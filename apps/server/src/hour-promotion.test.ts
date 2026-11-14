@@ -6,14 +6,7 @@ import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  stampDeployment,
-  tenants,
-  withTransaction,
-} from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, tenants, withTransaction } from "@waitron/db";
 import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -118,9 +111,6 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Promotion SL" });
-  await suite.db.insert(locations).values({
-    id: TENANT_A.locationId,
-  });
   await seedVenueSettings(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["en"],
@@ -130,7 +120,6 @@ beforeEach(async () => {
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,
-      locationId: TENANT_A.locationId,
       name: node === primary ? "Primary" : "Standby",
       filingModule: "verifactu",
       taxModule: "vat",
@@ -1090,9 +1079,6 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   await spare.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Promotion SL" });
-  await spare.db.insert(locations).values({
-    id: TENANT_A.locationId,
-  });
   await seedVenueSettings(spare.db, { operationDescription: "Hospitality" });
   await seedBusinessDay(spare.db, {});
   await spare.db.insert(nodes).values({

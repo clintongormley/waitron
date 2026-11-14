@@ -50,7 +50,7 @@ describe("park & retrieve schema", () => {
   beforeAll(async () => {
     const admin = suite.db;
     await seedVenue(admin, {
-      name: "Fixture Location A",
+      name: "Fixture Venue A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     });

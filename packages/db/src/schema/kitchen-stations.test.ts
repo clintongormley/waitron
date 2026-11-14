@@ -17,13 +17,10 @@ import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { kitchenStations } from "./kitchen-stations.js";
-import { locations } from "./tenants.js";
 
 // What this suite proves is the column mapping, the threshold CHECK and the partial unique index.
-const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 
-describe("default station without a location", () => {
+describe("default station without a venue", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("a second default station is refused, and two non-defaults are not", async () => {
@@ -53,12 +50,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await suite.db.insert(locations).values([
-      {
-        id: LOCATION_A2,
-      },
-      { id: LOCATION_B },
-    ]);
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -229,10 +220,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
 
   it("the partial unique index is what blocks the second default (proof by deletion of the index)", async () => {
     // The index is recreated in a `finally` so every other case still meets it.
-    const probeLocation = "aaaaaaaa-0000-4000-8000-000000000003";
-    await suite.db.insert(locations).values({
-      id: probeLocation,
-    });
     await seedVenueSettings(suite.db, { operationDescription: "Hostelería" });
     await seedBusinessDay(suite.db, {});
     await seedStation("Probe default", true);

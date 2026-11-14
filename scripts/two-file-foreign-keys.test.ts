@@ -148,12 +148,12 @@ describe("negative controls", () => {
   });
 
   it("reports a key from a node's own table into the venue's", () => {
-    // `join_requests` is `local` and `locations` is `state`: a key across the two classes.
-    expect(violationOf(edge("join_requests", "locations"), classes)).toContain("[local -> state]");
+    // `join_requests` is `local` and `settings` is `state`: a key across the two classes.
+    expect(violationOf(edge("join_requests", "settings"), classes)).toContain("[local -> state]");
   });
 
   it("reports one in the other direction too", () => {
-    expect(violationOf(edge("locations", "join_requests"), classes)).toContain("[state -> local]");
+    expect(violationOf(edge("settings", "join_requests"), classes)).toContain("[state -> local]");
   });
 
   it("says nothing about a key that stays on one side", () => {

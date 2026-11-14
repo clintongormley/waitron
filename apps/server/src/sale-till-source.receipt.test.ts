@@ -7,7 +7,7 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { sales, withTransaction, venueLocationId } from "@waitron/db";
+import { sales, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -94,12 +94,8 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
   };
 }
 
-/** Provision a fresh chained venue, seed a catalogue + an `each` product and a login person with a
- *  known PIN. Returns the cfg, the venue's `locationId`,
- *  the sellable product, and the operator to attribute the sale to. */
 async function setupVenue(): Promise<{
   cfg: TradingContext;
-  locationId: string;
   product: AvailableProduct & { menuItemId: string };
   operatorId: string;
 }> {
@@ -134,7 +130,6 @@ async function setupVenue(): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
   const cfg = tillConfigFromVenue(venue);
   const [department] = await suite.db.select().from(departments);
   await suite.db.insert(departmentReceipts).values({
@@ -188,7 +183,7 @@ async function setupVenue(): Promise<{
       operatorId: person!.id,
     };
   });
-  return { cfg, locationId: venueId, product, operatorId };
+  return { cfg, product, operatorId };
 }
 
 /** Seed a `phone-portrait` (handheld) `device_profiles` row. A per-call counter keeps the
@@ -423,7 +418,6 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
 
 describe("a sale names the device it was rung on", () => {
   it("files the sale and its fiscal record under the ringing device's source and device", async () => {
-    // Two devices at one location, so only the device can tell the two sales apart.
     const { cfg, product, operatorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);

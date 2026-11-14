@@ -9,7 +9,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { isoCBOR } from "@simplewebauthn/server/helpers";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_CLASSIFICATION, CORE_MIGRATIONS, devices, locations } from "@waitron/db";
+import { CORE_CLASSIFICATION, CORE_MIGRATIONS, devices } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
 import {
@@ -33,7 +33,6 @@ const withoutIdentity = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const person = "10000000-0000-4000-8000-000000000001";
 const second = "10000000-0000-4000-8000-000000000002";
 const device = "10000000-0000-4000-8000-000000000003";
-const location = "10000000-0000-4000-8000-000000000004";
 const profile = "10000000-0000-4000-8000-000000000005";
 const now = "2026-10-20T08:00:00.000Z";
 const old = "2026-10-01T08:00:00.000Z";
@@ -72,7 +71,6 @@ beforeEach(async () => {
   for (const suite of [original, restored]) {
     if (suite === restored)
       await suite.db.insert(schema.roles).values(await original.db.select().from(schema.roles));
-    await suite.db.insert(locations).values({ id: location });
     await seedVenueSettings(suite.db, {
       name: "Main",
       invoiceLocales: ["en"],

@@ -977,7 +977,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(provisionRequests[0].venue.fullSeriesCode).toBe("F1");
   });
 
-  it("passes a taxpayer domicile distinct from the location address into provisioning", async () => {
+  it("passes a taxpayer domicile distinct from the venue address into provisioning", async () => {
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();
     mountSetup(app, deps, noopLog);

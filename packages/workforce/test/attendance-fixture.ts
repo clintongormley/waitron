@@ -7,7 +7,7 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
 import * as api from "../src/index.js";
-import { seedEmployment, seedLocation } from "./fixtures.js";
+import { seedEmployment, seedFixtureVenue } from "./fixtures.js";
 
 export function attendanceFixture() {
   const suite = useVenueDb({
@@ -15,10 +15,10 @@ export function attendanceFixture() {
   });
   const backend = new api.WorkforceBackend();
   const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
-  let locationId: string, personId: string, other: string, manager: string, nodeId: string;
+  let personId: string, other: string, manager: string, nodeId: string;
   beforeEach(async () => {
     await seedTenant(suite.db);
-    locationId = await seedLocation(suite.db);
+    await seedFixtureVenue(suite.db);
     nodeId = await seedNode(suite.db);
     const rows = await seedPersons(suite.db, [
       { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
@@ -110,9 +110,6 @@ export function attendanceFixture() {
     },
     get manager() {
       return manager;
-    },
-    get locationId() {
-      return locationId;
     },
     get nodeId() {
       return nodeId;

@@ -7,14 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  tenants,
-  withTransaction,
-  openVenueDatabase,
-} from "@waitron/db";
+import { invoiceSeries, nodes, tenants, withTransaction, openVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { buildManifest } from "./backup-manifest.js";
@@ -45,7 +38,6 @@ const suite = useVenueDb({
   timeoutMs: 120000,
 });
 const ids = {
-  location: "b7000000-0000-4000-8000-000000000001",
   node: "b7000000-0000-4000-8000-000000000002",
   series: "b7000000-0000-4000-8000-000000000003",
 };
@@ -54,11 +46,8 @@ beforeAll(async () => {
     await tx
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "File roundtrip" });
-    await tx.insert(locations).values({
-      id: ids.location,
-    });
     await seedVenueSettings(tx, {
-      name: "File location",
+      name: "File venue",
       invoiceLocales: ["es"],
       operationDescription: "Venta",
     });

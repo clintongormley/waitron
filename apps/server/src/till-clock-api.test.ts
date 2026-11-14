@@ -345,7 +345,7 @@ describe("signed-in own till clock routes", () => {
       { expectedEntryId: "not-a-uuid" },
       { expectedEntryId: null, personId: venue.personId },
       { expectedEntryId: null, at: instant.toISOString() },
-      { expectedEntryId: null, locationId: "10000000-0000-4000-8000-000000000001" },
+      { expectedEntryId: null, extra: venue.personId },
       { expectedEntryId: null, origin: {} },
     ]) {
       const response = await request("in", body);

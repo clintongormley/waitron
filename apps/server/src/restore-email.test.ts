@@ -9,14 +9,7 @@ import { hashPassword, hashPin, startManagementSession } from "@waitron/identity
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  openVenueDatabase,
-  tenants,
-  withTransaction,
-} from "@waitron/db";
+import { invoiceSeries, nodes, openVenueDatabase, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -38,7 +31,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
 
 const T = {
-  locationId: "c0000000-0000-4000-8000-000000000002",
+  streamId: "c0000000-0000-4000-8000-000000000002",
   nodeId: "c0000000-0000-4000-8000-000000000008",
   seriesId: "c0000000-0000-4000-8000-000000000004",
 };
@@ -68,9 +61,6 @@ const suite = useVenueDb({
     await db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Restore venue" });
-    await db.insert(locations).values({
-      id: T.locationId,
-    });
     await seedVenueSettings(db, {
       name: "Restaurant",
       invoiceLocales: ["es"],
@@ -219,7 +209,7 @@ describe.each(paths)("invoice email after %s", (path) => {
         const store = createMemoryObjectStore({ now: () => NOW });
         const kit: RecoveryKit = {
           version: 2 as const,
-          streamId: T.locationId,
+          streamId: T.streamId,
           bucket: {
             region: "eu-west-1",
             bucket: "synthetic",
@@ -232,10 +222,10 @@ describe.each(paths)("invoice email after %s", (path) => {
         };
         await writePointer(
           store,
-          T.locationId,
+          T.streamId,
           signPointer(
             {
-              streamId: T.locationId,
+              streamId: T.streamId,
               term: 0,
               nodeId: T.nodeId,
               generation: `gen-0-${T.nodeId}-20261008T120000Z`,

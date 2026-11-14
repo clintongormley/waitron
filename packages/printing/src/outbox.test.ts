@@ -9,7 +9,6 @@ import {
   printers,
   sales,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -25,7 +24,7 @@ import {
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 import "./errors.js";
-type PrintConfig = { locationId: string };
+type PrintConfig = {};
 
 // The central assertion is the NEVER-BLOCK invariant (CLAUDE.md §5): enqueue opens NO socket.
 // `node:sqlite` reaches the venue file in-process, so the database work inside the spy's window
@@ -42,8 +41,7 @@ async function setup(): Promise<PrintConfig> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
-  return { locationId: venueId };
+  return {};
 }
 
 async function jobRow(

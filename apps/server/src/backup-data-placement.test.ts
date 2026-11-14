@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { tenants, locations, nodes, invoiceSeries, catalogues } from "@waitron/db";
+import { tenants, nodes, invoiceSeries, catalogues } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
@@ -20,8 +20,8 @@ import { buildManifest } from "./backup-manifest.js";
 import { validateBackupArtifactFile } from "./backup-verification-archive.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { placeBackupData, placeBackupDatabase } from "./backup-data-placement.js";
-import { openBackupQuery } from "@waitron/store";
-import { readCopyNode, restoreSecrets } from "./restore.js";
+
+import { restoreSecrets } from "./restore.js";
 
 vi.mock("node:fs/promises", { spy: true });
 
@@ -65,7 +65,6 @@ const codeRoot = migrationsRootWith(join(scratchRoot, "code"), {
   core: [withoutCursor, withCursor],
 });
 const node = "20000000-0000-4000-8000-000000000002";
-const location = "10000000-0000-4000-8000-000000000001";
 const capturedAt = "2026-10-20T08:00:00.000Z";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(sets, olderRoot),
@@ -74,11 +73,8 @@ const suite = useVenueDb({
     await db
       .insert(tenants)
       .values({ id: 1, country: "GB", taxId: "TEST-ONLY", legalName: "Placement fixture" });
-    await db.insert(locations).values({
-      id: location,
-    });
     await seedVenueSettings(db, {
-      name: "Placement location",
+      name: "Placement venue",
       invoiceLocales: ["en"],
       operationDescription: "Sale",
     });
@@ -450,21 +446,5 @@ it("restores the target's append-only protection when the private source lacks i
     ).toEqual({ content_hash: "captured-hash" });
   } finally {
     db.close();
-  }
-});
-
-it("reads the backup node without a location table in the copy", async () => {
-  const f = await fixture();
-  const database = new DatabaseSync(f.source);
-  try {
-    database.exec("pragma foreign_keys = off; drop table locations");
-  } finally {
-    database.close();
-  }
-  const copy = await openBackupQuery(f.source);
-  try {
-    expect(await readCopyNode(copy.query, f.entries)).toEqual({ node: { nodeId: node } });
-  } finally {
-    await copy.close();
   }
 });

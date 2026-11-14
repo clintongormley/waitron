@@ -239,7 +239,7 @@ describe("authenticated working-time downloads", () => {
     expect((await ask()).status).toBe(200);
   });
   it("refuses any query on the options route", async () => {
-    for (const search of [`locationId=${fixture.locationId}`, "anything=1"]) {
+    for (const search of [`extra=${fixture.personId}`, "anything=1"]) {
       const response = await app.request(`${base("own")}-options?${search}`, {
         headers: { cookie: staffCookie },
       });

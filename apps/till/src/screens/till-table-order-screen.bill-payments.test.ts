@@ -538,7 +538,7 @@ describe("till-table-order-screen: a bill's receipt language", () => {
   it.each([
     ["names none", undefined],
     ["names one no longer offered", "eu-ES"],
-  ])("names the location's language when the bill %s", async (_case, stored) => {
+  ])("names the venue's language when the bill %s", async (_case, stored) => {
     const el = await mountScreen({
       bills: [{ ...untouched, ...(stored === undefined ? {} : { receiptLanguage: stored }) }],
       receiptLanguages: offered,

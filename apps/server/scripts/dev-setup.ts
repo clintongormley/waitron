@@ -173,9 +173,9 @@ export async function inspectVenues(
 ): Promise<{ hasExpected: boolean; hasAny: boolean }> {
   const store = await openVenueDatabase(venueDir);
   try {
-    const hasLocations = await tableExists(store.venue, "locations");
+    const hasSettings = await tableExists(store.venue, "settings");
     const hasTenants = await tableExists(store.venue, "tenants");
-    if (!hasLocations || !hasTenants) return { hasExpected: false, hasAny: false };
+    if (!hasSettings || !hasTenants) return { hasExpected: false, hasAny: false };
 
     // `exists(...)` answers 0 or 1 on this engine, not a boolean, so each is compared rather than
     // returned: handing a caller `0` where it expects `false` would make every `if` read true.

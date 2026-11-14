@@ -12,7 +12,6 @@ import {
   printJobs,
   sales,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -126,7 +125,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
@@ -137,7 +135,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   });
   return withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, {
-      name: `Bill payments signed in menu ${venueId}`,
+      name: `Bill payments signed in menu ${provisioned.nodeId}`,
     });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const beer = await createProduct(tx, {

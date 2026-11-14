@@ -1009,70 +1009,10 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror
   link, the pinned main-box key, the handover tables) and removes only the standby's reserved identity
   (`fiscal_reservations`). It removes recipes (owner, 2026-11-04). The owner chose that A760's squash
-  runs first, merged into the eight sets. It absorbs A1301's schema slices (S20–S28);
+  runs first, merged into the eight sets. Slice 5 (5a–5h) completes the location removal. It absorbs A1301's schema slices (S20–S28);
   S23 builds no `venue_settings`, because the venue's settings become documents in the shared
   `settings` table. It also renames every leftover "tenant" name: the `tenants` table becomes
   `taxpayer`, and names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
-
-## A1301. Remove the "location" concept: the venue holds everything a location held
-
-- **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
-  2026-11-01, high priority; nothing new is built on locations meanwhile). The design is written and
-  reviewed: its settings move to the `settings.venue` and `settings.business_day` documents (A1308,
-  owner, 2026-11-04), and the work is cut into
-  slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
-  every design question (lane B's A1268 does the working-time hashes; the working-time export names
-  the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: 5h of A1308's slice 5.
-  `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
-  `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
-  `@waitron/db/testing/seed.js` has `seedVenue`, `seedVenueSettings`, `seedBusinessDay` and `seedWorkingOrder`.
-  S18 is planned in six sub-slices
-  ([S18 plan](../superpowers/plans/2026-11-04-a1301-s18-contract-cleanup.md)). S18c (#2443),
-  S18a (#2447), S18b (#2450), S18d (#2451, #2453) and S18f (#2467) have landed. The owner decided on 2026-11-02 what the venue id sent to Cloud and naming the backup
-  folder becomes: Cloud assigns the id, and a box not connected to Cloud backs up where its owner
-  says. The owner approved the [venue-id design](../superpowers/specs/2026-11-04-a1301-venue-id-design.md)
-  that writes this up, with its defaults, on 2026-11-04. A1308 slice 5g builds S18e with the identities in the venue settings document. S18f used the
-  owner's cheaper schedule and landed before that cutover. The schema slices S20–S28 get a plan of their own.
-
-  What the landed slices left, by owner:
-
-  - **S18:** Two test helpers still hand out a node value
-    holding the venue row's id, because test files read it from there: `hour-recovery-host.ts`'s
-    `node` and `staged-hour-crash.ts`'s (an assertion in
-    `restore-emergency-crash.e2e.test.ts`) (S18f).
-  - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387).
-    Calendar rows still written
-    with a `location_id` take `venueLocationId` (S8, #2405). The export no longer carries
-    `fire_control`, whose column goes with `locations` in S28 rather than in A773-2, since dropping
-    it alone rebuilds `locations` (S17, #2415; A773-2 PR D plan D113). S28 also deletes the tests
-    that still set it, listed in D113 and in [kitchen.md](kitchen.md). Server test helpers take the venue row's
-    id through the test type `WithVenueRowId` (`apps/server/src/testing/venue-row-id.ts`), which
-    stays in fixtures that still read the venue row, including node, Cloud, backup, kitchen-setting
-    and menu-name fixtures.
-    The `locationId` brand remains in `packages/shared/src/ids.ts` (S18f).
-  - **Fixture lines the helpers could not take:** F5 (#2403), F2 (#2410) and F4 (#2412) list the
-    lines they left (fixed ids the helpers cannot keep, second-location cases and standby copies)
-    with their owning slice in their commit messages and PR bodies; F3 (#2427) lists its lines
-    with the reason each was left. fiscal-verifactu's own helpers and the tests outside F2's list
-    (`certificate-install`, `seed-single-venue`, `void-issue-clock`) are S3's. Left as they were
-    by F4: rows written under fixed ids that a backup, archive, `trading.env` or assertion names
-    (most `recovery*` and `restore*` suites, `hour-promotion`, `hour-recovery`,
-    `rebuild-first-start`, `promote-endpoint-e2e`), devices planted under
-    a join request's id, cases needing no taxpayer row (`reset-request`), and second-location
-    cases whose code slice deletes them.
-    Left as they were by F3: venue and node rows under fixed ids that a boot env, `trading.env`,
-    adoption, promotion, mirror or break-glass key names (the `boot.*` suites the F3c
-    commit lists,
-    `adoption-allocation-refusal`, `allocated-standby-host`, `backup-data-placement`,
-    `backup-verification`, `first-fiscal-mode`), a raw insert on `backup-verification-compatibility`'s
-    fixture-migrated copy, devices sharing one token hash (`device-session`), a case needing no
-    taxpayer row (`department-receipt-languages`), and second-location cases whose code slice
-    deletes them (`alerts-api`, `boot.test`, `device-api.pass`).
-
-  [Design](../superpowers/specs/2026-11-01-a1301-remove-location-design.md),
-  [plan](../superpowers/plans/2026-11-01-a1301-remove-location.md),
-  [working-time plan](../superpowers/plans/2026-11-02-a1301-working-time-slices.md)
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
@@ -1150,7 +1090,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
-- **`locations`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`media_image_data`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
 - **`payment_refunds`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`workforce_chains`: decide the remaining DELETE restriction (A805 follow-up).**
@@ -1337,6 +1276,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#loose-ends-left-by-a435-steps-3-3b-and-4-1520-1524-1519)
 
 ## Decisions and deliberate limits
+
+**Venue identity (owner, 2026-11-02).** Cloud assigns its venue id; a box not connected to Cloud backs up where its owner chooses. A1308 slice 5 completes the removal of the old location object. The [venue-id design](../superpowers/specs/2026-11-04-a1301-venue-id-design.md) records the decision and its defaults.
 
 **Three till refusals keep their statuses (A394-9, owner 2026-11-10: "Leave them, write it down (Rec.)").**
 On the till, `service_zone.not_found`, `table.not_found`/`table.inactive` and `reader.not_found`

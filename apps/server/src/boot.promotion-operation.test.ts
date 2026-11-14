@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { invoiceSeries, locations, nodes, stampDeployment, tenants } from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, tenants } from "@waitron/db";
 import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword } from "@waitron/identity";
@@ -93,7 +93,6 @@ vi.mock("./modules.js", async (original) => {
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 const NODE = "f2000000-0000-4000-8000-000000000001";
-const LOCATION = "f2000000-0000-4000-8000-000000000002";
 const ADMIN = "f2000000-0000-4000-8000-000000000003";
 const SOURCE = "f2000000-0000-4000-8000-000000000004";
 const PASSWORD = "public-boot-test-admin";
@@ -109,9 +108,6 @@ it.each(["account", "key"])(
     await suite.db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Operation SL" });
-    await suite.db.insert(locations).values({
-      id: LOCATION,
-    });
     await seedVenueSettings(suite.db, {
       name: "Restaurant",
       invoiceLocales: ["en"],

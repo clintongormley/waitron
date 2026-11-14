@@ -5,7 +5,6 @@ import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 
 import { dayCutoverChanges } from "./schema/day-cutover-changes.js";
-import { locations } from "./schema/tenants.js";
 import { withTransaction } from "./tenancy.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import {
@@ -13,16 +12,13 @@ import {
   readVenueClock,
   readVenueClockAndPlace,
   readVenueInvoiceLocales,
-  venueLocationId,
 } from "./venue.js";
 
 describe("the venue accessor", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   async function insertVenue(
-    values: Partial<
-      typeof locations.$inferInsert & VenueSettings & { timeZone: string; dayCutover: string }
-    > = {},
+    values: Partial<VenueSettings & { timeZone: string; dayCutover: string }> = {},
   ) {
     const {
       name = "Casa Pepe",
@@ -36,14 +32,7 @@ describe("the venue accessor", () => {
       dayCutover,
       fiscalTerritory = "ES-common",
       operationDescription = "Meals",
-      ...columns
     } = values;
-    const [row] = await suite.db
-      .insert(locations)
-      .values({
-        ...columns,
-      })
-      .returning({ id: locations.id });
     await seedVenueSettings(suite.db, {
       name,
       fiscalTerritory,
@@ -56,7 +45,6 @@ describe("the venue accessor", () => {
       invoiceLocales,
     });
     await seedBusinessDay(suite.db, { timeZone, dayCutover });
-    return row!.id;
   }
 
   it("reads the one venue's settings", async () => {
@@ -179,21 +167,6 @@ describe("the venue accessor", () => {
     ]);
   });
 
-  it("refuses two venues when one of them has cutover changes", async () => {
-    await insertVenue();
-    await insertVenue({ name: "Second" });
-    await suite.db.insert(dayCutoverChanges).values([
-      { effectiveBusinessDay: "2026-01-15", dayCutover: "03:00:00" },
-      { effectiveBusinessDay: "2026-03-01", dayCutover: "05:30:00" },
-    ]);
-
-    const error: unknown = await withTransaction(suite.db, readVenueClockAndPlace).catch(
-      (caught) => caught,
-    );
-    expect(error).toMatchObject({ code: "provisioning.second_venue" });
-    expect((error as { params: unknown }).params).toEqual({});
-  });
-
   it("returns a saved zone that is not valid as it is", async () => {
     await insertVenue({ timeZone: "Invalid/Zone" });
 
@@ -211,34 +184,15 @@ describe("the venue accessor", () => {
     ]);
   });
 
-  it("returns the venue's row id", async () => {
-    const id = await insertVenue();
-
-    expect(await withTransaction(suite.db, venueLocationId)).toBe(id);
-  });
-
   describe.each<[string, (tx: Transaction) => Promise<unknown>]>([
     ["readVenue", readVenue],
     ["readVenueClock", readVenueClock],
     ["readVenueClockAndPlace", readVenueClockAndPlace],
     ["readVenueInvoiceLocales", readVenueInvoiceLocales],
-    ["venueLocationId", venueLocationId],
   ])("%s", (_name, read) => {
     it("refuses with no venue", async () => {
       const error: unknown = await withTransaction(suite.db, read).catch((caught) => caught);
       expect(error).toMatchObject({ code: "venue.not_found" });
-      // toMatchObject reads `params: {}` as "any params"; the params must be empty.
-      expect((error as { params: unknown }).params).toEqual({});
-    });
-
-    if (read === readVenueInvoiceLocales) return;
-
-    it("refuses with two venues", async () => {
-      await insertVenue();
-      await insertVenue({ name: "Second" });
-
-      const error: unknown = await withTransaction(suite.db, read).catch((caught) => caught);
-      expect(error).toMatchObject({ code: "provisioning.second_venue" });
       // toMatchObject reads `params: {}` as "any params"; the params must be empty.
       expect((error as { params: unknown }).params).toEqual({});
     });

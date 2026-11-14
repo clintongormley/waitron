@@ -209,7 +209,6 @@ async function seedNamedPrinters(names: string[]): Promise<string[]> {
   return rows.map((row) => row.id);
 }
 
-/** An office (page) printer at the venue's location; its id is never a receipt printer's. */
 async function seedPagePrinter(): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)

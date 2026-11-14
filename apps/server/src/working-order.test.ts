@@ -142,7 +142,7 @@ beforeAll(() => {
 
 interface SeededVenue {
   cfg: DeviceRequestConfig;
-  /** The catalogue assigned to this venue's location — where the KDS routing tests add more products. */
+
   catalogueId: string;
   /** The `each`-priced "Espresso" product (VAT general/21%, category "ES drinks"). */
   coffeeId: string;
@@ -160,13 +160,6 @@ async function passItems(tx: Transaction) {
   return boardItems(await readScopedPassBoard(tx, EVERY));
 }
 
-/**
- * Stand up the one taxpayer row + a location + till + node and a catalogue with two products, all
- * keyed to `LOCALE` so the `working_order_lines_check_locales` trigger (descriptions must hold
- * EXACTLY the location's `invoice_locales`) is satisfied. The helper empties the database between
- * tests, so the order number is that test's own — always 1 on the first park — and the suite is
- * order-independent (CLAUDE.md §4).
- */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue> {
   const eachUnitId = randomUUID();
   const kgUnitId = randomUUID();
@@ -3484,7 +3477,7 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
   it("reads the invoice languages once, and never `listAvailableProducts`, for a non-empty basket", async () => {
     const { cfg, coffeeId } = await setupVenue();
     const offers = await counterOffers(cfg);
-    const locationRead = vi.spyOn(catalogue, "readInvoiceLocales");
+    const venueRead = vi.spyOn(catalogue, "readInvoiceLocales");
     const productList = vi.spyOn(catalogue, "listAvailableProducts");
     await withTransaction(db, async (tx) => {
       await createOpenOrder(tx, cfg, randomUUID(), offers.toOfferLines([line(coffeeId)]), null, {
@@ -3492,7 +3485,7 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
       });
     });
     expect(productList).not.toHaveBeenCalled();
-    expect(locationRead).toHaveBeenCalledTimes(1);
+    expect(venueRead).toHaveBeenCalledTimes(1);
   });
 
   // The line's customer text is keyed by the VENUE's invoice locales, read at pricing time —
@@ -7866,7 +7859,7 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
 
 // The per-line `courseId` OVERRIDE is screened at the shared ring-time resolver (`priceOrderLines`):
 // a malformed, unknown, other-venue (the working_order_lines.course_id FK is by id only, not
-// location-scoped) or deactivated override is a clean `course.not_found`. The product DEFAULT
+
 // (`product.course_id`) is NOT re-screened (that would reject a legitimately-deactivated default).
 // Exercised through `addTabRound`; the order paths run the same `priceOrderLines` code.
 describe("priceOrderLines course-override validation (KDS-2 A1)", () => {

@@ -3040,8 +3040,6 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     });
   }
 
-  /** Another device's receipt and drawer printer here, with a drawer that device may open: the
-   *  printer a lookup by location rather than by device would pick. */
   const otherDevicesDrawerPrinter = async (cfg: TradingContext) =>
     deviceReceiptPrinter(await enrolDrawerTill(cfg), true);
 

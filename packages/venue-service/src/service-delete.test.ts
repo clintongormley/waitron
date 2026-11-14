@@ -14,7 +14,6 @@ import {
   withTransaction,
   workingOrders,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -84,8 +83,7 @@ async function fixture() {
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(tx);
-    const cfg = { locationId: venueId };
+    const cfg = {};
     const ds = await tx
       .insert(departments)
       .values([
@@ -278,7 +276,6 @@ describe("service deletion", () => {
       await tx.insert(orderServiceContexts).values(
         orders.map((order) => ({
           workingOrderId: order.id,
-          locationId: f.cfg.locationId,
           zoneId: f.alpha,
           departmentId: f.dining,
           serviceMode: "prepay",

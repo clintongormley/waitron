@@ -437,7 +437,7 @@ describe("trading with a saved archive bucket", () => {
           headers: { cookie, "content-type": "application/json" },
           body: JSON.stringify({
             ...place,
-            prefix: `archives/${venue.cfg.locationId}`,
+            prefix: `archives/${venue.cfg.nodeId}`,
             accessKeyId: "AKIASTREAM",
             secretAccessKey: "stream-secret-0123456789",
           }),

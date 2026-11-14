@@ -1,7 +1,7 @@
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { sql, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { newId, nowIso, venueLocationId, withTransaction, diningTables } from "@waitron/db";
+import { newId, nowIso, withTransaction, diningTables } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -18,9 +18,7 @@ beforeAll(() => {
   db = suite.db;
 });
 
-interface Venue {
-  locationId: string;
-}
+interface Venue {}
 
 async function setupVenue(timeZone = "Europe/Madrid"): Promise<Venue> {
   await seedVenue(db, {
@@ -29,7 +27,7 @@ async function setupVenue(timeZone = "Europe/Madrid"): Promise<Venue> {
     operationDescription: "Restaurant service",
     timeZone,
   });
-  return { locationId: await venueLocationId(db) };
+  return {};
 }
 
 async function makeTable(label: string): Promise<string> {

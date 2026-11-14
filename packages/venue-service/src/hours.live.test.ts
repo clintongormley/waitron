@@ -15,7 +15,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -60,7 +59,6 @@ it("refreshes Calendar and routing from special days, clock and daily station st
       operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     });
-    const venueId = await venueLocationId(tx);
     const [department] = await tx
       .insert(departments)
       .values({
@@ -74,7 +72,7 @@ it("refreshes Calendar and routing from special days, clock and daily station st
       .values([{ name: "Bar" }, { name: "Kitchen", isDefault: true }, { name: "Deli pass" }])
       .returning();
     return {
-      cfg: { locationId: venueId },
+      cfg: {},
       departmentId: department!.id,
       bar: barRow!.id,
       kitchen: kitchenRow!.id,
@@ -164,8 +162,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
       province: "Lleida",
       city: "Vielha",
     });
-    const venueId = await venueLocationId(tx);
-    return { locationId: venueId };
+    return {};
   });
   const calendar = QUERY_DEPENDENCIES["named-days"];
   const holidays = QUERY_DEPENDENCIES.holidays;

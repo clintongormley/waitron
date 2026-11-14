@@ -19,7 +19,6 @@ export async function establishDormantContract(args: {
   db: Database;
   node: NodeDatabase;
   ring: KeyRing;
-  locationId: string;
   sourceId: string;
   taxpayerNif: string;
   standby: StandbyIdentity;

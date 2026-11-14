@@ -15,7 +15,6 @@ import {
   products,
   withTransaction,
   type Transaction,
-  venueLocationId,
   readVenueClock,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -46,8 +45,7 @@ async function fixture(db: Transaction) {
     invoiceLocales: ["en-GB"],
     operationDescription: "Restaurant",
   });
-  const venueId = await venueLocationId(db);
-  const cfg = { locationId: venueId };
+  const cfg = {};
   const department = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;
   const [terrace] = await db
     .insert(floorZones)

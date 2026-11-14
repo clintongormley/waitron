@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { dirname, join } from "node:path";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { roles, personRoles } from "@waitron/db";
@@ -101,7 +102,6 @@ import {
   customThemes,
   products,
   sales,
-  venueLocationId,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -181,7 +181,6 @@ import {
 import { seedSessionDevice } from "./testing/session-device.js";
 import { setDefaultStation } from "./kitchen.js";
 import { selfEnrolNodeAgent } from "./join-requests.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deletePrinter } from "./printer-delete.js";
 import { stageConfigurationImport } from "./configuration-import.js";
 import { useTestProducer } from "./testing/test-producer.js";
@@ -658,7 +657,7 @@ describe("configuration transfer database path", () => {
     expect(persisted.rows[0]!.count).toBe(0);
   });
 
-  it("transfers page-printer capabilities to the target location, waits in Add, then restores its id and saved name", async () => {
+  it("transfers page-printer capabilities to the target venue, waits in Add, then restores its id and saved name", async () => {
     const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -1034,10 +1033,6 @@ describe("configuration transfer database path", () => {
         await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
       },
     });
-    const venueTableColumns = await targetSuite.db.execute<{ name: string }>(sql`
-      select name from pragma_table_info('locations')
-    `);
-    expect(venueTableColumns.rows.map((column) => column.name)).not.toContain("order_flow");
     await withTransaction(targetSuite.db, async (tx) => {
       const [metadata] = transferred.tables.media_images!;
       const bytes = await readImageBytes(tx, metadata!.filename as string);
@@ -2662,50 +2657,6 @@ it("transfers each station's ready warning time", async () => {
   ]);
 });
 
-it.each(["ticket", "line"] as const)(
-  "exports no venue bump mode, and an import leaves the target's column alone (target %s)",
-  async (targetMode) => {
-    const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
-      db: suite.db,
-      modules: ALL_MODULES,
-    });
-    const sourceVenueId = await venueLocationId(suite.db);
-    await suite.db.execute(
-      sql`update locations set bump_mode = 'ticket' where id = ${sourceVenueId}`,
-    );
-    const versions = await schemaVersionsByModule(
-      { venue: suite.db, node: suite.node },
-      ALL_MODULES,
-    );
-    const transferred = await buildConfigurationBundle(
-      suite.db,
-      source,
-      ALL_MODULES,
-      new Date("2026-10-23T12:00:00Z"),
-      versions,
-    );
-    expect(transferred.venue).not.toHaveProperty("bumpMode");
-    await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
-      db: targetSuite.db,
-      modules: ALL_MODULES,
-      beforeCommit: async (tx) => {
-        await tx.execute(
-          sql`update locations set bump_mode = ${targetMode} where id = ${await venueLocationId(tx)}`,
-        );
-        await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
-      },
-    });
-    const targetVenueId = await venueLocationId(targetSuite.db);
-    expect(
-      (
-        await targetSuite.db.execute(
-          sql`select bump_mode as "bumpMode" from locations where id = ${targetVenueId}`,
-        )
-      ).rows,
-    ).toEqual([{ bumpMode: targetMode }]);
-  },
-);
-
 it("refuses an imported bump mode outside the two values before writing anything", async () => {
   const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
     db: suite.db,
@@ -3913,9 +3864,7 @@ async function shortNamedBundle(taxId: string) {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
-  const cfg: WithVenueRowId = {
-    locationId: venueId,
+  const cfg: TradingContext = {
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     tipsEnabled: false,
@@ -5491,7 +5440,6 @@ it("A725 transfers station and department choices", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const sourceVenueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
       name: "Receipt department",
@@ -5538,8 +5486,6 @@ it("A725 transfers station and department choices", async () => {
     modules: ALL_MODULES,
     beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
-  const targetVenueId = await venueLocationId(targetSuite.db);
-  expect(targetVenueId).not.toBe(sourceVenueId);
   const modes = await targetSuite.db.execute(sql`
     select z.name, p.print_trading_name as trading_name, z.collection_number as zone_collection
     from floor_zones z
@@ -5648,12 +5594,11 @@ it("transfers a department's customer and staff period menus to its zone under n
     expect(sourceIds).not.toContain(id);
 });
 
-it("exports and imports all seven cell classes into another venue, remapping every id and the location", async () => {
+it("exports and imports all seven cell classes into another venue, remapping every id and the venue", async () => {
   const source = await applyVenue(planVenue(venue("B24681359"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const sourceVenueId = await venueLocationId(suite.db);
 
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
@@ -5699,16 +5644,7 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     const noCategoryRow = { kind: "no_category" as const };
     await setRoutingCell(tx, { row: noCategoryRow, zoneId: null }, { kind: "no_preparation" });
     await setRoutingCell(tx, { row: noCategoryRow, zoneId: terrace.id }, atStation(bar!.id));
-    return [
-      sourceVenueId,
-      department.id,
-      terrace.id,
-      lounge.id,
-      bar!.id,
-      griddle!.id,
-      category.id,
-      product.id,
-    ];
+    return [department.id, terrace.id, lounge.id, bar!.id, griddle!.id, category.id, product.id];
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const decoded = decodeConfigurationBundle(
@@ -5730,7 +5666,6 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     modules: ALL_MODULES,
     beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
-  const targetVenueId = await venueLocationId(targetSuite.db);
   const idOf = async (table: string, name: string) => {
     const result = await targetSuite.db.execute<{ id: string }>(
       sql`select id from ${sql.identifier(table)} where name = ${name}`,
@@ -5746,7 +5681,6 @@ it("exports and imports all seven cell classes into another venue, remapping eve
   const product = await idOf("products", "Routes mojito");
   for (const id of [terrace, lounge, bar, griddle, category, product])
     expect(sourceIds).not.toContain(id);
-  expect(sourceIds).not.toContain(targetVenueId);
   const cells = await targetSuite.db.execute<Record<string, unknown>>(sql`
     select category_id, product_id, zone_id, station_id, no_preparation, no_category
     from routing_cells`);
@@ -5927,7 +5861,6 @@ it("carries a cell's period choices with their cell, including a period whose me
 
 async function insertSpecialDay(
   tx: Parameters<Parameters<typeof withTransaction>[1]>[0],
-  _cfg: { locationId: string },
   day: { date: string; name: string; closedAllDay?: boolean },
 ) {
   const id = randomUUID();
@@ -5943,18 +5876,18 @@ describe("special days in a configuration transfer", () => {
   const AT = new Date("2026-10-06T10:00:00Z");
 
   interface Named {
-    cfg: { locationId: string };
+    cfg: {};
     departments: Map<string, string>;
     stations: Map<string, string>;
   }
 
-  async function named(db: typeof suite.db, located: { locationId: string }): Promise<Named> {
+  async function named(db: typeof suite.db): Promise<Named> {
     const departmentRows = await db.execute<{ id: string; name: string }>(sql`
       select id, name from departments `);
     const stationRows = await db.execute<{ id: string; name: string }>(sql`
       select id, name from kitchen_stations `);
     return {
-      cfg: { locationId: located.locationId },
+      cfg: {},
       departments: new Map(departmentRows.rows.map((row) => [row.name, row.id])),
       stations: new Map(stationRows.rows.map((row) => [row.name, row.id])),
     };
@@ -5989,18 +5922,16 @@ describe("special days in a configuration transfer", () => {
         .insert(kitchenStations)
         .values([{ name: "Bar" }, { name: "Pass" }, { name: "Grill" }]);
     });
-    const { cfg, stations } = await named(suite.db, {
-      locationId: await venueLocationId(suite.db),
-    });
+    const { stations } = await named(suite.db);
     const bar = { kind: "station" as const, id: stations.get("Bar")! };
     await withTransaction(suite.db, async (tx) => {
-      await insertSpecialDay(tx, cfg, { date: "2026-12-24", name: "Christmas Eve" });
-      await insertSpecialDay(tx, cfg, {
+      await insertSpecialDay(tx, { date: "2026-12-24", name: "Christmas Eve" });
+      await insertSpecialDay(tx, {
         date: "2026-12-25",
         name: "Christmas",
         closedAllDay: true,
       });
-      await insertSpecialDay(tx, cfg, { date: "2027-01-01", name: "New Year" });
+      await insertSpecialDay(tx, { date: "2027-01-01", name: "New Year" });
       await setStationToday(tx, bar.id, "closed", AT, await seedActivityActor(tx));
     });
     const versions = await schemaVersionsByModule(
@@ -6071,11 +6002,7 @@ describe("special days in a configuration transfer", () => {
     expect(dayStates.rows[0]!.n).toBe(0);
   });
 
-  const namedOn = async (
-    tx: Parameters<Parameters<typeof withTransaction>[1]>[0],
-    _cfg: { locationId: string },
-    date: string,
-  ) =>
+  const namedOn = async (tx: Parameters<Parameters<typeof withTransaction>[1]>[0], date: string) =>
     (
       await tx.execute<{ date: string; name: string }>(sql`
         select d.date, s.name from special_day_dates d
@@ -6089,12 +6016,10 @@ describe("special days in a configuration transfer", () => {
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, (tx) => tx.insert(kitchenStations).values({ name: "Pass" }));
-    const { cfg, stations } = await named(suite.db, {
-      locationId: await venueLocationId(suite.db),
-    });
+    const { stations } = await named(suite.db);
     const pass = { kind: "station" as const, id: stations.get("Pass")! };
     await withTransaction(suite.db, async (tx) => {
-      await insertSpecialDay(tx, cfg, { date: "2026-12-31", name: "New Year's Eve" });
+      await insertSpecialDay(tx, { date: "2026-12-31", name: "New Year's Eve" });
       await setDefaultStation(tx, pass.id);
     });
     const versions = await schemaVersionsByModule(
@@ -6110,13 +6035,11 @@ describe("special days in a configuration transfer", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
-    const imported = await named(targetSuite.db, {
-      locationId: await venueLocationId(targetSuite.db),
-    });
+    const imported = await named(targetSuite.db);
     const importedPass = { kind: "station" as const, id: imported.stations.get("Pass")! };
     const read = await withTransaction(targetSuite.db, async (tx) => ({
-      eve: await namedOn(tx, imported.cfg, "2026-12-31"),
-      tuesday: await namedOn(tx, imported.cfg, "2026-10-06"),
+      eve: await namedOn(tx, "2026-12-31"),
+      tuesday: await namedOn(tx, "2026-10-06"),
       // 23:00 in Madrid on New Year's Eve, and noon on an ordinary Tuesday.
       states: [
         await stationStates(tx, new Date("2026-12-31T22:00:00Z")),
@@ -6189,9 +6112,6 @@ describe("special days in a configuration transfer", () => {
 describe("public holidays in a configuration transfer", () => {
   const AT = new Date("2026-10-06T10:00:00Z");
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-  const scope = (located: { locationId: string }) => ({
-    locationId: located.locationId,
-  });
 
   async function moveTo(db: typeof suite.db, province: string, city: string) {
     await withTransaction(db, (tx) => seedVenueSettings(tx, { province, city }));
@@ -6217,9 +6137,8 @@ describe("public holidays in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const cfg = scope({ locationId: await venueLocationId(suite.db) });
     await withTransaction(suite.db, async (tx) => {
-      await insertSpecialDay(tx, cfg, {
+      await insertSpecialDay(tx, {
         date: "2026-01-06",
         name: "Three Kings",
         closedAllDay: true,
@@ -6259,7 +6178,6 @@ describe("public holidays in a configuration transfer", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
-    const targetVenueId = await venueLocationId(targetSuite.db);
 
     const expected = await holidaysByCity(suite.db);
     expect(expected.area).toEqual({
@@ -6270,8 +6188,6 @@ describe("public holidays in a configuration transfer", () => {
     });
     expect(expected.entries).toEqual([{ city: "madrid", date: "2026-01-06", name: "Three Kings" }]);
     expect(await holidaysByCity(targetSuite.db)).toEqual(expected);
-
-    expect(targetVenueId).not.toBe(await venueLocationId(suite.db));
 
     const read = () =>
       withTransaction(targetSuite.db, async (tx) => ({
@@ -6639,7 +6555,6 @@ it("transfers order start policies under new department and zone ids", async () 
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const sourceVenueId = await venueLocationId(suite.db);
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
       name: "Order start department",
@@ -6687,8 +6602,6 @@ it("transfers order start policies under new department and zone ids", async () 
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
-  const targetVenueId = await venueLocationId(targetSuite.db);
-  expect(targetVenueId).not.toBe(sourceVenueId);
   const imported = await targetSuite.db.execute<{
     department_id: string;
     zone_id: string;
@@ -7060,8 +6973,6 @@ it("refuses an absent leaveBehindWhenFalse column before exporting", async () =>
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
-  expect(venueId).toBeDefined();
   const module = {
     name: "probe",
     configurationTransfer: {
@@ -7209,9 +7120,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const sourceVenueId = await venueLocationId(suite.db);
-  const cfg: WithVenueRowId = {
-    locationId: sourceVenueId,
+  const cfg: TradingContext = {
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     tipsEnabled: false,
@@ -7316,7 +7225,6 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
-  const targetVenueId = await venueLocationId(targetSuite.db);
   const rows = await targetSuite.db.execute<{
     department: string;
     zone: string;
@@ -7335,7 +7243,6 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     sql`select f.zone_id, t.id table_id from floor_plans f join floor_plan_tables p on p.zone_id=f.zone_id join dining_tables t on t.plan_table_id=p.id where f.zone_id=${imported.zone}`,
   );
   expect(links.rows).toEqual([{ zone_id: imported.zone, table_id: imported.table_id }]);
-  expect(targetVenueId).not.toBe(sourceVenueId);
 });
 
 it("carries Long table's parts, naming the imported tables", async () => {
@@ -7343,9 +7250,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
-  const cfg: WithVenueRowId = {
-    locationId: venueId,
+  const cfg: TradingContext = {
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     tipsEnabled: false,
@@ -7426,9 +7331,7 @@ it("carries a kept size, naming the imported table", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
-  const cfg: WithVenueRowId = {
-    locationId: venueId,
+  const cfg: TradingContext = {
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     tipsEnabled: false,

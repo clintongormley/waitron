@@ -21,7 +21,6 @@ import {
   departmentDayRanges,
   departmentDays,
   departments,
-  locations,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
   menuPeriods,
@@ -61,7 +60,7 @@ const at = new Date("2026-11-02T12:00:00Z");
 /** Saves a new special day on `date` painting the fixture's department (period) or zone (closed). */
 const paintDate = (
   v: {
-    cfg: { locationId: string };
+    cfg: {};
     departmentId: string;
     periodId: string;
     zoneId?: string;
@@ -112,10 +111,6 @@ async function fixture(
   } = {},
 ) {
   return withTransaction(suite.db, async (tx) => {
-    const loc = randomUUID();
-    await tx.insert(locations).values({
-      id: loc,
-    });
     await seedVenueSettings(tx, {
       name: "Clock venue",
       invoiceLocales: ["en"],
@@ -211,7 +206,7 @@ async function fixture(
     } else {
       await seasonDay(tx, { departmentId, seasonId, weekday: 3, periodId, ranges });
     }
-    return { cfg: { locationId: loc }, departmentId, periodId, seasonId, specialDayId, zoneId };
+    return { cfg: {}, departmentId, periodId, seasonId, specialDayId, zoneId };
   });
 }
 const range = (startsAt: string, endsAt: string) => ({ startsAt, endsAt });
@@ -247,7 +242,7 @@ async function seasonDay(
 /** Raw special-day rows painting one department, bypassing the special-day writer's checks. */
 async function paintedDay(
   tx: Transaction,
-  v: { cfg: { locationId: string }; departmentId: string },
+  v: { cfg: {}; departmentId: string },
   day: {
     name: string;
     date: string;
@@ -1931,7 +1926,7 @@ it("lists a department's season conflicts in the venue's season order", async ()
       { id: "e0000000-0000-4000-8000-000000000000", name: "Summer", startsOn: "06-01" },
       { id: "d0000000-0000-4000-8000-000000000000", name: "Autumn", startsOn: "09-01" },
     ];
-    await tx.insert(seasons).values(added.map((s) => ({ ...s, locationId: v.cfg.locationId })));
+    await tx.insert(seasons).values(added.map((s) => ({ ...s })));
     for (const seasonId of [v.seasonId, ...added.map((s) => s.id)])
       await seasonDay(tx, {
         departmentId: v.departmentId,
@@ -1959,7 +1954,6 @@ it("counts a range painted in every season once, so a capped list still names ev
         ["Summer", "06-01"],
         ["Autumn", "09-01"],
       ].map(([name, startsOn]) => ({
-        locationId: v.cfg.locationId,
         name: name!,
         startsOn: startsOn!,
       })),
@@ -2127,10 +2121,6 @@ async function busyCalendar(count: number, run = 0) {
   const fixed = (kind: number, n: number) =>
     `00000000-0000-4${String(run).padStart(3, "0")}-8${String(kind).padStart(3, "0")}-${String(n).padStart(12, "0")}`;
   return withTransaction(suite.db, async (tx) => {
-    const loc = randomUUID();
-    await tx.insert(locations).values({
-      id: loc,
-    });
     await seedVenueSettings(tx, { operationDescription: "Restaurant" });
     await seedBusinessDay(tx, { timeZone: before.timeZone, dayCutover: "05:00:00" });
     const seasonIds = ["03-01", "06-01", "09-01", "12-01"].map((startsOn, i) => ({
@@ -2237,7 +2227,7 @@ async function busyCalendar(count: number, run = 0) {
         ]);
       }
     }
-    return { locationId: loc };
+    return {};
   });
 }
 

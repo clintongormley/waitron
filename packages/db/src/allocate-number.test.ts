@@ -5,28 +5,23 @@ import { allocateInvoiceNumber } from "./allocate-number.js";
 import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { invoiceSeries } from "./schema/series.js";
-import { locations } from "./schema/tenants.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { seedNode, seedVenue } from "./testing/seed.js";
 import { withTransaction } from "./tenancy.js";
 
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const UNKNOWN_SERIES = "00000000-0000-4000-8000-000000000000";
 
 let nodeA1 = "";
 
 async function seed(db: Database): Promise<void> {
   await seedVenue(db, {
-    name: "Fixture Location A",
+    name: "Fixture Venue A",
     invoiceLocales: ["es", "ca"],
     operationDescription: "Hostelería",
   });
   nodeA1 = await seedNode(db);
-  await db.insert(locations).values({
-    id: LOCATION_B,
-  });
   await seedVenueSettings(db, {
-    name: "Fixture Location B",
+    name: "Fixture Venue B",
     invoiceLocales: ["es"],
     operationDescription: "Hostelería",
   });

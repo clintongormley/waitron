@@ -16,7 +16,6 @@ import {
   seasons,
   specialDayDates,
   specialDays,
-  venueLocationId,
   withTransaction,
   zoneDayRanges,
   zoneDays as zoneDayRows,
@@ -67,9 +66,7 @@ async function venue(options: { oneSeason?: boolean } = {}) {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   });
-  const cfg: { locationId: string } = {
-    locationId: await venueLocationId(db),
-  };
+  const cfg: {} = {};
   const departmentId = await scoped(
     async (tx) => (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id,
   );
@@ -86,7 +83,7 @@ async function venue(options: { oneSeason?: boolean } = {}) {
     for (const zone of zones) await configureZone(tx, { zoneId: zone.id, departmentId });
     const menus: Record<string, string> = {};
     const period = async (name: string) => {
-      const menuId = (await createCatalogue(tx, { name: `${name} ${cfg.locationId}` })).id;
+      const menuId = (await createCatalogue(tx, { name: `${name}` })).id;
       menus[name] = menuId;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");

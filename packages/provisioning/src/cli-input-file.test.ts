@@ -75,7 +75,7 @@ const input = {
       module: "test-regime",
       eventId: "initial-42",
       sourceId: "paper-42",
-      input: { approvedLocationName: "From supplied file" },
+      input: { approvedVenueName: "From supplied file" },
     },
   ],
 };
@@ -98,7 +98,7 @@ function deps(lines: string[], path: string | undefined): CliDeps {
             targetNodeId: NODE,
           });
           await seedVenueSettings(tx, {
-            name: (operation.input as { approvedLocationName: string }).approvedLocationName,
+            name: (operation.input as { approvedVenueName: string }).approvedVenueName,
           });
           return "file-setup-complete";
         },

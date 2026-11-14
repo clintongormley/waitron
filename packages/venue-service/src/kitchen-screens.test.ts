@@ -14,7 +14,6 @@ import {
   floorZones,
   kitchenStations,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
@@ -72,14 +71,12 @@ const refused = (field: string, reason: string) => ({
   params: { field, reason },
 });
 
-async function seedLocation(): Promise<string> {
+async function seedFixtureVenue(): Promise<void> {
   await seedVenue(db, {
     name: `Venue ${randomUUID()}`,
     invoiceLocales: ["en-GB"],
     operationDescription: "Hospitality",
   });
-  const venueId = await venueLocationId(db);
-  return venueId;
 }
 
 async function seedProfile(formFactor: "till" | "phone-portrait" | "kds"): Promise<string> {
@@ -100,8 +97,8 @@ async function seedStation(name: string) {
  * Counter, shown Terrace, Dining room, Counter; a kitchen display profile and a till profile.
  */
 async function seedVenueWithStations() {
-  const locationId = await seedLocation();
-  const cfg = { locationId };
+  await seedFixtureVenue();
+  const cfg = {};
   const grill = await seedStation("Grill");
   const cold = await seedStation("Cold");
   const pastry = await seedStation("Pastry");

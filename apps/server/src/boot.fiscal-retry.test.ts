@@ -278,7 +278,6 @@ describe("boot's Retry now wiring", () => {
         await seedPendingEnvios(suite.db, {
           count: 2,
           identity: {
-            locationId: venue.cfg.locationId,
             nodeId: venue.cfg.nodeId,
             nif: "B12345678",
           },

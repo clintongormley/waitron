@@ -14,7 +14,7 @@ import { jobOrigin } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
-import { seedLocation, seedPerson } from "../test/fixtures.js";
+import { seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 
 const WRITERS = 20;
 
@@ -28,7 +28,7 @@ let nodeId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
 });
 
@@ -89,8 +89,7 @@ describe("appendToChain under concurrent callers", () => {
     expect(verifyChain(chain)).toEqual({ ok: true });
   });
 
-  it("never collides between two nodes on the SAME location — independent heads", async () => {
-    // Both nodes claim the same sequence_no values at one location; they cannot collide only because
+  it("never collides between two nodes on the SAME venue — independent heads", async () => {
     // `node_id` is in `time_entries_chain_position_uq`.
     const nodeB = await seedNode(suite.db);
     const perNode = WRITERS / 2;

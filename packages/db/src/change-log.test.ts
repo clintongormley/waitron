@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { catalogues } from "./schema/catalogue.js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ResourceChange } from "@waitron/shared";
 import { installChangeFeed } from "./change-feed.js";
@@ -10,11 +10,9 @@ import { withTransaction } from "./tenancy.js";
 import type { Transaction } from "./client.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-// Raw SQL supplies the id because the schema's JavaScript default is not evaluated.
-async function insertLocation(tx: Transaction): Promise<string> {
+async function insertMenu(tx: Transaction): Promise<string> {
   const id = randomUUID();
-  await tx.execute(sql`
-    insert into locations (id) values (${id})`);
+  await tx.insert(catalogues).values({ id, name: id });
   return id;
 }
 
@@ -43,19 +41,19 @@ describe("the change log", () => {
     const seen = collect();
     let id = "";
     await withTransaction(suite.db, async (tx) => {
-      id = await insertLocation(tx);
+      id = await insertMenu(tx);
       // Still open: a listener that had already seen this would be reporting a change that the
       // rollback case below proves may never happen.
       expect(seen).toEqual([]);
     });
-    expect(seen).toEqual([{ resources: [{ type: "locations", id }] }]);
+    expect(seen).toEqual([{ resources: [{ type: "catalogues", id }] }]);
   });
 
   it("publishes nothing when the transaction rolls back", async () => {
     const seen = collect();
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await insertLocation(tx);
+        await insertMenu(tx);
         throw new Error("deliberate");
       }),
     ).rejects.toThrow("deliberate");
@@ -67,9 +65,9 @@ describe("the change log", () => {
     const seen = collect();
     let id = "";
     await withTransaction(suite.db, async (tx) => {
-      id = await insertLocation(tx);
+      id = await insertMenu(tx);
     });
-    expect(seen).toEqual([{ resources: [{ type: "locations", id }] }]);
+    expect(seen).toEqual([{ resources: [{ type: "catalogues", id }] }]);
   });
 
   it("stops delivering to a listener that has unsubscribed", async () => {
@@ -78,7 +76,7 @@ describe("the change log", () => {
     const unsubscribe = subscribeToChanges((change) => dropped.push(change));
     unsubscribe();
     await withTransaction(suite.db, async (tx) => {
-      await insertLocation(tx);
+      await insertMenu(tx);
     });
     // `seen` is the control: the change WAS delivered, to the listener still registered.
     expect(seen).toHaveLength(1);

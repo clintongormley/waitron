@@ -15,7 +15,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
   zoneDayRanges,
   zoneDays,
 } from "@waitron/db";
@@ -56,15 +55,14 @@ async function venue() {
     operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
   });
-  const venueId = await venueLocationId(db);
-  const cfg: { locationId: string } = { locationId: venueId };
+  const cfg: {} = {};
   const zone = await seedZone(db, { name: "Dining room", displayOrder: 0 });
   return scoped(async (tx) => {
     const departmentId = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" }))
       .id;
     await configureZone(tx, { zoneId: zone!.id, departmentId });
     const period = async (name: string) => {
-      const menuId = (await createCatalogue(tx, { name: `${name} ${cfg.locationId}` })).id;
+      const menuId = (await createCatalogue(tx, { name: `${name}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
       return (await saveMenuPeriod(tx, departmentId, { name, menuId, staffMenuIds: [] })).id;
@@ -624,7 +622,7 @@ describe("saveSeasonWeeks", () => {
     const more = await scoped(async (tx) => {
       const department = async (name: string) => {
         const id = (await createDepartment(tx, { name, orderStart: "table" })).id;
-        const menuId = (await createCatalogue(tx, { name: `${name} ${v.cfg.locationId}` })).id;
+        const menuId = (await createCatalogue(tx, { name: `${name}` })).id;
         const { document } = await buildMenuDocument(tx, menuId);
         await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
         const period = (await saveMenuPeriod(tx, id, { name, menuId, staffMenuIds: [] })).id;

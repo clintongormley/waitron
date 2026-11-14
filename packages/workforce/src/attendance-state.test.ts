@@ -5,7 +5,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
-import { seedLocation } from "../test/fixtures.js";
+import { seedFixtureVenue } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import {
   attendanceDayWork,
@@ -17,7 +17,6 @@ import {
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
-let locationId: string;
 const day = () => ({
   businessDay: "2026-01-05",
   startAt: "2026-01-05T04:00:00.000Z",
@@ -25,7 +24,7 @@ const day = () => ({
 });
 beforeEach(async () => {
   await seedTenant(suite.db);
-  locationId = await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
 });
 
 describe("durable attendance day work", () => {
@@ -109,7 +108,6 @@ describe("durable attendance day work", () => {
       source: "order" as const,
       key: "one",
       personId: person!.id,
-      locationId,
       kind: "order" as const,
       at: "2026-01-05T09:00:00.000Z",
       offsetMinutes: 0,

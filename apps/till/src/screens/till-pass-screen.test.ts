@@ -2382,11 +2382,6 @@ describe("A773 pass screen: a till's All stations, its extras and portions", () 
     );
     expect(names(el)).toEqual(["2× Burger"]);
   });
-
-  it("exposes no Fire-control property", async () => {
-    const el = await mount({});
-    expect("fireControl" in el).toBe(false);
-  });
 });
 
 describe("A773 pass screen: a pass monitor", () => {
@@ -2721,7 +2716,7 @@ describe("D95 the pass on a 1024 px tablet", () => {
   });
 });
 
-it.each(["ticket_items", "ticket_item_moves", "locations", "categories", "category_details"])(
+it.each(["ticket_items", "ticket_item_moves", "categories", "category_details"])(
   "live pass %s changes coalesce behind one read while the fifteen-second timer keeps reading",
   async (type) => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });

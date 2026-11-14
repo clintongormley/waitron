@@ -114,7 +114,7 @@ afterEach(async () => {
 });
 
 describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () => {
-  it("fetches a designated node and location with no cached invoice series", async () => {
+  it("fetches a designated node and venue with no cached invoice series", async () => {
     const identity = { ...SAMPLE_BUNDLE.designated };
     const expected = { ...SAMPLE_BUNDLE, designated: identity };
     const app = new Hono();

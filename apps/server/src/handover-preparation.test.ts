@@ -13,7 +13,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   incidents,
   invoiceSeries,
-  locations,
   nodes,
   stampDeployment,
   tenants,
@@ -50,7 +49,6 @@ import {
   mergeModulePreparationRevisions,
   readModulePreparationHistory,
 } from "@waitron/provisioning";
-import { locationId } from "@waitron/shared";
 import { startServer, type StartedServer } from "./boot.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -114,7 +112,6 @@ vi.mock("@waitron/identity/src/verify-password.js", async (importOriginal) => {
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
-const venueId = locationId(TENANT_A.locationId);
 const primary = { nodeId: TENANT_A.nodeId };
 const standby = { nodeId: TENANT_A.nodeId2 };
 const OPERATION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -168,9 +165,6 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
-  await suite.db.insert(locations).values({
-    id: venueId,
-  });
   await seedVenueSettings(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["en"],
@@ -180,7 +174,6 @@ beforeEach(async () => {
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,
-      locationId: venueId,
       name: node === primary ? "Primary" : "Standby",
       filingModule: "verifactu",
       taxModule: "vat",

@@ -13,7 +13,6 @@ import { TillApp } from "./till-app.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
-import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   MenuStateAnswer,
@@ -213,7 +212,6 @@ function till(formFactor: FormFactor) {
     venueName: "Bar Pepe",
     nif: "B12345678",
     orderFlow: "prepay" as const,
-    fireControl: "waiter" as const,
     courses,
     cardProvider: "none" as const,
     tipsEnabled: false,
@@ -452,34 +450,6 @@ describe("A768 the till follows the venue's setup revision", () => {
     await poll(el);
     expect(api.getTill.mock.calls.length).toBe(reads + 2);
     expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
-  });
-
-  it("A773 waiter authority: refresh drops the retired station control", async () => {
-    const stationTill = {
-      ...till(drillFormFactor),
-      onboardingIntent: "prepare" as const,
-      capabilities: ["print-receipt", "show-station"] as CapabilityFlag[],
-    };
-    const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue(stationTill),
-      listStations: vi.fn().mockResolvedValue([]),
-      getStationQueue: vi.fn().mockResolvedValue({ tickets: [] }),
-    });
-    await flush(el);
-    await signIn(el);
-    emit(shell(el), "show-station");
-    await flush(el);
-    const station = () => el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen")!;
-    const reads = api.getTill.mock.calls.length;
-    api.getTill.mockResolvedValue({
-      ...stationTill,
-      fireControl: "kitchen",
-      setupRevision: "s2",
-    });
-    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
-    await poll(el);
-    expect(api.getTill.mock.calls.length).toBe(reads + 1);
-    expect("fireControl" in station()).toBe(false);
   });
 
   it("a settings read that answers after a server switch applies nothing", async () => {

@@ -12,7 +12,7 @@ const saved = {
   nodeId: "saved-node",
   nodeRecoveryKeyName: "Amber Hill",
   taxpayer: { legalName: "Saved venue", taxId: "89890001K" },
-  venueName: "Saved location",
+  venueName: "Saved venue",
 };
 afterEach(() => {
   cleanupWidgets();
@@ -57,7 +57,7 @@ it("shows the selected backup's key name and date without exposing the archive e
   expect(text).toContain("2026-10-01");
   expect(text).toContain("Saved venue");
   expect(text).toContain("89890001K");
-  expect(text).toContain("Saved location");
+  expect(text).toContain("Saved venue");
   expect(text).toContain("Keep older paper keys until no older backup remains.");
   expect(text).not.toContain("archive-secret");
   expect(child(el)!.outerHTML).not.toContain("archive-secret");

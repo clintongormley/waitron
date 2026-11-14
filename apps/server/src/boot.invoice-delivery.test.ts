@@ -16,7 +16,6 @@ import {
   tenants,
   withTransaction,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -106,7 +105,6 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
   const node = await seedNode(suite.db);
   await suite.db.update(nodes).set({ filingModule: "none" }).where(eq(nodes.id, node));
   const [series] = await suite.db
@@ -208,7 +206,6 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     env,
     node,
     deadPeerPort,
-    location: venueId,
     claim: { ...job!.invoiceClaim!, holder: identity.agentId },
   };
 }

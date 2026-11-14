@@ -364,7 +364,7 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
   // without test submissions, so it files none of them.
   await seedPendingEnvios(suite.db, {
     count: 3,
-    identity: { locationId: venue.cfg.locationId, nodeId, nif: "61000002T" },
+    identity: { nodeId, nif: "61000002T" },
     entorno: "preproduction",
   });
   const enviosBefore = suite.db.all(sql`select * from envios order by rowid`);

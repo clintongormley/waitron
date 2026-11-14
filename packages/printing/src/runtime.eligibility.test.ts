@@ -1,12 +1,6 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  printAgents,
-  printJobs,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, printAgents, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -14,7 +8,7 @@ import { esc } from "./escpos.js";
 import { claimPrintJobs, reportPrintJob } from "./runtime.js";
 import { createPrinter } from "./printers.js";
 import { endMovedPrintJob, enqueuePrintJob } from "./outbox.js";
-type PrintConfig = { locationId: string };
+type PrintConfig = {};
 
 const SETTING = { paperWidth: "58mm", resolution: "180dpi" } as const;
 
@@ -26,8 +20,7 @@ async function setup(): Promise<PrintConfig> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
-  return { locationId: venueId };
+  return {};
 }
 
 async function seedAgent(name: string): Promise<string> {

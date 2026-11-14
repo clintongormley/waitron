@@ -43,7 +43,7 @@ describe("frozen daily close schema (append-only triggers, columns, FK)", () => 
   beforeAll(async () => {
     const db = suite.db;
     await seedVenue(db, {
-      name: "Fixture Location A",
+      name: "Fixture Venue A",
       invoiceLocales: ["es"],
       operationDescription: "Hosteleria",
     });

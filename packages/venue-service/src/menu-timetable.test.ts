@@ -1,3 +1,4 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
@@ -22,7 +23,6 @@ import {
   departmentDays as departmentDayRows,
   floorZones,
   kitchenStations,
-  locations,
   menuPeriods,
   menuPeriodStaffMenus,
   routingCellPeriods,
@@ -32,7 +32,6 @@ import {
   workingOrderLines,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -585,21 +584,20 @@ describe("service-period writers", () => {
 /** A second call in one case reuses the venue's row and names its station, zones and departments
  * apart. */
 async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } = {}) {
-  const [existing] = await db.select({ id: locations.id }).from(locations);
-  if (existing === undefined)
+  const existing = await readSettings(db, VENUE_SETTINGS);
+  if (existing.revision === 0)
     await seedVenue(db, {
       name: `Casa ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
       operationDescription: "Hostelería",
       timeZone: ZONE,
     });
-  const venueId = await venueLocationId(db);
-  const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-  const locationId: string = venueId;
-  const cfg = { locationId };
+  const suffix = existing.revision === 0 ? "" : ` ${randomUUID()}`;
+  const fixtureId = randomUUID();
+  const cfg = {};
   await db
     .insert(kitchenStations)
-    .values({ name: `Cocina${suffix}`, isDefault: existing === undefined });
+    .values({ name: `Cocina${suffix}`, isDefault: existing.revision === 0 });
   const zone = async (name: string, displayOrder: number, departmentId: string) =>
     (
       await db
@@ -624,13 +622,13 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
       menus[name] = (
         await createCatalogue(tx, {
           name: (await tx.select().from(catalogues)).some((menu) => menu.name === name)
-            ? `${name} ${locationId}`
+            ? `${name} ${fixtureId}`
             : name,
         })
       ).id;
       if (!options.unpublished?.includes(name)) await publish(tx, menus[name]);
     }
-    const v = { cfg, locationId, restaurant, deli, barra, sala, terraza, mostrador, menus };
+    const v = { cfg, restaurant, deli, barra, sala, terraza, mostrador, menus };
     if (options.timetable === false) return { ...v, periods: null };
     const period = async (departmentId: string, name: string, menu: MenuName) =>
       (await saveMenuPeriod(tx, departmentId, { name, menuId: menus[menu], staffMenuIds: [] })).id;
@@ -1741,7 +1739,7 @@ describe("statements", () => {
     const lots = await read(busy);
     const v = busy;
     expect(lots).toHaveLength(none.length);
-    const runningPeriodReads = /"locations"/;
+    const runningPeriodReads = /"settings"/;
     expect(lots.filter((text) => runningPeriodReads.test(text))).toEqual([]);
     const priced = await scoped((tx) => listZoneOffers(tx, v.barra, { withDefault: false }));
     expect(priced.defaultMenuId).toBeNull();
@@ -1914,7 +1912,7 @@ describe("the venue's clock", () => {
       const prepared = vi.spyOn(session, "prepareQuery");
       await fn(tx);
       const reads = prepared.mock.calls.filter(([query]) =>
-        /from "locations"/.test((query as unknown as { sql: string }).sql),
+        /from "settings"/.test((query as unknown as { sql: string }).sql),
       ).length;
       prepared.mockRestore();
       return reads;
@@ -2946,7 +2944,7 @@ describe("a service period occurrence", () => {
             ...(withDefault ? {} : { withDefault: false as const }),
           });
           const clockReads = prepared.mock.calls.filter(([query]) =>
-            /from "locations"/.test((query as unknown as { sql: string }).sql),
+            /from "settings"/.test((query as unknown as { sql: string }).sql),
           ).length;
           return { offers, clockReads };
         } finally {

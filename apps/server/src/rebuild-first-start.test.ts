@@ -10,7 +10,6 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import {
-  locations,
   nodes,
   readMembershipTrustSet,
   readNodeMembership,
@@ -80,9 +79,6 @@ beforeAll(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
-  await suite.db.insert(locations).values({
-    id: LOCATION,
-  });
   await seedVenueSettings(suite.db, {
     name: "Local",
     invoiceLocales: ["es"],

@@ -6,7 +6,6 @@ import {
   kitchenStations,
   parties,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -33,16 +32,13 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, fn);
 }
 
-async function seedLocation(name: string): Promise<string> {
+async function seedFixtureVenue(name: string): Promise<void> {
   for (const id of ["sender", "p1", "p2", "p3"]) await seedPerson(db, { id, displayName: id });
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
   await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
-  return locationId;
 }
 
-async function departmentWithTables(cfg: { locationId: string }, name: string, count = 1) {
+async function departmentWithTables(name: string, count = 1) {
   return scoped(async (tx) => {
     const department = await createDepartment(tx, { name, orderStart: "table" });
     const zone = await createServiceZone(tx, { name, departmentId: department.id });
@@ -50,7 +46,6 @@ async function departmentWithTables(cfg: { locationId: string }, name: string, c
       .insert(diningTables)
       .values(
         Array.from({ length: count }, () => ({
-          locationId: cfg.locationId,
           zoneId: zone.id,
           label: randomUUID(),
         })),
@@ -67,10 +62,10 @@ async function newParty(): Promise<string> {
 
 describe("readTableStepRules", () => {
   it("reads each table's department's steps in list order", async () => {
-    const cfg = { locationId: await seedLocation("Steps in order") };
-    const a = await departmentWithTables(cfg, "A", 2);
-    const b = await departmentWithTables(cfg, "B");
-    const empty = await departmentWithTables(cfg, "Empty");
+    await seedFixtureVenue("Steps in order");
+    const a = await departmentWithTables("A", 2);
+    const b = await departmentWithTables("B");
+    const empty = await departmentWithTables("Empty");
     await scoped(async (tx) => {
       await saveServiceSteps(tx, a.departmentId, [
         { name: "Bread", start: "seated", courseId: null, minutes: 0 },
@@ -115,8 +110,8 @@ describe("readTableStepRules", () => {
   });
 
   it("leaves out a table whose zone is inactive", async () => {
-    const cfg = { locationId: await seedLocation("Steps without department") };
-    const a = await departmentWithTables(cfg, "A");
+    await seedFixtureVenue("Steps without department");
+    const a = await departmentWithTables("A");
     const zone = await seedZone(db, { name: "Inactive", active: false });
     const [table] = await db
       .insert(diningTables)
@@ -132,8 +127,8 @@ describe("readTableStepRules", () => {
 
 describe("step completions", () => {
   it("records completions and reads them back by party", async () => {
-    const cfg = { locationId: await seedLocation("Completions") };
-    const a = await departmentWithTables(cfg, "A");
+    await seedFixtureVenue("Completions");
+    const a = await departmentWithTables("A");
     const [first, second] = (
       await scoped(async (tx) => {
         await saveServiceSteps(tx, a.departmentId, [

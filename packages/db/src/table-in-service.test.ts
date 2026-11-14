@@ -1,9 +1,9 @@
+import { tenants } from "@waitron/db";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
 import { floorZones } from "./schema/floor-zones.js";
-import { locations } from "./schema/tenants.js";
 import { tableInService } from "./table-in-service.js";
 import { seedVenue, seedZone } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -79,7 +79,7 @@ describe("table in service", () => {
   it("keeps the same table correlation when the table is joined", async () => {
     const rows = await suite.db
       .select({ id: diningTables.id, inService: tableInService(diningTables.id) })
-      .from(locations)
+      .from(tenants)
       .innerJoin(diningTables, sql`true`)
       .orderBy(diningTables.id);
     expect(rows).toEqual([

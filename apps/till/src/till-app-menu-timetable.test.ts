@@ -166,7 +166,6 @@ const till = {
   venueName: "Casa Delgado",
   nif: "B12345678",
   orderFlow: "prepay" as const,
-  fireControl: "waiter" as const,
   courses: [],
   cardProvider: "none" as const,
   tipsEnabled: false,

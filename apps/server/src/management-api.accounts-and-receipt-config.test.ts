@@ -1419,7 +1419,7 @@ describe("Management API — receipt routes (Task 7)", () => {
     });
   });
 
-  it("GET returns the location's address lines even when the receipt does not print them", async () => {
+  it("GET returns the venue's address lines even when the receipt does not print them", async () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);

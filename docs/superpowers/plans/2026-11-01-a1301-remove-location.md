@@ -1,5 +1,7 @@
 # A1301 — Remove the location concept: code and fixture slices — Implementation Plan
 
+> 2026-11-14: Built by A1308 slice 5, parts 5a–5h. See the [slice 5 plans](2026-11-08-a1308-5a-service-and-staff-location-columns.md). This document records the earlier design.
+
 > **2026-11-07 (A1422):** the upgrade and migration tests this plan names (among them
 > `kitchen-timing-upgrade`, `drawer-refund-upgrade`, `sale-receipt-guests-upgrade`,
 > `role-retirement-upgrade`, `fiscal-allocation-migration` and `fiscal-certificate-migration`) were

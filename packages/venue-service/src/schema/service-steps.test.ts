@@ -10,7 +10,6 @@ import {
   FOREIGN_KEY_VIOLATION,
   isRefusal,
   kitchenCourses,
-  locations,
   parties,
   serviceStepCompletions,
   serviceSteps,
@@ -163,7 +162,6 @@ describe("the service_step_completions table", () => {
     return withTransaction(db, async (tx) => {
       for (const id of ["sender", "waiter-1", "waiter-2"])
         await seedPerson(tx, { id, displayName: id });
-      await tx.insert(locations).values({}).returning({ id: locations.id });
       await seedVenueSettings(tx, {
         name,
         invoiceLocales: ["en-GB"],

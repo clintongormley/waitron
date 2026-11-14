@@ -1,12 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  invoiceSeries,
-  sales,
-  tenants,
-  venueLocationId,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { invoiceSeries, sales, tenants, type Database, type Transaction } from "@waitron/db";
 import { cadenas, envios, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -25,7 +18,6 @@ export type Entorno = "production" | "preproduction";
 
 /** The FK closure a `registros_facturacion` row hangs off. */
 export interface FiscalIds {
-  locationId: string;
   nodeId: string;
   seriesId: string;
   saleId: string;
@@ -48,7 +40,6 @@ let seedSeq = 0;
 /** Fresh random ids for one FK closure. Each test seeds its own so nothing collides on a fixed id. */
 export function freshFiscalIds(overrides: Partial<FiscalIds> = {}): FiscalIds {
   return {
-    locationId: overrides.locationId ?? randomUUID(),
     nodeId: overrides.nodeId ?? randomUUID(),
     seriesId: overrides.seriesId ?? randomUUID(),
     saleId: overrides.saleId ?? randomUUID(),
@@ -90,10 +81,6 @@ export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<vo
   });
 }
 
-/**
- * Seeds the FK closure `registros_facturacion` needs — tenant, location, device, node, invoice series,
- * sale, registro_sif — through `db`, and returns the ids. It stops SHORT of the registro itself.
- */
 export async function seedFiscalParents(
   db: Database,
   opts: SeedParentsOptions = {},
@@ -113,7 +100,6 @@ export async function seedFiscalParents(
       invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     });
-    ids.locationId = await venueLocationId(db);
     await seedDevice(db);
     ids.nodeId = await seedNode(db);
     await db.insert(invoiceSeries).values({ id: ids.seriesId, nodeId: ids.nodeId, code: "A" });

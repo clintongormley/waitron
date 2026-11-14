@@ -9,14 +9,7 @@ import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  stampDeployment,
-  tenants,
-  withNodeTransaction,
-} from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, tenants, withNodeTransaction } from "@waitron/db";
 import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -69,7 +62,6 @@ fetchWrap.wrap = reset.wrap as typeof fetchWrap.wrap;
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 
-const LOCATION = "b8000000-0000-4000-8000-000000000001";
 const NODE = "b8000000-0000-4000-8000-000000000002";
 const ORIGIN = "b8000000-0000-4000-8000-000000000003";
 const SERIES = "b8000000-0000-4000-8000-000000000004";
@@ -112,7 +104,6 @@ async function seedVenue(): Promise<void> {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222J", legalName: "Surface SL" });
-  await suite.db.insert(locations).values({ id: LOCATION });
   await seedVenueSettings(suite.db, {
     name: "Venue",
     invoiceLocales: ["en"],

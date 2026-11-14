@@ -9,17 +9,14 @@ import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { nodes } from "./nodes.js";
-import { locations } from "./tenants.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(async () => {
   await suite.db.execute(sql`delete from nodes`);
-  await suite.db.execute(sql`delete from locations`);
   await suite.db.execute(sql`delete from tenants`);
 });
 
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const NODE_A1 = "aaaaaaaa-2222-4000-8000-000000000001";
 
 /** Normalise the query result before reading catalog rows. */
@@ -30,15 +27,12 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 
 async function seed(db: Database): Promise<void> {
   await seedVenue(db, {
-    name: "Fixture Location A",
+    name: "Fixture venue",
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  await db.insert(locations).values({
-    id: LOCATION_B,
-  });
   await seedVenueSettings(db, {
-    name: "Fixture Location B",
+    name: "Fixture venue",
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
@@ -105,27 +99,6 @@ describe("nodes schema", () => {
       expect(indexes).toContain("tenants_country_tax_id_key");
       expect(indexes).not.toContain("tenants_nif_key");
     });
-  });
-
-  it("locations retain territory and clock columns; the venue document owns name and address", async () => {
-    const cols = await db.execute<{ name: string; notnull: number }>(
-      sql`select name, "notnull" from pragma_table_info('locations')`,
-    );
-    const byName = new Map(cols.rows.map((r) => [r.name, r.notnull]));
-    for (const a of [
-      "name",
-      "address_line1",
-      "address_line2",
-      "postal_code",
-      "city",
-      "province",
-      "fiscal_territory",
-      "operation_description",
-      "time_zone",
-      "day_cutover",
-    ]) {
-      expect(byName.has(a)).toBe(false);
-    }
   });
 
   it("nodes record the resolved filing_module and tax_module", async () => {

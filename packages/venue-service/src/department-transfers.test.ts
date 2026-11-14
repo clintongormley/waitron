@@ -1,3 +1,4 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
@@ -18,8 +19,6 @@ import {
   workingOrderLines,
   deviceProfiles,
   floorZones,
-  locations,
-  venueLocationId,
   withTransaction,
   workingOrders,
   type Transaction,
@@ -44,16 +43,16 @@ const suite = useVenueDb({
 /** A second call in one case reuses the venue's row and names its departments and zones apart. */
 async function venue() {
   return withTransaction(suite.db, async (tx) => {
-    const [existing] = await tx.select({ id: locations.id }).from(locations);
-    if (existing === undefined) {
+    const existing = await readSettings(tx, VENUE_SETTINGS);
+    if (existing.revision === 0) {
       await seedVenue(tx, {
         name: randomUUID(),
         invoiceLocales: ["en-GB"],
         operationDescription: "Hospitality",
       });
     }
-    const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-    const cfg = { locationId: await venueLocationId(tx) };
+    const suffix = existing.revision === 0 ? "" : ` ${randomUUID()}`;
+    const cfg = {};
     const a = await createDepartment(tx, { name: `Deli${suffix}`, orderStart: "table" });
     const b = await createDepartment(tx, {
       name: `Restaurant${suffix}`,

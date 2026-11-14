@@ -1527,7 +1527,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     },
   );
 
-  it("asks about an unscoped order on pay even when the retired location mode says invoice first", async () => {
+  it("asks about an unscoped order on pay even when the retired venue mode says invoice first", async () => {
     const made = await strandedDish("Unscoped order");
     const id = randomUUID();
     await park(id, [made]);
@@ -1549,7 +1549,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     });
   });
 
-  it("checks an unscoped table bill on pay despite the retired invoice-first location mode", async () => {
+  it("checks an unscoped table bill on pay despite the retired invoice-first venue mode", async () => {
     const made = await strandedDish("Unscoped sale basket");
     const id = randomUUID();
     await park(id, [made]);

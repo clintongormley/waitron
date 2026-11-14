@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, type Transaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
@@ -299,12 +299,7 @@ describe("attendance_question queue owner", () => {
     migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   });
   const backend = new WorkforceBackend();
-  let locationId: string,
-    nodeId: string,
-    personId: string,
-    primary: boolean,
-    now: Date,
-    controller: AbortController;
+  let nodeId: string, personId: string, primary: boolean, now: Date, controller: AbortController;
   let send: ReturnType<typeof vi.fn<MailTransport>>;
   const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
   const day = (date = "2026-01-05") => ({
@@ -333,7 +328,6 @@ describe("attendance_question queue owner", () => {
   const questions = () => suite.db.select().from(attendanceQuestions);
   const event = (at: string) => ({
     nodeId,
-    locationId,
     personId,
     at,
     offsetMinutes: 60,
@@ -396,7 +390,6 @@ describe("attendance_question queue owner", () => {
       invoiceLocales: ["es"],
       operationDescription: "Restaurant",
     });
-    locationId = await venueLocationId(suite.db);
     nodeId = await seedNode(suite.db);
     const [person] = await seedPersons(suite.db, {
       displayName: "Worker",
@@ -505,7 +498,7 @@ describe("attendance_question queue owner", () => {
       );
     },
   );
-  it("sends a reminder naming the venue without being told a location", async () => {
+  it("sends a reminder naming the venue without being told a venue", async () => {
     await seedMissing();
     await seedVenueSettings(suite.db, { name: "Sevilla" });
     expect(await pass()).toMatchObject({ processed: true });

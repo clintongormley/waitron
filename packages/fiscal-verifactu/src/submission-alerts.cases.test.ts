@@ -285,7 +285,7 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
     const first = await seedPendingEnvios(suite.db, { count: 1 });
     const second = await seedPendingEnvios(suite.db, {
       count: 1,
-      identity: { locationId: first.locationId, nodeId: first.nodeId, nif: first.nif },
+      identity: { nodeId: first.nodeId, nif: first.nif },
     });
     await fileOnChain(aeat, first, 2, [1100, 1100, 1100], at(1));
     await fileOnChain(aeat, second, 20_000, [1200, 1200, 1200], at(2));

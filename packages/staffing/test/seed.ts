@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
-import { kitchenStations, venueLocationId, withTransaction, type Database } from "@waitron/db";
+import { kitchenStations, withTransaction, type Database } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 
 import { departments, seasons } from "@waitron/venue-service";
@@ -14,7 +14,6 @@ export async function seedVenueWithStaff(db: Database) {
       operationDescription: "Restaurant",
     };
     await seedVenue(tx, venue);
-    const locationId = await venueLocationId(tx);
     const person = async (displayName: string) => {
       const [row] = await seedPersons(tx, { jobRoles: [], displayName, role: "staff" });
       return row!.id;
@@ -35,7 +34,7 @@ export async function seedVenueWithStaff(db: Database) {
       .values({ name: "Summer", startsOn: "06-01" })
       .returning({ id: seasons.id });
     return {
-      cfg: { locationId },
+      cfg: {},
       ana,
       marc,
       departmentId: department!.id,

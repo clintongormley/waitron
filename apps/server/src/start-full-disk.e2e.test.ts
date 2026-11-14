@@ -911,9 +911,7 @@ describe("a start on a real full disk", () => {
       try {
         db.exec("pragma journal_mode = wal");
         db.exec("create table tenants (country text, tax_id text)");
-        db.exec("create table locations (id text)");
         db.exec("insert into tenants values ('ES', 'B00000000')");
-        db.exec("insert into locations values ('loc-1')");
         db.exec("create table settings (module text primary key)");
         db.exec("insert into settings values ('venue')");
       } finally {

@@ -37,7 +37,7 @@ const pinned = vi.hoisted(() => ({
 }));
 vi.mock("./backup-verification-trust.js", () => ({ FISCAL_BACKUP_PUBLIC_TRUST: pinned }));
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
+const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "R", purpose: "rectificative" },
@@ -129,7 +129,6 @@ async function capture(populate = true) {
     const first = await activation(0);
     await activation(1);
     await seedSoldRegistro(suite.db, {
-      locationId: node.locationId,
       entorno: "preproduction",
       nodeId: node.nodeId,
       sifId: first.sifId,

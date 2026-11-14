@@ -137,15 +137,13 @@ it("selectors use calendar arithmetic for the next window", async () => {
     selection: { kind: "week", date: "2026-01-12" },
   });
 });
-it("has no Location field", async () => {
+it("requests the next week", async () => {
   const { el } = await mount({ view: hoursView() });
-  expect(el.shadowRoot!.querySelector('[name="hoursLocation"]')).toBeNull();
   const select = vi.fn();
   el.addEventListener("hours-select", select);
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
   const detail = (select.mock.calls[0]![0] as CustomEvent).detail as Record<string, unknown>;
   expect(detail).toEqual({ selection: { kind: "week", date: "2026-01-12" } });
-  expect("locationId" in detail).toBe(false);
 });
 it("heads a pending question card by its work day alone", async () => {
   const { el } = await mount();

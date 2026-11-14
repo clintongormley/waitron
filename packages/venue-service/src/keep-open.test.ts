@@ -1,3 +1,4 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { sql, and, isNotNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -8,12 +9,10 @@ import {
   CORE_MIGRATIONS,
   dayCutoverChanges,
   floorZones,
-  locations,
   specialDayDates,
   specialDays,
   withTransaction,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -34,8 +33,8 @@ const at = (time: string, date = "2026-10-09") =>
 /** A second call in one case reuses the venue's row and names its department and zone apart. */
 async function fixture() {
   return run(async (tx) => {
-    const [existing] = await tx.select({ id: locations.id }).from(locations);
-    if (existing === undefined) {
+    const existing = await readSettings(tx, VENUE_SETTINGS);
+    if (existing.revision === 0) {
       await seedVenue(tx, {
         name: "Venue",
         invoiceLocales: ["en-GB"],
@@ -44,9 +43,8 @@ async function fixture() {
         dayCutover: "06:00:00",
       });
     }
-    const venueId = await venueLocationId(tx);
-    const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-    const cfg = { locationId: venueId };
+    const suffix = existing.revision === 0 ? "" : ` ${randomUUID()}`;
+    const cfg = {};
     const departmentId = (
       await createDepartment(tx, { name: `Restaurant${suffix}`, orderStart: "table" })
     ).id;
@@ -55,7 +53,7 @@ async function fixture() {
       .values({ ...cfg, name: `Dining${suffix}`, departmentId })
       .returning();
     await configureZone(tx, { zoneId: zone!.id, departmentId });
-    const menu = await createCatalogue(tx, { name: `Menu ${venueId}${suffix}` });
+    const menu = await createCatalogue(tx, { name: `Menu${suffix}` });
     const lunch = (
       await saveMenuPeriod(tx, departmentId, {
         name: "Lunch",
@@ -540,7 +538,7 @@ it("reads the clock, the seasons and the special days once for a zone's keep-ope
       const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
       expect(sql.filter((q) => q.includes('from "seasons"'))).toHaveLength(1);
       expect(sql.filter((q) => q.includes('from "special_day_dates"'))).toHaveLength(1);
-      expect(sql.filter((q) => q.includes('from "locations"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "settings"'))).toHaveLength(1);
     } finally {
       spy.mockRestore();
     }

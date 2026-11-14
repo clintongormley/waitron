@@ -7,7 +7,6 @@ import {
   specialDayDates,
   specialDays,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -29,8 +28,7 @@ async function fixture() {
       timeZone: "Europe/Madrid",
       dayCutover: "04:30:00",
     });
-    const venueId = await venueLocationId(tx);
-    const cfg = { locationId: venueId };
+    const cfg = {};
     const [department] = await tx
       .insert(departments)
       .values({

@@ -227,7 +227,7 @@ describe("recordSubstitution — the F3's origin", () => {
   });
 
   it.each(["Deli meals", "Terrace drinks", ""])(
-    "files the supplied operation description %j without location fallback",
+    "files the supplied operation description %j without venue fallback",
     async (operationDescription) => {
       const fake = new FakeFiscalBackend(suite.db);
       const { saleId: original } = await sellTicket(fake);

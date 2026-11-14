@@ -8,7 +8,6 @@ import {
   floorPlans,
   newId,
   nowIso,
-  venueLocationId,
   withTransaction,
   diningTables,
 } from "@waitron/db";
@@ -32,9 +31,7 @@ import {
 } from "./bookings.js";
 import "./errors.js";
 
-interface VenueCfg {
-  locationId: string;
-}
+interface VenueCfg {}
 
 const suite = useVenueDb({
   migrations: BOOKINGS_TEST_MIGRATIONS,
@@ -74,9 +71,8 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant service",
   });
-  const locationId = await venueLocationId(db);
   return {
-    cfg: { locationId: locationId },
+    cfg: {},
     createdBy: await seedPerson(db),
   };
 }
@@ -469,11 +465,10 @@ describe("seatBooking", () => {
       invoiceLocales: ["es-ES"],
       operationDescription: "Restaurant service",
     });
-    const locationId = await venueLocationId(db);
     const nodeId = await seedNode(db);
     return {
-      cfg: { locationId: locationId },
-      core: fakeCore({ locationId, nodeId }),
+      cfg: {},
+      core: fakeCore({ nodeId }),
       createdBy: await seedPerson(db),
       seatedBy: await seedPerson(db, { displayName: "Booking waiter" }),
     };

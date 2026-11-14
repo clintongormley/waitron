@@ -3,7 +3,7 @@ import { getCountryPack } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { invoiceSeries, locations, nodes, withTransaction, workingOrders } from "@waitron/db";
+import { invoiceSeries, nodes, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, nodeId, seriesId } from "@waitron/shared";
@@ -23,7 +23,6 @@ const recipient = {
 
 async function bill(full = false) {
   return withTransaction(suite.db, async (tx) => {
-    await tx.insert(locations).values({}).returning();
     await seedVenueSettings(tx, {
       name: "Selector",
       invoiceLocales: ["es-ES"],

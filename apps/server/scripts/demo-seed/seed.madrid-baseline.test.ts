@@ -190,7 +190,7 @@ const ADDED_TABLES = [
   "working_line_portions",
   "declaraciones_responsables",
 ];
-const REMOVED_TABLES_WITH_ROWS = ["location_catalogues"];
+const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
   "device_profile_admission_persons",
   "floor_plan_table_parts",

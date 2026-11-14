@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { invoiceSeries, locations, nodes, stampDeployment, tenants } from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, tenants } from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import {
   loadKeyRing,
@@ -48,16 +48,12 @@ const { startServer, httpPort } = ephemeralServerFixture();
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
-const LOCATION = "a8000000-0000-4000-8000-000000000001";
 const PRIMARY = "a8000000-0000-4000-8000-000000000002";
 const STANDBY = "a8000000-0000-4000-8000-000000000003";
 it("boot keeps an adoption whose copy has not arrived pending, with no ambient session or selling identity", async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
-  await suite.db.insert(locations).values({
-    id: LOCATION,
-  });
   await seedVenueSettings(suite.db, {
     name: "Venue",
     invoiceLocales: ["en"],
@@ -136,9 +132,6 @@ it("the pending-adoption start answers the main box's signed query", async () =>
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
-  await suite.db.insert(locations).values({
-    id: LOCATION,
-  });
   await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({
@@ -265,7 +258,6 @@ async function seedJoiningSpare() {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
-  await suite.db.insert(locations).values({ id: LOCATION });
   await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
   await seedBusinessDay(suite.db, {});
   const standby = generateNodeKeyPair();

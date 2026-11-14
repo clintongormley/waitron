@@ -16,7 +16,6 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 afterEach(async () => {
   await suite.db.execute(sql`delete from invoice_series`);
   await suite.db.execute(sql`delete from nodes`);
-  await suite.db.execute(sql`delete from locations`);
   await suite.db.execute(sql`delete from tenants`);
 });
 
@@ -33,7 +32,7 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 
 async function seed(db: Database): Promise<void> {
   await seedVenue(db, {
-    name: "Fixture Location A",
+    name: "Fixture Venue A",
     invoiceLocales: ["es", "ca"],
     operationDescription: "Hostelería",
   });

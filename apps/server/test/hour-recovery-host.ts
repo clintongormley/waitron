@@ -114,7 +114,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 export const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-export const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
+export const node = { nodeId: TENANT_A.nodeId, streamId: "a0000000-0000-4000-8000-000000000002" };
 export const binding: OperationBinding = {
   module: "fiscal-verifactu",
   action: "restore",
@@ -427,7 +427,7 @@ export async function bucketCommand(given?: Awaited<ReturnType<typeof archiveHos
   const generation = `gen-0-${node.nodeId}-20261016T124000Z`;
   const kit = {
     version: 2 as const,
-    streamId: node.locationId,
+    streamId: node.streamId,
     bucket: {
       endpoint: "",
       region: "eu-west-1",
@@ -622,7 +622,7 @@ export async function stageBucketRoute(given?: Awaited<ReturnType<typeof archive
   });
   const { f, command, deps, kit } = await bucketCommand(given);
   const recoveryContext = {
-    selectedSourceId: `stream:${node.locationId}:gen-0-${node.nodeId}-20261016T124000Z`,
+    selectedSourceId: `stream:${node.streamId}:gen-0-${node.nodeId}-20261016T124000Z`,
     oldBoxGone: true,
     soleRecovery: true,
   };
@@ -742,7 +742,7 @@ export async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
   const pointId = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
   const point = {
     id: pointId,
-    venueId: node.locationId,
+    venueId: node.streamId,
     capturedAt: new Date().toISOString(),
     modules: (
       await buildManifest({

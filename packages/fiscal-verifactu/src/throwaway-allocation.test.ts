@@ -2,7 +2,7 @@ import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js"
 import { generateKeyPairSync, randomUUID, type KeyObject } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, afterEach, vi } from "vitest";
-import { deployment, locations, nodes, tenants, withTransaction } from "@waitron/db";
+import { deployment, nodes, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ThrowawayAllocation } from "@waitron/module";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -21,7 +21,6 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const TAXPAYER = "B12345674";
 const node = {
   nodeId: brandNodeId("c0000000-0000-4000-8000-000000000008"),
-  locationId: "c0000000-0000-4000-8000-000000000002",
 };
 const bases = [
   { code: "A", purpose: "standard" },
@@ -37,9 +36,6 @@ async function seedStampedVenue(stamp: "preproduction" | "production") {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: TAXPAYER, legalName: "Real Restaurant S.L." });
-  await suite.db.insert(locations).values({
-    id: node.locationId,
-  });
   await seedVenueSettings(suite.db, {
     name: "Casa Real",
     invoiceLocales: ["es"],

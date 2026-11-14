@@ -2,7 +2,7 @@ import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { invoiceSeries, sales, workingOrders, withTransaction, venueLocationId } from "@waitron/db";
+import { invoiceSeries, sales, workingOrders, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -25,8 +25,7 @@ async function fixture(nullHeader = false) {
     invoiceLocales: ["es-ES"],
     operationDescription: "Hospitality",
   });
-  const venueId = await venueLocationId(suite.db);
-  const cfg = { locationId: venueId };
+  const cfg = {};
   const nodeId = await seedNode(suite.db);
   const [primary] = await suite.db
     .insert(departments)
@@ -127,7 +126,6 @@ describe("invoice-choice email contact selection", () => {
     const input = {
       delivery: delivery(),
       invoiceType: "F1" as const,
-      locationId: f.cfg.locationId,
       context,
       source: { kind: "order" as const, orderId: f.orderId },
     };
@@ -142,7 +140,6 @@ describe("invoice-choice email contact selection", () => {
     const input = {
       delivery: delivery(),
       invoiceType: "F1" as const,
-      locationId: f.cfg.locationId,
       context,
       source: { kind: "order" as const, orderId: f.orderId },
     };

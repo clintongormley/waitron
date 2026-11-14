@@ -48,7 +48,7 @@ async function run(overrides: Partial<DailyCloseInput> = {}) {
 }
 
 async function bill(
-  seed: Pick<SeededVenue, "deviceId" | "locationId" | "nodeId" | "seriesId">,
+  seed: Pick<SeededVenue, "deviceId" | "nodeId" | "seriesId">,
   orderNumber: number,
   opts: { total: string; issuedAt: string; settledAt?: string },
 ): Promise<string> {

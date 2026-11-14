@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
-import { seedLocation, seedEmployment } from "../test/fixtures.js";
+import { seedFixtureVenue, seedEmployment } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { timeEntries } from "./schema/time-entries.js";
@@ -40,7 +40,7 @@ const event = (at: string, subject = personId) => ({
 const query = () => run((tx) => backend.timeRecord(tx, { period: january, personId }));
 beforeEach(async () => {
   await seedTenant(suite.db);
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },

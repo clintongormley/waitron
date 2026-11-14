@@ -496,7 +496,7 @@ it("changing the API context drops old rows/options and reads the new context ev
   const replacement = findBillApi(async (url) =>
     json(
       url.pathname.endsWith("options")
-        ? { ...billOptions, zones: [{ id: "new-zone", name: "New location" }] }
+        ? { ...billOptions, zones: [{ id: "new-zone", name: "New zone" }] }
         : listPage([billRow({ label: "New session bill" })], 1),
     ),
   );
@@ -505,7 +505,7 @@ it("changing the API context drops old rows/options and reads the new context ev
   await vi.waitFor(() => expect(table(el).shadowRoot!.textContent).toContain("New session bill"));
   expect(table(el).shadowRoot!.textContent).not.toContain("Lucía");
   expect(table(el).columns.find((c) => c.key === "zone")!.filter!.options).toEqual([
-    { value: "new-zone", label: "New location" },
+    { value: "new-zone", label: "New zone" },
   ]);
   expect(requests(replacement.fetcher)).toHaveLength(1);
 });

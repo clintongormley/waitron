@@ -10,7 +10,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -114,8 +113,7 @@ async function venue() {
     province: "Northshire",
     city: "Villa Real",
   });
-  const venueId = await venueLocationId(db);
-  const cfg: { locationId: string } = { locationId: venueId };
+  const cfg: {} = {};
   return { cfg };
 }
 type Venue = Awaited<ReturnType<typeof venue>>;

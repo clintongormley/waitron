@@ -3,19 +3,15 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { venueLocationId } from "../venue.js";
 import { catalogues, products } from "./catalogue.js";
 import { kitchenCourses } from "./kitchen-courses.js";
-import { locations } from "./tenants.js";
 
-let LOCATION_A: string;
-const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 
 describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
@@ -30,10 +26,6 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
-    });
-    LOCATION_A = await venueLocationId(db);
-    await db.insert(locations).values({
-      id: LOCATION_A2,
     });
     await seedVenueSettings(db, {
       name: "Loc A2",
@@ -123,43 +115,6 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     expect(row!.displayOrder).toBe(5);
     expect(row!.name).toBe("Mains");
     expect(row!.active).toBe(true);
-  });
-
-  it("locations.fire_control defaults to 'waiter' (the new venue setting)", async () => {
-    const [row] = await inTx((tx) =>
-      tx
-        .select({ fireControl: locations.fireControl })
-        .from(locations)
-        .where(eq(locations.id, LOCATION_A)),
-    );
-    expect(row!.fireControl).toBe("waiter");
-  });
-
-  it("fire_control accepts the three labels and refuses a fourth", async () => {
-    // The column is `text` with an `in (...)` CHECK, so the set is tested by writing each label.
-    for (const label of ["waiter", "kitchen", "expo"] as const) {
-      await inTx((tx) =>
-        tx.update(locations).set({ fireControl: label }).where(eq(locations.id, LOCATION_A2)),
-      );
-      const [row] = await inTx((tx) =>
-        tx
-          .select({ fireControl: locations.fireControl })
-          .from(locations)
-          .where(eq(locations.id, LOCATION_A2)),
-      );
-      expect(row!.fireControl).toBe(label);
-    }
-    // Control: a non-label is refused. Raw SQL, because the column's type admits only the labels.
-    const e = await captureError(() =>
-      inTx(async (tx) => {
-        tx.run(sql`update locations set fire_control = 'nope' where id = ${LOCATION_A2}`);
-      }),
-    );
-    expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
-    // Restore, since this suite shares its rows across cases.
-    await inTx((tx) =>
-      tx.update(locations).set({ fireControl: "waiter" }).where(eq(locations.id, LOCATION_A2)),
-    );
   });
 
   it("routes a product to a course and rejects a missing one", async () => {

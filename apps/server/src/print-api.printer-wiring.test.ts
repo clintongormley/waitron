@@ -20,7 +20,6 @@ import {
   installChangeFeed,
   subscribeToChanges,
   CORE_CHANGE_SOURCES,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -43,18 +42,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-/**
- * The routes only this half of the pair drives: the station ↔ printer mapping, a location's print
- * mode and drawer-open policy, the change events and the job resend, plus the `hardware.manage` gate
- * and the key-scoped claim eligibility.
- */
 const noopLog: Logger = () => {};
 
-interface Tenant {
-  locationId: string;
-}
-
-let tenantA: Tenant;
 let managerCookie: string;
 let staffCookie: string;
 
@@ -70,7 +59,7 @@ function nextNif(): string {
   return `${String(76_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-async function seedTenantWithLocation(): Promise<Tenant> {
+async function seedPrintVenue(): Promise<void> {
   // Through the table definition: `tenants.created_at` is a `$defaultFn` generator a raw insert never reaches.
   await suite.db
     .insert(tenants)
@@ -80,11 +69,10 @@ async function seedTenantWithLocation(): Promise<Tenant> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
-  return { locationId: await venueLocationId(suite.db) };
 }
 
 beforeAll(async () => {
-  tenantA = await seedTenantWithLocation();
+  await seedPrintVenue();
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
     const [mgr] = await seedPersons(tx, {
       displayName: "The Manager",
@@ -597,14 +585,6 @@ describe("Station ↔ printer mapping routes (hardware.manage)", () => {
   });
 });
 
-function retainedConfiguration() {
-  return {
-    locations: suite.db.all(sql`select * from locations order by id`),
-    drawer: suite.db.all(sql`select * from drawer_opens order by id`),
-    jobs: suite.db.all(sql`select * from print_jobs order by id`),
-  };
-}
-
 describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
   it("has no till list, and no per-till receipt printer or drawer route", async () => {
     const app = mountApp();
@@ -616,62 +596,6 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     ] as const) {
       const res = await send(app, method, route, { cookie: managerCookie, body });
       expect(res.status).toBe(404);
-    }
-  });
-
-  it("keeps the retired venue receipt-mode route closed for every former value", async () => {
-    const app = mountApp();
-    const before = retainedConfiguration();
-    for (const mode of ["never", "on_request", "auto"] as const) {
-      const res = await send(
-        app,
-        "PATCH",
-        `/management-api/locations/${tenantA.locationId}/receipt-print-mode`,
-        { cookie: managerCookie, body: { mode } },
-      );
-      expect(res.status).toBe(404);
-      expect(retainedConfiguration()).toEqual(before);
-    }
-  });
-
-  it("keeps the retired route closed for unknown locations and invalid values", async () => {
-    const app = mountApp();
-    const unknown = await send(
-      app,
-      "PATCH",
-      `/management-api/locations/${randomUUID()}/receipt-print-mode`,
-      { cookie: managerCookie, body: { mode: "auto" } },
-    );
-    expect(unknown.status).toBe(404);
-
-    const badMode = await send(
-      app,
-      "PATCH",
-      `/management-api/locations/${tenantA.locationId}/receipt-print-mode`,
-      { cookie: managerCookie, body: { mode: "sometimes" } },
-    );
-    expect(badMode.status).toBe(404);
-  });
-
-  it("keeps the retired drawer policy route closed without changing configuration or audit", async () => {
-    const app = mountApp();
-    const before = retainedConfiguration();
-    for (const cookie of [undefined, staffCookie, managerCookie]) {
-      for (const id of [tenantA.locationId, randomUUID(), "bad-id"]) {
-        for (const policy of ["open", "gated", "sometimes", null]) {
-          const res = await send(
-            app,
-            "PATCH",
-            `/management-api/locations/${id}/drawer-open-policy`,
-            {
-              cookie,
-              body: { policy },
-            },
-          );
-          expect(res.status).toBe(404);
-          expect(retainedConfiguration()).toEqual(before);
-        }
-      }
     }
   });
 
@@ -923,24 +847,6 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
       cookie: managerCookie,
     });
     expect(manager.status).toBe(200);
-  });
-
-  it("never lets an authenticated manager or staff restore the retired authorization bypass", async () => {
-    const app = mountApp();
-    const before = retainedConfiguration();
-    for (const cookie of [managerCookie, staffCookie, undefined]) {
-      const res = await send(
-        app,
-        "PATCH",
-        `/management-api/locations/${tenantA.locationId}/drawer-open-policy`,
-        {
-          cookie,
-          body: { policy: "open" },
-        },
-      );
-      expect(res.status).toBe(404);
-      expect(retainedConfiguration()).toEqual(before);
-    }
   });
 });
 

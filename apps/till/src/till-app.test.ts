@@ -243,7 +243,6 @@ const till = {
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
-  fireControl: "waiter" as const,
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
@@ -4306,7 +4305,7 @@ describe("till-app", () => {
       expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
     });
 
-    it("starts on the location's language when the sale names none", async () => {
+    it("starts on the venue's language when the sale names none", async () => {
       const { el } = await soldWith(
         { invoiceLocale: "eu-ES", receiptLanguages: SPAIN },
         { recordSale: vi.fn().mockResolvedValue({ ...saleResult, locale: undefined }) },
@@ -4411,7 +4410,6 @@ describe("till-app", () => {
   });
 
   describe("the counter's receipt language", () => {
-    // The location's own receipt language comes first, as `GET /api/till` lists them.
     const OFFERED = ["ca-ES", "es-ES"];
     const languageButton = (el: TillApp) =>
       tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-receipt-language]");
@@ -4446,7 +4444,7 @@ describe("till-app", () => {
       return { el, c };
     }
 
-    it("offers no language button when the location offers one receipt language", async () => {
+    it("offers no language button when the venue offers one receipt language", async () => {
       const { el } = await counterWith({
         getTill: vi
           .fn()
@@ -4457,7 +4455,7 @@ describe("till-app", () => {
       expect(languageButton(el)).toBeNull();
     });
 
-    it("shows the location's language until staff choose another, then sends the chosen one with the sale", async () => {
+    it("shows the venue's language until staff choose another, then sends the chosen one with the sale", async () => {
       const { el, c } = await counterWith();
       const id = c.store.id;
       expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
@@ -4550,7 +4548,7 @@ describe("till-app", () => {
       );
     });
 
-    it("keeps each order's own language: a held order keeps its choice and the next sale starts on the location's", async () => {
+    it("keeps each order's own language: a held order keeps its choice and the next sale starts on the venue's", async () => {
       const { el, c } = await counterWith({
         retrieveWorkingOrder: vi.fn(async (id: string) => ({
           kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 1 },
@@ -4683,7 +4681,7 @@ describe("till-app", () => {
       );
     });
 
-    it("starts a retrieved order on the location's language when its stored one is no longer offered", async () => {
+    it("starts a retrieved order on the venue's language when its stored one is no longer offered", async () => {
       const { el, c } = await counterWith(
         {
           retrieveWorkingOrder: vi.fn().mockResolvedValue({
@@ -9782,13 +9780,12 @@ describe("till-app", () => {
       it("boots the venue courses without the retired table Fire-control setting", async () => {
         const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0 }];
         const { el } = await mountApp({
-          getTill: vi.fn().mockResolvedValue({ ...till, courses, fireControl: "waiter" }),
+          getTill: vi.fn().mockResolvedValue({ ...till, courses }),
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
         });
         const screen = await toTableOrder(el, openTable);
         expect(screen.courses).toEqual(courses);
-        expect("fireControl" in screen).toBe(false);
       });
 
       const heldCourseLine: TabLine = {
@@ -13592,17 +13589,6 @@ describe("till-app", () => {
       expect(counter(el)!.store.lines).toHaveLength(1);
     });
 
-    it("A773 waiter authority: boot leaves the retired control out of the station screen", async () => {
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, fireControl: "kitchen" }),
-      });
-      const c = await toCounter(el);
-      emit(c, "show-station");
-      await flush(el);
-      const screen = el.shadowRoot!.querySelector("till-station-screen")!;
-      expect("fireControl" in screen).toBe(false);
-    });
-
     it("show-expo: the counter nav switches to the expo/pass screen (basket-preserving)", async () => {
       const { el } = await mountApp();
       const c = await toCounter(el);
@@ -13623,19 +13609,6 @@ describe("till-app", () => {
       await flush(el);
       expect(counter(el)).not.toBeNull();
       expect(counter(el)!.store.lines).toHaveLength(1);
-    });
-
-    it("A773 boot leaves the retired Fire-control property off the pass", async () => {
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, fireControl: "expo" }),
-      });
-      const c = await toCounter(el);
-      emit(c, "show-expo");
-      await flush(el);
-      const screen = el.shadowRoot!.querySelector("till-pass-screen") as unknown as {
-        fireControl: string;
-      };
-      expect("fireControl" in screen).toBe(false);
     });
   });
 

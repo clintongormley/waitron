@@ -17,7 +17,6 @@ import {
   deviceProfiles,
   devices,
   kitchenStations,
-  locations,
   openVenueDatabase,
   readNodeMembership,
   readStandardSeriesId,
@@ -151,7 +150,6 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
-const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 // Also signs in to the dashboard for the box-status read.
@@ -190,12 +188,6 @@ async function seedMirror(
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222F", legalName: "Promote E2E Cloud SL" })
     .onConflictDoNothing();
-  await admin
-    .insert(locations)
-    .values({
-      id: MIRROR_LOCATION_ID,
-    })
-    .onConflictDoNothing();
   await seedVenueSettings(admin, {
     name: "Barra",
     invoiceLocales: ["en"],
@@ -216,7 +208,6 @@ async function seedMirror(
     db: admin,
     node,
     ring: RING,
-    locationId: MIRROR_LOCATION_ID,
     sourceId: MIRROR_ORIGIN_NODE_ID,
     taxpayerNif: nif,
     standby,
@@ -322,12 +313,10 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
       vatClass: "general",
     });
     await assignCatalogueToVenue(tx, cat.id);
-    const offers = await offerProducts(tx, {
-      locationId: MIRROR_LOCATION_ID,
-    });
+    const offers = await offerProducts(tx, {});
     return offers.offerFor(water.id);
   });
-  // Unused: the venue rows key on location and till, not the node.
+
   void nodeId;
   return waterOffer;
 }

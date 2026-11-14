@@ -51,10 +51,10 @@ it.each(["", "Not/A_Zone", "+02:00", "UTC"])(
     });
     const placed = await openVenueDatabase(f.roots.venueDir);
     try {
-      const [location] = await readSettings(placed.venue, BUSINESS_DAY_SETTINGS).then(({ doc }) => [
+      const [venueDoc] = await readSettings(placed.venue, BUSINESS_DAY_SETTINGS).then(({ doc }) => [
         doc,
       ]);
-      expect(location!.timeZone).toBe(timeZone);
+      expect(venueDoc!.timeZone).toBe(timeZone);
       expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
       const after = await placed.venue.select().from(invoiceSeries);
       for (const row of originalSeries)
@@ -93,10 +93,10 @@ it("retains an invalid zone through signed-pointer bucket preview, preparation a
   expect(entry.failures).toEqual([]);
   const placed = await openVenueDatabase(entry.f.roots.venueDir);
   try {
-    const [location] = await readSettings(placed.venue, BUSINESS_DAY_SETTINGS).then(({ doc }) => [
+    const [venueDoc] = await readSettings(placed.venue, BUSINESS_DAY_SETTINGS).then(({ doc }) => [
       doc,
     ]);
-    expect(location!.timeZone).toBe("Not/A_Zone");
+    expect(venueDoc!.timeZone).toBe("Not/A_Zone");
     expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
     expect(
       (await placed.venue.select().from(invoiceSeries))

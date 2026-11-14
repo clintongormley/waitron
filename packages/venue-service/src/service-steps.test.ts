@@ -9,14 +9,12 @@ import {
   captureError,
   departments,
   kitchenCourses,
-  locations,
   parties,
   serviceStepCompletions,
   serviceSteps,
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -47,7 +45,7 @@ async function seedVenueCfg(
   name: string,
   invoiceLocales: string[] = ["en-GB"],
   options: { tenant?: boolean; province?: string } = {},
-): Promise<{ locationId: string }> {
+): Promise<{}> {
   const venue = {
     name,
     invoiceLocales,
@@ -56,12 +54,11 @@ async function seedVenueCfg(
   };
   if (options.tenant === true) await seedVenue(db, venue);
   else {
-    const { name, province, invoiceLocales, operationDescription, ...columns } = venue;
-    await db.insert(locations).values(columns);
+    const { name, province, invoiceLocales, operationDescription } = venue;
     await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
     await seedBusinessDay(db);
   }
-  return { locationId: await venueLocationId(db) };
+  return {};
 }
 
 async function seedCourse(name: string, displayOrder: number, active = true): Promise<string> {

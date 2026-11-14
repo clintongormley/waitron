@@ -646,7 +646,7 @@ describe("the till's station day", () => {
     expect(answer.status).toBe(404);
     expect(answer.json).toMatchObject({ code: "station.not_found" });
   });
-  it("refuses a deleted source and an unreadable location clock without changing rows", async () => {
+  it("refuses a deleted source and an unreadable venue clock without changing rows", async () => {
     await suite.db
       .update(kitchenStations)
       .set({ active: false })

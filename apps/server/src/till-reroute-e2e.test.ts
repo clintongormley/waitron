@@ -10,7 +10,6 @@ import {
   deviceProfiles,
   devices,
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   stampDeployment,
@@ -94,10 +93,8 @@ vi.mock("./promote-api.js", async (original) => {
 // `server-router.contract.test.ts` replays through the router — both sides read the one JSON, so a
 // wire-shape drift fails a `toEqual` here before the router contract runs.
 
-// One venue: shared tenant/location/till, DISTINCT nodes (so B reading a NODE_A-tagged tab is a genuine
 // cross-node, venue-wide read) each with its own series. Fixed ids so `/api/node.nodeId` is deterministic
 // and matches the committed fixture.
-const LOCATION = "55555555-5555-4555-8555-555555555555";
 const NODE_A = "33333333-3333-4333-8333-333333333333";
 const NODE_B = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SERIES_A = "44444444-4444-4444-8444-444444444444";
@@ -152,10 +149,6 @@ let b: Database;
 
 let migrationsRoot: string;
 
-/** Seed the venue's identity (tenant, location, both nodes, till, both series) plus a staff person on
- * PIN 5555 and the till device, on one venue directory. The device's `token_hash` is
- * `hashDeviceToken(DEVICE_TOKEN)`, so the `waitron_device=<id>.<token>` cookie built above authenticates
- * against this row on whichever node holds it. */
 async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
   await seedModuleSettings(db, { "fiscal-none": false });
   beforeServerStarts();
@@ -165,12 +158,6 @@ async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90444444A", legalName: "Reroute E2E SL" })
     .onConflictDoNothing({ target: tenants.id });
-  await db
-    .insert(locations)
-    .values({
-      id: LOCATION,
-    })
-    .onConflictDoNothing({ target: locations.id });
   await seedVenueSettings(db, {
     name: "Loc",
     invoiceLocales: ["en"],

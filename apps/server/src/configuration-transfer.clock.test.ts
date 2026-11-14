@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { locations, deviceProfiles, withTransaction } from "@waitron/db";
+import { settings, deviceProfiles, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { getDeviceProfile, profileAllows } from "@waitron/layouts";
 import { persons } from "@waitron/identity";
@@ -148,7 +148,7 @@ it.each(["request", "artifact"] as const)(
         beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
       });
     const refusal = await run().catch((error: unknown) => error);
-    expect(await target.db.select().from(locations)).toEqual([]);
+    expect(await target.db.select().from(settings).where(eq(settings.module, "venue"))).toEqual([]);
     expect(await target.db.select().from(persons)).toEqual([]);
     expect(refusal).toMatchObject({
       code: "venue.time_zone_invalid",

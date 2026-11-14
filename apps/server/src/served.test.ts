@@ -27,7 +27,6 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -155,7 +154,6 @@ async function setupVenue(): Promise<Venue> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -165,7 +163,7 @@ async function setupVenue(): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   });
   return inTx(async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: `Served menu ${venueId}` });
+    const catalogue = await createCatalogue(tx, { name: `Served menu` });
     const category = await createCategory(tx, { name: "Platos" });
     const productId = {} as Record<Dish, string>;
     for (const [dish, unitPrice] of Object.entries(DISHES) as [Dish, string][]) {

@@ -16,7 +16,6 @@ import {
   sales,
   tenants,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { hashDeviceToken } from "@waitron/identity";
 import { createClient, PAGE_FORMATS, PAGE_HOLDS, PAGE_MEDIA } from "@waitron/print-agent";
@@ -82,7 +81,6 @@ async function venue(opts: { render?: Render; realClock?: true; bus?: LiveEvents
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const locationId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
@@ -130,7 +128,6 @@ async function venue(opts: { render?: Render; realClock?: true; bus?: LiveEvents
     state,
     cfg,
     backend,
-    locationId,
     nodeId,
     seriesId: series!.id,
     agentOne,

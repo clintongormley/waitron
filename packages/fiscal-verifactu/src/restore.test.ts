@@ -69,7 +69,6 @@ describe("restoreFiscal", () => {
   it("activates the supplied restore identity and complete series, resets the head and keeps the ledger", async () => {
     const first = await seedLiveNode();
     await seedSoldRegistro(db, {
-      locationId: TENANT_A.locationId,
       nodeId: TENANT_A.nodeId,
       sifId: first.id,
       nif: SIF.nif,

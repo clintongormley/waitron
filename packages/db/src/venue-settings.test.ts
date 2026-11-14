@@ -1,10 +1,9 @@
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import * as api from "./index.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { persons } from "./schema/identity/persons.js";
-import { locations } from "./schema/tenants.js";
 import { settings } from "./schema/settings.js";
 import * as seeds from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -162,23 +161,14 @@ describe("the venue document", () => {
     expect((await api.readVenueSettings(suite.db)).doc.cloudVenueId).toBe(id);
   });
 
-  it("keeps the interim location identity independent of the venue document", async () => {
-    const [row] = await suite.db.insert(locations).values({}).returning({ id: locations.id });
-    await seedVenueSettings(suite.db, { operationDescription: "Meals" });
-    await seedBusinessDay(suite.db, {});
-    expect(await api.venueLocationId(suite.db)).toBe(row!.id);
-  });
-
-  it("refuses a locations row without its venue document", async () => {
-    await suite.db.insert(locations).values({});
+  it("refuses a missing venue document", async () => {
     await expect(withTransaction(suite.db, api.readVenue)).rejects.toMatchObject({
       code: "venue.not_found",
       params: {},
     });
   });
 
-  it("merges document fields with the remaining location fields and reads place in the clock query", async () => {
-    await suite.db.insert(locations).values({});
+  it("merges document fields with the remaining venue fields and reads place in the clock query", async () => {
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     await seeds.seedBusinessDay(suite.db, { timeZone: "Europe/London", dayCutover: "04:00:00" });
     expect(await withTransaction(suite.db, api.readVenue)).toEqual({
@@ -201,7 +191,7 @@ describe("the venue document", () => {
     });
   });
 
-  it("reads receipt languages from the document without a locations row", async () => {
+  it("reads receipt languages from the document without other venue settings", async () => {
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     expect(await api.readVenueInvoiceLocales(suite.db)).toEqual(["en", "es"]);
   });
@@ -255,7 +245,6 @@ describe("the venue document", () => {
   });
 
   it("the joined clock read refuses the same invalid document version as the settings reader", async () => {
-    await suite.db.insert(locations).values({});
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     await suite.db.update(settings).set({ version: 2 }).where(eq(settings.module, "venue"));
     for (const read of [api.readVenueSettings, api.readVenueClockAndPlace])
@@ -288,7 +277,6 @@ describe("the business-day document", () => {
   });
 
   it("reads the zone, territory and description from the documents", async () => {
-    await suite.db.insert(locations).values({});
     await withTransaction(suite.db, async (tx) => {
       await api.createVenueSettings(
         tx,
@@ -312,7 +300,6 @@ describe("the business-day document", () => {
   });
 
   it("refuses a venue with no business-day document", async () => {
-    await suite.db.insert(locations).values({});
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     for (const read of [api.readVenue, api.readVenueClock])
       await expect(withTransaction<unknown>(suite.db, read)).rejects.toMatchObject({
@@ -338,7 +325,6 @@ describe("the business-day document", () => {
   });
 
   it("uses the first day-start row as the base and later rows as ordered changes", async () => {
-    await suite.db.insert(locations).values({});
     await withTransaction(suite.db, async (tx) => {
       await api.createVenueSettings(tx, doc, null);
       await api.saveSettings(tx, api.BUSINESS_DAY_SETTINGS, {

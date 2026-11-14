@@ -14,12 +14,10 @@ import {
   departmentDays,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
-  locations,
   seasons,
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
   readVenueClock,
   zoneDays,
 } from "@waitron/db";
@@ -61,10 +59,8 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function newLocation(name: string): Promise<string> {
+async function newVenue(name: string): Promise<void> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
-  const venueId = await venueLocationId(db);
-  return venueId;
 }
 
 const shape = (rows: { name: string; startsOn: string }[]) =>
@@ -72,7 +68,7 @@ const shape = (rows: { name: string; startsOn: string }[]) =>
 
 describe("ensureDefaultSeasons", () => {
   it("gives the venue the four default seasons once, however often it runs", async () => {
-    await newLocation("Four seasons");
+    await newVenue("Four seasons");
     const first = await withTransaction(db, (tx) => ensureDefaultSeasons(tx));
     const second = await withTransaction(db, (tx) => ensureDefaultSeasons(tx));
     const expected = [
@@ -88,7 +84,7 @@ describe("ensureDefaultSeasons", () => {
   });
 
   it("gives a new venue Spring green, Summer amber, Autumn orange and Winter blue", async () => {
-    await newLocation("Coloured seasons");
+    await newVenue("Coloured seasons");
     await withTransaction(db, (tx) => ensureDefaultSeasons(tx));
     const stored = await withTransaction(db, (tx) => readSeasons(tx));
     expect(stored.map(({ name, colour }) => [name, colour])).toEqual([
@@ -100,7 +96,7 @@ describe("ensureDefaultSeasons", () => {
   });
 
   it("leaves a venue that already has a season alone", async () => {
-    await newLocation("One season");
+    await newVenue("One season");
     const [own] = await db
       .insert(seasons)
       .values({ name: "All year", startsOn: "01-01" })
@@ -119,13 +115,10 @@ describe("ensureDefaultSeasons", () => {
     };
     if (tenant) await seedVenue(db, venue);
     else {
-      const { name, province, invoiceLocales, operationDescription, ...columns } = venue;
-      await db.insert(locations).values(columns);
+      const { name, province, invoiceLocales, operationDescription } = venue;
       await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
       await seedBusinessDay(db);
     }
-    const venueId = await venueLocationId(db);
-    return venueId;
   };
   const starterSeasons = (language: "es" | "en") =>
     DEFAULT_SEASONS.map(({ name, startsOn, colour }) => ({
@@ -185,7 +178,7 @@ describe("ensureDefaultSeasons", () => {
   });
 
   it("reads the venue's seasons, ordered by start", async () => {
-    await newLocation("Mine");
+    await newVenue("Mine");
     await db.insert(seasons).values([
       { name: "Late", startsOn: "10-01" },
       { name: "Early", startsOn: "02-01" },
@@ -216,8 +209,7 @@ async function autumnVenue() {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   });
-  const venueId = await venueLocationId(db);
-  const cfg: { locationId: string } = { locationId: venueId };
+  const cfg: {} = {};
   const zone = await seedZone(db, { name: "Terrace", displayOrder: 0 });
   const stored = await db
     .insert(seasons)
@@ -233,7 +225,7 @@ async function autumnVenue() {
     const bar = (await createDepartment(tx, { name: "Bar", orderStart: "counter" })).id;
     await configureZone(tx, { zoneId: zone!.id, departmentId: restaurant });
     const period = async (name: string) => {
-      const menuId = (await createCatalogue(tx, { name: `${name} ${cfg.locationId}` })).id;
+      const menuId = (await createCatalogue(tx, { name: `${name}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
       return (await saveMenuPeriod(tx, restaurant, { name, menuId, staffMenuIds: [] })).id;
@@ -515,7 +507,7 @@ describe("saveSeasons", () => {
   });
 
   it("gives a venue without seasons its four before adding", async () => {
-    await newLocation("No seasons yet, saveSeasons");
+    await newVenue("No seasons yet, saveSeasons");
     const saved = await change({ save: [entry(undefined, "Fair", "04-10")] });
     expect(shape(saved)).toEqual([
       { name: "Spring", startsOn: "03-01" },
@@ -578,7 +570,7 @@ describe("saveSeasons", () => {
   });
 
   it("refuses deleting every season", async () => {
-    await newLocation("Lone season, saveSeasons");
+    await newVenue("Lone season, saveSeasons");
     const [only] = await db
       .insert(seasons)
       .values({ name: "All year", startsOn: "01-01" })
@@ -591,7 +583,7 @@ describe("saveSeasons", () => {
   });
 
   it("swaps Summer's and Autumn's starts and their names in one call, each id keeping its weeks", async () => {
-    await newLocation("Swapped seasons");
+    await newVenue("Swapped seasons");
     const [, summer, autumn] = await scoped((tx) => ensureDefaultSeasons(tx));
     const kitchen = (await scoped((tx) => createDepartment(tx, { name: "Kitchen" }))).id;
     await scoped((tx) => writeDepartmentSeasonWeeks(tx, kitchen, [summer!.id], EMPTY_WEEK()));

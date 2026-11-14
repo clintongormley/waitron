@@ -84,7 +84,6 @@ const request = (async (path: string) => {
   if (path.includes("/staffing/rota?"))
     return {
       week: url.searchParams.get("week"),
-      locationId: "location",
       timeZone: "Europe/Madrid",
       version: null,
       seasons: [],

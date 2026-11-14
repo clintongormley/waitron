@@ -13,7 +13,6 @@ import {
   saleSubstitutions,
   tenderRefunds,
   tenders,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import {
@@ -76,7 +75,6 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  await venueLocationId(db);
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, { capabilities: CAPS });
   profileId = device.profileId;

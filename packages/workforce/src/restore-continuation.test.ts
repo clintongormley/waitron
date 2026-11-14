@@ -18,7 +18,7 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
 import { workforceChains } from "./schema/workforce-chains.js";
-import { seedLocation, seedPerson } from "../test/fixtures.js";
+import { seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
@@ -30,7 +30,7 @@ let nodeId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
 });
 

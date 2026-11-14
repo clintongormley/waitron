@@ -33,8 +33,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
-  locations,
+  settings,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -190,7 +189,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
@@ -216,7 +214,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     await tx
       .insert(personStaffRoles)
       .values({ personId: admin!.id, staffRoleId: await ensureFixtureJobRole(tx) });
-    const cat = await createCatalogue(tx, { name: `Bill payments menu ${venueId}` });
+    const cat = await createCatalogue(tx, { name: `Bill payments menu ${provisioned.nodeId}` });
     const dishes = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
@@ -371,7 +369,6 @@ async function insertPayment(
   return row!.id;
 }
 
-/** Every department of the venue's location gets `receipt` as its contact, for the body only. */
 async function withDepartmentContact(
   receipt: Record<string, unknown>,
   body: () => Promise<void>,
@@ -3104,7 +3101,10 @@ describe("the invoice at full payment", () => {
         await printSalePaymentSlip(suite.db, { ...venue.cfg, locale }, billId);
         expect(
           selects.mock.calls.filter(
-            ([fields]) => fields !== undefined && "id" in fields && fields.id === locations.id,
+            ([fields]) =>
+              fields !== undefined &&
+              "document" in fields &&
+              (fields.document as { module?: unknown })?.module === settings.module,
           ),
         ).toHaveLength(0);
       } finally {

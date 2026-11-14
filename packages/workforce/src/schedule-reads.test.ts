@@ -15,11 +15,10 @@ import {
   insertDraftShift,
   insertRosterVersion,
   insertShiftSwap,
-  seedLocation,
+  seedFixtureVenue,
   seedPerson,
 } from "../test/fixtures.js";
 
-let locationId: string;
 let publishedVersionId: string;
 
 const suite = useVenueDb({
@@ -27,8 +26,8 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    locationId = await seedLocation(db);
-    publishedVersionId = await insertRosterVersion(db, { locationId });
+    await seedFixtureVenue(db);
+    publishedVersionId = await insertRosterVersion(db, {});
     await db.execute(
       sql`update roster_versions set status='published', published_at='2026-01-01T00:00:00Z' where id=${publishedVersionId}`,
     );
@@ -42,20 +41,19 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 describe("listShiftsForPerson", () => {
   it("shows only published shifts while drafts, unattached and superseded shifts stay hidden", async () => {
     const personId = await seedPerson(suite.db, `publication-${crypto.randomUUID()}`);
-    const loc = await seedLocation(suite.db);
+    await seedFixtureVenue(suite.db);
     const published = publishedVersionId;
-    const draft = await insertRosterVersion(suite.db, { locationId: loc });
-    const superseded = await insertRosterVersion(suite.db, { locationId: loc });
+    const draft = await insertRosterVersion(suite.db, {});
+    const superseded = await insertRosterVersion(suite.db, {});
     await suite.db.execute(
       sql`update roster_versions set status='superseded', published_at='2025-12-31T00:00:00Z' where id=${superseded}`,
     );
     const visible = await insertDraftShift(suite.db, {
       personId,
-      locationId: loc,
       rosterVersionId: published,
     });
     for (const rosterVersionId of [draft, null, superseded]) {
-      await insertDraftShift(suite.db, { personId, locationId: loc, rosterVersionId });
+      await insertDraftShift(suite.db, { personId, rosterVersionId });
     }
     const rows = await run((tx) =>
       listShiftsForPerson(tx, { personId, from: "2026-01-05", to: "2026-01-12" }),
@@ -69,21 +67,18 @@ describe("listShiftsForPerson", () => {
     // Two of mine, seeded out of starts_at order, plus one of the other person's in the same window.
     const late = await insertDraftShift(suite.db, {
       personId: me,
-      locationId,
       rosterVersionId: publishedVersionId,
       startsAt: "2026-01-06T09:00:00Z",
       endsAt: "2026-01-06T17:00:00Z",
     });
     const early = await insertDraftShift(suite.db, {
       personId: me,
-      locationId,
       rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T09:00:00Z",
       endsAt: "2026-01-05T17:00:00Z",
     });
     await insertDraftShift(suite.db, {
       personId: other,
-      locationId,
       rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T10:00:00Z",
       endsAt: "2026-01-05T18:00:00Z",
@@ -107,21 +102,18 @@ describe("listShiftsForPerson", () => {
     const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
     const before = await insertDraftShift(suite.db, {
       personId: me,
-      locationId,
       rosterVersionId: publishedVersionId,
       startsAt: "2026-01-04T09:00:00Z",
       endsAt: "2026-01-04T17:00:00Z",
     });
     const atFrom = await insertDraftShift(suite.db, {
       personId: me,
-      locationId,
       rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T09:00:00Z",
       endsAt: "2026-01-05T17:00:00Z",
     });
     const atTo = await insertDraftShift(suite.db, {
       personId: me,
-      locationId,
       rosterVersionId: publishedVersionId,
       startsAt: "2026-01-06T09:00:00Z",
       endsAt: "2026-01-06T17:00:00Z",
@@ -140,7 +132,6 @@ describe("listShiftsForPerson", () => {
     const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
     const rollsOver = await insertDraftShift(suite.db, {
       personId: me,
-      locationId,
       rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T23:30:00Z",
       startsOffsetMinutes: 60,
@@ -164,9 +155,9 @@ describe("listSwapsForPerson", () => {
   it("returns swaps I REQUESTED and swaps OFFERED TO ME with the right direction, and nobody else's", async () => {
     const { me, other } = await twoPeople();
     const third = await seedPerson(suite.db, `third-${crypto.randomUUID()}`);
-    const myShift = await insertDraftShift(suite.db, { personId: me, locationId });
-    const theirShift = await insertDraftShift(suite.db, { personId: other, locationId });
-    const othersShift = await insertDraftShift(suite.db, { personId: other, locationId });
+    const myShift = await insertDraftShift(suite.db, { personId: me });
+    const theirShift = await insertDraftShift(suite.db, { personId: other });
+    const othersShift = await insertDraftShift(suite.db, { personId: other });
     const requestedByMe = await insertShiftSwap(suite.db, {
       requestedByPersonId: me,
       fromShiftId: myShift,

@@ -4,7 +4,6 @@ import { asc, sql, inArray } from "drizzle-orm";
 import "./errors.js";
 import type { Transaction } from "./client.js";
 import { dayCutoverChanges } from "./schema/day-cutover-changes.js";
-import { locations } from "./schema/tenants.js";
 import { settings } from "./schema/settings.js";
 import { decodeSettingsRow, readSettings, saveSettings, type SettingsRead } from "./settings.js";
 import { VENUE_SETTINGS, BUSINESS_DAY_SETTINGS, type VenueSettings } from "./venue-settings.js";
@@ -81,38 +80,25 @@ export interface VenuePlace {
   city: string | null;
 }
 
-async function venueRow(tx: Transaction): Promise<{ id: string; venue: Venue }> {
+export async function readVenue(tx: Transaction): Promise<Venue> {
   const { first, doc, businessDay } = await clockRows(tx);
   return {
-    id: first.id,
-    venue: {
-      name: doc.name,
-      invoiceLocales: doc.invoiceLocales,
-      operationDescription: doc.operationDescription,
-      fiscalTerritory: doc.fiscalTerritory,
-      addressLine1: doc.addressLine1,
-      addressLine2: doc.addressLine2,
-      postalCode: doc.postalCode,
-      city: doc.city,
-      province: doc.province,
-      timeZone: businessDay.timeZone,
-      dayCutover: first.dayCutover!,
-    },
+    name: doc.name,
+    invoiceLocales: doc.invoiceLocales,
+    operationDescription: doc.operationDescription,
+    fiscalTerritory: doc.fiscalTerritory,
+    addressLine1: doc.addressLine1,
+    addressLine2: doc.addressLine2,
+    postalCode: doc.postalCode,
+    city: doc.city,
+    province: doc.province,
+    timeZone: businessDay.timeZone,
+    dayCutover: first.dayCutover!,
   };
 }
 
 export async function readBusinessDayRevision(tx: Transaction): Promise<number> {
   return requireVenue(await readSettings(tx, BUSINESS_DAY_SETTINGS)).revision;
-}
-
-function theOneRow<T>(rows: T[]): T {
-  if (rows.length === 0) throw new AppError("venue.not_found", {});
-  if (rows.length > 1) throw new AppError("provisioning.second_venue", {});
-  return rows[0]!;
-}
-
-export async function readVenue(tx: Transaction): Promise<Venue> {
-  return (await venueRow(tx)).venue;
 }
 
 export async function readVenueInvoiceLocales(tx: Transaction): Promise<string[]> {
@@ -126,7 +112,6 @@ function storedCutover(value: string): string {
 async function clockRows(tx: Transaction) {
   const rows = await tx
     .select({
-      id: locations.id,
       effectiveBusinessDay: dayCutoverChanges.effectiveBusinessDay,
       dayCutover: dayCutoverChanges.dayCutover,
       document: {
@@ -136,14 +121,10 @@ async function clockRows(tx: Transaction) {
         doc: settings.doc,
       },
     })
-    .from(locations)
-    .leftJoin(settings, inArray(settings.module, ["venue", "business_day"]))
+    .from(settings)
     .leftJoin(dayCutoverChanges, sql`true`)
+    .where(inArray(settings.module, ["venue", "business_day"]))
     .orderBy(asc(dayCutoverChanges.effectiveBusinessDay));
-  const location = rows[0];
-  if (location === undefined) throw new AppError("venue.not_found", {});
-  if (rows.some((row) => row.id !== location.id))
-    throw new AppError("provisioning.second_venue", {});
   const doc = requireVenue(
     decodeSettingsRow(
       rows.find((row) => row.document?.module === "venue")?.document ?? undefined,
@@ -181,9 +162,4 @@ export async function readVenueClockAndPlace(
 
 export async function readVenueClock(tx: Transaction): Promise<BusinessDayClock> {
   return (await readVenueClockAndPlace(tx)).clock;
-}
-
-/** Interim, until the schema stops keying rows by location: the one `locations` row's id. */
-export async function venueLocationId(tx: Transaction): Promise<string> {
-  return theOneRow(await tx.select({ id: locations.id }).from(locations).limit(2)).id;
 }

@@ -157,7 +157,7 @@ describe("bookings seat route → real seatTable", () => {
     });
   });
 
-  it("opens the booking's tab as the dashboard, at the booking's location", async () => {
+  it("opens the booking's tab as the dashboard, at the booking's venue", async () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
     const tableId = await withTransaction(db, async (tx: Transaction) => {

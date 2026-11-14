@@ -54,7 +54,7 @@ const DEFAULT_RULESET: WorkTimeRuleset = {
 };
 
 describe("resolveWorkTimeRuleset", () => {
-  it("resolves the venue's rules without being told a location", async () => {
+  it("resolves the venue's rules without being told a venue", async () => {
     await seedConvenioConfig(suite.db, { workingDaysPerWeek: 6 });
     const ruleset = await resolveWorkTimeRuleset(suite.db);
     expect(ruleset.workingDaysPerWeek).toBe(6);

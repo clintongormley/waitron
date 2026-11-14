@@ -41,7 +41,7 @@ const modules = ALL_MODULES.filter(
 const shippedSetNames = new Set(manifestSets().map((set) => set.name));
 const setEntries = modules.filter((m) => shippedSetNames.has(m.name));
 const sourceNodeId = "20000000-0000-4000-8000-000000000002";
-const locationId = "10000000-0000-4000-8000-000000000001";
+const streamId = "10000000-0000-4000-8000-000000000001";
 const capturedAt = "2026-10-20T08:00:00.000Z";
 const runtime = { release: "test-release", revision: "a".repeat(40), fingerprint: "b".repeat(64) };
 const key = "private-archive-key-sentinel";
@@ -66,9 +66,8 @@ async function seedSource(db: VenueDb["db"]) {
   db.run(
     `insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'private-tax-sentinel', 'Private company sentinel', '2026-10-20T00:00:00Z')`,
   );
-  await db.run(sql`insert into locations (id) values (${locationId})`);
   db.run(
-    sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture location","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T08:00:00.000Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
+    sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T08:00:00.000Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
   );
   db.run(
     "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
@@ -183,7 +182,7 @@ async function verify(f: Fixture) {
     key,
     vault,
     sourceNodeId,
-    locationId,
+    streamId,
     f.root,
     "private-tax-sentinel",
     "Private company sentinel",

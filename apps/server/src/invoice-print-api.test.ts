@@ -1,3 +1,4 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -7,7 +8,6 @@ import {
   CORE_MIGRATIONS,
   invoiceSeries,
   invoiceDeliveries,
-  locations,
   nodes,
   printJobs,
   printAgents,
@@ -66,8 +66,8 @@ const clock: TrustedClock = {
 async function issue(full = true) {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
-  const [existing] = await suite.db.select().from(locations);
-  if (existing === undefined) {
+  const existing = await readSettings(suite.db, VENUE_SETTINGS);
+  if (existing.revision === 0) {
     await seedVenue(suite.db, {
       name: "Bar",
       invoiceLocales: ["es-ES"],
@@ -124,7 +124,6 @@ const inventory = { visible: [], scanned: [], pairedBluetooth: [], bluetoothOutc
 const MAC = "5A:4A:45:D4:FB:BB";
 async function setup(bluetooth = false) {
   const sale = await issue();
-  const [location] = await suite.db.select().from(locations);
   const [node] = await suite.db.select().from(nodes);
   const secret = "synthetic-agent-secret";
   const [agent] = await suite.db
@@ -216,7 +215,6 @@ async function setup(bluetooth = false) {
     delivery,
     agentId: agent!.id,
     otherToken: `${other!.id}.${secret}`,
-    locationId: location!.id,
     token,
     client,
     app,

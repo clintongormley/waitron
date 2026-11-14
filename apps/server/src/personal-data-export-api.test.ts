@@ -5,7 +5,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -279,18 +279,17 @@ describe("GET /management-api/me/personal-data/export", () => {
       'attachment; filename="martha-lewis-2026-10-04.zip"',
     );
     expect(subjects).toEqual([{ personId: marthaId, language: "en", at: NOW, timeZone: "UTC" }]);
-    expect(subjects[0]).not.toHaveProperty("locationId");
   });
 
   it("refuses venue.not_found when the box holds no venue row", async () => {
-    const [venueRow] = await suite.db.select().from(locations);
+    const [venueRow] = await suite.db.select().from(settings).where(eq(settings.module, "venue"));
     suite.db.run(sql`pragma foreign_keys = off`);
     try {
-      suite.db.run(sql`delete from locations`);
+      suite.db.run(sql`delete from settings where module = 'venue'`);
       await refused(await ask(mounted()), 400, "venue.not_found");
       expect(subjects).toEqual([]);
     } finally {
-      await suite.db.insert(locations).values(venueRow!);
+      await suite.db.insert(settings).values(venueRow!);
       suite.db.run(sql`pragma foreign_keys = on`);
     }
   });

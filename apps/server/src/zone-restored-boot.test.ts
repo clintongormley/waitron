@@ -16,16 +16,9 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { Agent } from "undici";
-import { eq, ne } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterAll, expect, it, vi } from "vitest";
-import {
-  incidents,
-  locations,
-  nodes,
-  openVenueDatabase,
-  readVenueHolder,
-  withTransaction,
-} from "@waitron/db";
+import { incidents, openVenueDatabase, readVenueHolder } from "@waitron/db";
 import { hashPassword } from "@waitron/identity";
 import { runRestore } from "./restore-command.js";
 import { runEntry } from "./node-entry.js";
@@ -68,10 +61,6 @@ afterAll(async () => {
 it.each(["archive", "bucket"] as const)(
   "%s restores an invalid zone before real entry/boot repair and restart",
   async (kind) => {
-    await withTransaction(suite.db, async (tx) => {
-      await tx.delete(nodes).where(ne(nodes.id, node.nodeId));
-      await tx.delete(locations).where(ne(locations.id, node.locationId));
-    });
     await recoveryInvoices();
     await suite.db.run(
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
@@ -168,7 +157,6 @@ it.each(["archive", "bucket"] as const)(
       const path = "/management-api/venue-details/time-zone-repair";
       const view = await (await request(path)).json();
       expect(view).toMatchObject({ eligible: true, category: "invalid", nodeId: node.nodeId });
-      expect(view).not.toHaveProperty("locationId");
       expect(runPendingCardLoop).not.toHaveBeenCalled();
       expect(runAttendanceLoop).not.toHaveBeenCalled();
       await withMockedKill(async (kills) => {

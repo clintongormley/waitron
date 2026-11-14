@@ -13,14 +13,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  openVenueDatabase,
-  nodes,
-  locations,
-  tenants,
-  stampDeployment,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, openVenueDatabase, nodes, tenants, stampDeployment } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -84,11 +77,8 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Old venue" });
-  await suite.db.insert(locations).values({
-    id: LOCATION,
-  });
   await seedVenueSettings(suite.db, {
-    name: "Old location",
+    name: "Old venue",
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
@@ -166,22 +156,9 @@ it("reads the selected copy's node-key name after the live box has replaced its 
     nodeId: NODE,
     nodeRecoveryKeyName: oldName,
     taxpayer: { legalName: "Old venue", taxId: "89890001K" },
-    venueName: "Old location",
+    venueName: "Old venue",
   });
   expect(await readdir(scratch)).toEqual(["selected.db"]);
-});
-
-it("refuses a copy with two venue rows as an unknown identity", async () => {
-  await suite.db.insert(locations).values({
-    id: "d0000000-0000-4000-8000-000000000003",
-  });
-  await seedVenueSettings(suite.db, { operationDescription: "Restaurant" });
-  await seedBusinessDay(suite.db, {});
-  artifact = await packSelected();
-  await expect(previewRecoveryArchive(args())).rejects.toMatchObject({
-    code: "restore.identity_unknown",
-    params: { nodeId: NODE },
-  });
 });
 
 it("names the key a backup's node copy holds, not one its venue copy could hold", async () => {

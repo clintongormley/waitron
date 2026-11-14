@@ -1,7 +1,7 @@
-import { venueLocationId } from "@waitron/db";
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedFixtureSif as registerSif } from "../../test/sif-fixture.js";
 import { eq } from "drizzle-orm";
-import { invoiceSeries, locations, nodes, sales, tenants } from "@waitron/db";
+import { invoiceSeries, nodes, sales, tenants } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { deviceOrigin } from "@waitron/shared";
@@ -28,7 +28,7 @@ export const TEST_SISTEMA: SistemaInformatico = {
 
 /**
  * A seeded fiscal fixture: one NODE (the SIF/chain/series owner) and one till device at its
- * location, where a sale rings.
+ * venue, where a sale rings.
  */
 export interface SeededNode {
   deviceId: DeviceId;
@@ -69,18 +69,14 @@ async function ensureTaxpayer(tx: Transaction, nif: string): Promise<void> {
     .onConflictDoNothing();
 }
 
-async function insertLocation(tx: Transaction, label: string): Promise<string> {
-  const existing = await tx.select({ id: locations.id }).from(locations).limit(2);
-  if (existing.length === 1) return existing[0]!.id;
-  const [locationRow] = await tx.insert(locations).values({}).returning({ id: locations.id });
+async function ensureVenue(tx: Transaction, label: string): Promise<void> {
+  if ((await readSettings(tx, VENUE_SETTINGS)).revision > 0) return;
   await seedVenueSettings(tx, {
     name: "Sala " + label,
     invoiceLocales: ["es"],
     operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(tx, {});
-  if (locationRow === undefined) throw new Error("seedNode: location insert returned no row");
-  return locationRow.id;
 }
 
 async function insertNode(tx: Transaction, label: string): Promise<NodeId> {
@@ -96,8 +92,8 @@ async function addNode(
   tx: Transaction,
   nif: string,
   label: string,
-): Promise<Omit<SeededNode, "deviceId"> & { locationId: string }> {
-  const location = await insertLocation(tx, label);
+): Promise<Omit<SeededNode, "deviceId">> {
+  await ensureVenue(tx, label);
   const node = await insertNode(tx, label);
 
   const [seriesRow] = await tx
@@ -112,7 +108,7 @@ async function addNode(
     idSistemaInformatico: TEST_SISTEMA.IdSistemaInformatico,
   });
 
-  return { locationId: location, nodeId: node, seriesId: seriesRow.id, sifId: sif.id };
+  return { nodeId: node, seriesId: seriesRow.id, sifId: sif.id };
 }
 
 /**
@@ -136,13 +132,12 @@ export async function seedNode(db: Database, label = "A"): Promise<SeededNode> {
  */
 export async function addDeviceToNode(db: Database, seed: SeededNode): Promise<SeededNode> {
   const added = await db.transaction(async (tx) => {
-    const [locationRow] = await tx
+    const [nodeRow] = await tx
       .select({ id: nodes.id })
       .from(nodes)
       .where(eq(nodes.id, seed.nodeId));
-    if (locationRow === undefined) throw new Error("addDeviceToNode: node not found");
+    if (nodeRow === undefined) throw new Error("addDeviceToNode: node not found");
     return {
-      locationId: await venueLocationId(tx),
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
       sifId: seed.sifId,
@@ -154,7 +149,7 @@ export async function addDeviceToNode(db: Database, seed: SeededNode): Promise<S
 }
 
 async function addBareNode(tx: Transaction, label: string): Promise<NodeId> {
-  await insertLocation(tx, label);
+  await ensureVenue(tx, label);
   return insertNode(tx, label);
 }
 

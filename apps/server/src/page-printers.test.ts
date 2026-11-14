@@ -11,7 +11,6 @@ import {
   printAgents,
   tenants,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -85,11 +84,10 @@ async function venue() {
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
   const agentOne = await agent("Back office agent");
   const agentTwo = await agent("Re-paired agent");
-  return { locationId: venueId, nodeId, agentOne, agentTwo };
+  return { nodeId, agentOne, agentTwo };
 }
 
 async function agent(name: string): Promise<string> {

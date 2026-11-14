@@ -11,7 +11,6 @@ import {
   tenants,
   units,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -40,9 +39,8 @@ async function venue(country: string, province: string, receipt: string | string
     invoiceLocales: typeof receipt === "string" ? [receipt] : receipt,
     operationDescription: "Hospitality",
   });
-  const locationId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
-  return { locationId, nodeId };
+  return { nodeId };
 }
 
 async function storedLanguages() {
@@ -370,16 +368,16 @@ it.each(STARTER_VENUES)(
     const node = await venue(country, province, receipt);
     await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
     const name = staffLanguage === "en" ? FIRST_MENU_NAME : STARTER_MENU_NAMES[FIRST_MENU_NAME].es;
-    const location = { catalogueId: await readDefaultCatalogueId(suite.db) };
+    const venueMenu = { catalogueId: await readDefaultCatalogueId(suite.db) };
     const menus = await suite.db
       .select({ name: catalogues.name })
       .from(catalogues)
-      .where(eq(catalogues.id, location!.catalogueId!));
+      .where(eq(catalogues.id, venueMenu.catalogueId!));
     expect(menus).toEqual([{ name }]);
     const owned = await suite.db
       .select({ role: sections.role, internalName: sections.internalName, names: sections.names })
       .from(sections)
-      .where(eq(sections.ownerMenuId, location!.catalogueId!))
+      .where(eq(sections.ownerMenuId, venueMenu.catalogueId!))
       .orderBy(asc(sections.role));
     // The home layout is shown nowhere, so it keeps its English name in code (A918 slice 4, decision 5).
     expect(owned).toEqual([

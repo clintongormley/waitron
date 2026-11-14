@@ -52,7 +52,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId: bar,
       },
       { orderNumber: 1, ageMinutes: 20 },
@@ -90,7 +89,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 1, ageMinutes: 5 },
@@ -106,7 +104,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 1, ageMinutes: 11 },
@@ -116,7 +113,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 2, ageMinutes: 16 },
@@ -126,7 +122,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 3, ageMinutes: 2 },
@@ -138,7 +133,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 4, ageMinutes: 20, served: true },
@@ -171,7 +165,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 1, ageMinutes: 2 }, // line 1: fresh
@@ -195,7 +188,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 1, ageMinutes: 16 }, // line 1: forgotten
@@ -217,7 +209,6 @@ describe("computeOverdueOrders", () => {
   });
 
   it("breaks a tied worst band (same age, different stations) by line_no, not by insertion/row-arrival order", async () => {
-    // A second station in the same location — the fixture the tie needs, since the beforeEach station
     // only gives us one. `isDefault: false` avoids colliding with the beforeEach station's own default.
     const barStationId = await seedKitchenStation(suite.db, {
       name: "Counter",
@@ -225,7 +216,7 @@ describe("computeOverdueOrders", () => {
     });
     const { orderId } = await seedOpenOrder(
       suite.db,
-      { deviceId: venue.deviceId, locationId: venue.locationId, nodeId: venue.nodeId },
+      { deviceId: venue.deviceId, nodeId: venue.nodeId },
       1,
     );
     // ONE shared instant for BOTH lines, as lines fired together can share; two `seedFiredLine`
@@ -257,7 +248,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 1, ageMinutes: 20, status: "settled", collected: true },
@@ -271,7 +261,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 1, ageMinutes: 20, status: "abandoned" },
@@ -285,7 +274,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 1, ageMinutes: 11, tableLabel: "12" },
@@ -298,7 +286,6 @@ describe("computeOverdueOrders", () => {
     const seed = {
       deviceId: venue.deviceId,
       nodeId: venue.nodeId,
-      locationId: venue.locationId,
       stationId,
     };
     // An order with no table, labelled.
@@ -325,12 +312,11 @@ describe("computeOverdueOrders", () => {
     const seed = {
       deviceId: venue.deviceId,
       nodeId: venue.nodeId,
-      locationId: venue.locationId,
       stationId,
     };
     const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
     // Table 5 joined first: sorting by table id or by label would both put Table 4 first.
-    await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
+    await seedPartyAt(suite.db, { orderId }, [
       {
         id: `00000000-${randomUUID().slice(9)}`,
         label: "Table 4",
@@ -357,11 +343,10 @@ describe("computeOverdueOrders", () => {
     const seed = {
       deviceId: venue.deviceId,
       nodeId: venue.nodeId,
-      locationId: venue.locationId,
       stationId,
     };
     const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
-    await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
+    await seedPartyAt(suite.db, { orderId }, [
       {
         label: "Table 4",
         joinedAt: "2026-09-28T20:00:00.000Z",
@@ -379,11 +364,10 @@ describe("computeOverdueOrders", () => {
     const seed = {
       deviceId: venue.deviceId,
       nodeId: venue.nodeId,
-      locationId: venue.locationId,
       stationId,
     };
     const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
-    const moved = await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
+    const moved = await seedPartyAt(suite.db, { orderId }, [
       {
         label: "Table 4",
         joinedAt: "2026-09-28T20:00:00.000Z",
@@ -397,26 +381,18 @@ describe("computeOverdueOrders", () => {
     // Two merges in a row: a reader that follows only one finds the middle party, which holds no
     // table, and names the bill "Ana".
     const { orderId: middleBill } = await seedOpenOrder(suite.db, seed, 2);
-    const middle = await seedPartyAt(
-      suite.db,
-      { locationId: venue.locationId, orderId: middleBill },
-      [
-        {
-          label: "Table 6",
-          joinedAt: "2026-09-28T20:10:00.000Z",
-          leftAt: "2026-09-28T20:50:00.000Z",
-        },
-      ],
-    );
+    const middle = await seedPartyAt(suite.db, { orderId: middleBill }, [
+      {
+        label: "Table 6",
+        joinedAt: "2026-09-28T20:10:00.000Z",
+        leftAt: "2026-09-28T20:50:00.000Z",
+      },
+    ]);
     const { orderId: survivorBill } = await seedOpenOrder(suite.db, seed, 3);
-    const survivor = await seedPartyAt(
-      suite.db,
-      { locationId: venue.locationId, orderId: survivorBill },
-      [
-        { label: "Table 7", joinedAt: "2026-09-28T20:20:00.000Z" },
-        { label: "Table 8", joinedAt: "2026-09-28T20:21:00.000Z" },
-      ],
-    );
+    const survivor = await seedPartyAt(suite.db, { orderId: survivorBill }, [
+      { label: "Table 7", joinedAt: "2026-09-28T20:20:00.000Z" },
+      { label: "Table 8", joinedAt: "2026-09-28T20:21:00.000Z" },
+    ]);
     const closed = { state: "closed" as const, closedAt: "2026-09-28T20:50:00.000Z" };
     await suite.db
       .update(parties)
@@ -438,7 +414,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 1, ageMinutes: 11 },
@@ -458,7 +433,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: nodeB.nodeId,
-        locationId: venue.locationId,
         stationId: stationB,
       },
       { orderNumber: 1, ageMinutes: 20 },
@@ -479,7 +453,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 5, ageMinutes: 11 },
@@ -489,7 +462,6 @@ describe("computeOverdueOrders", () => {
       {
         deviceId: venue.deviceId,
         nodeId: venue.nodeId,
-        locationId: venue.locationId,
         stationId,
       },
       { orderNumber: 3, ageMinutes: 11 },

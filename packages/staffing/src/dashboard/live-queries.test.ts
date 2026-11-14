@@ -17,7 +17,7 @@ describe("QUERY_DEPENDENCIES", () => {
     ]);
   });
 
-  it("reads the month again when its paint, a staff role, an area, a season, a special day, a holiday area, the location or the day's changeover changes", () => {
+  it("reads the month again when its paint, a staff role, an area, a season, a special day, a holiday area, the venue or the day's changeover changes", () => {
     expect(QUERY_DEPENDENCIES["staffing-month"]).toEqual([
       "shifts",
       "roster_versions",

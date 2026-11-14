@@ -10,7 +10,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { loadKeyRing } from "@waitron/credentials";
 import {
   invoiceSeries,
-  locations,
+  settings,
   nodes,
   openVenueDatabase,
   sales,
@@ -79,7 +79,6 @@ const DISK_FULL_LINE =
 const HUELLA = "A".repeat(64);
 
 const ids = {
-  location: "a5380000-0000-4000-8000-000000000001",
   node: "a5380000-0000-4000-8000-000000000002",
   series: "a5380000-0000-4000-8000-000000000003",
   sif: "a5380000-0000-4000-8000-000000000004",
@@ -120,11 +119,8 @@ beforeAll(async () => {
     await tx
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Archive source" });
-    await tx.insert(locations).values({
-      id: ids.location,
-    });
     await seedVenueSettings(tx, {
-      name: "Archive location",
+      name: "Archive venue",
       invoiceLocales: ["es"],
       operationDescription: "Venta",
     });
@@ -437,7 +433,7 @@ describe("waitron-restore restore --from-archive", () => {
     });
     expect(await readStreamSettings(suite.db, ring)).toBeNull();
     const expectedTenants = await suite.db.select().from(tenants);
-    const expectedLocations = await suite.db.select().from(locations);
+    const expectedSettings = await suite.db.select().from(settings).orderBy(settings.module);
     const chainKey = { nodeId: ids.node };
     const expectedChain = await readChain(suite.db, chainKey);
     const expectedHead = await suite.db.select().from(workforceChains);
@@ -467,7 +463,7 @@ describe("waitron-restore restore --from-archive", () => {
     try {
       const db = restored.venue;
       expect(await db.select().from(tenants)).toEqual(expectedTenants);
-      expect(await db.select().from(locations)).toEqual(expectedLocations);
+      expect(await db.select().from(settings).orderBy(settings.module)).toEqual(expectedSettings);
       const sifs = await db
         .select({
           numeroInstalacion: registroSif.numeroInstalacion,

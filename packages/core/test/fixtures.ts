@@ -1,12 +1,11 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { saleId as brandSaleId, seriesId as brandSeriesId, stringToCents } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
-import { invoiceSeries, locations, sales, tenants, venueLocationId } from "@waitron/db";
+import { invoiceSeries, sales, tenants } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 
 export interface SeededTenant {
-  locationId: string;
-  /** A till device at that location: the origin of the sales a test records. */
   deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -30,15 +29,14 @@ export async function seedTenant(db: Database): Promise<SeededTenant> {
     .values({ id: 1, country: "ES", taxId: freshNif(), legalName: "Waitron SL" })
     .onConflictDoNothing({ target: tenants.id });
 
-  const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
-  if (existing === undefined) {
+  const existing = await readSettings(db, VENUE_SETTINGS);
+  if (existing.revision === 0) {
     await seedVenue(db, {
       name: "Sala principal",
       invoiceLocales: ["es-ES", "ca-ES"],
       operationDescription: "Venta en establecimiento",
     });
   }
-  const locationId = await venueLocationId(db);
 
   const { deviceId } = await seedDevice(db);
   const nodeId = await seedNode(db);
@@ -49,7 +47,7 @@ export async function seedTenant(db: Database): Promise<SeededTenant> {
     .returning({ id: invoiceSeries.id });
   const seriesId = brandSeriesId(series!.id);
 
-  return { locationId: locationId, deviceId, nodeId, seriesId };
+  return { deviceId, nodeId, seriesId };
 }
 
 /**

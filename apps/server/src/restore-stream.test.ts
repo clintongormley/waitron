@@ -13,14 +13,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  openVenueDatabase,
-  tenants,
-  withTransaction,
-} from "@waitron/db";
+import { invoiceSeries, nodes, openVenueDatabase, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -86,7 +79,7 @@ const suite = useVenueDb({
 });
 
 const T = {
-  locationId: "c0000000-0000-4000-8000-000000000002",
+  streamId: "c0000000-0000-4000-8000-000000000002",
   seriesId: "c0000000-0000-4000-8000-000000000004",
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
@@ -139,15 +132,12 @@ beforeAll(async () => {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: VENUE.taxId, legalName: VENUE.legalName });
-  await db.insert(locations).values({
-    id: T.locationId,
-  });
   await seedVenueSettings(db, {
     name: VENUE.venueName,
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await withTransaction(db, (tx) => saveVenueFields(tx, { streamId: T.locationId }, null));
+  await withTransaction(db, (tx) => saveVenueFields(tx, { streamId: T.streamId }, null));
   await seedBusinessDay(db, {});
   await db.insert(nodes).values({ id: T.nodeId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
@@ -179,7 +169,7 @@ afterAll(async () => {
 
 const KIT: RecoveryKit = {
   version: 2 as const,
-  streamId: T.locationId,
+  streamId: T.streamId,
   bucket: {
     region: "eu-west-1",
     bucket: "venue-copy",
@@ -192,7 +182,7 @@ const KIT: RecoveryKit = {
 };
 
 const POINTER: StreamPointer = {
-  streamId: T.locationId,
+  streamId: T.streamId,
   term: 0,
   nodeId: T.nodeId,
   generation: GENERATION,
@@ -208,7 +198,7 @@ async function bucket(
 ): Promise<MemoryObjectStore> {
   let clock = opts.lastChangeAt ?? new Date(NOW.getTime() - 60 * 60_000);
   const store = createMemoryObjectStore({ now: () => clock });
-  const streamId = opts.streamId ?? T.locationId;
+  const streamId = opts.streamId ?? T.streamId;
   await writePointer(
     store,
     streamId,
@@ -263,7 +253,7 @@ describe("prepareStreamRestore", () => {
     expect(copyFixture).toHaveBeenLastCalledWith(
       expect.objectContaining({
         generation: GENERATION,
-        streamId: T.locationId,
+        streamId: T.streamId,
         bucket: KIT.bucket,
         streamKey: "ORDJdLj2BbyzMwSmlgQMW4J4JTtlToWe1oIRIEd9D/M=",
       }),
@@ -678,32 +668,29 @@ describe("prepareStreamRestore", () => {
     await prepared.discard();
   });
 
-  it.each([
-    [
-      "two venue rows",
-      "insert into locations (id) values ('c0000000-0000-4000-8000-0000000000aa')",
-    ],
-    ["no venue row", "delete from invoice_series; delete from nodes; delete from locations"],
-  ])("refuses a copy with %s as an unknown identity, as an archive of it is", async (_, change) => {
-    const deps = await prepareDeps(await bucket(), {
-      restoreGeneration: async (args) => {
-        await copyFile(fixtureDb, args.outPath);
-        const copy = new DatabaseSync(args.outPath, { enableForeignKeyConstraints: false });
-        try {
-          copy.exec(change);
-          // Otherwise the copy is refused as damaged before the identity is read.
-          expect(copy.prepare("pragma foreign_key_check").all()).toEqual([]);
-        } finally {
-          copy.close();
-        }
-      },
-    });
-    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
-      code: "restore.identity_unknown",
-      params: { nodeId: T.nodeId },
-    });
-    await expectStateUntouched(deps.stateDir);
-  });
+  it.each([["no venue row", "delete from settings where module = 'venue'"]])(
+    "refuses a copy with %s as an unknown identity, as an archive of it is",
+    async (_, change) => {
+      const deps = await prepareDeps(await bucket(), {
+        restoreGeneration: async (args) => {
+          await copyFile(fixtureDb, args.outPath);
+          const copy = new DatabaseSync(args.outPath, { enableForeignKeyConstraints: false });
+          try {
+            copy.exec(change);
+            // Otherwise the copy is refused as damaged before the identity is read.
+            expect(copy.prepare("pragma foreign_key_check").all()).toEqual([]);
+          } finally {
+            copy.close();
+          }
+        },
+      });
+      await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+        code: "restore.identity_unknown",
+        params: { nodeId: T.nodeId },
+      });
+      await expectStateUntouched(deps.stateDir);
+    },
+  );
 });
 
 describe("measureBucketSkew", () => {
@@ -741,7 +728,7 @@ describe("refuseIfSourceLive", () => {
     await expect(
       refuseIfSourceLive({
         store,
-        streamId: T.locationId,
+        streamId: T.streamId,
         generation: GENERATION,
         now: () => NOW,
         oldBoxGone: false,
@@ -756,7 +743,7 @@ describe("refuseIfSourceLive", () => {
     const store = createMemoryObjectStore({ now: () => NOW });
     await refuseIfSourceLive({
       store,
-      streamId: T.locationId,
+      streamId: T.streamId,
       generation: GENERATION,
       now: () => NOW,
       oldBoxGone: false,

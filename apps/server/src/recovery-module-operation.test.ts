@@ -7,7 +7,6 @@ import {
   stampDeployment,
   withTransaction,
   invoiceSeries,
-  locations,
   nodes,
   tenants,
 } from "@waitron/db";
@@ -24,7 +23,6 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 const target = {
-  locationId: "c0000000-0000-4000-8000-000000000001",
   nodeId: nodeId("c0000000-0000-4000-8000-000000000002"),
 };
 const ADMIN = "c0000000-0000-4000-8000-000000000003";
@@ -44,9 +42,6 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Restaurant" });
-  await suite.db.insert(locations).values({
-    id: target.locationId,
-  });
   await seedVenueSettings(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["es"],

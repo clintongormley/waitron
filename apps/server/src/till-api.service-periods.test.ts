@@ -1002,7 +1002,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     ]);
   });
 
-  it("accepts all period menus when the location clock cannot be read", async () => {
+  it("accepts all period menus when the venue clock cannot be read", async () => {
     at(mondayAt("13:00"));
     const v = await mealVenue();
     await suite.db.run(
@@ -1959,7 +1959,7 @@ describe("menu-state follows department service periods", () => {
     },
   );
 
-  it("reports open service when the location clock cannot be read", async () => {
+  it("reports open service when the venue clock cannot be read", async () => {
     const v = await setupPeriods();
     await suite.db.run(
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,

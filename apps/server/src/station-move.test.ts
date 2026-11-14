@@ -1132,7 +1132,7 @@ describe("release", () => {
       const [clockBefore] = await inTx(venue, (tx) =>
         Promise.resolve(
           tx.all<{ timeZone: string; dayCutover: string }>(
-            sql`select json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+            sql`select json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from (select doc from settings where module = 'business_day') b join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
           ),
         ),
       );

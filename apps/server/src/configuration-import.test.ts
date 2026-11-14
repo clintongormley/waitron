@@ -2,14 +2,13 @@ import { dirname, join } from "node:path";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
 import { Hono } from "hono";
 import { mountSetup } from "./setup-api.js";
 import type { WaitronModule } from "@waitron/module";
 import { sql } from "drizzle-orm";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { loadKeyRing } from "@waitron/credentials";
-import { kitchenStations, products, withTransaction, venueLocationId } from "@waitron/db";
+import { kitchenStations, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { expectedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -76,32 +75,6 @@ const bundle: ConfigurationBundle = {
   tables: { products: [{ id: "p1" }] },
   reconnect: ["printers"],
 };
-// A format-9 export nested the venue's own fields under `location`, beside its id and fire control.
-const formatNineVenue = {
-  country: "ES",
-  taxId: "B12345678",
-  legalName: "Prepared SL",
-  taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
-  location: {
-    id: "location",
-    name: "Prepared",
-    invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
-    fiscalTerritory: "ES-common",
-    addressLine1: "Calle 1",
-    addressLine2: null,
-    postalCode: "28001",
-    city: "Madrid",
-    province: "Madrid",
-    timeZone: "Europe/Madrid",
-    dayCutover: "06:00:00",
-    fireControl: "waiter",
-    catalogueId: null,
-  },
-  seriesCode: "F",
-  fullSeriesCode: "FF",
-  rectificativeSeriesCode: "R",
-};
 const modules = [
   {
     name: "core",
@@ -118,18 +91,7 @@ const validate = (candidate: ConfigurationBundle): Promise<void> => {
 
 describe("staged configuration import", () => {
   it.each([
-    [
-      "real pre-retirement export",
-      JSON.parse(
-        readFileSync(
-          new URL(
-            "./testing/fixtures/configuration-v1-before-printing-retirement.json",
-            import.meta.url,
-          ),
-          "utf8",
-        ),
-      ) as Record<string, unknown>,
-    ],
+    ["format-1 export", { ...bundle, version: 1 }],
     [
       "pre-canvas-retirement export with an empty canvas list",
       { version: 2, tables: { ...bundle.tables, canvases: [] } },
@@ -181,7 +143,6 @@ describe("staged configuration import", () => {
           ...bundle.tables,
           kitchen_timing_defaults: [
             {
-              location_id: "loc",
               warm_after_minutes: 5,
               overdue_after_minutes: 10,
               forgotten_after_minutes: 15,
@@ -204,7 +165,7 @@ describe("staged configuration import", () => {
     ["A1308 4a-i pre-recipe-removal export", { version: 12 }],
     ["A1308 4a-ii pre-menu-list-removal export", { version: 14 }],
     ["old version", { version: 1 }],
-    ["A1308 pre-location-column export", { version: 11 }],
+    ["A1308 earlier schema export", { version: 11 }],
     ["previous format before venue-language storage", { version: 15 }],
     [
       "pre-payment-policy-retirement export with the policy",
@@ -217,7 +178,7 @@ describe("staged configuration import", () => {
     ["pre-job-role-move export", { version: 22 }],
     ["pre-today-choice-fold export", { version: 23 }],
     ["future version", { version: bundle.version + 1 }],
-    ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
+    ["pre-venue-fields export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(stateDir);
@@ -683,8 +644,6 @@ describe("routing cells in a staged import", () => {
         db: source.db,
         modules: ALL_MODULES,
       });
-      const venueId = await venueLocationId(source.db);
-      const cfg = { locationId: venueId };
       const variant = await withTransaction(source.db, async (tx) => {
         const department = await createDepartment(tx, {
           name: "Dining room",
@@ -697,7 +656,7 @@ describe("routing cells in a staged import", () => {
         const [station] = await tx.insert(kitchenStations).values({ name: "Bar" }).returning();
         const category = await createCategory(tx, { name: "Drinks" });
         const menu = await createCatalogue(tx, {
-          name: `Configuration import menu ${cfg.locationId}`,
+          name: `Configuration import menu`,
         });
         const product = await createProduct(tx, {
           catalogueId: menu.id,

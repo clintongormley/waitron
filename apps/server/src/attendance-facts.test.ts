@@ -115,7 +115,7 @@ beforeEach(async () => {
 });
 
 describe("attendance source facts", () => {
-  it("reads the venue's facts for a day with no location", async () => {
+  it("reads the venue's facts for a day with no venue", async () => {
     const placed = await amendment("2026-01-05T12:00:00Z");
     expect(
       await facts({

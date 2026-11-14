@@ -4,10 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  locations,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -27,7 +25,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
 });
 const AT = new Date("2026-10-14T23:30:00.000Z");
-let scope: { nodeId: string; locationId: string };
+let scope: { nodeId: string };
 beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Test venue",
@@ -37,15 +35,15 @@ beforeEach(async () => {
     timeZone: "Invalid/Zone",
     dayCutover: "06:00:00",
   });
-  scope = { nodeId: await seedNode(suite.db), locationId: await venueLocationId(suite.db) };
+  scope = { nodeId: await seedNode(suite.db) };
 });
 afterEach(() => vi.restoreAllMocks());
 const read = () => withTransaction(suite.db, (tx) => readZoneContext(tx, scope));
 const preview = (zone = "Europe/Madrid", at = AT) =>
   withTransaction(suite.db, (tx) => validateRetainedZoneClock(tx, scope, zone, at));
 const retained = () => ({
-  locations: suite.db.all(
-    sql`select l.*, json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from locations l join settings v on v.module = 'venue' join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+  venueState: suite.db.all(
+    sql`select json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from (select doc from settings where module = 'venue') v join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
   ),
   changes: suite.db.all(sql`select * from day_cutover_changes order by effective_business_day`),
   settings: suite.db.all(sql`select * from settings where module = 'business_day'`),
@@ -120,10 +118,10 @@ describe("raw saved zone context", () => {
     expect(error).toMatchObject({ code: "venue.not_found" });
     expect((error as { params: unknown }).params).toEqual({});
   });
-  it("refuses with no venue row", async () => {
+  it("refuses with no venue document", async () => {
+    await suite.db.execute(sql`delete from settings where module = 'venue'`);
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
-      await suite.db.delete(locations);
       const error: unknown = await read().catch((caught: unknown) => caught);
       expect(error).toMatchObject({ code: "venue.not_found" });
       expect((error as { params: unknown }).params).toEqual({});

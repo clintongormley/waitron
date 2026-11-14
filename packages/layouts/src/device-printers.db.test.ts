@@ -8,7 +8,6 @@ import {
   printers,
   restrictRefused,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -43,10 +42,8 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);
 }
 
-async function seedLocation(name: string): Promise<string> {
+async function seedFixtureVenue(name: string): Promise<void> {
   await seedVenue(suite.db, { name, invoiceLocales: ["es"], operationDescription: "Hospitality" });
-  const venueId = await venueLocationId(suite.db);
-  return venueId;
 }
 
 async function seedPrinter(name: string): Promise<string> {
@@ -96,7 +93,7 @@ describe("a profile's printer lists and each device's current printers", () => {
 
   // `useVenueDb` empties every table after each test.
   beforeEach(async () => {
-    await seedLocation("Here");
+    await seedFixtureVenue("Here");
     p1 = await seedPrinter("Bar");
     p2 = await seedPrinter("Counter");
     p3 = await seedPrinter("Portable");
@@ -574,7 +571,7 @@ describe("a deleted printer on a profile's lists", () => {
   let gone: string;
 
   beforeEach(async () => {
-    await seedLocation("Here");
+    await seedFixtureVenue("Here");
     live = await seedPrinter("Bar");
     const [row] = await suite.db
       .insert(printers)
@@ -707,7 +704,7 @@ describe("a profile's invoice printer list", () => {
   let office: string;
 
   beforeEach(async () => {
-    await seedLocation("Here");
+    await seedFixtureVenue("Here");
     receipt = await seedPrinter("Bar");
     office = await seedPagePrinter("Office");
   });

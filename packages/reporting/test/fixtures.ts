@@ -1,3 +1,4 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -18,7 +19,6 @@ import {
   catalogues,
   diningTables,
   invoiceSeries,
-  locations,
   parties,
   partyTables,
   products,
@@ -32,7 +32,6 @@ import {
   ticketItems,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
@@ -50,8 +49,6 @@ import type { TenderMethod } from "../src/types.js";
  */
 
 export interface SeededVenue {
-  locationId: string;
-  /** A till device at that location: the origin of every money row the fixtures write. */
   deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -65,16 +62,15 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
     operationDescription: "Test op",
     dayCutover: "05:00:00",
   };
-  const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
-  if (existing === undefined) await seedVenue(db, venue);
-  const locationId = existing?.id ?? (await venueLocationId(db));
+  const existing = await readSettings(db, VENUE_SETTINGS);
+  if (existing.revision === 0) await seedVenue(db, venue);
   const { deviceId } = await seedDevice(db, {});
   const nodeId = await seedNode(db);
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })
     .returning({ id: invoiceSeries.id });
-  return { locationId, deviceId, nodeId, seriesId: brandSeriesId(series!.id) };
+  return { deviceId, nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
 export async function seedNodeAndSeries(
@@ -456,7 +452,6 @@ export async function seedFiredLine(
 export interface FiredOrderSeed {
   deviceId: DeviceId;
   nodeId: NodeId;
-  locationId: string;
   stationId: string;
 }
 
@@ -466,7 +461,7 @@ export interface FiredOrderSeed {
  */
 export async function seedOpenOrder(
   db: Database,
-  seed: { deviceId: DeviceId; locationId: string; nodeId: NodeId },
+  seed: { deviceId: DeviceId; nodeId: NodeId },
   orderNumber: number,
 ): Promise<{ orderId: string }> {
   const [order] = await db
@@ -547,7 +542,7 @@ export async function seedFiredOrder(
  */
 export async function seedPartyAt(
   db: Database,
-  seed: { locationId: string; orderId: string },
+  seed: { orderId: string },
   tables: { id?: string; label: string; joinedAt: string; leftAt?: string }[],
 ): Promise<string> {
   const [party] = await db

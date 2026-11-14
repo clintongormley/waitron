@@ -3,7 +3,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, kitchenStations, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, kitchenStations, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
@@ -37,9 +37,6 @@ const absent = useVenueDb({
 beforeEach(async () => {
   for (const suite of [original, restored]) {
     const db = suite.db;
-    await db.insert(locations).values({
-      id: "venue",
-    });
     await seedVenueSettings(db, {
       name: "Venue",
       invoiceLocales: ["en"],

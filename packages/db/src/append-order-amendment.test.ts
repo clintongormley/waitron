@@ -31,9 +31,7 @@ import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 import { orderAmendments } from "./schema/order-amendments.js";
 import { workingOrders } from "./schema/orders.js";
-import { locations } from "./schema/tenants.js";
 
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const OPERATOR_A = "aaaaaaaa-2222-4000-8000-000000000001";
 const OTHER_ACTOR = "cccccccc-2222-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
@@ -49,23 +47,19 @@ let orderNumberSeq = 0;
 describe("order_amendments append helper", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  // Pure setup: the one taxpayer row, then two locations, each with a node, and two devices at A.
   // Working orders are seeded per-test (see openOrder).
   beforeAll(async () => {
     const admin = suite.db;
     await seedVenue(admin, {
-      name: "Fixture Location A",
+      name: "Fixture Venue A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
     nodeA = await seedNode(admin);
     ({ deviceId: deviceA1 } = await seedDevice(admin));
     ({ deviceId: deviceA2 } = await seedDevice(admin));
-    await admin.insert(locations).values({
-      id: LOCATION_B,
-    });
     await seedVenueSettings(admin, {
-      name: "Fixture Location B",
+      name: "Fixture Venue B",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });

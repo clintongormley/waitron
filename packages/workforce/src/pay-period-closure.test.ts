@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
-import { seedLocation, seedEmployment } from "../test/fixtures.js";
+import { seedFixtureVenue, seedEmployment } from "../test/fixtures.js";
 import * as api from "./index.js";
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, api.WORKFORCE_MIGRATIONS],
@@ -24,7 +24,7 @@ const ruleset = {
 let nodeId: string, worker: string, manager: string, other: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },

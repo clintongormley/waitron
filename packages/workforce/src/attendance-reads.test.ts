@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
-import { seedLocation } from "../test/fixtures.js";
+import { seedFixtureVenue } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend } from "./clocking.js";
 import { readRecordedEntries } from "./record-reads.js";
@@ -29,7 +29,7 @@ const now = new Date("2026-02-07T08:00:00.000Z");
 let personId: string, other: string, manager: string, nodeId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
@@ -87,7 +87,6 @@ function queue() {
 function question(
   input: {
     date?: string;
-    location?: string;
     subject?: string;
     key?: string;
     automatic?: string;
@@ -155,11 +154,6 @@ it("gives the inbox the venue's zone and no place list", async () => {
     items: [],
     timeZone: "Atlantic/Canary",
   });
-  for (const prompt of value.prompts) {
-    expect(prompt).not.toHaveProperty("locationId");
-    expect(prompt).not.toHaveProperty("locationName");
-    expect(prompt.day).not.toHaveProperty("locationId");
-  }
 });
 it("keeps canonical active unanswered questions oldest first without exposing another worker or retired rows", async () => {
   const newer = await question({ date: "2026-01-06" });
@@ -576,7 +570,7 @@ it("selects calendar work dates from stored offsets after the venue's zone chang
   expect(recorded.record.entries.map((e) => e.entry.offsetMinutes)).toEqual([120, 120]);
 });
 
-it("reads a person's day at the venue without being told a location", async () => {
+it("reads a person's day at the venue without being told a venue", async () => {
   await shift();
   await suite.db.run(
     sql`update settings set doc = json_set(doc, '$.timeZone', ${"Atlantic/Canary"}) where module = 'business_day'`,

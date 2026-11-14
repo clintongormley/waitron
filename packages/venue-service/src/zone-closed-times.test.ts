@@ -7,7 +7,6 @@ import {
   seasons,
   withTransaction,
   type Transaction,
-  venueLocationId,
   zoneDayRanges,
   zoneDays,
 } from "@waitron/db";
@@ -41,8 +40,7 @@ async function venue() {
       invoiceLocales: ["es-ES"],
       operationDescription: "Restaurant",
     });
-    const venueId = await venueLocationId(db);
-    const cfg = { locationId: venueId };
+    const cfg = {};
     const departmentId = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;
     const zone = async (name: string, displayOrder: number, active = true) => {
       const z = await seedZone(db, { name, displayOrder });
@@ -334,7 +332,7 @@ describe("zones closed at an instant", () => {
     const one = await reads([v.terrace]);
     const three = await reads([v.bar, v.terrace, v.disabled]);
     for (const texts of [one, three]) {
-      for (const table of ["locations", "seasons", "special_day_dates", "zone_days", "floor_zones"])
+      for (const table of ["settings", "seasons", "special_day_dates", "zone_days", "floor_zones"])
         expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
       expect(texts).toHaveLength(5);
     }
@@ -418,8 +416,8 @@ describe("zones closed at an instant", () => {
     });
     expect(prepared.answers.states).toEqual(three.answers);
     const afterDay = prepared.texts.slice(prepared.answers.before);
-    expect(afterDay.filter((q) => /from "(locations|seasons)"/.test(q))).toEqual([]);
-    expect(three.texts.filter((q) => /from "(locations|seasons)"/.test(q))).toHaveLength(2);
+    expect(afterDay.filter((q) => /from "(settings|seasons)"/.test(q))).toEqual([]);
+    expect(three.texts.filter((q) => /from "(settings|seasons)"/.test(q))).toHaveLength(2);
   });
   it("reads the day afresh when handed a day read for another business day", async () => {
     const v = await venue();

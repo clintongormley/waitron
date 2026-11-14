@@ -574,7 +574,7 @@ it("names the venue once and gives entries and closures no workplace column", as
   expect(cells(english, "metadata")[0]!.venueName).toBe("Deli");
   for (const key of ["history", "frozen-history", "closures"])
     expect(english.sections.find((s) => s.key === key)!.columns.map((c) => c.key)).not.toContain(
-      "locationId",
+      "extra",
     );
   expect(english.notes.filter((note) => note.includes("Chain position"))).toEqual([]);
   const spanish = await doc({ locale: "es" });

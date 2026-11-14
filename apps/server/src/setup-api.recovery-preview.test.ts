@@ -11,7 +11,7 @@ const preview: RecoveryBackupPreview = {
   nodeId: "d0000000-0000-4000-8000-000000000001",
   nodeRecoveryKeyName: "Amber Hill",
   taxpayer: { legalName: "Selected venue", taxId: "89890001K" },
-  venueName: "Selected location",
+  venueName: "Selected venue",
 };
 function request(headers: Record<string, string> = {}, body: Uint8Array = new Uint8Array([1, 2])) {
   return {

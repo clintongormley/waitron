@@ -13,7 +13,6 @@ import {
   nodes,
   openVenueDatabase,
   stampDeployment,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -73,7 +72,6 @@ export async function copyMigrations(scratch: string): Promise<string> {
 export interface StreamBox {
   nodeId: string;
   seriesId: string;
-  locationId: string;
   streamId: string;
   publicKey: string;
   /** The node's break-glass secret. */
@@ -111,7 +109,6 @@ export async function provisionStreamBox(options: {
       planVenue(options.venue.request, modules),
       { db: seeding.venue, modules },
     );
-    const locationId = await venueLocationId(seeding.venue);
     const streamId = await withTransaction(seeding.venue, ensureStreamId);
     const nodeSecret = await mintBreakGlassSecret(
       { venue: seeding.venue, node: seeding.node },
@@ -130,7 +127,6 @@ export async function provisionStreamBox(options: {
     box = {
       nodeId: venue.nodeId,
       seriesId: venue.seriesIds[0]!,
-      locationId,
       streamId,
       publicKey: row!.publicKey!,
       nodeSecret,

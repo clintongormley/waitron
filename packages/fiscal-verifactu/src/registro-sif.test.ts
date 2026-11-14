@@ -195,7 +195,6 @@ describe("a new SIF identity begins a new chain", () => {
     // huella. See seedSoldRegistro's doc comment for why this must be a real
     // registros_facturacion row rather than a bare column update.
     await seedSoldRegistro(db, {
-      locationId: TENANT_A.locationId,
       nodeId: TENANT_A.nodeId,
       sifId: first.id,
       nif: SIF_PARAMS.nif,
@@ -238,7 +237,6 @@ describe("a new SIF identity begins a new chain", () => {
     expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TENANT_A.nodeId))).toBe(true);
 
     await seedSoldRegistro(db, {
-      locationId: TENANT_A.locationId,
       nodeId: TENANT_A.nodeId,
       sifId: reg.id,
       nif: SIF_PARAMS.nif,

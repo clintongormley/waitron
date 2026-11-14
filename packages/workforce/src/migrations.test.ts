@@ -24,14 +24,14 @@ import {
   insertRosterVersion,
   insertShiftSwap,
   insertShiftTemplate,
-  seedLocation,
+  seedFixtureVenue,
   seedPerson,
 } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
-  // Core for the `tenants` row the setup seeds and the `locations` and `nodes` rows the cases seed
-  // (`seedLocation`, `seedNode`), and for `persons`, which the cases write and workforce's tables
+
+  // (`seedFixtureVenue`, `seedNode`), and for `persons`, which the cases write and workforce's tables
   // reference.
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
@@ -89,19 +89,18 @@ describe("persons, from core's set layered under workforce", () => {
 });
 
 describe("the D1a time & attendance tables", () => {
-  async function seedPersonAndLocation(): Promise<{
+  async function seedWorkforcePerson(): Promise<{
     personId: string;
-    locationId: string;
     nodeId: string;
   }> {
     const personId = await seedPerson(suite.db, `d1a-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db);
+    await seedFixtureVenue(suite.db);
     const nodeId = await seedNode(suite.db);
-    return { personId, locationId, nodeId };
+    return { personId, nodeId };
   }
 
   it("rejects an entry_kind outside the enum", async () => {
-    const { personId, nodeId } = await seedPersonAndLocation();
+    const { personId, nodeId } = await seedWorkforcePerson();
     // Every other column valid, so the row cannot be refused on the wrong constraint.
     const error = await captureError(() =>
       suite.db.execute(sql`
@@ -117,7 +116,7 @@ describe("the D1a time & attendance tables", () => {
   });
 
   it("rejects an event_offset_minutes outside the ±840 range", async () => {
-    const { personId, nodeId } = await seedPersonAndLocation();
+    const { personId, nodeId } = await seedWorkforcePerson();
     // Every other column valid, so ONLY the offset check is violated.
     const error = await captureError(() =>
       suite.db.execute(sql`
@@ -132,7 +131,7 @@ describe("the D1a time & attendance tables", () => {
   });
 
   it("rejects a negative contracted_minutes_per_week", async () => {
-    const { personId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into employments (
@@ -144,7 +143,7 @@ describe("the D1a time & attendance tables", () => {
   });
 
   it("rejects an employment whose end_date precedes its start_date", async () => {
-    const { personId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into employments (
@@ -160,12 +159,11 @@ describe("the D1a time & attendance tables", () => {
 describe("the D1b correction columns", () => {
   async function seedBaseEntry(): Promise<{
     personId: string;
-    locationId: string;
     nodeId: string;
     entryId: string;
   }> {
     const personId = await seedPerson(suite.db, `d1b-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db);
+    await seedFixtureVenue(suite.db);
     const nodeId = await seedNode(suite.db);
     // A valid position-1 entry; the cases below write at position 2, so they never collide on
     // time_entries_chain_position_uq. `.000Z` because the whole-second checks demand it.
@@ -176,7 +174,7 @@ describe("the D1b correction columns", () => {
       ) values (${newId()}, 'dashboard', ${personId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 0,
         ${personId}, '2026-01-05T09:00:00.000Z', ${"A".repeat(64)}, 1, true
       ) returning id`);
-    return { personId, locationId, nodeId, entryId: rows.rows[0]!.id };
+    return { personId, nodeId, entryId: rows.rows[0]!.id };
   }
 
   it("accepts a fully-populated correction row (the ADD VALUE 'correction' landed)", async () => {
@@ -243,22 +241,22 @@ describe("the D1b correction columns", () => {
 });
 
 describe("the D2 scheduling tables (shifts + roster_versions)", () => {
-  async function seedPersonAndLocation(): Promise<{ personId: string; locationId: string }> {
+  async function seedWorkforcePerson(): Promise<{ personId: string }> {
     const personId = await seedPerson(suite.db, `d2-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db);
-    return { personId, locationId };
+    await seedFixtureVenue(suite.db);
+    return { personId };
   }
 
   it("stores a draft roster version defaulting status to draft with a null published_at", async () => {
-    const { locationId } = await seedPersonAndLocation();
-    const versionId = await insertRosterVersion(suite.db, { locationId });
+    const {} = await seedWorkforcePerson();
+    const versionId = await insertRosterVersion(suite.db, {});
     const rows = await suite.db.execute<{ status: string; published_at: string | null }>(sql`
       select status, published_at from roster_versions where id = ${versionId}`);
     expect(rows.rows[0]).toEqual({ status: "draft", published_at: null });
   });
 
   it("rejects a roster version whose period_end precedes its period_start", async () => {
-    await seedPersonAndLocation();
+    await seedWorkforcePerson();
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into roster_versions (id, created_at, period_start, period_end)
@@ -269,7 +267,7 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   });
 
   it("rejects a published status carrying a null published_at (the publish-shape invariant)", async () => {
-    await seedPersonAndLocation();
+    await seedWorkforcePerson();
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into roster_versions (id, created_at, period_start, period_end, status)
@@ -280,7 +278,7 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   });
 
   it("rejects a draft status carrying a non-null published_at (the other direction)", async () => {
-    await seedPersonAndLocation();
+    await seedWorkforcePerson();
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into roster_versions (id, created_at, period_start, period_end, published_at)
@@ -290,8 +288,8 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     expect(engineErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
   });
 
-  it("rejects a second published version for the same (location, period) via the partial unique index", async () => {
-    await seedPersonAndLocation();
+  it("rejects a second published version for the same (venue, period) via the partial unique index", async () => {
+    await seedWorkforcePerson();
     await suite.db.execute(sql`
       insert into roster_versions (id, created_at, period_start, period_end, status, published_at)
       values (${rowIdentity()}, '2026-05-04', '2026-05-10', 'published', ${nowIso()})`);
@@ -309,14 +307,12 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   });
 
   it("allows two DRAFT versions for the same period — the published-only index is partial", async () => {
-    const { locationId } = await seedPersonAndLocation();
+    const {} = await seedWorkforcePerson();
     await insertRosterVersion(suite.db, {
-      locationId,
       periodStart: "2026-05-11",
       periodEnd: "2026-05-17",
     });
     await insertRosterVersion(suite.db, {
-      locationId,
       periodStart: "2026-05-11",
       periodEnd: "2026-05-17",
     });
@@ -327,19 +323,18 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   });
 
   it("stores a draft shift with a null roster_version_id", async () => {
-    const { personId, locationId } = await seedPersonAndLocation();
-    const shiftId = await insertDraftShift(suite.db, { personId, locationId });
+    const { personId } = await seedWorkforcePerson();
+    const shiftId = await insertDraftShift(suite.db, { personId });
     const rows = await suite.db.execute<{ roster_version_id: string | null }>(sql`
       select roster_version_id from shifts where id = ${shiftId}`);
     expect(rows.rows[0]!.roster_version_id).toBeNull();
   });
 
   it("rejects a shift whose ends_at is not after its starts_at", async () => {
-    const { personId, locationId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const error = await captureError(() =>
       insertDraftShift(suite.db, {
         personId,
-        locationId,
         startsAt: "2026-03-03T17:00:00Z",
         endsAt: "2026-03-03T09:00:00Z",
       }),
@@ -349,11 +344,10 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   });
 
   it("rejects a shift whose starts_offset_minutes is outside the ±840 range", async () => {
-    const { personId, locationId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const error = await captureError(() =>
       insertDraftShift(suite.db, {
         personId,
-        locationId,
         startsOffsetMinutes: 900,
       }),
     );
@@ -363,14 +357,14 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
 });
 
 describe("the D2.2 planning tables (absences, availability, shift_templates, shift_swaps)", () => {
-  async function seedPersonAndLocation(): Promise<{ personId: string; locationId: string }> {
+  async function seedWorkforcePerson(): Promise<{ personId: string }> {
     const personId = await seedPerson(suite.db, `d22-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db);
-    return { personId, locationId };
+    await seedFixtureVenue(suite.db);
+    return { personId };
   }
 
   it("stores an absence defaulting status to requested with a null note", async () => {
-    const { personId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const id = await insertAbsence(suite.db, { personId, status: "requested" });
     const rows = await suite.db.execute<{ status: string; note: string | null }>(sql`
       select status, note from absences where id = ${id}`);
@@ -378,7 +372,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   });
 
   it("rejects an absence whose ends_on precedes its starts_on", async () => {
-    const { personId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const error = await captureError(() =>
       insertAbsence(suite.db, {
         personId,
@@ -391,7 +385,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   });
 
   it("rejects an absence_kind outside the enum", async () => {
-    const { personId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const error = await captureError(() =>
       insertAbsence(suite.db, { personId, kind: "sabbatical" }),
     );
@@ -400,14 +394,14 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   });
 
   it("rejects an availability weekday outside 0–6", async () => {
-    const { personId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const error = await captureError(() => insertAvailability(suite.db, { personId, weekday: 7 }));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/availability_weekday_ck/);
   });
 
   it("rejects an availability window whose end is not after its start", async () => {
-    const { personId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const error = await captureError(() =>
       insertAvailability(suite.db, {
         personId,
@@ -420,7 +414,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   });
 
   it("rejects an availability effective_to before its effective_from", async () => {
-    const { personId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const error = await captureError(() =>
       insertAvailability(suite.db, {
         personId,
@@ -433,28 +427,24 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   });
 
   it("rejects a shift_template with an empty label", async () => {
-    const { locationId } = await seedPersonAndLocation();
-    const error = await captureError(() =>
-      insertShiftTemplate(suite.db, { locationId, label: "" }),
-    );
+    const {} = await seedWorkforcePerson();
+    const error = await captureError(() => insertShiftTemplate(suite.db, { label: "" }));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/shift_templates_label_ck/);
   });
 
   it("rejects a shift_template weekday outside 0–6", async () => {
-    const { locationId } = await seedPersonAndLocation();
-    const error = await captureError(() =>
-      insertShiftTemplate(suite.db, { locationId, weekday: -1 }),
-    );
+    const {} = await seedWorkforcePerson();
+    const error = await captureError(() => insertShiftTemplate(suite.db, { weekday: -1 }));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/shift_templates_weekday_ck/);
   });
 
   it("stores a shift_swap defaulting status to requested, and cascades it away when its from_shift is deleted", async () => {
     // A swap is meaningless once its offered shift is gone, so the from_shift FK cascades.
-    const { personId, locationId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const toPerson = await seedPerson(suite.db, `d22to-${crypto.randomUUID()}`);
-    const fromShiftId = await insertDraftShift(suite.db, { personId, locationId });
+    const fromShiftId = await insertDraftShift(suite.db, { personId });
     const swapId = await insertShiftSwap(suite.db, {
       requestedByPersonId: personId,
       fromShiftId,
@@ -473,7 +463,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   });
 
   it("rejects a shift_swap whose from_shift references no shift", async () => {
-    const { personId } = await seedPersonAndLocation();
+    const { personId } = await seedWorkforcePerson();
     const toPerson = await seedPerson(suite.db, `d22to-${crypto.randomUUID()}`);
     const error = await captureError(() =>
       insertShiftSwap(suite.db, {
@@ -577,7 +567,7 @@ describe("question ownership", () => {
   const single = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS] });
   it("a command's question belongs to its person", async () => {
     await seedTenant(single.db);
-    await seedLocation(single.db);
+    await seedFixtureVenue(single.db);
     const personId = await seedPerson(single.db, "Worker");
     const other = await seedPerson(single.db, "Other");
     const [question] = await single.db

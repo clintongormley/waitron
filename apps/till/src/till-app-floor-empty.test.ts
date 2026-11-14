@@ -127,7 +127,6 @@ function stubApi(over: Record<string, unknown>, counter = false) {
       venueName: "Restaurant",
       nif: "B12345678",
       orderFlow: "prepay",
-      fireControl: "waiter",
       courses: [],
       cardProvider: "none",
       tipsEnabled: false,

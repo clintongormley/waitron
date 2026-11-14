@@ -3,7 +3,7 @@ import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
-import { captureError, invoiceSeries, locations, nodes, withTransaction } from "@waitron/db";
+import { captureError, invoiceSeries, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -124,7 +124,7 @@ describe("currentSif resolves per node", () => {
   // Two nodes of one taxpayer resolve to distinct SIFs / distinct chains.
   it("gives two nodes of one taxpayer distinct SIF identities and distinct chains", async () => {
     const nodeA = node;
-    // A second node under nodeA's OWN location and NIF, so the two genuinely share one obligado.
+
     const sibling = await addSiblingNode();
 
     const [sifA, sifB] = await suite.db.transaction(async (tx) => [
@@ -151,12 +151,11 @@ describe("currentSif resolves per node", () => {
   });
 
   // Registers a second node beside an existing fixture's and gives it a live SIF, returning
-  // its node id. Its own fresh location keeps it a distinct node under the same obligado.
+
   async function addSiblingNode(): Promise<NodeId> {
     return suite.db.transaction(async (tx) => {
       // Through the tables, not raw SQL: `id` and `created_at` are builder-side `$defaultFn`
       // generators a raw insert never reaches.
-      await tx.insert(locations).values({}).returning({ id: locations.id });
       await seedVenueSettings(tx, {
         name: "Sala sib",
         invoiceLocales: ["es"],

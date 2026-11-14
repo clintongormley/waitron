@@ -166,7 +166,7 @@ describe("ordinary zone edit revision", () => {
       { revision: 1 },
     ]);
   });
-  it("publishes a changed location only after its zone and revision commit", async () => {
+  it("publishes a changed venue only after its zone and revision commit", async () => {
     await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
     const initial = await read();
     const published: unknown[] = [];
@@ -336,7 +336,7 @@ describe("venue detail edits", () => {
     expect(saved.model.details.city).toBe("Alcalá de Henares");
     expect(saved.model.details.addressLine1).toBe("Calle nueva 2");
   });
-  it("clears only optional line two and retains unrelated location settings", async () => {
+  it("clears only optional line two and retains unrelated venue settings", async () => {
     await suite.db.execute(
       sql`update settings set doc = json_set(doc, '$.addressLine2', 'Upstairs') where module = 'venue'`,
     );
@@ -862,7 +862,7 @@ describe("venue details preserve committed history", () => {
     const initial = await read();
     const history = retained();
     expect(history.fiscal_allocations).toHaveLength(1);
-    const location = suite.db.all(sql`select * from locations`);
+    const venueDoc = suite.db.all(sql`select * from settings order by module`);
     await expect(
       withTransaction(suite.db, (tx) =>
         writeVenueDetails(tx, {
@@ -874,7 +874,7 @@ describe("venue details preserve committed history", () => {
       code: "venue.detail_locked",
       params: { field: "timeZone", reason: "sales" },
     });
-    expect(suite.db.all(sql`select * from locations`)).toEqual(location);
+    expect(suite.db.all(sql`select * from settings order by module`)).toEqual(venueDoc);
     expect(retained()).toEqual(history);
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
@@ -997,7 +997,7 @@ describe("venue details preserve committed history", () => {
     expect((await read()).details).toEqual(initial.details);
     expect(suite.db.all(sql`select id from sales`)).toHaveLength(1);
   });
-  it("commits a queued clock edit before the following real sale reads current location details", async () => {
+  it("commits a queued clock edit before the following real sale reads current venue details", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-06T12:00:00Z"));
     const clocksReadAtIssuance: unknown[] = [];
@@ -1525,9 +1525,9 @@ describe("workforce facts after venue corrections", () => {
       return response.json() as Promise<unknown>;
     };
     const readCurrent = async () => ({
-      roster: await get(`roster?locationId=${venue.cfg.locationId}&period=2026-10-05`),
+      roster: await get(`roster?extra=${venue.cfg.nodeId}&period=2026-10-05`),
       comparison: await get(
-        `planned-vs-actual?locationId=${venue.cfg.locationId}&from=2026-10-06&to=2026-10-07`,
+        `planned-vs-actual?extra=${venue.cfg.nodeId}&from=2026-10-06&to=2026-10-07`,
       ),
       summary: await withTransaction(suite.db, (tx) =>
         backend.workSummary(
@@ -1566,14 +1566,14 @@ describe("workforce facts after venue corrections", () => {
     await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { timeZone: "UTC", name: "Current location label" },
+        changes: { timeZone: "UTC", name: "Current venue label" },
       }),
     );
     expect(await readCurrent()).toEqual(before);
     expect(retained()).toEqual(history);
     expect((await read()).details).toEqual({
       ...initial.details,
-      name: "Current location label",
+      name: "Current venue label",
       timeZone: "UTC",
     });
   });

@@ -83,7 +83,7 @@ function retained() {
   return Object.fromEntries(
     [
       "tenants",
-      "locations",
+      "settings",
       "nodes",
       "invoice_series",
       "registro_sif",

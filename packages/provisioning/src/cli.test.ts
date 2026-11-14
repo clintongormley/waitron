@@ -19,7 +19,6 @@ import type { VenueApplyDeps, VenueResult } from "./venue-apply.js";
 const VENUE_DIR = "/var/lib/waitron/venue";
 
 const VENUE_RESULT = {
-  locationId: "22222222-2222-2222-2222-222222222222",
   nodeId: "44444444-4444-4444-4444-444444444444",
   seriesIds: ["66666666-6666-6666-6666-666666666666", "77777777-7777-7777-7777-777777777777"],
   seeded: [
@@ -438,7 +437,7 @@ describe("runCli venue", () => {
     expect(h.askedSecretly).toEqual([]);
   });
 
-  it("keeps the taxpayer domicile separate from the location address", async () => {
+  it("keeps the taxpayer domicile separate from the venue address", async () => {
     const h = harness({ env: VENUE_ENV, modules: verifactuModules });
 
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
@@ -811,8 +810,8 @@ describe("runCli venue", () => {
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(0);
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
-    const location = actions.find((action) => action.kind === "create-venue");
-    expect(location?.kind === "create-venue" && location.invoiceLocales).toEqual(["es-ES"]);
+    const venueDoc = actions.find((action) => action.kind === "create-venue");
+    expect(venueDoc?.kind === "create-venue" && venueDoc.invoiceLocales).toEqual(["es-ES"]);
   });
 
   it("refuses a venue directory nothing supplied, rather than opening the working directory", async () => {
@@ -1026,9 +1025,9 @@ describe("runCli venue", () => {
     expect(h.askedSecretly).toEqual(["admin PIN (not shown): ", "admin password (not shown): "]);
 
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
-    const location = actions.find((action) => action.kind === "create-venue");
-    expect(location?.kind === "create-venue" && location.invoiceLocales).toEqual(["es-ES"]);
-    expect(location?.kind === "create-venue" && location.addressLine2).toBeNull();
+    const venueDoc = actions.find((action) => action.kind === "create-venue");
+    expect(venueDoc?.kind === "create-venue" && venueDoc.invoiceLocales).toEqual(["es-ES"]);
+    expect(venueDoc?.kind === "create-venue" && venueDoc.addressLine2).toBeNull();
   });
 });
 

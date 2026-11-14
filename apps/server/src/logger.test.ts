@@ -142,7 +142,7 @@ describe("createLogger personal data", () => {
       name: "Patio",
       label: "T4",
       holderDeviceName: "Bar till",
-      locationName: "Bar del Port",
+      venueName: "Bar del Port",
       personId: "p1",
       ownerId: "p2",
     };
@@ -402,6 +402,6 @@ describe("maskPersonalData keeps the first and last character of each piece", ()
   });
 
   it("leaves a key on neither list as it is", () => {
-    expect(maskPersonalData("locationName", "Bar del Port")).toBe("Bar del Port");
+    expect(maskPersonalData("venueName", "Bar del Port")).toBe("Bar del Port");
   });
 });

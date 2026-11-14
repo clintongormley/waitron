@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { diningTables, withTransaction, type Database, venueLocationId } from "@waitron/db";
+import { diningTables, withTransaction, type Database } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -40,7 +40,6 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant service",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
 
   const { managerSid, staffSid } = await withTransaction(db, async (tx: Transaction) => {
@@ -60,7 +59,7 @@ async function setupVenue(): Promise<Venue> {
   });
 
   return {
-    ctx: { db, cfg: {}, core: fakeCore({ locationId, nodeId }) },
+    ctx: { db, cfg: {}, core: fakeCore({ nodeId }) },
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };

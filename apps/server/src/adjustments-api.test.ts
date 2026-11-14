@@ -711,7 +711,7 @@ describe("approval through the route (plan D6)", () => {
         name: "Bucket till device",
         profileId: tillProfile!.id,
       });
-      // A handheld at the same location as `till`, so only the device tells their counts apart.
+
       const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {
         name: "Bucket phone device",
         profileId: handheldProfile!.id,

@@ -47,14 +47,13 @@ afterEach(async () => {
     await tx.execute(sql`delete from nodes`);
     await tx.execute(sql`delete from ${devices}`);
     await tx.execute(sql`delete from ${deviceProfiles}`);
-    await tx.execute(sql`delete from locations`);
     await tx.execute(sql`delete from tenants`);
     await tx.execute(sql.raw(guard.sql));
   });
 });
 
 const AT = "2026-07-20T19:20:30+00:00";
-/** An order opened from the dashboard at location A: no device to seed. */
+
 let DASHBOARD_ORDER: {
   readonly source: "dashboard";
   readonly deviceId: null;
@@ -72,7 +71,7 @@ async function seed(db: Database): Promise<void> {
   await seedVenue(db, {
     // Bilingual on purpose: a single-locale venue cannot detect a trigger
     // that checks "at least one locale" instead of "exactly these".
-    name: "Fixture Location A",
+    name: "Fixture Venue A",
     invoiceLocales: ["es", "ca"],
     operationDescription: "Hostelería",
   });

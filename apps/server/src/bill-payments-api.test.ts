@@ -39,7 +39,6 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -241,7 +240,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(db);
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(provisioned.nodeId),
@@ -250,7 +248,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   };
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Bill payments api menu ${venueId}` });
+    const cat = await createCatalogue(tx, { name: `Bill payments api menu ${provisioned.nodeId}` });
     const dishes = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {

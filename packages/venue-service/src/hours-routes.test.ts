@@ -18,7 +18,6 @@ import {
   catalogues,
   departments,
   kitchenStations,
-  locations,
   specialDayDates,
   specialDays,
   withTransaction,
@@ -59,7 +58,7 @@ const noopLog: Logger = () => {};
 
 interface Fixture {
   app: Hono;
-  cfg: { locationId: string };
+  cfg: {};
   restaurant: HoursSubject;
   deli: HoursSubject;
   bar: HoursSubject;
@@ -86,20 +85,17 @@ async function fixture(): Promise<Fixture> {
       operationDescription,
       timeZone,
       dayCutover,
-      ...columns
     } = venue("Venue");
-    const [location] = await tx.insert(locations).values(columns).returning();
     await seedVenueSettings(tx, { name: venueName, invoiceLocales, operationDescription });
     await seedBusinessDay(tx, { timeZone, dayCutover });
-    const department = (location: string, name: string, isDefault = false) => ({
-      locationId: location,
+    const department = (name: string, isDefault = false) => ({
       name,
       tradingName: `${name} trading`,
       isDefault,
     });
     const [restaurant, deli] = await tx
       .insert(departments)
-      .values([department(location!.id, "Restaurant", true), department(location!.id, "Deli")])
+      .values([department("Restaurant", true), department("Deli")])
       .returning();
     const [bar, kitchen] = await tx
       .insert(kitchenStations)
@@ -137,7 +133,7 @@ async function fixture(): Promise<Fixture> {
       1,
     );
     return {
-      cfg: { locationId: location!.id },
+      cfg: {},
       departmentIds: { restaurant: restaurant!.id, deli: deli!.id },
       restaurant: { kind: "station" as const, id: restaurantStation!.id },
       deli: { kind: "station" as const, id: deliStation!.id },

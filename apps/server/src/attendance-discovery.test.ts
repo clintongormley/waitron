@@ -18,7 +18,6 @@ import {
   workingOrders,
   withTransaction,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -43,9 +42,9 @@ const suite = useVenueDb({
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const backend = new WorkforceBackend();
-let locationId: string, personId: string, nodeId: string, deviceId: string;
+let personId: string, nodeId: string, deviceId: string;
 const now = new Date("2026-01-09T12:00:00Z");
-const scope = () => ({ locationId, now, batchSize: 2 });
+const scope = () => ({ now, batchSize: 2 });
 const event = (at: string) => ({
   personId,
   nodeId,
@@ -94,7 +93,6 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  locationId = await venueLocationId(suite.db);
   nodeId = await seedNode(suite.db);
   deviceId = (await seedDevice(suite.db)).deviceId;
   const [person] = await seedPersons(suite.db, {
@@ -106,7 +104,7 @@ beforeEach(async () => {
 });
 
 describe("durable attendance discovery", () => {
-  it("discovers the venue's day without being told a location", async () => {
+  it("discovers the venue's day without being told a venue", async () => {
     await signIn("2026-01-05T12:00:00Z");
     const { beginAttendanceDiscovery, discoverAttendanceDays, nextAttendanceDay } =
       await import("./attendance-discovery.js");

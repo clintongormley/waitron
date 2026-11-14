@@ -6,7 +6,6 @@ import {
   deviceProfileServiceAccess,
   deviceProfileZones,
   kitchenNotices,
-  locations,
   orderServiceContexts,
   routingCellPeriods,
   routingCells,
@@ -232,17 +231,15 @@ describe("department name storage", () => {
   const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS],
   });
-  async function location(name: string) {
-    const [row] = await suite.db.insert(locations).values({}).returning();
+  async function seedNamedVenue(name: string) {
     await seedVenueSettings(suite.db, {
       name,
       invoiceLocales: ["es"],
       operationDescription: "Hospitality",
     });
     await seedBusinessDay(suite.db, {});
-    return row!.id;
   }
-  async function insert(_locationId: string, name: string) {
+  async function insert(name: string) {
     return withTransaction(suite.db, async (tx) => {
       const [row] = await tx.insert(departments).values({ name, tradingName: name }).returning();
       return row!;
@@ -250,19 +247,19 @@ describe("department name storage", () => {
   }
   it("reuses a deleted department name with a new id", async () => {
     await seedTenant(suite.db);
-    const locationId = await location("Venue");
-    const old = await insert(locationId, "Deli");
+    await seedNamedVenue("Venue");
+    const old = await insert("Deli");
     await suite.db.update(departments).set({ active: false }).where(eq(departments.id, old.id));
-    const replacement = await insert(locationId, "Deli");
+    const replacement = await insert("Deli");
     expect(replacement.id).not.toBe(old.id);
     expect(await suite.db.select().from(departments).where(eq(departments.id, old.id))).toEqual([
       { ...old, active: false },
     ]);
   });
-  it("still refuses two live names in one location", async () => {
+  it("still refuses two live names in one venue", async () => {
     await seedTenant(suite.db);
-    const locationId = await location("Venue");
-    await insert(locationId, "Deli");
-    await expect(insert(locationId, "Deli")).rejects.toThrow("UNIQUE constraint failed:");
+    await seedNamedVenue("Venue");
+    await insert("Deli");
+    await expect(insert("Deli")).rejects.toThrow("UNIQUE constraint failed:");
   });
 });

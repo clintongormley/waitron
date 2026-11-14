@@ -16,7 +16,6 @@ import {
   withTransaction,
   saveSettings,
   type Database,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -99,7 +98,6 @@ function nextName(prefix: string): string {
 
 interface Venue {
   nodeId: string;
-  locationId: string;
   managerCookie: string;
   staffCookie: string;
 }
@@ -115,7 +113,6 @@ async function seedVenueWithStaff(): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
-  const locationId = await venueLocationId(suite.db);
   const writingNodeId = await seedNode(suite.db);
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
     const [mgr] = await seedPersons(tx, {
@@ -137,7 +134,6 @@ async function seedVenueWithStaff(): Promise<Venue> {
   });
   return {
     nodeId: writingNodeId,
-    locationId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };

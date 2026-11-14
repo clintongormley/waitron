@@ -7,9 +7,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
   CORE_MIGRATIONS,
+  catalogues,
   diningTables,
   installChangeFeed,
-  locations,
   subscribeToChanges,
   withTransaction,
 } from "@waitron/db";
@@ -350,7 +350,6 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   const app = new Hono();
   mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["dining_tables"] }, () => {});
   const { zone } = await withTransaction(suite.db, async (tx) => {
-    const [location] = await tx.insert(locations).values({}).returning({ id: locations.id });
     await seedVenueSettings(tx, {
       name: "Before probe",
       invoiceLocales: ["es"],
@@ -358,7 +357,7 @@ it("delivers a write made outside withTransaction on the next transaction the pr
     });
     await seedBusinessDay(tx, {});
     const [zone] = [await seedZone(tx, { name: "Probe tables" })];
-    return { location: location!, zone: zone! };
+    return { zone: zone! };
   });
   await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
   const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
@@ -368,7 +367,7 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   const reader = response.body!.getReader();
   try {
     await reader.read();
-    await suite.db.insert(locations).values({});
+    await suite.db.insert(catalogues).values({ name: "Unwatched change" });
     await suite.db.insert(diningTables).values({ zoneId: zone!.id, label: "T9" });
     const waiting = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from change_log`,

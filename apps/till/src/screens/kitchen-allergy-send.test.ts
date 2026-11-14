@@ -191,7 +191,7 @@ async function mount(
       api: api as unknown as TillApi,
       embedded: true,
       runsPass: true,
-      ...{ fireControl: screen === "station" ? "kitchen" : "expo" },
+      ...{},
       deviceMode: api.deviceMode,
     },
     theme,
@@ -308,55 +308,52 @@ describe("station allergy boundary after changing stations", () => {
 describe("A773 waiter authority — expo allergy boundary", () => {
   for (const deviceMode of [false, true])
     for (const kind of ["group", "course"] as const)
-      for (const fireControl of ["waiter", "kitchen", "expo"] as const)
-        it.each([null, "none", "allergies"] as const)(
-          `expo ${kind} never previews or sends answer %s (device ${deviceMode}, legacy ${fireControl})`,
-          async (answer) => {
-            const api = fixture(kind, deviceMode);
-            const read = view(answer);
-            read.snapshot.guests = [
-              { id: "guest-1", position: 0, who: "Alex", allergens: { milk: {} }, note: null },
-            ];
-            read.dishes[0]!.extras = [
-              { name: "Cream", quantity: "1.000", allergens: { milk: {} } },
-            ];
-            api.previewPartyAllergy.mockResolvedValue(read);
-            const { el } = await mount("expo", kind, api);
-            Object.assign(el, { fireControl });
-            await el.updateComplete;
-            const reads = deviceMode ? api.getDevicePassBoard : api.getExpoBoard;
-            const count = reads.mock.calls.length;
-            for (let press = 0; press < 2; press++) {
-              await fire(el, kind);
-              await settle(el);
-            }
-            el.dispatchEvent(
-              new CustomEvent("allergy-confirm", {
-                detail: {
-                  scopeKey: "old-scope",
-                  expectedPartyRevision: 7,
-                  patch: {
-                    party: { answer: "none", guests: [] },
-                    ticks: [{ line: { kind: "working", id: "line-2" }, guestIndex: 0 }],
-                  },
-                },
-                bubbles: true,
-                composed: true,
-              }),
-            );
+      it.each([null, "none", "allergies"] as const)(
+        `expo ${kind} never previews or sends answer %s (device ${deviceMode})`,
+        async (answer) => {
+          const api = fixture(kind, deviceMode);
+          const read = view(answer);
+          read.snapshot.guests = [
+            { id: "guest-1", position: 0, who: "Alex", allergens: { milk: {} }, note: null },
+          ];
+          read.dishes[0]!.extras = [{ name: "Cream", quantity: "1.000", allergens: { milk: {} } }];
+          api.previewPartyAllergy.mockResolvedValue(read);
+          const { el } = await mount("expo", kind, api);
+          Object.assign(el, {});
+          await el.updateComplete;
+          const reads = deviceMode ? api.getDevicePassBoard : api.getExpoBoard;
+          const count = reads.mock.calls.length;
+          for (let press = 0; press < 2; press++) {
+            await fire(el, kind);
             await settle(el);
-            expect(api.getFindBill).not.toHaveBeenCalled();
-            expect(api.previewPartyAllergy).not.toHaveBeenCalled();
-            expect(api.fireGroup).not.toHaveBeenCalled();
-            expect(api.fireCourse).not.toHaveBeenCalled();
-            expect(api.fireDeviceGroup).not.toHaveBeenCalled();
-            expect(api.fireDeviceCourse).not.toHaveBeenCalled();
-            expect(reads).toHaveBeenCalledTimes(count);
-            expect(dialog(el)).toBeNull();
-            expect(el.shadowRoot!.querySelector('[role="alert"], [data-table-changed]')).toBeNull();
-            expect(inBoard(el).querySelector('[data-item="ticket-1"]')).not.toBeNull();
-          },
-        );
+          }
+          el.dispatchEvent(
+            new CustomEvent("allergy-confirm", {
+              detail: {
+                scopeKey: "old-scope",
+                expectedPartyRevision: 7,
+                patch: {
+                  party: { answer: "none", guests: [] },
+                  ticks: [{ line: { kind: "working", id: "line-2" }, guestIndex: 0 }],
+                },
+              },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+          await settle(el);
+          expect(api.getFindBill).not.toHaveBeenCalled();
+          expect(api.previewPartyAllergy).not.toHaveBeenCalled();
+          expect(api.fireGroup).not.toHaveBeenCalled();
+          expect(api.fireCourse).not.toHaveBeenCalled();
+          expect(api.fireDeviceGroup).not.toHaveBeenCalled();
+          expect(api.fireDeviceCourse).not.toHaveBeenCalled();
+          expect(reads).toHaveBeenCalledTimes(count);
+          expect(dialog(el)).toBeNull();
+          expect(el.shadowRoot!.querySelector('[role="alert"], [data-table-changed]')).toBeNull();
+          expect(inBoard(el).querySelector('[data-item="ticket-1"]')).not.toBeNull();
+        },
+      );
 
   for (const kind of ["group", "course"] as const)
     it.each(["operator", "api", "reopen", "board"] as const)(

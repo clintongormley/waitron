@@ -36,14 +36,6 @@ CREATE TABLE `settings` (
 	CONSTRAINT "settings_doc_ck" CHECK(case when json_valid("settings"."doc") then json_type("settings"."doc") = 'object' else 0 end)
 );
 --> statement-breakpoint
-CREATE TABLE `locations` (
-	`id` text PRIMARY KEY NOT NULL,
-	`bump_mode` text DEFAULT 'line' NOT NULL,
-	`fire_control` text DEFAULT 'waiter' NOT NULL,
-	CONSTRAINT "locations_bump_mode_ck" CHECK("locations"."bump_mode" in ('line', 'ticket')),
-	CONSTRAINT "locations_fire_control_ck" CHECK("locations"."fire_control" in ('waiter', 'kitchen', 'expo'))
-);
---> statement-breakpoint
 CREATE TABLE `tenants` (
 	`id` integer PRIMARY KEY NOT NULL,
 	`country` text NOT NULL,

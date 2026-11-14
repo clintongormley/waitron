@@ -8,7 +8,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
-  locations,
+  settings,
   nodes,
   stampDeployment,
   type Transaction,
@@ -880,7 +880,7 @@ it("keeps a standby established during preparation when the venue row is subsequ
         });
         await suite.db.execute(sql`pragma foreign_keys = off`);
         try {
-          await suite.db.execute(sql`delete from locations`);
+          await suite.db.execute(sql`delete from settings where module = 'venue'`);
         } finally {
           await suite.db.execute(sql`pragma foreign_keys = on`);
         }
@@ -900,7 +900,7 @@ it("keeps a standby established during preparation when the venue row is subsequ
       .from(nodes)
       .where(eq(nodes.id, args.standby.nodeId)),
   ).toEqual([{ name: "Already established", publicKey: args.standby.publicKey }]);
-  expect(await suite.db.select().from(locations)).toEqual([]);
+  expect(await suite.db.select().from(settings).where(eq(settings.module, "venue"))).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
 });
 

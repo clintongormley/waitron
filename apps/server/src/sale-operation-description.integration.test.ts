@@ -34,7 +34,7 @@ useVenueDb({
     const [zone] = await db.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
     departmentId = zone!.departmentId;
     await db.run(
-      sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Generic location service"}) where module = 'venue'`,
+      sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Generic venue service"}) where module = 'venue'`,
     );
     await authored("Dining meals");
   },
@@ -151,7 +151,7 @@ it("a counter sale sent without a zone records the selected zone and files that 
 });
 
 it.each(["cash", "card"] as const)(
-  "an immediate %s sale files the department value rather than the location value",
+  "an immediate %s sale files the department value rather than the venue value",
   async (method) => {
     const input = request();
     const result = await payWorkingOrder(
@@ -408,7 +408,7 @@ it("a concurrent winner is replayed even when its department description is subs
 });
 
 it.each(["cash", "integrated"] as const)(
-  "a no-description fiscal contribution issues a %s sale with no department or location fallback",
+  "a no-description fiscal contribution issues a %s sale with no department or venue fallback",
   async (method) => {
     await authored();
     const modules = enabledModules(

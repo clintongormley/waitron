@@ -6,7 +6,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { locations, nodes, tenants } from "@waitron/db";
+import { nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
@@ -34,7 +34,6 @@ const unavailable = "Cloud recovery is unavailable. Try again.";
 const requestId = "10000000-0000-4000-8000-000000000001";
 const pointId = "20000000-0000-4000-8000-000000000002";
 const nodeId = "30000000-0000-4000-8000-000000000003";
-const locationId = "40000000-0000-4000-8000-000000000004";
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -422,9 +421,6 @@ describe("comparison immediately before real archive placement", () => {
     await suite.db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Test venue" });
-    await suite.db.insert(locations).values({
-      id: locationId,
-    });
     await seedVenueSettings(suite.db, {
       name: "Test room",
       invoiceLocales: ["en"],

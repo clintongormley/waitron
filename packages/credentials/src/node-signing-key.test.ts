@@ -1,9 +1,9 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { generateKeyPairSync } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  locations,
   readMembershipTrustSet,
   setNodePublicKey,
   withNodeTransaction,
@@ -167,8 +167,8 @@ describe("establishing the box's signing key", () => {
   });
 
   async function freshNode() {
-    const [existing] = await suite.db.select({ id: locations.id }).from(locations).limit(1);
-    if (existing === undefined) {
+    const existing = await readSettings(suite.db, VENUE_SETTINGS);
+    if (existing.revision === 0) {
       await seedVenue(suite.db, {
         name: "Bar",
         invoiceLocales: ["es-ES"],

@@ -610,7 +610,6 @@ it("gives first setup's history no time floor", async () => {
     })
     .returning({ id: registroSif.id });
   await seedSoldRegistro(suite.db, {
-    locationId: TENANT_A.locationId,
     nodeId: TENANT_A.nodeId,
     sifId: sif!.id,
     nif: "89890001K",

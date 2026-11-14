@@ -33,7 +33,6 @@ import {
   serviceSteps,
   withTransaction,
   type Transaction,
-  venueLocationId,
   zoneDayRanges,
   zoneDays,
 } from "@waitron/db";
@@ -66,8 +65,7 @@ async function fixture(tx: Transaction, suffix = "") {
     invoiceLocales: ["en-GB"],
     operationDescription: "Hospitality",
   });
-  const venueId = await venueLocationId(tx);
-  const cfg = { locationId: venueId };
+  const cfg = {};
   const ds = await tx
     .insert(departments)
     .values([

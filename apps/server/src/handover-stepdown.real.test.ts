@@ -205,7 +205,7 @@ describe("a card sale in flight when the box steps down", () => {
     // stand-ins have each been reached once, so the drain that holds AEAT is a later pass.
     await seedPendingEnvios(suite.db, {
       count: 9,
-      identity: { locationId: venue.cfg.locationId, nodeId, nif: "61000002T" },
+      identity: { nodeId, nif: "61000002T" },
       entorno: "preproduction",
     });
     // The fixture adds a standard series of its own; the sale files in the venue's.

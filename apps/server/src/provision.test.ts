@@ -200,7 +200,7 @@ describe("provisionVenue", () => {
   });
 
   it.each(["preproduction", "production"] as const)(
-    "names the default department, and its trading name, after the location when provisioning under %s",
+    "names the default department, and its trading name, after the venue when provisioning under %s",
     async (environment) => {
       const db = ownerDb();
       const venue = venueRequest(nextNif());
@@ -358,7 +358,7 @@ describe("provisionVenue", () => {
     expect(await counts()).toEqual({ default_stations: 1, stations: 1, cells: 0 });
   });
 
-  it("recovers the exact committed venue by location, node and series after a process dies before file publication", async () => {
+  it("recovers the exact committed venue by venue, node and series after a process dies before file publication", async () => {
     const db = ownerDb();
     const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
     const minted = await provisionVenue(
@@ -489,9 +489,9 @@ describe("clearProvisionFixture", () => {
         await db.execute(sql`select
       (select count(*) from floor_zones where kept_open_day is not null) as extensions,
       (select count(*) from floor_zones) as zones,
-      (select count(*) from locations) as locations`)
+      (select count(*) from settings where module = 'venue') as venue_documents`)
       ).rows,
-    ).toEqual([{ extensions: 0, zones: 0, locations: 0 }]);
+    ).toEqual([{ extensions: 0, zones: 0, venue_documents: 0 }]);
   });
 
   it("clears a venue's holiday area geography before the venue", async () => {
@@ -513,8 +513,8 @@ describe("clearProvisionFixture", () => {
       select
         (select cast(count(*) as int) from special_days) as entries,
         (select cast(count(*) as int) from settings where module = 'venue' and json_type(doc, '$.holidayArea') = 'object') as geographies,
-        (select cast(count(*) as int) from locations) as locations`);
-    expect(rows[0]).toEqual({ entries: 0, geographies: 0, locations: 0 });
+        (select cast(count(*) as int) from settings where module = 'venue') as venue_documents`);
+    expect(rows[0]).toEqual({ entries: 0, geographies: 0, venue_documents: 0 });
   });
 
   it("clears a venue holding special days before their owners", async () => {
@@ -544,13 +544,13 @@ describe("clearProvisionFixture", () => {
         (select cast(count(*) as int) from special_day_dates) as special_day_dates,
         (select cast(count(*) as int) from departments) as departments,
         (select cast(count(*) as int) from kitchen_stations) as stations,
-        (select cast(count(*) as int) from locations) as locations`);
+        (select cast(count(*) as int) from settings where module = 'venue') as venue_documents`);
     expect(rows[0]).toEqual({
       special_days: 0,
       special_day_dates: 0,
       departments: 0,
       stations: 0,
-      locations: 0,
+      venue_documents: 0,
     });
   });
   it("clears a venue's special days, their dates and paint before the venue", async () => {
@@ -583,8 +583,8 @@ describe("clearProvisionFixture", () => {
         (select cast(count(*) as int) from special_days) as special_days,
         (select cast(count(*) as int) from special_day_dates) as dates,
         (select cast(count(*) as int) from department_day_ranges) as paint,
-        (select cast(count(*) as int) from locations) as locations`);
-    expect(rows[0]).toEqual({ special_days: 0, dates: 0, paint: 0, locations: 0 });
+        (select cast(count(*) as int) from settings where module = 'venue') as venue_documents`);
+    expect(rows[0]).toEqual({ special_days: 0, dates: 0, paint: 0, venue_documents: 0 });
   });
 
   it("clears a department's floor plan sets before the department and the venue", async () => {
@@ -608,8 +608,8 @@ describe("clearProvisionFixture", () => {
       select
         (select cast(count(*) as int) from floor_plan_sets) as sets,
         (select cast(count(*) as int) from departments) as departments,
-        (select cast(count(*) as int) from locations) as locations`);
-    expect(rows[0]).toEqual({ sets: 0, departments: 0, locations: 0 });
+        (select cast(count(*) as int) from settings where module = 'venue') as venue_documents`);
+    expect(rows[0]).toEqual({ sets: 0, departments: 0, venue_documents: 0 });
   });
 
   it("clears a venue's routing cells before its stations", async () => {

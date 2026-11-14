@@ -1,6 +1,6 @@
 import type { RecordExportDocument } from "@waitron/shared";
 import { jobOrigin } from "@waitron/shared";
-import { venueLocationId, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { registerModulePermissions } from "@waitron/identity";
@@ -17,7 +17,6 @@ export async function seedAttendanceExport(db: Database) {
     invoiceLocales: ["es"],
     operationDescription: "Sale on premises",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const [worker, manager] = await seedPersons(db, [
     {
@@ -81,7 +80,6 @@ export async function seedAttendanceExport(db: Database) {
   return {
     personId: worker!.id,
     managerId: manager!.id,
-    locationId,
     nodeId,
     closure,
     document: async (audience: "standard" | "representatives", locale: "en" | "es" = "en") => {

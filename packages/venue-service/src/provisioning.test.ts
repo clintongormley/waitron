@@ -10,7 +10,6 @@ import {
   withTransaction,
   catalogues,
   kitchenStations,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -236,11 +235,8 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
   describe("the starter service steps", () => {
     async function venue(name: string) {
       await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
-      const venueId = await venueLocationId(db);
-      const locationId = venueId;
       const node = { nodeId: await seedNode(db) };
       return {
-        locationId,
         seed: () => withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node)),
         steps: async () =>
           (
@@ -389,7 +385,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     expect(periods.rows).toEqual([{ menu_id: menus[1]!.id }]);
   });
 
-  it("seeds the location's Open period and preserves authored name, colour and staff order on a re-run", async () => {
+  it("seeds the venue's Open period and preserves authored name, colour and staff order on a re-run", async () => {
     const [menu] = await db
       .insert(catalogues)
       .values({ name: "Carta" })
@@ -522,8 +518,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         invoiceLocales: ["es-ES"],
         operationDescription: "Bar",
       });
-      const venueId = await venueLocationId(db);
-      const locationId = venueId;
       const node = { nodeId: await seedNode(db) };
       const profile = async (
         formFactor: "till" | "phone-portrait" | "tablet-landscape" | "kds",
@@ -550,7 +544,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
           where is_counter_default = 1`);
         return rows.rows[0]!;
       };
-      return { locationId, profiles, runSeed, access, defaults };
+      return { profiles, runSeed, access, defaults };
     }
 
     it("puts each profile that takes orders in the counter's department, every zone, starting at the counter, and leaves the kitchen display and a profile that takes no orders without one", async () => {

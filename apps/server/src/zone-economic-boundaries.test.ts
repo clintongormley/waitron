@@ -364,7 +364,7 @@ it.each(closedStates)(
   },
 );
 
-it("an admitted direct issue uses the writing location's calendar and preserves old invoices", async () => {
+it("an admitted direct issue uses the writing venue's calendar and preserves old invoices", async () => {
   const { id } = await held();
   const reading = venue.clock.now();
   const clock = {

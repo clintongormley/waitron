@@ -1,12 +1,6 @@
 import { eq, and, isNotNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  kitchenStations,
-  withTransaction,
-  type Transaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, kitchenStations, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { loadRoutingRules, routingAt, routingModel, stationStates } from "./routing-store.js";
@@ -25,8 +19,7 @@ async function fixture(tx: Transaction) {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });
-  const venueId = await venueLocationId(tx);
-  const cfg = { locationId: venueId };
+  const cfg = {};
   const stations = await tx
     .insert(kitchenStations)
     .values([

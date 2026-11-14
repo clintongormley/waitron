@@ -8,7 +8,6 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   sales,
@@ -26,7 +25,6 @@ const LEDGER_TABLE = "registros_facturacion";
 const SQLITE_CONSTRAINT_TRIGGER = 1811;
 
 const F = {
-  locationId: "c0000000-0000-4000-8000-000000000002",
   seriesId: "c0000000-0000-4000-8000-000000000004",
   saleId: "c0000000-0000-4000-8000-000000000005",
   sifId: "c0000000-0000-4000-8000-000000000006",
@@ -41,9 +39,6 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
-  await db.insert(locations).values({
-    id: F.locationId,
-  });
   await seedVenueSettings(db, {
     name: "Local principal",
     invoiceLocales: ["es"],

@@ -222,7 +222,7 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
   it("has no violations on the board with held food and no station Fire button", async () => {
     const { el, host } = await mountWidget<TillStationScreen>(
       "till-station-screen",
-      { api: stubApi(), ...{ fireControl: "kitchen" } },
+      { api: stubApi(), ...{} },
       theme,
     );
     await flush(el);
@@ -291,7 +291,7 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
       "till-station-screen",
       {
         api: stubApi({ fireGroup }),
-        ...{ fireControl: "kitchen" },
+        ...{},
       },
       theme,
     );

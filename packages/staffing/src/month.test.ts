@@ -237,16 +237,7 @@ describe("readStaffingMonth", () => {
       expect(tables.filter((table) => table === holidayTable)).toHaveLength(1);
     const watched: readonly string[] = QUERY_DEPENDENCIES["staffing-month"];
     expect(
-      tables.filter(
-        (table) =>
-          !watched.includes(
-            table === "settings"
-              ? "settings.venue"
-              : table === "locations"
-                ? "settings.business_day"
-                : table,
-          ),
-      ),
+      tables.filter((table) => !watched.includes(table === "settings" ? "settings.venue" : table)),
     ).toEqual([]);
     for (const unshown of ["floor_zones"]) expect(tables).not.toContain(unshown);
   });
@@ -284,7 +275,7 @@ describe("rota counts in the staffing month", () => {
       tables.filter(
         (t) =>
           !(QUERY_DEPENDENCIES["staffing-month"] as readonly string[]).includes(
-            t === "settings" ? "settings.venue" : t === "locations" ? "settings.business_day" : t,
+            t === "settings" ? "settings.venue" : t,
           ),
       ),
     ).toEqual([]);

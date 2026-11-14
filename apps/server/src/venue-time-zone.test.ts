@@ -1,7 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, settings } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
@@ -12,13 +11,11 @@ const venue = {
   operationDescription: "Retail",
   timeZone: "Atlantic/Canary",
 };
-let venueId: string;
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
     await seedVenue(db, venue);
-    venueId = await venueLocationId(db);
   },
 });
 
@@ -27,23 +24,12 @@ it("reads the venue's stored time zone instead of inferring it from language", a
 });
 
 it("uses UTC when no venue is set up", async () => {
-  await suite.db.execute(sql`delete from locations`);
+  const [saved] = await suite.db.select().from(settings).where(eq(settings.module, "venue"));
+  await suite.db.delete(settings).where(eq(settings.module, "venue"));
   try {
     await expect(readVenueTimeZone(suite.db)).resolves.toBe("UTC");
   } finally {
-    await suite.db.insert(locations).values({ ...venue, id: venueId });
-  }
-});
-
-it("refuses a second venue row rather than answering UTC", async () => {
-  const second = { ...venue, id: randomUUID(), name: "Second venue" };
-  await suite.db.insert(locations).values(second);
-  try {
-    await expect(readVenueTimeZone(suite.db)).rejects.toMatchObject({
-      code: "provisioning.second_venue",
-    });
-  } finally {
-    await suite.db.delete(locations).where(eq(locations.id, second.id));
+    await suite.db.insert(settings).values(saved!);
   }
 });
 

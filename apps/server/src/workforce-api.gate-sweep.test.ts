@@ -28,7 +28,6 @@ const suite = useVenueDb({
 const noopLog: Logger = () => {};
 
 interface Venue {
-  locationId: string;
   personId: string;
   managerCookie: string;
   staffCookie: string;
@@ -66,7 +65,6 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.db, modules: ALL_MODULES },
   );
   const seeded = await withTransaction(suite.db, async (tx) => {
-    const loc = await tx.execute<{ id: string }>(sql`select id from locations  limit 1`);
     // Through the table definitions, not raw SQL: every `id` and `created_at` here is a JavaScript
     // `$defaultFn` generator on this engine, which a raw insert never reaches.
     const [mgr] = await seedPersons(tx, {
@@ -85,10 +83,9 @@ async function setupVenue(): Promise<Venue> {
     const sSes = await startManagementSession(tx, {
       personId: stf!.id,
     });
-    return { locationId: loc.rows[0]!.id, personId: mgr!.id, mSid: mSes.token, sSid: sSes.token };
+    return { personId: mgr!.id, mSid: mSes.token, sSid: sSes.token };
   });
   return {
-    locationId: seeded.locationId,
     personId: seeded.personId,
     managerCookie: `${MANAGEMENT_COOKIE}=${seeded.mSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${seeded.sSid}`,
@@ -160,7 +157,7 @@ async function seedRequestedAbsence(personId: string): Promise<string> {
 
 describe("Workforce API — the schedule.manage gates, the decider columns, planned-vs-actual", () => {
   it("refuses every roster write route to a staff-role session — 403 authorization.not_permitted", async () => {
-    const { locationId, staffCookie } = await setupVenue();
+    const { staffCookie } = await setupVenue();
     const app = mountApp();
     const missing = "00000000-0000-0000-0000-000000000000";
     const expect403 = async (res: Response) => {
@@ -176,7 +173,7 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
       await send(
         app,
         "GET",
-        `/management-api/roster/breaches?locationId=${locationId}&period=2026-03-02`,
+        `/management-api/roster/breaches?extra=${missing}&period=2026-03-02`,
         staffCookie,
       ),
     );

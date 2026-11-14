@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "./errors.js";
-import type { LocationId, SaleId } from "./ids.js";
+import type { DeviceId, SaleId } from "./ids.js";
 import {
   deviceId,
   fiscalRecordId,
   isUuid,
-  locationId,
   nodeId,
   normaliseUuid,
   saleId,
@@ -20,7 +19,6 @@ const UUID_A = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 const UUID_B = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 
 const ALL_ID_CONSTRUCTORS: ReadonlyArray<[string, string, (value: string) => string]> = [
-  ["locationId", "LocationId", locationId],
   ["deviceId", "DeviceId", deviceId],
   ["nodeId", "NodeId", nodeId],
   ["seriesId", "SeriesId", seriesId],
@@ -34,7 +32,7 @@ const ALL_ID_CONSTRUCTORS: ReadonlyArray<[string, string, (value: string) => str
 
 describe("id constructors", () => {
   it("returns the underlying string unchanged", () => {
-    expect(locationId(UUID_A)).toBe(UUID_A);
+    expect(deviceId(UUID_A)).toBe(UUID_A);
   });
 
   it("accepts an upper-case uuid and folds it to lower case", () => {
@@ -56,19 +54,19 @@ describe("id constructors", () => {
   });
 
   it("rejects the empty string", () => {
-    expect(() => locationId("")).toThrowError(AppError);
+    expect(() => deviceId("")).toThrowError(AppError);
   });
 
   it("rejects a uuid with trailing content", () => {
-    expect(() => locationId(`${UUID_A} OR 1=1`)).toThrowError(AppError);
+    expect(() => deviceId(`${UUID_A} OR 1=1`)).toThrowError(AppError);
   });
 
   it("rejects a uuid with leading whitespace", () => {
-    expect(() => locationId(` ${UUID_A}`)).toThrowError(AppError);
+    expect(() => deviceId(` ${UUID_A}`)).toThrowError(AppError);
   });
 
   it("distinguishes two different ids of the same kind", () => {
-    expect(locationId(UUID_A)).not.toBe(locationId(UUID_B));
+    expect(deviceId(UUID_A)).not.toBe(deviceId(UUID_B));
   });
 });
 
@@ -102,14 +100,14 @@ describe("brand assignability", () => {
     expect(typeof wrongKind).toBe("string");
   });
 
-  it("refuses a bare string where a LocationId is required", () => {
-    // @ts-expect-error an unvalidated string is not a LocationId
-    const unvalidated: LocationId = UUID_A;
+  it("refuses a bare string where a DeviceId is required", () => {
+    // @ts-expect-error an unvalidated string is not a DeviceId
+    const unvalidated: DeviceId = UUID_A;
     expect(typeof unvalidated).toBe("string");
   });
 
   it("allows a branded id where a plain string is required", () => {
-    const asPlain: string = locationId(UUID_A);
+    const asPlain: string = deviceId(UUID_A);
     expect(asPlain).toBe(UUID_A);
   });
 });

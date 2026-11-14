@@ -98,7 +98,7 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
     ]);
   });
 
-  it("still refuses two live names in one location", async () => {
+  it("still refuses two live names in one venue", async () => {
     await seedZone("Live duplicate");
     await expect(seedZone("Live duplicate")).rejects.toThrow("UNIQUE constraint failed:");
   });

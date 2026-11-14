@@ -15,7 +15,6 @@ import {
   kitchenStations,
   products,
   routingCells,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
@@ -33,7 +32,7 @@ async function venue() {
     invoiceLocales: ["en"],
     operationDescription: "Restaurant",
   });
-  return { locationId: (await venueLocationId(suite.db)) as string };
+  return {};
 }
 
 it("deleting a category removes its own and its subtree's category cells and keeps product cells", async () => {

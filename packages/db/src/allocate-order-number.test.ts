@@ -13,7 +13,7 @@ let nodeA2 = "";
 
 async function seed(db: Database): Promise<void> {
   await seedVenue(db, {
-    name: "Fixture Location A",
+    name: "Fixture Venue A",
     invoiceLocales: ["es"],
     operationDescription: "Hostelería",
   });
@@ -95,7 +95,7 @@ describe("allocateOrderNumber under overlapping callers", () => {
 
   async function freshTenantNode(db: Database): Promise<{ nodeId: string }> {
     await seedVenue(db, {
-      name: "Fixture Location",
+      name: "Fixture Venue",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });

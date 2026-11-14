@@ -18,7 +18,6 @@ import {
   removeChangeFeed,
   subscribeToChanges,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -208,17 +207,15 @@ async function seedVenueWithPrinters() {
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const locationId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
   await suite.db.insert(invoiceSeries).values({ nodeId, code: "F", purpose: "standard" });
-  const cfg = { locationId };
+  const cfg = {};
 
   const printer = async (values: {
     name: string;
     portable?: boolean;
     hasCashDrawer?: boolean;
     active?: boolean;
-    location?: string;
   }) =>
     (
       await suite.db

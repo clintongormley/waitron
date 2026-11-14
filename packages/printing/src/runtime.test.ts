@@ -1,12 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  printAgents,
-  printJobs,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, printAgents, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -21,7 +15,7 @@ import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import { FakeSink } from "@waitron/print-agent";
 import type { PrinterTarget, Transport } from "@waitron/print-agent";
-type PrintConfig = { locationId: string };
+type PrintConfig = {};
 
 const SETTING = { paperWidth: "58mm", resolution: "180dpi" } as const;
 
@@ -29,18 +23,17 @@ const SETTING = { paperWidth: "58mm", resolution: "180dpi" } as const;
 // contending; that property is runtime.race.test.ts's.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function seedLocation(name: string): Promise<string> {
+async function seedFixtureVenue(name: string): Promise<void> {
   await seedVenue(suite.db, {
     name,
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
-  return venueId;
 }
 
 async function setup(): Promise<PrintConfig> {
-  return { locationId: await seedLocation("Bar") };
+  await seedFixtureVenue("Bar");
+  return {};
 }
 
 async function seedAgent(name = "Kitchen agent"): Promise<string> {

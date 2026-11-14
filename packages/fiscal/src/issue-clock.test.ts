@@ -36,8 +36,8 @@ const zone = (target = scope) => withTransaction(suite.db, (tx) => readIssueZone
 const prepare = (clock: TrustedClock = source()) =>
   withTransaction(suite.db, (tx) => prepareIssueClock(tx, scope, clock));
 
-describe("writing location zone", () => {
-  it("uses the writing node when the configured location is omitted", async () => {
+describe("writing venue zone", () => {
+  it("uses the writing node when the configured venue is omitted", async () => {
     expect(await zone({ nodeId: scope.nodeId })).toBe("Europe/Madrid");
   });
   it.each([

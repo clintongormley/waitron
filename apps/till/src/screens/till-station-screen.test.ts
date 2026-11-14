@@ -282,42 +282,28 @@ describe("till-station-screen", () => {
     ).toBe("Advance ticket #5");
   });
 
-  it("A773 waiter authority: leaves the retired control out of the queue widget", async () => {
-    const api = stubApi();
+  it("ignores a course Fire from the station queue", async () => {
+    const api = stubApi({ fireCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }) });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
-      ...{ fireControl: "kitchen" },
     });
     await flush(el);
-    expect("fireControl" in queueWidget(el)!).toBe(false);
+    const before = queueWidget(el)!.groups;
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("fire-course", {
+        detail: { orderId: "wo-1", courseId: "co-2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.getFindBill).not.toHaveBeenCalled();
+    expect(api.previewPartyAllergy).not.toHaveBeenCalled();
+    expect(api.fireCourse).not.toHaveBeenCalled();
+    expect(api.getStationQueue).toHaveBeenCalledOnce();
+    expect(queueWidget(el)!.groups).toBe(before);
+    expect(el.shadowRoot!.querySelector('till-party-allergy-dialog, [role="alert"]')).toBeNull();
   });
-
-  it.each(["waiter", "kitchen", "expo"] as const)(
-    "A773 waiter authority: ignores a course Fire under the former %s control",
-    async (fireControl) => {
-      const api = stubApi({ fireCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }) });
-      const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-        api,
-        ...{ fireControl },
-      });
-      await flush(el);
-      const before = queueWidget(el)!.groups;
-      queueWidget(el)!.dispatchEvent(
-        new CustomEvent("fire-course", {
-          detail: { orderId: "wo-1", courseId: "co-2" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      await flush(el);
-      expect(api.getFindBill).not.toHaveBeenCalled();
-      expect(api.previewPartyAllergy).not.toHaveBeenCalled();
-      expect(api.fireCourse).not.toHaveBeenCalled();
-      expect(api.getStationQueue).toHaveBeenCalledOnce();
-      expect(queueWidget(el)!.groups).toBe(before);
-      expect(el.shadowRoot!.querySelector('till-party-allergy-dialog, [role="alert"]')).toBeNull();
-    },
-  );
 
   it("an advance-ticket-item from the widget calls advanceTicketItem then reloads the active queue", async () => {
     const api = stubApi();
@@ -1058,7 +1044,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
             state: "queued",
             name: "Solomillo",
             quantity: "1.000",
-            // A HELD later course — normally fireable under `fire_control = 'kitchen'`.
+            // A held later course.
             course: { id: "co-h", name: "Principales", displayOrder: 2 },
             firedAt: null,
             phase: "held",
@@ -1094,7 +1080,6 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
       deviceMode: true,
-      ...{ fireControl: "kitchen" },
     });
     await flush(el);
     expect(queueWidget(el)!.shadowRoot!.querySelector("[data-fire]")).toBeNull();
@@ -4328,7 +4313,6 @@ describe.each(["Table 4", null, "missing card"])(
       });
       const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
         api,
-        ...{ fireControl: "kitchen" },
       });
       await flush(el);
       expect(queueWidget(el)!.groups).toEqual(queue);
@@ -5863,7 +5847,7 @@ describe("the Columns window on the till", () => {
   });
 });
 
-it.each(["ticket_items", "ticket_item_moves", "locations", "categories", "category_details"])(
+it.each(["ticket_items", "ticket_item_moves", "categories", "category_details"])(
   "live station %s changes coalesce behind one read while the fifteen-second timer keeps reading",
   async (type) => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });

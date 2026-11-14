@@ -11,7 +11,6 @@ import { expect, vi } from "vitest";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import {
   insertReservedNodeTx,
-  locations,
   nodes,
   openVenueDatabase,
   stampDeployment,
@@ -38,7 +37,6 @@ import {
   writeMirrorLink,
 } from "@waitron/node-db";
 import { mergeModulePreparationRevisions } from "@waitron/provisioning";
-import { locationId } from "@waitron/shared";
 import { acceptFinalCopy, acceptedCopyPath } from "../handover-acceptance.js";
 import { captureFinalCopy, finalCopyPath } from "../handover-capture.js";
 import { placeAcceptedCopyAtStart, recordCopyPlaced } from "../handover-place-copy.js";
@@ -47,7 +45,6 @@ import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js"
 import { mintSelfSignedServerCert } from "../self-signed-cert.js";
 import { pinMainBoxKey } from "./pinned-main-box.js";
 
-const venueId = locationId(TENANT_A.locationId);
 export const primary = { nodeId: TENANT_A.nodeId };
 export const standby = { nodeId: TENANT_A.nodeId2 };
 export const OPERATION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -159,9 +156,6 @@ export function placedSpareFixture(boxes: {
     await mainBox.db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
-    await mainBox.db.insert(locations).values({
-      id: venueId,
-    });
     await seedVenueSettings(mainBox.db, {
       name: "Restaurant",
       invoiceLocales: ["en"],
@@ -189,9 +183,6 @@ export function placedSpareFixture(boxes: {
     await spareBefore.db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
-    await spareBefore.db.insert(locations).values({
-      id: venueId,
-    });
     await seedVenueSettings(spareBefore.db, { name: "Restaurant" });
     await seedBusinessDay(spareBefore.db, { timeZone: "Europe/Madrid" });
     await spareBefore.db.insert(nodes).values({

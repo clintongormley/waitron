@@ -15,14 +15,7 @@ import { issueOrderInvoice } from "./issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import {
-  billPayments,
-  sales,
-  tenders,
-  withTransaction,
-  workingOrders,
-  venueLocationId,
-} from "@waitron/db";
+import { billPayments, sales, tenders, withTransaction, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -47,7 +40,6 @@ import type { Logger } from "../logger.js";
 import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
-import type { WithVenueRowId } from "./venue-row-id.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -85,7 +77,7 @@ export interface BillVenue {
   backend: FiscalBackend;
   clock: TrustedClock;
   /** The box's configuration, tips off. */
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   card: FakePaymentProvider;
   /** Serves the fake card provider as `fake`. */
   pool: CardProviderPool;
@@ -171,10 +163,8 @@ export async function provisionBillVenue(
     ),
     { db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -185,7 +175,7 @@ export async function provisionBillVenue(
       .insert(departmentReceipts)
       .values({ departmentId: department.id, receipt: { operationDescription: "Restaurante" } });
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Bill menu ${cfg.locationId}` });
+    const cat = await createCatalogue(tx, { name: `Bill menu ${cfg.nodeId}` });
     const platos = await createCategory(tx, { name: "Platos" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {

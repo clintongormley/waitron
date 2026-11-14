@@ -1,14 +1,13 @@
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { nodes, locations } from "@waitron/db";
+import { nodes } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { expect, it } from "vitest";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
 import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { loadConfig } from "./config.js";
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const LOCATION = "55555555-5555-4555-8555-555555555555";
 it.each(["activation-started", "committed", "publication"] as const)(
   "returns %s to owner setup before any trading duty",
   async (status) => {
@@ -56,7 +55,6 @@ it("durably completed ordinary trading needs no fresh outside consultation", asy
       { kind: "complete" },
     ] as const)
       state = await f.store.update(f.context.attemptId, state.revision, change);
-    await suite.db.insert(locations).values([{ id: LOCATION }]);
     await seedVenueSettings(suite.db, {
       name: "Main",
       invoiceLocales: ["en"],

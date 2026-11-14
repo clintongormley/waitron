@@ -318,11 +318,7 @@ it("Venue settings no longer hosts a global receipt tab or global receipt reads"
   );
   expect(deep(app.shadowRoot!, "dashboard-receipts-screen")).toBeNull();
   expect(fetchImpl.mock.calls.map(([path]) => path)).not.toEqual(
-    expect.arrayContaining([
-      "/management-api/receipt",
-      "/management-api/receipt-settings",
-      "/management-api/location-settings",
-    ]),
+    expect.arrayContaining(["/management-api/receipt", "/management-api/receipt-settings"]),
   );
 });
 it("a Receipt deep link without venue permission opens the overview without department or receipt reads", async () => {

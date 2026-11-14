@@ -61,7 +61,7 @@ vi.mock("./backup-turns.js", async (importOriginal) => {
 const { startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
+const node = { nodeId: TENANT_A.nodeId };
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

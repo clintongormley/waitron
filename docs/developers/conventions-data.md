@@ -1641,6 +1641,7 @@ open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` n
 
 _2026-11-03 (A1301 S12b):_ `join_requests.location_id` was stamped with the venue's id.
 _2026-11-12 (A1308 5e):_ that column and the venue foreign keys on `devices` and `print_agents` are removed.
+_2026-11-14 (A1308 5h):_ `locations` and its interim id accessor are removed; venue and business-day reads use the shared settings documents.
 
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`join_requests`,
@@ -4162,7 +4163,7 @@ reading triggers first and recreating them after the rename rebuilt each of the 
 trigger on another table reads (`products`, `sales`, `tenders`, `sale_settlements`,
 `working_orders`, `locations`, `devices`, `media_images`, `sections`, `section_members`,
 `menu_publications`, `menu_scheduled_publications`, `menu_version_images`); every recreated trigger
-was byte-identical to the original and `pragma integrity_check` answered `ok`. Two other repairs
+was byte-identical to the original and `pragma integrity_check` answered `ok`. A1308 slice 5h removed `locations` on 2026-11-14; the list above records the 2026-11-10 experiment. Two other repairs
 were tried and rejected. SQLite's `legacy_alter_table=ON`, which skips that re-check, rebuilt
 `devices` but refused `products`, whose CHECKs name its own columns: drizzle writes those CHECKs
 against `__new_<table>` and relies on the normal rename to correct them

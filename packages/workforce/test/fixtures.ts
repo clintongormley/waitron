@@ -1,14 +1,8 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { and, asc, eq } from "drizzle-orm";
 import { attendanceMailKey, attendanceMailOutcome } from "../src/attendance-mail.js";
-import {
-  locations,
-  venueLocationId,
-  outgoingMail,
-  enqueueMail,
-  MAIL_LIFETIME_MS,
-  type OutgoingMailStatus,
-} from "@waitron/db";
+import { outgoingMail, enqueueMail, MAIL_LIFETIME_MS, type OutgoingMailStatus } from "@waitron/db";
 import { jobOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { WORKFORCE_PERMISSIONS } from "../src/permissions.js";
@@ -25,7 +19,7 @@ import { shiftSwaps } from "../src/schema/shift-swaps.js";
 import type { ShiftSwapStatus } from "../src/schema/shift-swaps.js";
 import { shiftTemplates } from "../src/schema/shift-templates.js";
 import { shifts } from "../src/schema/shifts.js";
-import { seedVenue, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 
 registerModulePermissions(WORKFORCE_PERMISSIONS);
 
@@ -57,26 +51,17 @@ export function makeRuleset(overrides: Partial<WorkTimeRuleset> = {}): WorkTimeR
   };
 }
 
-/** Seeds the venue and returns its id. A second call writes a second location, for the
- * cross-location cases A1301's code slices delete; through the table definition, not raw SQL,
- * because `id` is a `$defaultFn` generator that only the insert builder runs. */
-export async function seedLocation(db: Database): Promise<string> {
-  const venue = { name: "Main", invoiceLocales: ["en"], operationDescription: "Sale on premises" };
-  const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
-  if (existing === undefined) {
-    await seedVenue(db, venue);
-    return venueLocationId(db);
-  }
-  const [row] = await db.insert(locations).values({}).returning({ id: locations.id });
-  await seedVenueSettings(db, {
-    invoiceLocales: venue.invoiceLocales,
-    operationDescription: venue.operationDescription,
-  });
-  await seedBusinessDay(db, {});
-  return row!.id;
+export async function seedFixtureVenue(db: Database): Promise<void> {
+  const current = await readSettings(db, VENUE_SETTINGS);
+  if (current.revision === 0)
+    await seedVenue(db, {
+      name: "Main",
+      invoiceLocales: ["en"],
+      operationDescription: "Sale on premises",
+    });
 }
 
-/** A person, PIN '1234'. Through the table definition for the same reason as {@link seedLocation}. */
+/** A person, PIN '1234'. Through the table definition for the same reason as {@link seedFixtureVenue}. */
 export async function seedPerson(db: Database, name = "Ana"): Promise<string> {
   const [row] = await seedPersons(db, { displayName: name, pinHash: hashPin("1234") });
   return row!.id;
@@ -102,7 +87,6 @@ export async function seedEmployment(
 export async function insertRosterVersion(
   db: Database | Transaction,
   params: {
-    locationId: string;
     periodStart?: string;
     periodEnd?: string;
   },
@@ -122,7 +106,6 @@ export async function insertDraftShift(
   db: Database | Transaction,
   params: {
     personId: string;
-    locationId: string;
     startsAt?: string;
     startsOffsetMinutes?: number;
     endsAt?: string;
@@ -204,7 +187,6 @@ export async function insertAvailability(
 export async function insertShiftTemplate(
   db: Database | Transaction,
   params: {
-    locationId: string;
     label?: string;
     weekday?: number;
     startsMinute?: number;

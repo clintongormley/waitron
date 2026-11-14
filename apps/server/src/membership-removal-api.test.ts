@@ -76,7 +76,6 @@ const suite = useVenueDb({
 interface Primary {
   db: Database;
   nodeId: string;
-  locationId: string;
   publicKey: string;
   adminPersonId: string;
   adminCookie: string;
@@ -116,7 +115,6 @@ async function primary(
   return {
     db,
     nodeId,
-    locationId: venue.cfg.locationId,
     publicKey,
     adminPersonId,
     adminCookie: `${MANAGEMENT_COOKIE}=${token}`,

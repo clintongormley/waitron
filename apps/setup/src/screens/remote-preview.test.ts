@@ -14,7 +14,7 @@ const saved = {
   nodeId: "saved-node",
   nodeRecoveryKeyName: "Amber Hill",
   taxpayer: { legalName: "Saved venue", taxId: "89890001K" },
-  venueName: "Saved location",
+  venueName: "Saved venue",
 };
 const approved = {
   requestId: "current-request",

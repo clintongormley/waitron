@@ -48,7 +48,7 @@ it("stores a page destination and its advertised formats outside the receipt-pri
 });
 
 describe("the agent that reaches a page printer", () => {
-  async function seedLocation(name: string): Promise<void> {
+  async function seedFixtureVenue(name: string): Promise<void> {
     await seedVenue(suite.db, { name, invoiceLocales: ["es-ES"], operationDescription: "Sale" });
   }
 
@@ -71,13 +71,13 @@ describe("the agent that reaches a page printer", () => {
   }
 
   it("starts a page printer reached by no recorded agent", async () => {
-    await seedLocation("Bar");
+    await seedFixtureVenue("Bar");
     const row = await insertPrinter("192.0.2.30");
     expect(row).toMatchObject({ agentId: null });
   });
 
   it("records an existing agent, and refuses an agent id that names no agent", async () => {
-    await seedLocation("Bar");
+    await seedFixtureVenue("Bar");
     const [agent] = await suite.db
       .insert(printAgents)
       .values({ name: "Back office", tokenHash: "hash" })

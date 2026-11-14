@@ -82,9 +82,8 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
   );
 }
 
-/** Seeds a second till device, node and open working order at the same location as `seeded`. */
 async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
-  const { locationId } = seeded;
+  const {} = seeded;
   // A raw insert runs no drizzle `$defaultFn`, so `id` and the timestamps are supplied by hand.
   const stamp = new Date().toISOString();
   const node2 = await suite.db.execute<{ id: string }>(sql`
@@ -95,7 +94,6 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
     insert into working_orders (id, source, device_id, order_number, opened_at)
     values (${randomUUID()}, 'device', ${deviceId}, 1, ${stamp}) returning id`);
   return {
-    locationId,
     deviceId,
     nodeId: brandNodeId(node2.rows[0].id),
     workingOrderId: wo2.rows[0].id,

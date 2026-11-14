@@ -17,7 +17,7 @@ import { AppError } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend } from "./clocking.js";
 import { rosterVersions } from "./schema/roster-versions.js";
-import { insertRosterVersion, seedLocation, seedPerson } from "../test/fixtures.js";
+import { insertRosterVersion, seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 
 const PUBLISHERS = 6;
 
@@ -26,16 +26,14 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
-let locationId: string;
-
 beforeEach(async () => {
   await seedTenant(suite.db);
-  locationId = await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
 });
 
 describe("publishRoster under concurrent publishers", () => {
   it("lets exactly one concurrent publish of a draft win; the rest see roster.already_published", async () => {
-    const versionId = await insertRosterVersion(suite.db, { locationId });
+    const versionId = await insertRosterVersion(suite.db, {});
     // A distinct publisher per call, so the surviving `published_by` identifies the winner.
     const persons: string[] = [];
     for (let i = 0; i < PUBLISHERS; i++) persons.push(await seedPerson(suite.db, `publisher-${i}`));
@@ -73,9 +71,7 @@ describe("publishRoster under concurrent publishers", () => {
     // Which publisher wins is not asserted: the queue's admission order is not fixed here.
     const period = { periodStart: "2026-06-01", periodEnd: "2026-06-07" };
     const versions = await Promise.all(
-      Array.from({ length: PUBLISHERS }, () =>
-        insertRosterVersion(suite.db, { locationId, ...period }),
-      ),
+      Array.from({ length: PUBLISHERS }, () => insertRosterVersion(suite.db, { ...period })),
     );
     const results = await Promise.allSettled(
       versions.map((versionId) =>

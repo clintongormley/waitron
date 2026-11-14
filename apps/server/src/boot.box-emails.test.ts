@@ -477,7 +477,7 @@ describe("the running server's managers' email check", () => {
         .select({ locale: persons.locale })
         .from(persons)
         .where(eq(persons.email, "owner@example.test"));
-      const location = await readVenue(suite.db);
+      const venueDoc = await readVenue(suite.db);
       const venueLocale = await readVenueLocale(suite.db);
       // The admin has no language of their own, so the email takes the venue's.
       expect(admin!.locale).toBeNull();
@@ -505,7 +505,7 @@ describe("the running server's managers' email check", () => {
       expect(holder.sent).toHaveLength(1);
       expect(holder.sent[0]).toMatchObject({
         recipient: "owner@example.test",
-        subject: boxEmailMessage("storage.disk_full", "es", location!.name).subject,
+        subject: boxEmailMessage("storage.disk_full", "es", venueDoc!.name).subject,
       });
 
       await tick();

@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -52,7 +51,7 @@ describe("readTenantIdentities", () => {
 });
 
 describe("hasOperationalVenue", () => {
-  it("recognizes the saved venue document with no location row", async () => {
+  it("recognizes the saved venue document", async () => {
     await seedVenueSettings(suite.db);
     expect(await hasOperationalVenue(suite.db)).toBe(true);
   });
@@ -68,12 +67,5 @@ describe("hasOperationalVenue", () => {
     });
 
     expect(await hasOperationalVenue(suite.db)).toBe(true);
-  });
-
-  it("does not count location rows as a saved venue", async () => {
-    await suite.db.execute(
-      sql`insert into locations (id) values ('00000000-0000-4000-8000-00000000000a')`,
-    );
-    expect(await hasOperationalVenue(suite.db)).toBe(false);
   });
 });

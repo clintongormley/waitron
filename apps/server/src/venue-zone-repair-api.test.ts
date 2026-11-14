@@ -10,7 +10,7 @@ import { serve } from "@hono/node-server";
 import { once } from "node:events";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, tenants, venueLocationId, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, settings, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, managementSessions, startManagementSession } from "@waitron/identity";
@@ -27,7 +27,7 @@ const ORIGIN = "https://manage.example.test";
 const RAW = "Invalid/Zone?secret=must-not-escape";
 const AT = new Date("2026-10-14T23:30:00.000Z");
 const body = { timeZone: "Europe/Madrid", expectedClockRevision: 1, confirmed: true };
-let scope: { nodeId: string; locationId: string };
+let scope: { nodeId: string };
 let token: string;
 let actor: string;
 let app: Hono;
@@ -44,7 +44,7 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Restaurant service",
   });
-  scope = { locationId: await venueLocationId(suite.db), nodeId: await seedNode(suite.db) };
+  scope = { nodeId: await seedNode(suite.db) };
   const [person] = await seedPersons(suite.db, { displayName: "Manager", role: "manager" });
   actor = person!.id;
   token = (await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: actor })))
@@ -86,8 +86,8 @@ function request(method = "POST", input: unknown = body, headers: Record<string,
   );
 }
 const rows = () => ({
-  locations: suite.db.all(
-    sql`select l.*, json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from locations l join settings v on v.module = 'venue' join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+  venueState: suite.db.all(
+    sql`select json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from (select doc from settings where module = 'venue') v join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
   ),
   settings: suite.db.all(sql`select * from settings where module = 'business_day'`),
   incidents: suite.db.all(sql`select * from incidents`),
@@ -119,7 +119,6 @@ describe("time-zone repair management boundary", () => {
         admission: { state: "invalid" },
         clockRevision: 1,
       });
-      expect(view).not.toHaveProperty("locationId");
       expect(restart).not.toHaveBeenCalled();
       const response = await request();
       expect(response.status).toBe(200);
@@ -211,7 +210,7 @@ describe("time-zone repair management boundary", () => {
     { ...body, expectedClockRevision: "0" },
     { ...body, expectedClockRevision: null },
     { ...body, timeZone: null },
-    ...["nodeId", "locationId", "payment", "date", "force", "dayCutover"].map((key) => ({
+    ...["nodeId", "extra", "payment", "date", "force", "dayCutover"].map((key) => ({
       ...body,
       [key]: "forged",
     })),
@@ -430,15 +429,15 @@ describe("time-zone repair management boundary", () => {
   it.each(["GET", "POST"])(
     "answers %s with 409 venue.not_found, as the settings routes do, with no venue row",
     async (method) => {
-      const [venueRow] = await suite.db.select().from(locations);
+      const [venueRow] = await suite.db.select().from(settings).where(eq(settings.module, "venue"));
       await suite.db.execute(sql`pragma foreign_keys = off`);
       try {
-        await suite.db.execute(sql`delete from locations`);
+        await suite.db.execute(sql`delete from settings where module = 'venue'`);
         const response = await request(method);
         expect(response.status).toBe(409);
         expect(await response.json()).toEqual({ error: { code: "venue.not_found", params: {} } });
       } finally {
-        await suite.db.insert(locations).values(venueRow!);
+        await suite.db.insert(settings).values(venueRow!);
         await suite.db.execute(sql`pragma foreign_keys = on`);
       }
       expect(restart).not.toHaveBeenCalled();

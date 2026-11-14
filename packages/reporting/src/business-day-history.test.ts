@@ -1,7 +1,7 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, withTransaction, readVenueClock } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, readVenueClock } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   businessDayStart,
@@ -11,16 +11,12 @@ import {
 } from "./business-day.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-const locationId = "a495-location";
 const clock = {
   timeZone: "Europe/Madrid",
   dayCutover: "05:00",
   cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "03:00" }],
 };
 beforeEach(async () => {
-  await suite.db.insert(locations).values({
-    id: locationId,
-  });
   await seedVenueSettings(suite.db, {
     name: "Clock",
     invoiceLocales: ["es"],

@@ -18,7 +18,6 @@ import {
   stampDeployment,
   lockVenueDatabase,
   tenants,
-  locations,
   nodes,
   type Database,
   type DeploymentEnvironment,
@@ -358,11 +357,9 @@ it("boots real HTTPS first setup after Move and previews another backup", async 
   const app = await f.boot();
   expect((await post(app, { choice: "move", password: PASSWORD })).status).toBe(200);
   const sourceNode = "ca278f55-6259-4658-a90c-faf628c0441b";
-  const sourceLocation = "5a1f0110-2d83-4db4-86d5-89a166d60799";
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Selected business" });
-  await suite.db.insert(locations).values({ id: sourceLocation });
   await seedBusinessDay(suite.db, {});
   await seedVenueSettings(suite.db, { name: "Selected venue", invoiceLocales: ["en-GB"] });
   await suite.db.insert(nodes).values({ id: sourceNode, name: "Selected box" });

@@ -12,7 +12,6 @@ import { Agent } from "undici";
 import { loadKeyRing } from "@waitron/credentials";
 import {
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   readNodeMembership,
@@ -49,7 +48,6 @@ const { startServer, startConfiguredServer, httpPort } = ephemeralServerFixture(
 // `startServer`, so the two never want the write lock at once.
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
-const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
@@ -90,12 +88,6 @@ async function seed(db: Database): Promise<void> {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90333333J", legalName: "Reconcile SL" })
-    .onConflictDoNothing();
-  await db
-    .insert(locations)
-    .values({
-      id: TILL_LOCATION_ID,
-    })
     .onConflictDoNothing();
   await seedVenueSettings(db, {
     name: "Loc",

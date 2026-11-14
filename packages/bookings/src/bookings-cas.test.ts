@@ -9,7 +9,7 @@ import { seedPerson } from "@waitron/db/testing/seed.js";
  */
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { diningTables, withTransaction, venueLocationId } from "@waitron/db";
+import { diningTables, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -21,17 +21,14 @@ import "./errors.js";
 const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 const LOCALE = "es-ES";
 
-async function setupVenue(
-  db: Database,
-): Promise<{ cfg: { locationId: string }; createdBy: string }> {
+async function setupVenue(db: Database): Promise<{ cfg: {}; createdBy: string }> {
   await seedVenue(db, {
     name: "Front counter",
     invoiceLocales: [LOCALE],
     operationDescription: "Restaurant service",
   });
-  const locationId = await venueLocationId(db);
   await seedNode(db);
-  return { cfg: { locationId: locationId }, createdBy: await seedPerson(db) };
+  return { cfg: {}, createdBy: await seedPerson(db) };
 }
 
 /** An ACTIVE dining table for the venue (createTable's raw equivalent — the verb lives in

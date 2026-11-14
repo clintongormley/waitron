@@ -6,7 +6,6 @@ import {
   installChangeFeed,
   subscribeToChanges,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -62,14 +61,10 @@ describe("booking change interests", () => {
       invoiceLocales: ["es"],
       operationDescription: "test",
     });
-    const venueId = await venueLocationId(suite.db);
-    const cfg = { locationId: venueId };
     const zone = await seedZone(suite.db, { name: "Events" });
     const tables = await suite.db
       .insert(diningTables)
-      .values(
-        ["Old", "New"].map((label) => ({ locationId: cfg.locationId, zoneId: zone!.id, label })),
-      )
+      .values(["Old", "New"].map((label) => ({ zoneId: zone!.id, label })))
       .returning();
     for (const table of tables)
       await suite.db

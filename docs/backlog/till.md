@@ -3938,13 +3938,3 @@ reaches them, also moves Waitron's own from the browser's 700 to Bold's 600, on 
 tills and the setup screens; the design did not discuss it. The way not taken: a
 heading weight held at 700, which no hand-set Bold would reach. The rule stands unless the owner
 says otherwise.
-
-## Delete the tests and fixtures that still set `fireControl` with A1301 S28
-
-Left open by A773-2 PR D, its plan's D113. Nothing reads the setting; tests still pass it to the
-till's setup answer or write the `fire_control` column, and they pass. List them with
-`grep -rlE 'fireControl|fire_control' apps/till apps/server packages --include='*.ts' --include='*.json' | grep -v /drizzle/`:
-the till's test files and its `apps/till/test/` fixtures, the server and package tests named in
-[kitchen.md](kitchen.md), and
-`apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json`. The
-hash-pinned `madrid-before-move.*.json` captures change only when they are recaptured.

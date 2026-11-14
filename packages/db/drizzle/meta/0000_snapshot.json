@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "849a0e17-38b5-4fc3-b8b4-852eb123d486",
+  "id": "5bdec11b-fa2f-4e37-9dc7-7c007f757dff",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -242,48 +242,6 @@
         "settings_doc_ck": {
           "name": "settings_doc_ck",
           "value": "case when json_valid(\"settings\".\"doc\") then json_type(\"settings\".\"doc\") = 'object' else 0 end"
-        }
-      }
-    },
-    "locations": {
-      "name": "locations",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "bump_mode": {
-          "name": "bump_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'line'"
-        },
-        "fire_control": {
-          "name": "fire_control",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'waiter'"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "locations_bump_mode_ck": {
-          "name": "locations_bump_mode_ck",
-          "value": "\"locations\".\"bump_mode\" in ('line', 'ticket')"
-        },
-        "locations_fire_control_ck": {
-          "name": "locations_fire_control_ck",
-          "value": "\"locations\".\"fire_control\" in ('waiter', 'kitchen', 'expo')"
         }
       }
     },

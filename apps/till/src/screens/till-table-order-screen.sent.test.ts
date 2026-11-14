@@ -35,7 +35,7 @@ function collect(el: TillTableOrderScreen, type: string) {
   el.addEventListener(type, (event) => events.push(event as CustomEvent));
   return events;
 }
-async function sent(over: Partial<TillTableOrderScreen> & { fireControl?: string } = {}) {
+async function sent(over: Partial<TillTableOrderScreen> & {} = {}) {
   const mounted = await mount({ currentOrders: current(), groups, now, ...over });
   mounted.el.style.width = "1280px";
   await resized(mounted.el);
@@ -138,20 +138,17 @@ it.each(["busy", "groupCommandBusy"] as const)(
   },
 );
 
-it.each(["waiter", "kitchen", "expo"] as const)(
-  "keeps shared paid-group Fire confirmed under legacy %s control",
-  async (fireControl) => {
-    const { el } = await sent({ fireControl });
-    const events = collect(el, "fire-group");
-    await click(el, "[data-held-toggle]");
-    await click(el, '[data-group-fire="g3"]');
-    expect(events).toEqual([]);
-    expect(find(el, "[data-fire-dialog]").hasAttribute("open")).toBe(true);
-    await userEvent.click(find(el, "[data-fire-confirm]"));
-    await el.updateComplete;
-    expect(events.map((e) => e.detail)).toEqual([{ groupId: "g3" }]);
-  },
-);
+it("confirms shared paid-group Fire", async () => {
+  const { el } = await sent({});
+  const events = collect(el, "fire-group");
+  await click(el, "[data-held-toggle]");
+  await click(el, '[data-group-fire="g3"]');
+  expect(events).toEqual([]);
+  expect(find(el, "[data-fire-dialog]").hasAttribute("open")).toBe(true);
+  await userEvent.click(find(el, "[data-fire-confirm]"));
+  await el.updateComplete;
+  expect(events.map((e) => e.detail)).toEqual([{ groupId: "g3" }]);
+});
 
 it("keeps a due group's Fire behind the same confirmation", async () => {
   const { el } = await sent();

@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { staffRoles, personStaffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
@@ -24,7 +25,6 @@ import {
   printers,
   printJobs,
   ticketItems,
-  venueLocationId,
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
@@ -102,7 +102,6 @@ import { readBillEditState } from "./bill-editing.js";
 import { workingOrderLines, workingOrders } from "@waitron/db";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { leaveSessionAlone } from "./testing/tab-person.js";
 import "./errors.js";
@@ -130,7 +129,7 @@ async function sendRound(
   });
 }
 
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let anna: { id: string };
 // The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Anna" but
 // is inserted AFTER it, so `[abel, anna]` proves `listActiveStaff` sorts by name rather than by
@@ -179,7 +178,6 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Retail",
     });
-    const venueId = await venueLocationId(db);
     // A default kitchen station so the place route's fire (placeOrder → fireLines) has a fallback.
     const defaultStationId = await seedKitchenStation(db, {});
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
@@ -285,7 +283,7 @@ const suite = useVenueDb({
     waterOfferId = offerId;
     hiddenWaterOfferId = hiddenOfferId;
     hiddenMenuId = staffMenuId;
-    cfg = makeCfg(venueId, nodeId);
+    cfg = makeCfg(nodeId);
     const sessionProfile = await seedDeviceProfile(db, "Session device profile", [
       ...CAPABILITY_FLAGS,
     ]);
@@ -302,10 +300,9 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
+function makeCfg(nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -1822,46 +1819,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     await expect(resolveCardCollector(practice, undefined, randomUUID())).rejects.toMatchObject({
       code: "reader.not_found",
     });
-  });
-
-  it("GET /api/till carries no bump mode, whatever the venue's column holds", async () => {
-    await suite.db.execute(
-      sql`update locations set bump_mode = 'ticket' where id = ${cfg.locationId}`,
-    );
-    try {
-      const app = new Hono();
-      mountTillApi(app, deps(suite.db), collect([]));
-
-      const res = await app.request("/api/till");
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body).not.toHaveProperty("bumpMode");
-    } finally {
-      await suite.db.execute(
-        sql`update locations set bump_mode = 'line' where id = ${cfg.locationId}`,
-      );
-    }
-  });
-
-  it("A773 waiter authority: GET /api/till omits fire control under every stored legacy mode", async () => {
-    try {
-      const app = new Hono();
-      mountTillApi(app, deps(suite.db), collect([]));
-
-      for (const mode of ["waiter", "kitchen", "expo"]) {
-        await suite.db.execute(
-          sql`update locations set fire_control = ${mode} where id = ${cfg.locationId}`,
-        );
-        const res = await app.request("/api/till");
-        expect(res.status).toBe(200);
-        const body = await res.json();
-        expect(body).not.toHaveProperty("fireControl");
-      }
-    } finally {
-      await suite.db.execute(
-        sql`update locations set fire_control = 'waiter' where id = ${cfg.locationId}`,
-      );
-    }
   });
 
   it("GET /api/till echoes the venue's ACTIVE kitchen courses in display order (KDS-2 §5b)", async () => {

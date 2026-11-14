@@ -32,7 +32,7 @@ vi.mock("@hono/node-server", async () => {
 const { startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
+const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "R", purpose: "rectificative" },

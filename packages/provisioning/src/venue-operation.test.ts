@@ -1,6 +1,6 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { describe, expect, it } from "vitest";
-import { locations, nodes, tenants } from "@waitron/db";
+import { settings, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -159,7 +159,7 @@ describe("fresh setup authority carried into a module seed", () => {
     ).rejects.toThrow("module refused");
     expect(retained).toBeDefined();
     expect(readOperationAuthority(retained!.authority, retained!.binding)).toBeUndefined();
-    for (const table of [persons, tenants, locations, nodes])
+    for (const table of [persons, tenants, settings, nodes])
       expect(await suite.db.select().from(table)).toEqual([]);
   });
 

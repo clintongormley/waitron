@@ -435,7 +435,7 @@ it.each([
     ],
   ],
   // `computeCategorySales` (packages/reporting/src/category-sales.ts) reads the period's lines under
-  // the same inclusion clauses as the other reports, on the venue clock from `locations`; current
+
   // mode adds today's classification (`currentClassifications`, packages/catalogue).
   [
     "getCategorySales",

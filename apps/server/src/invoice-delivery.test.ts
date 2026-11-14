@@ -1,3 +1,4 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -12,7 +13,6 @@ import {
   pagePrinters,
   invoiceSeries,
   invoiceDeliveries,
-  locations,
   printJobs,
   printAgents,
   printers,
@@ -79,8 +79,8 @@ const email = () => ({
 async function issue(full = true) {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
-  const [saved] = await suite.db.select().from(locations);
-  if (saved === undefined) {
+  const saved = await readSettings(suite.db, VENUE_SETTINGS);
+  if (saved.revision === 0) {
     await seedVenue(suite.db, {
       name: "Bar",
       invoiceLocales: ["es-ES"],
@@ -834,7 +834,6 @@ describe("receipt delivery reservation", () => {
     await expect(
       withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, email())),
     ).rejects.toMatchObject({ code: "invoice_delivery.active" });
-    await suite.db.select().from(locations);
     const [agent] = await suite.db
       .insert(printAgents)
       .values({
@@ -885,7 +884,6 @@ describe("receipt delivery reservation", () => {
     const delivery = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId)),
     );
-    await suite.db.select().from(locations);
     const [agent] = await suite.db
       .insert(printAgents)
       .values({ name: "Receipt agent", tokenHash: "scrypt$fixture" })
@@ -1059,7 +1057,6 @@ describe("receipt delivery reservation", () => {
   async function receiptClaimSetup() {
     const sale = await issue();
     const job = await receiptJob(sale.saleId);
-    const [location] = await suite.db.select().from(locations);
     const [agent] = await suite.db
       .insert(printAgents)
       .values({
@@ -1074,7 +1071,7 @@ describe("receipt delivery reservation", () => {
       .update(invoiceDeliveries)
       .set({ nextAttemptAt: start.toISOString() })
       .where(eq(invoiceDeliveries.id, delivery.id));
-    return { sale, job, delivery, agentId: agent!.id, locationId: location!.id };
+    return { sale, job, delivery, agentId: agent!.id };
   }
   async function pulled(ctx: Awaited<ReturnType<typeof receiptClaimSetup>>) {
     return withTransaction(suite.db, (tx) =>
@@ -1626,7 +1623,6 @@ describe("receipt agent correlation key", () => {
 describe("invoice email automatic retries", () => {
   it("does not automatically retry a definite receipt refusal", async () => {
     const sale = await issue();
-    await suite.db.select().from(locations);
     const [agent] = await suite.db
       .insert(printAgents)
       .values({

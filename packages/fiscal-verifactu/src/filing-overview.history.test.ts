@@ -225,7 +225,6 @@ describe("readFilingOverview: possibly missing history", () => {
     await stampDeployment(suite.db, "production");
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     await insertPendingAlta(suite.db, {
-      locationId: seeded.locationId,
       nodeId: seeded.nodeId,
       sifId: seeded.sifId,
       nif: seeded.nif,
@@ -247,7 +246,7 @@ describe("readFilingOverview: possibly missing history", () => {
     const rehearsal = await seedPendingEnvios(suite.db, {
       count: 1,
       entorno: "preproduction",
-      identity: { locationId: seeded.locationId, nodeId: seeded.nodeId, nif: seeded.nif },
+      identity: { nodeId: seeded.nodeId, nif: seeded.nif },
     });
     const rehearsalSeries = rehearsal.facturaKeys[0]!.split("|")[1]!.split("/")[0]!;
     await retire(

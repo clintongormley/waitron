@@ -3,7 +3,6 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  locations,
   withTransaction,
   mediaImageBlobs,
   mediaImageData,
@@ -389,7 +388,6 @@ describe("edit validation", () => {
 });
 
 async function attachLogo(filename: string, active: boolean) {
-  await suite.db.insert(locations).values({}).returning();
   await seedVenueSettings(suite.db, {
     name: "Place",
     invoiceLocales: ["es-ES"],

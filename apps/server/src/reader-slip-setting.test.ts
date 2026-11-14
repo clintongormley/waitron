@@ -30,7 +30,6 @@ it("refreshes the saved reader slip setting in setup revision and every equipmen
   const binding = {
     deviceId,
     deviceProfileId: profileId,
-    locationId: cfg.locationId,
     label: "Counter",
     formFactor: "till" as const,
     capabilities: [],

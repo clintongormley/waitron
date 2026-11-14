@@ -108,8 +108,8 @@ describe("working-time export selection", () => {
       ["own", "personId"],
       ["manager", "override"],
       ["own", "nodeId"],
-      ["own", "locationId"],
-      ["manager", "locationId"],
+      ["own", "extra"],
+      ["manager", "extra"],
     ] as const) {
       const q = valid();
       q.set(key, personId);
@@ -126,7 +126,7 @@ describe("working-time export selection", () => {
   });
   it("options takes no query", () => {
     expect(() => parseAttendanceExportOptions(new URLSearchParams())).not.toThrow();
-    for (const raw of [`locationId=${personId}`, `personId=${personId}`])
+    for (const raw of [`extra=${personId}`, `personId=${personId}`])
       expect(() => parseAttendanceExportOptions(new URLSearchParams(raw))).toThrow(
         expect.objectContaining({ code: "management.request_invalid", params: { field: "query" } }),
       );

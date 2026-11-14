@@ -609,7 +609,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    // The venue's one `locations` row: the venue menu routes act on it and `venueCfg` names its id.
+
     await seedVenue(db, { name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" });
 
     // A MANAGER (holds `catalogue.manage`) and a STAFF person (holds no `catalogue.manage`), each with a

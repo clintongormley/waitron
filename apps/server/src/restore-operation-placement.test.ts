@@ -10,7 +10,6 @@ import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   stampDeployment,
@@ -40,7 +39,6 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 const NODE = "d0000000-0000-4000-8000-000000000001";
-const LOCATION = "d0000000-0000-4000-8000-000000000002";
 const binding = {
   module: "test-regime",
   action: "restore",
@@ -56,9 +54,6 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Restaurant" });
-  await suite.db.insert(locations).values({
-    id: LOCATION,
-  });
   await seedVenueSettings(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["es"],

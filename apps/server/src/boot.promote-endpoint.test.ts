@@ -9,7 +9,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  locations,
   nodes,
   openVenueDatabase,
   readStandardSeriesId,
@@ -88,7 +87,6 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
-const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
@@ -97,7 +95,6 @@ const TILL_ENV = {
 const ADMIN_ID = "99999999-9999-4999-8999-999999999999";
 const ADMIN_PW = "correct-horse-battery-staple";
 
-const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const MIRROR_NUMERO_INSTALACION = 7;
 
@@ -133,12 +130,6 @@ async function seedIdentity(db: Database, node: NodeDatabase): Promise<void> {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Endpoint Venue SL" })
     .onConflictDoNothing();
-  await db
-    .insert(locations)
-    .values({
-      id: TILL_LOCATION_ID,
-    })
-    .onConflictDoNothing();
   await seedVenueSettings(db, {
     name: "Barra",
     invoiceLocales: ["en"],
@@ -170,12 +161,6 @@ async function seedMirrorIdentity(db: Database, node: NodeDatabase): Promise<{ n
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Endpoint Cloud SL" })
-    .onConflictDoNothing();
-  await db
-    .insert(locations)
-    .values({
-      id: MIRROR_LOCATION_ID,
-    })
     .onConflictDoNothing();
   await seedVenueSettings(db, { name: "Barra", operationDescription: "Hospitality" });
   await seedBusinessDay(db, {});

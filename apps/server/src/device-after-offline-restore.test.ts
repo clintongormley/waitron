@@ -5,13 +5,7 @@ import { serve } from "@hono/node-server";
 import { fetch as httpFetch } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import {
-  devices,
-  invoiceSeries,
-  openVenueDatabase,
-  venueLocationId,
-  withTransaction,
-} from "@waitron/db";
+import { devices, invoiceSeries, openVenueDatabase, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startManagementSession } from "@waitron/identity";
@@ -72,7 +66,6 @@ it.each([
       expect(await store.venue.select().from(devices)).toEqual([]);
       const cfg = {
         nodeId: TENANT_A.nodeId,
-        locationId: await withTransaction(store.venue, venueLocationId),
         locale: "en",
         invoiceLocales: ["es"],
         tipsEnabled: false,

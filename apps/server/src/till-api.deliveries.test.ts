@@ -381,7 +381,6 @@ const printInvoice = (
     cookie,
   );
 
-/** Another active A4 printer at the venue's location, listed and chosen by its tills. */
 async function upstairsOffice(v: Venue): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const [upstairs] = await tx
@@ -646,7 +645,7 @@ describe("GET /api/sales/:id/deliveries", () => {
     expect(await readStatus(v, simplified.orderId)).toEqual({ status: 200, body: null });
   });
 
-  it("offers the till's own invoice printer, not another A4 printer at the location", async () => {
+  it("offers the till's own invoice printer, not another A4 printer at the venue", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
     const upstairs = await upstairsOffice(v);
@@ -827,7 +826,7 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
     expect(await deliveryRows(saleId)).toEqual([]);
   });
 
-  it("prints on the till's own invoice printer, and refuses another A4 printer at the location", async () => {
+  it("prints on the till's own invoice printer, and refuses another A4 printer at the venue", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
     const upstairs = await upstairsOffice(v);
@@ -1171,7 +1170,6 @@ describe("a receipt printer as the till's invoice printer", () => {
     return original!;
   }
 
-  /** Every till at the location prints invoices on a new A4 printer, and no profile lists `counter`. */
   async function withdraw(v: Venue, counter: string): Promise<string> {
     const upstairs = await upstairsOffice(v);
     await withTransaction(suite.db, async (tx) => {
@@ -2270,7 +2268,7 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/to-receipt (paper instead o
 });
 
 describe("what each delivery route reads", () => {
-  it("reads no sale location for the status", async () => {
+  it("reads no sale venue for the status", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
     const { answer, reads } = await readsDuring(SALE_LOCATION_READ, () => readStatus(v, orderId));
@@ -2278,7 +2276,7 @@ describe("what each delivery route reads", () => {
     expect(reads).toBe(0);
   });
 
-  it("decides an email request without reading a sale location or printer", async () => {
+  it("decides an email request without reading a sale venue or printer", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
     const { answer, statements } = await statementsDuring(() => emailIt(v, orderId));
@@ -2304,7 +2302,7 @@ describe("what each delivery route reads", () => {
     });
   });
 
-  it("reads no sale location to email again", async () => {
+  it("reads no sale venue to email again", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
     const ended = await endedEmail(v, orderId, "failed");

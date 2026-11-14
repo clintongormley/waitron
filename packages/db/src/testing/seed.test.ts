@@ -9,9 +9,8 @@ import { deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
-import { locations } from "../schema/tenants.js";
 import { readTenant } from "../read-tenant.js";
-import { readVenue, venueLocationId } from "../venue.js";
+import { readVenue } from "../venue.js";
 import { withTransaction } from "../tenancy.js";
 import {
   freshNif,
@@ -37,7 +36,6 @@ afterEach(async () => {
   await suite.db.execute(sql`delete from device_profiles`);
   await suite.db.execute(sql`delete from kitchen_stations`);
   await suite.db.execute(sql`delete from nodes`);
-  await suite.db.execute(sql`delete from locations`);
   await suite.db.execute(sql`delete from catalogues`);
   await suite.db.execute(sql`delete from tenants`);
 });
@@ -119,8 +117,7 @@ describe("seedVenue", () => {
   it("seedVenue refuses a second venue", async () => {
     await seedVenue(db);
     expect((await readVenue(db)).name).toBe("Test venue");
-    const existing = await venueLocationId(db);
-    await expect(seedVenue(db)).rejects.toThrow(existing);
+    await expect(seedVenue(db)).rejects.toThrow("seedVenue: a venue document already exists");
   });
 });
 
@@ -131,7 +128,7 @@ describe("seedNode", () => {
     db = suite.db;
   });
 
-  it("inserts one node and returns its id without requiring a location", async () => {
+  it("inserts one node and returns its id without requiring a venue", async () => {
     const node = await seedNode(db);
     const [row] = await db
       .select({ id: nodes.id, name: nodes.name })
@@ -148,16 +145,14 @@ describe("seedKitchenStation", () => {
     db = suite.db;
   });
 
-  async function seedTenantAndLocation() {
+  async function seedTenantAndVenue() {
     await seedTenant(db);
-    const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
     await seedVenueSettings(db, { operationDescription: "Restaurant" });
     await seedBusinessDay(db, {});
-    return { location: loc!.id };
   }
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
-    await seedTenantAndLocation();
+    await seedTenantAndVenue();
     const id = await seedKitchenStation(db, {});
     // Read through the table rather than as raw SQL: SQLite stores a flag as 0/1 and only the
     // column's own mapping turns it back into a boolean.
@@ -169,7 +164,7 @@ describe("seedKitchenStation", () => {
   });
 
   it("honours an overridden name and is_default", async () => {
-    await seedTenantAndLocation();
+    await seedTenantAndVenue();
     const id = await seedKitchenStation(db, {
       name: "Barra",
       isDefault: false,
@@ -189,16 +184,14 @@ describe("seedDevice", () => {
     db = suite.db;
   });
 
-  async function seedLocation(database: Database) {
-    const [loc] = await database.insert(locations).values({}).returning({ id: locations.id });
+  async function seedVenueFixture(database: Database) {
     await seedVenueSettings(database, { operationDescription: "Restaurant" });
     await seedBusinessDay(database, {});
-    return loc!.id;
   }
 
-  it("seedDevice pairs an active device on a new till profile at the location", async () => {
+  it("seedDevice pairs an active device on a new till profile at the venue", async () => {
     await seedTenant(db);
-    await seedLocation(db);
+    await seedVenueFixture(db);
     const { deviceId, profileId } = await seedDevice(db, { label: "Barra" });
     const [row] = await db
       .select({
@@ -221,7 +214,7 @@ describe("seedDevice", () => {
 
   it("seedDevice reuses a given profile and takes the form factor and capabilities asked for", async () => {
     await seedTenant(db);
-    await seedLocation(db);
+    await seedVenueFixture(db);
     const first = await seedDevice(db, {
       formFactor: "phone-portrait",
       capabilities: ["take-cash"],

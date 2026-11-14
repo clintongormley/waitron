@@ -60,7 +60,7 @@ async function mountCurrent(over: Partial<TillTableOrderScreen> = {}) {
   return mount({ groups, currentOrders: current(), now, ...over });
 }
 
-async function mountSent(over: Partial<TillTableOrderScreen> & { fireControl?: string } = {}) {
+async function mountSent(over: Partial<TillTableOrderScreen> & {} = {}) {
   const mounted = await mount({ groups, currentOrders: current(), now, ...over });
   await sentPanelFor(mounted.el);
   return mounted;
@@ -676,7 +676,7 @@ describe("the release reminder in Sent", () => {
   });
 
   it("offers Snooze and confirmed Fire where the kitchen fires", async () => {
-    const { el } = await mountSent({ fireControl: "kitchen" });
+    const { el } = await mountSent({});
     expect(sq(el, "[data-reminder-snooze]")).not.toBeNull();
     expect(sq(el, "[data-reminder-fire]")).not.toBeNull();
   });

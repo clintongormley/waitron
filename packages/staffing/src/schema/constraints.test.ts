@@ -2,7 +2,7 @@ import { staffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, kitchenStations, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, kitchenStations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 
@@ -27,7 +27,6 @@ async function venue() {
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
     });
-    const locationId = await venueLocationId(tx);
     const [department] = await tx
       .insert(departments)
       .values({ name: "Dining room", tradingName: "Dining room" })
@@ -53,7 +52,6 @@ async function venue() {
       .values({ name: "Waiter" })
       .returning({ id: staffRoles.id });
     return {
-      locationId,
       departmentId: department!.id,
       stationId: station!.id,
       seasonId: season!.id,

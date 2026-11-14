@@ -17,7 +17,6 @@ import {
   withTransaction,
   saveSettings,
   workingOrders,
-  venueLocationId,
   readNodeMembership,
   stampDeployment,
   writeNodeMembership,
@@ -209,11 +208,9 @@ async function setup(
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

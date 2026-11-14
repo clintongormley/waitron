@@ -1,6 +1,5 @@
-// The Drizzle snapshot is built from this file's exports, so it names each one and never re-exports
-// a table another set owns (`locations`, `nodes`, `devices`, `persons`): that would be a duplicate
-// CREATE TABLE in this set's migrations. Guard: `schema-ownership.test.ts`.
+// Re-exporting a core table would create it again in this migration set.
+// Guard: `schema-ownership.test.ts`.
 export { employments } from "./employments.js";
 export { timeEntries, workforceCorrectionStatus, workforceEntryKind } from "./time-entries.js";
 export { workforceChains } from "./workforce-chains.js";

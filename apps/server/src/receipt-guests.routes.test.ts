@@ -19,7 +19,6 @@ import {
   sales,
   withTransaction,
   type Database,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
@@ -121,7 +120,6 @@ async function venue(db: Database): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     locale: "es-ES",
     ...loadNodeIdentity({
@@ -144,7 +142,7 @@ async function venue(db: Database): Promise<Venue> {
     tableFreeItemId,
   } = await withTransaction(db, async (tx) => {
     const menu = await createCatalogue(tx, {
-      name: `Receipt guests routes menu ${venueId}`,
+      name: `Receipt guests routes menu`,
     });
     const category = await createCategory(tx, { name: "Tapas" });
     const product = await createProduct(tx, {

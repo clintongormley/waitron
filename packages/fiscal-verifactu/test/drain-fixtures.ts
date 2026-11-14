@@ -1,6 +1,7 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedFixtureSif as registerSif } from "./sif-fixture.js";
 import { sql } from "drizzle-orm";
-import { invoiceSeries, locations, newId, nodes, sales, type Database } from "@waitron/db";
+import { invoiceSeries, newId, nodes, sales, type Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
@@ -38,7 +39,7 @@ const DEFAULT_ENTORNO: Entorno = "production";
 export interface SeededDrainOptions {
   count: number;
   /** Reuse an operational venue's fiscal identity instead of creating another venue. */
-  identity?: { locationId: string; nodeId: string; nif: string };
+  identity?: { nodeId: string; nif: string };
   /** Stamps a generation time after the fake AEAT's `serverNow`, which the fake answers with
    * warning 2004 (AceptadoConErrores). A future invoice date is refused outright (1112) instead. */
   futureDated?: boolean;
@@ -53,7 +54,6 @@ export interface SeededDrainOptions {
 }
 
 export interface SeededDrain {
-  locationId: string;
   nodeId: NodeId;
   sifId: string;
   nif: string;
@@ -86,9 +86,8 @@ function toAeatDate(isoDate: string): string {
 export async function insertPendingAlta(
   db: Database,
   params: {
-    locationId: string;
     nodeId: string;
-    /** The device the sale is recorded from; absent seeds one at `locationId`. */
+
     deviceId?: string;
     sifId: string;
     nif: string;
@@ -226,10 +225,9 @@ export async function seedPendingEnvios(
     opts.identity === undefined
       ? await seedTenantWithSif(db)
       : {
-          locationId: opts.identity.locationId,
           nodeId: brandNodeId(opts.identity.nodeId),
         };
-  const { locationId, nodeId } = seeded;
+  const { nodeId } = seeded;
   const sif = await db.transaction((tx) =>
     opts.identity === undefined
       ? currentSif(tx, nodeId)
@@ -256,7 +254,6 @@ export async function seedPendingEnvios(
     // Deterministic, distinct, and hex-valid for `registros_huella_ck` (`^[0-9A-F]{64}$`).
     const huella = String(sequence).padStart(64, "0");
     const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-      locationId,
       nodeId,
       deviceId,
       sifId: sif.id,
@@ -274,7 +271,6 @@ export async function seedPendingEnvios(
   }
 
   return {
-    locationId,
     nodeId,
     sifId: sif.id,
     nif: sif.nif,
@@ -298,7 +294,6 @@ export async function appendPendingAlta(
   const huella = String(secuencia).padStart(64, "0");
   // `DEFAULT_ENTORNO`, so the appended row agrees with the chain it extends.
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-    locationId: seeded.locationId,
     nodeId: seeded.nodeId,
     sifId: seeded.sifId,
     nif: seeded.nif,
@@ -448,17 +443,13 @@ export async function seedSecondChain(
   seeded: SeededDrain,
   secuencia: number,
 ): Promise<{ registroId: string; facturaKey: string }> {
-  const existing = await db.select({ id: locations.id }).from(locations).limit(2);
-  const location =
-    existing.length === 1
-      ? existing[0]!
-      : (await db.insert(locations).values({}).returning({ id: locations.id }))[0]!;
+  const existing = await readSettings(db, VENUE_SETTINGS);
   await seedVenueSettings(db, {
     invoiceLocales: ["es"],
     operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(db, {});
-  if (existing.length !== 1) await seedVenueSettings(db, { name: "Sala B" });
+  if (existing.revision === 0) await seedVenueSettings(db, { name: "Sala B" });
   const [node] = await db.insert(nodes).values({ name: "Node B" }).returning({ id: nodes.id });
   const nodeId = brandNodeId(node!.id);
   await db.insert(invoiceSeries).values({ nodeId, code: "B" });
@@ -470,7 +461,6 @@ export async function seedSecondChain(
 
   const huella = `B${String(secuencia).padStart(63, "0")}`;
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-    locationId: location!.id,
     nodeId,
     sifId: sif.id,
     nif: seeded.nif,
@@ -497,12 +487,8 @@ export async function seedIndependentChain(
   db: Database,
   params: { sifId: string; secuencia: number; entorno?: Entorno | null },
 ): Promise<{ registroId: string; facturaKey: string }> {
-  const existing = await db.select({ id: locations.id }).from(locations).limit(2);
-  const location =
-    existing.length === 1
-      ? existing[0]!
-      : (await db.insert(locations).values({}).returning({ id: locations.id }))[0]!;
-  if (existing.length !== 1) await seedVenueSettings(db, { name: "Sala Z" });
+  const existing = await readSettings(db, VENUE_SETTINGS);
+  if (existing.revision === 0) await seedVenueSettings(db, { name: "Sala Z" });
   const [node] = await db.insert(nodes).values({ name: "Node Z" }).returning({ id: nodes.id });
   const nodeId = brandNodeId(node!.id);
   await db.insert(invoiceSeries).values({ nodeId, code: "Z" });
@@ -521,7 +507,6 @@ export async function seedIndependentChain(
   // 64 hex digits for `registros_huella_ck`, prefixed apart from `seedSecondChain`'s "B".
   const huella = `E${String(params.secuencia).padStart(63, "0")}`;
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-    locationId: location!.id,
     nodeId,
     sifId: params.sifId,
     nif,
@@ -552,12 +537,8 @@ export async function seedPinnedChain(
     entorno?: Entorno;
   },
 ): Promise<{ chain: SeededDrain; registroIds: string[] }> {
-  const existing = await db.select({ id: locations.id }).from(locations).limit(2);
-  const location =
-    existing.length === 1
-      ? existing[0]!
-      : (await db.insert(locations).values({}).returning({ id: locations.id }))[0]!;
-  if (existing.length !== 1)
+  const existing = await readSettings(db, VENUE_SETTINGS);
+  if (existing.revision === 0)
     await seedVenueSettings(db, { name: `Sala ${params.sifId.slice(0, 4)}` });
   const [node] = await db
     .insert(nodes)
@@ -581,7 +562,6 @@ export async function seedPinnedChain(
     const secuencia = params.firstSecuencia + index;
     const huella = `A${String(secuencia).padStart(63, "0")}`;
     const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-      locationId: location!.id,
       nodeId,
       deviceId,
       sifId: params.sifId,
@@ -600,7 +580,6 @@ export async function seedPinnedChain(
   return {
     chain: {
       ...seeded,
-      locationId: location!.id,
       nodeId,
       sifId: params.sifId,
       registroIds,

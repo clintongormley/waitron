@@ -6,7 +6,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPayments, withTransaction, workingOrders, venueLocationId } from "@waitron/db";
+import { billPayments, withTransaction, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -125,7 +125,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
@@ -145,7 +144,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   };
   return withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, {
-      name: `Bill payments issue clock menu ${venueId}`,
+      name: `Bill payments issue clock menu ${provisioned.nodeId}`,
     });
     const dishes = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
@@ -272,7 +271,7 @@ describe("the invoice at full payment", () => {
           ),
         ),
       );
-      const [location] = await inTx((tx) =>
+      const [venueDoc] = await inTx((tx) =>
         readSettings(tx, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]),
       );
       try {
@@ -290,7 +289,7 @@ describe("the invoice at full payment", () => {
       } finally {
         await inTx(async (tx) =>
           tx.run(
-            sql`update settings set doc = json_set(doc, '$.timeZone', ${location!.timeZone}) where module = 'business_day'`,
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${venueDoc!.timeZone}) where module = 'business_day'`,
           ),
         );
       }
@@ -334,7 +333,7 @@ describe("the invoice at full payment", () => {
           new Date("2026-10-06T22:10:00Z"),
         ),
       );
-      const [location] = await inTx((tx) =>
+      const [venueDoc] = await inTx((tx) =>
         readSettings(tx, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]),
       );
       try {
@@ -352,7 +351,7 @@ describe("the invoice at full payment", () => {
       } finally {
         await inTx(async (tx) =>
           tx.run(
-            sql`update settings set doc = json_set(doc, '$.timeZone', ${location!.timeZone}) where module = 'business_day'`,
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${venueDoc!.timeZone}) where module = 'business_day'`,
           ),
         );
       }
@@ -366,7 +365,7 @@ async function withSavedIssueZone<T>(
   issue: () => Promise<T>,
 ): Promise<T> {
   const zones: Record<number, string> = { 60: "Etc/GMT-1", 0: "Etc/UTC", [-480]: "Etc/GMT+8" };
-  const [location] = await readSettings(tx, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
+  const [venueDoc] = await readSettings(tx, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
   await tx.run(
     sql`update settings set doc = json_set(doc, '$.timeZone', ${zones[offsetMinutes]}) where module = 'business_day'`,
   );
@@ -374,7 +373,7 @@ async function withSavedIssueZone<T>(
     return await issue();
   } finally {
     await tx.run(
-      sql`update settings set doc = json_set(doc, '$.timeZone', ${location!.timeZone}) where module = 'business_day'`,
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${venueDoc!.timeZone}) where module = 'business_day'`,
     );
   }
 }

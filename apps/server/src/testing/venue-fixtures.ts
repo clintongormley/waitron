@@ -1,7 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { sql } from "drizzle-orm";
-import { withTransaction, type Database, venueLocationId } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -15,7 +15,6 @@ import { jobOrigin, nodeId as brandNodeId, seriesId as brandSeriesId } from "@wa
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
 import type { OriginConfig } from "../trading-context.js";
-import type { WithVenueRowId } from "./venue-row-id.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
@@ -27,7 +26,7 @@ const LOCALE = "es-ES";
 export interface Venue {
   seriesId: ReturnType<typeof brandSeriesId>;
   /** Orders a test opens directly come from the dashboard, so no device is seeded for them. */
-  cfg: WithVenueRowId<OriginConfig>;
+  cfg: OriginConfig;
   /** The venue's provisioned default kitchen station — where `placeOrder` fires items, and the
    *  station the KDS device below binds to. */
   defaultStationId: string;
@@ -40,11 +39,10 @@ export interface Venue {
   staffCookie: string;
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId<OriginConfig> {
+function tillConfigFromVenue(venue: VenueResult): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -97,11 +95,10 @@ export async function setupVenue(db: Database): Promise<Venue> {
     { db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(db);
-  const cfg = tillConfigFromVenue(venue, venueId);
+  const cfg = tillConfigFromVenue(venue);
 
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Delicatessen ${venueId}` });
+    const cat = await createCatalogue(tx, { name: `Delicatessen ${venue.nodeId}` });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const coffee = await createProduct(tx, {
       catalogueId: cat.id,

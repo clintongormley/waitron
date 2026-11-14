@@ -15,7 +15,6 @@ import {
   tenants,
   withTransaction,
   type Database,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -39,7 +38,7 @@ beforeAll(() => {
 const AT = new Date("2026-10-06T10:00:00Z");
 
 interface Fixture {
-  cfg: { locationId: string };
+  cfg: {};
   restaurant: HoursSubject;
   deli: HoursSubject;
   bar: HoursSubject;
@@ -56,17 +55,15 @@ async function fixture(): Promise<Fixture> {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     });
-    const venueId = await venueLocationId(tx);
-    const cfg = { locationId: venueId };
-    const department = (location: string, name: string, isDefault = false) => ({
-      locationId: location,
+    const cfg = {};
+    const department = (name: string, isDefault = false) => ({
       name,
       tradingName: name,
       isDefault,
     });
     const [restaurant, deli] = await tx
       .insert(departments)
-      .values([department(venueId, "Restaurant", true), department(venueId, "Deli")])
+      .values([department("Restaurant", true), department("Deli")])
       .returning();
     const [bar, kitchen] = await tx
       .insert(kitchenStations)

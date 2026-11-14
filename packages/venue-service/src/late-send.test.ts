@@ -1,12 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  departments,
-  kitchenStations,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, departments, kitchenStations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -27,12 +21,9 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, fn);
 }
 
-async function seedLocation(name: string): Promise<string> {
+async function seedFixtureVenue(name: string): Promise<void> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
   await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
-  return locationId;
 }
 
 async function department(name: string): Promise<string> {
@@ -48,7 +39,7 @@ async function switchOn(departmentId: string): Promise<void> {
 
 describe("readLateSendNeedsManager", () => {
   it("answers false for a new department and true once the setting is on", async () => {
-    await seedLocation("Late send read");
+    await seedFixtureVenue("Late send read");
     const id = await department("Restaurant");
     expect(await scoped((tx) => readLateSendNeedsManager(tx, id))).toBe(false);
     await switchOn(id);
@@ -58,7 +49,7 @@ describe("readLateSendNeedsManager", () => {
 
 describe("listLateSendManagerDepartmentIds", () => {
   it("lists this venue's active departments with the setting on", async () => {
-    await seedLocation("Late send list");
+    await seedFixtureVenue("Late send list");
     const a = await department("A");
     await department("B");
     const c = await department("C");

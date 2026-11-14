@@ -11,7 +11,6 @@ import {
   printJobs,
   tenants,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -55,20 +54,19 @@ const clock: TrustedClock = {
 async function venue() {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
-  const locationId = await location("Bar");
+  await seedNamedVenue("Bar");
   const nodeId = await seedNode(suite.db);
   const agentOne = await agent("Back office agent");
   const agentTwo = await agent("Re-paired agent");
-  return { locationId, nodeId, agentOne, agentTwo };
+  return { nodeId, agentOne, agentTwo };
 }
 
-async function location(name: string): Promise<string> {
+async function seedNamedVenue(name: string): Promise<void> {
   await seedVenue(suite.db, {
     name,
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  return venueLocationId(suite.db);
 }
 
 async function agent(name: string): Promise<string> {
@@ -82,7 +80,6 @@ async function agent(name: string): Promise<string> {
 let hostCounter = 20;
 
 async function printer(
-  _locationId: string,
   agentId: string | null,
   extra: Partial<typeof pagePrinters.$inferInsert> = {},
 ): Promise<string> {
@@ -205,7 +202,7 @@ async function allRows() {
 describe("claiming an A4 delivery", () => {
   it("hands its own agent the oldest due delivery with the printer's endpoint and records the claim", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne, {
+    const office = await printer(v.agentOne, {
       host: "192.0.2.40",
       port: 8631,
       resourcePath: "/ipp/office",
@@ -254,7 +251,7 @@ describe("claiming an A4 delivery", () => {
 
   it("hands out a delivery whose next attempt lies 400 days ahead, as after a backward step", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const ahead = await queueA4(await fullInvoice(v.nodeId), office, 400 * 86_400_000);
     const inside = await queueA4(await fullInvoice(v.nodeId), office, 600_000);
 
@@ -266,8 +263,8 @@ describe("claiming an A4 delivery", () => {
 
   it("does not claim another agent's printer, nor one with no agent, and its own agent claims it", async () => {
     const v = await venue();
-    const theirs = await printer(v.locationId, v.agentTwo);
-    const nobodys = await printer(v.locationId, null);
+    const theirs = await printer(v.agentTwo);
+    const nobodys = await printer(null);
     const id = await queueA4(await fullInvoice(v.nodeId), theirs);
     const unclaimed = await queueA4(await fullInvoice(v.nodeId), nobodys);
 
@@ -282,8 +279,8 @@ describe("claiming an A4 delivery", () => {
 
   it("fails a due delivery whose printer is disabled without claiming it, and hands out the next", async () => {
     const v = await venue();
-    const disabled = await printer(v.locationId, v.agentOne);
-    const active = await printer(v.locationId, v.agentOne);
+    const disabled = await printer(v.agentOne);
+    const active = await printer(v.agentOne);
     const dead = await queueA4(await fullInvoice(v.nodeId), disabled, 1_000);
     const notDue = await queueA4(await fullInvoice(v.nodeId), disabled, 9_000);
     const live = await queueA4(await fullInvoice(v.nodeId), active, 2_000);
@@ -303,7 +300,7 @@ describe("claiming an A4 delivery", () => {
 
   it("gives a second claim before the lease ends nothing", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     await claim(v.agentOne, 1_000);
     const held = await row(id);
@@ -315,7 +312,7 @@ describe("claiming an A4 delivery", () => {
 
   it("turns an unrenewed claim unknown when any claim is asked for after its lease", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     await claim(v.agentOne, 1_000);
 
@@ -331,7 +328,7 @@ describe("claiming an A4 delivery", () => {
 describe("renewing an A4 claim", () => {
   it("keeps a claim alive past 60 s, and the expiry sweep leaves it alone", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
 
@@ -351,7 +348,7 @@ describe("renewing an A4 claim", () => {
 
   it("without renewal the claim becomes unknown and renewing it then is lost", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
 
@@ -363,7 +360,7 @@ describe("renewing an A4 claim", () => {
 
   it("answers lost once the lease has run out, even when no sweep has run", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
 
@@ -373,7 +370,7 @@ describe("renewing an A4 claim", () => {
 
   it("refuses a renewal with another token, generation or holder, or after the report", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
     const held = job!.claim;
@@ -425,7 +422,7 @@ describe("renewing an A4 claim", () => {
 describe("reporting an A4 delivery", () => {
   it("records a failure with its code and queues no retry", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
 
@@ -447,7 +444,7 @@ describe("reporting an A4 delivery", () => {
 
   it("answers a repeat of an accepted report as repeated, agreeing or not, and changes nothing", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
 
@@ -468,7 +465,7 @@ describe("reporting an A4 delivery", () => {
 
   it("keeps a claim that matches no row lost after an accepted report", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
     await report(job!.claim, { status: "sent" }, 5_000);
@@ -493,7 +490,7 @@ describe("reporting an A4 delivery", () => {
 
   it("answers lost, not repeated, for a claim whose row was ended without a report", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
     // Guards against a future writer that ends a claimed A4 row without recording a report.
@@ -514,7 +511,7 @@ describe("reporting an A4 delivery", () => {
 
   it("keeps unknown for a failure reported after the lease ran out, even when no sweep has run", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
 
@@ -528,7 +525,7 @@ describe("reporting an A4 delivery", () => {
 
   it("turns unknown into sent on a late success before any retry", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
     await expire(60_000);
@@ -547,7 +544,7 @@ describe("reporting an A4 delivery", () => {
 
   it("keeps unknown on a late failure", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
     await expire(60_000);
@@ -564,7 +561,7 @@ describe("reporting an A4 delivery", () => {
 
   it("keeps the same agent's old token as history only after a reclaim", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const saleId = await fullInvoice(v.nodeId);
     const first = await queueA4(saleId, office);
     const old = await claim(v.agentOne, 0);
@@ -591,7 +588,7 @@ describe("reporting an A4 delivery", () => {
 
   it("changes nothing current on an old success after a retry was queued, claimed and failed", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const saleId = await fullInvoice(v.nodeId);
     const first = await queueA4(saleId, office);
     const old = await claim(v.agentOne, 0);
@@ -616,7 +613,7 @@ describe("reporting an A4 delivery", () => {
     "makes the next %s after a completed A4 original a duplicate",
     async (medium) => {
       const v = await venue();
-      const office = await printer(v.locationId, v.agentOne);
+      const office = await printer(v.agentOne);
       const saleId = await fullInvoice(v.nodeId);
       await queueA4(saleId, office);
       const job = await claim(v.agentOne, 0);
@@ -659,7 +656,7 @@ describe("reporting an A4 delivery", () => {
 
   it("lets the old agent finish its claim after a re-point, and hands the next one to the new agent", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne, {
+    const office = await printer(v.agentOne, {
       host: "192.0.2.40",
       port: 631,
       resourcePath: "/ipp/print",
@@ -711,8 +708,8 @@ describe("reporting an A4 delivery", () => {
 describe("one A4 job per printer", () => {
   it("hands out another printer's younger invoice while one is sending, and names the busy printer", async () => {
     const v = await venue();
-    const x = await printer(v.locationId, v.agentOne);
-    const y = await printer(v.locationId, v.agentOne);
+    const x = await printer(v.agentOne);
+    const y = await printer(v.agentOne);
     const first = await queueA4(await fullInvoice(v.nodeId), x, 0);
     const olderOnX = await queueA4(await fullInvoice(v.nodeId), x, 1_000);
     const youngerOnY = await queueA4(await fullInvoice(v.nodeId), y, 2_000);
@@ -729,7 +726,7 @@ describe("one A4 job per printer", () => {
 
   it("counts another agent's claim on a printer as busy", async () => {
     const v = await venue();
-    const x = await printer(v.locationId, v.agentTwo);
+    const x = await printer(v.agentTwo);
     await queueA4(await fullInvoice(v.nodeId), x, 0);
     expect((await pull(v.agentTwo, 1_000)).job).toBeDefined();
     const later = await queueA4(await fullInvoice(v.nodeId), x, 1_000);
@@ -744,8 +741,8 @@ describe("one A4 job per printer", () => {
 
   it("skips a printer it is told to, and hands out another printer's invoice", async () => {
     const v = await venue();
-    const x = await printer(v.locationId, v.agentOne);
-    const y = await printer(v.locationId, v.agentOne);
+    const x = await printer(v.agentOne);
+    const y = await printer(v.agentOne);
     const onX = await queueA4(await fullInvoice(v.nodeId), x, 0);
     const onY = await queueA4(await fullInvoice(v.nodeId), y, 1_000);
 
@@ -760,7 +757,7 @@ describe("one A4 job per printer", () => {
 
   it("hands out the printer's next invoice once the one out is reported", async () => {
     const v = await venue();
-    const x = await printer(v.locationId, v.agentOne);
+    const x = await printer(v.agentOne);
     await queueA4(await fullInvoice(v.nodeId), x, 0);
     const next = await queueA4(await fullInvoice(v.nodeId), x, 1_000);
     const job = await claim(v.agentOne, 5_000);
@@ -776,7 +773,7 @@ describe("one A4 job per printer", () => {
 
   it("frees a printer whose claim has lapsed on the same call, and hands out its next invoice", async () => {
     const v = await venue();
-    const x = await printer(v.locationId, v.agentOne);
+    const x = await printer(v.agentOne);
     const lapsed = await queueA4(await fullInvoice(v.nodeId), x, 0);
     const next = await queueA4(await fullInvoice(v.nodeId), x, 1_000);
     await claim(v.agentOne, 1_000);
@@ -793,7 +790,7 @@ describe("one A4 job per printer", () => {
 describe("the hold a renewal reports", () => {
   it("stores the hold beside the renewal, and a renewal without one clears it", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
     expect((await row(id)).printerHold).toBeNull();
@@ -815,7 +812,7 @@ describe("the hold a renewal reports", () => {
 
   it("writes no hold through a lost claim", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
     const held = job!.claim;
@@ -833,7 +830,7 @@ describe("the hold a renewal reports", () => {
 
   it("keeps a held claim sending while it is renewed every 20 s for 30 minutes", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
 
@@ -850,7 +847,7 @@ describe("the hold a renewal reports", () => {
 
   it("keeps the last hold through a report and through a lapse", async () => {
     const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
+    const office = await printer(v.agentOne);
     const reported = await queueA4(await fullInvoice(v.nodeId), office);
     const job = await claim(v.agentOne, 0);
     await renew(job!.claim, 20_000, "paper_out");

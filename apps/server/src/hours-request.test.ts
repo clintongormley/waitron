@@ -11,7 +11,7 @@ it.each(["week", "month"])("reads the exact own %s scope without inventing a dat
   expect(query(`kind=${kind}&date=2024-02-29`)).toEqual({
     selection: { kind, date: "2024-02-29" },
   });
-  expect(() => query(`locationId=${id}&kind=${kind}`)).toThrow(
+  expect(() => query(`extra=${id}&kind=${kind}`)).toThrow(
     expect.objectContaining({ code: "management.request_invalid" }),
   );
 });
@@ -22,9 +22,9 @@ it("accepts only the manager pay-period view", () => {
 });
 it.each([
   "",
-  `locationId=${id}`,
-  "locationId=&kind=week",
-  "locationId=nope&kind=week",
+  `extra=${id}`,
+  "extra=&kind=week",
+  "extra=nope&kind=week",
   `kind=`,
   `kind=pay-period`,
   `kind=weekly`,
@@ -33,7 +33,7 @@ it.each([
   `kind=week&date=2026-1-5`,
   `kind=week&date=2026-01-05&date=2026-01-05`,
   `kind=week&kind=month`,
-  `locationId=${id}&locationId=${id}&kind=week`,
+  `extra=${id}&extra=${id}&kind=week`,
   `kind=week&personId=${id}`,
   `kind=week&extra=x`,
 ])("refuses a malformed or widened own hours query %#", (raw) => {

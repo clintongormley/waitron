@@ -1,4 +1,5 @@
-import { locations, readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { settings, readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
@@ -267,7 +268,7 @@ describe("direct action country zone preflight", () => {
         [module.name, { eventId: "zone-test", sourceId: "zone-test", input: {} }],
       ]),
     }).catch((error: unknown) => error);
-    expect(await suite.db.select().from(locations)).toEqual([]);
+    expect(await suite.db.select().from(settings).where(eq(settings.module, "venue"))).toEqual([]);
     expect((await readSettings(suite.db, BUSINESS_DAY_SETTINGS)).revision).toBe(0);
     expect(await suite.db.select().from(tenants)).toEqual([]);
     expect(await suite.db.select().from(nodes)).toEqual([]);
@@ -289,13 +290,13 @@ describe("direct action country zone preflight", () => {
       },
     });
     const actions = planVenue(request(), [module]);
-    const location = actions.find((action) => action.kind === "create-venue")!;
-    actions.push({ ...location, timeZone: "Europe/London" });
+    const venueDoc = actions.find((action) => action.kind === "create-venue")!;
+    actions.push({ ...venueDoc, timeZone: "Europe/London" });
     const refusal = await applyDirectVenue(actions, { db: suite.db, modules: [module] }).catch(
       (error: unknown) => error,
     );
     expect(seeds).toBe(0);
-    expect(await suite.db.select().from(locations)).toEqual([]);
+    expect(await suite.db.select().from(settings).where(eq(settings.module, "venue"))).toEqual([]);
     expect((await readSettings(suite.db, BUSINESS_DAY_SETTINGS)).revision).toBe(0);
     expect(refusal).toMatchObject({
       code: "venue.time_zone_invalid",
@@ -314,14 +315,17 @@ describe("direct action country zone preflight", () => {
           sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
         );
       });
-      const before = (await suite.db.execute(sql`select * from locations`)).rows;
+      const before = (await suite.db.execute(sql`select * from settings where module = 'venue'`))
+        .rows;
       const clockBefore = (
         await suite.db.execute(sql`select * from settings where module = 'business_day'`)
       ).rows;
       const refusal = await applyDirectVenue(actions, { db: suite.db, modules: [] }).catch(
         (error: unknown) => error,
       );
-      expect((await suite.db.execute(sql`select * from locations`)).rows).toEqual(before);
+      expect(
+        (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
+      ).toEqual(before);
       expect(
         (await suite.db.execute(sql`select * from settings where module = 'business_day'`)).rows,
       ).toEqual(clockBefore);

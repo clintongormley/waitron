@@ -41,7 +41,6 @@ const suite = useVenueDb({
 });
 const tx = <T>(fn: (t: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const backend = new WorkforceBackend();
-type Cfg = { locationId: string };
 type ShiftInput = {
   week: string;
   personId: string;
@@ -160,7 +159,7 @@ async function seasonHours(
     });
   });
 }
-async function specialDay(_cfg: Cfg, name: string, date: string, closedAllDay = false) {
+async function specialDay(name: string, date: string, closedAllDay = false) {
   return tx(async (t) => {
     const [special] = await t
       .insert(specialDays)
@@ -173,7 +172,7 @@ async function specialDay(_cfg: Cfg, name: string, date: string, closedAllDay = 
     return { id: special!.id, dateId: row!.id };
   });
 }
-async function addSeason(_cfg: Cfg, name: string, startsOn: string) {
+async function addSeason(name: string, startsOn: string) {
   return tx(async (t) => {
     const [row] = await t.insert(seasons).values({ name, startsOn }).returning({ id: seasons.id });
     return row!.id;
@@ -287,7 +286,7 @@ describe("the rota week", () => {
   });
   it("names each day's season and special day, and the seasons the week touches", async () => {
     const v = await venue();
-    const fiesta = await specialDay(v.cfg, "Fiesta", "2026-12-02");
+    const fiesta = await specialDay("Fiesta", "2026-12-02");
     const r = await read();
     expect(r.days[0]!.seasonId).toBe(v.seasonId);
     expect(r.days[2]!.specialDay).toEqual({ id: fiesta.id, name: "Fiesta" });
@@ -296,7 +295,7 @@ describe("the rota week", () => {
   });
   it("lists the seasons in the order the week first touches them when one starts mid-week", async () => {
     const v = await venue();
-    const winter = await addSeason(v.cfg, "Winter", "12-03");
+    const winter = await addSeason("Winter", "12-03");
     const r = await read();
     expect(r.days.map((d) => d.seasonId)).toEqual([
       ...Array(3).fill(v.seasonId),
@@ -309,7 +308,7 @@ describe("the rota week", () => {
   });
   it("lists a season that starts earlier in the year after the one the week begins in", async () => {
     const v = await venue();
-    const winter = await addSeason(v.cfg, "Winter", "01-01");
+    const winter = await addSeason("Winter", "01-01");
     const r = await read("2026-12-28");
     expect(r.days.map((d) => d.seasonId)).toEqual([
       ...Array(4).fill(v.seasonId),
@@ -325,7 +324,7 @@ describe("the rota week", () => {
     const period = await servicePeriod(v.departmentId);
     await seasonHours(v, period, 2);
     await seasonHours(v, period, 4);
-    await specialDay(v.cfg, "Closed", "2026-12-03", true);
+    await specialDay("Closed", "2026-12-03", true);
     expect(hours(await read())).toEqual([
       ["2026-11-30", false],
       ["2026-12-01", true],
@@ -344,7 +343,7 @@ describe("the rota week", () => {
     async (_, painted) => {
       const v = await venue();
       const period = await servicePeriod(v.departmentId);
-      const fiesta = await specialDay(v.cfg, "Fiesta", "2026-12-02");
+      const fiesta = await specialDay("Fiesta", "2026-12-02");
       if (painted)
         await tx(async (t) => {
           const [day] = await t
@@ -381,7 +380,7 @@ describe("the rota week", () => {
     );
     expect((await read()).days.map((d) => d.hasHours)).toEqual(Array(7).fill(false));
   });
-  it("a location with no season names none", async () => {
+  it("a venue with no season names none", async () => {
     const v = await seedVenueWithStaff(suite.db);
     await tx((t) => t.delete(seasons).where(eq(seasons.id, v.seasonId)));
     const r = await read();

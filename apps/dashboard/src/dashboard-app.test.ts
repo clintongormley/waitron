@@ -2763,7 +2763,6 @@ describe("dashboard-app", () => {
     expect(navItem(el, "email"), "Prepare email settings are also in Settings").not.toBeNull();
     expect(navItem(el, "sections")).toBeNull();
     expect(navItem(el, "recipe")).toBeNull();
-    expect(navItem(el, "location-menus")).toBeNull();
     expect(navItem(el, "catalogue")!.textContent).toContain(t("nav.catalogue"));
   });
 

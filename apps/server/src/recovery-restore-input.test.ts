@@ -8,7 +8,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   stampDeployment,
@@ -40,7 +39,6 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 const NODE = "d0000000-0000-4000-8000-000000000001";
-const LOCATION = "d0000000-0000-4000-8000-000000000002";
 const request = {
   binding: {
     module: "test-regime",
@@ -96,9 +94,6 @@ const manifest = {
 };
 beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
-  await suite.db.insert(locations).values({
-    id: LOCATION,
-  });
   await seedVenueSettings(suite.db, {
     name: "Original",
     invoiceLocales: ["es"],

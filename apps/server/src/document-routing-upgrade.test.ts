@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, runMigrations, venueLocationId, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, runMigrations, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 
@@ -31,7 +31,6 @@ it("routing upgrade preserves populated predecessor rows", async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  await venueLocationId(db);
   const node = await seedNode(db);
   const { deviceId } = await seedDevice(db);
   const series = randomUUID();

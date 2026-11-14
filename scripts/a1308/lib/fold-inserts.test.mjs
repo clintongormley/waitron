@@ -11,12 +11,12 @@ const rule = {
   child: "policies",
   parent: "floorZones",
   key: "zoneId",
-  fields: { enabled: "active", locationId: null },
+  fields: { enabled: "active", retiredId: null },
   raw: {
     childTable: "policies",
     parentTable: "floor_zones",
     key: "zone_id",
-    columns: { enabled: "active", location_id: null },
+    columns: { enabled: "active", retired_id: null },
   },
 };
 const imports = 'import { eq } from "drizzle-orm";\nimport { floorZones } from "@waitron/db";\n';
@@ -30,7 +30,7 @@ describe("foldInserts", () => {
     ],
     [
       "dropped field",
-      "await tx.insert(policies).values({ zoneId: Z, locationId: L, enabled });",
+      "await tx.insert(policies).values({ zoneId: Z, retiredId: L, enabled });",
       "await tx.update(floorZones).set({ active: enabled }).where(eq(floorZones.id, Z));",
     ],
     [
@@ -43,7 +43,7 @@ describe("foldInserts", () => {
       "db.insert(policies).values({ zoneId: Z, enabled: true }).onConflictDoUpdate({ target: policies.zoneId, set: { enabled: false } });",
       "db.update(floorZones).set({ active: true }).where(eq(floorZones.id, Z));",
     ],
-    ["nothing to set", "await tx.insert(policies).values({ zoneId: Z, locationId: L });", ""],
+    ["nothing to set", "await tx.insert(policies).values({ zoneId: Z, retiredId: L });", ""],
   ])("rewrites %s and is unchanged on a second pass", (_name, input, expected) => {
     const source = imports + input;
     const out = foldInserts(source, path, [rule]);
@@ -139,9 +139,9 @@ describe("foldInserts", () => {
     "rewrites raw SQL value %s, drops columns, and is idempotent",
     (value) => {
       const source =
-        "await tx.execute(sql`insert into policies (zone_id, enabled, location_id) values (${zone}, " +
+        "await tx.execute(sql`insert into policies (zone_id, enabled, retired_id) values (${zone}, " +
         value +
-        ", ${location})`);";
+        ", ${retiredValue})`);";
       const out = foldInserts(source, path, [rule]);
       expect(out).toEqual({
         text:
@@ -247,7 +247,12 @@ describe("foldInserts", () => {
     expect(lines).toEqual([`${file}:1: unsupported insert values`]);
     expect(readFileSync(file, "utf8")).toBe("db.insert(policies).values(rows);");
     const alias = join(root, "fold.mjs");
-    symlinkSync(join(process.cwd(), "scripts/a1308/fk1-zone-fixtures.mjs"), alias);
+    const command = join(root, "command.mjs");
+    writeFileSync(
+      command,
+      `import { runFoldCli } from ${JSON.stringify(new URL("./fold-inserts.mjs", import.meta.url).href)};\nawait runFoldCli([{ child: "zoneSalePolicies", parent: "floorZones", key: "zoneId", fields: { paidWhen: "paidWhen" } }]);`,
+    );
+    symlinkSync(command, alias);
     writeFileSync(
       file,
       imports + 'db.insert(zoneSalePolicies).values({ zoneId: Z, paidWhen: "prepay" });',

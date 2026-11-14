@@ -1,3 +1,4 @@
+import { settings } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { mergeOf as mergeColumns } from "@waitron/db";
 import { addFloorPlanSet } from "@waitron/venue-service";
@@ -17,7 +18,6 @@ import {
   floorResetTables,
   tableMerges,
   floorZones,
-  locations,
   parties,
   partyTables,
   workingOrders,
@@ -93,7 +93,7 @@ async function snapshot(tx: Transaction) {
   for (const [key, table] of Object.entries(floorRows))
     result[key] = await tx.select().from(table).orderBy(table.id);
   result.zones = await tx.select().from(floorZones).orderBy(floorZones.id);
-  result.locations = await tx.select().from(locations).orderBy(locations.id);
+  result.settings = await tx.select().from(settings).orderBy(settings.module);
   result.tickets = await tx.select().from(ticketItems).orderBy(ticketItems.id);
   result.bookings = await tx.select().from(bookings).orderBy(bookings.id);
   result.orders = await tx.select().from(workingOrders).orderBy(workingOrders.id);
@@ -450,7 +450,7 @@ describe("floor hierarchy deletion", () => {
           : row,
       ),
     );
-    expect(after.locations).toEqual(before.locations);
+    expect(after.settings).toEqual(before.settings);
     expect(after.tickets).toEqual(before.tickets);
     expect(after.parties).toEqual(before.parties);
     expect(after.partyTables).toEqual(before.partyTables);

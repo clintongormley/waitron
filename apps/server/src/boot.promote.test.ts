@@ -11,7 +11,6 @@ import { isAppError } from "@waitron/shared";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import {
   captureError,
-  locations,
   nodes,
   readStandardSeriesId,
   openVenueDatabase,
@@ -84,7 +83,6 @@ vi.mock("undici", async (importOriginal) => {
   };
 });
 
-const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
@@ -130,12 +128,6 @@ async function seedIdentity(db: Database, node: NodeDatabase): Promise<void> {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Venue SL" })
-    .onConflictDoNothing();
-  await db
-    .insert(locations)
-    .values({
-      id: TILL_LOCATION_ID,
-    })
     .onConflictDoNothing();
   await seedVenueSettings(db, {
     name: "Barra",
@@ -211,7 +203,6 @@ async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
   const seeded = await seedPendingEnvios(appDb, {
     count: 1,
     identity: {
-      locationId: TILL_LOCATION_ID,
       nodeId: TILL_ENV.WAITRON_NODE_ID,
       nif: "90111111H",
     },
@@ -354,7 +345,6 @@ describe("historical promote: local secondary → primary, live", () => {
   }, 60_000);
 });
 
-const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 /** A mirror holding its own dormant identity. */
@@ -366,12 +356,6 @@ async function seedMirrorIdentity(
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Cloud SL" })
-    .onConflictDoNothing();
-  await db
-    .insert(locations)
-    .values({
-      id: MIRROR_LOCATION_ID,
-    })
     .onConflictDoNothing();
   await seedVenueSettings(db, { name: "Barra", operationDescription: "Hospitality" });
   await seedBusinessDay(db, {});
@@ -390,7 +374,6 @@ async function seedMirrorIdentity(
     db: db,
     node,
     ring: PROMOTE_RING,
-    locationId: MIRROR_LOCATION_ID,
     sourceId: MIRROR_ORIGIN_NODE_ID,
     taxpayerNif: nif,
     standby,

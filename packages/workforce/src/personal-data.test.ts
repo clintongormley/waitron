@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { insertAttendanceMail, setAttendanceMail } from "../test/fixtures.js";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   seedNode,
@@ -29,7 +29,7 @@ import {
   insertDraftShift,
   insertRosterVersion,
   insertTimeEntry,
-  seedLocation,
+  seedFixtureVenue,
   seedPerson,
 } from "../test/fixtures.js";
 
@@ -151,21 +151,18 @@ async function seedAll(db: Database) {
  */
 async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>>) {
   const { manager, marta, colleague } = people;
-  const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
   await seedVenueSettings(db, {
     name: "Harbour Terrace",
     invoiceLocales: ["en"],
     operationDescription: "Sale on premises",
   });
   await seedBusinessDay(db, {});
-  const locationId = loc!.id;
-  const publishedVersion = await insertRosterVersion(db, { locationId });
+  const publishedVersion = await insertRosterVersion(db, {});
   await db
     .update(rosterVersions)
     .set({ status: "published", publishedAt: "2026-06-20T10:00:00.000Z" })
     .where(eq(rosterVersions.id, publishedVersion));
   const draftVersion = await insertRosterVersion(db, {
-    locationId,
     periodStart: "2026-02-09",
     periodEnd: "2026-02-15",
   });
@@ -173,7 +170,6 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
   // Inserted, and recorded (created_at), in the opposite order to their starts.
   const summer = await insertDraftShift(db, {
     personId: marta,
-    locationId,
     startsAt: "2026-07-10T16:00:00Z",
     startsOffsetMinutes: 120,
     endsAt: "2026-07-10T22:00:00Z",
@@ -183,7 +179,6 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
   });
   const draft = await insertDraftShift(db, {
     personId: marta,
-    locationId,
     startsAt: "2026-02-14T03:41:00Z",
     startsOffsetMinutes: 60,
     endsAt: "2026-02-14T11:41:00Z",
@@ -193,7 +188,6 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
   });
   await insertDraftShift(db, {
     personId: marta,
-    locationId,
     startsAt: "2026-01-02T00:30:00Z",
     startsOffsetMinutes: -120,
     endsAt: "2026-01-02T08:30:00Z",
@@ -204,7 +198,6 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
 
   const colleagueEarly = await insertDraftShift(db, {
     personId: colleague,
-    locationId,
     startsAt: "2026-03-05T02:17:00Z",
     startsOffsetMinutes: 60,
     endsAt: "2026-03-05T09:17:00Z",
@@ -214,7 +207,6 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
   });
   const colleagueLate = await insertDraftShift(db, {
     personId: colleague,
-    locationId,
     startsAt: "2026-04-11T21:53:00Z",
     startsOffsetMinutes: 120,
     endsAt: "2026-04-12T05:53:00Z",
@@ -224,7 +216,6 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
   });
   const colleagueGiveAway = await insertDraftShift(db, {
     personId: colleague,
-    locationId,
     startsAt: "2026-05-16T15:23:00Z",
     startsOffsetMinutes: 120,
     endsAt: "2026-05-16T23:23:00Z",
@@ -449,7 +440,7 @@ async function clockInThenAutomaticOut(
 async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof seedAll>>) {
   const { manager, marta, colleague } = people;
   await seedTenant(db);
-  const locationId = await seedLocation(db);
+  await seedFixtureVenue(db);
   const nodeId = await seedNode(db);
   const [openEntry, automaticEntry] = await clockInThenAutomaticOut(db, {
     nodeId,
@@ -629,7 +620,7 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     outcome: "refused",
   });
 
-  return { locationId, nodeId };
+  return { nodeId };
 }
 
 const MARTA_CLAIM_TOKEN = "holder-7:3f9c2b1e-claim-token";

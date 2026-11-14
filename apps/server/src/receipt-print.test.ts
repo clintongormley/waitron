@@ -335,7 +335,6 @@ async function configureReceipt(
 /** Every capability but the drawer. */
 const NO_DRAWER_CAPABILITY = CAPABILITY_FLAGS.filter((flag) => flag !== "open-cash-drawer");
 
-/** `cfg` as a request from a new device at its location whose profile lacks `capability`. */
 async function deviceWithout(
   cfg: DeviceRequestConfig,
   capability: string,
@@ -1505,7 +1504,6 @@ describe("receipt commands and cash drawer jobs after filing", () => {
 });
 
 describe("every device whose profile allows the drawer opens its chosen drawer", () => {
-  /** Another till device at the venue's location, and the config a sale there runs under. */
   async function addNode(
     cfg: DeviceRequestConfig,
     name: string,
@@ -1548,8 +1546,6 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
     }));
   }
 
-  /** Two till devices at one location, both printing their receipts on one drawer printer; the other's
-   *  device has `otherCapabilities`. */
   async function sharedDrawer(
     orderFlow: OrderFlow = "prepay",
     otherCapabilities: string[] = [...CAPABILITY_FLAGS],
@@ -2618,7 +2614,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     );
   }
 
-  it("prints the stored logo for the printer's paper, then the location's address, phone and email", async () => {
+  it("prints the stored logo for the printer's paper, then the venue's address, phone and email", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });

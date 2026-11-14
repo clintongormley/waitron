@@ -1,3 +1,4 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -8,7 +9,6 @@ import {
   engineErrorMessage,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
-  locations,
   triggerRaised,
   UNIQUE_VIOLATION,
   type Database,
@@ -67,8 +67,8 @@ let orderNumber = 0;
 
 /** An open working order at the venue (seeded on first use), opened from the dashboard. */
 async function seedWorkingOrder(db: Database): Promise<string> {
-  const [venue] = await db.select({ id: locations.id }).from(locations).limit(1);
-  if (venue === undefined)
+  const venue = await readSettings(db, VENUE_SETTINGS);
+  if (venue.revision === 0)
     await seedVenue(db, {
       name: "Dining room",
       invoiceLocales: ["es"],

@@ -5,7 +5,6 @@ import {
   departments,
   kitchenCourses,
   serviceSteps,
-  venueLocationId,
   withTransaction,
   type Database,
   type ServiceStepStart,
@@ -37,7 +36,7 @@ type Step = [name: string, start: ServiceStepStart, minutes?: number, course?: "
 
 async function venue(name: string) {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
-  const cfg: { locationId: string } = { locationId: await venueLocationId(db) };
+  const cfg: {} = {};
   const [dessert] = await db
     .insert(kitchenCourses)
     .values({ ...cfg, name: "Dessert", displayOrder: 1 })
@@ -45,12 +44,7 @@ async function venue(name: string) {
   return { cfg, courseId: dessert!.id };
 }
 
-async function department(
-  cfg: { locationId: string },
-  courseId: string,
-  name: string,
-  steps: Step[],
-) {
+async function department(cfg: {}, courseId: string, name: string, steps: Step[]) {
   const [row] = await db
     .insert(departments)
     .values({ ...cfg, name, tradingName: name })

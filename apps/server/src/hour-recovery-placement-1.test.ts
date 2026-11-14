@@ -282,7 +282,7 @@ describe("selected-hour admission before archive placement", () => {
         const pointId = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
         const point = {
           id: pointId,
-          venueId: node.locationId,
+          venueId: node.streamId,
           capturedAt: new Date().toISOString(),
           modules: (
             await buildManifest({

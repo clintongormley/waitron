@@ -1,5 +1,7 @@
 # A1301 — Remove the location concept: one venue, one box, one premises
 
+> 2026-11-14: Built by A1308 slice 5, parts 5a–5h. See the [slice 5 plans](../plans/2026-11-08-a1308-5a-service-and-staff-location-columns.md). This document records the earlier design.
+
 > **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
 > Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)

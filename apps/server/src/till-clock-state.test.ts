@@ -1,13 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  nodes,
-  dayCutoverChanges,
-  venueLocationId,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, dayCutoverChanges, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 
@@ -26,7 +20,6 @@ const suite = useVenueDb({
 const backend = new WorkforceBackend();
 let personId: string;
 let otherPersonId: string;
-let locationId: string;
 let nodeId: string;
 
 beforeEach(async () => {
@@ -37,7 +30,6 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
     dayCutover: "05:00:00",
   });
-  locationId = await venueLocationId(suite.db);
   nodeId = await seedNode(suite.db);
   const people = await seedPersons(suite.db, [
     { displayName: "Anna", pinHash: "seed", role: "staff" },
@@ -210,7 +202,7 @@ describe("till own clock state", () => {
     });
   });
 
-  it("reads the state for the venue without being told a location", async () => {
+  it("reads the state for the venue without being told a venue", async () => {
     expect(
       await withTransaction(suite.db, (tx) =>
         readTillClockState(tx, { personId }, new Date("2026-01-05T03:59:59Z")),
@@ -252,7 +244,7 @@ describe("till own clock state", () => {
 
   it("orders simultaneous cross-node entries by recording time then node and sequence", async () => {
     const ids = ["10000000-0000-4000-8000-000000000001", "20000000-0000-4000-8000-000000000001"];
-    await suite.db.insert(nodes).values(ids.map((id) => ({ id, locationId, name: id })));
+    await suite.db.insert(nodes).values(ids.map((id) => ({ id, name: id })));
     const at = "2026-01-05T09:00:00Z";
     const recorded = () => new Date("2026-01-05T12:00:00Z");
     const append = (node: string, entryKind: "in" | "out" | "break_start", clock = recorded) =>

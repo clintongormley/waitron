@@ -434,9 +434,6 @@ async function collectedAtSet(id: string): Promise<boolean> {
   return rows[0]!.collected === 1; // 0/1, not a boolean — see `orderState`
 }
 
-/** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location). Every
- *  fixture line here carries no product/category route, so `placeOrder` fires it to this
- *  station. */
 async function defaultStationId(): Promise<string> {
   const rows = suite.db.all<{ id: string }>(sql`
     select id from kitchen_stations where is_default and active

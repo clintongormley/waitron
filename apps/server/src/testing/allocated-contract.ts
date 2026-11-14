@@ -5,11 +5,9 @@ import {
   catalogues,
   deployment,
   invoiceSeries,
-  locations,
   nodes,
   readTenant,
   tenants,
-  venueLocationId,
   type Database,
 } from "@waitron/db";
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu";
@@ -77,12 +75,6 @@ export async function prepareStandbyDatabase(
   primary: ProvisionedNode,
 ) {
   const tenant = (await source.select().from(tenants))[0]!;
-  const location = (
-    await source
-      .select()
-      .from(locations)
-      .where(eq(locations.id, await venueLocationId(source)))
-  )[0]!;
   const node = (await source.select().from(nodes).where(eq(nodes.id, primary.nodeId)))[0]!;
   const sif = await source
     .select()
@@ -96,7 +88,6 @@ export async function prepareStandbyDatabase(
   const catalogue = await source.select().from(catalogues).where(eq(catalogues.isDefault, true));
   if (catalogue.length > 0) await target.insert(catalogues).values(catalogue);
 
-  await target.insert(locations).values(location);
   await seedVenueSettings(target, (await readVenueSettings(source)).doc);
   await target.insert(nodes).values(node);
   await target.insert(deployment).values({ id: 1, environment: "preproduction" });

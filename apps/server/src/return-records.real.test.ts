@@ -366,7 +366,6 @@ async function copyBase() {
   await withTransaction(current.db, async (tx) => {
     for (const table of [
       "tenants",
-      "locations",
       "settings",
       "day_cutover_changes",
       "device_profiles",

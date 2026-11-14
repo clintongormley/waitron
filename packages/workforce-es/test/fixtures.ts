@@ -4,7 +4,7 @@ import { convenioConfig } from "../src/schema/convenio-config.js";
 /**
  * Fixture strings stay English: the data is regime-neutral; only the legal rendering is Spanish.
  */
-export { seedEmployment, seedLocation, seedPerson } from "@waitron/workforce/test/fixtures.js";
+export { seedEmployment, seedFixtureVenue, seedPerson } from "@waitron/workforce/test/fixtures.js";
 
 export async function seedConvenioConfig(
   db: Database | Transaction,
