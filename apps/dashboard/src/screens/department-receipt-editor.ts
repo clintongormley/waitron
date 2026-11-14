@@ -231,6 +231,7 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#previewDue = false;
     this.#previewSource = undefined;
     this.#queries.release("receipt");
+    this.#queries.release("theme");
     this.#scope?.dispose();
     this.#scope = undefined;
   }
@@ -256,6 +257,24 @@ export class DepartmentReceiptEditor extends LitElement {
     const department = this.department;
     if (!department) return;
     const opening = this.#opening;
+    // The preview's venue logo comes from the theme in use, which the receipt read does not carry.
+    // The value counts reads (a theme change, or a refresh after a reconnect); its first answer is
+    // the opening read. Started before the await below, so a close while the receipt read is
+    // pending releases it.
+    let themeReads = 0;
+    void this.#queries.watch(
+      "theme",
+      {
+        key: `department-receipt-editor-theme:${department.id}:${opening}`,
+        dependencies: [{ type: "custom_themes" }],
+        read: async () => ++themeReads,
+      },
+      (read) => {
+        if (opening !== this.#opening || read === 1) return;
+        this.#previewSource = undefined;
+        this.#queuePreview();
+      },
+    );
     let initialRead = true;
     await this.#queries
       .watch(
@@ -705,6 +724,7 @@ export class DepartmentReceiptEditor extends LitElement {
                   }}
                 ></dashboard-image-upload>
                 ${errors.logo ? html`<p class="error">${errors.logo}</p>` : nothing}
+                ${this.preview?.venueLogo && !this.draft.receipt.logo ? html`<p class="note" data-test="venue-logo">${t("receipts.venue_logo")}</p>` : nothing}
                 ${(["phone", "email"] as const).map(
                   (field) =>
                     html`<wt-input

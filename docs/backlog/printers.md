@@ -688,16 +688,6 @@ Hardware and inbox checks to complete in the owner session.
   the owner ("A printer that came back but gave up on one ticket: should the till say so?",
   2026-11-14).
 
-## Bundle: Department receipt preview
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A department's Receipts preview shows the theme's logo, for a readable department whose draft names
-  no logo, with no words saying it is the venue's** (A841 slice 9, D7 of
-  [the plan](../superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).
-- **A department's Receipts preview does not redraw when the theme in use changes while it is open**
-  (A841 slice 9, [the plan](../superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).
-
 ## Bundle: Guest count
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

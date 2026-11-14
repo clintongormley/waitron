@@ -40,6 +40,7 @@ export function preview(text = "Sample"): ReceiptPreview {
     },
     paperWidth: "80mm",
     paperWidths: ["58mm", "80mm"],
+    venueLogo: false,
     marks: {
       logo: null,
       headerSubtitle: null,

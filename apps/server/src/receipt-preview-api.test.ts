@@ -1083,6 +1083,19 @@ describe("the receipt preview's top block", () => {
       expect([sizes(result), result.marks.logo]).toEqual([[], null]);
     });
 
+    it("says the logo is the venue's exactly when it draws the theme's for a draft with none", async () => {
+      expect((await rendered({})).venueLogo).toBe(false);
+      await putThemeInUse(suite.db);
+      const drawn = await rendered({});
+      expect([sizes(drawn), drawn.venueLogo]).toEqual([[[16, 1]], true]);
+      const named = await rendered({ logo: await libraryImage(49) });
+      expect(named.venueLogo).toBe(false);
+      await readableNoLogo();
+      await UNTRUSTED_CASES.find((c) => c.name !== "the read throws")!.apply(suite.db, at());
+      const untrusted = await rendered({});
+      expect([sizes(untrusted), untrusted.venueLogo]).toEqual([[], false]);
+    });
+
     it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
       "a draft with no logo draws no logo while the stored settings cannot be trusted: %s",
       async (name, untrusted) => {

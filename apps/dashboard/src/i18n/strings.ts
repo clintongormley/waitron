@@ -635,6 +635,8 @@ export const en = {
   "receipts.header_subtitle_hint": "e.g. a tagline",
   "receipts.print_address": "Print the venue's address",
   "receipts.no_address": "This venue has no address saved. It is set during setup.",
+  "receipts.venue_logo":
+    "No logo chosen here, so receipts print the venue's logo from the theme in use.",
   "receipts.phone": "Phone",
   "receipts.phone_hint": "e.g. +34 912 345 678",
   "receipts.email": "Email",
@@ -4607,6 +4609,8 @@ export const es: Record<StringKey, string> = {
   "receipts.print_address": "Imprimir la dirección del local",
   "receipts.no_address":
     "Este local no tiene ninguna dirección guardada. Se indica durante la configuración inicial.",
+  "receipts.venue_logo":
+    "No has elegido un logotipo aquí, así que los recibos imprimen el logotipo del local del tema en uso.",
   "receipts.phone": "Teléfono",
   "receipts.phone_hint": "p. ej., +34 912 345 678",
   "receipts.email": "Correo electrónico",
