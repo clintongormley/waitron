@@ -378,6 +378,10 @@ it("includes a corrective sale's parent from another node and its payment facts"
   );
   expect(returned.records).toHaveLength(1);
   expect(returned.records[0]!.node_id).toBe(source.nodeId);
+  const [batch, ...more] = makeReturnedBatches(returned);
+  expect(more).toEqual([]);
+  expect(batch!.sales.map((row) => row.id).sort()).toEqual([parent.saleId, correctionId].sort());
+  expect(batch!.tenders.map((row) => row.id)).toEqual(["parent-payment"]);
 });
 
 async function copyBase() {
@@ -952,6 +956,11 @@ it("selects and receives a substitution's earlier sale from a different node", a
   expect(returned.sales.map((row) => row.id).sort()).toEqual(
     [parent.saleId, source.saleId, replacementSaleId].sort(),
   );
+  expect(
+    makeReturnedBatches(returned)
+      .flatMap((batch) => batch.sales.map((row) => row.id))
+      .sort(),
+  ).toEqual([parent.saleId, source.saleId, replacementSaleId].sort());
   expect(
     await withTransaction(receiver.db, (tx) =>
       receiveReturnedOriginals(tx, source.nodeId, returned, new Date("2026-07-20T17:22:00.000Z")),

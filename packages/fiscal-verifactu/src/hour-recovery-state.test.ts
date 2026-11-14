@@ -306,3 +306,17 @@ it("gives a restore's history no time floor", async () => {
     }),
   ).toMatchObject({ contradictions: [] });
 });
+
+it("recognises a matching committed conflict switch and refuses one from another source", async () => {
+  await seed();
+  vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
+  const operation = { ...binding, action: "conflict-switch" };
+  await activate(operation, "0CNQR", "2026-10-16T12:40:00.000Z");
+  const before = await suite.db.select().from(invoiceSeries);
+  expect((await read(operation)).priorActivation).toBe("committed");
+  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  await expect(read({ ...operation, sourceId: "another-recovery" })).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
+});

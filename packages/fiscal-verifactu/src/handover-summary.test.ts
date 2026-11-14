@@ -356,3 +356,36 @@ describe("summariseChains", () => {
     expect(VERIFACTU_HANDOVER.summarise).toBe(summariseChains);
   });
 });
+
+describe("the return seat", () => {
+  const seat = VERIFACTU_HANDOVER.returnRecords!;
+
+  async function returningNode() {
+    const source = await seedNode(suite.db, "Source");
+    const other = await seedNode(suite.db, "Other");
+    await append(source, 1);
+    await append(source, 2);
+    await append(other, 3);
+    return source;
+  }
+
+  it("reads only the returning node's records", async () => {
+    const source = await returningNode();
+    const batches = await suite.db.transaction((tx) => seat.read(tx, source.nodeId));
+    const ids = batches.flatMap((batch) =>
+      (batch as { records: { id: string }[] }).records.map((row) => row.id),
+    );
+    expect(ids.sort()).toEqual(
+      records(source.nodeId)
+        .map((row) => row.id)
+        .sort(),
+    );
+  });
+
+  it("refuses to inspect a batch that is not a returned-records object", async () => {
+    const source = await returningNode();
+    await expect(
+      suite.db.transaction((tx) => seat.inspect!(tx, source.nodeId, [])),
+    ).rejects.toMatchObject({ code: "fiscal.return_invalid" });
+  });
+});
