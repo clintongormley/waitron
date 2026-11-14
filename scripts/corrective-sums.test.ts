@@ -66,6 +66,13 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     reason: "a replacement is refused after ANY earlier corrective (sale.replacement_not_first)",
   },
   {
+    file: "packages/reporting/src/vat-return.ts",
+    fragment: "where r.corrects_sale_id = s.id and r.replaces_original = 1",
+    lines: 1,
+    reason:
+      "looks up a replaced sale's supply day to choose its VAT period; it totals nothing a sale owes",
+  },
+  {
     file: "packages/core/src/record-substitution.ts",
     fragment: "inArray(sales.correctsSaleId, input.substitutedSaleIds)",
     lines: 1,
