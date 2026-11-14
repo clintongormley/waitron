@@ -384,7 +384,7 @@ it("requires fresh proof for lifecycle changes", async () => {
 
 it("folds case and Unicode accents for duplicate names while preserving the accent distinction", async () => {
   const { actor } = await fixture();
-  await create(actor.token, "Café", []);
+  await create(actor.token, "Caf\u00e9", []);
   expect(await refusalOf(() => create(actor.token, "CAFE\u0301", []))).toMatchObject({
     code: "role.name_taken",
   });
