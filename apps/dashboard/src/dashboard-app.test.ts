@@ -5085,6 +5085,7 @@ describe("dashboard URL navigation", () => {
   it("an old tester link opens the Routing tab", async () => {
     history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager?dev=1#saved");
     const push = vi.spyOn(history, "pushState");
+    onTestFinished(() => push.mockRestore());
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
