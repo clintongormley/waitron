@@ -1,5 +1,6 @@
+import { scryptSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { hashSecret, verifySecretAsync } from "./secret-hash.js";
+import { hashSecret, hashSecretAsync, verifySecretAsync } from "./secret-hash.js";
 
 describe("hashSecret", () => {
   it("salts each hash (same input, different output)", () => {
@@ -27,5 +28,24 @@ describe("verifySecretAsync", () => {
     setImmediate(() => order.push("turned"));
     await verified;
     expect(order).toEqual(["turned", "verified"]);
+  });
+});
+
+describe("hashSecretAsync", () => {
+  it("keeps the stored format, fresh salts and synchronous verification", async () => {
+    const first = await hashSecretAsync("hunter2");
+    const second = await hashSecretAsync("hunter2");
+    expect(first).toMatch(/^scrypt\$[a-f0-9]{32}\$[a-f0-9]{64}$/);
+    expect(second).not.toBe(first);
+    const [, salt, key] = first.split("$");
+    expect(scryptSync("hunter2", Buffer.from(salt!, "hex"), 32).toString("hex")).toBe(key);
+  });
+
+  it("lets the event loop turn while it creates a hash", async () => {
+    const order: string[] = [];
+    const hashed = hashSecretAsync("hunter2").then(() => order.push("hashed"));
+    setImmediate(() => order.push("turned"));
+    await hashed;
+    expect(order).toEqual(["turned", "hashed"]);
   });
 });

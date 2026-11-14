@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, scrypt } from "node:crypto";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { quoteLiteral } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { generateSync } from "otplib";
 import { codeOf, seedManager, seedSessionDevice, TOTP_KEY_RING } from "../test/fixtures.js";
 import { startManagementSession } from "./management-session.js";
@@ -32,6 +32,11 @@ import {
   unlinkOwnGoogle,
   removeOwnPasskey,
 } from "./profile.js";
+
+vi.mock("node:crypto", async (original) => {
+  const actual = await original<typeof import("node:crypto")>();
+  return { ...actual, scrypt: vi.fn(actual.scrypt) };
+});
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 async function fixture() {
@@ -305,6 +310,7 @@ describe("your profile", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "password.too_short" });
+    vi.mocked(scrypt).mockClear();
     await withTransaction(suite.db, (tx) =>
       changeOwnPassword(tx, {
         ...f,
@@ -312,6 +318,7 @@ describe("your profile", () => {
         keyRing: TOTP_KEY_RING,
       }),
     );
+    expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toContain("new password");
     await expect(
       withTransaction(suite.db, (tx) =>
         readOwnProfile(tx, { ...f, managementSessionId: other.token }),
@@ -343,6 +350,7 @@ describe("your profile", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "pin.too_short" });
+    vi.mocked(scrypt).mockClear();
     await withTransaction(suite.db, (tx) =>
       changeOwnPin(tx, {
         ...f,
@@ -350,6 +358,7 @@ describe("your profile", () => {
         keyRing: TOTP_KEY_RING,
       }),
     );
+    expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toContain("9876");
     const rows = await suite.db.execute<{ ended_at: string | null }>(
       sql`select ended_at from sessions where id = ${till.rows[0]!.id}`,
     );

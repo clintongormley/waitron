@@ -9,11 +9,11 @@ const hashing = vi.hoisted(() => ({ underNodeLock: false, seen: [] as boolean[] 
 
 vi.mock("node:crypto", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:crypto")>();
-  const scryptSync = (...args: Parameters<typeof actual.scryptSync>) => {
+  const scrypt = (...args: Parameters<typeof actual.scrypt>) => {
     hashing.seen.push(hashing.underNodeLock);
-    return actual.scryptSync(...args);
+    return actual.scrypt(...args);
   };
-  return { ...actual, scryptSync };
+  return { ...actual, scrypt };
 });
 
 // The core set and node.db's own: mint and verify touch nothing else.

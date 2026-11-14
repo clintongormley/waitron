@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { mkdtemp, rm, readFile, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { randomBytes } from "node:crypto";
+import { randomBytes, scrypt } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { createFirstSetupCoordinator, createFirstSetupStore, type VenueRequest } from "./index.js";
 import { verifyPassword, verifyPin } from "@waitron/identity";
@@ -12,6 +12,11 @@ import {
 } from "./first-setup-owner.js";
 import * as filesystem from "node:fs/promises";
 vi.mock("node:fs/promises", { spy: true });
+vi.mock("node:crypto", async (original) => {
+  const actual = await original<typeof import("node:crypto")>();
+  return { ...actual, scrypt: vi.fn(actual.scrypt) };
+});
+
 const dirs: string[] = [];
 const payload: FirstSetupClaimPayload = {
   environment: "production",
@@ -94,7 +99,11 @@ it("the owner service offers no way to win a setup back with the password", asyn
 
 it("binds normalized planned identity, hashing both secrets and returning no verifiers/imports", async () => {
   const f = await fixture();
+  vi.mocked(scrypt).mockClear();
   const claimed = await f.claim();
+  expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toEqual(
+    expect.arrayContaining([payload.request.admin.pin, payload.request.admin.password]),
+  );
   const state = (await f.store.read())!;
   expect(state.frozen.request.admin.email).toBe("elena@example.test");
   expect(state.frozen.request.admin.displayName).toBe("Elena");

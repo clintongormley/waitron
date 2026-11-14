@@ -1,8 +1,6 @@
 import { randomBytes, scrypt, scryptSync, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
-// scrypt from node:crypto: a real password KDF (salted, memory-hard) with no native dependency.
-
 /** Fresh per hash: without a per-hash salt two identical secrets would share a stored hash. */
 const SALT_BYTES = 16;
 const KEY_BYTES = 32;
@@ -20,6 +18,12 @@ export const SECRET_HASH_PREFIX = `${ALGORITHM}$`;
 export function hashSecret(secret: string): string {
   const salt = randomBytes(SALT_BYTES);
   const derived = scryptSync(secret, salt, KEY_BYTES);
+  return `${SECRET_HASH_PREFIX}${salt.toString("hex")}$${derived.toString("hex")}`;
+}
+
+export async function hashSecretAsync(secret: string): Promise<string> {
+  const salt = randomBytes(SALT_BYTES);
+  const derived = await scryptAsync(secret, salt, KEY_BYTES);
   return `${SECRET_HASH_PREFIX}${salt.toString("hex")}$${derived.toString("hex")}`;
 }
 

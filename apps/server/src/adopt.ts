@@ -224,7 +224,7 @@ export async function adoptFromPrimary(
   }
   assertAuthorityKeyMatches(bundle.boxCaPem, bundle.boxCaKeyPem);
   const ring = loadKeyRing(keyRingEnv(bundle.credentialsRing));
-  const recovery = makeBreakGlassSecret();
+  const recovery = await makeBreakGlassSecret();
 
   await hooks.beforeFirstWrite();
   // Before the main box's ring replaces this box's, so a join stopped at any later point leaves

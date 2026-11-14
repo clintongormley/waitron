@@ -2,6 +2,7 @@ export {
   buildConfigurationBundle,
   exportConfigurationTables,
   encodeConfigurationBundle,
+  encodeConfigurationBundleAsync,
   decodeConfigurationBundle,
   validateConfigurationBundle,
   importConfigurationTables,

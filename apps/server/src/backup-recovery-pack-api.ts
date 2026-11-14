@@ -317,7 +317,7 @@ export function mountBackupRecoveryPackMakeApi(
           const env = await deps.readBoxEnv();
           const seat = await serverKeySeat(deps.modules, deps.documentEvidence);
           const madeAt = deps.now().toISOString();
-          const replacement = request.newServerKey ? makeBreakGlassSecret() : undefined;
+          const replacement = request.newServerKey ? await makeBreakGlassSecret() : undefined;
           return withNodeTransaction(deps.nodeDb, async (nodeTx) => {
             const made = await withTransaction(deps.db, (tx) =>
               makePack(tx, nodeTx, deps, {
