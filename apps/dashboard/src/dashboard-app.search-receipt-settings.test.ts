@@ -104,17 +104,21 @@ it("keeps an open receipt chooser usable after returning to the browser tab", as
   await userEvent.click(searchResult(app, id("email"))!);
   await expect.poll(() => settingChooser(app)?.querySelector("wt-combobox")).toBeTruthy();
   await chooseSettingRow(app, "restaurant");
-  const reads = () =>
-    fetchImpl.mock.calls.filter(([path]) => path === "/management-api/session/me").length;
-  const before = reads();
+  const fetch = fetchImpl.getMockImplementation()!;
+  fetchImpl.mockImplementation(async (path, init) => {
+    const response = await fetch(path, init);
+    if (path !== "/management-api/session/me") return response;
+    return new Response(
+      JSON.stringify({ ...(await response.json()), venueName: "Refreshed venue" }),
+      {
+        headers: { "content-type": "application/json" },
+      },
+    );
+  });
   document.dispatchEvent(new Event("visibilitychange"));
-  await expect.poll(reads).toBeGreaterThan(before);
   await expect
-    .poll(
-      () =>
-        settingChooser(app)!.querySelector<HTMLButtonElement>("[data-test=setting-open]")?.disabled,
-    )
-    .toBe(false);
+    .poll(() => app.shadowRoot!.querySelector("[data-test=venue-name]")?.textContent)
+    .toBe("Refreshed venue");
   await userEvent.click(
     settingChooser(app)!.querySelector<HTMLElement>("[data-test=setting-open]")!,
   );
