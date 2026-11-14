@@ -309,10 +309,10 @@ declare module "@waitron/shared" {
      * Thrown by `VerifactuBackend.recordCorrection` (./backend.ts) when the sale being corrected is
      * not an `F2`. Only `F2 → R5` is supported; rectifying an `F1` is an `R1`, and filing the wrong
      * rectificativa is unrepairable, so this refuses rather than mis-types it. Also thrown for a
-     * corrective by replacement, which this backend does not file. `tipoFactura` is the original's
-     * type.
+     * corrective by replacement, which this backend does not file, with `replaces: true`.
+     * `tipoFactura` is the original's type.
      */
-    "fiscal.correction_unsupported": { saleId: string; tipoFactura: string };
+    "fiscal.correction_unsupported": { saleId: string; tipoFactura: string; replaces?: true };
 
     /**
      * Thrown by `VerifactuBackend.recordSubstitution` (./backend.ts) when a substituted sale is not

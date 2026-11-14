@@ -479,6 +479,7 @@ export class VerifactuBackend implements FiscalBackend {
         saleId: correction.correctsSaleId,
         // Non-null on every alta; only an anulación stores NULL.
         tipoFactura: original.tipo_factura as string,
+        ...(correction.replaces === true ? { replaces: true as const } : {}),
       });
     }
 

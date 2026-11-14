@@ -538,6 +538,21 @@ describe("recordCorrection — refusals", () => {
       .where(eq(registrosFacturacion.saleId, replacement.saleId));
     expect(filed).toEqual([]);
   });
+  it("says a refused replacement was refused for being a replacement, not for its original's type", async () => {
+    const { saleId: original } = await withTransaction(suite.db, (tx) =>
+      recordSale(tx, backend, saleInput({ nodeId, seriesId })),
+    );
+
+    const refusal = await withTransaction(suite.db, (tx) =>
+      backend.recordCorrection(tx, correctiveSale(), { correctsSaleId: original, replaces: true }),
+    ).catch((error: unknown) => error);
+
+    expect((refusal as AppError).params).toEqual({
+      saleId: original,
+      tipoFactura: "F2",
+      replaces: true,
+    });
+  });
 });
 
 describe("recordSubstitution — refusals", () => {
