@@ -181,8 +181,7 @@ export function pairWithBluetoothctl(
         return;
       }
       const refused = /^Failed to register agent: (.+)$/.exec(line);
-      if (refused !== null)
-        finish(fail(`bluetooth agent refused: ${refused[1]!}`, "bluetooth_unavailable"), "quit");
+      if (refused !== null) finish(fail(`bluetooth agent refused: ${refused[1]!}`), "quit");
     };
 
     const clean = (fragment: string): string =>

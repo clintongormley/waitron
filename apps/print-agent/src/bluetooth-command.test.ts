@@ -323,7 +323,6 @@ describe("pairWithBluetoothctl — outcomes", () => {
     await expect(result).resolves.toStrictEqual({
       ok: false,
       error: "bluetooth agent refused: org.freedesktop.DBus.Error.AccessDenied",
-      reason: "bluetooth_unavailable",
     });
     expect(child.input).toStrictEqual(["quit\n", END]);
   });
