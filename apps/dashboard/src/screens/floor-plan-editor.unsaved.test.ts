@@ -54,7 +54,7 @@ async function mount() {
     getMe: async () => ({
       personId: "p1",
       email: "ada@example.com",
-      role: "manager",
+      roleIds: ["manager"],
       locale: "en-GB",
       venueLocale: "en-GB",
       sessionDefault: "en-GB",

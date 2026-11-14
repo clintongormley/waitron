@@ -920,7 +920,7 @@ describe("queued account mail primary admission at real boot", () => {
           firstNames: "New",
           lastNames: "Member",
           telephone: null,
-          role: "staff",
+          roleIds: [],
           email: "invite-boot@example.test",
         });
         expect(invitation.status).toBe(role === "primary" ? 201 : 403);

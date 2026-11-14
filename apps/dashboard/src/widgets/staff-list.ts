@@ -6,13 +6,14 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { roleName, statusName } from "../i18n/domain.js";
-import type { PersonSummary } from "../api/client.js";
+import { accessRoleName, statusName } from "../i18n/domain.js";
+import type { AccessRole, PersonSummary } from "../api/client.js";
 
 const personKey = (person: PersonSummary): string => person.personId;
 
 @customElement("dashboard-staff-list")
 export class StaffList extends LitElement {
+  @property({ attribute: false }) accessRoles: AccessRole[] = [];
   @property({ attribute: false }) people: PersonSummary[] = [];
 
   @property({ attribute: false }) currentPersonId: string | null = null;
@@ -40,6 +41,7 @@ export class StaffList extends LitElement {
   #columns(): DataTableColumn<PersonSummary>[] {
     const inputs = [
       currentLocale(),
+      this.accessRoles,
       this.currentPersonId,
       this.canAdminister,
       this.canExportPersonalData,
@@ -47,6 +49,12 @@ export class StaffList extends LitElement {
     ];
     if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
       return this.#columnsMemo.columns;
+    const roleNames = new Map(this.accessRoles.map((role) => [role.id, accessRoleName(role)]));
+    const heldRoleNames = (person: PersonSummary) =>
+      person.roleIds
+        .map((id) => roleNames.get(id))
+        .filter((name) => name !== undefined)
+        .join(", ") || t("person.no_access_role");
     const columns: DataTableColumn<PersonSummary>[] = [
       {
         key: "displayName",
@@ -70,8 +78,8 @@ export class StaffList extends LitElement {
         key: "role",
         choosable: "shown",
         label: t("staff.field_role"),
-        cell: (person) => roleName(person.role),
-        sortValue: (person) => roleName(person.role),
+        cell: heldRoleNames,
+        sortValue: heldRoleNames,
       },
       {
         key: "email",

@@ -96,7 +96,7 @@ it.each([false, true])(
           return {
             personId: "00000000-0000-4000-8000-000000000001",
             email: "ada@example.test",
-            role: "manager",
+            roleIds: ["manager"],
             locale: "en-GB",
             venueLocale: "en-GB",
             sessionDefault: "en-GB",

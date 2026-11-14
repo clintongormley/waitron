@@ -1,7 +1,8 @@
 import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import type { Database, Transaction } from "@waitron/db";
-import { insertInChunks, personStaffRoles, persons } from "@waitron/db";
-import { heldBuiltInKey, setBuiltInMembership } from "../src/roles.js";
+import { insertInChunks, personStaffRoles, persons, personRoles, roles } from "@waitron/db";
+import { ensureBuiltInRoles } from "../src/roles.js";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BuiltInRoleKey } from "../src/permissions.js";
 export type PersonSeed = Omit<typeof persons.$inferInsert, "role"> & {
   role?: BuiltInRoleKey;
@@ -24,7 +25,7 @@ export async function seedPersons(
     )
     .returning();
   for (const [index, row] of rows.entries())
-    await setBuiltInMembership(db, row.id, seeds[index]!.role ?? "staff");
+    await setBuiltInRoleForTest(db, row.id, seeds[index]!.role ?? "staff");
   const fixtureRole = seeds.some((seed) => seed.jobRoles === undefined)
     ? await ensureFixtureJobRole(db)
     : null;
@@ -42,11 +43,23 @@ export async function setBuiltInRoleForTest(
   personId: string,
   role: BuiltInRoleKey,
 ): Promise<void> {
-  await setBuiltInMembership(db, personId, role);
+  const builtIns = await ensureBuiltInRoles(db as Transaction);
+  await db
+    .delete(personRoles)
+    .where(
+      and(eq(personRoles.personId, personId), inArray(personRoles.roleId, Object.values(builtIns))),
+    );
+  await db.insert(personRoles).values({ personId, roleId: builtIns[role] });
 }
 export async function builtInRoleForTest(
   db: Database | Transaction,
   personId: string,
 ): Promise<BuiltInRoleKey | null> {
-  return heldBuiltInKey(db, personId);
+  const [row] = await db
+    .select({ key: roles.builtInKey })
+    .from(personRoles)
+    .innerJoin(roles, eq(roles.id, personRoles.roleId))
+    .where(and(eq(personRoles.personId, personId), isNotNull(roles.builtInKey)))
+    .orderBy(desc(eq(roles.builtInKey, "admin")));
+  return row?.key ?? null;
 }

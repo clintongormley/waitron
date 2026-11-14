@@ -16,7 +16,7 @@ const staff: PersonSummary[] = [
   {
     personId: "p1",
     displayName: "Ana",
-    role: "staff",
+    roleIds: ["staff"],
     status: "active",
     hasPassword: false,
     hasTotp: false,

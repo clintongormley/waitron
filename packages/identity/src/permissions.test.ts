@@ -93,7 +93,6 @@ describe("roleHasPermission", () => {
     const ADMIN_ONLY: ReadonlySet<Permission> = new Set([
       "node.manage",
       "system.box_admin",
-      "person.admin",
       "person.email",
       "personal_data.export",
     ]);
@@ -284,7 +283,7 @@ describe("explicit permission declarations", () => {
       "report.export": ["manager"],
       "hardware.manage": ["manager"],
       "fiscal.view": ["manager"],
-      "person.admin": [],
+      "person.admin": ["manager"],
       "person.email": [],
       "personal_data.export": [],
       "node.manage": [],

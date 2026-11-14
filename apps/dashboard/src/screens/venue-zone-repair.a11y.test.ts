@@ -46,7 +46,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
         const api = {
           getMe: vi.fn().mockResolvedValue({
             personId: "manager",
-            role: "manager",
+            roleIds: ["manager"],
             email: "manager@example.test",
             locale,
             venueLocale: locale,

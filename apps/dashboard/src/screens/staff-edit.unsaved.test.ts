@@ -1,3 +1,4 @@
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
@@ -20,7 +21,7 @@ const person: PersonSummary = {
   lastNames: "Lovelace",
   telephone: null,
   email: "ada@example.com",
-  role: "manager",
+  roleIds: ["manager"],
   status: "pending",
   hasPassword: false,
   hasTotp: false,
@@ -31,6 +32,7 @@ class StaffEditApp extends LitElement {
   override render() {
     return html`<dashboard-staff-screen
         .canAdminister=${true}
+        .canChangeEmail=${true}
         .api=${this.api}
       ></dashboard-staff-screen
       >${this.leave.render({
@@ -45,7 +47,11 @@ customElements.define("staff-edit-leave-test-app", StaffEditApp);
 async function mount(api: Partial<DashboardApi>) {
   setLocale("en-GB");
   const { el: app } = await mountWidget<StaffEditApp>("staff-edit-leave-test-app", {
-    api: { listStaff: async () => [person], ...api } as DashboardApi,
+    api: {
+      listAccessRoles: async () => accessRoleChoices,
+      listStaff: async () => [person],
+      ...api,
+    } as DashboardApi,
   });
   const screen = app.shadowRoot!.querySelector("dashboard-staff-screen")!;
   await expect
@@ -77,6 +83,7 @@ it("staff edit commits the submitted details before a failed list refresh", asyn
   let dirtyAtRefresh: boolean | undefined;
   let received: { id: string; details: PersonEditDetails } | undefined;
   const mounted = await mount({
+    listAccessRoles: async () => accessRoleChoices,
     listStaff: async () => {
       if (++reads === 1) return [person];
       dirtyAtRefresh = mounted.app.leave.coordinator.isDirty();
@@ -98,7 +105,6 @@ it("staff edit commits the submitted details before a failed list refresh", asyn
       displayName: "Ada",
       telephone: null,
       email: "new@example.com",
-      role: "manager",
       status: "pending",
     },
   });
@@ -183,6 +189,7 @@ for (const action of ["save", "resend"] as const) {
     });
     const bea: PersonSummary = { ...person, personId: "p2", email: "bea@example.com" };
     const { app, screen, form } = await mount({
+      listAccessRoles: async () => accessRoleChoices,
       listStaff: async () => [person, bea],
       savePerson: () => pending,
       resendInvitation: async () => {
@@ -227,6 +234,7 @@ for (const action of ["save", "resend"] as const) {
     });
     const bea: PersonSummary = { ...person, personId: "p2", email: "bea@example.com" };
     const { app, screen, form } = await mount({
+      listAccessRoles: async () => accessRoleChoices,
       listStaff: async () => [person, bea],
       savePerson: () => pending,
       resendInvitation: async () => {

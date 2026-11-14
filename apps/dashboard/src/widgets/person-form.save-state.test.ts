@@ -1,9 +1,10 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { PersonForm } from "./person-form.js";
 import "./person-form.js";
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { setLocale, t } from "../i18n/t.js";
 
 afterEach(() => {
@@ -15,7 +16,11 @@ type Created = Parameters<PersonForm["closeSaved"]>[0];
 
 async function mount() {
   setLocale("en-GB");
-  const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+  const { el } = await mountWidget<PersonForm>("dashboard-person-form", {
+    open: true,
+    accessRoles: accessRoleChoices,
+    viewerAdmin: true,
+  });
   await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   const creates = vi.fn<(detail: Created) => void>();
   el.addEventListener("create-person", (event) => creates((event as CustomEvent<Created>).detail));
@@ -99,9 +104,20 @@ it.each(["given-name", "family-name", "nickname", "email", "tel"])(
 it("choosing a role other than staff wakes Create, and choosing staff again quiets it", async () => {
   const { el } = await mount();
   const role = q(el, "wt-combobox[name=role]")!;
-  await chooseOption(role, "manager");
+  await chooseOptions(role, ["manager"]);
   expect(await state(el)).toEqual(ready);
-  await chooseOption(role, "staff");
+  await chooseOptions(role, ["staff"]);
+  expect(await state(el)).toEqual(quiet);
+});
+
+it("reordering the same access roles after saving keeps Create quiet", async () => {
+  const { el, creates } = await mount();
+  await fillValid(el);
+  const role = q(el, "wt-combobox[name=role]")!;
+  await chooseOptions(role, ["staff", "manager"]);
+  await press(el);
+  el.commitSaved(creates.mock.calls[0]![0]);
+  await chooseOptions(role, ["manager", "staff"]);
   expect(await state(el)).toEqual(quiet);
 });
 
@@ -116,7 +132,7 @@ it("a filled form is ready and sends what was typed", async () => {
     displayName: "Ada Lovelace",
     email: "ada@example.com",
     telephone: null,
-    role: "staff",
+    roleIds: ["staff"],
   });
 });
 

@@ -476,13 +476,21 @@ export interface JobRole {
   holderIds: string[];
 }
 
+export interface AccessRole {
+  id: string;
+  builtInKey: PersonRole | null;
+  name: string | null;
+  permissions: string[];
+  holderCount: number;
+}
+
 export interface PersonSummary {
   personId: string;
   displayName: string;
   firstNames?: string | null;
   lastNames?: string | null;
   telephone?: string | null;
-  role: PersonRole;
+  roleIds: string[];
   status: "pending" | "active" | "suspended";
   hasPassword: boolean;
   hasTotp: boolean;
@@ -495,7 +503,6 @@ export interface PersonEditDetails {
   lastNames: string;
   telephone: string | null;
   email: string;
-  role: PersonRole;
   status: "pending" | "active" | "suspended";
 }
 
@@ -2846,6 +2853,22 @@ export class DashboardApi {
     );
   }
 
+  listAccessRoles(): Promise<AccessRole[]> {
+    return this.#request<AccessRole[]>("/management-api/access-roles", "GET");
+  }
+
+  setPersonAccessRoles(
+    personId: string,
+    roleIds: string[],
+    expectedRoleIds: string[],
+  ): Promise<{ roleIds: string[] }> {
+    return this.#request(
+      `/management-api/staff/${encodeURIComponent(personId)}/access-roles`,
+      "PUT",
+      { roleIds, expectedRoleIds },
+    );
+  }
+
   listStaff(): Promise<PersonSummary[]> {
     return this.#request<PersonSummary[]>("/management-api/staff", "GET");
   }
@@ -2855,7 +2878,7 @@ export class DashboardApi {
     firstNames: string;
     lastNames: string;
     telephone: string | null;
-    role: PersonRole;
+    roleIds: string[];
     email: string;
   }): Promise<{ id: string } & InvitationResult> {
     return this.#request<{ id: string } & InvitationResult>("/management-api/staff", "POST", input);
@@ -4303,7 +4326,7 @@ export class DashboardApi {
   getMe(options?: RequestOptions): Promise<{
     tradingAdmission?: TradingAdmissionView;
     personId: string;
-    role: PersonRole;
+    roleIds: string[];
     email: string | null;
     locale: string | null;
     venueLocale: string;
@@ -4318,7 +4341,7 @@ export class DashboardApi {
     return this.#request<{
       tradingAdmission?: TradingAdmissionView;
       personId: string;
-      role: PersonRole;
+      roleIds: string[];
       email: string | null;
       locale: string | null;
       venueLocale: string;

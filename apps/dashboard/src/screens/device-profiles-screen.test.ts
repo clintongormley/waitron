@@ -94,7 +94,15 @@ function person(
   role: PersonRole,
   status: PersonSummary["status"] = "active",
 ): PersonSummary {
-  return { personId, displayName, role, status, hasPassword: true, hasTotp: false, email: null };
+  return {
+    personId,
+    displayName,
+    roleIds: [role],
+    status,
+    hasPassword: true,
+    hasTotp: false,
+    email: null,
+  };
 }
 
 const staff = [

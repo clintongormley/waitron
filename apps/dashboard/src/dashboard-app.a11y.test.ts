@@ -21,7 +21,7 @@ const people: PersonSummary[] = [
   {
     personId: "p1",
     displayName: "Ada",
-    role: "manager",
+    roleIds: ["manager"],
     status: "active",
     hasPassword: true,
     hasTotp: true,
@@ -30,7 +30,7 @@ const people: PersonSummary[] = [
   {
     personId: "p2",
     displayName: "Bea",
-    role: "staff",
+    roleIds: ["staff"],
     status: "suspended",
     hasPassword: false,
     hasTotp: false,
@@ -42,7 +42,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   return {
     getMe: vi.fn().mockResolvedValue({
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       locale: null,
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
@@ -156,7 +156,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
         ? stubApi({
             getMe: vi.fn().mockResolvedValue({
               personId: "p1",
-              role: "manager",
+              roleIds: ["manager"],
               locale: null,
               venueLocale: "es-ES",
               sessionDefault: "es-ES",
@@ -300,7 +300,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p2",
-        role: "staff",
+        roleIds: ["staff"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -325,7 +325,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
-        role: "manager",
+        roleIds: ["manager"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -482,7 +482,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
-        role: "manager",
+        roleIds: ["manager"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -631,7 +631,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       liveData: new LiveData(),
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
-        role: "manager",
+        roleIds: ["manager"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",

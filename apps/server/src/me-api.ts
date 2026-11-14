@@ -38,7 +38,6 @@ import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import { managementSite } from "./request-from-box.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
 import "./errors.js";
-import { heldBuiltInKey } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -366,18 +365,14 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  // Role-blind, so a staff session answers `{ role: "staff" }` rather than 403: the dashboard shell
-  // probes this to decide between the staff view and the manager screens. `sessionDefault` is
-  // derived per request and never stored; an explicit `locale` still wins.
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { personId, role, authority, email, locale, venueName, expiresAt } = await asStaff(
+      const { personId, authority, email, locale, venueName, expiresAt } = await asStaff(
         async (tx) => {
           const session = await resolveManagementSession(tx, sessionId, { touch: false });
           return {
             ...session,
-            role: await heldBuiltInKey(tx, session.personId),
             venueName: await readVenueName(tx),
           };
         },
@@ -394,7 +389,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
           ? {}
           : { tradingAdmission: deps.readTradingAdmission() }),
         personId,
-        role,
+        roleIds: authority.roleIds,
         email,
         locale,
         venueLocale: deps.venueLocale,

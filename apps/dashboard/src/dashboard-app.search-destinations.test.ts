@@ -123,7 +123,7 @@ async function mount(
   const api = {
     getMe: vi.fn().mockResolvedValue({
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       email: "ada@example.com",
       locale: options.locale ?? "en-GB",
       venueLocale: "en-GB",

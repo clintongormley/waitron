@@ -14,7 +14,7 @@ const people: PersonSummary[] = [
   {
     personId: "p1",
     displayName: "Ada",
-    role: "manager",
+    roleIds: ["manager"],
     status: "active",
     hasPassword: true,
     hasTotp: true,
@@ -24,7 +24,7 @@ const people: PersonSummary[] = [
 
 const meResponse = {
   personId: "p1",
-  role: "manager",
+  roleIds: ["manager"],
   email: "manager@example.com",
   locale: null as string | null,
   venueLocale: "es-ES",

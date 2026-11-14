@@ -326,7 +326,7 @@ describe("Me API — the identity property: the session's person, never the body
     expect(
       (await who.json()) as {
         personId: string;
-        role: string;
+        roleIds: string[];
         email: string | null;
         locale: string | null;
         venueLocale: string;
@@ -339,7 +339,13 @@ describe("Me API — the identity property: the session's person, never the body
       },
     ).toEqual({
       personId: p,
-      role: "staff",
+      roleIds: [
+        (
+          await suite.db.execute<{ id: string }>(
+            sql`select id from roles where built_in_key = 'staff'`,
+          )
+        ).rows[0]!.id,
+      ],
       email: null,
       sessionExpiresInSeconds: 1800,
       sessionIdleTimeoutSeconds: 1800,

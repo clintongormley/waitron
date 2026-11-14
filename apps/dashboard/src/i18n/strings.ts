@@ -1234,7 +1234,7 @@ export const en = {
   "profile.email_sent":
     "The confirmation email is on its way. Enter the code from your new address to confirm it.",
   "profile.email_captured":
-    "The confirmation is on its way to the server inbox. Only an administrator can read it.",
+    "The confirmation is on its way to the server inbox. Managers and administrators can read it.",
   "profile.email_unconfigured":
     "The confirmation could not be sent because email is not set up. After email is set up, open Your details, re-enter the new address and save.",
   "profile.email_admin_help":
@@ -1465,7 +1465,7 @@ export const en = {
   "staff.add_user": "Add user",
   "staff.field_display_name": "Display name",
   "staff.field_legal_name": "Last name, first name",
-  "staff.field_role": "Role",
+  "staff.field_role": "Access roles",
   "staff.field_email": "Email",
   "staff.field_status": "Status",
   "staff.field_telephone": "Phone",
@@ -1474,7 +1474,7 @@ export const en = {
   "staff.empty": "No users yet.",
   "staff.filters": "User filters",
   "staff.search": "Search users",
-  "staff.filter_role": "Role",
+  "staff.filter_role": "Access roles",
   "staff.filter_status": "Status",
   "staff.filter_all_roles": "All roles",
   "staff.filter_current": "Current users",
@@ -2274,7 +2274,11 @@ export const en = {
   "person.job_roles": "Job roles",
   "person.job_roles_hint": "Puts them on the rota and on the devices that take that job",
   "person.save_job_roles": "Save job roles",
-  "person.role": "Role",
+  "person.access_roles_selected": "{count} selected",
+  "person.access_roles": "Access roles — what they may do",
+  "person.no_access_role": "No access role",
+  "person.save_access_roles": "Save access roles",
+  "person.reload_access_roles": "Reload",
   "person.pin": "PIN",
   "person.email": "Email",
   "person.email_help": "This address receives the account invitation and password-reset links.",
@@ -5211,7 +5215,7 @@ export const es: Record<StringKey, string> = {
   "profile.email_sent":
     "La confirmación está en camino. Introduce el código que llegue a tu nueva dirección para confirmarla.",
   "profile.email_captured":
-    "La confirmación va a la bandeja de correo del servidor. Solo un administrador puede leerla.",
+    "La confirmación va a la bandeja de correo del servidor. Los gerentes y administradores pueden leerla.",
   "profile.email_unconfigured":
     "No se ha podido enviar la confirmación porque el correo no está configurado. Una vez configurado, abre Tus datos, vuelve a introducir la nueva dirección y guarda.",
   "profile.email_admin_help":
@@ -5453,7 +5457,7 @@ export const es: Record<StringKey, string> = {
   "staff.add_user": "Añadir usuario",
   "staff.field_display_name": "Nombre visible",
   "staff.field_legal_name": "Apellidos, nombre",
-  "staff.field_role": "Rol",
+  "staff.field_role": "Roles de acceso",
   "staff.field_email": "Correo electrónico",
   "staff.field_status": "Estado",
   "staff.field_telephone": "Teléfono",
@@ -5462,7 +5466,7 @@ export const es: Record<StringKey, string> = {
   "staff.empty": "Todavía no hay usuarios.",
   "staff.filters": "Filtros de usuarios",
   "staff.search": "Buscar usuarios",
-  "staff.filter_role": "Rol",
+  "staff.filter_role": "Roles de acceso",
   "staff.filter_status": "Estado",
   "staff.filter_all_roles": "Todos los roles",
   "staff.filter_current": "Usuarios actuales",
@@ -6276,7 +6280,11 @@ export const es: Record<StringKey, string> = {
   "person.job_roles": "Puestos",
   "person.job_roles_hint": "Los pone en el cuadrante y en los dispositivos que aceptan ese puesto",
   "person.save_job_roles": "Guardar puestos",
-  "person.role": "Rol",
+  "person.access_roles_selected": "{count} seleccionados",
+  "person.access_roles": "Roles de acceso — lo que puede hacer",
+  "person.no_access_role": "Sin rol de acceso",
+  "person.save_access_roles": "Guardar roles de acceso",
+  "person.reload_access_roles": "Recargar",
   "person.pin": "PIN",
   "person.email": "Correo electrónico",
   "person.email_help":

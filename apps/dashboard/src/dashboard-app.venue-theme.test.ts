@@ -28,7 +28,7 @@ const rejecting = vi.fn<typeof fetch>(() => Promise.reject(new TypeError("Failed
 
 const meResponse = {
   personId: "p1",
-  role: "manager",
+  roleIds: ["manager"],
   email: "manager@example.com",
   locale: null,
   venueLocale: "es-ES",
@@ -143,7 +143,7 @@ it("a change elsewhere reads nothing", async () => {
 });
 
 it("a staff session follows the theme too", async () => {
-  const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, role: "staff" }) });
+  const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, roleIds: ["staff"] }) });
   await mount(api);
   await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
   expect(api.getVenueTheme).toHaveBeenCalled();

@@ -512,6 +512,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That display name is already in use. Add a surname or nickname.",
     es: "Ese nombre visible ya está en uso. Añade un apellido o apodo.",
   },
+  "role.not_found": {
+    en: "This access role is no longer available. Reload to choose from the current roles.",
+    es: "Este rol de acceso ya no está disponible. Recarga para elegir entre los roles actuales.",
+  },
+  "role.not_permitted": {
+    en: "You can only give or take away a role whose permissions you all have.",
+    es: "Solo puedes dar o quitar un rol cuyos permisos tengas todos.",
+  },
+  "person.roles_changed": {
+    en: "Someone changed this person's access roles while you were editing. Reload to see them; your changes are kept until you do.",
+    es: "Alguien cambió los roles de acceso de esta persona mientras editabas. Recarga para verlos; tus cambios se conservan hasta entonces.",
+  },
   "person.holds_more": {
     en: "This person can do things you can't, so only someone who can do everything they can may change their sign-in.",
     es: "Esta persona puede hacer cosas que tú no, así que solo alguien que pueda hacer todo lo que ella hace puede cambiar su acceso.",

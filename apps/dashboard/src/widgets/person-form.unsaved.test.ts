@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -12,6 +12,7 @@ import {
   reattachAfterDetachedUpdate,
 } from "./test-helpers.js";
 import "./person-form.js";
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(() => {
@@ -25,6 +26,8 @@ class PersonFormApp extends LitElement {
   override render() {
     return html`<dashboard-person-form
         .open=${true}
+        .accessRoles=${accessRoleChoices}
+        .viewerAdmin=${true}
         @wt-close=${() => this.closes++}
         @create-person=${(e: CustomEvent) => this.submitted.push(e.detail)}
       ></dashboard-person-form
@@ -109,9 +112,9 @@ it("Add staff change and normalized revert update browser unload immediately", a
 it("an Add staff role choice is protected and reverting it closes without a question", async () => {
   const { app, form } = await mount();
   const role = form.shadowRoot!.querySelector("wt-combobox")!;
-  await chooseOption(role, "manager");
+  await chooseOptions(role, ["manager"]);
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  await chooseOption(role, "staff");
+  await chooseOptions(role, ["staff"]);
   expect(app.leave.coordinator.isDirty()).toBe(false);
   cancel(form);
   await expect.poll(() => app.closes).toBe(1);
@@ -131,7 +134,7 @@ it("a refused Add staff request retains its normalized submitted values and warn
       displayName: "Ada",
       email: "ada@example.com",
       telephone: null,
-      role: "staff",
+      roleIds: ["staff"],
     },
   ]);
   form.error = "connection.failed";
@@ -158,7 +161,7 @@ it("Add staff blocks Cancel and native Escape while its write is pending", async
 it("standalone Add staff Cancel reports once after the native delayed close", async () => {
   const { el: form } = await mountWidget<HTMLElementTagNameMap["dashboard-person-form"]>(
     "dashboard-person-form",
-    { open: true },
+    { open: true, accessRoles: accessRoleChoices, viewerAdmin: true },
   );
   await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   let closed = 0;
@@ -216,7 +219,7 @@ it("Add staff reopened after a put-back entry was saved opens quiet and empty", 
       displayName: "Ada",
       email: "",
       telephone: null,
-      role: "staff",
+      roleIds: ["staff"],
     }),
   ).toBe(true);
   expect(form.open).toBe(false);

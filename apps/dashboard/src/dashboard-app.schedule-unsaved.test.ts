@@ -19,7 +19,7 @@ async function mount(path = "/manage/my-schedule") {
       getMe: async () => ({
         personId: "p1",
         email: "ada@example.com",
-        role: "staff",
+        roleIds: ["staff"],
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",

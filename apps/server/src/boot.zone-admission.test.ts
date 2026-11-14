@@ -416,7 +416,13 @@ describe("startup zone admission", () => {
     const session = await request("/management-api/session/me", "GET", undefined, staffToken);
     expect(session.status).toBe(200);
     expect(await session.json()).toMatchObject({
-      role: "staff",
+      roleIds: [
+        (
+          await suite.db.execute<{ id: string }>(
+            sql`select id from roles where built_in_key = 'staff'`,
+          )
+        ).rows[0]!.id,
+      ],
       venueName: "Zone Admission SL",
       tradingAdmission: { state: "invalid" },
     });

@@ -1,7 +1,7 @@
 import { mountAlertsApi } from "../../src/alerts-api.js";
 import { createAlertRegistry } from "../../src/alerts.js";
 import { printingAlertSource } from "../../src/alert-sources.js";
-import { setBuiltInMembership } from "@waitron/identity";
+import { importAccessRoleMembership, ensureBuiltInRoles } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { asc, eq, like, sql } from "drizzle-orm";
@@ -418,8 +418,10 @@ async function seed(
       .select({ id: persons.id })
       .from(persons)
       .where(eq(persons.displayName, MANAGER_NAME));
-    for (const person of holders) await setBuiltInMembership(tx, person.id, "staff");
-    await setBuiltInMembership(tx, manager!.id, "manager");
+    const builtInRoles = await ensureBuiltInRoles(tx);
+    for (const person of holders)
+      await importAccessRoleMembership(tx, person.id, builtInRoles.staff);
+    await importAccessRoleMembership(tx, manager!.id, builtInRoles.manager);
     await tx.insert(personStaffRoles).values(
       [...holders, manager!].map((person) => ({
         personId: person.id,

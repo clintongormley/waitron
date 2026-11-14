@@ -12,7 +12,7 @@ const staff: PersonSummary[] = [
   {
     personId: "p1",
     displayName: "Ana",
-    role: "staff",
+    roleIds: ["staff"],
     status: "active",
     hasPassword: false,
     hasTotp: false,
@@ -21,7 +21,7 @@ const staff: PersonSummary[] = [
   {
     personId: "p2",
     displayName: "Beto",
-    role: "staff",
+    roleIds: ["staff"],
     status: "active",
     hasPassword: false,
     hasTotp: false,

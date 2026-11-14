@@ -55,7 +55,7 @@ function stubApi(): DashboardApi {
   return {
     getMe: vi.fn().mockResolvedValue({
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       email: "manager@example.com",
       locale: null,
       venueLocale: "es-ES",

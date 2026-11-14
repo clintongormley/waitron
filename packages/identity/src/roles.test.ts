@@ -3,7 +3,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import * as identity from "./index.js";
-import { seedPerson } from "../test/fixtures.js";
+import { openFreshManagementSession, openManagementSession, seedPerson } from "../test/fixtures.js";
 import { seedPersons } from "../test/person-rows.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -50,12 +50,23 @@ it("replaces only the built-in membership", async () => {
   await suite.db.execute(sql`insert into roles (id, name, name_folded, created_at)
     values ('accountant', 'Accountant', 'accountant', '2026-11-13T00:00:00Z')`);
   await suite.db.execute(sql`insert into person_roles values (${personId}, 'accountant')`);
-  await withTransaction(suite.db, (tx) => identity.setBuiltInMembership(tx, personId, "manager"));
-  expect(await identity.heldBuiltInKey(suite.db, personId)).toBe("manager");
+  const actor = await openFreshManagementSession(suite.db, "admin");
+  const builtIns = await withTransaction(suite.db, identity.ensureBuiltInRoles);
+  await withTransaction(suite.db, (tx) =>
+    identity.setPersonAccessRoles(tx, {
+      managementSessionId: actor.token,
+      personId,
+      roleIds: [builtIns.manager, "accountant"],
+      expectedRoleIds: [builtIns.staff, "accountant"],
+    }),
+  );
+  expect((await identity.readPersonAuthority(suite.db, personId)).roleIds).toContain(
+    builtIns.manager,
+  );
   const authority = await identity.readPersonAuthority(suite.db, personId);
   expect(authority.roleIds).toHaveLength(2);
   expect(authority.roleIds).toContain("accountant");
-  expect(await identity.heldBuiltInKey(suite.db, crypto.randomUUID())).toBeNull();
+  expect((await identity.readPersonAuthority(suite.db, crypto.randomUUID())).roleIds).toEqual([]);
 });
 
 it("normalises an imported custom role name instead of trusting its folded value", async () => {
@@ -106,3 +117,48 @@ it("imports an edited built-in onto its local id and logs its membership without
   expect(entries[0]!.data).toEqual({ roleId, builtInKey: "supervisor", name: null });
   expect(await suite.db.select().from(outgoingMail)).toEqual([]);
 });
+
+it("lists all access roles with holder counts and declared grants, built-ins before custom names", async () => {
+  const { token } = await openManagementSession(suite.db, "admin");
+  await seedPerson(suite.db, "staff");
+  await suite.db
+    .execute(sql`insert into roles (id, name, name_folded, permissions, created_at) values
+    ('z-role', 'Zed', 'zed', '["report.view","role_test.retired"]', '2026-11-14T00:00:00Z'),
+    ('a-role', 'Accountant', 'accountant', '[]', '2026-11-14T00:00:00Z')`);
+  const choices = await withTransaction(suite.db, (tx) => identity.listAccessRoles(tx, token));
+  expect(choices.map((role) => [role.builtInKey, role.name, role.holderCount])).toEqual([
+    ["staff", null, 1],
+    ["supervisor", null, 0],
+    ["manager", null, 0],
+    ["admin", null, 1],
+    [null, "Accountant", 0],
+    [null, "Zed", 0],
+  ]);
+  expect(choices.find((role) => role.id === "z-role")!.permissions).toEqual(["report.view"]);
+  expect(choices.find((role) => role.builtInKey === "admin")!.permissions).toContain(
+    "person.admin",
+  );
+});
+
+it.each(["person.manage", "person.admin", null])(
+  "lists access roles with either grant, refusing neither (%s)",
+  async (permission) => {
+    const { token } = await openManagementSession(suite.db, "manager");
+    await suite.db.execute(
+      sql`update roles set permissions = ${JSON.stringify(permission === null ? [] : [permission])} where built_in_key = 'manager'`,
+    );
+    const read = () => withTransaction(suite.db, (tx) => identity.listAccessRoles(tx, token));
+    if (permission === null)
+      await expect(read()).rejects.toMatchObject({
+        code: "authorization.not_permitted",
+        params: { permission: "person.manage" },
+      });
+    else
+      expect((await read()).map((role) => role.builtInKey)).toEqual([
+        "staff",
+        "supervisor",
+        "manager",
+        "admin",
+      ]);
+  },
+);

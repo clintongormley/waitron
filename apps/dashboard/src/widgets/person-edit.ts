@@ -19,12 +19,12 @@ import type {
   DashboardApi,
   JobRole,
   PersonEditDetails,
-  PersonRole,
+  AccessRole,
   PersonSummary,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { roleName, rolesByName, statusName } from "../i18n/domain.js";
-import { t } from "../i18n/t.js";
+import { accessRoleName, statusName } from "../i18n/domain.js";
+import { fill, t } from "../i18n/t.js";
 import { refusedField } from "./person-form.js";
 import { sameValue } from "./product-editor-model.js";
 
@@ -39,6 +39,19 @@ export class PersonEdit extends LitElement {
       .fields {
         display: grid;
         gap: var(--wt-space-4);
+      }
+      .access-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      [data-access-role] {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
       }
       .job-roles {
         padding-top: var(--wt-space-4);
@@ -56,6 +69,9 @@ export class PersonEdit extends LitElement {
   @property({ attribute: false }) person: PersonSummary | null = null;
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean }) canAdminister = false;
+  @property({ attribute: false }) viewerPermissions: string[] = [];
+  @property({ type: Boolean }) viewerAdmin = false;
+  @property({ type: Boolean }) canChangeEmail = false;
   @property({ type: Boolean }) canManageSchedule = false;
   @property({ attribute: false }) api?: DashboardApi;
   @state() private jobRoles: JobRole[] = [];
@@ -67,6 +83,15 @@ export class PersonEdit extends LitElement {
   #jobScope?: DraftScope<string[]>;
   readonly #jobScopeId = {};
   #jobRead = 0;
+  @state() private accessRoles: AccessRole[] = [];
+  @state() private accessRoleIds: string[] = [];
+  @state() private accessRolesLoaded = false;
+  @state() private accessRolesBusy = false;
+  @state() private accessRolesError: string | null = null;
+  #expectedAccessRoleIds: string[] = [];
+  #accessScope?: DraftScope<string[]>;
+  readonly #accessScopeId = {};
+  #accessRead = 0;
   @property({ type: Boolean, reflect: true }) open = false;
   @property({ type: Boolean }) busy = false;
   @property() error: string | null = null;
@@ -79,7 +104,6 @@ export class PersonEdit extends LitElement {
     lastNames: "",
     telephone: null,
     email: "",
-    role: "staff",
     status: "pending",
   };
   readonly #feedback = new FormFeedback(this);
@@ -90,8 +114,9 @@ export class PersonEdit extends LitElement {
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
     !this.jobRolesBusy &&
+    !this.accessRolesBusy &&
     (await this.#leave!.request({
-      scopes: this.#jobScope ? [this, this.#jobScopeId] : [this],
+      scopes: [this, this.#jobScopeId, this.#accessScopeId],
       reason,
       proceed() {},
     })) === "proceeded";
@@ -106,6 +131,7 @@ export class PersonEdit extends LitElement {
     this.#scope = undefined;
     this.#leave = undefined;
     this.#disposeJobRoles();
+    this.#disposeAccessRoles();
     super.disconnectedCallback();
   }
 
@@ -125,6 +151,12 @@ export class PersonEdit extends LitElement {
         changed.has("canManageSchedule"))
     )
       void this.#loadJobRoles();
+    if (!this.open || !this.person || !this.canAdminister) this.#disposeAccessRoles();
+    else if (
+      this.api &&
+      (personChanged || changed.has("open") || changed.has("api") || changed.has("canAdminister"))
+    )
+      void this.#loadAccessRoles();
     if (changed.has("error")) this.#feedback.newRefusal();
     if (changed.has("open") && this.open) {
       this.#feedback.reset();
@@ -178,7 +210,6 @@ export class PersonEdit extends LitElement {
       lastNames: person?.lastNames ?? "",
       telephone: person?.telephone ?? null,
       email: person?.email ?? "",
-      role: person?.role ?? "staff",
       status: person?.status ?? "pending",
     };
     this.#feedback.reset();
@@ -244,7 +275,6 @@ export class PersonEdit extends LitElement {
       lastNames: this.details.lastNames.trim(),
       telephone: this.details.telephone?.trim() || null,
       email: this.details.email.trim(),
-      role: this.details.role,
       status: this.details.status,
     };
   }
@@ -256,7 +286,8 @@ export class PersonEdit extends LitElement {
   }
 
   closeIfUnchanged(): boolean {
-    if (this.#scope?.isDirty() || this.#jobScope?.isDirty()) return false;
+    if (this.#scope?.isDirty() || this.#jobScope?.isDirty() || this.#accessScope?.isDirty())
+      return false;
     this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
     this.#reportClose();
     return true;
@@ -384,6 +415,152 @@ export class PersonEdit extends LitElement {
     </section>`;
   }
 
+  #canGrant(role: AccessRole): boolean {
+    return (
+      this.viewerAdmin ||
+      (role.builtInKey !== "admin" &&
+        role.permissions.every((permission) => this.viewerPermissions.includes(permission)))
+    );
+  }
+
+  #disposeAccessRoles(): void {
+    this.#accessRead++;
+    this.#accessScope?.dispose();
+    this.#accessScope = undefined;
+    this.accessRolesLoaded = false;
+  }
+
+  async #loadAccessRoles(reload = false): Promise<void> {
+    const read = ++this.#accessRead;
+    this.accessRolesLoaded = false;
+    this.accessRolesError = null;
+    try {
+      const [roles, people] = await Promise.all([
+        this.api!.listAccessRoles(),
+        reload ? this.api!.listStaff() : Promise.resolve(null),
+      ]);
+      if (read !== this.#accessRead) return;
+      this.accessRoles = roles;
+      this.accessRoleIds = [
+        ...(people?.find((p) => p.personId === this.person!.personId)?.roleIds ??
+          this.person!.roleIds),
+      ].sort();
+      this.#expectedAccessRoleIds = [...this.accessRoleIds];
+      this.#accessScope?.dispose();
+      const { scope } = draftScopeFor<string[]>(this, {
+        id: this.#accessScopeId,
+        current: () => this.accessRoleIds,
+        snapshot: (value) => [...value],
+        equal: (a, b) => sameValue([...a].sort(), [...b].sort()),
+        restore: (value) => {
+          this.accessRoleIds = [...value];
+        },
+      });
+      this.#accessScope = scope;
+      scope.commit(this.accessRoleIds);
+      this.accessRolesLoaded = true;
+    } catch (error) {
+      if (read === this.#accessRead) this.accessRolesError = codeOf(error);
+    }
+  }
+
+  async #saveAccessRoles(event: Event): Promise<void> {
+    event.stopPropagation();
+    if (
+      !this.accessRolesLoaded ||
+      this.accessRolesBusy ||
+      this.busy ||
+      saveActionState(this.#accessScope).unchanged
+    )
+      return;
+    const submitted = [...this.accessRoleIds];
+    this.accessRolesBusy = true;
+    this.accessRolesError = null;
+    try {
+      const { roleIds } = await this.api!.setPersonAccessRoles(
+        this.person!.personId,
+        submitted,
+        this.#expectedAccessRoleIds,
+      );
+      this.#expectedAccessRoleIds = [...roleIds];
+      if (sameValue(this.accessRoleIds, submitted)) this.accessRoleIds = [...roleIds];
+      this.#accessScope?.commit(roleIds);
+      this.person = { ...this.person!, roleIds: [...roleIds] };
+      this.#emit("access-roles-saved", { personId: this.person.personId, roleIds: [...roleIds] });
+    } catch (error) {
+      this.accessRolesError = codeOf(error);
+    } finally {
+      this.accessRolesBusy = false;
+    }
+  }
+
+  #accessRolesEditor() {
+    if (!this.canAdminister) return nothing;
+    const save = saveActionState(this.#accessScope);
+    return html`<section
+      class="fields access-roles"
+      data-test="access-roles"
+      @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save-access-roles]"))}
+    >
+      <div class="access-tags">
+        ${
+          this.accessRoleIds.length
+            ? this.accessRoleIds.map((id) => {
+                const role = this.accessRoles.find((r) => r.id === id);
+                return html`<span data-access-role=${id}
+                  >${role ? accessRoleName(role) : id}${
+                    role && this.#canGrant(role)
+                      ? html`<wt-button
+                          variant="secondary"
+                          aria-label=${`${t("action.remove")} ${accessRoleName(role)}`}
+                          ?disabled=${this.busy || this.accessRolesBusy}
+                          @click=${(event: Event) => {
+                            event.stopPropagation();
+                            this.accessRoleIds = this.accessRoleIds.filter((value) => value !== id);
+                            this.#accessScope?.changed();
+                          }}
+                          >${t("action.remove")}</wt-button
+                        >`
+                      : nothing
+                  }</span
+                >`;
+              })
+            : html`<span>${t("person.no_access_role")}</span>`
+        }
+      </div>
+      <wt-combobox
+        multiple
+        name="accessRoles"
+        .countLabel=${(count: number) => fill("person.access_roles_selected", { count: String(count) })}
+        label=${t("person.access_roles")}
+        .values=${this.accessRoleIds.filter((id) => this.accessRoles.some((r) => r.id === id && this.#canGrant(r)))}
+        .options=${this.accessRoles.filter((r) => this.#canGrant(r)).map((r) => ({ value: r.id, label: accessRoleName(r) }))}
+        ?disabled=${!this.accessRolesLoaded || this.busy || this.accessRolesBusy}
+        @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+          event.stopPropagation();
+          const locked = this.accessRoleIds.filter(
+            (id) => !this.accessRoles.some((r) => r.id === id && this.#canGrant(r)),
+          );
+          this.accessRoleIds = [...new Set([...locked, ...event.detail.values])].sort();
+          this.#accessScope?.changed();
+        }}
+      ></wt-combobox>
+      <wt-form-actions
+        data-test="access-role-actions"
+        .error=${this.accessRolesError ? codeMessage(this.accessRolesError) : ""}
+      >
+        ${this.accessRolesError ? html`<wt-button slot="cancel" data-test="reload-access-roles" variant="secondary" ?disabled=${this.accessRolesBusy} @click=${() => void this.#loadAccessRoles(true)}>${t("person.reload_access_roles")}</wt-button>` : nothing}
+        <wt-button
+          data-test="save-access-roles"
+          variant=${save.variant}
+          ?disabled=${!this.accessRolesLoaded || save.unchanged || this.busy || this.accessRolesBusy}
+          @click=${(event: Event) => void this.#saveAccessRoles(event)}
+          >${t("person.save_access_roles")}</wt-button
+        >
+      </wt-form-actions>
+    </section>`;
+  }
+
   #statusOptions(person: PersonSummary): PersonSummary["status"][] {
     return person.status === "suspended" ? ["suspended"] : [person.status, "suspended"];
   }
@@ -406,7 +583,8 @@ export class PersonEdit extends LitElement {
         label=${label}
         .value=${value}
         error=${errors[field] ?? ""}
-        ?disabled=${this.busy || (field === "email" && !this.canAdminister && this.person?.personId !== this.currentPersonId)}
+        ?disabled=${this.busy}
+        ?readonly=${field === "email" && !this.canChangeEmail && this.person?.personId !== this.currentPersonId}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
       ></wt-input>
     `;
@@ -423,7 +601,7 @@ export class PersonEdit extends LitElement {
         size="standard"
         heading=${person ? `${t("action.edit")} ${person.displayName}` : t("person.edit")}
         .open=${this.open}
-        .dismissible=${!this.busy && !this.jobRolesBusy}
+        .dismissible=${!this.busy && !this.jobRolesBusy && !this.accessRolesBusy}
         .beforeClose=${this.#leave ? this.#beforeClose : undefined}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         @wt-close=${(event: Event) => {
@@ -459,23 +637,6 @@ export class PersonEdit extends LitElement {
                   ${this.#input("edit-email", "email", t("person.email"), "email", errors)}
                   ${this.#input("edit-telephone", "telephone", t("person.telephone"), "telephone", errors)}
                   <wt-combobox
-                    data-test="edit-role"
-                    name="role"
-                    label=${t("person.role")}
-                    required
-                    search="auto"
-                    searchPlaceholder=${t("categories.combobox_search")}
-                    noResultsLabel=${t("categories.combobox_no_results")}
-                    .options=${rolesByName().map((role) => ({ value: role, label: roleName(role) }))}
-                    .value=${this.details.role}
-                    ?disabled=${this.busy || (!this.canAdminister && person.personId !== this.currentPersonId)}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      event.stopPropagation();
-                      this.details = { ...this.details, role: event.detail.value as PersonRole };
-                      this.#scope?.changed();
-                    }}
-                  ></wt-combobox>
-                  <wt-combobox
                     ?preserve-order=${true /* Preserve account lifecycle. */}
                     data-test="edit-status"
                     name="status"
@@ -500,7 +661,7 @@ export class PersonEdit extends LitElement {
                     }}
                   ></wt-combobox>
                 </div>
-                ${this.#jobRolesEditor()}
+                ${this.#accessRolesEditor()} ${this.#jobRolesEditor()}
                 ${
                   person.status === "pending" && this.canAdminister
                     ? html`<div class="actions">

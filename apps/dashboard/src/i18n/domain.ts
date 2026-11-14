@@ -1,5 +1,11 @@
 import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
-import type { AllergenDeclaration, HomeDevice, PersonRole, Printer } from "../api/client.js";
+import type {
+  AccessRole,
+  AllergenDeclaration,
+  HomeDevice,
+  PersonRole,
+  Printer,
+} from "../api/client.js";
 import { fill, t } from "./t.js";
 
 const ROLE_NAMES: NameTable = {
@@ -138,6 +144,13 @@ const PRINT_JOB_STATUS_NAMES: NameTable = {
 
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(ROLE_NAMES, value, locale);
+}
+
+export function accessRoleName(
+  role: Pick<AccessRole, "builtInKey" | "name">,
+  locale = currentLocale(),
+): string {
+  return role.builtInKey === null ? role.name! : roleName(role.builtInKey, locale);
 }
 
 export const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];

@@ -19,7 +19,7 @@ it.each([true, false])(
       liveData: new LiveData(),
       getMe: async () => ({
         personId: "reader",
-        role: "supervisor",
+        roleIds: ["supervisor"],
         email: "reader@example.test",
         locale: "en-GB",
         venueLocale: "en-GB",

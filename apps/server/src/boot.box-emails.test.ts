@@ -107,6 +107,19 @@ vi.mock("./smtp-send.js", async (load) => {
   };
 });
 
+vi.mock("./mailpit-client.js", async (load) => {
+  const actual = await load<typeof import("./mailpit-client.js")>();
+  return {
+    ...actual,
+    createMailpitClient: (baseUrl: string) =>
+      actual.createMailpitClient(baseUrl, async (url) => {
+        if (url !== "http://127.0.0.1:8025/api/v1/messages?limit=50")
+          throw new Error(`Unexpected inbox request: ${url}`);
+        return Response.json({ messages_count: 0, messages: [] });
+      }),
+  };
+});
+
 // The backup run's memory of its last stop, the one boot hands both the bell and the email duty.
 vi.mock("./alert-sources.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./alert-sources.js")>();

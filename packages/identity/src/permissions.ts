@@ -14,7 +14,7 @@ export const CORE_PERMISSIONS = [
   { permission: "sale.rectify", defaultHolders: ["supervisor", "manager"] },
   { permission: "person.manage", defaultHolders: ["manager"] },
   { permission: "catalogue.manage", defaultHolders: ["manager"] },
-  { permission: "person.admin", defaultHolders: [] },
+  { permission: "person.admin", defaultHolders: ["manager"] },
   { permission: "person.email", defaultHolders: [] },
   { permission: "personal_data.export", defaultHolders: [] },
   { permission: "venue.configure", defaultHolders: ["manager"] },

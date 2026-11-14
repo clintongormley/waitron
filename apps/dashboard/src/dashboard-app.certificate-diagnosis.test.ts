@@ -88,7 +88,7 @@ const q = <T extends Element = HTMLElement>(el: Element, s: string) =>
 function identity(permissions = ["fiscal.view"], personId = "operator") {
   return {
     personId,
-    role: "manager" as const,
+    roleIds: ["manager" as const],
     email: "operator@example.test",
     locale: "en-GB",
     venueLocale: "en-GB",

@@ -1,3 +1,4 @@
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import type { DownloadedFile } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -35,7 +36,7 @@ const people: PersonSummary[] = [
     firstNames: "Ada Augusta",
     lastNames: "Lovelace",
     telephone: null,
-    role: "manager",
+    roleIds: ["manager"],
     status: "active",
     hasPassword: true,
     hasTotp: false,
@@ -47,7 +48,7 @@ const people: PersonSummary[] = [
     firstNames: "Marta",
     lastNames: "López",
     telephone: null,
-    role: "staff",
+    roleIds: ["staff"],
     status: "active",
     hasPassword: false,
     hasTotp: false,
@@ -59,6 +60,7 @@ const FILE: DownloadedFile = { blob: new Blob(["zip"]), fileName: "ada-lovelace-
 
 function stubApi(download?: () => Promise<DownloadedFile>): DashboardApi {
   return {
+    listAccessRoles: async () => accessRoleChoices,
     listStaff: vi.fn().mockResolvedValue(people),
     downloadPersonalData: vi.fn(download ?? (() => Promise.resolve(FILE))),
   } as unknown as DashboardApi;

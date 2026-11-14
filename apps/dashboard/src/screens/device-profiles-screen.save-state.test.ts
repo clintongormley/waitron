@@ -94,11 +94,15 @@ const station = (id: string, name: string, active = true): Station => ({
   forgottenAfterMinutes: 15,
 });
 
-const person = (personId: string, displayName: string, role: PersonSummary["role"]) =>
+const person = (
+  personId: string,
+  displayName: string,
+  role: "staff" | "supervisor" | "manager" | "admin",
+) =>
   ({
     personId,
     displayName,
-    role,
+    roleIds: [role],
     status: "active",
     hasPassword: true,
     hasTotp: false,

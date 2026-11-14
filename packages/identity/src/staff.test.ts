@@ -1,3 +1,4 @@
+import { ensureBuiltInRoles } from "./roles.js";
 import { seedPersons } from "../test/person-rows.js";
 import { hashPin } from "./verify-pin.js";
 import { CORE_MIGRATIONS, refusalError, withTransaction } from "@waitron/db";
@@ -135,13 +136,16 @@ describe("listActiveStaff", () => {
 describe("listPersons", () => {
   it("reads the staff roster in a fixed number of queries", async () => {
     const { token, personId } = await openManagementSession(suite.db, "admin");
+    const builtIns = await run(ensureBuiltInRoles);
     for (let i = 0; i < 20; i++) await seedPerson(suite.db, "staff");
     await run(async (tx) => {
       const reads = vi.spyOn(tx, "select");
       try {
         const roster = await listPersons(tx, { managementSessionId: token });
         expect(roster.length).toBeGreaterThanOrEqual(21);
-        expect(roster.find((person) => person.personId === personId)?.role).toBe("admin");
+        expect(roster.find((person) => person.personId === personId)?.roleIds).toEqual([
+          builtIns.admin,
+        ]);
         expect(reads.mock.calls.length).toBeLessThanOrEqual(4);
       } finally {
         reads.mockRestore();
@@ -163,13 +167,14 @@ describe("listPersons", () => {
     const names = roster.map((p) => p.displayName);
     expect(names).toContain("Ada");
     const self = roster.find((p) => p.personId === manager)!;
+    expect(self).not.toHaveProperty("role");
     expect(self.hasPassword).toBe(true);
     expect(self.hasTotp).toBe(false);
     expect(Object.keys(roster[0]!)).toEqual(
       expect.arrayContaining([
         "personId",
         "displayName",
-        "role",
+        "roleIds",
         "status",
         "hasPassword",
         "hasTotp",

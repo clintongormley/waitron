@@ -1,3 +1,4 @@
+import { ensureBuiltInRoles, setPersonAccessRoles } from "./roles.js";
 import {
   CORE_MIGRATIONS,
   persons,
@@ -13,7 +14,7 @@ import { expect, it } from "vitest";
 import { assertUsableAdminRemains } from "./admin-anchor.js";
 import { readPersonAuthority } from "./authority.js";
 import { startManagementSession } from "./management-session.js";
-import { updatePersonDetails, deactivatePerson, resetPersonLogin } from "./staff.js";
+import { deactivatePerson, resetPersonLogin } from "./staff.js";
 import { unlinkOwnGoogle, removeOwnPasskey } from "./profile.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -56,15 +57,10 @@ it.each(operations)(
       withTransaction(suite.db, async (tx) => {
         const input = { personId: target!.id, managementSessionId: session.token };
         if (operation === "demote")
-          await updatePersonDetails(tx, {
+          await setPersonAccessRoles(tx, {
             ...input,
-            displayName: "Target",
-            firstNames: "Target",
-            lastNames: "Person",
-            telephone: null,
-            email: "target@example.test",
-            role: "manager",
-            status: "active",
+            roleIds: [(await ensureBuiltInRoles(tx)).manager],
+            expectedRoleIds: [(await ensureBuiltInRoles(tx)).admin],
           });
         else if (operation === "suspend") await deactivatePerson(tx, input);
         else if (operation === "reset") await resetPersonLogin(tx, input);

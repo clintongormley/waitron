@@ -4,7 +4,7 @@ import { DashboardApi, type PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { roleName, rolesByName, statusName } from "../i18n/domain.js";
+import { statusName } from "../i18n/domain.js";
 import { setLocale, t } from "../i18n/t.js";
 import { PersonEdit } from "./person-edit.js";
 
@@ -20,7 +20,7 @@ const person: PersonSummary = {
   firstNames: "Ada Augusta",
   lastNames: "Lovelace",
   telephone: "+44 20",
-  role: "manager",
+  roleIds: ["manager"],
   status: "active",
   hasPassword: true,
   hasTotp: false,
@@ -33,14 +33,15 @@ function change(el: PersonEdit, testId: string, value: string): void {
   );
 }
 
-/** One real edit, outside every text field, so Save is awake as it is when a refusal comes back. */
 async function edited(el: PersonEdit): Promise<void> {
-  await chooseOption(box(el, "role"), "staff");
+  change(el, "edit-first-names", "Augusta");
   await el.updateComplete;
 }
 
 async function bottomOf(el: PersonEdit): Promise<string> {
-  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    'wt-form-actions[slot="footer"]',
+  )!;
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
@@ -63,70 +64,58 @@ type Box = HTMLElement & {
   updateComplete: Promise<unknown>;
 };
 
-const box = (el: PersonEdit, name: "role" | "status"): Box =>
+const box = (el: PersonEdit, name: "status"): Box =>
   el.shadowRoot!.querySelector<Box>(`wt-combobox[name="${name}"]`)!;
 
 /** What the closed dropdown shows on its trigger, not what its properties say it holds. */
-async function shown(el: PersonEdit, name: "role" | "status"): Promise<string | undefined> {
+async function shown(el: PersonEdit, name: "status"): Promise<string | undefined> {
   const found = box(el, name);
   await found.updateComplete;
   return found.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
 }
 
 describe("person-edit", () => {
-  it("picks the role and the status from required shared dropdowns showing the person's own", async () => {
+  it("picks the status from a required shared dropdown showing the person's own", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
       person,
       open: true,
     });
-    const role = box(el, "role");
     const status = box(el, "status");
-    expect(role).not.toBeNull();
-    expect(status).not.toBeNull();
-    expect(role.label).toBe(t("person.role", "es-ES"));
     expect(status.label).toBe(t("person.status_label", "es-ES"));
-    for (const found of [role, status]) {
-      expect(found.required).toBe(true);
-      expect(found.search).toBe("auto");
-    }
-    expect(role.options).toEqual(
-      rolesByName("es-ES").map((value) => ({ value, label: roleName(value, "es-ES") })),
-    );
+    expect(status.required).toBe(true);
+    expect(status.search).toBe("auto");
     expect(status.options).toEqual([
       { value: "active", label: statusName("active", "es-ES") },
       { value: "suspended", label: statusName("suspended", "es-ES") },
     ]);
-    expect(role.value).toBe("manager");
-    expect(await shown(el, "role")).toBe(roleName("manager", "es-ES"));
     expect(status.value).toBe("active");
     expect(await shown(el, "status")).toBe(statusName("active", "es-ES"));
-    // The fixture's telephone fails the form's own check.
     change(el, "edit-telephone", "+44 20 7946 0958");
-    await chooseOption(role, "supervisor");
     await chooseOption(status, "suspended");
     await el.updateComplete;
     const saved = new Promise<CustomEvent>((resolve) =>
       el.addEventListener("save-person", (event) => resolve(event as CustomEvent), { once: true }),
     );
     saveOf(el).click();
-    expect((await saved).detail).toMatchObject({ role: "supervisor", status: "suspended" });
+    expect((await saved).detail.status).toBe("suspended");
   });
 
   it("locks the status dropdown when the person is the one signed in", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       currentPersonId: person.personId,
       open: true,
     });
     expect(box(el, "status").disabled).toBe(true);
-    expect(box(el, "role").disabled).toBe(false);
   });
 
   it("uses the shared modal with one field per row, the same field-list shape as the profile screen's own edit form", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -134,7 +123,7 @@ describe("person-edit", () => {
     expect(modal).not.toBeNull();
     await modal!.updateComplete;
     // One shared grid gap, not a per-field margin — so every row (wt-input as well as the
-    // role/status dropdowns) stacks without overlapping.
+    // status dropdown) stacks without overlapping.
     const rows = [...el.shadowRoot!.querySelector(".fields")!.children] as HTMLElement[];
     expect(rows.length).toBeGreaterThan(0);
     for (let i = 1; i < rows.length; i++) {
@@ -142,39 +131,23 @@ describe("person-edit", () => {
         rows[i - 1]!.getBoundingClientRect().bottom,
       );
     }
-    for (const name of ["role", "status"] as const) {
+    for (const name of ["status"] as const) {
       const select = box(el, name);
       await select.updateComplete;
       expect(select.required).toBe(true);
       expect(select.shadowRoot!.querySelector("[data-required]")!.textContent).toContain("*");
     }
-    // No <hr> divider ahead of role/status — one continuous field list instead.
+    // No <hr> divider ahead of status — one continuous field list instead.
     expect(el.shadowRoot!.querySelector("hr")).toBeNull();
-  });
-
-  it("lists the roles alphabetically in the current language, keeping the person's own role chosen", async () => {
-    setLocale("en-GB");
-    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
-      canAdminister: true,
-      person,
-      open: true,
-    });
-    const role = box(el, "role");
-    expect(role.options.map((option) => option.label)).toEqual(
-      ["admin", "manager", "staff", "supervisor"].map((value) => roleName(value, "en-GB")),
-    );
-    expect(role.value).toBe("manager");
-    expect(await shown(el, "role")).toBe(roleName("manager", "en-GB"));
   });
 
   it("presents one populated form and emits the full edit through one Save", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
-    expect(box(el, "role").value).toBe("manager");
-    expect(await shown(el, "role")).toBe(roleName("manager", "es-ES"));
     expect(box(el, "status").value).toBe("active");
     expect(await shown(el, "status")).toBe(statusName("active", "es-ES"));
     expect(box(el, "status").options.map((option) => option.value)).toEqual([
@@ -183,7 +156,6 @@ describe("person-edit", () => {
     ]);
     change(el, "edit-first-names", "Ada Augusta Byron");
     change(el, "edit-telephone", "+44 20 7946 0958");
-    await chooseOption(box(el, "role"), "admin");
     await chooseOption(box(el, "status"), "suspended");
     await el.updateComplete;
     const saved = new Promise<CustomEvent>((resolve) =>
@@ -196,7 +168,6 @@ describe("person-edit", () => {
       lastNames: "Lovelace",
       telephone: "+44 20 7946 0958",
       email: "ada@example.com",
-      role: "admin",
       status: "suspended",
     });
   });
@@ -211,6 +182,7 @@ describe("person-edit", () => {
     };
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person: generated,
       open: true,
     });
@@ -236,6 +208,7 @@ describe("person-edit", () => {
   it("rejects a malformed telephone beside the field and blocks Save, then saves a valid or blank one", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -263,6 +236,7 @@ describe("person-edit", () => {
     const pending = { ...person, status: "pending" as const };
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person: pending,
       open: true,
     });
@@ -277,6 +251,7 @@ describe("person-edit", () => {
   it("hides Resend invitation once the account is no longer pending", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -286,6 +261,7 @@ describe("person-edit", () => {
   it("no longer offers reset login/PIN or deactivate/reactivate from the form — those live on the row's kebab menu now", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -298,6 +274,7 @@ describe("person-edit", () => {
     const inactive = { ...person, status: "suspended" as const };
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person: inactive,
       open: true,
     });
@@ -308,6 +285,7 @@ describe("person-edit", () => {
   it("Cancel discards edits and secret actions never retain an entered credential", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -338,6 +316,7 @@ describe("person-edit server refusals", () => {
   it("puts a taken display name beside its field, leaving Save working, until it is edited", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -359,6 +338,7 @@ describe("person-edit server refusals", () => {
   it("keeps any other server refusal in the bottom message alone, leaving Save working", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -377,6 +357,7 @@ describe("person-edit server refusals", () => {
   ])("puts %s under %s, leaving Save working, until it is edited", async (code, testId, fixed) => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -397,6 +378,7 @@ describe("person-edit server refusals", () => {
   it("puts a refusal whose params name a shown field under that field, leaving Save working", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -412,6 +394,7 @@ describe("person-edit server refusals", () => {
   it("keeps a refusal whose params name a field the form does not show in the bottom message", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -426,6 +409,7 @@ describe("person-edit server refusals", () => {
   it("focuses the email field when a refusal naming it arrives", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -447,6 +431,7 @@ describe("person-edit server refusals", () => {
   it("keeps a taken display name beside its field when another field fails its check", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -471,6 +456,7 @@ describe("person-edit server refusals", () => {
   it("still sends a Save whose own checks pass, for the server to judge the name again", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -487,6 +473,7 @@ describe("person-edit server refusals", () => {
   it("clears a taken display name when a name change regenerates it", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person: { ...person, displayName: "Ada Lovelace" },
       open: true,
     });
@@ -502,6 +489,7 @@ describe("person-edit server refusals", () => {
   it("keeps a taken display name when a name change leaves a customised one alone", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -523,6 +511,7 @@ describe("person-edit validation and keyboard submit", () => {
   it("says nothing about errors before the first submission, and Save works", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -537,6 +526,7 @@ describe("person-edit validation and keyboard submit", () => {
   it("on an invalid submission shows one message at the bottom of the form, disables Save and focuses the first invalid field", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -560,6 +550,7 @@ describe("person-edit validation and keyboard submit", () => {
   it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -589,6 +580,7 @@ describe("person-edit validation and keyboard submit", () => {
   it("focuses the display name when a refusal naming it arrives", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -603,6 +595,7 @@ describe("person-edit validation and keyboard submit", () => {
   it("drops a refusal that names no field when the form is submitted again", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
       error: "connection.failed",
@@ -619,6 +612,7 @@ describe("person-edit validation and keyboard submit", () => {
   it("shows a refusal and the generic sentence together when both apply", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -634,6 +628,7 @@ describe("person-edit validation and keyboard submit", () => {
   it("starts again when reopened: no messages, Save quiet until an edit and then working", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -657,6 +652,7 @@ describe("person-edit validation and keyboard submit", () => {
   it("names every blank required field under its own message and does not save", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -683,6 +679,7 @@ describe("person-edit validation and keyboard submit", () => {
   it("rejects a malformed email beside the field and does not save", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -703,6 +700,7 @@ describe("person-edit validation and keyboard submit", () => {
   it("saves on Enter in a field", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
+      canChangeEmail: true,
       person,
       open: true,
     });
@@ -729,7 +727,6 @@ describe("person-edit validation and keyboard submit", () => {
         lastNames: "Lovelace",
         telephone: "+34 600 000 000",
         email: "ada@example.com",
-        role: "manager",
         status: "active",
       },
     ]);

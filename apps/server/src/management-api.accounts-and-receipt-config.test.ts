@@ -25,11 +25,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { roles, withTransaction, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   encryptTotpSecret,
+  ensureBuiltInRoles,
+  defaultPermissionsFor,
   hashPassword,
   hashPin,
   persons,
@@ -90,10 +92,18 @@ function invitationBody(
     firstNames: displayName,
     lastNames: "Test",
     telephone: null,
-    role: "staff",
+    roleIds: [builtIns.staff],
     email,
     ...overrides,
   };
+}
+
+let builtIns: Awaited<ReturnType<typeof ensureBuiltInRoles>>;
+async function removeManagerPersonAdmin(tx: Transaction): Promise<void> {
+  await tx
+    .update(roles)
+    .set({ permissions: defaultPermissionsFor("manager").filter((p) => p !== "person.admin") })
+    .where(eq(roles.builtInKey, "manager"));
 }
 
 let venueCfg: TradingContext | undefined;
@@ -129,6 +139,7 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  builtIns = await withTransaction(suite.db, ensureBuiltInRoles);
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
@@ -295,25 +306,19 @@ describe("Management API staff + session routes", () => {
     const owner = await suite.db.execute<{ id: string }>(
       sql`select id from persons where email='owner@example.test'`,
     );
-    const edit = (id: string, cookie: string, displayName: string, email: string) =>
-      app.request(`/management-api/staff/${id}`, {
+    const edit = (id: string, cookie: string) =>
+      app.request(`/management-api/staff/${id}/access-roles`, {
         method: "PUT",
         headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({
-          displayName,
-          firstNames: displayName,
-          lastNames: "Admin",
-          telephone: null,
-          email,
-          role: "staff",
-          status: "active",
-        }),
+        body: JSON.stringify({ roleIds: [builtIns.staff], expectedRoleIds: [builtIns.admin] }),
       });
     const responses = await Promise.all([
-      edit(owner.rows[0]!.id, ownerCookie, "Administrator", "owner@example.test"),
-      edit(managerId, managerCookie, "The Manager", MANAGER_EMAIL),
+      edit(owner.rows[0]!.id, ownerCookie),
+      edit(managerId, managerCookie),
     ]);
-    expect(responses.map((response) => response.status).sort()).toEqual([204, 409]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const refused = responses.find((response) => response.status === 409)!;
+    expect(await refused.json()).toMatchObject({ error: { code: "person.last_admin" } });
     const remaining = { rows: [{ count: 0 }] };
     for (const person of await suite.db
       .select({ id: persons.id })
@@ -907,7 +912,7 @@ describe("Management API staff + session routes", () => {
     const created = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify(invitationBody("Owner", "owner@x.com", { role: "manager" })),
+      body: JSON.stringify(invitationBody("Owner", "owner@x.com", { roleIds: [builtIns.manager] })),
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
@@ -927,7 +932,6 @@ describe("Management API staff + session routes", () => {
       lastNames: "Hopper",
       telephone: "+1 222 333 4444",
       email: "grace@example.com",
-      role: "supervisor",
       status: "active",
     };
     const saved = await app.request(`/management-api/staff/${staffId}`, {
@@ -938,7 +942,10 @@ describe("Management API staff + session routes", () => {
     expect(saved.status).toBe(204);
     const listed = await app.request("/management-api/staff", { headers: { cookie } });
     const people = (await listed.json()) as ({ personId: string } & typeof details)[];
-    expect(people.find((person) => person.personId === staffId)).toMatchObject(details);
+    expect(people.find((person) => person.personId === staffId)).toMatchObject({
+      ...details,
+      roleIds: [builtIns.staff],
+    });
   });
 
   it("create with a duplicate email → 409 person.email_taken, no row lands", async () => {
@@ -980,16 +987,17 @@ describe("Management API staff + session routes", () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, "owner@example.test", "dashPass123");
+    const unknownRoleId = randomUUID();
     const response = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify(
-        invitationBody("Unknown role", "unknown-role@example.test", { role: "owner" }),
+        invitationBody("Unknown role", "unknown-role@example.test", { roleIds: [unknownRoleId] }),
       ),
     });
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "role" } },
+      error: { code: "role.not_found", params: { roleId: unknownRoleId } },
     });
     expect(await countPersonsNamed("Unknown role")).toBe(0);
   });
@@ -1902,7 +1910,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     expect(await res.json()).toEqual({
       error: {
         code: "management.request_invalid",
-        params: { field: "displayName|firstNames|lastNames|role|telephone" },
+        params: { field: "displayName|firstNames|lastNames|roleIds|telephone" },
       },
     });
     expect(await countPersonsNamed("Phoneless")).toBe(0);
@@ -1931,7 +1939,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     expect(await countPersonsNamed("Unmailed")).toBe(1);
     await app.flushMail();
     const row = suite.db.get<{ id: string; status: string }>(
-      sql`select id,status from outgoing_mail where person_id=${created.id}`,
+      sql`select id,status from outgoing_mail where person_id=${created.id} and kind='account_action'`,
     )!;
     expect(row.status).toBe("unknown");
     expect(log).toHaveBeenCalledWith("error", "mail.send_failed", {
@@ -1977,7 +1985,6 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       lastNames: "Hopper",
       telephone: null,
       email: "grace@example.com",
-      role: "supervisor",
       status: "active",
     };
     for (const [override, field] of [
@@ -2124,6 +2131,7 @@ describe("Management API — fresh sign-in for people changes", () => {
     "%s refuses before changing people or queuing mail, then accepts fresh proof",
     async (action) => {
       const { staffId: clerkId } = await setupTenant();
+      await withTransaction(suite.db, removeManagerPersonAdmin);
       const [owner] = await suite.db
         .select()
         .from(persons)
@@ -2151,20 +2159,21 @@ describe("Management API — fresh sign-in for people changes", () => {
       const body =
         action === "invite"
           ? invitationBody("Invited", "invited@example.test")
-          : {
-              displayName: action === "own-email" ? "Administrator" : "The Clerk",
-              firstNames: "Clerk",
-              lastNames: "Test",
-              telephone: null,
-              email: action.endsWith("email") ? "changed@example.test" : STAFF_EMAIL,
-              role: action === "own-email" ? "admin" : action === "role" ? "supervisor" : "staff",
-              status: action === "status" ? "suspended" : "active",
-            };
+          : action === "role"
+            ? { roleIds: [builtIns.supervisor], expectedRoleIds: [builtIns.staff] }
+            : {
+                displayName: action === "own-email" ? "Administrator" : "The Clerk",
+                firstNames: "Clerk",
+                lastNames: "Test",
+                telephone: null,
+                email: action.endsWith("email") ? "changed@example.test" : STAFF_EMAIL,
+                status: action === "status" ? "suspended" : "active",
+              };
       const request = (session: string) =>
         app.request(
           action === "invite"
             ? "/management-api/staff"
-            : `/management-api/staff/${staffId}${edit ? "" : `/${action}`}`,
+            : `/management-api/staff/${staffId}${action === "role" ? "/access-roles" : edit ? "" : `/${action}`}`,
           {
             method: edit ? "PUT" : "POST",
             headers: { "content-type": "application/json", cookie: session },
@@ -2203,7 +2212,13 @@ describe("Management API — fresh sign-in for people changes", () => {
       await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie));
       const accepted = await request(cookie);
       expect(accepted.status).toBe(
-        action === "invite" ? 201 : edit || action === "deactivate" ? 204 : 200,
+        action === "invite"
+          ? 201
+          : action === "role"
+            ? 200
+            : edit || action === "deactivate"
+              ? 204
+              : 200,
       );
       const [person] = await suite.db.select().from(persons).where(eq(persons.id, staffId));
       if (action.endsWith("email")) expect(person!.email).toBe("changed@example.test");
@@ -2217,7 +2232,10 @@ describe("Management API — fresh sign-in for people changes", () => {
         action === "reset-login" ||
         action === "reactivate"
       )
-        expect((await suite.db.execute(sql`select * from outgoing_mail`)).rows).toHaveLength(1);
+        expect(
+          (await suite.db.execute(sql`select * from outgoing_mail where kind='account_action'`))
+            .rows,
+        ).toHaveLength(1);
     },
   );
 
@@ -2235,7 +2253,6 @@ describe("Management API — fresh sign-in for people changes", () => {
         lastNames: "Person",
         telephone: "+44 20 1234",
         email: "  CLERK@X.COM  ",
-        role: "staff",
         status: "active",
       }),
     });
@@ -2792,7 +2809,6 @@ describe("A998 admin account authority", () => {
         lastNames: "Owner",
         telephone: null,
         email: "manager-controlled@example.test",
-        role: "admin",
         status: "active",
       }),
     });
@@ -2833,7 +2849,7 @@ describe("A998 admin account authority", () => {
       signIn: signedIn.status,
     }).toEqual({ edit: 403, reset: 202, delivered: 0, completion: null, signIn: 401 });
     expect(await changed.json()).toMatchObject({
-      error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+      error: { code: "person.holds_more", params: { personId: admin!.id } },
     });
     expect(await signedIn.json()).toMatchObject({ error: { code: "password.invalid" } });
     expect(
@@ -2859,6 +2875,7 @@ describe("A998 staff route authority", () => {
     "refuses a manager's $action on a $role before any change or email",
     async ({ action, status, role }) => {
       const { staffId } = await setupTenant();
+      if (role === "staff") await withTransaction(suite.db, removeManagerPersonAdmin);
       await setBuiltInRoleForTest(suite.db, staffId, role as "admin" | "staff");
       await suite.db
         .update(persons)
@@ -2877,7 +2894,10 @@ describe("A998 staff route authority", () => {
       });
       expect(response.status).toBe(403);
       expect(await response.json()).toMatchObject({
-        error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+        error:
+          role === "admin"
+            ? { code: "person.holds_more", params: { personId: staffId } }
+            : { code: "authorization.not_permitted", params: { permission: "person.admin" } },
       });
       await app.flushMail();
       expect(sent).toEqual([]);
@@ -2896,12 +2916,12 @@ describe("A998 staff route authority", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify(
-        invitationBody("New Admin", "new-admin@example.test", { role: "admin" }),
+        invitationBody("New Admin", "new-admin@example.test", { roleIds: [builtIns.admin] }),
       ),
     });
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({
-      error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+      error: { code: "role.not_permitted", params: { roleId: builtIns.admin } },
     });
     expect(await countPersonsNamed("New Admin")).toBe(0);
     await app.flushMail();
@@ -2909,7 +2929,7 @@ describe("A998 staff route authority", () => {
   });
 });
 
-it("rechecks admin authority lost after the invitation preflight", async () => {
+it("rechecks person.admin authority lost after the invitation preflight", async () => {
   const { staffId } = await setupTenant();
   await suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, staffId));
   const sent: Parameters<MailSink>[0][] = [];
@@ -2935,6 +2955,7 @@ it("rechecks admin authority lost after the invitation preflight", async () => {
           )[0]!.id,
           "manager",
         );
+        await removeManagerPersonAdmin(tx);
       }).then(() => original(body));
     }
     return original(body);
@@ -2972,13 +2993,11 @@ it("refuses a manager suspending an admin through details with the same email", 
   const response = await app.request(`/management-api/staff/${staffId}`, {
     method: "PUT",
     headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify(
-      invitationBody("Existing Admin", STAFF_EMAIL, { role: "admin", status: "suspended" }),
-    ),
+    body: JSON.stringify(invitationBody("Existing Admin", STAFF_EMAIL, { status: "suspended" })),
   });
   expect(response.status).toBe(403);
   expect(await response.json()).toMatchObject({
-    error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+    error: { code: "person.holds_more", params: { personId: staffId } },
   });
   expect(await suite.db.select().from(persons).where(eq(persons.id, staffId))).toEqual(before);
 });
@@ -3003,18 +3022,20 @@ it("keeps the original invitation usable after promotion to Supervisor and Admin
   await app.flushMail();
   expect(sent).toHaveLength(1);
   const oldToken = new URL(sent[0]!.actionUrl).searchParams.get("token")!;
-  const supervised = await app.request(`/management-api/staff/${id}`, {
+  const supervised = await app.request(`/management-api/staff/${id}/access-roles`, {
     method: "PUT",
     headers: { cookie: adminCookie, "content-type": "application/json" },
-    body: JSON.stringify({ ...body, role: "supervisor", status: "pending" }),
+    body: JSON.stringify({ roleIds: [builtIns.supervisor], expectedRoleIds: [builtIns.staff] }),
   });
-  expect(supervised.status).toBe(204);
-  const promoted = await app.request(`/management-api/staff/${id}`, {
+  expect(supervised.status).toBe(200);
+  expect(await builtInRoleForTest(suite.db, id)).toBe("supervisor");
+  const promoted = await app.request(`/management-api/staff/${id}/access-roles`, {
     method: "PUT",
     headers: { cookie: adminCookie, "content-type": "application/json" },
-    body: JSON.stringify({ ...body, role: "admin", status: "pending" }),
+    body: JSON.stringify({ roleIds: [builtIns.admin], expectedRoleIds: [builtIns.supervisor] }),
   });
-  expect(promoted.status).toBe(204);
+  expect(promoted.status).toBe(200);
+  expect(await builtInRoleForTest(suite.db, id)).toBe("admin");
   const complete = (token: string) =>
     app.request("/management-api/account-actions/complete", {
       method: "POST",
@@ -3056,7 +3077,6 @@ describe("A1000 non-admin account authority", () => {
         lastNames: "Owner",
         telephone: null,
         email: "manager-controlled@example.test",
-        role: "staff",
         status: "active",
       }),
     });
@@ -3097,7 +3117,7 @@ describe("A1000 non-admin account authority", () => {
       signIn: signedIn.status,
     }).toEqual({ edit: 403, reset: 202, delivered: 0, completion: null, signIn: 401 });
     expect(await changed.json()).toMatchObject({
-      error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+      error: { code: "authorization.not_permitted", params: { permission: "person.email" } },
     });
     expect(await signedIn.json()).toMatchObject({ error: { code: "password.invalid" } });
     expect(
@@ -3123,7 +3143,6 @@ it("preserves a manager changing their own email through staff details", async (
     headers: { cookie, "content-type": "application/json" },
     body: JSON.stringify(
       invitationBody("The Manager", "own-replacement@example.test", {
-        role: "manager",
         status: "active",
       }),
     ),
@@ -3298,7 +3317,7 @@ describe("queued invitation answers", () => {
         )!.id;
         expect(
           suite.db.all(
-            sql`select status, requested_by, params from outgoing_mail where person_id=${id}`,
+            sql`select status, requested_by, params from outgoing_mail where person_id=${id} and kind='account_action'`,
           ),
         ).toEqual(
           mode === "unconfigured"

@@ -1,3 +1,4 @@
+import { ensureBuiltInRoles } from "./roles.js";
 import { seedPersons } from "../test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { hashSessionToken } from "./session-token.js";
@@ -15,7 +16,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { invitePerson } from "./staff.js";
 import { saveOwnProfile } from "./profile.js";
-import { openManagementSession, seedManager, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
+import {
+  openFreshManagementSession as openManagementSession,
+  seedManager,
+  seedPerson,
+  TOTP_KEY_RING,
+} from "../test/fixtures.js";
 import { foldForUniqueness } from "./fold.js";
 import { PERSONS_EMAIL, PERSONS_LIVE_DISPLAY_NAME } from "./person-constraints.js";
 import { startManagementSession } from "./management-session.js";
@@ -39,11 +45,11 @@ function create(
   displayName: string,
   email = `${randomUUID()}@example.test`,
 ): Promise<{ id: string }> {
-  return run((tx) =>
+  return run(async (tx) =>
     invitePerson(tx, {
       managementSessionId: token,
       displayName,
-      role: "staff",
+      roleIds: [(await ensureBuiltInRoles(tx)).staff],
       firstNames: "First",
       lastNames: "Last",
       telephone: null,

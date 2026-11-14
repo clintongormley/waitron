@@ -26,7 +26,7 @@ reales. Revisa el estado del correo de cuentas en esta página y el de las factu
 correo**: las cajas de desarrollo guardan las facturas localmente aunque el correo de cuentas use
 el servidor guardado.
 
-En Demostración, usa **Bandeja de correo** en la barra superior. Inicia sesión como administrador
+En Demostración, usa **Bandeja de correo** en la barra superior. Inicia sesión como gerente o administrador
 para abrir los mensajes guardados.
 
 ## Comprueba el resultado de la prueba {#test-results}

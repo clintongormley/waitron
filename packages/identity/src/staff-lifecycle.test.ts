@@ -1,3 +1,5 @@
+import { readPersonAuthority } from "./authority.js";
+import { ensureBuiltInRoles, setPersonAccessRoles } from "./roles.js";
 import { builtInRoleForTest } from "../test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -49,14 +51,14 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 describe("invited person lifecycle", () => {
   it("stores legal and contact details as Pending with no usable PIN", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
-    const { id } = await run((tx) =>
+    const { id } = await run(async (tx) =>
       invitePerson(tx, {
         managementSessionId: token,
         displayName: "  Ada  ",
         firstNames: " Ada ",
         lastNames: " Lovelace ",
         telephone: " +44 20 1234 ",
-        role: "manager",
+        roleIds: [(await ensureBuiltInRoles(tx)).manager],
         email: " ADA@example.com ",
       }),
     );
@@ -91,7 +93,7 @@ describe("invited person lifecycle", () => {
       firstNames: "Alex",
       lastNames: "Smith",
       telephone: null,
-      role: "staff" as const,
+      roleIds: [(await run(ensureBuiltInRoles)).staff],
     };
     await run((tx) =>
       invitePerson(tx, { ...base, displayName: "Alex", email: "alex.one@example.com" }),
@@ -137,14 +139,14 @@ describe("invited person lifecycle", () => {
 
   it("returns the administrative fields without credential material", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
-    const created = await run((tx) =>
+    const created = await run(async (tx) =>
       invitePerson(tx, {
         managementSessionId: token,
         displayName: "Grace",
         firstNames: "Grace Brewster",
         lastNames: "Hopper",
         telephone: null,
-        role: "staff",
+        roleIds: [(await ensureBuiltInRoles(tx)).staff],
         email: "grace@example.com",
       }),
     );
@@ -162,14 +164,14 @@ describe("invited person lifecycle", () => {
 
   it("does not allow a Pending account through normal password or PIN login", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
-    const created = await run((tx) =>
+    const created = await run(async (tx) =>
       invitePerson(tx, {
         managementSessionId: token,
         displayName: "Pending login",
         firstNames: "Pending",
         lastNames: "Login",
         telephone: null,
-        role: "staff",
+        roleIds: [(await ensureBuiltInRoles(tx)).staff],
         email: "pending-login@example.com",
       }),
     );
@@ -192,16 +194,16 @@ describe("invited person lifecycle", () => {
     ).toBe("password.invalid");
   });
 
-  it("updates all administrative details in one operation while preserving Pending", async () => {
+  it("updates administrative details and access roles while preserving Pending", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
-    const created = await run((tx) =>
+    const created = await run(async (tx) =>
       invitePerson(tx, {
         managementSessionId: token,
         displayName: "Edit me",
         firstNames: "Edith",
         lastNames: "Old",
         telephone: null,
-        role: "staff",
+        roleIds: [(await ensureBuiltInRoles(tx)).staff],
         email: "edit-me@example.com",
       }),
     );
@@ -214,8 +216,16 @@ describe("invited person lifecycle", () => {
         lastNames: "New",
         telephone: "+34 600 000 000",
         email: "edie@example.com",
-        role: "supervisor",
         status: "pending",
+      }),
+    );
+    const builtIns = await run(ensureBuiltInRoles);
+    await run((tx) =>
+      setPersonAccessRoles(tx, {
+        managementSessionId: token,
+        personId: created.id,
+        roleIds: [builtIns.supervisor],
+        expectedRoleIds: [builtIns.staff],
       }),
     );
     const roster = await run((tx) => listPersons(tx, { managementSessionId: token }));
@@ -225,7 +235,7 @@ describe("invited person lifecycle", () => {
       lastNames: "New",
       telephone: "+34 600 000 000",
       email: "edie@example.com",
-      role: "supervisor",
+      roleIds: [builtIns.supervisor],
       status: "pending",
     });
   });
@@ -233,26 +243,26 @@ describe("invited person lifecycle", () => {
   it("rejects a malformed telephone on both invite and update, but accepts an absent one", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     await expect(
-      run((tx) =>
+      run(async (tx) =>
         invitePerson(tx, {
           managementSessionId: token,
           displayName: "Bad Phone",
           firstNames: "Bad",
           lastNames: "Phone",
           telephone: "123",
-          role: "staff",
+          roleIds: [(await ensureBuiltInRoles(tx)).staff],
           email: "bad-phone@example.com",
         }),
       ),
     ).rejects.toMatchObject({ code: "person.telephone_invalid" });
-    const created = await run((tx) =>
+    const created = await run(async (tx) =>
       invitePerson(tx, {
         managementSessionId: token,
         displayName: "Good Phone",
         firstNames: "Good",
         lastNames: "Phone",
         telephone: null,
-        role: "staff",
+        roleIds: [(await ensureBuiltInRoles(tx)).staff],
         email: "good-phone@example.com",
       }),
     );
@@ -266,7 +276,6 @@ describe("invited person lifecycle", () => {
           lastNames: "Phone",
           telephone: "12345",
           email: "good-phone@example.com",
-          role: "staff",
           status: "pending",
         }),
       ),
@@ -276,18 +285,24 @@ describe("invited person lifecycle", () => {
   it("does not let the only active admin demote or deactivate themselves", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
     const attempt = (role: "staff" | "admin", status: "active" | "suspended") =>
-      withTransaction(suite.db, (tx) =>
-        updatePersonDetails(tx, {
-          managementSessionId: token,
-          personId: personId.toUpperCase(),
-          displayName: "Owner",
-          firstNames: "Only",
-          lastNames: "Owner",
-          telephone: null,
-          email: "only-owner@example.com",
-          role,
-          status,
-        }),
+      withTransaction(suite.db, async (tx) =>
+        role === "staff"
+          ? setPersonAccessRoles(tx, {
+              managementSessionId: token,
+              personId,
+              roleIds: [(await ensureBuiltInRoles(tx)).staff],
+              expectedRoleIds: [(await ensureBuiltInRoles(tx)).admin],
+            })
+          : updatePersonDetails(tx, {
+              managementSessionId: token,
+              personId: personId.toUpperCase(),
+              displayName: "Owner",
+              firstNames: "Only",
+              lastNames: "Owner",
+              telephone: null,
+              email: "only-owner@example.com",
+              status,
+            }),
       );
     expect(await codeOf(() => attempt("staff", "active"))).toBe("person.last_admin");
     expect(await codeOf(() => attempt("admin", "suspended"))).toBe("person.self_deactivation");
@@ -314,14 +329,14 @@ describe("invited person lifecycle", () => {
 
   it("clears a PIN instead of letting an administrator choose its replacement", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
-    const created = await run((tx) =>
+    const created = await run(async (tx) =>
       invitePerson(tx, {
         managementSessionId: token,
         displayName: "Reset pin",
         firstNames: "Reset",
         lastNames: "Pin",
         telephone: null,
-        role: "staff",
+        roleIds: [(await ensureBuiltInRoles(tx)).staff],
         email: "reset-pin@example.com",
       }),
     );
@@ -335,14 +350,14 @@ describe("invited person lifecycle", () => {
 
   it("reset login returns an account to Pending and removes its login credentials", async () => {
     const actor = await openManagementSession(suite.db, "admin");
-    const target = await withTransaction(suite.db, (tx) =>
+    const target = await withTransaction(suite.db, async (tx) =>
       invitePerson(tx, {
         managementSessionId: actor.token,
         displayName: "Reset login",
         firstNames: "Reset",
         lastNames: "Login",
         telephone: null,
-        role: "manager",
+        roleIds: [(await ensureBuiltInRoles(tx)).manager],
         email: "reset-login@example.com",
       }),
     );
@@ -389,21 +404,16 @@ describe("invited person lifecycle", () => {
     const actor = await openManagementSession(suite.db, "manager");
     expect(
       await codeOf(() =>
-        run((tx) =>
-          updatePersonDetails(tx, {
+        run(async (tx) =>
+          setPersonAccessRoles(tx, {
             managementSessionId: actor.token,
             personId: actor.personId,
-            displayName: "Manager",
-            firstNames: "Manager",
-            lastNames: "Person",
-            telephone: null,
-            email: "manager-promotion@example.com",
-            role: "admin",
-            status: "active",
+            roleIds: [(await ensureBuiltInRoles(tx)).admin],
+            expectedRoleIds: [(await ensureBuiltInRoles(tx)).manager],
           }),
         ),
       ),
-    ).toBe("authorization.not_permitted");
+    ).toBe("role.not_permitted");
   });
 });
 
@@ -444,7 +454,6 @@ function details(
     lastNames: "Person",
     telephone: null,
     email: "edited@example.com",
-    role: "staff",
     status: "active",
     ...overrides,
   };
@@ -464,10 +473,20 @@ describe("updatePersonDetails refusals and side effects", () => {
       const before = (await suite.db.execute(sql`select * from persons where id = ${target}`)).rows;
       const input = details(token, target, {
         email: field === "email" ? "new@example.com" : "kept@example.com",
-        role: field === "role" ? "supervisor" : "staff",
         status: field === "status" ? "suspended" : "active",
       });
-      await expect(run((tx) => updatePersonDetails(tx, input))).rejects.toMatchObject({
+      await expect(
+        run(async (tx) =>
+          field === "role"
+            ? setPersonAccessRoles(tx, {
+                managementSessionId: token,
+                personId: target,
+                roleIds: [(await ensureBuiltInRoles(tx)).supervisor],
+                expectedRoleIds: (await readPersonAuthority(tx, target)).roleIds,
+              })
+            : updatePersonDetails(tx, input),
+        ),
+      ).rejects.toMatchObject({
         code: "management_session.proof_required",
       });
       expect(
@@ -549,7 +568,7 @@ describe("updatePersonDetails refusals and side effects", () => {
     await run((tx) =>
       updatePersonDetails(
         tx,
-        details(token, admin, { displayName: "Only admin", role: "admin", status: "active" }),
+        details(token, admin, { displayName: "Only admin", status: "active" }),
       ),
     );
     const rows = await suite.db.execute<{
@@ -714,14 +733,14 @@ describe("invitePerson required text", () => {
     async (field) => {
       const { token } = await openManagementSession(suite.db, "admin");
       await expect(
-        run((tx) =>
+        run(async (tx) =>
           invitePerson(tx, {
             managementSessionId: token,
             displayName: "Blank",
             firstNames: "Blank",
             lastNames: "Field",
             telephone: null,
-            role: "staff",
+            roleIds: [(await ensureBuiltInRoles(tx)).staff],
             email: "blank@example.com",
             [field]: "   ",
           }),
@@ -775,14 +794,14 @@ describe("a colliding row that lands after the pre-check", () => {
     const before = await personCount();
     await expect(
       withRacerPlanted("insert", () =>
-        run((tx) =>
+        run(async (tx) =>
           invitePerson(tx, {
             managementSessionId: token,
             displayName: "Racer",
             firstNames: "Late",
             lastNames: "Comer",
             telephone: null,
-            role: "staff",
+            roleIds: [(await ensureBuiltInRoles(tx)).staff],
             email: "late@example.com",
           }),
         ),
@@ -798,14 +817,14 @@ describe("a colliding row that lands after the pre-check", () => {
     const { token } = await openManagementSession(suite.db, "admin");
     await expect(
       withRacerPlanted("insert", () =>
-        run((tx) =>
+        run(async (tx) =>
           invitePerson(tx, {
             managementSessionId: token,
             displayName: "Late comer",
             firstNames: "Late",
             lastNames: "Comer",
             telephone: null,
-            role: "staff",
+            roleIds: [(await ensureBuiltInRoles(tx)).staff],
             email: " Racer@Example.com ",
           }),
         ),
@@ -816,14 +835,14 @@ describe("a colliding row that lands after the pre-check", () => {
   it("invitePerson passes a refusal that is not a collision through untranslated", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     const error = await captureError(() =>
-      run((tx) =>
+      run(async (tx) =>
         invitePerson(tx, {
           managementSessionId: token,
           displayName: "\0",
           firstNames: "Bad",
           lastNames: "Role",
           telephone: null,
-          role: "staff",
+          roleIds: [(await ensureBuiltInRoles(tx)).staff],
           email: "bad-role@example.com",
         }),
       ),

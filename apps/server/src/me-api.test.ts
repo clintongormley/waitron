@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { generateSync } from "otplib";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, personRoles, roles, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -45,6 +45,8 @@ vi.mock("node:crypto", async (importOriginal) =>
 // The cross-person identity property is pinned in `me-api.cross-person.test.ts`.
 
 const noopLog: Logger = () => {};
+let staffRoleId: string;
+let managerRoleId: string;
 let me: string;
 let colleague: string;
 let manager: string;
@@ -87,6 +89,9 @@ const suite = useVenueDb({
       locale: "es-ES",
     });
     localed = localedRow!.id;
+    const builtIns = await db.select().from(roles);
+    staffRoleId = builtIns.find((role) => role.builtInKey === "staff")!.id;
+    managerRoleId = builtIns.find((role) => role.builtInKey === "manager")!.id;
   },
 });
 
@@ -208,6 +213,22 @@ async function insertAbsence(personId: string, startsOn: string, endsOn: string)
 }
 
 describe("mountMeApi — whoami", () => {
+  it("keeps a person with no access roles signed in and returns no fixed role", async () => {
+    const [person] = await seedPersons(suite.db, { displayName: "No access role" });
+    await suite.db.delete(personRoles).where(eq(personRoles.personId, person!.id));
+    const response = await send(mountApp(), "GET", "/management-api/session/me", {
+      cookie: await cookieFor(person!.id),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      personId: person!.id,
+      roleIds: [],
+      permissions: [],
+      modules: MODULES,
+    });
+    expect(body).not.toHaveProperty("role");
+  });
   it("GET /management-api/session/me returns identity, locale, venue and module hints for a staff session", async () => {
     const res = await send(mountApp(), "GET", "/management-api/session/me", {
       cookie: await cookieFor(me),
@@ -216,7 +237,7 @@ describe("mountMeApi — whoami", () => {
     expect(
       (await res.json()) as {
         personId: string;
-        role: string;
+        roleIds: string[];
         email: string | null;
         locale: string | null;
         venueLocale: string;
@@ -230,7 +251,7 @@ describe("mountMeApi — whoami", () => {
       },
     ).toEqual({
       personId: me,
-      role: "staff",
+      roleIds: [staffRoleId],
       email: null,
       locale: null,
       venueLocale: VENUE_LOCALE,
@@ -286,7 +307,7 @@ describe("mountMeApi — whoami", () => {
     expect(
       (await res.json()) as {
         personId: string;
-        role: string;
+        roleIds: string[];
         email: string | null;
         locale: string | null;
         venueLocale: string;
@@ -300,7 +321,7 @@ describe("mountMeApi — whoami", () => {
       },
     ).toEqual({
       personId: localed,
-      role: "staff",
+      roleIds: [staffRoleId],
       email: null,
       locale: "es-ES",
       venueLocale: VENUE_LOCALE,
@@ -320,11 +341,11 @@ describe("mountMeApi — whoami", () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      role: string;
+      roleIds: string[];
       permissions: string[];
       modules: string[];
     };
-    expect(body.role).toBe("manager");
+    expect(body.roleIds).toEqual([managerRoleId]);
     expect(body.permissions).toContain("booking.manage");
     expect(body.permissions).not.toContain("node.manage");
     expect(body.modules).toEqual(MODULES);

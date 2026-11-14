@@ -310,7 +310,7 @@ describe("DashboardApi", () => {
       {
         personId: "p1",
         displayName: "Ada",
-        role: "manager",
+        roleIds: ["manager"],
         status: "active",
         hasPassword: true,
         hasTotp: false,
@@ -369,7 +369,7 @@ describe("DashboardApi", () => {
       firstNames: "Beatrice",
       lastNames: "Jones",
       telephone: null,
-      role: "staff",
+      roleIds: ["staff"],
       email: "bea@x.com",
     });
     expect(out).toEqual({ id: "p2", invitationSent: true });
@@ -382,7 +382,7 @@ describe("DashboardApi", () => {
         firstNames: "Beatrice",
         lastNames: "Jones",
         telephone: null,
-        role: "staff",
+        roleIds: ["staff"],
         email: "bea@x.com",
       }),
     });
@@ -458,7 +458,6 @@ describe("DashboardApi", () => {
       lastNames: "Lovelace",
       telephone: "+44 20",
       email: "ada@example.com",
-      role: "admin" as const,
       status: "active" as const,
     };
     await api.savePerson("p1", details);
@@ -1071,7 +1070,7 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
   it("getMe GETs the whoami route and returns the session and venue identity", async () => {
     const body = {
       personId: "p1",
-      role: "staff",
+      roleIds: ["staff"],
       locale: "en-GB",
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
@@ -1090,7 +1089,7 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
   it("getMe surfaces a null stored locale for a person with no preference", async () => {
     const body = {
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       locale: null,
       venueLocale: "es-ES",
       sessionDefault: "es-ES",

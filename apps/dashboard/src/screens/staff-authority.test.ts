@@ -1,3 +1,4 @@
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { afterEach, expect, it, vi } from "vitest";
 import type { WtInput } from "@waitron/ui";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
@@ -15,7 +16,7 @@ const people: PersonSummary[] = [
     lastNames: "Person",
     email: "other@example.test",
     telephone: "+44 20",
-    role: "staff",
+    roleIds: ["staff"],
     status: "pending",
     hasPassword: false,
     hasTotp: false,
@@ -25,11 +26,15 @@ const people: PersonSummary[] = [
 it.each([false, true])(
   "offers account actions only with admin authority (%s)",
   async (canAdminister) => {
-    const api = { listStaff: vi.fn().mockResolvedValue(people) } as unknown as DashboardApi;
+    const api = {
+      listAccessRoles: async () => accessRoleChoices,
+      listStaff: vi.fn().mockResolvedValue(people),
+    } as unknown as DashboardApi;
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
       api,
       currentPersonId: "manager",
       canAdminister,
+      canChangeEmail: canAdminister,
     });
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector<StaffList>("dashboard-staff-list")!.people).toEqual(
@@ -61,13 +66,13 @@ it.each([false, true])(
     await edit.updateComplete;
     const email = edit.shadowRoot!.querySelector<WtInput>("[data-test=edit-email]")!;
     await email.updateComplete;
-    expect(email.shadowRoot!.querySelector("input")!.disabled).toBe(!canAdminister);
-    for (const field of ["role", "status"]) {
-      const input = edit.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-        `[data-test=edit-${field}]`,
+    expect(email.shadowRoot!.querySelector("input")!.readOnly).toBe(!canAdminister);
+    const status =
+      edit.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "[data-test=edit-status]",
       )!;
-      expect(input.disabled).toBe(!canAdminister);
-    }
+    expect(status.disabled).toBe(!canAdminister);
+    expect(edit.shadowRoot!.querySelector("[data-test=access-roles]") !== null).toBe(canAdminister);
     expect(edit.shadowRoot!.querySelector("[data-test=resend-invitation]") !== null).toBe(
       canAdminister,
     );
@@ -89,7 +94,7 @@ it("preserves a manager's own login email control", async () => {
   expect(email.shadowRoot!.querySelector("input")!.disabled).toBe(false);
 });
 
-it.each(["email", "role", "status"])(
+it.each(["email", "status"])(
   "keeps another person's %s control disabled for a manager",
   async (field) => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
@@ -101,7 +106,7 @@ it.each(["email", "role", "status"])(
     const control = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
       `[data-test=edit-${field}]`,
     )!;
-    expect(control.disabled).toBe(true);
+    expect(field === "email" ? (control as WtInput).readonly : control.disabled).toBe(true);
   },
 );
 it("hides invitation resend in a manager's editor", async () => {
@@ -128,15 +133,12 @@ it("offers only editing in a manager's staff row menu", async () => {
   ).toEqual(["edit-other"]);
 });
 
-it("preserves a manager's own role control", async () => {
+it("requires person.admin even for editing your own access roles", async () => {
   const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
-    person: { ...people[0]!, role: "manager", status: "active" },
+    person: { ...people[0]!, roleIds: ["manager"], status: "active" },
     currentPersonId: "other",
     canAdminister: false,
     open: true,
   });
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[data-test=edit-role]")!
-      .disabled,
-  ).toBe(false);
+  expect(el.shadowRoot!.querySelector("[data-test=access-roles]")).toBeNull();
 });

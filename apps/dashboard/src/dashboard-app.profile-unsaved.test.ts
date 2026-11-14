@@ -31,7 +31,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     api: {
       getMe: async () => ({
         personId: "p1",
-        role: "staff",
+        roleIds: ["staff"],
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",

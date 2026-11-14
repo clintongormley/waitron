@@ -1,27 +1,33 @@
 # Usuarios
 
-Usa **Usuarios** para mantener al día los datos del equipo. Solo un administrador puede gestionar
-el acceso de otra persona, para que editar sus datos de contacto no permita entrar en su cuenta.
+Usa **Usuarios** para mantener al día los datos y roles de acceso del equipo. Los roles de acceso
+deciden qué puede hacer cada persona; los puestos la incluyen en el turno y en los dispositivos
+que admiten ese puesto.
 
 ## Nombres y datos de contacto {#staff-details}
 
 Como gerente, abre el menú de una persona y elige **Editar** para cambiar sus nombres y teléfono.
-Su correo es su dirección de acceso, por lo que solo un administrador puede cambiarlo. Lo mismo
-se aplica al rol y al estado de la cuenta.
+Su correo es su dirección de acceso. Cambiar el de otra persona requiere un permiso adicional, que solo tiene Admin de forma predeterminada.
 
 ## Acceso a la cuenta {#account-access}
 
 Mantén al menos un administrador activo que pueda entrar al panel con contraseña, Google o una
 llave de acceso. Un PIN solo permite entrar en la caja.
 
-Como administrador, puedes añadir personas y enviar su invitación, reenviar una invitación,
+Los gerentes pueden añadir personas y enviar su invitación, reenviar una invitación,
 restablecer el PIN o el acceso, y deshabilitar o volver a habilitar cuentas. Restablecer el PIN
 lo borra; la persona elige el nuevo. Restablecer el acceso borra sus credenciales y envía una
 nueva invitación si el correo está configurado; si Waitron no lo permite o no cambia nada,
 consulta [Pérdidas habituales](data-protection.md#breach-losses). Deshabilitar una cuenta también
 borra su PIN, contraseña, llaves de acceso, verificación en dos pasos, códigos de recuperación y
 vínculo con Google. Al volver a habilitarla se envía una nueva
-invitación. Los gerentes no ven estas acciones.
+invitación. Solo puedes cambiar el acceso de otra persona si tienes todos sus permisos.
+
+En **Roles de acceso — lo que puede hacer**, elige los roles necesarios y pulsa **Guardar roles de
+acceso**. Solo puedes dar o quitar un rol si tienes todos sus permisos; los roles bloqueados siguen
+visibles. Una persona **Sin rol de acceso** puede entrar y usar sus páginas personales. Cambiar
+los roles no cancela sus invitaciones ni enlaces para restablecer la contraseña. Guarda los nombres
+y datos de contacto por separado.
 
 Para configurar el envío de estos enlaces, abre [Configuración del correo](email.md#set-up). Si una invitación no llega en unos minutos, revisa el correo no deseado del destinatario y Correo antes de reenviarla: solo funciona el enlace más reciente. Si un reintento indica que no ha cambiado nada, espera un minuto.
 

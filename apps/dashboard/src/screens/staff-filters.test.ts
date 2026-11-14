@@ -1,13 +1,15 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import { StaffScreen } from "./staff-screen.js";
 import { setLocale } from "../i18n/t.js";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 
 type Combobox = HTMLElement & {
   value: string;
+  values: string[];
   options: { value: string; label: string }[];
   updateComplete: Promise<unknown>;
 };
@@ -24,7 +26,7 @@ const people: PersonSummary[] = [
     firstNames: "Ada Augusta",
     lastNames: "Lovelace",
     telephone: "+44 111",
-    role: "admin",
+    roleIds: ["admin"],
     status: "active",
     email: "ada@example.com",
     hasPassword: true,
@@ -36,7 +38,7 @@ const people: PersonSummary[] = [
     firstNames: "Grace",
     lastNames: "Hopper",
     telephone: "+1 222",
-    role: "manager",
+    roleIds: ["manager"],
     status: "pending",
     email: "grace@example.com",
     hasPassword: false,
@@ -48,7 +50,7 @@ const people: PersonSummary[] = [
     firstNames: "Alex",
     lastNames: "Smith",
     telephone: null,
-    role: "staff",
+    roleIds: ["staff"],
     status: "suspended",
     email: "alex@example.com",
     hasPassword: false,
@@ -57,7 +59,10 @@ const people: PersonSummary[] = [
 ];
 
 async function screen(): Promise<StaffScreen> {
-  const api = { listStaff: vi.fn().mockResolvedValue(people) } as unknown as DashboardApi;
+  const api = {
+    listAccessRoles: vi.fn().mockResolvedValue(accessRoleChoices),
+    listStaff: vi.fn().mockResolvedValue(people),
+  } as unknown as DashboardApi;
   const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
     canAdminister: true,
     api,
@@ -101,17 +106,16 @@ it("combines role and status filters and can include inactive users", async () =
   const status = el.shadowRoot!.querySelector<HTMLElement>("[data-test=status-filter]")!;
   await chooseOption(status, "all");
   const role = el.shadowRoot!.querySelector<HTMLElement>("[data-test=role-filter]")!;
-  await chooseOption(role, "staff");
+  await chooseOptions(role, ["staff"]);
   await el.updateComplete;
   expect(shown(el).map((person) => person.displayName)).toEqual(["Inactive Alex"]);
 });
 
-it("lists the role filter's roles alphabetically in the current language, after All roles", async () => {
+it("lists the role filter's roles alphabetically in the current language", async () => {
   setLocale("en-GB");
   const el = await screen();
   const role = el.shadowRoot!.querySelector<Combobox>("[data-test=role-filter]")!;
   expect(role.options.map((option) => option.value)).toEqual([
-    "all",
     "admin",
     "manager",
     "staff",
@@ -123,13 +127,13 @@ it("marks the chosen role's option selected when the options re-render in a diff
   setLocale("en-GB");
   const el = await screen();
   const role = el.shadowRoot!.querySelector<Combobox>("[data-test=role-filter]")!;
-  await chooseOption(role, "manager");
+  await chooseOptions(role, ["manager"]);
   await el.updateComplete;
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
   expect(shown(el).map((person) => person.displayName)).toEqual(["Grace"]);
-  expect(role.value).toBe("manager");
+  expect(role.values).toEqual(["manager"]);
   await role.updateComplete;
   expect(role.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim()).toBe("Encargado");
 });
@@ -150,4 +154,22 @@ it("explains what current users are in a help tooltip beside the status filter",
   const [labelId] = trigger.getAttribute("aria-labelledby")!.split(" ");
   const label = status.shadowRoot!.getElementById(labelId!);
   expect(label?.textContent?.trim()).toBe("Status");
+});
+
+it("filters any selected access role and includes a two-role person once", async () => {
+  const api = {
+    listAccessRoles: vi.fn().mockResolvedValue(accessRoleChoices),
+    listStaff: vi
+      .fn()
+      .mockResolvedValue([{ ...people[0]!, roleIds: ["admin", "manager"] }, people[1]]),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+  await vi.waitFor(() => expect(shown(el)).toHaveLength(2));
+  const roles = el.shadowRoot!.querySelector("[data-test=role-filter]")!;
+  roles.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["admin", "manager"] } }));
+  await el.updateComplete;
+  expect(shown(el).map((person) => person.personId)).toEqual(["1", "2"]);
+  roles.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["admin"] } }));
+  await el.updateComplete;
+  expect(shown(el).map((person) => person.personId)).toEqual(["1"]);
 });

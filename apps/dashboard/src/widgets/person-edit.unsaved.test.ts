@@ -1,9 +1,15 @@
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
-import { DashboardApi, type PersonEditDetails, type PersonSummary } from "../api/client.js";
+import {
+  DashboardApi,
+  type AccessRole,
+  type PersonEditDetails,
+  type PersonSummary,
+} from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
@@ -26,7 +32,7 @@ const person: PersonSummary = {
   lastNames: "Lovelace",
   telephone: null,
   email: "ada@example.com",
-  role: "manager",
+  roleIds: ["manager"],
   status: "active",
   hasPassword: true,
   hasTotp: false,
@@ -38,34 +44,39 @@ class PersonEditApp extends LitElement {
   canManageSchedule = false;
   api = new DashboardApi(
     "",
-    async () =>
+    async (path) =>
       new Response(
-        JSON.stringify({
-          staffRoles: [
-            {
-              id: "waiter",
-              name: "Waiter",
-              colour: "blue",
-              position: 0,
-              holderIds: ["p1"],
-              holderNames: ["Ada"],
-            },
-            {
-              id: "chef",
-              name: "Chef",
-              colour: "red",
-              position: 1,
-              holderIds: [],
-              holderNames: [],
-            },
-          ],
-        }),
+        JSON.stringify(
+          String(path).endsWith("/access-roles")
+            ? accessRoleChoices
+            : {
+                staffRoles: [
+                  {
+                    id: "waiter",
+                    name: "Waiter",
+                    colour: "blue",
+                    position: 0,
+                    holderIds: ["p1"],
+                    holderNames: ["Ada"],
+                  },
+                  {
+                    id: "chef",
+                    name: "Chef",
+                    colour: "red",
+                    position: 1,
+                    holderIds: [],
+                    holderNames: [],
+                  },
+                ],
+              },
+        ),
         { headers: { "content-type": "application/json" } },
       ),
   );
   override render() {
     return html`<dashboard-person-edit
         .canAdminister=${true}
+        .canChangeEmail=${true}
         .canManageSchedule=${this.canManageSchedule}
         .api=${this.api}
         .person=${this.person}
@@ -154,10 +165,7 @@ it("Edit staff normalizes reverted values and leaves clean forms without a quest
   await expect.poll(() => app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
-for (const [name, changed, original] of [
-  ["role", "supervisor", "manager"],
-  ["status", "suspended", "active"],
-] as const) {
+for (const [name, changed, original] of [["status", "suspended", "active"]] as const) {
   it(`Edit staff protects the ${name} selection and its revert`, async () => {
     const { app, form } = await mount();
     const box = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
@@ -226,7 +234,6 @@ it("a completed staff save invalidates a pending discard question and closes onc
     lastNames: "Lovelace",
     telephone: null,
     email: "new@example.com",
-    role: "manager" as const,
     status: "active" as const,
   };
   expect(form.closeSaved(submitted)).toBe(true);
@@ -238,7 +245,7 @@ it("a completed staff save invalidates a pending discard question and closes onc
 it("standalone Edit staff Cancel reports once after its native delayed close", async () => {
   const { el: form } = await mountWidget<HTMLElementTagNameMap["dashboard-person-edit"]>(
     "dashboard-person-edit",
-    { canAdminister: true, person, open: true },
+    { canAdminister: true, canChangeEmail: true, person, open: true },
   );
   await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   let closes = 0;
@@ -344,7 +351,6 @@ it("warns about job-role edits even after the person's details were saved", asyn
       lastNames: "Lovelace",
       telephone: null,
       email: "ada@example.com",
-      role: "manager",
       status: "active",
     }),
   ).toBe(false);
@@ -360,4 +366,45 @@ it("warns about job-role edits even after the person's details were saved", asyn
   await app.updateComplete;
   expect(roles().values).toEqual(["chef"]);
   expect(form.open).toBe(true);
+});
+
+it("protects access-role changes independently of a saved details draft", async () => {
+  const { app, form } = await mount();
+  form.viewerAdmin = true;
+  app.api = Object.assign(new DashboardApi(""), {
+    listAccessRoles: async (): Promise<AccessRole[]> => [
+      { id: "manager", builtInKey: "manager", name: null, permissions: [], holderCount: 1 },
+      { id: "waiter", builtInKey: "staff", name: null, permissions: [], holderCount: 0 },
+    ],
+  });
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  const roles = () =>
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="accessRoles"]')!;
+  await expect.poll(() => roles()?.disabled).toBe(false);
+  await chooseOptions(roles(), ["waiter"]);
+  await form.updateComplete;
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(
+    form.closeSaved({
+      displayName: "Ada",
+      firstNames: "Ada",
+      lastNames: "Lovelace",
+      telephone: null,
+      email: "ada@example.com",
+      status: "active",
+    }),
+  ).toBe(false);
+  const email = emailField(form);
+  email.shadowRoot!.querySelector("input")!.focus();
+  await userEvent.keyboard("{Escape}");
+  const q = await question(app);
+  await expect.poll(() => q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
+  await q.updateComplete;
+  expect(form.open).toBe(true);
+  expect(roles().values).toEqual(["waiter"]);
+  await chooseOptions(roles(), ["manager"]);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });

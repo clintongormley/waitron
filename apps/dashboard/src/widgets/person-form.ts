@@ -17,10 +17,10 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { sameValue } from "./product-editor-model.js";
-import type { DashboardApi, PersonRole } from "../api/client.js";
+import type { AccessRole, DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { roleName, rolesByName } from "../i18n/domain.js";
-import { t } from "../i18n/t.js";
+import { accessRoleName } from "../i18n/domain.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 
 type PersonInput = Parameters<DashboardApi["createPerson"]>[0];
 
@@ -67,12 +67,16 @@ export class PersonForm extends LitElement {
   /** The refused request's `params.field`, when it named one. */
   @property({ attribute: false }) errorField: string | null = null;
 
+  @property({ attribute: false }) accessRoles: AccessRole[] = [];
+  @property({ attribute: false }) viewerPermissions: string[] = [];
+  @property({ type: Boolean }) viewerAdmin = false;
+
   @state() private firstNames = "";
   @state() private lastNames = "";
   @state() private displayName = "";
   @state() private email = "";
   @state() private telephone = "";
-  @state() private selectedRole: PersonRole = "staff";
+  @state() private selectedRoleIds: string[] = [];
   readonly #feedback = new FormFeedback(this);
 
   #scope?: DraftScope<PersonInput>;
@@ -98,6 +102,8 @@ export class PersonForm extends LitElement {
     if (changed.has("error")) this.#feedback.newRefusal();
     if (changed.has("open") && this.open) {
       this.#feedback.reset();
+      const staff = this.#grantableRoles().find((role) => role.builtInKey === "staff");
+      this.selectedRoleIds = staff ? [staff.id] : [];
     }
     if (!this.open) {
       this.#scope?.dispose();
@@ -117,7 +123,7 @@ export class PersonForm extends LitElement {
           this.displayName = value.displayName;
           this.email = value.email;
           this.telephone = value.telephone ?? "";
-          this.selectedRole = value.role;
+          this.selectedRoleIds = [...value.roleIds];
         },
       });
       this.#leave = coordinator;
@@ -206,7 +212,7 @@ export class PersonForm extends LitElement {
       displayName: this.displayName.trim(),
       email: this.email.trim(),
       telephone: this.telephone.trim() || null,
-      role: this.selectedRole,
+      roleIds: [...new Set(this.selectedRoleIds)].sort(),
     };
   }
 
@@ -244,8 +250,17 @@ export class PersonForm extends LitElement {
     this.displayName = "";
     this.email = "";
     this.telephone = "";
-    this.selectedRole = "staff";
+    this.selectedRoleIds = [];
     this.#feedback.reset();
+  }
+
+  #grantableRoles(): AccessRole[] {
+    return this.accessRoles.filter(
+      (role) =>
+        this.viewerAdmin ||
+        (role.builtInKey !== "admin" &&
+          role.permissions.every((permission) => this.viewerPermissions.includes(permission))),
+    );
   }
 
   override render() {
@@ -276,17 +291,21 @@ export class PersonForm extends LitElement {
         <wt-combobox
           class="field"
           name="role"
-          label=${t("person.role")}
-          required
+          label=${t("person.access_roles")}
+          multiple
+          placeholder=${t("person.no_access_role")}
+          .countLabel=${(count: number) => fill("person.access_roles_selected", { count: String(count) })}
           ?disabled=${this.busy}
           search="auto"
           searchPlaceholder=${t("categories.combobox_search")}
           noResultsLabel=${t("categories.combobox_no_results")}
-          .options=${rolesByName().map((role) => ({ value: role, label: roleName(role) }))}
-          .value=${this.selectedRole}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          .options=${this.#grantableRoles()
+            .map((role) => ({ value: role.id, label: accessRoleName(role) }))
+            .sort((a, b) => a.label.localeCompare(b.label, currentLocale()))}
+          .values=${this.selectedRoleIds}
+          @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
             event.stopPropagation();
-            this.selectedRole = event.detail.value as PersonRole;
+            this.selectedRoleIds = [...event.detail.values];
             this.#scope?.changed();
           }}
         ></wt-combobox>

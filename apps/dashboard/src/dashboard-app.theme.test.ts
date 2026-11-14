@@ -124,7 +124,7 @@ function signedInApi(locale: Locale = "en-GB"): DashboardApi {
     ...stubApi(locale),
     getMe: vi.fn().mockResolvedValue({
       personId: "p2",
-      role: "staff",
+      roleIds: ["staff"],
       locale,
       venueLocale: locale,
       sessionDefault: locale,
