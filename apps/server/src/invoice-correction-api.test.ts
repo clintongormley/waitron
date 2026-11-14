@@ -178,7 +178,6 @@ async function opened(saleId: string): Promise<string> {
   return (answer.json as { correction: { id: string } }).correction.id;
 }
 
-/** Replaces the invoice `saleId` through the core writer, as the replacement remedy will. */
 /** Replaces the bill as the administrator would once AEAT has refused it. */
 function replace(saleId: SaleId): Promise<SaleId> {
   return inTx(venue, async (tx) => {
