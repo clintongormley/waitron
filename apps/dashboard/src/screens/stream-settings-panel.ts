@@ -4,7 +4,7 @@ import { isPlainWebAddress } from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -226,7 +226,7 @@ export class StreamSettingsPanel extends LitElement {
   @state() private settings?: StreamSettingsView;
   @state() private draft: StreamBucketBody = { ...EMPTY };
   @state() private editing = false;
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   /** Fields the server refused, each shown until the owner changes it. */
   @state() private refused: Partial<Record<Field, string>> = {};
   @state() private submitting = false;
@@ -329,8 +329,9 @@ export class StreamSettingsPanel extends LitElement {
           : named === "endpoint"
             ? "stream.form.endpoint_invalid"
             : undefined;
+      this.#feedback.newRefusal();
       this.refused = { [named]: t(key ?? "stream.field.check") };
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.failure = failureOf(error);
@@ -367,17 +368,17 @@ export class StreamSettingsPanel extends LitElement {
   }
 
   #resetForm(): void {
-    this.attempted = false;
+    this.#feedback.reset();
     this.refused = {};
   }
 
   /** False when the draft has a problem, which it marks, or a request is already running. */
   #ready(): boolean {
     this.#clearMessages();
-    this.attempted = true;
+    this.#feedback.press();
     this.refused = {};
     if (Object.keys(this.#validate()).length === 0) return !this.submitting;
-    void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+    void this.#feedback.focus(this.shadowRoot!);
     return false;
   }
 
@@ -625,8 +626,8 @@ export class StreamSettingsPanel extends LitElement {
 
   #renderForm(canCancel: boolean): TemplateResult {
     const save = () => this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]");
-    const checked = this.attempted ? this.#validate() : {};
-    const errors = { ...this.refused, ...checked };
+    const checked = this.#feedback.attempted ? this.#validate() : {};
+    const errors = { ...this.#feedback.remaining(this.refused), ...checked };
     const marked = FIELDS.some((f) => errors[f.field] !== undefined);
     const invalid = Object.keys(checked).length > 0;
     const saveAction = saveActionState(this.#scope);
@@ -690,9 +691,7 @@ export class StreamSettingsPanel extends LitElement {
         event.stopPropagation();
         this.draft = { ...this.draft, [f.field]: event.detail.value };
         this.#scope?.changed();
-        const refused = { ...this.refused };
-        delete refused[f.field];
-        this.refused = refused;
+        this.#feedback.dismiss(f.field);
         this.testPassed = false;
       }}
       >${
