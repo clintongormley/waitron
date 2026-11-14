@@ -995,6 +995,11 @@ the A1018 plan, not run.
     a spare that was off or unreachable is caught up within about 35 seconds of answering again (one
     retry wait and one check), and nobody acts on it. The confirmed digest lives in memory only, so
     every start of the main box sends once: no column, no migration.
+    **Changed 2026-11-14 after the pre-merge review:** the confirmed digest is also forgotten at any
+    failed send, the same settings are sent again every 5 minutes while nothing changes, the waits
+    run on a clock that only moves forward, and a file holding no recovery key is not sent. The
+    route reads the chart only once the whole body has arrived, takes one request at a time, and
+    refuses a body over 64 KiB.
   - **(iv) Before the point of no return: the check already exists, so none is added.** It is the
     offer's comparison: the spare compares the two digests when the offer arrives
     (`handover-destination-api.ts:134-140`), and the main box steps down only after that answer
