@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./person-form.js";
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import type { PersonForm } from "./person-form.js";
 
 // Open the modal before running axe so its controls enter the accessibility tree.
@@ -10,7 +11,7 @@ describe.each(["light", "dark"] as const)("person-form a11y (%s theme)", (theme)
   it("renders accessibly when open", async () => {
     const { el, host } = await mountWidget<PersonForm>(
       "dashboard-person-form",
-      { open: true },
+      { open: true, accessRoles: accessRoleChoices, viewerAdmin: true },
       theme,
     );
     const wtDialog = el.shadowRoot!.querySelector("wt-modal")!;
@@ -27,7 +28,7 @@ describe.each(["light", "dark"] as const)("person-form a11y (%s theme)", (theme)
   it("with Create quiet and then ready", async () => {
     const { el, host } = await mountWidget<PersonForm>(
       "dashboard-person-form",
-      { open: true },
+      { open: true, accessRoles: accessRoleChoices, viewerAdmin: true },
       theme,
     );
     await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;

@@ -1,12 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { roleName } from "../i18n/domain.js";
 import { t, currentLocale, setLocale } from "../i18n/t.js";
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { PersonForm } from "./person-form.js";
 
 afterEach(cleanupWidgets);
+
+function mountForm(props: Partial<PersonForm>) {
+  return mountWidget<PersonForm>("dashboard-person-form", {
+    accessRoles: accessRoleChoices,
+    viewerAdmin: true,
+    ...props,
+  });
+}
 
 async function openedDialog(el: PersonForm): Promise<HTMLDialogElement> {
   const dialog = el.shadowRoot!.querySelector("wt-modal")!;
@@ -50,7 +59,8 @@ async function fillRequired(el: PersonForm): Promise<void> {
 }
 
 type RoleBox = HTMLElement & {
-  value: string;
+  values: string[];
+  multiple: boolean;
   label: string;
   required: boolean;
   search: string;
@@ -70,7 +80,7 @@ async function shownRole(el: PersonForm): Promise<string | undefined> {
 
 describe("person-form", () => {
   it("is headed Añadir usuario and confirms with Guardar", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await openedDialog(el);
     expect([
       el.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading"),
@@ -78,13 +88,14 @@ describe("person-form", () => {
     ]).toEqual(["Añadir usuario", "Guardar"]);
   });
 
-  it("picks the role from a required shared dropdown, starting on staff", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+  it("picks multiple access roles from an optional shared dropdown, starting on staff", async () => {
+    const { el } = await mountForm({ open: true });
     await openedDialog(el);
     const box = roleBox(el);
     expect(box).not.toBeNull();
-    expect(box.label).toBe(t("person.role", "es-ES"));
-    expect(box.required).toBe(true);
+    expect(box.label).toBe(t("person.access_roles", "es-ES"));
+    expect(box.required).toBe(false);
+    expect(box.multiple).toBe(true);
     expect(box.search).toBe("auto");
     expect(box.options).toEqual(
       ["admin", "staff", "manager", "supervisor"].map((role) => ({
@@ -92,21 +103,45 @@ describe("person-form", () => {
         label: roleName(role, "es-ES"),
       })),
     );
-    expect(box.value).toBe("staff");
+    expect(box.values).toEqual(["staff"]);
     expect(await shownRole(el)).toBe(roleName("staff", "es-ES"));
     await fillRequired(el);
-    await chooseOption(box, "supervisor");
+    await chooseOptions(box, ["staff", "supervisor"]);
     const created = new Promise<CustomEvent>((resolve) =>
       el.addEventListener("create-person", (event) => resolve(event as CustomEvent), {
         once: true,
       }),
     );
     confirmOf(el).click();
-    expect((await created).detail.role).toBe("supervisor");
+    expect((await created).detail.roleIds).toEqual(["staff", "supervisor"]);
+  });
+
+  it("offers only roles the viewer can grant, and submits an empty selection", async () => {
+    const { el } = await mountForm({ viewerAdmin: false, viewerPermissions: ["payment.take"] });
+    el.open = true;
+    await el.updateComplete;
+    const box = roleBox(el);
+    expect(box.options.map((option) => option.value)).toEqual(["staff"]);
+    await chooseOptions(box, []);
+    await fillRequired(el);
+    const created = new Promise<CustomEvent>((resolve) =>
+      el.addEventListener("create-person", (event) => resolve(event as CustomEvent), {
+        once: true,
+      }),
+    );
+    confirmOf(el).click();
+    expect((await created).detail.roleIds).toEqual([]);
+    expect(await shownRole(el)).toBe(t("person.no_access_role"));
+  });
+
+  it("starts without a role when the viewer cannot grant Staff", async () => {
+    const { el } = await mountForm({ open: true, viewerAdmin: false, viewerPermissions: [] });
+    expect(roleBox(el).values).toEqual([]);
+    expect(roleBox(el).options).toEqual([]);
   });
 
   it("stacks contact fields above a divider and the role selector", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await openedDialog(el);
     const fields = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".field")];
     expect(
@@ -123,7 +158,7 @@ describe("person-form", () => {
   });
 
   it("opens only when requested and offers every role", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", {});
+    const { el } = await mountForm({});
     expect((await openedDialog(el)).open).toBe(false);
     el.open = true;
     await el.updateComplete;
@@ -140,23 +175,26 @@ describe("person-form", () => {
     );
   });
 
-  it("starts a new person as staff even though another role is listed first", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+  it("starts a new person as staff by its built-in key even though another role is listed first", async () => {
+    const { el } = await mountForm({
+      open: true,
+      accessRoles: accessRoleChoices.map((role) => ({ ...role, id: `access-${role.id}` })),
+    });
     await openedDialog(el);
     const select = roleBox(el);
-    expect(select.options[0]!.value).not.toBe("staff");
-    expect(select.value).toBe("staff");
+    expect(select.options[0]!.value).not.toBe("access-staff");
+    expect(select.values).toEqual(["access-staff"]);
     expect(await shownRole(el)).toBe(roleName("staff", "es-ES"));
   });
 
   it("emits trimmed account details without asking the administrator for a PIN", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "first-names", "  Ada Augusta ");
     change(el, "last-names", " Lovelace ");
     change(el, "display-name", " Ada ");
     change(el, "email", " ADA@example.com ");
     change(el, "telephone", " +44 20 1234 ");
-    await chooseOption(roleBox(el), "manager");
+    await chooseOptions(roleBox(el), ["manager"]);
     await el.updateComplete;
 
     const created = new Promise<CustomEvent>((resolve) =>
@@ -172,7 +210,7 @@ describe("person-form", () => {
       displayName: "Ada",
       email: "ADA@example.com",
       telephone: "+44 20 1234",
-      role: "manager",
+      roleIds: ["manager"],
     });
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
@@ -180,7 +218,7 @@ describe("person-form", () => {
   });
 
   it("uses both names as the display-name default until that field is edited", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "first-names", "Alex Maria");
     change(el, "last-names", "Ramos");
     await el.updateComplete;
@@ -192,7 +230,7 @@ describe("person-form", () => {
   });
 
   it("fills the display name in from both names", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "first-names", "Clinton");
     change(el, "last-names", "Gormley");
     await el.updateComplete;
@@ -200,7 +238,7 @@ describe("person-form", () => {
   });
 
   it("stops following the names once the display name is edited", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "first-names", "Clinton");
     change(el, "display-name", "Clint");
     change(el, "last-names", "Gormley");
@@ -209,7 +247,7 @@ describe("person-form", () => {
   });
 
   it("resumes generating the display name once it is cleared again", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "first-names", "Alex");
     change(el, "last-names", "Ramos");
     await el.updateComplete;
@@ -227,7 +265,7 @@ describe("person-form", () => {
   });
 
   it("rejects a malformed telephone beside the field and blocks Save, then submits a valid one", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "first-names", "Ada");
     change(el, "last-names", "Lovelace");
     change(el, "display-name", "Ada");
@@ -253,7 +291,7 @@ describe("person-form", () => {
   });
 
   it("explains every missing required field under it, with one message at the bottom of the form and Save disabled", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "telephone", "+34 600 000 000");
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
@@ -272,7 +310,7 @@ describe("person-form", () => {
   });
 
   it("gives every field a semantic name and marks telephone optional", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     const fields = [...el.shadowRoot!.querySelectorAll("wt-input")].map((field) => {
       const input = field.shadowRoot!.querySelector("input")!;
       return { name: input.name, required: input.required, autocomplete: input.autocomplete };
@@ -287,7 +325,7 @@ describe("person-form", () => {
   });
 
   it("keeps entered values on a server error and clears them after Cancel", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", {
+    const { el } = await mountForm({
       open: true,
       error: "connection.failed",
     });
@@ -316,7 +354,7 @@ describe("person-form", () => {
 
 describe("person-form server refusals", () => {
   it("puts a taken display name beside its field, leaving Save working, until it is edited", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     el.error = "person.display_name_taken";
     await el.updateComplete;
@@ -333,7 +371,7 @@ describe("person-form server refusals", () => {
   });
 
   it("keeps any other server refusal in the bottom message alone, leaving Save working", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     el.error = "connection.failed";
     await el.updateComplete;
@@ -349,7 +387,7 @@ describe("person-form server refusals", () => {
   ])(
     "puts %s under the %s field, leaving Create working, until it is edited",
     async (code, testId) => {
-      const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+      const { el } = await mountForm({ open: true });
       await fillRequired(el);
       change(el, "telephone", "12");
       await el.updateComplete;
@@ -368,7 +406,7 @@ describe("person-form server refusals", () => {
   );
 
   it("puts a refusal whose params name a shown field under that field, leaving Save working", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     el.errorField = "lastNames";
     el.error = "profile.invalid";
@@ -379,7 +417,7 @@ describe("person-form server refusals", () => {
   });
 
   it("keeps a refusal whose params name no single shown field in the bottom message", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     el.errorField = "displayName|firstNames|lastNames|role|telephone";
     el.error = "management.request_invalid";
@@ -392,7 +430,7 @@ describe("person-form server refusals", () => {
   });
 
   it("focuses the email field when a refusal naming it arrives", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     el.error = "person.email_taken";
     await el.updateComplete;
@@ -403,7 +441,7 @@ describe("person-form server refusals", () => {
   });
 
   it("keeps a taken display name beside its field when another field fails its check", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     el.error = "person.display_name_taken";
     await el.updateComplete;
@@ -423,7 +461,7 @@ describe("person-form server refusals", () => {
   });
 
   it("still sends an Add whose own checks pass, for the server to judge the name again", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     el.error = "person.display_name_taken";
     await el.updateComplete;
@@ -437,7 +475,7 @@ describe("person-form server refusals", () => {
   });
 
   it("clears a taken display name when a name change regenerates it", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "first-names", "Ada");
     change(el, "last-names", "Lovelace");
     change(el, "email", "ada@example.com");
@@ -452,7 +490,7 @@ describe("person-form server refusals", () => {
   });
 
   it("keeps a taken display name when a name change leaves a customised one alone", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     el.error = "person.display_name_taken";
     await el.updateComplete;
@@ -467,7 +505,7 @@ describe("person-form server refusals", () => {
 
 describe("person-form validation and keyboard submit", () => {
   it("says nothing about errors before the first submission, and Create works", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "email", "ada@");
     await el.updateComplete;
 
@@ -477,7 +515,7 @@ describe("person-form validation and keyboard submit", () => {
   });
 
   it("on an invalid submission focuses the first invalid field and keeps what was typed", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "first-names", "Ada");
     await el.updateComplete;
     confirmOf(el).click();
@@ -494,7 +532,7 @@ describe("person-form validation and keyboard submit", () => {
   });
 
   it("re-checks every change after a failed submission, and Create works again once all are fixed", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "first-names", "Ada");
     change(el, "last-names", "Lovelace");
     change(el, "display-name", "Ada");
@@ -521,7 +559,7 @@ describe("person-form validation and keyboard submit", () => {
   });
 
   it("focuses the display name when a refusal naming it arrives", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     el.error = "person.display_name_taken";
     await el.updateComplete;
@@ -532,7 +570,7 @@ describe("person-form validation and keyboard submit", () => {
   });
 
   it("drops a refusal that names no field when the form is submitted again", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", {
+    const { el } = await mountForm({
       open: true,
       error: "connection.failed",
     });
@@ -547,7 +585,7 @@ describe("person-form validation and keyboard submit", () => {
   });
 
   it("shows a refusal and the generic sentence together when both apply", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "telephone", "+34 600 000 000");
     await el.updateComplete;
     confirmOf(el).click();
@@ -558,7 +596,7 @@ describe("person-form validation and keyboard submit", () => {
   });
 
   it("starts again when reopened: no messages, Create quiet until an edit and then working", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     change(el, "telephone", "+34 600 000 000");
     await el.updateComplete;
     confirmOf(el).click();
@@ -577,7 +615,7 @@ describe("person-form validation and keyboard submit", () => {
   });
 
   it("rejects a malformed email beside the field without emitting create-person", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     change(el, "email", "ada@example");
     await el.updateComplete;
@@ -594,7 +632,7 @@ describe("person-form validation and keyboard submit", () => {
   });
 
   it("submits on Enter in a field, sending a blank telephone as null", async () => {
-    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const { el } = await mountForm({ open: true });
     await fillRequired(el);
     const events: CustomEvent[] = [];
     el.addEventListener("create-person", (event) => events.push(event as CustomEvent));
@@ -617,7 +655,7 @@ describe("person-form validation and keyboard submit", () => {
         displayName: "Ada",
         email: "ada@example.com",
         telephone: null,
-        role: "staff",
+        roleIds: ["staff"],
       },
     ]);
   });
