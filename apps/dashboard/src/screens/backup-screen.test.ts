@@ -1665,6 +1665,38 @@ describe("backup-screen retention boxes", () => {
     return el;
   }
 
+  it("a blank time of day sends nothing: the field says why, focus moves to it, and Apply waits until it is filled", async () => {
+    const api = stubApi();
+    const el = await readyToApply(api);
+    await chooseOption(q(el, "[data-test=time-mode]")!, "fixed");
+    await el.updateComplete;
+    const at = q(el, "[data-test=at-time]") as WtInput;
+    expect(at.required).toBe(true);
+    setInput(el, "[data-test=at-time]", "");
+    await el.updateComplete;
+
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(at.error).toBe(t("backup.schedule.at_required"));
+    expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.activeElement).toBe(at);
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(true);
+
+    setInput(el, "[data-test=at-time]", "04:15");
+    await el.updateComplete;
+    expect(at.error).toBe("");
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(false);
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+    expect(api.applyBackup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schedule: { kind: "wall-clock", days: "daily", at: { hour: 4, minute: 15 } },
+      }),
+    );
+  });
+
   it("a blank box sends nothing: the box says why, focus moves to it, and Apply waits until it is filled", async () => {
     const api = stubApi();
     const el = await readyToApply(api);

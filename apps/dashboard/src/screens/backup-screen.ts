@@ -622,8 +622,12 @@ export class BackupScreen extends LitElement {
     return parseRetention(this.retainCount) === null || parseRetention(this.retainDays) === null;
   }
 
+  get #timeMissing(): boolean {
+    return this.timeMode === "fixed" && !/^\d{2}:\d{2}/.test(this.atTime);
+  }
+
   get #policyHeld(): boolean {
-    return this.attempted && this.#retentionInvalid;
+    return this.attempted && (this.#retentionInvalid || this.#timeMissing);
   }
 
   get #folderMissing(): boolean {
@@ -699,7 +703,7 @@ export class BackupScreen extends LitElement {
     this.folderRefused = false;
     this.customRefused = null;
     this.formRefusal = null;
-    if (!this.#retentionInvalid && !this.#destinationInvalid) return true;
+    if (!this.#retentionInvalid && !this.#timeMissing && !this.#destinationInvalid) return true;
     this.#focusFirstInvalidBox();
     return false;
   }
@@ -1808,6 +1812,8 @@ export class BackupScreen extends LitElement {
               data-test="at-time"
               name="at-time"
               label=${t("backup.schedule.at")}
+              required
+              error=${this.attempted && this.#timeMissing ? t("backup.schedule.at_required") : ""}
               .value=${this.atTime}
               @keydown=${(event: KeyboardEvent) => this.#submitOnEnter(event)}
               @wt-change=${(e: CustomEvent<{ value: string }>) => (this.atTime = e.detail.value)}
