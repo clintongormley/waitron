@@ -1013,7 +1013,7 @@ describe("a handheld's More", () => {
     },
   );
 
-  it("a till's More and name menu are unchanged", async () => {
+  it("a till's More offers its actions and the name menu keeps the clock actions", async () => {
     const locale = currentLocale();
     setLocale("en-GB");
     await atViewport(1280, async () => {

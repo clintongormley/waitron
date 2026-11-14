@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { leaveCoordinatorFor, type WtButton } from "@waitron/ui";
 import { clockApp, signIn, working, shellAction } from "../test/clock-app.js";
@@ -7,6 +7,7 @@ import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 
 import { SessionActivity } from "./session-activity.js";
+import { ServerRouter } from "./api/server-router.js";
 
 const locale = currentLocale();
 afterEach(() => {
@@ -73,26 +74,52 @@ it("Cancel discards the report without asking; disconnect disposes its draft and
   expect(data(preview(reopened)).id).not.toBe(previous);
 });
 
-it("idle sign-out drops the report and its draft without asking before the next person can see it", async () => {
-  const activity = new SessionActivity();
-  const configured = vi.spyOn(activity, "configure");
-  const { el } = await clockApp({ enabled: false, props: { sessionActivity: activity } });
-  await signIn(el);
-  await working(el);
-  await shellAction(el, "[data-report-problem]");
-  const report = reportOf(el);
-  const dialog = report.shadowRoot!.querySelector("wt-report-dialog")!;
-  await expect.poll(() => dialog.open).toBe(true);
-  await editReport(dialog, "Previous operator note");
-  const previousId = data(preview(dialog)).id;
-  configured.mock.calls.at(-1)![0].onIdle();
-  await expect.poll(() => el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
-  await expect.poll(() => dialog.open).toBe(false);
-  expect(dialog.description).toBe("");
-  expect(dialog.preview).toBe("");
-  expect(leaveCoordinatorFor(report)!.isDirty()).toBe(false);
-  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  const fresh = await openStrip(el);
-  expect(fresh.description).toBe("");
-  expect(data(preview(fresh)).id).not.toBe(previousId);
-});
+it.each(["idle", "server-change", "device-revoked"] as const)(
+  "%s drops the report and its draft without asking before the next person can see it",
+  async (ending) => {
+    const activity = new SessionActivity();
+    const configured = vi.spyOn(activity, "configure");
+    const router = new ServerRouter({
+      origin: location.origin,
+      fetchImpl: vi.fn().mockRejectedValue(new Error("Offline")),
+      storage: { getItem: () => null, setItem: () => {} },
+    });
+    onTestFinished(() => router.stop());
+    const { el, api } = await clockApp({
+      enabled: false,
+      props: { sessionActivity: activity, router },
+    });
+    await signIn(el);
+    await working(el);
+    await shellAction(el, "[data-report-problem]");
+    const report = reportOf(el);
+    const dialog = report.shadowRoot!.querySelector("wt-report-dialog")!;
+    await expect.poll(() => dialog.open).toBe(true);
+    await editReport(dialog, "Previous operator note");
+    const previousId = data(preview(dialog)).id;
+    if (ending === "idle") configured.mock.calls.at(-1)![0].onIdle();
+    else if (ending === "server-change")
+      router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: "a", to: "b" } }));
+    else {
+      api.getDeviceIdentity.mockRejectedValue({ code: "device.unauthorized" });
+      el.shadowRoot!.querySelector("till-shell")!.dispatchEvent(
+        new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
+      );
+    }
+    await expect
+      .poll(() =>
+        el.shadowRoot!.querySelector(
+          ending === "device-revoked" ? "till-enrol-screen" : "till-lock-screen",
+        ),
+      )
+      .not.toBeNull();
+    await expect.poll(() => dialog.open).toBe(false);
+    expect(dialog.description).toBe("");
+    expect(dialog.preview).toBe("");
+    expect(leaveCoordinatorFor(report)!.isDirty()).toBe(false);
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    const fresh = await openStrip(el);
+    expect(fresh.description).toBe("");
+    expect(data(preview(fresh)).id).not.toBe(previousId);
+  },
+);

@@ -9326,6 +9326,7 @@ export class TillApp extends LitElement {
    * device forgets it and gets the picker, unless the device list fails to load).
    */
   async #onDeviceUnauthorized(): Promise<void> {
+    this.shadowRoot?.querySelector<TillProblemReport>("till-problem-report")?.close();
     this.#pauseLive();
     this.#live = undefined;
     this.makeNow = [];
@@ -19595,6 +19596,7 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.shadowRoot?.querySelector<TillProblemReport>("till-problem-report")?.close();
     this.#counterRefreshRequest++;
     this.#basketRefreshing = undefined;
     this.#closeDeviceZones();
@@ -21298,7 +21300,6 @@ export class TillApp extends LitElement {
 
   /** Keeps the basket: it belongs to the till. */
   async #onLogout(endServerSession = true): Promise<void> {
-    this.shadowRoot?.querySelector<TillProblemReport>("till-problem-report")?.close();
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.#tableToResume =
