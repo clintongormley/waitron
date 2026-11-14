@@ -76,3 +76,6 @@ and till mounts retain their 409 cases. This corrects the earlier call-chain ass
 
 **Review correction size:** catch-up adds one runner delay property and changes the initial due value;
 boot registration moves after the last startup step. The restart test adds about 30 lines; no new storage.
+
+**Watcher 19:29:** a box first becoming primary also catches up on its first eligible housekeeping
+turn. Startup/upgrade catch-up uses the same measured 500-row batches; no year-sized backlog was measured.

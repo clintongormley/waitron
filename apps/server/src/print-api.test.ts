@@ -2643,7 +2643,7 @@ describe("mountPrintApi — management: recent jobs", () => {
     const printerId = await createUsbPrinter(app, "WAITRON-DEMO-PRINTER", "Demo printer");
     await enqueue(printerId, esc(WIDE).line("Kitchen ticket").bytes());
     const receipt = await enqueue(printerId, esc(WIDE).line("Receipt").bytes());
-    await withTransaction(suite.db, (tx) =>
+    const drawer = await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(tx, printerId, esc().kick().bytes(), "drawer"),
     );
     const demo = await configureDemoPrinter(suite.db, true);
@@ -2682,6 +2682,20 @@ describe("mountPrintApi — management: recent jobs", () => {
     ]);
     expect(
       (await suite.db.select().from(printJobs).where(eq(printJobs.id, receipt)))[0]!.payload
+        .byteLength,
+    ).toBe(0);
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(printJobs)
+        .set({ payload: new Uint8Array(0) })
+        .where(eq(printJobs.id, drawer.jobId)),
+    );
+    const withoutDrawer = await send(app, "GET", path, { cookie: managerCookie });
+    expect(((await withoutDrawer.json()) as { kind: string }[]).map((row) => row.kind)).toEqual([
+      "document",
+    ]);
+    expect(
+      (await suite.db.select().from(printJobs).where(eq(printJobs.id, drawer.jobId)))[0]!.payload
         .byteLength,
     ).toBe(0);
   });

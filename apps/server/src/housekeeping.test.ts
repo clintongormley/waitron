@@ -1,10 +1,12 @@
 import { setImmediate as turn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, printJobs, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter } from "@waitron/printing";
 import { clearOldPrintPayloads, housekeepingJob } from "./housekeeping.js";
+import { createJobRunner } from "./job-runner.js";
+import { fakeTimerDelay } from "./testing/fake-timer-delay.js";
 import { printJobInTrouble } from "./print-job-trouble.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -122,11 +124,24 @@ describe("print payload housekeeping", () => {
         log: () => {},
         maxWaitMs: 3600000,
       });
-      await duty.pass({ now: at, signal: new AbortController().signal });
-      sizes.push(
-        (await suite.db.select().from(printJobs).where(eq(printJobs.id, row.id)))[0]!.payload
-          .byteLength,
-      );
+      vi.useFakeTimers();
+      const runner = createJobRunner({ now: () => at, delay: fakeTimerDelay, log: () => {} });
+      try {
+        runner.add(duty);
+        await vi.advanceTimersByTimeAsync(999);
+        expect(
+          (await suite.db.select().from(printJobs).where(eq(printJobs.id, row.id)))[0]!.payload
+            .byteLength,
+        ).toBe(3);
+        await vi.advanceTimersByTimeAsync(1);
+        sizes.push(
+          (await suite.db.select().from(printJobs).where(eq(printJobs.id, row.id)))[0]!.payload
+            .byteLength,
+        );
+      } finally {
+        await runner.stopJobs();
+        vi.useRealTimers();
+      }
     }
     expect(sizes).toEqual([0, 0, 0, 0, 0, 0, 0]);
   });

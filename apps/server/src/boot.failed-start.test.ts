@@ -1424,6 +1424,11 @@ describe("closing a started server", () => {
     try {
       expect(stop).not.toHaveBeenCalled();
       await vi.waitFor(() => expect(runner.views().housekeeping?.state).toBe("waiting"));
+      expect(runner.views().housekeeping?.lastRunAt).toBeNull();
+      await vi.waitFor(
+        () => expect(runner.views().housekeeping?.lastRunAt).toEqual(expect.any(String)),
+        { timeout: 5000 },
+      );
     } finally {
       await server.close();
     }

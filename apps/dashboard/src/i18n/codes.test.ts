@@ -978,7 +978,7 @@ it.each([
   ["es", "Pedidos", "semana", "recibos de devolución", "panel"],
 ])(
   "explains expired print payloads and their next step in %s",
-  (locale, orders, week, dashboard) => {
+  (locale, orders, week, refunds, dashboard) => {
     const sale = codeMessage("print_job.sale_payload_expired", locale);
     expect(sale).toContain(orders);
     expect(sale).toContain(dashboard);
