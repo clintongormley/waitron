@@ -375,9 +375,10 @@ it("withdraws a missing guest publication through boot's Cloud job and reports i
   const running = await boot({
     modules: VERIFACTU,
     testSubmissions: false,
-    beforeStart: async (venue, directory, env) => {
-      saved.localVenueId = venue.cfg.locationId;
-      saved.view.localVenueId = venue.cfg.locationId;
+    beforeStart: async (_venue, directory, env) => {
+      await withTransaction(suite.db, (tx) =>
+        saveCloudVenueId(tx, saved.view.registration.venueId),
+      );
       await mkdir(join(directory, "cloud"), { recursive: true });
       const destination = join(directory, "cloud/connection.json");
       await writeFile(destination, JSON.stringify(saved), { mode: 0o600 });
