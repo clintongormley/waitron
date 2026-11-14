@@ -170,19 +170,19 @@ it("browser Back restores the edited page while Keep is chosen, then Discard ret
   const current = page.shadowRoot!.querySelector("department-settings")!;
   await current.updateComplete;
   await edit(current);
-  const length = history.length;
+  const push = vi.spyOn(history, "pushState");
   history.back();
   await choose("keep");
   expect(location.pathname).toBe("/manage/venue-operations/department/d1");
   expect(shell.shadowRoot!.querySelector("department-edit-dialog")).toBe(page);
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  expect(history.length).toBe(length);
+  expect(push).not.toHaveBeenCalled();
   history.back();
   await choose("discard");
   await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
   expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
-  expect(history.length).toBe(length);
+  expect(push).not.toHaveBeenCalled();
   expect(settings).toBeUndefined();
 });
 it("an accepted external department route recreates the form and its baseline", async () => {

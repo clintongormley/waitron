@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { UrlStateController } from "./url-state.js";
 import { cleanup, mount } from "./test-helpers.js";
@@ -35,9 +35,10 @@ it("restores URL state, preserves unrelated parameters and state, and follows hi
   expect(location.pathname).toBe("/tabs/counter");
   expect(new URL(location.href).searchParams.get("dev")).toBe("1");
   expect(history.state).toEqual({ marker: "retained" });
-  const length = history.length;
+  const push = vi.spyOn(history, "pushState");
+  onTestFinished(() => push.mockRestore());
   el.url.write({ tab: "counter" });
-  expect(history.length).toBe(length);
+  expect(push).not.toHaveBeenCalled();
   const back = new Promise<void>((resolve) =>
     window.addEventListener("popstate", () => resolve(), { once: true }),
   );
@@ -47,7 +48,7 @@ it("restores URL state, preserves unrelated parameters and state, and follows hi
   expect(el.shadowRoot!.textContent).toContain("floor");
   el.url.write({ tab: null }, true);
   expect(el.url.read("tab")).toBeNull();
-  expect(history.length).toBe(length);
+  expect(push).not.toHaveBeenCalled();
 });
 
 it("stops observing and writing browser state when its host disconnects", async () => {

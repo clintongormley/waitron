@@ -1081,14 +1081,15 @@ it("opens the menu and tab the address names, and leaves the list by the Back co
 });
 
 it("replaces an address naming an unknown menu or tab rather than adding a history entry", async () => {
-  const before = history.length;
+  const push = vi.spyOn(history, "pushState");
+  onTestFinished(() => push.mockRestore());
   const el = await mount(api(), "/manage/menus/menu/menu-gone/view/structure");
   await vi.waitFor(() => expect(location.pathname).toBe("/manage/menus"));
   expect(table(el)).not.toBeNull();
   cleanupWidgets();
   await mount(api(), "/manage/menus/menu/menu-lunch/view/bogus");
   await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
-  expect(history.length).toBe(before);
+  expect(push).not.toHaveBeenCalled();
 });
 
 it("puts Add menu under the empty menu table's sentence, opening the same form", async () => {

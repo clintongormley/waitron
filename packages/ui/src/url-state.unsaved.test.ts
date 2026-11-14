@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { LitElement, html } from "lit";
 import {
   createLeaveCoordinator,
@@ -143,7 +143,8 @@ it("restores indexed Back before asking and publishes only an accepted route", a
   await el.url.write({ tab: "counter" });
   value = "edited";
   scope.changed();
-  const length = history.length;
+  const push = vi.spyOn(history, "pushState");
+  onTestFinished(() => push.mockRestore());
   history.back();
   await expect.poll(() => decisions.length).toBe(1);
   expect(location.pathname).toBe("/guarded/counter");
@@ -152,7 +153,7 @@ it("restores indexed Back before asking and publishes only an accepted route", a
   await el.updateComplete;
   expect(location.pathname).toBe("/guarded/counter");
   expect(value).toBe("edited");
-  expect(history.length).toBe(length);
+  expect(push).not.toHaveBeenCalled();
 });
 
 it("every controller reads only the accepted URL, including one connected before the guard", async () => {
@@ -188,9 +189,15 @@ it("disconnected URL controllers cannot leave or push, and their late decision c
   await pending;
   expect(value).toBe("edited");
   expect(location.pathname).toBe("/guarded/floor");
-  const length = history.length;
+  const push = vi.spyOn(history, "pushState");
+  const replace = vi.spyOn(history, "replaceState");
+  onTestFinished(() => {
+    push.mockRestore();
+    replace.mockRestore();
+  });
   await el.url.write({ tab: "kitchen" });
-  expect(history.length).toBe(length);
+  expect(push).not.toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
 });
 
 it("query removal and path replacement share the leave decision and preserve unrelated URL parts", async () => {

@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -461,12 +461,13 @@ describe("dashboard-alerts-screen", () => {
 
   it("shows the Open tab for an unknown view and corrects the URL in place", async () => {
     history.replaceState(null, "", "/manage/alerts/view/bogus");
-    const before = history.length;
+    const push = vi.spyOn(history, "pushState");
+    onTestFinished(() => push.mockRestore());
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api: stubApi() });
     await flush(el);
     expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("open");
     expect(location.pathname).toBe("/manage/alerts/view/open");
-    expect(history.length).toBe(before);
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("keeps the load error shown while Handled fails, even after Open refreshes", async () => {

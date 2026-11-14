@@ -1942,13 +1942,13 @@ it.each([
 
 it("opens Stations from the retired Settings address, replacing it without a history entry", async () => {
   history.replaceState(null, "", "/manage/prep-stations/view/settings");
-  const count = history.length;
+  const push = vi.spyOn(history, "pushState");
   const el = await mount(api());
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
   expect(tabs.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
-  expect(history.length).toBe(count);
+  expect(push).not.toHaveBeenCalled();
   expect(stationTable(el)).not.toBeNull();
 });
 
@@ -1968,31 +1968,31 @@ it("opens Routing from an old tester link that names it, and its next tab change
 
 it("opens Stations from an old tester link that names no tab, and restores panels on Back without adding history entries", async () => {
   history.replaceState(null, "", "/manage/prep-stations/test/bread");
-  const count = history.length;
+  const push = vi.spyOn(history, "pushState");
   const el = await mount(api());
   const tabs = el.shadowRoot!.querySelector("wt-tabs");
   expect(tabs, "the page owns a tab strip").not.toBeNull();
   await tabs!.updateComplete;
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
-  expect(history.length).toBe(count);
+  expect(push).not.toHaveBeenCalled();
   history.replaceState(null, "", "/manage/prep-stations/view/routing");
   dispatchEvent(new PopStateEvent("popstate"));
   await settle(el);
   expect(tabs!.value).toBe("routing");
-  expect(history.length).toBe(count);
+  expect(push).not.toHaveBeenCalled();
 });
 
 it("replaces invalid tabs with Stations and ignores nested tab changes", async () => {
   history.replaceState(null, "", "/manage/prep-stations/view/missing");
-  const count = history.length;
+  const push = vi.spyOn(history, "pushState");
   const el = await mount(api());
   const tabs = el.shadowRoot!.querySelector("wt-tabs");
   expect(tabs, "the page owns a tab strip").not.toBeNull();
   await tabs!.updateComplete;
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
-  expect(history.length).toBe(count);
+  expect(push).not.toHaveBeenCalled();
   q(el, '[slot="routing"]')!.dispatchEvent(
     new CustomEvent("wt-tab-change", {
       detail: { value: "routing" },

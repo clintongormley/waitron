@@ -89,7 +89,7 @@ it.each(["back", "forward"] as const)(
     const accepted = direction === "back" ? "/guarded/b" : "/guarded/a";
     const destination = direction === "back" ? "/guarded/a" : "/guarded/b";
     const published = f.routes.length;
-    const length = history.length;
+    const push = vi.spyOn(history, "pushState");
     f.edit();
     history[direction]();
     await expect.poll(() => f.answers.length).toBe(1);
@@ -108,7 +108,7 @@ it.each(["back", "forward"] as const)(
     expect(location.pathname).toBe(destination);
     expect(f.routes).toHaveLength(published + 1);
     expect(f.value).toBe("saved");
-    expect(history.length).toBe(length);
+    expect(push).not.toHaveBeenCalled();
     expect(history.state.marker).toBe("original");
     expect(location.search).toBe("?dev=1");
     expect(location.hash).toBe("#keep");
@@ -134,7 +134,7 @@ it.each(["back", "forward"] as const)(
     guard.reset();
     f.routes.length = 0;
     f.edit();
-    const length = history.length;
+    const push = vi.spyOn(history, "pushState");
     const go = vi.spyOn(history, "go");
     history[direction]();
     await expect.poll(() => f.answers.length).toBe(1);
@@ -148,7 +148,7 @@ it.each(["back", "forward"] as const)(
     expect(f.routes).toEqual(["/guarded/unknown"]);
     expect(history.state.marker).toBe("destination");
     expect(history.state.unrelated).toBe(7);
-    expect(history.length).toBe(length);
+    expect(push).not.toHaveBeenCalled();
     expect(go).not.toHaveBeenCalled();
   },
 );
@@ -161,7 +161,7 @@ it("Keep on an old-epoch entry stays at the replaced URL without publishing or p
   guard.reset();
   const epoch = history.state.__wtNavigation.epoch;
   f.edit();
-  const length = history.length;
+  const push = vi.spyOn(history, "pushState");
   history.back();
   await expect.poll(() => f.answers.length).toBe(1);
   expect(location.pathname).toBe("/guarded/a");
@@ -170,7 +170,7 @@ it("Keep on an old-epoch entry stays at the replaced URL without publishing or p
   await idle();
   expect(f.routes).toEqual([]);
   expect(f.value).toBe("edited");
-  expect(history.length).toBe(length);
+  expect(push).not.toHaveBeenCalled();
   expect(location.pathname).toBe("/guarded/a");
 });
 
@@ -257,9 +257,9 @@ it("same URL, reverted entry and committed entry skip the question; replacement 
   f.edit();
   expect(await guard.write(guard.href)).toBe("proceeded");
   f.edit("saved");
-  const length = history.length;
+  const push = vi.spyOn(history, "pushState");
   await guard.write("/guarded/b", true);
-  expect(history.length).toBe(length);
+  expect(push).not.toHaveBeenCalled();
   f.edit();
   f.scope.commit("edited");
   await guard.write("/guarded/c");
@@ -405,14 +405,16 @@ it("an accepted-route observer can normalize the URL without adding another hist
     if (new URL(guard.href).pathname === "/guarded/legacy")
       void guard.write("/guarded/current", true);
   });
-  const length = history.length;
+  const push = vi.spyOn(history, "pushState");
   f.edit();
   const result = guard.write("/guarded/legacy");
   await expect.poll(() => f.answers.length).toBe(1);
   f.answers[0]!("discard");
   expect(await result).toBe("proceeded");
   expect(location.pathname).toBe("/guarded/current");
-  expect(history.length).toBe(length + 1);
+  expect(push.mock.calls.map(([, , url]) => new URL(String(url), location.href).pathname)).toEqual([
+    "/guarded/legacy",
+  ]);
 });
 
 it("accepting an entry with a copied position retires the old history epoch", async () => {

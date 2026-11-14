@@ -4091,7 +4091,7 @@ it("account-link cancellation preserves the accepted history index and publishes
     },
   });
   const index = history.state.__wtNavigation;
-  const length = history.length;
+  const push = vi.spyOn(history, "pushState");
   try {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
       api: stubApi({ inspectAccountAction: vi.fn(never) }),
@@ -4101,7 +4101,7 @@ it("account-link cancellation preserves the accepted history index and publishes
     expect(new URL(guard.href).pathname).toBe("/manage/");
     expect(new URL(guard.href).search).toBe("");
     expect(history.state).toEqual({ marker: "retained", __wtNavigation: index });
-    expect(history.length).toBe(length);
+    expect(push).not.toHaveBeenCalled();
     await expect.poll(() => field(el, "email")).not.toBeNull();
   } finally {
     cleanupWidgets();
