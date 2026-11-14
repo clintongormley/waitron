@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
@@ -53,10 +54,10 @@ it.each(["en", "es"] as const)(
     const section = el.shadowRoot!.querySelector('[data-test="abandoned-refunds"]')!;
     expect(section.textContent).toContain("lost-confirmed");
     expect(section.textContent).toContain(
-      locale === "en" ? "Refund confirmed" : "Devolución confirmada",
+      locale === "en" ? "Refund confirmed" : es["payments.abandoned.confirmed"],
     );
     expect(section.textContent).toContain(
-      locale === "en" ? "Check SumUp before refunding" : "Comprueba SumUp antes de devolver",
+      locale === "en" ? "Check SumUp before refunding" : es["payments.abandoned.unconfirmed"],
     );
     expect(section.querySelectorAll("button, wt-button")).toHaveLength(0);
     expect(section.querySelector("time")?.getAttribute("datetime")).toBe(
