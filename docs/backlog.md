@@ -900,8 +900,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A559. The till's full-invoice dialog changes width when an error appears.** Left open by A231q.
   [Detail](backlog/till.md#a559-the-tills-full-invoice-dialog-changes-width-when-an-error-appears)
 
-- **Failed refreshes with nowhere to go** (bundle of 2, size S). [Detail](backlog/till.md#bundle-failed-refreshes-with-nowhere-to-go)
-
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by the comments sweep (#604–#623).** Found while pruning comments.

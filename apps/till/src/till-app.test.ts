@@ -21300,6 +21300,7 @@ describe("switching the device's profile from the header", () => {
       let switched = false;
       const { el } = await openProfile({
         // A device read after the switch that answers nothing makes the profiles step throw.
+        // Vitest still prints that rejection, reading `approvedProfiles` of null, though it is caught here.
         getDeviceIdentity: vi.fn(async () => (switched ? null : identity)),
         switchDeviceProfile: vi.fn(async () => {
           switched = true;
