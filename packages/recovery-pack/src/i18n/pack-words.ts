@@ -252,7 +252,7 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         todo: "Use Backups → Change the recovery key, then make a new pack.",
       },
       "backup.recovery_key_too_short": {
-        what: "The box's recovery key is too short to use.",
+        what: "The recovery key is too short to use.",
         todo: "Use Backups → Change the recovery key: the new key replaces the short one. Then make a new pack.",
       },
       "backup.stream_signer_missing": {
@@ -335,7 +335,7 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         todo: "Usa Copias de seguridad → Cambiar la clave de recuperación y después haz un paquete nuevo.",
       },
       "backup.recovery_key_too_short": {
-        what: "La clave de recuperación del servidor es demasiado corta para usarla.",
+        what: "La clave de recuperación es demasiado corta para usarla.",
         todo: "Usa Copias de seguridad → Cambiar la clave de recuperación: la clave nueva sustituye a la corta. Después haz un paquete nuevo.",
       },
       "backup.stream_signer_missing": {
