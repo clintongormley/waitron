@@ -57,6 +57,10 @@ export function mountSpareSettingsApi(
     (c) =>
       run(c, log, async () => {
         const raw = await readRawJsonBody<unknown>(c);
+        // Checked again in the turn, since a promotion can change the mode meanwhile; checked here so
+        // a sign-in-free request never queues among the main box's backup writes.
+        if ((await readNodeMode(deps.node, deps.nodeId)).mode !== "mirror")
+          throw new AppError("spare.settings_not_a_spare", {});
         const digest = await deps.turns(async () => {
           const held = await readNodeMembership(deps.db);
           const verdict = verifyEnvelope<unknown>(

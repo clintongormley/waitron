@@ -294,6 +294,19 @@ describe("POST /api/node/backup-settings", () => {
     expect(await backupEnv()).not.toBe(SPARES_OWN);
   });
 
+  it("on a box that is not a mirror, refuses without waiting for a turn in the backup queue", async () => {
+    await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+    const asked = vi.fn();
+    const turns: Turns = (body) => {
+      asked();
+      return createTurns()(body);
+    };
+    expect(await send({ junk: true }, appFor(turns))).toEqual(
+      refusal(409, "spare.settings_not_a_spare"),
+    );
+    expect(asked).not.toHaveBeenCalled();
+  });
+
   it("refuses a body larger than any settings message, writing nothing", async () => {
     await holdOwnSettings();
     const large = envelopeOf({
