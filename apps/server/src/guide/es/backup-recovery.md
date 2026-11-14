@@ -95,7 +95,8 @@ de seguridad** y después **Restaurar desde Waitron Cloud**.
 **Añadir un nodo réplica**: este servidor se une al principal y guarda una copia de los datos del
 restaurante. Cuando termina de unirse, puede sustituirlo: consulta [Traspasar el local a un equipo
 de reserva](servers.md#hand-over) e [Iniciar aquí si ha fallado el equipo principal](servers.md#emergency).
-Para recuperar un restaurante cuyo servidor ya no está, elige una opción de restauración.
+Un servidor nuevo no puede unirse a un principal que ya no está: en ese caso, elige una opción de
+restauración.
 
 Para un archivo de copia, elígelo en **Archivo de copia de seguridad**, introduce la clave que lo
 abre en **Clave de recuperación** y elige su **Entorno de la copia**. Para tu bucket, elige tu

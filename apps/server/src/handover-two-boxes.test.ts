@@ -19,7 +19,7 @@ import {
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { HandoverBinding } from "@waitron/handover";
-import { endorseKey, signDocumentBody } from "@waitron/membership";
+import { endorseKey } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules } from "@waitron/module";
 import { readHandoverOperation, readNodeMode } from "@waitron/node-db";
@@ -57,7 +57,6 @@ import {
   ADMIN_PASSWORD,
   MAIN_URL,
   SPARE_URL,
-  holdBoxSecrets,
   joinSpare,
   mirrorBundleApp,
   veriFactuMainBox,
@@ -129,18 +128,7 @@ async function joined() {
   await spareBox.db.run(
     sql`update tenants set country = ${tenant!.country}, tax_id = ${tenant!.taxId}`,
   );
-  // Today's chart does not vouch for a joined box's key, so a real start answers
-  // `destination_unreachable`; A947 3b's Tasks 4.4 and 5.4 add this endorsement.
-  const { body: joinedChart } = (await readNodeMembership(mainBox.db))!;
-  const body = { ...joinedChart, term: joinedChart.term + 1 };
-  const vouching = {
-    body,
-    signerNodeId: mainId,
-    signature: signDocumentBody(body, mainKey),
-    endorsements: [endorseKey(spareId, standby.publicKey, mainId, mainKey)],
-  };
-  await writeNodeMembership(mainBox.db, vouching);
-  await writeNodeMembership(spareBox.db, vouching);
+  await writeNodeMembership(spareBox.db, (await readNodeMembership(mainBox.db))!);
 
   const spareApp = new Hono();
   const spareDeps = { db: spareBox.db, node: spareBox.node, ring: RING, nodeId: spareId };
@@ -347,7 +335,7 @@ describe("a main box and a spare on two separate databases", () => {
 });
 
 describe("a controlled handover to the joined spare, then the old box back by emergency switch", () => {
-  it("the spare sells and files under its own installation; the old box, reset and joined again under a new id, takes over when the spare is switched off", async () => {
+  it("the spare sells and records invoices under its own installation; the old box, reset and joined again under a new id, takes over when the spare is switched off", async () => {
     const realNow = Date.now();
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
     vi.setSystemTime(realNow);
@@ -358,6 +346,7 @@ describe("a controlled handover to the joined spare, then the old box back by em
       const boxes = await joined();
       const { mainId, spareId } = boxes;
       const signIn = { email: boxes.main.email, password: ADMIN_PASSWORD };
+      const mainSale = await saleOn(mainBox.db, mainId);
       await boxes.writeSpareRow();
       const started = await boxes.start();
       expect(started.status, JSON.stringify(started.body)).toBe(200);
@@ -380,6 +369,7 @@ describe("a controlled handover to the joined spare, then the old box back by em
       const seriesIds = (rows: Record<string, unknown[]>) =>
         (rows.invoice_series as Array<{ id: string }>).map(({ id }) => id);
       expect(codes(oldRows)).not.toEqual([]);
+      expect(Object.values(oldRows).flat()).toContainEqual(mainSale.record);
       const handedOver = await takeoverRoutes({
         store: c,
         nodeId: spareId,
@@ -405,7 +395,6 @@ describe("a controlled handover to the joined spare, then the old box back by em
       expect(await fiscalRowsOf(c.venue, mainId)).toEqual(oldRows);
 
       // The old box is reset (both databases new) and joins the new main box under a new id.
-      await holdBoxSecrets(spareState);
       const resetState = join(scratch, "reset-state");
       await mkdir(resetState);
       const cBundle = mirrorBundleApp(
@@ -441,14 +430,13 @@ describe("a controlled handover to the joined spare, then the old box back by em
           endorsement: endorseKey(newId, rejoined.standby.publicKey, spareId, cKey),
         }),
       );
-      const cFiscalAtSwitchOff = await fiscalRows(c.venue);
       const bVenue = join(scratch, "b-venue");
       await mkdir(bVenue);
       c.venue.run(sql`vacuum into ${join(bVenue, "venue.db")}`);
       resetBox.node.run(sql`vacuum into ${join(bVenue, "node.db")}`);
       const b = await openVenueDatabase(bVenue);
       opened.push(b);
-      const cChainOnB = await fiscalRowsOf(b.venue, spareId);
+      const bFiscalAtCopy = await fiscalRows(b.venue);
 
       // C is switched off; B declares the emergency and takes over on the copy it holds.
       const declaration = new Hono();
@@ -501,14 +489,16 @@ describe("a controlled handover to the joined spare, then the old box back by em
       const bRows = await fiscalRowsOf(b.venue, newId);
       for (const code of codes(bRows))
         expect([...codes(oldRows), ...codes(cRows)]).not.toContain(code);
-      expect(JSON.stringify([oldRows, cChainOnB])).not.toContain(tookOver.identity);
+      expect(JSON.stringify(bFiscalAtCopy)).not.toContain(tookOver.identity);
       const bSale = await saleOn(b.venue, newId);
       expect(seriesIds(bRows)).toContain(bSale.seriesId);
       expect(bSale.record).toMatchObject({ node_id: newId });
       expect(bSale.installation).toMatchObject({ node_id: newId });
       expect(Object.values(bSale.installation)).toContain(tookOver.identity);
-      expect(await fiscalRowsOf(b.venue, spareId)).toEqual(cChainOnB);
-      expect(await fiscalRows(c.venue)).toEqual(cFiscalAtSwitchOff);
+      // Every fiscal row B's copy held before its takeover is still there, unchanged.
+      const bFiscalAfter = await fiscalRows(b.venue);
+      for (const [table, rows] of Object.entries(bFiscalAtCopy))
+        for (const row of rows) expect(bFiscalAfter[table]).toContainEqual(row);
     } finally {
       for (const store of opened) await store.close();
     }

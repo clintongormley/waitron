@@ -15,7 +15,7 @@ export const startEn = {
     "Restore a backup onto this server when no other server is still running with newer restaurant data, or rebuild from the continuous copy in your own storage bucket when the old server is gone. A mirror can take over only after it has joined a running primary.",
   "role.mirror.heading": "Add a mirror node",
   "role.mirror.copy":
-    "This server joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. To recover a restaurant whose server is already gone, choose Restore from backup or Restore from my bucket.",
+    "This server joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. A new server cannot join a primary that is already gone: to recover then, choose Restore from backup or Restore from my bucket.",
   "role.restore.heading": "Restore from backup",
   "role.restore.copy":
     "Recover onto this fresh server from an encrypted Waitron backup when no other server is still running with newer restaurant data.",
@@ -141,7 +141,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
     "Restaura una copia de seguridad en este servidor cuando no haya otro servidor funcionando con datos más recientes del restaurante, o reconstrúyelo desde la copia continua de tu propio bucket cuando el servidor anterior ya no esté. Una réplica solo puede sustituir al principal después de unirse a un principal en marcha.",
   "role.mirror.heading": "Añadir un nodo réplica",
   "role.mirror.copy":
-    "Este servidor se une al principal y guarda una copia de los datos del restaurante. Cuando termina de unirse, puede sustituirlo: con un traspaso desde la página Servidores del principal, o con un cambio de emergencia si el principal falla. Para recuperar un restaurante cuyo servidor ya no está, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
+    "Este servidor se une al principal y guarda una copia de los datos del restaurante. Cuando termina de unirse, puede sustituirlo: con un traspaso desde la página Servidores del principal, o con un cambio de emergencia si el principal falla. Un servidor nuevo no puede unirse a un principal que ya no está: para recuperar el restaurante en ese caso, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
   "role.restore.heading": "Restaurar desde una copia de seguridad",
   "role.restore.copy":
     "Recupera el restaurante en este servidor nuevo desde una copia de seguridad cifrada de Waitron cuando no haya ningún otro servidor funcionando con datos más recientes del restaurante.",

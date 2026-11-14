@@ -1757,10 +1757,7 @@ Not in any track until the standalone primary is done.
   Slice 9's S2 re-run from its new Parts F and G, and S2 reads PASS; the watcher (`questions.md`, 2026-11-12 10:10) said “Do not rebuild Slices 10/11”; Task 10.6 stays with A1342.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
-- **A947 3b must make the held chart vouch for a joined box's key, or the main box can never check
-  its answer and waits at every start.** Left open by A1018 Slice 3 (Ruling R13).
-  [Detail](backlog/replication-cloud.md#a947-3b-must-make-the-held-chart-vouch-for-a-joined-boxs-key-or-the-main-box-can-never-check-its-answer-and-waits-at-every-start)
-  A947 also owns the spare's authenticated switch screen (watcher, 2026-11-08); the spare's
+- **A947 owns the spare's authenticated switch screen** (watcher, 2026-11-08); the spare's
   dashboard is retired. [Decision](backlog/replication-cloud.md#decisions-and-deliberate-limits).
 
 - **A captured signed peer query can be replayed later to read a box's status, or a stepped-down box's indicator and final copy.** The peer-status

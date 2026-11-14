@@ -676,15 +676,6 @@ follow, being reached over the internet (owner, 2026-10-29).
 Building waits for A947's strip and Cloud's half:
 [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
 
-## A947 3b must make the held chart vouch for a joined box's key, or the main box can never check its answer and waits at every start.
-
-The start check verifies a peer's signed status with
-`peerKeyOf` (`apps/server/src/handover-signing.ts`): this box's own key, the main-box key a spare
-pins at adoption, and keys the held chart's endorsements vouch for. A main box holds none of
-these for its spare, so once 3b makes a spare finish joining, the spare's answers count as
-silent. No box has a joined peer before 3b. Left open by A1018 Slice 3 (Ruling R13).
-
-
 ## The membership route ignores a different chart at the term this box holds.
 
 The start check
@@ -739,10 +730,10 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 - **The first hand-back to the same box is refused after the giving box has stopped filing; settle
   before Slice 13.** M2 to M1 answers `sif.allocation_invalid` `standby_already_active` at the first
   request, because M1's registration stays active (run on a promoted database standing in for the
-  copy). A box that is reset first is not refused: since 3b-F, `apps/server/src/handover-two-boxes.test.ts` resets M1 (two new
-  databases), joins it to M2 under a new id and takes over by emergency switch, selling under a new
-  installation with M2's records unchanged (separate databases and the real routes; no restarts, no
-  wipe, no bucket stream). Left open by A1018 Slice 5 (Ruling R40).
+  copy). An emergency takeover by a reset M1 is not refused: `apps/server/src/handover-two-boxes.test.ts`
+  gives M1 two new databases, joins it to M2 under a new id, and M1 takes over by emergency switch
+  and sells under a new installation, M2's records unchanged. That ran on databases only: no box
+  restarts, no real wipe of M1's files, and no bucket stream. Left open by A1018 Slice 5 (Ruling R40).
 - **The module preparation file grows with every write, and a handover cannot promise room in it.**
   Every revision repeats all earlier entries under a 1 MiB cap. The handover's size check keeps room
   for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5

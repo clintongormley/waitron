@@ -85,8 +85,8 @@ copy, choose **Restore from backup** and then **Restore from Waitron Cloud**.
 
 **Add a mirror node**: this server joins the primary and keeps a copy of the restaurant's data.
 Once it has joined, it can take over: see [Hand over to a spare box](servers.md#hand-over) and
-[Start here when the main box has failed](servers.md#emergency). To recover a restaurant whose
-server is already gone, choose a restore option.
+[Start here when the main box has failed](servers.md#emergency). A new server cannot join a primary
+that is already gone: to recover then, choose a restore option.
 
 For a backup file, choose it in **Backup file**, enter the key that unlocks it in **Recovery key**,
 and choose its **Backup environment**. For your bucket, choose your recovery pack or kit file in
