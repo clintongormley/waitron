@@ -18,7 +18,7 @@ import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustme
 import { createProduct } from "@waitron/catalogue";
 import { previewCorrectionAmounts, recordSubstitution } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
-import { latestRecord } from "@waitron/fiscal-verifactu/src/clock-behind.js";
+import { latestRecordQuery } from "@waitron/fiscal-verifactu/src/clock-behind.js";
 import {
   createPinThrottle,
   hashPin,
@@ -314,7 +314,10 @@ const STEAK_HALF = [{ rate: "21.00", base: "5.00", tax: "1.05" }];
 const MINUTE = 60_000;
 
 async function behindLatestRecord(): Promise<TrustedClock> {
-  const latest = await inTx(venue, (tx) => latestRecord(tx));
+  const latest = await inTx(venue, async (tx) => {
+    const [row] = await latestRecordQuery(tx);
+    return row;
+  });
   const base = systemClock();
   const reading = { ...base.now(), instant: new Date(latest!.at.getTime() - 2 * MINUTE) };
   return { ...base, now: () => reading };

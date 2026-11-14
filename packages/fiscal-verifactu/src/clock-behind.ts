@@ -7,13 +7,7 @@ import { registrosFacturacion } from "./schema/registros.js";
 /** How far a stored record's time may run ahead of the reading it is compared with. */
 export const CLOCK_BEHIND_MARGIN_MS = 60_000;
 
-export interface LatestRecord {
-  id: string;
-  at: Date;
-  offsetMinutes: number;
-}
-
-/** The query {@link latestRecord} runs. */
+/** The latest record in any chain, ties broken by the larger id. */
 export function latestRecordQuery(tx: Transaction) {
   return tx
     .select({
@@ -24,12 +18,6 @@ export function latestRecordQuery(tx: Transaction) {
     .from(registrosFacturacion)
     .orderBy(desc(registrosFacturacion.fechaHoraHusoGenRegistro), desc(registrosFacturacion.id))
     .limit(1);
-}
-
-/** The latest record in any chain, ties broken by the larger id. */
-export async function latestRecord(tx: Transaction): Promise<LatestRecord | undefined> {
-  const [latest] = await latestRecordQuery(tx);
-  return latest;
 }
 
 /** Every chain's node and the largest `secuencia` it holds now. */
