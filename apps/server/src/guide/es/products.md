@@ -500,3 +500,12 @@ precios, tamaños, extras y declaraciones publicados. Elige el idioma del client
 los nombres y las descripciones; los nombres que falten usan el idioma predeterminado y después
 el nombre interno. Publica los cambios antes de revisarlos aquí. Esta vista previa no comparte
 la carta con los clientes.
+
+## Comparte la carta predeterminada en esta caja {#guest-sharing}
+
+En **Vista previa para clientes**, elige **Compartir carta** para compartir la versión publicada
+de la carta predeterminada. Puede ser distinta de la que estás revisando. Elige
+**Abrir la carta compartida en esta caja** para comprobarla. Publica los cambios antes de revisarlos ahí.
+Solo se muestra una carta predeterminada activa y publicada. Elige **Dejar de compartir** para retirarla.
+La elección se conserva en esta caja al importar una configuración; una caja nueva empieza sin compartir.
+El enlace para clientes con datos móviles y el envío a Cloud aún no están disponibles.

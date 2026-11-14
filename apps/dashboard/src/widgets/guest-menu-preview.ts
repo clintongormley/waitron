@@ -17,6 +17,9 @@ export class GuestMenuPreview extends LitElement {
       :host {
         display: inline-block;
       }
+      a {
+        color: var(--wt-color-primary-text);
+      }
       iframe {
         display: block;
         width: 100%;
@@ -34,6 +37,48 @@ export class GuestMenuPreview extends LitElement {
   @state() private error = "";
   @state() private source = "";
 
+  @state() private sharing: { enabled: boolean; revision: number; available: boolean } | null =
+    null;
+  @state() private sharingBusy = false;
+  @state() private sharingError = "";
+
+  async #readSharing() {
+    const generation = this.#sharingGeneration;
+    this.sharing = null;
+    this.sharingError = "";
+    try {
+      const value = await this.api.getGuestMenuSharing();
+      if (generation === this.#sharingGeneration) this.sharing = value;
+    } catch (error) {
+      if (generation === this.#sharingGeneration) this.sharingError = codeMessage(codeOf(error));
+    }
+  }
+  async #changeSharing() {
+    if (!this.sharing || this.sharingBusy) return;
+    this.sharingBusy = true;
+    this.sharingError = "";
+    const generation = this.#sharingGeneration;
+    try {
+      const value = await this.api.setGuestMenuSharing(
+        !this.sharing.enabled,
+        this.sharing.revision,
+      );
+      if (generation === this.#sharingGeneration) this.sharing = value;
+    } catch (error) {
+      if (generation === this.#sharingGeneration) this.sharingError = codeMessage(codeOf(error));
+      if (codeOf(error) === "settings.out_of_date") {
+        try {
+          const value = await this.api.getGuestMenuSharing();
+          if (generation === this.#sharingGeneration) this.sharing = value;
+        } catch {
+          /* Keep the action's refusal until the next attempt. */
+        }
+      }
+    } finally {
+      if (generation === this.#sharingGeneration) this.sharingBusy = false;
+    }
+  }
+  #sharingGeneration = 0;
   #generation = 0;
   #language?: string;
   #clear() {
@@ -43,9 +88,11 @@ export class GuestMenuPreview extends LitElement {
   }
   #close() {
     this.#generation++;
+    this.#sharingGeneration++;
     this.#clear();
     this.opened = false;
     this.loading = false;
+    this.sharingBusy = false;
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
@@ -80,7 +127,9 @@ export class GuestMenuPreview extends LitElement {
         variant="secondary"
         @click=${() => {
           this.opened = true;
-          void this.#load();
+          void this.#load().then(() => {
+            if (this.opened) void this.#readSharing();
+          });
         }}
         >${t("menus.guest_preview")}</wt-button
       >
@@ -115,6 +164,17 @@ export class GuestMenuPreview extends LitElement {
               ? html`<p>${t("menus.guest_unpublished")}</p>`
               : nothing
         }
+        ${this.sharing?.available ? html`<a href="/public/menu" target="_blank" rel="noopener">${t("menus.guest_local_link")}</a>` : nothing}
+        ${this.sharing ? html`<p>${t(!this.sharing.enabled ? "menus.guest_sharing_off" : this.sharing.available ? "menus.guest_sharing_on" : "menus.guest_sharing_unavailable")}</p>` : nothing}
+        ${this.sharingError ? html`<p id="sharing-error" role="alert">${this.sharingError}</p>` : nothing}
+        <wt-button
+          id="sharing-action"
+          variant="secondary"
+          .disabled=${!this.sharing || this.sharingBusy}
+          @click=${() => this.#changeSharing()}
+          >${t(this.sharing?.enabled ? "menus.guest_turn_off" : "menus.guest_turn_on")}</wt-button
+        >
+        ${!this.sharing && this.sharingError ? html`<wt-button variant="secondary" @click=${() => this.#readSharing()}>${t("content_languages.retry")}</wt-button>` : nothing}
         <wt-button
           slot="footer"
           variant="secondary"

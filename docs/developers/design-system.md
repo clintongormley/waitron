@@ -6931,3 +6931,7 @@ dismisses it. Specific cereal/nut kinds remain written beside their symbol; the 
 the wording bundle’s language and asks guests to tell staff about allergies. No missing or empty
 declaration becomes an absence claim. EN/ES/CA/GL wording falls back as a whole bundle to the
 venue default, then English, independently of dish text.
+
+The guest preview also offers immediate sharing actions for the default menu, with a passive
+status read and a local page link when On. These actions apply to the default menu rather than
+the previewed menu. Cloud delivery remains a later slice; the page names that limitation.

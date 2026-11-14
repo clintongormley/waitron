@@ -473,3 +473,12 @@ Open a menu in **Menus**, go to **Preview** and choose **Guest menu preview**. Y
 prices, sizes, extras and declarations. Choose a guest language to check the names and descriptions;
 missing names use your default language, then the internal name. Publish your changes before
 checking them here. This preview does not share the menu with guests.
+
+## Share the default menu on this box {#guest-sharing}
+
+In **Guest menu preview**, choose **Turn sharing on** to share the default menu’s published
+version. This may be a different menu from the one you are previewing. Choose
+**Open the shared menu on this box** to check it. Publish changes before checking them there.
+Only an active, published default menu is shown. Choose **Turn sharing off** to stop sharing.
+The choice stays on this box when you import a configuration; a new box starts with sharing Off.
+A guest link over mobile data and Cloud delivery are not available yet.

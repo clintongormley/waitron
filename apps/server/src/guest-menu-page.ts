@@ -1,5 +1,6 @@
 import {
   guestMenuWords,
+  languageDisplayName,
   formatMoney,
   decimal,
   toScale,
@@ -12,10 +13,15 @@ import { NUTRITION_ICONS } from "@waitron/ui-core/nutrition-icons";
 import { escapeHtml as esc } from "./html-page.js";
 import { GUIDE_PAGE_TOKENS } from "./html-page-tokens.js";
 
+const pageTokens = Object.entries(GUIDE_PAGE_TOKENS)
+  .map(([name, value]) => `${name}:${typeof value === "string" ? value : value[0]}`)
+  .join(";");
+
 export function renderGuestMenuPage(
   menu: PublicGuestMenu,
   venueName: string,
   defaultLanguage: string,
+  languageLinks = false,
 ): string {
   const { language, text: words } = guestMenuWords(menu.language, defaultLanguage);
   const used = new Set<string>();
@@ -73,11 +79,9 @@ export function renderGuestMenuPage(
       .map((code) => `<li>${glyph(code)} ${esc(label(code.replace(/^diet-/, "")))}</li>`)
       .join("");
   const dietKey = key(true);
-  const tokens = Object.entries(GUIDE_PAGE_TOKENS)
-    .map(([name, value]) => `${name}:${typeof value === "string" ? value : value[0]}`)
-    .join(";");
+
   return `<!doctype html><html lang="${esc(menu.language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${esc(venueName)} · ${esc(menu.name)}</title><style>
-:root{${tokens};color-scheme:light}
+:root{${pageTokens};color-scheme:light}
 *{box-sizing:border-box}
 body{margin:0;padding:var(--wt-space-4);font-family:var(--wt-font-family);font-size:var(--wt-font-size-md);color:var(--wt-color-text);background:var(--wt-color-bg);overflow-wrap:anywhere}
 main{max-width:calc(var(--wt-space-6) * 28);margin:auto}
@@ -97,5 +101,10 @@ svg{width:var(--wt-space-4);height:var(--wt-space-4);fill:currentColor;vertical-
 small{color:var(--wt-color-text-muted)}
 [popover]{color:var(--wt-color-text);background:var(--wt-color-bg);padding:var(--wt-space-5);border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-md);max-width:calc(100% - var(--wt-space-6))}
 footer{margin-top:var(--wt-space-6)}footer li{margin-bottom:var(--wt-space-2)}
-</style></head><body><main><header><p>${esc(venueName)}</p><h1>${esc(menu.name)}</h1></header><nav aria-label="${esc(menu.name)}">${sections.map((s) => `<a href="#${s.id}">${esc(s.name)}</a>`).join("")}</nav>${body}<footer lang="${language}"><h2>${esc(words.key!)}</h2><p>${esc(words.keyLanguage!)}</p><p>${esc(words.note!)}</p><ul>${key(false)}</ul>${dietKey ? `<h2>${esc(words.diet!)}</h2><ul>${dietKey}</ul>` : ""}</footer></main></body></html>`;
+</style></head><body><main><header><p>${esc(venueName)}</p><h1>${esc(menu.name)}</h1></header><nav aria-label="${esc(menu.name)}">${sections.map((s) => `<a href="#${s.id}">${esc(s.name)}</a>`).join("")}</nav>${languageLinks ? `<nav lang="${language}" aria-label="${esc(words.languages!)}">${menu.languages.map((code) => `<a href="?language=${encodeURIComponent(code)}" lang="${esc(code)}">${esc(languageDisplayName(code, code))}</a>`).join(" · ")}</nav>` : ""}${body}<footer lang="${language}"><h2>${esc(words.key!)}</h2><p>${esc(words.keyLanguage!)}</p><p>${esc(words.note!)}</p><ul>${key(false)}</ul>${dietKey ? `<h2>${esc(words.diet!)}</h2><ul>${dietKey}</ul>` : ""}</footer></main></body></html>`;
+}
+
+export function renderGuestMenuUnavailable(requested: string, fallback: string): string {
+  const { language, text } = guestMenuWords(requested, fallback);
+  return `<!doctype html><html lang="${esc(language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(text.unavailable!)}</title><style>:root{${pageTokens}}body{margin:0;font-size:var(--wt-font-size-md);font-family:var(--wt-font-family);color:var(--wt-color-text);background:var(--wt-color-bg);padding:var(--wt-space-4)}h1{font-size:var(--wt-font-size-xl)}</style></head><body><h1>${esc(text.unavailable!)}</h1></body></html>`;
 }

@@ -299,6 +299,8 @@ export * from "./catalogue-items.js";
 export { menusHolding } from "./menu-removal.js";
 
 export * from "./settings.js";
+export { GUEST_MENU_SETTINGS } from "./guest-menu-settings.js";
+export { readGuestMenu } from "./guest-menu.js";
 
 export * from "./content-translation-types.js";
 export * from "./content-translation-targets.js";

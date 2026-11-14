@@ -35,6 +35,8 @@ halal|Halal|Halal|Halal|Halal
 kosher|Kosher|Kosher|Kosher|Kosher
 no_meat|No meat|Sin carne|Sense carn|Sen carne
 no_fish|No fish|Sin pescado|Sense peix|Sen peixe
+languages|Languages|Idiomas|Idiomes|Idiomas
+unavailable|Menu unavailable|Carta no disponible|Carta no disponible|Carta non dispoñible
 keyLanguage|Key in English|Leyenda en español|Llegenda en català|Lenda en galego
 key|Allergen key|Leyenda de alérgenos|Llegenda d’al·lèrgens|Lenda de alérxenos
 diet|Dietary declarations|Declaraciones dietéticas|Declaracions dietètiques|Declaracións dietéticas

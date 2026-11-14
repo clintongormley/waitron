@@ -346,7 +346,7 @@ import {
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { moduleCoreServices } from "./parties.js";
-import { mountGuestMenuApi } from "./guest-menu-api.js";
+import { mountGuestMenuApi, mountPublicGuestMenu } from "./guest-menu-api.js";
 import { mountCatalogueApi, translationContextFor } from "./catalogue-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -1439,6 +1439,11 @@ async function bootServer(
   // Setup and recovery must answer unavailable before their HTML catch-all can handle this path.
   let cloudServing = () => false;
   mountCloudPublic(app, () => cloudServing());
+  mountPublicGuestMenu(
+    app,
+    { db, serving: () => cloudServing(), venueLocale: () => venueLocale },
+    log,
+  );
 
   // Help, guide pages and certificate downloads precede every mode-specific gate and SPA catch-all.
   // Machine discovery remains setup-only; the fallback CA does not certify operator TLS.
@@ -3167,7 +3172,7 @@ async function bootServer(
     },
     log,
   );
-  mountGuestMenuApi(app, { db, venueLocale }, log);
+  mountGuestMenuApi(app, { db, venueLocale, serving: () => cloudServing() }, log);
   mountUnitsApi(app, { db, venueLocale }, log);
   mountPurchasingApi(app, { db }, log);
   const drainWaker = createLoopWaker({ minTickMs: timings.minTickMs });
