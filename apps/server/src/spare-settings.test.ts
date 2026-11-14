@@ -53,6 +53,7 @@ const SETTINGS = {
 const SPARES_OWN = "WAITRON_BACKUP_BUCKET=spares-own\n";
 const CHECK_MS = 5_000;
 const RETRY_MS = 30_000;
+const RECONFIRM_MS = 300_000;
 
 const mainBox = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS], timeoutMs: 60_000 });
 const spareBox = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS], timeoutMs: 60_000 });
@@ -63,6 +64,7 @@ let spareDir: string;
 let lines: string[];
 let requests: string[];
 let spareAnswers: "yes" | "not-started" | "off";
+let loseReply: boolean;
 let spareApp: Hono;
 const running: { stop(): Promise<void> }[] = [];
 
@@ -78,7 +80,9 @@ const exchangeFetch = (async (url: string | URL | Request, init?: RequestInit) =
   requests.push(String(url));
   if (spareAnswers === "off") throw new TypeError("fetch failed");
   if (spareAnswers === "not-started") return new Response("404 Not Found", { status: 404 });
-  return spareApp.request(String(url), init);
+  const answer = await spareApp.request(String(url), init);
+  if (loseReply) throw new TypeError("the reply was lost after the spare wrote");
+  return answer;
 }) as typeof fetch;
 
 function chartBody(spareContactUrl: string | null): MembershipDocumentBody {
@@ -130,6 +134,7 @@ beforeEach(async () => {
   lines = [];
   requests = [];
   spareAnswers = "yes";
+  loseReply = false;
 
   await seedVenue(spareBox.db);
   spareId = await seedNode(spareBox.db);
@@ -167,11 +172,14 @@ afterEach(async () => {
   await rm(spareDir, { recursive: true, force: true });
 });
 
+// `performance` is faked with the timers, so the duty's clock that only runs forward moves with them.
+const FAKED = ["setTimeout", "clearTimeout", "Date", "performance"] as const;
+
 /** Waits, in real time, until the duty is asleep on the fake clock again. */
 async function idle(): Promise<void> {
-  const deadline = performance.now() + 10_000;
+  const deadline = process.hrtime.bigint() + 10_000_000_000n;
   while (vi.getTimerCount() === 0) {
-    if (performance.now() > deadline) throw new Error("the duty never went back to sleep");
+    if (process.hrtime.bigint() > deadline) throw new Error("the duty never went back to sleep");
     await new Promise((resolve) => setImmediate(resolve));
   }
 }
@@ -184,7 +192,7 @@ async function tick(ms: number): Promise<void> {
 }
 
 async function start(): Promise<{ stop(): Promise<void> }> {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  vi.useFakeTimers({ toFake: [...FAKED] });
   const duty = runSpareSettings({
     db: mainBox.db,
     node: mainBox.node,
@@ -194,6 +202,7 @@ async function start(): Promise<{ stop(): Promise<void> }> {
     exchange: { timeoutMs: 5_000, fetch: exchangeFetch },
     checkMs: CHECK_MS,
     retryMs: RETRY_MS,
+    reconfirmMs: RECONFIRM_MS,
     log: logger(),
   });
   running.push(duty);
@@ -345,7 +354,7 @@ describe("runSpareSettings", () => {
         return Reflect.get(target, property, receiver) as unknown;
       },
     });
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.useFakeTimers({ toFake: [...FAKED] });
     running.push(
       runSpareSettings({
         db: mainBox.db,
@@ -394,6 +403,65 @@ describe("runSpareSettings", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("a file holding no recovery key sends nothing, and the spare keeps its settings", async () => {
+    await replaceBackupSettings(spareDir, SETTINGS);
+    await writeFile(
+      join(mainDir, "backup.env"),
+      "WAITRON_BACKUP_KEY_ROTATED_AT=2026-11-14T00:00:00.000Z\nWAITRON_BACKUP_RECOVERY_KEY=\n",
+    );
+    await link("streaming");
+    await start();
+    await tick(RETRY_MS * 2);
+    expect(requests).toEqual([]);
+    expect((await readBackupSettings(spareDir))?.WAITRON_BACKUP_RECOVERY_KEY).toBe(RECOVERY_KEY);
+    expect(events("spare-settings.send_failed")).toEqual([
+      expect.objectContaining({ level: "info", reason: "unreadable" }),
+    ]);
+  });
+
+  it("a clock stepped back an hour does not hold back the next try", async () => {
+    await link("streaming");
+    spareAnswers = "off";
+    await start();
+    expect(requests).toHaveLength(1);
+    vi.setSystemTime(Date.now() - 3_600_000);
+    spareAnswers = "yes";
+    await tick(RETRY_MS + CHECK_MS);
+    expect(await digestIn(spareDir)).toBe(await digestIn(mainDir));
+  });
+
+  it("settings the spare took with the reply lost are replaced when this box goes back to the ones it had sent", async () => {
+    await link("streaming");
+    await start();
+    await writeRecoveryKey(mainDir, { recoveryKey: NEW_RECOVERY_KEY, keyRotatedAt: undefined });
+    loseReply = true;
+    await tick(CHECK_MS);
+    expect((await readBackupSettings(spareDir))?.WAITRON_BACKUP_RECOVERY_KEY).toBe(
+      NEW_RECOVERY_KEY,
+    );
+
+    loseReply = false;
+    await replaceBackupSettings(mainDir, SETTINGS);
+    await tick(RETRY_MS + CHECK_MS);
+    expect(await digestIn(spareDir)).toBe(await digestIn(mainDir));
+  });
+
+  it("settings changed on the spare behind this box's back are put right within the reconfirm time, logging nothing new", async () => {
+    await link("streaming");
+    await start();
+    await writeFile(join(spareDir, "backup.env"), SPARES_OWN, { mode: 0o600 });
+    await tick(RECONFIRM_MS - CHECK_MS * 2);
+    expect(await readFile(join(spareDir, "backup.env"), "utf8")).toBe(SPARES_OWN);
+    expect(requests).toHaveLength(1);
+
+    await tick(CHECK_MS * 2);
+    expect(await digestIn(spareDir)).toBe(await digestIn(mainDir));
+    expect(requests).toHaveLength(2);
+    await tick(RECONFIRM_MS);
+    expect(requests).toHaveLength(3);
+    expect(events("spare-settings.sent")).toHaveLength(1);
+  });
+
   it("no log line carries the recovery key", async () => {
     await link("streaming");
     spareAnswers = "not-started";
@@ -437,6 +505,28 @@ describe("sendBackupSettings", () => {
       { nodeId: "44444444-4444-4444-8444-444444444444", contactUrl: SPARE_URL },
     );
     expect(outcome).toEqual({ delivered: false, reason: "spare.settings_invalid" });
+  });
+
+  it("names a refusal it does not know by the answer's status", async () => {
+    const fetchOtherCode = (async () =>
+      new Response(JSON.stringify({ error: { code: "x".repeat(4096), params: {} } }), {
+        status: 409,
+      })) as unknown as typeof fetch;
+    const outcome = await sendBackupSettings(
+      { ...deps(), exchange: { timeoutMs: 5_000, fetch: fetchOtherCode } },
+      { nodeId: spareId, contactUrl: SPARE_URL },
+    );
+    expect(outcome).toEqual({ delivered: false, reason: "409" });
+  });
+
+  it("a file holding settings but no recovery key is unreadable, and nothing is sent", async () => {
+    await writeFile(join(mainDir, "backup.env"), "WAITRON_BACKUP_BUCKET=venue-copies\n");
+    const outcome = await sendBackupSettings(
+      { ...deps(), exchange: { timeoutMs: 5_000, fetch: exchangeFetch } },
+      { nodeId: spareId, contactUrl: SPARE_URL },
+    );
+    expect(outcome).toEqual({ delivered: false, reason: "unreadable" });
+    expect(requests).toEqual([]);
   });
 
   it("is not delivered when the answered digest differs", async () => {
