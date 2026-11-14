@@ -25,7 +25,7 @@ async function fillValid(
   overrides: Record<string, string> = {},
 ): Promise<void> {
   for (const [key, value] of Object.entries({
-    personId: "op-1",
+    email: "op1@example.com",
     password: "correct horse",
     ...overrides,
   })) {
@@ -53,7 +53,7 @@ async function alerts(el: SetupResetScreen): Promise<Element[]> {
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 const REJECTED =
-  "That person ID and password are not the admin login used to connect this server. Check them and try again.";
+  "That email and password are not the admin login used to connect this server. Check them and try again.";
 
 afterEach(() => {
   setLocale("en-GB");
@@ -81,12 +81,14 @@ describe("setup-reset-screen", () => {
     );
   });
 
-  it("emits reset-requested with the trimmed person ID and the password as typed", async () => {
+  it("emits reset-requested with the trimmed email and the password as typed", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const events = collect(host);
-    await fillValid(el, { personId: "  op-1  ", password: "  correct horse  " });
+    await fillValid(el, { email: "  op1@example.com  ", password: "  correct horse  " });
     q(el, "[data-test=reset]")!.click();
-    expect(events).toEqual([{ credential: { personId: "op-1", password: "  correct horse  " } }]);
+    expect(events).toEqual([
+      { credential: { email: "op1@example.com", password: "  correct horse  " } },
+    ]);
   });
 
   it("resets when Enter is pressed in a field", async () => {
@@ -95,16 +97,19 @@ describe("setup-reset-screen", () => {
     await fillValid(el);
     q(el, "[data-test=password]")!.shadowRoot!.querySelector("input")!.focus();
     await userEvent.keyboard("{Enter}");
-    expect(events).toEqual([{ credential: { personId: "op-1", password: "correct horse" } }]);
+    expect(events).toEqual([
+      { credential: { email: "op1@example.com", password: "correct horse" } },
+    ]);
   });
 
   it("names both fields semantically, marks them required and gives them login autocomplete", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    const personId = q(el, "[data-test=personId]")!;
+    const email = q(el, "[data-test=email]")!;
     const password = q(el, "[data-test=password]")!;
-    expect(personId.getAttribute("name")).toBe("personId");
-    expect(personId.getAttribute("autocomplete")).toBe("username");
-    expect(personId.hasAttribute("required")).toBe(true);
+    expect(email.getAttribute("name")).toBe("email");
+    expect(email.getAttribute("autocomplete")).toBe("username");
+    expect(email.hasAttribute("required")).toBe(true);
+    expect(email.getAttribute("type")).toBe("email");
     expect(password.getAttribute("name")).toBe("password");
     expect(password.getAttribute("autocomplete")).toBe("current-password");
     expect(password.hasAttribute("required")).toBe(true);
@@ -134,7 +139,7 @@ describe("setup-reset-screen", () => {
   });
 
   it.each([
-    ["personId", "Enter the admin person ID."],
+    ["email", "Enter the admin email."],
     ["password", "Enter the admin password."],
   ])(
     "blocks the reset and explains %s when it is blank, emitting nothing",
@@ -183,8 +188,8 @@ describe("setup-reset-screen", () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
       credentialsRejected: true,
     });
-    expect(q(el, "[data-test=personId]")!.hasAttribute("invalid")).toBe(false);
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
     expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(false);
     expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
     expect(await bottomOf(el)).toBe(REJECTED);
@@ -199,7 +204,7 @@ describe("setup-reset-screen", () => {
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve));
 
-    for (const field of ["personId", "password"]) {
+    for (const field of ["email", "password"]) {
       const input = q(el, `[data-test=${field}]`)!;
       expect(input.getAttribute("error")).toBe("");
       expect(input.hasAttribute("invalid")).toBe(false);
@@ -218,8 +223,8 @@ describe("setup-reset-screen", () => {
     });
     expect(await bottomOf(el)).toBe("Too many attempts. Wait 30 seconds, then try again.");
     expect(await alerts(el)).toHaveLength(1);
-    expect(q(el, "[data-test=personId]")).not.toBeNull();
-    expect(q(el, "[data-test=personId]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=email]")).not.toBeNull();
+    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(false);
     expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
   });
 
@@ -229,7 +234,7 @@ describe("setup-reset-screen", () => {
     });
     q(el, "[data-test=reset]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("Enter the admin person ID.");
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("Enter the admin email.");
     expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Enter the admin password.");
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(await alerts(el)).toHaveLength(1);
@@ -249,21 +254,21 @@ describe("setup-reset-screen", () => {
 
   it("says nothing and leaves the reset button working before the first press", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    await type(el, "personId", "");
+    await type(el, "email", "");
     expect(await bottomOf(el)).toBe("");
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
-    expect(q(el, "[data-test=personId]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(false);
     expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
   });
 
   it("on a failed press focuses the first blank field and disables the reset button", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    await type(el, "personId", "op-1");
+    await type(el, "email", "op1@example.com");
     q(el, "[data-test=reset]")!.click();
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve));
 
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
     const password = q(el, "[data-test=password]")!;
     expect(password.getAttribute("error")).toBe("Enter the admin password.");
     expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
@@ -277,12 +282,12 @@ describe("setup-reset-screen", () => {
     q(el, "[data-test=reset]")!.click();
     await el.updateComplete;
 
-    await type(el, "personId", "op-1");
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    await type(el, "email", "op1@example.com");
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
     expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(true);
 
-    await type(el, "personId", " ");
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("Enter the admin person ID.");
+    await type(el, "email", " ");
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("Enter the admin email.");
 
     await fillValid(el);
     expect(await bottomOf(el)).toBe("");
@@ -306,8 +311,10 @@ describe("setup-reset-screen", () => {
     );
     q(el, "[data-test=reset]")!.click();
     await el.updateComplete;
-    expect(events).toEqual([{ credential: { personId: "op-1", password: "correct horse" } }]);
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    expect(events).toEqual([
+      { credential: { email: "op1@example.com", password: "correct horse" } },
+    ]);
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
     expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
     expect(await bottomOf(el)).toBe("");
   });
@@ -324,7 +331,7 @@ describe("setup-reset-screen", () => {
     expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
     expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Check the admin password.");
-    expect(q(el, "[data-test=personId]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(false);
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect((q(el, "[data-test=reset]") as HTMLElement & { disabled: boolean }).disabled).toBe(
       false,
@@ -335,17 +342,17 @@ describe("setup-reset-screen", () => {
     expect(await bottomOf(el)).toBe("");
     el.invalidField = undefined;
     await el.updateComplete;
-    el.invalidField = "personId";
+    el.invalidField = "email";
     await el.updateComplete;
     q(el, "[data-test=reset]")!.click();
     await el.updateComplete;
     expect(events).toHaveLength(1);
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
   });
 
   it.each([
-    ["personId", "op-2", { personId: "op-2", password: "correct horse" }],
-    ["password", "battery staple", { personId: "op-1", password: "battery staple" }],
+    ["email", "op2@example.com", { email: "op2@example.com", password: "correct horse" }],
+    ["password", "battery staple", { email: "op1@example.com", password: "battery staple" }],
   ])(
     "withdraws a refused login's message once %s changes, and the reset then sends the new login",
     async (field, value, credential) => {
@@ -357,7 +364,7 @@ describe("setup-reset-screen", () => {
       expect(await bottomOf(el)).toBe(REJECTED);
 
       await type(el, field, value);
-      expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+      expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
       expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
       expect(await bottomOf(el)).toBe("");
       expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
@@ -370,7 +377,7 @@ describe("setup-reset-screen", () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const escaped: Event[] = [];
     host.addEventListener("wt-change", (e) => escaped.push(e));
-    await type(el, "personId", "op-1");
+    await type(el, "email", "op1@example.com");
     expect(escaped).toEqual([]);
   });
 
@@ -394,7 +401,7 @@ describe("setup-reset-screen", () => {
     const status = q(el, "[data-test=outcome]")!;
     expect(status.getAttribute("role")).toBe("status");
     expect(status.textContent).toContain("resetting and will restart");
-    expect(q(el, "[data-test=personId]")).toBeNull();
+    expect(q(el, "[data-test=email]")).toBeNull();
     expect(q(el, "[data-test=back]")).toBeNull();
     q(el, "[data-test=reload]")!.click();
     expect(reload).toHaveBeenCalledOnce();
@@ -408,7 +415,7 @@ describe("setup-reset-screen", () => {
     const alert = q(el, "[data-test=outcome]")!;
     expect(alert.getAttribute("role")).toBe("alert");
     expect(alert.textContent).toContain("no half-finished join");
-    expect(q(el, "[data-test=personId]")).toBeNull();
+    expect(q(el, "[data-test=email]")).toBeNull();
     expect(q(el, "[data-test=reload]")!.textContent!.trim()).toBe("Reload");
   });
 
@@ -418,9 +425,7 @@ describe("setup-reset-screen", () => {
     expect(q(el, "h1")!.textContent!.trim()).toBe("Restablecer este servidor");
     const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
     expect(text).toContain("No se cambia nada en el servidor principal");
-    expect(q(el, "[data-test=personId]")!.getAttribute("label")).toBe(
-      "Inicio de sesión del administrador (ID de persona)",
-    );
+    expect(q(el, "[data-test=email]")!.getAttribute("label")).toBe("Correo del administrador");
     expect(q(el, "[data-test=password]")!.getAttribute("label")).toBe(
       "Contraseña del administrador",
     );
@@ -436,8 +441,8 @@ describe("setup-reset-screen", () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     q(el, "[data-test=reset]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe(
-      "Introduce el ID de persona del administrador.",
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe(
+      "Introduce el correo del administrador.",
     );
     expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe(
       "Introduce la contraseña del administrador.",
@@ -452,7 +457,7 @@ describe("setup-reset-screen", () => {
     });
     expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
     expect(await bottomOf(el)).toBe(
-      "Ese ID de persona y esa contraseña no son el inicio de sesión de administrador que se usó para conectar este servidor. Revísalos e inténtalo de nuevo.",
+      "Ese correo y esa contraseña no son el inicio de sesión de administrador que se usó para conectar este servidor. Revísalos e inténtalo de nuevo.",
     );
   });
 
@@ -468,15 +473,13 @@ describe("setup-reset-screen", () => {
 
   it("redraws in Spanish on a live language switch and keeps what was typed", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    await type(el, "personId", "op-7");
+    await type(el, "email", "op7@example.com");
     expect(q(el, "h1")!.textContent!.trim()).toBe("Reset this server");
     setLocale("es-ES");
     await el.updateComplete;
     expect(q(el, "h1")!.textContent!.trim()).toBe("Restablecer este servidor");
-    expect(q(el, "[data-test=personId]")!.getAttribute("label")).toBe(
-      "Inicio de sesión del administrador (ID de persona)",
-    );
-    const input = q(el, "[data-test=personId]") as HTMLElement & { value: string };
-    expect(input.value).toBe("op-7");
+    expect(q(el, "[data-test=email]")!.getAttribute("label")).toBe("Correo del administrador");
+    const input = q(el, "[data-test=email]") as HTMLElement & { value: string };
+    expect(input.value).toBe("op7@example.com");
   });
 });

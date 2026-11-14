@@ -55,7 +55,7 @@ test("dispatchProvisionRequested fires a composed, bubbling provision-requested 
 test("dispatchAdoptRequested fires a composed, bubbling adopt-requested wrapping the body", () => {
   const body = {
     primaryUrl: "https://waitron.local",
-    credential: { personId: "op-1", password: "correct horse", totp: "123456" },
+    credential: { email: "op1@example.com", password: "correct horse", totp: "123456" },
   };
   const e = capture("adopt-requested", (el) => dispatchAdoptRequested(el, body));
   expect(e.detail).toEqual({ body });
@@ -64,7 +64,7 @@ test("dispatchAdoptRequested fires a composed, bubbling adopt-requested wrapping
 });
 
 test("dispatchResetRequested fires a composed, bubbling reset-requested wrapping the login", () => {
-  const credential = { personId: "op-1", password: "correct horse" };
+  const credential = { email: "op1@example.com", password: "correct horse" };
   const e = capture("reset-requested", (el) => dispatchResetRequested(el, credential));
   expect(e.detail).toEqual({ credential });
   expect(e.bubbles).toBe(true);

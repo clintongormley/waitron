@@ -411,7 +411,7 @@ function refusedField<F extends string>(
 }
 
 const RESET_FIELD_PATHS: Record<string, ResetField> = {
-  personId: "personId",
+  email: "email",
   password: "password",
 };
 
@@ -421,7 +421,7 @@ const ADOPT_FIELD_CODES: Record<string, ConnectField> = {
 
 const ADOPT_FIELD_PATHS: Record<string, ConnectField> = {
   primaryUrl: "primaryUrl",
-  "credential.personId": "personId",
+  "credential.email": "email",
   "credential.password": "password",
   "credential.totp": "totp",
 };

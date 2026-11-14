@@ -18,7 +18,7 @@ import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 
-export type ConnectField = "primaryUrl" | "personId" | "password" | "totp";
+export type ConnectField = "primaryUrl" | "email" | "password" | "totp";
 type ConnectForm = Record<ConnectField, string>;
 
 /**
@@ -29,7 +29,7 @@ type Step = "address" | "compare" | "stopped" | "login";
 
 const REQUIRED_FIELDS: Record<"address" | "login", readonly ConnectField[]> = {
   address: ["primaryUrl"],
-  login: ["personId", "password"],
+  login: ["email", "password"],
 };
 
 /** Only plain http needs no comparison, and the server allows it to this machine alone. */
@@ -60,10 +60,10 @@ const FIELD_TEXT: Record<ConnectField, FieldText> = {
     error: "connect.primary_url.error",
     hint: "connect.primary_url.hint",
   },
-  personId: {
-    label: "connect.person_id.label",
-    error: "connect.person_id.error",
-    hint: "connect.person_id.hint",
+  email: {
+    label: "connect.email.label",
+    error: "connect.email.error",
+    hint: "connect.email.hint",
   },
   password: {
     label: "connect.password.label",
@@ -125,7 +125,7 @@ export class SetupConnectScreen extends LitElement {
 
   @state() private values: ConnectForm = {
     primaryUrl: "",
-    personId: "",
+    email: "",
     password: "",
     totp: "",
   };
@@ -176,7 +176,7 @@ export class SetupConnectScreen extends LitElement {
       snapshot: (form) => ({ ...form }),
       equal: (a, b) =>
         a.primaryUrl.trim() === b.primaryUrl.trim() &&
-        a.personId.trim() === b.personId.trim() &&
+        a.email.trim() === b.email.trim() &&
         a.password === b.password &&
         a.totp.trim() === b.totp.trim(),
       restore: (form) => {
@@ -201,7 +201,7 @@ export class SetupConnectScreen extends LitElement {
       const { primaryUrl, credential, confirmedCaPem } = this.request;
       this.values = {
         primaryUrl,
-        personId: credential.personId,
+        email: credential.email,
         password: credential.password,
         totp: "",
       };
@@ -320,7 +320,7 @@ export class SetupConnectScreen extends LitElement {
     const body: AdoptBody = {
       primaryUrl: this.values.primaryUrl.trim(),
       credential: {
-        personId: this.values.personId.trim(),
+        email: this.values.email.trim(),
         password: this.values.password,
         ...(totp === "" ? {} : { totp }),
       },
@@ -348,7 +348,7 @@ export class SetupConnectScreen extends LitElement {
       ?readonly=${readonly}
       label=${t(text.label)}
       name=${key}
-      autocomplete=${key === "password" ? "current-password" : key === "personId" ? "username" : key === "totp" ? "one-time-code" : "off"}
+      autocomplete=${key === "password" ? "current-password" : key === "email" ? "username" : key === "totp" ? "one-time-code" : "off"}
       ?required=${key !== "totp" && !readonly}
       hint=${t(text.hint)}
       error=${invalid ? t(text.error) : ""}
@@ -419,7 +419,7 @@ export class SetupConnectScreen extends LitElement {
           <p class="fingerprint" data-test="fingerprint">${fingerprint}</p>`;
       }
       case "login":
-        return html`${field("personId")} ${field("password", "password")} ${field("totp")}`;
+        return html`${field("email", "email")} ${field("password", "password")} ${field("totp")}`;
     }
   }
 

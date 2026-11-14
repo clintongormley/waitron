@@ -101,7 +101,7 @@ export const shellEn = {
   "shell.adopt.primary_unconfirmed":
     "The primary server's certificate wasn't compared, so nothing was sent. This is a fault in Waitron. Check the address and compare the certificate again.",
   "shell.adopt.login_failed":
-    "The login failed. Check the admin person ID, password and authenticator code, then try again.",
+    "The login failed. Check the admin email, password and authenticator code, then try again.",
   "shell.adopt.generic":
     "Couldn't connect to the primary. Check the address and login, then try again.",
   "shell.adopt.bucket_stream_active":
@@ -117,10 +117,10 @@ export const shellEn = {
   "shell.adopt.clocks_apart":
     "This server's clock and the primary server's are 10 minutes or more apart: this server reads {standbyAt}, the primary reads {primaryAt}. The two servers can work together only while their clocks agree. Nothing was changed on either server. If this server's time is wrong, connect it to the internet for a minute so it sets its clock, then enter a new authenticator code if you use one, and press Connect again.",
   "shell.adopt.incomplete":
-    "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished. You can reset this server with the admin person ID and password you used to connect it, then start setup again.",
+    "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished. You can reset this server with the admin email and password you used to connect it, then start setup again.",
 
   "shell.reset.request_invalid":
-    "The server rejected the details. Check the admin person ID and password, then try again.",
+    "The server rejected the details. Check the admin email and password, then try again.",
   "shell.reset.generic": "The server could not be reset. Check the connection and try again.",
   "shell.reset.resetting":
     "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: press Reset this server again.",
@@ -325,7 +325,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.adopt.primary_unconfirmed":
     "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Es un fallo de Waitron. Revisa la dirección y vuelve a comparar el certificado.",
   "shell.adopt.login_failed":
-    "No se ha podido iniciar sesión. Revisa el ID de persona, la contraseña y el código del autenticador del administrador, e inténtalo de nuevo.",
+    "No se ha podido iniciar sesión. Revisa el correo, la contraseña y el código del autenticador del administrador, e inténtalo de nuevo.",
   "shell.adopt.generic":
     "No se ha podido conectar con el servidor principal. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.bucket_stream_active":
@@ -341,10 +341,10 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.adopt.clocks_apart":
     "El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más: este servidor marca {standbyAt} y el principal marca {primaryAt}. Los dos servidores solo pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que ajuste su reloj, introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
   "shell.adopt.incomplete":
-    "Un intento anterior de unir este servidor a un restaurante se detuvo a medias y lo dejó configurado a medias. No se puede terminar. Puedes restablecer este servidor con el ID de persona y la contraseña del administrador que usaste para conectarlo, y volver a empezar la configuración.",
+    "Un intento anterior de unir este servidor a un restaurante se detuvo a medias y lo dejó configurado a medias. No se puede terminar. Puedes restablecer este servidor con el correo y la contraseña del administrador que usaste para conectarlo, y volver a empezar la configuración.",
 
   "shell.reset.request_invalid":
-    "El servidor ha rechazado los datos. Revisa el ID de persona y la contraseña del administrador, e inténtalo de nuevo.",
+    "El servidor ha rechazado los datos. Revisa el correo y la contraseña del administrador, e inténtalo de nuevo.",
   "shell.reset.generic":
     "No se ha podido restablecer el servidor. Comprueba la conexión e inténtalo de nuevo.",
   "shell.reset.resetting":

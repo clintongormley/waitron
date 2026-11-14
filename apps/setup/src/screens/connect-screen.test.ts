@@ -47,7 +47,7 @@ const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 const VALID: Record<string, string> = {
   primaryUrl: "https://waitron.local",
-  personId: "op-1",
+  email: "op1@example.com",
   password: "correct horse",
 };
 
@@ -66,7 +66,7 @@ const CERT_B: PrimaryCertificate = {
 /** A request the shell hands back: one the person already compared. */
 const REQUEST: AdoptBody = {
   primaryUrl: "https://primary.example",
-  credential: { personId: "op-7", password: " secret " },
+  credential: { email: "op7@example.com", password: " secret " },
   confirmedCaPem: CERT.pem,
 };
 
@@ -88,7 +88,7 @@ async function toLogin(el: SetupConnectScreen, address = VALID.primaryUrl): Prom
   await type(el, "primaryUrl", address);
   await pressed(el, "continue");
   await vi.waitFor(() =>
-    expect(q(el, "[data-test=matches]") ?? q(el, "[data-test=personId]")).not.toBeNull(),
+    expect(q(el, "[data-test=matches]") ?? q(el, "[data-test=email]")).not.toBeNull(),
   );
   if (q(el, "[data-test=matches]") !== null) await pressed(el, "matches");
 }
@@ -115,7 +115,7 @@ describe("setup-connect-screen", () => {
       "en-GB",
       {
         primaryUrl: "Full HTTPS address of the primary server",
-        personId: "An admin's person ID on the primary server",
+        email: "An admin's sign-in email on the primary server",
         password: "That admin's dashboard password",
         totp: "Current code, if this admin uses an authenticator",
       },
@@ -124,7 +124,7 @@ describe("setup-connect-screen", () => {
       "es-ES",
       {
         primaryUrl: "Dirección HTTPS completa del servidor principal",
-        personId: "ID de un administrador del servidor principal",
+        email: "Correo de acceso de un administrador del principal",
         password: "La contraseña del panel de ese administrador",
         totp: "El código que muestra ahora el autenticador",
       },
@@ -139,7 +139,7 @@ describe("setup-connect-screen", () => {
       await toLogin(el);
       expect({
         primaryUrl: hintOf("primaryUrl"),
-        personId: hintOf("personId"),
+        email: hintOf("email"),
         password: hintOf("password"),
         totp: hintOf("totp"),
       }).toEqual(hints);
@@ -173,7 +173,7 @@ describe("setup-connect-screen", () => {
         detail: {
           body: {
             primaryUrl: "https://waitron.local",
-            credential: { personId: "op-1", password: "correct horse" },
+            credential: { email: "op1@example.com", password: "correct horse" },
             confirmedCaPem: CERT.pem,
           },
         },
@@ -188,25 +188,25 @@ describe("setup-connect-screen", () => {
     q(el, "[data-test=connect]")!.click();
     const body = (events[0].detail as { body: { credential: Record<string, unknown> } }).body;
     expect(body.credential).toEqual({
-      personId: "op-1",
+      email: "op1@example.com",
       password: "correct horse",
       totp: "123456",
     });
   });
 
-  it("trims whitespace on primaryUrl/personId/totp but leaves the password verbatim", async () => {
+  it("trims whitespace on primaryUrl/email/totp but leaves the password verbatim", async () => {
     const { el, host } = await mount();
     const events = collect(host);
     await fillValid(el, {
       primaryUrl: "  https://waitron.local  ",
-      personId: "  op-1  ",
+      email: "  op1@example.com  ",
       password: "  correct horse  ",
       totp: "  123456  ",
     });
     q(el, "[data-test=connect]")!.click();
     expect((events[0].detail as { body: unknown }).body).toEqual({
       primaryUrl: "https://waitron.local",
-      credential: { personId: "op-1", password: "  correct horse  ", totp: "123456" },
+      credential: { email: "op1@example.com", password: "  correct horse  ", totp: "123456" },
       confirmedCaPem: CERT.pem,
     });
   });
@@ -223,7 +223,7 @@ describe("setup-connect-screen", () => {
         detail: {
           body: {
             primaryUrl: "https://waitron.local",
-            credential: { personId: "op-1", password: "correct horse" },
+            credential: { email: "op1@example.com", password: "correct horse" },
             confirmedCaPem: CERT.pem,
           },
         },
@@ -235,6 +235,15 @@ describe("setup-connect-screen", () => {
     const { el } = await mount();
     await toLogin(el);
     expect(q(el, "[data-test=password]")!.getAttribute("type")).toBe("password");
+  });
+
+  it("asks for the admin's sign-in email in a named email field with login autocomplete", async () => {
+    const { el } = await mount();
+    await toLogin(el);
+    const email = q(el, "[data-test=email]")!;
+    expect(email.getAttribute("name")).toBe("email");
+    expect(email.getAttribute("type")).toBe("email");
+    expect(email.getAttribute("autocomplete")).toBe("username");
   });
 
   it("blocks Continue and marks primaryUrl invalid when it is blank, reading nothing", async () => {
@@ -251,7 +260,7 @@ describe("setup-connect-screen", () => {
     expect(q(el, "[data-test=continue]")!.hasAttribute("disabled")).toBe(true);
   });
 
-  it.each(["personId", "password"])(
+  it.each(["email", "password"])(
     "blocks Connect and marks %s invalid when it is blank, emitting nothing",
     async (field) => {
       const { el, host } = await mount();
@@ -325,7 +334,7 @@ describe("setup-connect-screen", () => {
     expect(url.hasAttribute("invalid")).toBe(true);
     expect(url.getAttribute("error")).toBe("Check the primary server address.");
     expect(url.shadowRoot!.activeElement).toBe(url.shadowRoot!.querySelector("input"));
-    expect(q(el, "[data-test=personId]")).toBeNull();
+    expect(q(el, "[data-test=email]")).toBeNull();
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(await alerts(el)).toHaveLength(1);
     expect((q(el, "[data-test=continue]") as HTMLElement & { disabled: boolean }).disabled).toBe(
@@ -342,9 +351,9 @@ describe("setup-connect-screen", () => {
     const events = collect(host);
     const value = (field: string) =>
       (q(el, `[data-test=${field}]`) as HTMLElement & { value: string }).value;
-    expect([value("primaryUrl"), value("personId"), value("password"), value("totp")]).toEqual([
+    expect([value("primaryUrl"), value("email"), value("password"), value("totp")]).toEqual([
       "https://primary.example",
-      "op-7",
+      "op7@example.com",
       " secret ",
       "",
     ]);
@@ -356,7 +365,7 @@ describe("setup-connect-screen", () => {
         detail: {
           body: {
             primaryUrl: "https://primary.example",
-            credential: { personId: "op-7", password: " secret " },
+            credential: { email: "op7@example.com", password: " secret " },
             confirmedCaPem: CERT.pem,
           },
         },
@@ -368,14 +377,14 @@ describe("setup-connect-screen", () => {
     const { el } = await mount({
       request: {
         ...REQUEST,
-        credential: { personId: "op-7", password: " secret ", totp: "123456" },
+        credential: { email: "op7@example.com", password: " secret ", totp: "123456" },
       },
     });
     const value = (field: string) =>
       (q(el, `[data-test=${field}]`) as HTMLElement & { value: string }).value;
-    expect([value("primaryUrl"), value("personId"), value("password"), value("totp")]).toEqual([
+    expect([value("primaryUrl"), value("email"), value("password"), value("totp")]).toEqual([
       "https://primary.example",
-      "op-7",
+      "op7@example.com",
       " secret ",
       "",
     ]);
@@ -398,7 +407,7 @@ describe("setup-connect-screen", () => {
       errorMessage: "Couldn't reach the primary server.",
       request: REQUEST,
     });
-    await type(el, "personId", "");
+    await type(el, "email", "");
     q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
     expect(await alerts(el)).toHaveLength(1);
@@ -436,14 +445,12 @@ describe("setup-connect-screen", () => {
     await new Promise((resolve) => setTimeout(resolve));
 
     expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toBe("");
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe(
-      "Check the admin login (person id).",
-    );
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("Check the admin email.");
     expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Check the admin password.");
     expect(q(el, "[data-test=totp]")!.getAttribute("error")).toBe("");
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    const personId = q(el, "[data-test=personId]")!;
-    expect(personId.shadowRoot!.activeElement).toBe(personId.shadowRoot!.querySelector("input"));
+    const email = q(el, "[data-test=email]")!;
+    expect(email.shadowRoot!.activeElement).toBe(email.shadowRoot!.querySelector("input"));
     expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(true);
   });
 
@@ -493,7 +500,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     const { el, host } = await mount({ api });
     const events = collect(host);
     expect(q(el, "[data-test=password]")).toBeNull();
-    expect(q(el, "[data-test=personId]")).toBeNull();
+    expect(q(el, "[data-test=email]")).toBeNull();
 
     await type(el, "primaryUrl", "  https://waitron.local  ");
     await pressed(el, "continue");
@@ -510,7 +517,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     await pressed(el, "matches");
     expect(q(el, "[data-test=fingerprint]")).toBeNull();
     expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("readonly")).toBe(true);
-    await type(el, "personId", "op-1");
+    await type(el, "email", "op1@example.com");
     await type(el, "password", "correct horse");
     await pressed(el, "connect");
     expect(events).toEqual([
@@ -519,7 +526,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
         detail: {
           body: {
             primaryUrl: "https://waitron.local",
-            credential: { personId: "op-1", password: "correct horse" },
+            credential: { email: "op1@example.com", password: "correct horse" },
             confirmedCaPem: CERT.pem,
           },
         },
@@ -559,13 +566,13 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     const events = collect(host);
     await type(el, "primaryUrl", "http://127.0.0.1:8080");
     await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=personId]")).not.toBeNull());
+    await vi.waitFor(() => expect(q(el, "[data-test=email]")).not.toBeNull());
     expect(q(el, "[data-test=fingerprint]")).toBeNull();
     await fillValid(el);
     await pressed(el, "connect");
     expect((events[0]!.detail as { body: AdoptBody }).body).toEqual({
       primaryUrl: "http://127.0.0.1:8080",
-      credential: { personId: "op-1", password: "correct horse" },
+      credential: { email: "op1@example.com", password: "correct horse" },
     });
   });
 
@@ -603,7 +610,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     await type(el, "primaryUrl", "https://waitron.local");
     await pressed(el, "continue");
     await vi.waitFor(async () => expect(await bottomOf(el)).toBe(sentence));
-    expect(q(el, "[data-test=personId]")).toBeNull();
+    expect(q(el, "[data-test=email]")).toBeNull();
     expect(q(el, "[data-test=continue]")!.hasAttribute("disabled")).toBe(false);
   });
 
@@ -647,12 +654,12 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
       expect(text(q(el, "[data-test=fingerprint]")!)).toBe(CERT_B.fingerprint256),
     );
     await pressed(el, "matches");
-    await type(el, "personId", "op-1");
+    await type(el, "email", "op1@example.com");
     await type(el, "password", "correct horse");
     await pressed(el, "connect");
     expect((events[0]!.detail as { body: AdoptBody }).body).toEqual({
       primaryUrl: "https://b.example",
-      credential: { personId: "op-1", password: "correct horse" },
+      credential: { email: "op1@example.com", password: "correct horse" },
       confirmedCaPem: CERT_B.pem,
     });
   });
@@ -722,7 +729,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     const url = q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string };
     expect(url.hasAttribute("readonly")).toBe(false);
     expect(url.value).toBe(REQUEST.primaryUrl);
-    expect(q(el, "[data-test=personId]")).toBeNull();
+    expect(q(el, "[data-test=email]")).toBeNull();
     await type(el, "primaryUrl", "https://main.example");
     await pressed(el, "continue");
     await vi.waitFor(() => expect(q(el, "[data-test=matches]")).not.toBeNull());
@@ -775,7 +782,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
       "https://main.example",
     );
     await pressed(el, "matches");
-    await type(el, "personId", "op-1");
+    await type(el, "email", "op1@example.com");
     await type(el, "password", "correct horse");
     await pressed(el, "connect");
     expect((events[0]!.detail as { body: AdoptBody }).body.primaryUrl).toBe("https://main.example");
@@ -815,7 +822,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
       request: { primaryUrl: "https://primary.example", credential: REQUEST.credential },
       errorMessage: "Compare the certificate first.",
     });
-    expect(q(el, "[data-test=personId]")).toBeNull();
+    expect(q(el, "[data-test=email]")).toBeNull();
     expect((q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string }).value).toBe(
       "https://primary.example",
     );
@@ -826,7 +833,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     const { el } = await mount({
       request: { primaryUrl: "http://127.0.0.1:8080", credential: REQUEST.credential },
     });
-    expect(q(el, "[data-test=personId]")).not.toBeNull();
+    expect(q(el, "[data-test=email]")).not.toBeNull();
   });
 
   it("asks for the comparison in Spanish", async () => {
@@ -859,13 +866,13 @@ describe("setup-connect-screen in Spanish", () => {
     expect(q(el, "[data-test=primaryUrl]")!.getAttribute("label")).toBe(
       "Dirección del servidor principal",
     );
-    await fillValid(el, { personId: "" });
+    await fillValid(el, { email: "" });
     expect(text(q(el, "[data-test=connect]")!)).toBe("Conectar");
     q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
     expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe(
-      "Revisa el usuario administrador (ID de persona).",
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe(
+      "Revisa el correo del administrador.",
     );
   });
 
