@@ -432,6 +432,39 @@ describe("backupAlertSource and the bucket copy", () => {
     expect(alerts).toEqual([]);
   });
 
+  it("raises a retention warning beside lag, clears it, and suppresses it outside an active copy", async () => {
+    const since = "2026-09-15T10:00:00.000Z";
+    let view: HostStreamView = stream({ pruneBlockedSince: since, lagMs: 20 * 60_000 });
+    const source = src(configured, none, () => view);
+    const alerts = await source.read(ctx);
+    expect(alerts.map((a) => a.code)).toEqual([
+      "backup.stream_behind",
+      "backup.stream_retention_blocked",
+    ]);
+    expect(alerts[1]).toEqual({
+      key: "backup.stream_retention_blocked",
+      code: "backup.stream_retention_blocked",
+      params: {},
+      severity: "warning",
+      since,
+      screen: "backup",
+    });
+    for (const state of ["streaming", "paused"] as const) {
+      view = { ...stream({ state, pruneBlockedSince: since }), toSpare: true };
+      expect(
+        (await source.read(ctx)).find((a) => a.code === "backup.stream_retention_blocked"),
+      ).toMatchObject({ params: { toSpare: true }, severity: "warning", since });
+    }
+    for (const state of ["off", "opening", "refused"] as const) {
+      view = stream({ state, pruneBlockedSince: since });
+      expect((await source.read(ctx)).map((a) => a.code)).not.toContain(
+        "backup.stream_retention_blocked",
+      );
+    }
+    view = stream({});
+    expect(await source.read(ctx)).toEqual([]);
+  });
+
   it("raises backup.stream_behind at fifteen minutes, and backup.disabled with it", async () => {
     const lagMs = 20 * 60_000 + 59_999;
     const alerts = await src({ configured: false }, none, () => stream({ lagMs })).read(ctx);

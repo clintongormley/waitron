@@ -1621,14 +1621,15 @@ describe("generation housekeeping", () => {
     },
   );
 
-  it("prunes nothing while the bucket's clock cannot be read", async () => {
+  it("warns without pruning while the marker is absent, and clears at the successful daily read", async () => {
     const h = await harness();
     const list = h.store.list.bind(h.store);
     let markerReads = 0;
+    let missing = true;
     h.store.list = async (prefix) => {
       if (!prefix.endsWith("opened.json")) return list(prefix);
       markerReads += 1;
-      return [];
+      return missing ? [] : list(prefix);
     };
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
@@ -1643,6 +1644,49 @@ describe("generation housekeeping", () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(h.store.has(fullCopyOf(old))).toBe(true);
     expect(h.supervisor.status().state).toBe("streaming");
+    const since = h.clock.now().toISOString();
+    expect(h.supervisor.status().pruneBlockedSince).toBe(since);
+    h.clock.advance(PRUNE_EVERY_MS);
+    await h.clock.next();
+    await vi.waitFor(() => expect(markerReads).toBe(3));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(h.supervisor.status().pruneBlockedSince).toBe(since);
+    expect(h.store.has(fullCopyOf(old))).toBe(true);
+
+    missing = false;
+    h.clock.advance(PRUNE_EVERY_MS);
+    await h.clock.next();
+    await vi.waitFor(() => expect(h.store.has(fullCopyOf(old))).toBe(false));
+    expect(h.supervisor.status()).not.toHaveProperty("pruneBlockedSince");
+    expect(h.store.has(fullCopyOf(h.supervisor.status().generation!))).toBe(true);
+  });
+
+  it("does not reuse an earlier generation's clock when the next generation's marker is absent", async () => {
+    const h = await harness();
+    const first = generationName(2, NODE, new Date(START));
+    const list = h.store.list.bind(h.store);
+    let laterMarkerReads = 0;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("opened.json") && prefix !== markerOf(first)) {
+        laterMarkerReads += 1;
+        return [];
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.replicas().length === 2);
+    const generation = h.supervisor.status().generation!;
+    expect(generation).not.toBe(first);
+    h.store.upload(fullCopyOf(generation));
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+    oldGeneration(h, old, Date.parse(START) - 8 * DAY);
+    await h.clock.next();
+    await vi.waitFor(() => expect(laterMarkerReads).toBe(2));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(h.supervisor.status().pruneBlockedSince).toBe(h.clock.now().toISOString());
+    expect(h.store.has(fullCopyOf(old))).toBe(true);
   });
 
   it("reads the bucket's clock again at the daily prune when the marker could not be read at opening", async () => {

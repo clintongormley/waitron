@@ -127,6 +127,17 @@ export const ALERT_MESSAGES: Readonly<
       },
     },
   },
+  "backup.stream_retention_blocked": {
+    en: "The backup bucket is not being tidied: its marker could not be found, so old copies are being kept. Check the bucket settings on the Backups page. Waitron tries again daily.",
+    es: "No se está limpiando el bucket de copias: no se ha encontrado su marcador, así que se conservan las copias antiguas. Revisa los ajustes del bucket en la página de Copias. Waitron lo intenta de nuevo cada día.",
+    variants: {
+      toSpare: {
+        mode: "replace",
+        en: "Old copies on the standby server are not being tidied because their marker could not be found. Check that the standby server is switched on and connected to the restaurant's network. Waitron tries again daily.",
+        es: "No se están limpiando las copias antiguas del servidor en espera porque no se ha encontrado su marcador. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante. Waitron lo intenta de nuevo cada día.",
+      },
+    },
+  },
   "backup.stream_paused": {
     en: "The bucket copy is paused: the bucket could not be reached for so long that the box stopped copying to protect its disk. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",
     es: "La copia en el bucket está en pausa: no se ha podido contactar con el bucket durante tanto tiempo que el servidor ha dejado de copiar para proteger su disco. Las ventas continúan. Revisa la conexión a internet del servidor y el bucket en la página de Copias.",

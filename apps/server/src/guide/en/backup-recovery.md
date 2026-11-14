@@ -152,6 +152,12 @@ If the box says the bucket copy is not running, open **Backups** and press **Sta
 which starts it with the settings it already has. If it stops again, choose **Change bucket** and
 press **Test** to check the bucket.
 
+If the bell or **Box status** says the backup bucket is not being tidied, check the bucket settings
+in **Backups**. Old copies are kept until Waitron can find its marker; it tries again daily and
+clears the warning when that read succeeds. To request a fresh marker sooner, a Manager or Admin
+can use **Box status**, **Restart the box** when you are not serving. Tills stop selling during the
+restart. Restarting does not repair the bucket's settings.
+
 If the bucket copy says another box is writing this venue's copy to the same bucket and that box
 replaced this one, switch this box off: two boxes must never sell for one venue.
 

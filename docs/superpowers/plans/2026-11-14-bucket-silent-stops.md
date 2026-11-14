@@ -1,6 +1,6 @@
 # Bucket copy: silent stops and a real outage
 
-**Authority:** BUCKET-SILENT-STOPS, `~/waitron-campaign-e/queue.md`; watcher questions.md, 2026-11-14 10:47. Separate Sol high-effort draft, checked by Codex. Claude reviewed it in 299 seconds (`receipts/bucket-silent-stops/plan-review.md`); this revision adopts the smaller route. Watcher clearance remains required. Finish/land authorisation does not approve this design.
+**Authority:** BUCKET-SILENT-STOPS, `~/waitron-campaign-e/queue.md`; watcher questions.md, 2026-11-14 10:47. Separate Sol high-effort draft, checked by Codex. Claude reviewed it in 299 seconds (`receipts/bucket-silent-stops/plan-review.md`); this revision adopts the smaller route. The watcher cleared this corrected plan on 2026-11-14 at 11:08 (lane questions.md), choosing the first daily miss; no further plan read. Finish/land authorisation does not approve this design.
 
 **Finish line:** an owner-visible retention warning and dated, bounded real-binary loopback measurements. Reuse the supervisor, ongoing alerts, EN/ES renderer and existing stream rigs. Preserve sales, health and safe pruning. No new worker, persisted record, retry policy, email, provider account or fiscal path.
 
