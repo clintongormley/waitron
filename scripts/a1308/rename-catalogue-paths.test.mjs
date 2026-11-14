@@ -158,6 +158,17 @@ it("leaves prose without paths byte-identical when the package moves", () => {
   expect(read(root, "packages/menu/src/a.ts")).toBe("catalogue CatalogueScreen catalogues menu");
 });
 
+it("keeps the English-only inventory sorted after its path renames", () => {
+  const root = fixture({
+    "scripts/english-only-still-to-clean.ts":
+      'export const STILL_TO_CLEAN: readonly string[] = [\n  "packages/catalogue/src/a.ts",\n  "packages/db/src/x.ts",\n];\n',
+  });
+  run({ root });
+  expect(read(root, "scripts/english-only-still-to-clean.ts")).toBe(
+    'export const STILL_TO_CLEAN: readonly string[] = [\n  "packages/db/src/x.ts",\n  "packages/menu/src/a.ts",\n];\n',
+  );
+});
+
 it("leaves excluded, historical, out-of-scope and binary files alone", () => {
   const paths = [
     "packages/catalogue/drizzle/0000_baseline.sql",

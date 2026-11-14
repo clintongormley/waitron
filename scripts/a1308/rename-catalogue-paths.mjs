@@ -129,6 +129,11 @@ export function rewriteText(text, file, before, moves, rows = MOVES) {
   }
   if (file === "packages/db/package.json")
     text = text.replaceAll('"./schema/catalogue.js"', '"./schema/menu.js"');
+  if (file === "scripts/english-only-still-to-clean.ts")
+    text = text.replace(
+      /(export const STILL_TO_CLEAN[^=]*= \[\n)([\s\S]*?)(\n\];)/,
+      (_whole, head, paths, tail) => head + paths.split("\n").sort().join("\n") + tail,
+    );
   return text;
 }
 
