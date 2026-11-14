@@ -364,7 +364,7 @@ describe("vf-fiscal-filing-screen", () => {
     expect(unfolded(item)).toBe(
       "AEAT's answer to 2 records sent together had a different number of lines (1), so Waitron applied none of them. " +
         `Seen ${formatIsoMinute(REPLY_MISMATCH.detectedAt)} ` +
-        "What happens now Waitron sends each record again later, unless an earlier record on its chain is on hold, which puts it on hold too. A record that was already on hold stays on hold and is tried again an hour later. The state of each one now is below.",
+        "What happens now When this answer arrived, Waitron applied none of AEAT's lines and put each record back to be sent again, except any already on hold, which stayed on hold. Each record's state now is under Technical details.",
     );
     const fold = item.querySelector("wt-disclosure[data-test=technical]")!;
     expect(fold.getAttribute("heading")).toBe("Technical details");
@@ -385,7 +385,7 @@ describe("vf-fiscal-filing-screen", () => {
     setLocale("es");
     const spanish = await mount(vi.fn(async () => overview()));
     expect(flat(spanish.screen.shadowRoot!.querySelector("[data-test=warnings] h2"))).toBe(
-      "Avisos",
+      "Advertencias",
     );
     expect(text(spanish.screen, "[data-test=reply-mismatches] h3")).toBe(
       "Respuestas de la AEAT que no cuadran con lo enviado",
@@ -394,6 +394,88 @@ describe("vf-fiscal-filing-screen", () => {
       unfolded(spanish.screen.shadowRoot!.querySelector("[data-test=reply-mismatches] > ul > li")!),
     ).toContain(
       "La respuesta de la AEAT a 2 registros enviados juntos tenía otro número de líneas (1), así que Waitron no aplicó ninguna.",
+    );
+  });
+
+  it("says what Waitron did when it saw a mismatched reply, not that it will send the records again", async () => {
+    const settled = () =>
+      Promise.resolve(
+        overview({
+          warnings: {
+            replyMismatches: [
+              {
+                ...REPLY_MISMATCH,
+                sent: [
+                  { ...REPLY_MISMATCH.sent[0]!, estado: "aceptado" },
+                  { ...REPLY_MISMATCH.sent[1]!, estado: "rechazado" },
+                ],
+              },
+            ],
+            recordWarnings: [],
+            total: 1,
+          },
+        }),
+      );
+    const now = (screen: FiscalFilingScreen) =>
+      flat(screen.shadowRoot!.querySelector("[data-test=reply-mismatches] > ul > li > dl"));
+    const { screen } = await mount(vi.fn(settled));
+    expect(now(screen)).not.toMatch(/\bsends\b|\bis tried\b|\bwill\b/);
+    expect(now(screen)).toContain("Waitron applied none of AEAT's lines");
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(settled));
+    expect(now(spanish.screen)).not.toMatch(/vuelve a enviar|se vuelve a intentar/);
+    expect(now(spanish.screen)).toContain("Waitron no aplicó ninguna línea de la AEAT");
+  });
+
+  it("says which record sent issues an invoice and which cancels one, when both share a number, date and state", async () => {
+    const { screen } = await mount(
+      vi.fn(async () =>
+        overview({
+          warnings: {
+            replyMismatches: [
+              {
+                ...REPLY_MISMATCH,
+                sent: [
+                  { ...REPLY_MISMATCH.sent[0]!, tipoRegistro: "alta" },
+                  { ...REPLY_MISMATCH.sent[0]!, tipoRegistro: "anulacion" },
+                ],
+              },
+            ],
+            recordWarnings: [],
+            total: 1,
+          },
+        }),
+      ),
+    );
+    const fold = screen.shadowRoot!.querySelector(
+      "[data-test=reply-mismatches] wt-disclosure[data-test=technical]",
+    )!;
+    const sent = [...fold.querySelectorAll("dl > div:nth-of-type(2) li")].map(flat);
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).not.toBe(sent[1]);
+    expect(sent[1]).toContain("A cancellation of an earlier invoice.");
+  });
+
+  it("draws a warning whose stored details came back empty", async () => {
+    const { screen } = await mount(
+      vi.fn(async () =>
+        overview({
+          warnings: {
+            replyMismatches: [{ ...REPLY_MISMATCH, csv: null, sent: [], lines: [] }],
+            recordWarnings: [{ ...FLAGGED_WARNING, fields: [], codes: [], record: null }],
+            total: 2,
+          },
+        }),
+      ),
+    );
+    expect(
+      screen.shadowRoot!.querySelectorAll(
+        "[data-test=reply-mismatches] > ul > li, [data-test=record-warnings] > ul > li",
+      ),
+    ).toHaveLength(2);
+    expect(text(screen, "[data-test=reply-mismatches] > ul > li > span")).toBe(
+      "AEAT's answer to 0 records sent together had a different number of lines (0), so Waitron applied none of them.",
     );
   });
 
@@ -471,7 +553,9 @@ describe("vf-fiscal-filing-screen", () => {
 
     setLocale("es");
     const spanish = await mount(vi.fn(answer));
-    expect(text(spanish.screen, "[data-test=warnings]")).toBe("Avisos No hay avisos abiertos.");
+    expect(text(spanish.screen, "[data-test=warnings]")).toBe(
+      "Advertencias No hay advertencias abiertas.",
+    );
   });
 
   it("says the warnings shown are the newest few when there are more", async () => {
@@ -493,7 +577,7 @@ describe("vf-fiscal-filing-screen", () => {
     setLocale("es");
     const spanish = await mount(vi.fn(answer));
     expect(text(spanish.screen, "[data-test=warnings] [data-test=bounded]")).toBe(
-      "Se muestran los 1 más recientes de 201. Expórtalos para verlos todos.",
+      "Se muestran las 1 más recientes de 201. Expórtalas para verlas todas.",
     );
   });
 

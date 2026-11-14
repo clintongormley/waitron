@@ -49,14 +49,15 @@ every one.
 record.
 
 - **AEAT answers that did not match what was sent**: AEAT answered a group of records with a
-  different number of lines, so Waitron used none of its answer and sends the records again.
-  **Technical details** shows each record sent, where it stands now, and AEAT's lines.
+  different number of lines, so Waitron used none of its answer: it put each record back to be sent
+  again, or left it on hold. **Technical details** shows each record sent, where it stands now, and
+  AEAT's lines.
 - **Invoices with a warning from Waitron's own check**: AEAT accepts the invoice, but Waitron's
   check found something AEAT may point out, or totals that do not match the tax lines. For totals,
   check that sale's prices.
 
-A warning leaves the list once its alert is marked handled in the bell or on **Alerts**. The export
-carries every open warning, not only those on screen.
+A warning leaves the list once its alert is marked handled in the bell or on the **Alerts** page.
+The export carries every open warning, not only those on screen.
 
 ## Export the cases {#export}
 

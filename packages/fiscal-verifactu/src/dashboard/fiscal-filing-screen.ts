@@ -105,7 +105,9 @@ function total({ importeTotal, cuotaTotal }: FilingCaseView["record"]): string |
   });
 }
 
-function recordKind(record: FilingCaseView["record"]): string {
+function recordKind(
+  record: Pick<FilingCaseView["record"], "tipoRegistro" | "tipoFactura">,
+): string {
   if (record.tipoRegistro === "anulacion") return t("fiscal_filing.kind.anulacion");
   const type = record.tipoFactura ?? "";
   if (type === "F1" || type === "F2" || type === "F3") return t(`fiscal_filing.kind.${type}`);
@@ -385,8 +387,9 @@ function missingHistory({ notIssuedHere, identityChanges }: MissingHistory): Tem
 
 function sentRecord(record: WarnedRecordView): TemplateResult {
   const state = record.estado === null ? null : recordState({ estado: record.estado });
+  const kind = recordKind({ tipoRegistro: record.tipoRegistro, tipoFactura: null });
   return html`<li>
-    ${[record.numSerieFactura, record.fechaExpedicionFactura, state]
+    ${[record.numSerieFactura, record.fechaExpedicionFactura, state, kind]
       .filter((part) => part !== null)
       .join(" · ")}
   </li>`;

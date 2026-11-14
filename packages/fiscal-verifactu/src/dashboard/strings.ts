@@ -199,7 +199,7 @@ const en = {
     "AEAT's answer to {sent} records sent together had a different number of lines ({lines}), so Waitron applied none of them.",
   "fiscal_filing.warnings.reply.seen": "Seen {time}",
   "fiscal_filing.warnings.reply.now":
-    "Waitron sends each record again later, unless an earlier record on its chain is on hold, which puts it on hold too. A record that was already on hold stays on hold and is tried again an hour later. The state of each one now is below.",
+    "When this answer arrived, Waitron applied none of AEAT's lines and put each record back to be sent again, except any already on hold, which stayed on hold. Each record's state now is under Technical details.",
   "fiscal_filing.warnings.reply.csv": "Submission code (CSV)",
   "fiscal_filing.warnings.reply.sent": "Records sent",
   "fiscal_filing.warnings.reply.lines": "AEAT's lines",
@@ -544,16 +544,16 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.none": "Ninguno",
   "fiscal_filing.cases": "Casos de remisión",
   "fiscal_filing.held_without_case": "Detenidos sin caso: {count}",
-  "fiscal_filing.warnings": "Avisos",
-  "fiscal_filing.warnings.none": "No hay avisos abiertos.",
+  "fiscal_filing.warnings": "Advertencias",
+  "fiscal_filing.warnings.none": "No hay advertencias abiertas.",
   "fiscal_filing.warnings.bounded":
-    "Se muestran los {shown} más recientes de {total}. Expórtalos para verlos todos.",
+    "Se muestran las {shown} más recientes de {total}. Expórtalas para verlas todas.",
   "fiscal_filing.warnings.reply": "Respuestas de la AEAT que no cuadran con lo enviado",
   "fiscal_filing.warnings.reply.line":
     "La respuesta de la AEAT a {sent} registros enviados juntos tenía otro número de líneas ({lines}), así que Waitron no aplicó ninguna.",
   "fiscal_filing.warnings.reply.seen": "Visto: {time}",
   "fiscal_filing.warnings.reply.now":
-    "Waitron vuelve a enviar cada registro más tarde, salvo que un registro anterior de su cadena esté detenido, lo que también lo detiene. Un registro que ya estaba detenido sigue detenido y se vuelve a intentar una hora después. Abajo está el estado actual de cada uno.",
+    "Cuando llegó esta respuesta, Waitron no aplicó ninguna línea de la AEAT y volvió a dejar cada registro pendiente de enviar, salvo los que ya estaban detenidos, que siguieron detenidos. El estado actual de cada uno está en Detalles técnicos.",
   "fiscal_filing.warnings.reply.csv": "Código de la remisión (CSV)",
   "fiscal_filing.warnings.reply.sent": "Registros enviados",
   "fiscal_filing.warnings.reply.lines": "Líneas de la AEAT",
