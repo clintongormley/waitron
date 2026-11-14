@@ -1069,31 +1069,21 @@ it.each([false, true])(
   },
 );
 
-it("swiping across a bar changes day without opening", async () => {
+it("a real bar swipe changes day without opening, then a wide bar still opens", async () => {
   const el = await mount();
   el.style.width = "390px";
   await expect.poll(() => el.narrow).toBe(true);
   const opened = events<CalendarDayOpen>(el, "calendar-day-open");
   const changed = events<{ date: LocalDate }>(el, "week-change");
-  const bar = root(el).querySelector<HTMLElement>(".block")!;
-  bar.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      bubbles: true,
-      pointerType: "touch",
-      pointerId: 7,
-      clientX: 230,
-      clientY: 200,
-    }),
-  );
-  window.dispatchEvent(
-    new PointerEvent("pointerup", {
-      pointerType: "touch",
-      pointerId: 7,
-      clientX: 100,
-      clientY: 200,
-    }),
-  );
-  bar.click();
+  await commands.touchGesture({
+    at: 'opening-hours-week [data-test="day-card"] .row[data-row="rest"] .block:nth-child(2)',
+    moveBy: { x: -100, y: 0 },
+  });
   expect(changed).toEqual([{ date: "2026-12-03" }]);
   expect(opened).toEqual([]);
+  el.style.width = "1280px";
+  await expect.poll(() => el.narrow).toBe(false);
+  await userEvent.click(root(el).querySelector<HTMLElement>(".block")!);
+  expect(opened).toHaveLength(1);
+  expect(opened[0]!.date).toBe("2026-11-30");
 });

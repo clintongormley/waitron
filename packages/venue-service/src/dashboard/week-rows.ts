@@ -46,9 +46,8 @@ export function weekDays(model: OpeningHoursMonth, date: LocalDate): Day[] | und
 }
 
 export interface WeekBlock {
-  kind: "open" | "closed";
-  /** null for a closed piece. */
-  periodId: string | null;
+  kind: "open";
+  periodId: string;
   /** Minutes after the day's changeover, as `placeOnDay` gives. */
   start: number;
   end: number;

@@ -78,8 +78,7 @@ describe("weekRows", () => {
       ["dinner", false, "Dinner 22:00–23:00"],
     ]);
     expect(open[2]!.start).toBe(960);
-    const closed = terrace!.blocks.filter((b) => b.kind === "closed");
-    expect(closed).toEqual([]);
+    expect(terrace!.blocks.every((b) => b.kind === "open")).toBe(true);
     expect(terrace!.words).toBe(
       "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 22:00–23:00 · closed 20:00–22:00",
     );
@@ -137,8 +136,7 @@ describe("weekRows", () => {
       "rest",
       terraceClosed("2026-12-02", [{ startsAt: "22:00", endsAt: "05:00" }]),
     )[1]!;
-    const closed = late.blocks.filter((b) => b.kind === "closed");
-    expect(closed).toEqual([]);
+    expect(late.blocks.every((b) => b.kind === "open")).toBe(true);
     expect(late.words).toContain("closed 22:00–23:00");
     expect(
       late.blocks.filter((b) => b.periodId === "dinner").map((b) => [b.faded, b.text]),

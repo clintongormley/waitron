@@ -1550,4 +1550,18 @@ it("draws merged opening spans with time-only descriptions", async () => {
   await named(dayButton(el, day.date)).toHaveAccessibleName(
     containing("Restaurant: 09:00–00:00, Terrace: 09:00–23:00"),
   );
+  day.departments[0]!.zones[0]!.closed = [];
+  el.model = { ...model };
+  await el.updateComplete;
+  const inherited = [...cell(el, day.date).querySelectorAll<HTMLElement>(".segment")];
+  expect(inherited.map((span) => span.title)).toEqual(["09:00–00:00", "09:00–00:00"]);
+  const brand = document.createElement("span");
+  brand.style.background = "var(--wt-color-primary)";
+  root(el).append(brand);
+  for (const span of inherited)
+    expect(getComputedStyle(span).backgroundColor).toBe(getComputedStyle(brand).backgroundColor);
+  brand.remove();
+  await named(dayButton(el, day.date)).toHaveAccessibleName(
+    containing("Restaurant: 09:00–00:00, Terrace: 09:00–00:00"),
+  );
 });

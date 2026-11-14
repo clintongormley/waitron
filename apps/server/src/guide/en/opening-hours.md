@@ -6,7 +6,7 @@ Open a date to see when each department and zone is open. The Month and the day 
 
 For the period detail, choose **Open this week** in the pop-up. In Week, click a day's heading or any of its bars to open that day's hours. A gap in a zone's bars means it is closed then.
 
-To change the usual timetable, choose **Edit <season>'s standard week** beside the season at the top of the pop-up. For an exception, choose **Make a special day** at the bottom. Touching Closed stretches appear as one in the editor.
+To change the usual timetable, choose **Edit <season>'s standard week** beside the season at the top of the pop-up. For an exception, choose **Make a special day** at the bottom.
 
 ## Select days together {#select-days}
 

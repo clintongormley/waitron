@@ -603,13 +603,11 @@ export class OpeningHoursWeekView extends LitElement {
       </div>`;
   }
 
-  #swiped = false;
   #swipeFrom: { id: number; x: number; y: number } | undefined;
   /** The touch and pen contacts down on the day card. */
   #contacts = new Set<number>();
 
   #swipeStart(event: PointerEvent) {
-    this.#swiped = false;
     if (event.pointerType === "mouse") return;
     if (this.#contacts.size === 0) {
       // Heard on the window, so a contact lifted where the card does not hear it still ends.
@@ -631,7 +629,6 @@ export class OpeningHoursWeekView extends LitElement {
     const across = event.clientX - from.x;
     const down = event.clientY - from.y;
     if (Math.abs(across) < SWIPE_PX || Math.abs(across) <= 2 * Math.abs(down)) return;
-    this.#swiped = true;
     const target = addDays(this.date, across < 0 ? 1 : -1);
     if (weekInRange(target)) this.#emit("week-change", { date: target });
   };
@@ -644,10 +641,6 @@ export class OpeningHoursWeekView extends LitElement {
   }
 
   #openBarDay(date: LocalDate): void {
-    if (this.#swiped) {
-      this.#swiped = false;
-      return;
-    }
     this.#emit<CalendarDayOpen>("calendar-day-open", {
       date,
       returnTo: () => this.#dayButton(date),
