@@ -103,14 +103,14 @@ describe("createLogger personal data", () => {
   }
 
   it.each([
-    ["email", "marta.soler@example.test", "m***r@e***e.test"],
+    ["email", "martha.spencer@example.test", "m***r@e***e.test"],
     ["displayName", "Martha Spencer", "M***a S***r"],
     ["ownerName", "Martha Spencer", "M***a S***r"],
     ["editorName", "Martha Spencer", "M***a S***r"],
     ["holderPersonName", "Martha Spencer", "M***a S***r"],
     ["person", "Martha Spencer", "M***a S***r"],
     ["supplierTaxId", "12345678Z", "1***Z"],
-    ["legalName", "Jordi Puig Ferrer", "J***i P***g F***r"],
+    ["legalName", "Jamie King Foster", "J***e K***g F***r"],
     ["taxId", "12345678Z", "1***Z"],
     ["idEmisorFactura", "12345678Z", "1***Z"],
     ["todayName", "Spencer", "S***r"],
@@ -123,17 +123,17 @@ describe("createLogger personal data", () => {
   it("masks a listed key nested in objects and arrays", () => {
     const line = writeLine({
       edit: { editorName: "Martha Spencer", editorVersion: 3 },
-      conflicts: [{ editorName: "Jordi Puig" }],
+      conflicts: [{ editorName: "Jamie King" }],
     });
     expect(JSON.parse(line)).toEqual({
       edit: { editorName: "M***a S***r", editorVersion: 3 },
-      conflicts: [{ editorName: "J***i P***g" }],
+      conflicts: [{ editorName: "J***e K***g" }],
       at,
       level: "warn",
       event: "x",
     });
     expect(line).not.toContain("Martha Spencer");
-    expect(line).not.toContain("Jordi Puig");
+    expect(line).not.toContain("Jamie King");
   });
 
   it("keeps null under a listed key and the names of things", () => {
@@ -165,40 +165,40 @@ describe("createLogger personal data", () => {
   it("masks a merchant's name under merchants and only there", () => {
     const first = writeLine({
       merchants: [
-        { code: "MC1", name: "Jordi Puig Ferrer" },
+        { code: "MC1", name: "Jamie King Foster" },
         { code: "MC2", name: null },
       ],
       name: "Patio",
-      other: { merchants: "Jordi Puig Ferrer" },
+      other: { merchants: "Jamie King Foster" },
     });
     expect(JSON.parse(first)).toEqual({
       merchants: [
-        { code: "MC1", name: "J***i P***g F***r" },
+        { code: "MC1", name: "J***e K***g F***r" },
         { code: "MC2", name: null },
       ],
       name: "Patio",
-      other: { merchants: "Jordi Puig Ferrer" },
+      other: { merchants: "Jamie King Foster" },
       at,
       level: "warn",
       event: "x",
     });
 
     const second = writeLine({
-      merchants: [{ code: "MC1", name: "Jordi Puig Ferrer", email: "jordi.puig@example.test" }],
+      merchants: [{ code: "MC1", name: "Jamie King Foster", email: "jamie.king@example.test" }],
     });
     expect(JSON.parse(second)).toEqual({
-      merchants: [{ code: "MC1", name: "J***i P***g F***r", email: "j***g@e***e.test" }],
+      merchants: [{ code: "MC1", name: "J***e K***g F***r", email: "j***g@e***e.test" }],
       at,
       level: "warn",
       event: "x",
     });
-    expect(second).not.toContain("Jordi Puig");
-    expect(second).not.toContain("jordi.puig@example.test");
+    expect(second).not.toContain("Jamie King");
+    expect(second).not.toContain("jamie.king@example.test");
   });
 
   it("keeps a merchants element that is not an object as it is", () => {
-    expect(JSON.parse(writeLine({ merchants: ["Jordi Puig Ferrer", null, ["MC1"]] }))).toEqual({
-      merchants: ["Jordi Puig Ferrer", null, ["MC1"]],
+    expect(JSON.parse(writeLine({ merchants: ["Jamie King Foster", null, ["MC1"]] }))).toEqual({
+      merchants: ["Jamie King Foster", null, ["MC1"]],
       at,
       level: "warn",
       event: "x",
@@ -211,7 +211,7 @@ describe("stringifyMasked", () => {
   cyclic.self = cyclic;
   class Named {
     toJSON(): unknown {
-      return { email: "marta.soler@example.test", kind: "named" };
+      return { email: "martha.spencer@example.test", kind: "named" };
     }
   }
   const nested = Array.from({ length: 20 }, (_, i) => ({
@@ -222,14 +222,14 @@ describe("stringifyMasked", () => {
   const inputs: [string, unknown][] = [
     ["no listed key", { sleepMs: 3600000, nextDueAt: null, label: "T4", ok: true }],
     ["a nested list and no listed key", { zone: "Patio", tables: nested, count: 20 }],
-    ["a listed key at the top", { email: "marta.soler@example.test", id: 1 }],
+    ["a listed key at the top", { email: "martha.spencer@example.test", id: 1 }],
     ["a listed key nested", { edit: { editorName: "Martha Spencer", editorVersion: 3 } }],
-    ["a listed key inside an array", { conflicts: [{ editorName: "Jordi Puig" }, { id: 2 }] }],
+    ["a listed key inside an array", { conflicts: [{ editorName: "Jamie King" }, { id: 2 }] }],
     [
       "the merchants path",
-      { merchants: [{ code: "MC1", name: "Jordi Puig Ferrer" }, "MC2", null] },
+      { merchants: [{ code: "MC1", name: "Jamie King Foster" }, "MC2", null] },
     ],
-    ["merchants that is not a list", { merchants: "Jordi Puig Ferrer", name: "Patio" }],
+    ["merchants that is not a list", { merchants: "Jamie King Foster", name: "Patio" }],
     ["a string value carrying a listed key's text", { note: '{"email":"x"}', other: '"person":' }],
     ["null and undefined under listed keys", { email: null, person: undefined, taxId: null }],
     ["a BigInt under a listed key", { email: 12n, id: "p1" }],
@@ -238,7 +238,7 @@ describe("stringifyMasked", () => {
     ["a toJSON result carrying a listed key", { who: new Named() }],
     ["a toJSON value under a listed key", { person: new Named(), at: new Date(0) }],
     ["a toJSON giving undefined under a listed key", { email: { toJSON: () => undefined } }],
-    ["a top-level array", [{ email: "marta.soler@example.test" }, 1, "email"]],
+    ["a top-level array", [{ email: "martha.spencer@example.test" }, 1, "email"]],
     ["a string", "email"],
     ["undefined", undefined],
   ];
@@ -304,16 +304,16 @@ describe("stringifyMasked", () => {
     const counted = { toJSON: () => (calls += 1) };
     stringifyMasked({ zone: "Patio", tables: nested, counted });
     expect(calls).toBe(1);
-    stringifyMasked({ email: "marta.soler@example.test", counted });
+    stringifyMasked({ email: "martha.spencer@example.test", counted });
     expect(calls).toBe(3);
   });
 });
 
 describe("maskPersonalData keeps the first and last character of each piece", () => {
   it.each([
-    ["marta.soler@example.test", "m***r@e***e.test"],
-    ["jordi.puig@example.test", "j***g@e***e.test"],
-    ["marta@mail.example.co.uk", "m***a@m***o.uk"],
+    ["martha.spencer@example.test", "m***r@e***e.test"],
+    ["jamie.king@example.test", "j***g@e***e.test"],
+    ["martha@mail.example.co.uk", "m***a@m***o.uk"],
     ["ana@bo.es", "***@***.es"],
     ["Àngel@cafè.cat", "À***l@c***è.cat"],
   ])("writes the email %j as %j", (value, masked) => {
@@ -322,28 +322,28 @@ describe("maskPersonalData keeps the first and last character of each piece", ()
 
   // Not an address: one whole-value mask, so nothing is kept verbatim.
   it.each([
-    ["marta.soler", "m***r"],
-    ["marta@localhost", "m***t"],
+    ["martha.spencer", "m***r"],
+    ["martha@localhost", "m***t"],
     ["a@b@c.test", "a***t"],
-    ["marta soler@example.test", "m***t"],
+    ["martha spencer@example.test", "m***t"],
     ["@example.test", "@***t"],
-    ["marta@.test", "m***t"],
-    ["marta@example.", "m***."],
-    ["marta@example.com1", "m***1"],
-    ["marta@example.xn--p1ai", "m***i"],
+    ["martha@.test", "m***t"],
+    ["martha@example.", "m***."],
+    ["martha@example.com1", "m***1"],
+    ["martha@example.xn--p1ai", "m***i"],
     ["Martha Spencer", "M***r"],
   ])("writes the email-key value %j, which is not an address, as %j", (value, masked) => {
     expect(maskPersonalData("email", value)).toBe(masked);
   });
 
   it.each([
-    ["Jordi Puig Ferrer", "J***i P***g F***r"],
+    ["Jamie King Foster", "J***e K***g F***r"],
     ["Martha Spencer", "M***a S***r"],
     ["Spencer", "S***r"],
-    ["  Jordi   Puig\tFerrer\n", "J***i P***g F***r"],
+    ["  Jamie   King\tFoster\n", "J***e K***g F***r"],
     ["Martha Parker-Foster", "M***a P***r"],
     ["Àngel", "À***l"],
-    ["Ana Bo", "*** ***"],
+    ["Ann Bo", "*** ***"],
     ["Bar del Port", "*** *** P***t"],
     ["\u{1D49C}lex", "\u{1D49C}***x"],
     ["\u{1D49C}na", "***"],
@@ -390,12 +390,12 @@ describe("maskPersonalData keeps the first and last character of each piece", ()
   it("writes a merchant's name by the name rule, and any other value there as ***", () => {
     expect(
       maskPersonalData("merchants", [
-        { code: "MC1", name: "Jordi Puig Ferrer" },
+        { code: "MC1", name: "Jamie King Foster" },
         { code: "MC2", name: 7 },
-        { code: "MC3", name: { first: "Marta" } },
+        { code: "MC3", name: { first: "Martha" } },
       ]),
     ).toEqual([
-      { code: "MC1", name: "J***i P***g F***r" },
+      { code: "MC1", name: "J***e K***g F***r" },
       { code: "MC2", name: "***" },
       { code: "MC3", name: "***" },
     ]);
