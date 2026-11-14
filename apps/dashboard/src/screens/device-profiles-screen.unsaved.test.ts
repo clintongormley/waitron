@@ -1,3 +1,4 @@
+import { profileAction, withProfileListRead } from "../testing/profile-table.js";
 import { afterEach, expect, it, onTestFinished } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController, NavigationGuard, registerIcons } from "@waitron/ui";
@@ -83,7 +84,13 @@ class ProfileLeaveApp extends LitElement {
 customElements.define("profile-settings-leave-test-app", ProfileLeaveApp);
 afterEach(cleanupWidgets);
 function q(screen: DeviceProfilesScreen, id: string) {
-  return screen.shadowRoot!.querySelector<HTMLElement>(`[data-test=${id}]`);
+  return (
+    screen.shadowRoot!.querySelector<HTMLElement>(`[data-test=${id}]`) ??
+    screen
+      .shadowRoot!.querySelector("wt-data-table")
+      ?.shadowRoot?.querySelector<HTMLElement>(`[data-test=${id}]`) ??
+    null
+  );
 }
 function change(screen: DeviceProfilesScreen, id: string, value: string | boolean) {
   q(screen, id)!.dispatchEvent(
@@ -100,52 +107,58 @@ function unload() {
 async function mount(overrides: Partial<DashboardApi> = {}, loaded = profile) {
   setLocale("en-GB");
   const { el: app } = await mountWidget<ProfileLeaveApp>("profile-settings-leave-test-app", {
-    api: {
-      listDeviceProfiles: async () => [loaded],
-      getDeviceProfile: async () => loaded,
+    api: withProfileListRead(
+      {
+        listDeviceProfiles: async () => [loaded],
+        getDeviceProfile: async () => loaded,
 
-      listPrinters: async () => [printer, { ...printer, id: "r2", name: "Bar" }],
-      listPagePrinters: async () => [],
-      listStations: async () => [station],
-      listProfileKitchenScreens: async () => [
-        { profileId: "p1", screens: { station: { stationIds: ["s1"], zoneIds: null } } },
-      ],
-      listJobRoles: vi.fn().mockResolvedValue([
-        { id: "job-waiter", name: "Waiter", colour: "grey", position: 0 },
-        { id: "job-chef", name: "Chef", colour: "grey", position: 1 },
-      ]),
-      listStaff: async () => [
-        {
-          personId: "pe1",
-          displayName: "Ana",
-          roleIds: ["staff"],
-          status: "active",
-          hasPassword: true,
-          hasTotp: false,
-          email: null,
-        },
-      ],
-      getProfileScopeChoices: async () => ({
-        departments: [
-          { id: "d1", name: "Restaurant", active: true },
-          { id: "d2", name: "Bar", active: true },
+        listPrinters: async () => [printer, { ...printer, id: "r2", name: "Bar" }],
+        listPagePrinters: async () => [],
+        listStations: async () => [station],
+        listProfileKitchenScreens: async () => [
+          { profileId: "p1", screens: { station: { stationIds: ["s1"], zoneIds: null } } },
         ],
-        zones: [
-          { id: "z1", name: "Room", departmentId: "d1", active: true },
-          { id: "z2", name: "Terrace", departmentId: "d1", active: true },
-          { id: "z3", name: "Bar", departmentId: "d2", active: true },
+        listJobRoles: vi.fn().mockResolvedValue([
+          { id: "job-waiter", name: "Waiter", colour: "grey", position: 0 },
+          { id: "job-chef", name: "Chef", colour: "grey", position: 1 },
+        ]),
+        listStaff: async () => [
+          {
+            personId: "pe1",
+            displayName: "Ana",
+            roleIds: ["staff"],
+            status: "active",
+            hasPassword: true,
+            hasTotp: false,
+            email: null,
+          },
         ],
-      }),
-      listReaders: async () => [],
-      getProfileReaders: async () => ({ readerIds: [], defaultReaderId: null }),
-      updateDeviceProfile: async () => loaded,
-      createDeviceProfile: async () => ({ ...loaded, id: "p2" }),
-      ...overrides,
-    } as DashboardApi,
+        getProfileScopeChoices: async () => ({
+          departments: [
+            { id: "d1", name: "Restaurant", active: true },
+            { id: "d2", name: "Bar", active: true },
+          ],
+          zones: [
+            { id: "z1", name: "Room", departmentId: "d1", active: true },
+            { id: "z2", name: "Terrace", departmentId: "d1", active: true },
+            { id: "z3", name: "Bar", departmentId: "d2", active: true },
+          ],
+        }),
+        listReaders: async () => [],
+        getProfileReaders: async () => ({ readerIds: [], defaultReaderId: null }),
+        updateDeviceProfile: async () => loaded,
+        createDeviceProfile: async () => ({ ...loaded, id: "p2" }),
+        ...overrides,
+      } as DashboardApi,
+      {
+        departments: [{ id: "d1", name: "Restaurant", active: true }],
+        zones: [{ id: "z1", name: "Room", departmentId: "d1", active: true }],
+      },
+    ),
   });
   const screen = app.shadowRoot!.querySelector("dashboard-device-profiles-screen")!;
   await expect.poll(() => q(screen, "edit-p1")).not.toBeNull();
-  q(screen, "edit-p1")!.click();
+  await profileAction(screen, "edit-p1");
   await expect.poll(() => q(screen, "profile-name")).not.toBeNull();
   await screen.updateComplete;
   return { app, screen };
@@ -300,7 +313,7 @@ it("A366 reconnect: a departed save's narrowed devices stay off the screen, and 
   screen.remove();
   app.shadowRoot!.append(screen);
   await expect.poll(() => q(screen, "edit-p1")).not.toBeNull();
-  q(screen, "edit-p1")!.click();
+  await profileAction(screen, "edit-p1");
   await expect.poll(() => q(screen, "profile-name")).not.toBeNull();
   await screen.updateComplete;
   change(screen, "profile-pass-monitor", true);
@@ -441,7 +454,7 @@ it("W69 reconnect releases the departed write's busy state and ignores its reply
   screen.remove();
   app.shadowRoot!.append(screen);
   await expect.poll(() => q(screen, "edit-p1")).not.toBeNull();
-  q(screen, "edit-p1")!.click();
+  await profileAction(screen, "edit-p1");
   await expect.poll(() => q(screen, "profile-name")).not.toBeNull();
   change(screen, "profile-name", "Replacement counter");
   await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
@@ -468,7 +481,7 @@ it("W69 a departed profile reply cannot release a replacement save's busy gate",
   screen.remove();
   app.shadowRoot!.append(screen);
   await expect.poll(() => q(screen, "edit-p1")).not.toBeNull();
-  q(screen, "edit-p1")!.click();
+  await profileAction(screen, "edit-p1");
   await expect.poll(() => q(screen, "profile-name")).not.toBeNull();
   change(screen, "profile-name", "Replacement counter");
   q(screen, "profile-save")!.click();

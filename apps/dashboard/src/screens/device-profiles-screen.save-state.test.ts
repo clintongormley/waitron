@@ -1,3 +1,4 @@
+import { profileAction } from "../testing/profile-table.js";
 import { LitElement, html } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -223,7 +224,11 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
 }
 
 const q = <T extends HTMLElement = HTMLElement>(el: DeviceProfilesScreen, test: string) =>
-  el.shadowRoot!.querySelector<T>(`[data-test=${test}]`);
+  el.shadowRoot!.querySelector<T>(`[data-test=${test}]`) ??
+  el
+    .shadowRoot!.querySelector("wt-data-table")
+    ?.shadowRoot?.querySelector<T>(`[data-test=${test}]`) ??
+  null;
 const save = (el: DeviceProfilesScreen) =>
   q<HTMLElementTagNameMap["wt-button"]>(el, "profile-save")!;
 
@@ -299,7 +304,7 @@ async function openEdit(id = "p1", api: DashboardApi = stubApi()) {
     api,
   });
   await vi.waitFor(() => expect(q(el, `edit-${id}`)).not.toBeNull());
-  q(el, `edit-${id}`)!.click();
+  await profileAction(el, `edit-${id}`);
   await vi.waitFor(() => expect(q(el, "profile-save")).not.toBeNull());
   // The readers arrive on their own read; Save covers them once they are there.
   if (id === "p1") await vi.waitFor(() => expect(q(el, "profile-reader-r1")).not.toBeNull());
@@ -803,7 +808,7 @@ describe("the device profile editor's Save under the leave coordinator", () => {
     });
     const el = app.shadowRoot!.querySelector("dashboard-device-profiles-screen")!;
     await vi.waitFor(() => expect(q(el, "edit-p1")).not.toBeNull());
-    q(el, "edit-p1")!.click();
+    await profileAction(el, "edit-p1");
     await vi.waitFor(() => expect(q(el, "profile-reader-r1")).not.toBeNull());
     await settle(el);
     expect(await state(el)).toEqual(quiet);

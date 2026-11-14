@@ -1,3 +1,4 @@
+import { profileAction, profileListRoot } from "../testing/profile-table.js";
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -67,11 +68,9 @@ async function editor(api: DashboardApi) {
     api,
   });
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=edit-clock-profile]")).not.toBeNull(),
+    expect(profileListRoot(el).querySelector("[data-test=edit-clock-profile]")).not.toBeNull(),
   );
-  await userEvent.click(
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-clock-profile]")!,
-  );
+  await profileAction(el, "edit-clock-profile");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=profile-save]")).not.toBeNull(),
   );
@@ -107,7 +106,7 @@ describe("clock-in profile action", () => {
       await vi.waitFor(() => expect(f.profile().capabilities).toEqual(["clock-in"]));
       await vi.waitFor(() =>
         expect(
-          el.shadowRoot!.querySelector("[data-test=profile-name-clock-profile]"),
+          profileListRoot(el).querySelector("[data-test=profile-name-clock-profile]"),
         ).not.toBeNull(),
       );
       const reopened = await editor(f.api);

@@ -1,6 +1,7 @@
+import { profileAction, profileListRoot, withProfileListRead } from "../testing/profile-table.js";
 import { page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
@@ -127,7 +128,7 @@ const staff = [
 ];
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
-  return {
+  const api = {
     listDeviceProfiles: vi.fn().mockResolvedValue(profiles),
     getDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     createDeviceProfile: vi.fn().mockResolvedValue({ ...profiles[0], id: "p9" }),
@@ -150,6 +151,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     setProfileReaders: vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
     ...overrides,
   } as unknown as DashboardApi;
+  return withProfileListRead(api, scopeChoices);
 }
 
 async function flush(el: DeviceProfilesScreen) {
@@ -195,22 +197,237 @@ function selectFormFactor(el: DeviceProfilesScreen, value: string) {
 }
 
 describe("device-profiles-screen list mode", () => {
+  const capableProfile: DeviceProfile = {
+    ...profiles[0]!,
+    capabilities: ["integrated-card-payment", "open-cash-drawer", "clock-in", "take-cash"],
+  };
+
+  it("shows searchable profile rows with named scope and a short capability summary", async () => {
+    const before = currentLocale();
+    onTestFinished(() => setLocale(before));
+    setLocale("en-GB");
+    const terrace = { ...profiles[0]!, id: "p3", name: "Terrace phone", allowedZoneIds: ["z2"] };
+    let finishNames!: (choices: ProfileScopeChoices) => void;
+    const el = await mount(
+      stubApi({
+        listDeviceProfiles: vi.fn().mockResolvedValue([capableProfile, profiles[1], terrace]),
+        background: {
+          getProfileScopeChoices: () =>
+            new Promise<ProfileScopeChoices>((resolve) => {
+              finishNames = resolve;
+            }),
+        } as DashboardApi,
+      }),
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table");
+    expect(table).not.toBeNull();
+    await table!.updateComplete;
+    expect(table!.columns.map(({ label }) => label)).toEqual([
+      "Name",
+      "Form factor",
+      "Where it serves",
+      "Capabilities",
+      "Actions",
+    ]);
+    expect(table!.searchable).toBe(true);
+    const root = table!.shadowRoot!;
+    expect(root.querySelector('[data-test="profile-scope-p1"]')!.textContent).toBe("Loading…");
+    finishNames(scopeChoices);
+    await flush(el);
+    expect(root.querySelector('[data-test="profile-scope-p1"]')!.textContent).toContain(
+      "Restaurant",
+    );
+    expect(root.querySelector('[data-test="profile-scope-p1"]')!.textContent).toContain(
+      "All zones",
+    );
+    expect(root.querySelector('[data-test="profile-scope-p3"]')!.textContent).toContain("Terrace");
+    expect(root.querySelector('[data-test="profile-scope-p3"]')!.textContent).not.toContain(
+      "Dining room",
+    );
+    expect(root.querySelector('[data-test="profile-scope-p2"]')!.textContent).toContain(
+      "Station screens",
+    );
+    const summary = root.querySelector('[data-test="profile-caps-p1"]')!.textContent!;
+    expect(summary).toContain("Integrated card payment");
+    expect(summary).toContain("Open cash drawer");
+    expect(summary).toContain("+2 more");
+    expect(summary).not.toContain("Clock in");
+    expect(table!.columns.find(({ key }) => key === "actions")!.pinned).toBe("end");
+  });
+
+  it("finds capabilities hidden by the short summary and the profile's form factor", async () => {
+    const before = currentLocale();
+    onTestFinished(() => setLocale(before));
+    setLocale("en-GB");
+    const el = await mount(
+      stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([capableProfile, profiles[1]]) }),
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table");
+    expect(table).not.toBeNull();
+    await userEvent.fill(
+      table!.shadowRoot!.querySelector<HTMLInputElement>('input[name="search"]')!,
+      "Clock in",
+    );
+    await table!.updateComplete;
+    const keys = () =>
+      [...table!.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr[data-row-key]")].map(
+        (row) => row.dataset.rowKey,
+      );
+    expect(keys()).toEqual(["p1"]);
+    await userEvent.fill(
+      table!.shadowRoot!.querySelector<HTMLInputElement>('input[name="search"]')!,
+      "Prep station display",
+    );
+    await table!.updateComplete;
+    expect(keys()).toEqual(["p2"]);
+  });
+
+  it("reads scope names passively and keeps the profile table usable if those names fail", async () => {
+    const names = vi.fn().mockRejectedValue({ code: "server.internal" });
+    const foreground = vi.fn().mockResolvedValue(scopeChoices);
+    const background = stubApi({ getProfileScopeChoices: names });
+    const el = await mount(stubApi({ background, getProfileScopeChoices: foreground }));
+    const table = el.shadowRoot!.querySelector("wt-data-table");
+    expect(table).not.toBeNull();
+    await table!.updateComplete;
+    expect(names).toHaveBeenCalledTimes(1);
+    expect(foreground).not.toHaveBeenCalled();
+    expect(table!.rows).toHaveLength(2);
+    const scope = table!.shadowRoot!.querySelector('[data-test="profile-scope-p1"]')!.textContent!;
+    expect(scope).not.toContain("Restaurant");
+    expect(scope).not.toContain("Dining room");
+    expect(scope).toBe(t("device_profiles.scope_unavailable"));
+    expect(inScreenOrRow(el, '[role="alert"]')).not.toBeNull();
+    await profileAction(el, "edit-p1");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[data-test="editor-form"]')).not.toBeNull();
+    expect(inScreenOrRow(el, '[role="alert"]')).toBeNull();
+    let finishNames!: (value: ProfileScopeChoices) => void;
+    names.mockImplementation(
+      () =>
+        new Promise<ProfileScopeChoices>((resolve) => {
+          finishNames = resolve;
+        }),
+    );
+    const host = el.parentElement!;
+    el.remove();
+    host.append(el);
+    await flush(el);
+    expect(inScreenOrRow(el, '[role="alert"]')).toBeNull();
+    expect(profileListRoot(el).querySelector('[data-test="profile-scope-p1"]')!.textContent).toBe(
+      t("device_profiles.scope_loading"),
+    );
+    finishNames(scopeChoices);
+    await flush(el);
+    expect(
+      profileListRoot(el).querySelector('[data-test="profile-scope-p1"]')!.textContent,
+    ).toContain("Restaurant");
+  });
+
+  it.each([
+    [{ departmentId: "absent" }, "Department unavailable"],
+    [{ allowedZoneIds: ["z4"] }, "Restaurant · Old bar (Deleted)"],
+    [{ allowedZoneIds: [] }, "Restaurant · No zones"],
+  ])("shows the saved serving scope as %s", async (scope, label) => {
+    const before = currentLocale();
+    onTestFinished(() => setLocale(before));
+    setLocale("en-GB");
+    const el = await mount(
+      stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([{ ...profiles[0]!, ...scope }]) }),
+    );
+    expect(profileListRoot(el).querySelector('[data-test="profile-scope-p1"]')!.textContent).toBe(
+      label,
+    );
+  });
+
+  it("uses fresh editor scope choices instead of the list's cached snapshot", async () => {
+    const choices = {
+      departments: [{ id: "d2", name: "Deli", active: true }],
+      zones: [{ id: "dz", name: "Counter", departmentId: "d2", active: true }],
+    };
+    const api = Object.assign(
+      stubApi({
+        getProfileScopeChoices: vi.fn().mockResolvedValue(choices),
+        getDeviceProfile: vi
+          .fn()
+          .mockResolvedValue({ ...profiles[0]!, departmentId: "d2", startingZoneId: "dz" }),
+      }),
+      { liveData: new LiveData() },
+    );
+    const el = await mount(api);
+    await profileAction(el, "edit-p1");
+    await flush(el);
+    const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      '[data-test="profile-department"]',
+    )!;
+    expect(field.options.map(({ value }) => value)).toEqual(["d2"]);
+    expect(field.value).toBe("d2");
+  });
+
+  it("opens the profile from its row", async () => {
+    const el = await mount();
+    const row = profileListRoot(el).querySelector<HTMLElement>('[data-row-key="p1"] .row-activate');
+    expect(row).not.toBeNull();
+    await userEvent.click(row!, { position: { x: 12, y: 12 } });
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector('[data-test="editor-form"]')!.getAttribute("data-editing-id"),
+    ).toBe("p1");
+  });
+
+  it("cancelled deletion restores the row menu without opening the editor", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    await profileAction(el, "delete-p1");
+    const menu = profileListRoot(el)
+      .querySelector('[data-test="delete-p1"]')!
+      .closest("wt-row-actions")!;
+    const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+    const cancel = el.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-delete"]');
+    expect(cancel).not.toBeNull();
+    const closed = new Promise((resolve) =>
+      dialog.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await userEvent.click(cancel!);
+    await closed;
+    expect(menu.shadowRoot!.activeElement).toBe(menu.shadowRoot!.querySelector("button"));
+    expect(el.shadowRoot!.querySelector('[data-test="editor-form"]')).toBeNull();
+    expect(api.deleteDeviceProfile).not.toHaveBeenCalled();
+  });
+
+  it("confirmed deletion focuses Create after the profile row disappears", async () => {
+    const api = stubApi({
+      listDeviceProfiles: vi.fn().mockResolvedValueOnce(profiles).mockResolvedValue([profiles[1]]),
+    });
+    const el = await mount(api);
+    await profileAction(el, "delete-p1");
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-delete"]')!,
+    );
+    await vi.waitFor(() =>
+      expect(profileListRoot(el).querySelector('[data-row-key="p1"]')).toBeNull(),
+    );
+    expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector('[data-test="create"]'));
+  });
+
   it("loads and lists device profiles with their capability summary", async () => {
     const api = stubApi();
     const el = await mount(api);
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(1);
-    expect(el.shadowRoot!.querySelector("[data-test=profile-name-p1]")!.textContent).toContain(
+    expect(profileListRoot(el).querySelector("[data-test=profile-name-p1]")!.textContent).toContain(
       "Front counter",
     );
     // Two capabilities are summarised on the row (shipped locale is es-ES).
-    const caps = el.shadowRoot!.querySelector("[data-test=profile-caps-p1]")!.textContent!;
+    const caps = profileListRoot(el).querySelector("[data-test=profile-caps-p1]")!.textContent!;
     expect(caps).toContain("tarjeta");
-    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p2]")).toBeTruthy();
+    expect(profileListRoot(el).querySelector('[data-row-key="p2"]')).toBeTruthy();
   });
 
   it("shows a placeholder when there are no profiles", async () => {
     const el = await mount(stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([]) }));
-    expect(el.shadowRoot!.querySelector("[data-test=no-profiles]")).toBeTruthy();
+    expect(profileListRoot(el).querySelector(".empty")!.textContent!.trim()).toBe(
+      t("device_profiles.empty"),
+    );
   });
 
   it("shows the load error in a banner", async () => {
@@ -236,13 +453,13 @@ describe("device-profiles-screen list mode", () => {
     api.liveData.refresh();
     await vi.waitFor(() => expect(alert()).toBeNull());
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p3]")).toBeTruthy();
+    expect(profileListRoot(el).querySelector('[data-row-key="p3"]')).toBeTruthy();
   });
 
   it("Delete confirms then calls deleteDeviceProfile and reloads", async () => {
     const api = stubApi();
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-p1]")!.click();
+    await profileAction(el, "delete-p1");
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
     await flush(el);
@@ -255,7 +472,7 @@ describe("device-profiles-screen list mode", () => {
       deleteDeviceProfile: vi.fn().mockRejectedValue({ code: "device_profile.not_found" }),
     });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-p1]")!.click();
+    await profileAction(el, "delete-p1");
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
     await flush(el);
@@ -265,7 +482,7 @@ describe("device-profiles-screen list mode", () => {
   it("Duplicate creates a copy from the same capabilities under a '(copy)' name", async () => {
     const api = stubApi();
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+    await profileAction(el, "duplicate-p1");
     await flush(el);
     // The shipped locale is es-ES, so the copy suffix is the Spanish " (copia)". The copy carries the
     // source profile's form factor unchanged.
@@ -455,7 +672,7 @@ describe("device-profiles-screen editor form", () => {
   it("Edit loads the profile via getDeviceProfile; the capability switches reflect its flags", async () => {
     const api = stubApi();
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     expect(api.getDeviceProfile).toHaveBeenCalledWith("p1");
     const form = el.shadowRoot!.querySelector("[data-test=editor-form]")!;
@@ -481,7 +698,7 @@ describe("device-profiles-screen editor form", () => {
     const kdsProfile: DeviceProfile = { ...profiles[0], formFactor: "kds" };
     const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(kdsProfile) });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     const formFactor = el.shadowRoot!.querySelector<Combobox>("[data-test=profile-form-factor]")!;
     expect(formFactor.value).toBe("kds");
@@ -502,7 +719,7 @@ describe("device-profiles-screen editor form", () => {
   it("Edit → toggling a capability off then Save calls updateDeviceProfile without it", async () => {
     const api = stubApi();
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     toggle(el, "cap-integrated-card-payment", false);
     await el.updateComplete;
@@ -523,7 +740,7 @@ describe("device-profiles-screen editor form", () => {
     const phone: DeviceProfile = { ...profiles[0], formFactor: "phone-portrait" };
     const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     // The input renders for a non-KDS form factor.
     expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).toBeTruthy();
@@ -547,7 +764,7 @@ describe("device-profiles-screen editor form", () => {
     const kdsProfile: DeviceProfile = { ...profiles[0], formFactor: "kds" };
     const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(kdsProfile) });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     // No timeout input for a kitchen display.
     expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).toBeNull();
@@ -573,7 +790,7 @@ describe("device-profiles-screen editor form", () => {
     };
     const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     const input = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
       "[data-test=profile-inactivity]",
@@ -586,11 +803,11 @@ describe("device-profiles-screen editor form", () => {
       getDeviceProfile: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     expect(inScreenOrRow(el, "[role=alert]")).toBeTruthy();
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
+    expect(profileListRoot(el).querySelector('[data-row-key="p1"]')).toBeTruthy();
   });
 
   it("Cancel discards the form and returns to the list", async () => {
@@ -601,7 +818,7 @@ describe("device-profiles-screen editor form", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
+    expect(profileListRoot(el).querySelector('[data-row-key="p1"]')).toBeTruthy();
     expect(api.createDeviceProfile).not.toHaveBeenCalled();
   });
 
@@ -636,7 +853,9 @@ it.each(["create", "edit-p1"])(
       )
       .mockResolvedValue(profiles[0]);
     const el = await mount(stubApi({ createDeviceProfile: save, updateDeviceProfile: save }));
-    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
+    if (action === "create")
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    else await profileAction(el, action);
     await flush(el);
     change(el, "profile-name", "Retry profile");
     await el.updateComplete;
@@ -694,7 +913,7 @@ describe("device-profiles-screen remaining edges", () => {
     };
     const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).not.toBeNull(),
     );
@@ -720,7 +939,7 @@ describe("device-profiles-screen remaining edges", () => {
     const phone: DeviceProfile = { ...profiles[0]!, formFactor: "phone-portrait" };
     const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).not.toBeNull(),
     );
@@ -754,7 +973,7 @@ describe("device-profiles-screen remaining edges", () => {
   it("deletes once when the confirm button is pressed twice", async () => {
     const api = stubApi();
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-p1]")!.click();
+    await profileAction(el, "delete-p1");
     await el.updateComplete;
     const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
 
@@ -786,7 +1005,7 @@ describe("device-profiles-screen fields", () => {
   it("picks the form factor from a labelled dropdown showing the profile's own", async () => {
     const api = stubApi();
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
 
     const formFactor = box(el, "[data-test=profile-form-factor]")!;
@@ -820,7 +1039,7 @@ describe("device-profiles-screen fields", () => {
     const api = stubApi();
     expect("getDeviceHomeLayouts" in api).toBe(false);
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=profile-save]")).not.toBeNull(),
     );
@@ -841,7 +1060,7 @@ it.each(["connection.failed", "server.internal"])(
     vi.mocked(api.listDeviceProfiles).mockRejectedValue({ code: "connection.failed" });
     api.liveData.refresh();
     await vi.waitFor(() => expect(alert()).toBe(codeMessage("connection.failed")));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+    await profileAction(el, "duplicate-p1");
     await vi.waitFor(() => expect(api.copyDeviceProfile).toHaveBeenCalledOnce());
     await flush(el);
     vi.mocked(api.listDeviceProfiles).mockRejectedValue({ code: rereadCode });
@@ -855,7 +1074,7 @@ it.each(["connection.failed", "server.internal"])(
     api.liveData.refresh();
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=profile-row-p3]")).toBeTruthy(),
+      expect(profileListRoot(el).querySelector('[data-row-key="p3"]')).toBeTruthy(),
     );
     await flush(el);
     expect(alert()).toBe(codeMessage("connection.failed"));
@@ -906,7 +1125,7 @@ describe("device-profiles-screen printer lists", () => {
       ...overrides,
     });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     return { api, el };
   }
@@ -1083,7 +1302,7 @@ describe("device-profiles-screen printer lists", () => {
   it("says to add a printer first when the venue has none", async () => {
     const api = stubApi();
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=no-printers]")!.textContent!.trim()).toBe(
       t("device_profiles.no_printers"),
@@ -1117,7 +1336,7 @@ describe("device-profiles-screen printer lists", () => {
     const { api, el } = await editListed();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+    await profileAction(el, "duplicate-p1");
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![5]).toEqual({
@@ -1178,7 +1397,7 @@ describe("device-profiles-screen kitchen screens", () => {
       ...overrides,
     });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=edit-${profile.id}]`)!.click();
+    await profileAction(el, `edit-${profile.id}`);
     await flush(el);
     return { api, el };
   }
@@ -1590,7 +1809,7 @@ describe("device-profiles-screen kitchen screens", () => {
     await save(el);
     await flush(el);
     expect(text(el, "narrowed-devices")).not.toBeNull();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
+    await profileAction(el, "edit-p2");
     await flush(el);
     expect(text(el, "narrowed-devices")).toBeNull();
     rename(el);
@@ -1679,7 +1898,7 @@ describe("device-profiles-screen kitchen screens", () => {
     });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p2]")!.click();
+    await profileAction(el, "duplicate-p2");
     await flush(el);
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p2");
@@ -1701,7 +1920,7 @@ describe("device-profiles-screen kitchen screens", () => {
     });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+    await profileAction(el, "duplicate-p1");
     await flush(el);
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
@@ -1722,7 +1941,7 @@ describe("device-profiles-screen kitchen screens", () => {
     });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+    await profileAction(el, "duplicate-p1");
     await flush(el);
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
@@ -1771,7 +1990,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       ...overrides,
     });
     const el = await mount(api);
-    q(el, `edit-${profile.id}`)!.click();
+    await profileAction(el, `edit-${profile.id}`);
     await flush(el);
     return { api, el };
   }
@@ -1867,7 +2086,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       ),
     });
     const el = await mount(api);
-    q(el, "edit-p1")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     q(el, "create")!.click();
     await flush(el);
@@ -2313,7 +2532,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
     const el = await mount(api);
-    q(el, "edit-p1")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     change(el, "profile-name", "Draft name");
     toggle(el, "profile-role-job-waiter", false);
@@ -2347,7 +2566,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     };
     const api = stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([offZone]) });
     const el = await mount(api);
-    q(el, "duplicate-p1")!.click();
+    await profileAction(el, "duplicate-p1");
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
@@ -2377,7 +2596,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
         getProfileScopeChoices: vi.fn().mockResolvedValue(choices),
       });
       const el = await mount(api);
-      q(el, "duplicate-p1")!.click();
+      await profileAction(el, "duplicate-p1");
       await flush(el);
       expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
       expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
@@ -2391,7 +2610,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     const api = Object.assign(stubApi(), { liveData });
     const el = await mount(api);
     expect(api.getProfileScopeChoices).not.toHaveBeenCalled();
-    q(el, "edit-p1")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(1);
     liveData.invalidate([
@@ -2399,7 +2618,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       { type: "floor_zones", id: "z1" },
     ]);
     await flush(el);
-    expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(2);
+    expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(3);
   });
 
   it("opens an edit with its stored zones even when the departments arrive after the click", async () => {
@@ -2413,7 +2632,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       ),
     });
     const el = await mount(api);
-    q(el, "edit-p1")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     arrive(scopeChoices);
     await flush(el);
@@ -2465,7 +2684,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     const kitchen = { ...profiles[1]!, admittedStaffRoleIds: [] };
     const api = stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([kitchen]) });
     const el = await mount(api);
-    q(el, "duplicate-p2")!.click();
+    await profileAction(el, "duplicate-p2");
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
       admittedStaffRoleIds: [],
@@ -2483,7 +2702,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     };
     const api = stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([narrowed]) });
     const el = await mount(api);
-    q(el, "duplicate-p1")!.click();
+    await profileAction(el, "duplicate-p1");
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
@@ -2573,7 +2792,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       ...overrides,
     });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     await flush(el);
     return { api, el };
@@ -2803,7 +3022,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       const { api, el } = await editListed(withOffices, invoiceProfile);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
       await flush(el);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+      await profileAction(el, "duplicate-p1");
       await flush(el);
       expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toMatchObject({
         invoicePrinterIds: ["pg3", "pr2"],
@@ -3021,7 +3240,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
       vi.mocked(api.listReaders).mockResolvedValue(readers);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+      await profileAction(el, "edit-p1");
       await flush(el);
       await flush(el);
       expect(field(el, "profile-readers-default").value).toBe("r1");
@@ -3233,7 +3452,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       ...overrides,
     });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+    await profileAction(el, "duplicate-p1");
     await flush(el);
     await flush(el);
     return { api, el };
@@ -3295,7 +3514,7 @@ for (const locale of ["en", "es"]) {
         };
         const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
         const el = await mount(api);
-        el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+        await profileAction(el, "edit-p1");
         await flush(el);
         const control = el.shadowRoot!.querySelector<
           HTMLElement & { updateComplete: Promise<unknown> }
@@ -3334,7 +3553,7 @@ it("decimal input inactivity refuses ambiguous marks without clearing the timeou
   };
   const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
   const el = await mount(api);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+  await profileAction(el, "edit-p1");
   await flush(el);
   const control = el.shadowRoot!.querySelector<
     HTMLElement & { error: string; updateComplete: Promise<unknown> }
@@ -3399,7 +3618,9 @@ describe("the printer lists while the venue's printers are not read", () => {
           codeMessage("connection.failed"),
         ),
       );
-      el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${open}]`)!.click();
+      if (open === "create")
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+      else await profileAction(el, open);
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
       expect(noPrinters(el)).toBeNull();
@@ -3460,7 +3681,7 @@ describe("the printer lists while the venue's printers are not read", () => {
       } as Partial<DashboardApi>),
     );
     const alert = () => inScreenOrRow(el, "[role=alert]")?.textContent?.trim();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-p1]")!.click();
+    await profileAction(el, "delete-p1");
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
     await vi.waitFor(() => expect(alert()).toBe(codeMessage("device_profile.not_found")));
@@ -3525,7 +3746,7 @@ it("service deletion refreshes native profile zones and chooses a permitted star
     setLocale("en");
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     rename(el, "Retained draft");
     vi.mocked(api.getProfileScopeChoices).mockResolvedValue({
@@ -3584,7 +3805,7 @@ it("service deletion empty zone bound survives native unrelated save and actual 
       },
     );
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
+    await profileAction(el, "edit-p2");
     await flush(el);
     const every = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
       "[data-test=profile-pass-monitor-every-zone]",
@@ -3603,9 +3824,9 @@ it("service deletion empty zone bound survives native unrelated save and actual 
     await vi.waitFor(() => expect(api.updateDeviceProfile).toHaveBeenCalledOnce());
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toBeUndefined();
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=duplicate-p2]")).not.toBeNull(),
+      expect(profileListRoot(el).querySelector("[data-test=duplicate-p2]")).not.toBeNull(),
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p2]")!.click();
+    await profileAction(el, "duplicate-p2");
     await vi.waitFor(() => expect(writes.length).toBe(1));
     expect(writes[0]![0]).toBe("/management-api/device-profiles/p2/copy");
     expect(writes[0]![1]).toEqual({
@@ -3631,7 +3852,7 @@ const scopeBottom = (el: DeviceProfilesScreen) =>
 it("scope reader recovery clears its own refusal", async () => {
   const api = Object.assign(stubApi(), { liveData: new LiveData() });
   const el = await mount(api);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+  await profileAction(el, "edit-p1");
   await flush(el);
   vi.mocked(api.getProfileScopeChoices).mockRejectedValue({ code: "connection.failed" });
   api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
@@ -3644,7 +3865,7 @@ it("scope reader recovery clears its own refusal", async () => {
 it("scope reader refusal survives the main list reader recovery", async () => {
   const api = Object.assign(stubApi(), { liveData: new LiveData() });
   const el = await mount(api);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+  await profileAction(el, "edit-p1");
   await flush(el);
   vi.mocked(api.listPrinters).mockRejectedValue({ code: "server.internal" });
   api.liveData.invalidate([{ type: "printers", id: "pr1" }]);
@@ -3667,7 +3888,7 @@ it("scope reader recovery preserves a later action refusal", async () => {
     { liveData: new LiveData() },
   );
   const el = await mount(api);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+  await profileAction(el, "edit-p1");
   await flush(el);
   vi.mocked(api.getProfileScopeChoices).mockRejectedValue({ code: "connection.failed" });
   api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
@@ -3694,7 +3915,7 @@ it("scope opening keeps a newer zone snapshot after the held profile read", asyn
       liveData: new LiveData(),
     });
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await vi.waitFor(() => expect(api.getProfileScopeChoices).toHaveBeenCalledOnce());
     await flush(el);
     vi.mocked(api.getProfileScopeChoices).mockResolvedValue({
@@ -3702,7 +3923,7 @@ it("scope opening keeps a newer zone snapshot after the held profile read", asyn
       zones: scopeChoices.zones.filter((zone) => zone.id !== "z1"),
     });
     api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
-    await vi.waitFor(() => expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(3));
     await flush(el);
     release({ ...profiles[0]!, name: "Held profile draft", allowedZoneIds: ["z1", "z2"] });
     await vi.waitFor(() =>
@@ -3732,7 +3953,7 @@ describe("A182 canvas retirement", () => {
     const api = Object.assign(stubApi(), { listCanvases });
     const el = await mount(api);
     expect(listCanvases).not.toHaveBeenCalled();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=profile-canvas]")).toBeNull();
     rename(el, "Fixed counter");
@@ -3763,7 +3984,7 @@ describe("a device profile's address", () => {
     const el = await mount(api);
     const replace = vi.spyOn(history, "replaceState");
     const push = vi.spyOn(history, "pushState");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
     expect(location.pathname).toBe("/manage/device-profiles/profile/p1");
     expect(replace).toHaveBeenCalled();
@@ -3812,7 +4033,7 @@ describe("a device profile's address", () => {
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
+    expect(profileListRoot(el).querySelector('[data-row-key="p1"]')).toBeTruthy();
   });
 
   it("keeps a new profile's editor when the address comes back from another page naming no profile", async () => {
@@ -3836,7 +4057,7 @@ describe("a device profile's address", () => {
   it("closes an editor opened from the list when Back takes its name out of the address", async () => {
     history.replaceState(null, "", "/manage/device-profiles");
     const el = await mount();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
     history.replaceState(null, "", "/manage/device-profiles");
     window.dispatchEvent(new PopStateEvent("popstate"));
@@ -3875,7 +4096,7 @@ describe("a device profile's address", () => {
     await vi.waitFor(() => expect(inScreenOrRow(el, "[role=alert]")).toBeTruthy());
     expect(api.getDeviceProfile).toHaveBeenCalledWith("p1");
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
+    expect(profileListRoot(el).querySelector('[data-row-key="p1"]')).toBeTruthy();
     expect(location.pathname).toBe("/manage/device-profiles");
     expect(push).not.toHaveBeenCalled();
   });
@@ -3888,7 +4109,7 @@ describe("a device profile's address", () => {
     await vi.waitFor(() => expect(location.pathname).toBe("/manage/device-profiles"));
     expect(api.getDeviceProfile).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
+    expect(profileListRoot(el).querySelector('[data-row-key="p1"]')).toBeTruthy();
     expect(push).not.toHaveBeenCalled();
   });
 });
@@ -3897,7 +4118,7 @@ it("clears a duplicate's direct reload failure when live profiles arrive", async
   const api = Object.assign(stubApi(), { liveData: new LiveData() });
   const el = await mount(api);
   vi.mocked(api.listDeviceProfiles).mockRejectedValueOnce({ code: "connection.failed" });
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+  await profileAction(el, "duplicate-p1");
   await vi.waitFor(() =>
     expect(inScreenOrRow(el, "[role=alert]")?.textContent).toContain(
       codeMessage("connection.failed"),
@@ -3922,7 +4143,7 @@ it("keeps a card-reader load refusal through live profiles", async () => {
     { liveData: new LiveData() },
   );
   const el = await mount(api);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+  await profileAction(el, "edit-p1");
   await vi.waitFor(() => expect(scopeBottom(el)).toBe(codeMessage("connection.failed")));
   api.liveData.refresh();
   await vi.waitFor(() => expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2));

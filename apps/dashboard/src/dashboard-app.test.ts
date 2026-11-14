@@ -1,3 +1,4 @@
+import { profileAction, profileListRoot } from "./testing/profile-table.js";
 import { accessRoleChoices } from "./testing/access-role-fixture.js";
 import {
   chooseTheme,
@@ -1483,9 +1484,9 @@ describe("dashboard-app", () => {
         }),
     });
     await expect
-      .poll(() => screen.shadowRoot!.querySelector("[data-test=edit-dp1]"))
+      .poll(() => profileListRoot(screen).querySelector("[data-test=edit-dp1]"))
       .not.toBeNull();
-    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-dp1]")!.click();
+    await profileAction(screen, "edit-dp1");
     await expect.poll(() => land).toBeTypeOf("function");
 
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
@@ -1534,9 +1535,9 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(location.pathname).toBe("/manage/device-profiles");
     await expect
-      .poll(() => screen.shadowRoot!.querySelector("[data-test=edit-dp1]"))
+      .poll(() => profileListRoot(screen).querySelector("[data-test=edit-dp1]"))
       .not.toBeNull();
-    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-dp1]")!.click();
+    await profileAction(screen, "edit-dp1");
     await expect.poll(() => name()?.value).toBe("Front counter");
     expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
 

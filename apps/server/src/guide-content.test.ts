@@ -237,6 +237,7 @@ it.each(GUIDE_LANGUAGES)(
       "invoice-customer-data",
       "delete-staff-role",
       "job-roles",
+      "device-profiles",
       "device-profile-sign-in",
       "hours",
     ]);

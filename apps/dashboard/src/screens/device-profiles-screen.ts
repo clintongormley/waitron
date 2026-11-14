@@ -1,4 +1,5 @@
-import { QueryController } from "@waitron/dashboard-kit";
+import { QueryController, tableNoMatches } from "@waitron/dashboard-kit";
+import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
 import { dashboardQuery } from "../api/live-queries.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
@@ -24,7 +25,8 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -405,45 +407,19 @@ export class DeviceProfilesScreen extends LitElement {
         color: var(--wt-color-primary-text);
         text-decoration: underline;
       }
-      ol {
-        list-style: none;
-        margin: var(--wt-space-4) 0 0;
-        padding: 0;
-        display: grid;
-        gap: var(--wt-space-3);
-      }
-      .empty {
-        color: var(--wt-color-text-muted);
-      }
-      .row {
+      .list-heading {
         display: flex;
-        gap: var(--wt-space-3);
-        align-items: flex-start;
-        flex-wrap: wrap;
-      }
-      .details {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        min-width: 0;
-        margin-right: auto;
-      }
-      .label {
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-text);
-      }
-      .meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .actions {
-        display: flex;
-        gap: var(--wt-space-2);
         align-items: center;
+        justify-content: space-between;
         flex-wrap: wrap;
+        gap: var(--wt-space-3);
+        margin-bottom: var(--wt-space-4);
+      }
+      .list-heading .title {
+        margin: 0;
+      }
+      wt-data-table::part(profile-summary) {
+        white-space: nowrap;
       }
       .field {
         display: block;
@@ -575,6 +551,15 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   @state() private profiles: DeviceProfile[] = [];
+  @state() private listScopeChoices: ProfileScopeChoices | null = null;
+  @state() private listScopeError: string | null = null;
+  readonly #listScopeQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    (error) => {
+      this.listScopeError = codeOf(error);
+    },
+  );
 
   @state() private printers: Printer[] = [];
   @state() private pagePrinters: PagePrinterRow[] = [];
@@ -724,6 +709,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.#showError(null);
+    this.listScopeError = null;
     this.jobRolesRead = false;
     try {
       this.#jobRolesReady = this.#queries.watch("listJobRoles", [], (value) => {
@@ -731,6 +717,16 @@ export class DeviceProfilesScreen extends LitElement {
         this.jobRolesRead = true;
       });
       await Promise.all([
+        this.#listScopeQueries
+          .watch(
+            "names",
+            dashboardQuery(this.api.background ?? this.api, "getProfileScopeChoices", []),
+            (value) => {
+              this.listScopeChoices = value;
+              this.listScopeError = null;
+            },
+          )
+          .catch(() => {}),
         this.#jobRolesReady,
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.profiles = value;
@@ -851,10 +847,15 @@ export class DeviceProfilesScreen extends LitElement {
     return { field, sentence };
   }
 
-  #capabilitySummary(capabilities: string[]): string {
+  #capabilitySummary(capabilities: string[], compact = false): string {
     const known = CAPABILITY_FLAGS.filter((flag) => capabilities.includes(flag));
     if (known.length === 0) return t("device_profiles.no_capabilities");
-    return known.map((flag) => t(`device_profiles.capability.${flag}` as StringKey)).join(", ");
+    const labels = known
+      .slice(0, compact ? 2 : undefined)
+      .map((flag) => t(`device_profiles.capability.${flag}` as StringKey));
+    if (compact && known.length > 2)
+      labels.push(fill("device_profiles.more_capabilities", { count: String(known.length - 2) }));
+    return labels.join(", ");
   }
 
   // ── The form's own checks ────────────────────────────────────────────────────────────────────────
@@ -1078,6 +1079,8 @@ export class DeviceProfilesScreen extends LitElement {
         "choices",
         {
           ...query,
+          // The list snapshot must not replace the editor's opening read.
+          key: `editor:${query.key}`,
           read: () => {
             if (!initial) return query.read();
             initial = false;
@@ -1716,7 +1719,13 @@ export class DeviceProfilesScreen extends LitElement {
 
   // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
 
-  #openDelete(profile: DeviceProfile): void {
+  #deleteOpener: HTMLElement | null = null;
+
+  #openDelete(profile: DeviceProfile, event: Event): void {
+    this.#deleteOpener =
+      (event.currentTarget as HTMLElement)
+        .closest("wt-row-actions")
+        ?.shadowRoot?.querySelector("button") ?? null;
     this.deleteTarget = profile;
   }
 
@@ -1725,58 +1734,121 @@ export class DeviceProfilesScreen extends LitElement {
     if (target === null) return;
     const id = target.id;
     this.deleteTarget = null;
-    void this.#mutate(() => this.api.deleteDeviceProfile(id));
+    void this.#mutate(() => this.api.deleteDeviceProfile(id)).then(async () => {
+      if (this.profiles.some((profile) => profile.id === id)) return;
+      await this.updateComplete;
+      this.renderRoot.querySelector<HTMLElement>('[data-test="create"]')?.focus();
+    });
   }
 
   // ── Renderers ────────────────────────────────────────────────────────────────────────────────────
 
-  #renderRow(profile: DeviceProfile): TemplateResult {
-    return html`<li data-test="profile-row-${profile.id}">
-      <wt-card>
-        <div class="row">
-          <div class="details">
-            <span class="label" data-test="profile-name-${profile.id}">${profile.name}</span>
-            <span class="meta">
-              <span data-test="profile-caps-${profile.id}"
-                >${this.#capabilitySummary(profile.capabilities)}</span
-              >
-            </span>
-          </div>
-          <div class="actions">
+  #scopeSummary(profile: DeviceProfile): string {
+    if (isSharedDisplay(profile.formFactor)) return t("device_profiles.scope_kitchen");
+    const choices = this.listScopeChoices;
+    if (this.listScopeError !== null) return t("device_profiles.scope_unavailable");
+    if (choices === null) return t("device_profiles.scope_loading");
+    const department = choices.departments.find(({ id }) => id === profile.departmentId);
+    if (!department) return t("device_profiles.department_unavailable");
+    if (profile.allowedZoneIds === null)
+      return `${department.name} · ${t("device_profiles.all_zones")}`;
+    const zones = profile.allowedZoneIds.map((id) => {
+      const zone = choices.zones.find(
+        (zone) => zone.id === id && zone.departmentId === department.id,
+      );
+      return zone === undefined
+        ? undefined
+        : zone.active
+          ? zone.name
+          : `${zone.name} (${t("device_profiles.zone_disabled_mark")})`;
+    });
+    if (zones.length === 0) return `${department.name} · ${t("device_profiles.no_zones")}`;
+    return zones.some((name) => name === undefined)
+      ? t("device_profiles.scope_unavailable")
+      : `${department.name} · ${zones.join(", ")}`;
+  }
+
+  #columns(): DataTableColumn<DeviceProfile>[] {
+    return [
+      {
+        key: "name",
+        label: t("device_profiles.name"),
+        searchValue: (profile) => profile.name,
+        sortValue: (profile) => profile.name,
+        cell: (profile) =>
+          html`<span part="profile-summary" data-test=${`profile-name-${profile.id}`}
+            >${profile.name}</span
+          >`,
+      },
+      {
+        key: "formFactor",
+        label: t("device_profiles.form_factor"),
+        searchValue: (profile) =>
+          t(`device_profiles.form_factor.${profile.formFactor}` as StringKey),
+        cell: (profile) =>
+          html`<span part="profile-summary"
+            >${t(`device_profiles.form_factor.${profile.formFactor}` as StringKey)}</span
+          >`,
+      },
+      {
+        key: "scope",
+        label: t("device_profiles.where_serves"),
+        searchValue: (profile) => this.#scopeSummary(profile),
+        cell: (profile) =>
+          html`<span part="profile-summary" data-test=${`profile-scope-${profile.id}`}
+            >${this.#scopeSummary(profile)}</span
+          >`,
+      },
+      {
+        key: "capabilities",
+        label: t("device_profiles.capabilities"),
+        searchValue: (profile) => this.#capabilitySummary(profile.capabilities),
+        cell: (profile) =>
+          html`<span part="profile-summary" data-test=${`profile-caps-${profile.id}`}
+            >${this.#capabilitySummary(profile.capabilities, true)}</span
+          >`,
+      },
+      {
+        key: "actions",
+        label: t("device_profiles.row_actions"),
+        pinned: "end",
+        cell: (profile) =>
+          html`<wt-row-actions
+            align="end"
+            label=${`${t("device_profiles.row_actions")}: ${profile.name}`}
+          >
             <wt-button
-              variant="primary"
-              size="sm"
-              data-test="edit-${profile.id}"
+              data-test=${`edit-${profile.id}`}
               @click=${() => void this.#openEditor(profile.id)}
               >${t("action.edit")}</wt-button
             >
             <wt-button
-              variant="secondary"
-              size="sm"
-              data-test="duplicate-${profile.id}"
+              data-test=${`duplicate-${profile.id}`}
               @click=${() => this.#duplicate(profile)}
               >${t("device_profiles.duplicate")}</wt-button
             >
             <wt-button
               variant="danger"
-              size="sm"
-              data-test="delete-${profile.id}"
-              @click=${() => this.#openDelete(profile)}
+              data-test=${`delete-${profile.id}`}
+              @click=${(event: Event) => this.#openDelete(profile, event)}
               >${t("device_profiles.delete_confirm")}</wt-button
             >
-          </div>
-        </div>
-      </wt-card>
-    </li>`;
+          </wt-row-actions>`,
+      },
+    ];
   }
 
   #renderDeleteDialog(): TemplateResult {
     return html`<wt-dialog
       heading=${t("device_profiles.delete_title")}
       .open=${this.deleteTarget !== null}
+      .opener=${this.#deleteOpener}
       @wt-close=${() => (this.deleteTarget = null)}
     >
       <p data-test="delete-message">${t("device_profiles.delete_message")}</p>
+      <wt-button slot="footer" data-test="cancel-delete" @click=${() => (this.deleteTarget = null)}
+        >${t("action.cancel")}</wt-button
+      >
       <wt-button
         slot="footer"
         variant="danger"
@@ -1788,25 +1860,49 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   #renderList(): TemplateResult {
+    const error = this.errorKey ?? this.listScopeError;
     return html`
-      <h1 class="title">${t("device_profiles.title")}</h1>
-      <wt-button variant="primary" data-test="create" @click=${() => this.#openCreate()}
-        >${t("device_profiles.create")}</wt-button
-      >
+      <div class="list-heading">
+        <h1 class="title">${t("device_profiles.title")}</h1>
+        <wt-button variant="primary" data-test="create" @click=${() => this.#openCreate()}
+          >${t("device_profiles.create")}</wt-button
+        >
+      </div>
       ${this.#renderNarrowed()}
-      ${
-        this.profiles.length === 0
-          ? html`<p class="empty" data-test="no-profiles">${t("device_profiles.empty")}</p>`
-          : html`<ol>
-              ${this.profiles.map((profile) => this.#renderRow(profile))}
-            </ol>`
-      }
+      <wt-data-table
+        aria-label=${t("device_profiles.title")}
+        searchable
+        searchLabel=${t("device_profiles.search")}
+        noMatchesMessage=${tableNoMatches()}
+        emptyMessage=${t("device_profiles.empty")}
+        viewKey="waitron.device-profiles.table"
+        customiseColumnsLabel=${t("table.customise_columns")}
+        customiseLabel=${t("table.customise")}
+        restoreColumnsLabel=${t("table.restore_columns")}
+        doneLabel=${t("table.done")}
+        moveColumnLabel=${t("table.move_column")}
+        showColumnLabel=${t("table.show_column")}
+        hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
+        columnPositionLabel=${t("table.column_position")}
+        filtersLabel=${t("table.filters")}
+        filteredColumnLabel=${t("table.filtered_column")}
+        filtersClearAllLabel=${t("table.filters_clear_all")}
+        filtersCloseLabel=${t("table.filters_close")}
+        filterSearchPlaceholder=${t("categories.combobox_search")}
+        filterNoResultsLabel=${t("categories.combobox_no_results")}
+        sortKey="name"
+        sortDirection="ascending"
+        .rows=${this.profiles}
+        .columns=${this.#columns()}
+        .rowKey=${(profile: DeviceProfile) => profile.id}
+        .rowClick=${(profile: DeviceProfile) => void this.#openEditor(profile.id)}
+        .rowClickLabel=${(profile: DeviceProfile) => `${t("action.edit")}: ${profile.name}`}
+        .loading=${!this.#profilesRead}
+      ></wt-data-table>
       ${this.#renderDeleteDialog()}
-      ${
-        this.errorKey
-          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
-          : nothing
-      }
+      ${error ? html`<p class="error" role="alert">${codeMessage(error)}</p>` : nothing}
     `;
   }
 

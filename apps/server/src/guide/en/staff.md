@@ -145,6 +145,11 @@ To put someone on the rota and the sign-in list of devices that take their job, 
 the person's details. If someone changes them while you edit, press **Reload** to see their latest
 roles before choosing again.
 
+## Find a device profile {#device-profiles}
+
+In **Hardware**, open **Device profiles**. Search for the profile you need, then select its row to
+edit. Use its **⋮** menu to duplicate or delete it.
+
 ## Who can sign in on a device {#device-profile-sign-in}
 
 Open **Device profiles** and edit the profile used by the device. Under **Who can sign in**,

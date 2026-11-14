@@ -1375,12 +1375,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **A1529. Hardware screens brought into line (owner, 2026-11-14).**
   The owner reviewed mock-ups of the menu and profile screens and approved them. No migration.
   Remaining work:
-  - **The device profiles list becomes the shared table** (`wt-data-table`), like the other
-    list screens, instead of one card per profile with its own Edit, Duplicate and Delete
-    buttons. A row opens the profile; Edit, Duplicate and Delete go in the row menu, keyed
-    `actions` and pinned to the end. Columns: name, form factor, where it serves, and what it
-    can do as a few labels plus "+N more", so rows stay one height
-    (`apps/dashboard/src/screens/device-profiles-screen.ts`).
   - **The device profile editor is split into tabs** instead of one long column: General (name,
     form factor, auto-logout, Opens on), Where it serves, Who can sign in, What it can do (actions
     and screens side by side) and Printers and card readers. Where it serves and Who can sign in
@@ -1402,8 +1396,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   - **Every dashboard table that can grow past about ten rows has the shared search bar and
     filters** (`wt-data-table`'s `searchable` and column `filter`s). Devices, Units, Modifiers and
     the product and staff lists already do. Missing on 2026-11-14: Printers' agents, printers
-    and print jobs tables (filters but no search bar), the card readers table (neither) and the
-    device profiles table A1529 adds. To check against the ten-row rule: alerts, orders, access
+    and print jobs tables (filters but no search bar) and the card readers table (neither).
+    To check against the ten-row rule: alerts, orders, access
     roles, handover intervals and modules. Content languages and servers stay short. A table
     whose data lives on the server takes "Shared database-backed table paging, search and
     sorting" below instead.
