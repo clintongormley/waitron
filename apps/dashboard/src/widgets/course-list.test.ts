@@ -6,6 +6,7 @@ import type { WtInput, WtSegmentedControl } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import type { Course, DashboardApi } from "../api/client.js";
 import { CourseList } from "./course-list.js";
 
@@ -1191,7 +1192,7 @@ describe("layout", () => {
   });
   it.each([
     ["en", "Rename", "Delete"],
-    ["es", "Cambiar nombre", "Eliminar"],
+    ["es", es["kitchen.rename_course"], es["action.delete"]],
   ])(
     "offers named Rename/Delete actions and focuses the editor (%s)",
     async (locale, renameText, deleteText) => {
