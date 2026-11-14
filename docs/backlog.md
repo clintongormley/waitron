@@ -658,7 +658,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   be). A1539's line about prep-station hours links to the Periods page. No migration. Not started.
 
 - **A1537. Calendar: show opening hours plainly, keep the period detail in the Week, and make the
-  Week's days open (owner, 2026-11-14).** No migration. Not started.
+  Week's days open (owner, 2026-11-14).** No migration. [Plan](superpowers/plans/2026-11-14-a1537-calendar-hours.md) cleared by the watcher on 2026-11-14; implementation not started.
   - **The day pop-up and the Month view show only the times each department and zone is open, with
     its periods merged.** Today the pop-up lists every period and closure in turn ("Open
     09:00–12:30 · Lunch 12:30–16:00 · … · closed 23:00–23:15 · closed 23:15–00:00"); it becomes

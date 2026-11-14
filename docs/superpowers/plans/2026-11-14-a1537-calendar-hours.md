@@ -2,7 +2,7 @@
 
 **Finish line:** One PR: merged opening times in pop-ups/Month; detailed Week bars opening days; touching Closed stretches shown once; standard-week action beside season, others below.
 
-**Authority:** `docs/backlog.md`, owner’s A1537, at `f44d6694c4099fd184d87ec1d06acaac4129f11a`. Await Claude review and watcher clearance before building. No migration. Exclude A1535, A1538’s selection/editor chrome, A1539’s station changes, new infrastructure and unrelated repairs.
+**Authority:** `docs/backlog.md`, owner’s A1537, at `f44d6694c4099fd184d87ec1d06acaac4129f11a`. Claude reviewed the proposal; the watcher cleared it on 2026-11-14 at 22:10 (Lane D questions.md). The owner did not approve this plan. No migration. Exclude A1535, A1538’s selection/editor chrome, A1539’s station changes, new infrastructure and unrelated repairs.
 
 Paths below use **S = `packages/venue-service/src`**, **D = `packages/venue-service/src/dashboard`**.
 
