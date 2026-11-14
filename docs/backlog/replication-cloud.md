@@ -4,6 +4,18 @@ The open entries are listed in [the backlog](../backlog.md), under "Replication,
 
 ## A1018. Agree and build the hosted writer stop-proof contract
 
+**Local completion audit, 14 November 2026:** A947 3b-F
+([#3172](https://github.com/clintongormley/waitron/pull/3172), main 5cdf681c05)
+adds the controlled handover and reset/rejoin emergency takeover test. Running
+`pnpm --filter @waitron/server exec vitest run src/handover-two-boxes.test.ts`
+on main 95275f0bca gives one pass and one failure: the emergency fixture at line 464 sends only the
+preview's identifier and time; the declaration API requires its source too
+(`handover-emergency-api.ts:152–155`, added by A1188 part 0, #3142).
+It returns `handover.request_invalid` for `expectedCopy.source` before activation.
+This contract mismatch still needs correction and a passing two-box run. Physical-box
+qualification remains the owner's; hosted placements remain A1188 and A1505. The earlier
+simulated-slice receipts below do not qualify those settings.
+
 **Owner design approval, 24 October 2026, 04:07.** The owner approved the
 [current design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md)
 as published at Waitron `2c13c7f55dd53a6a7b4d4423ccdc166df5af7397`: both Harbour
@@ -497,6 +509,11 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 
 ## A1342: return a stopped box's records before reset
 
+**Automatic duplicate identification:** agree which returned invoices count as duplicates before
+planning it; no matching rule has been agreed. This is the remaining replication entry requested
+by the watcher on 14 November at 00:48. Acknowledgement, responsibility and resolution stay
+unplanned.
+
 Payment-clash acceptance is an internal API without a screen. Sale lines, reprints and real-box
 qualification remain open. A1342’s marker is now stored and returned invoices are listed. Reports show a general notice, without identifying affected invoices or periods; duplicates are not identified.
 
@@ -896,6 +913,16 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
   as a refactor larger than that PR (its simplify review, 2026-10-15).
 
 ## Decisions and deliberate limits
+
+**A1018 local scope, 14 November 2026:** The watcher dropped Slice 13's archive/wipe/self-wipe
+work on 14 November at 00:48 under the warn-only reset decision. Slice 14's selected-backup
+placement moved to A1188 part 0 and landed as
+[#3142](https://github.com/clintongormley/waitron/pull/3142), ae5413fe34.
+Task 7.4b's extra emergency wait is deliberately unbuilt: the owner chose the next free minute
+on 2 November ([Q2](../superpowers/plans/2026-11-02-a1018-handover-build.md#questions-for-the-owner)).
+The watcher said not to rebuild Slices 10/11 on 12 November at 10:10; Task 10.6 stays with A1342.
+Automatic duplicate identification needs an agreed matching rule, retained with A1342;
+acknowledgement, responsibility and resolution remain unplanned.
 
 **A1018 R40, 2026-11-14:** A box goes back to being main only by being reset, rejoining as a spare
 and taking the normal controlled handover; a hand-back to a former main that kept its files is

@@ -1723,20 +1723,14 @@ Not in any track until the standalone primary is done.
 
 - **Address search provider, province names, guide lines** (bundle of 2, size M, waits for another entry). Holds A1171, A1171. [Detail](backlog/replication-cloud.md#bundle-address-search-provider-province-names-guide-lines)
 
-- **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles all AEAT communication after either takeover; returning M1 transfers fiscal originals, outcomes and their recorded payment facts without replaying live effects.
-  The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md) cuts the work into slices.
-  The controlled Servers-to-spare screen is built and checked on simulated boxes; real-box use
-  still waits for real-box qualification. Slice 7’s emergency server flow is checked on simulated
-  boxes. Slice 8 adds the protected `/handover/emergency` page, saved-declaration resume and the
-  existing clock check, with one entered password/code retained until completion or leaving and a
-  replacement code only if it expires. Its [page plan](superpowers/plans/2026-11-12-a1018-8-emergency-page.md)
-  was cleared by the watcher on 12 November; real-box and Cloud qualification remain open. Reporting → Handover intervals shows committed emergency takeovers from signed
-  declarations, including unknown sale/order times and venue-zone dates. The [12a PR 1](superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md) warning beside sales/cash-up/category reports and VAT links report viewers to the handover dates; it does not identify which report periods are affected. The [receiver completion work](superpowers/plans/2026-11-12-a1018-return-completion.md) persists accounted batch digests with the venue and shows whether one advertised inventory was fully received. Report warnings remain as date reminders; missing activity, amounts and cash-ups stay unconfirmed. A1342’s marker is now stored and returned invoices are listed. Reports show a general notice, without identifying affected invoices or periods; duplicates are not identified.
-  The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
-  minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked
-  pending the venue's tax adviser, and Task 7.4b is not built. On 2026-11-03 the owner read
-  Slice 9's S2 re-run from its new Parts F and G, and S2 reads PASS; the watcher (`questions.md`, 2026-11-12 10:10) said “Do not rebuild Slices 10/11”; Task 10.6 stays with A1342.
-  [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
+- **A1018. Finish local handover qualification; physical boxes and Cloud remain separate.**
+  A947 3b-F landed as [#3172](https://github.com/clintongormley/waitron/pull/3172).
+  The 14 November current-main two-box run passes the controlled case but refuses the emergency
+  test's declaration because its fixture drops the preview copy's required source. Correct that
+  request and run the two-box flow before calling the local build complete. Physical qualification
+  belongs to the owner. Cloud emergency start is A1188; Cloud-to-box handover is A1505.
+  The extra emergency wait in Task 7.4b was deliberately excluded by the owner's next-free-minute
+  choice. [Audit, scope and build history](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **A947 owns the spare's authenticated switch screen** (watcher, 2026-11-08); the spare's
   dashboard is retired. [Decision](backlog/replication-cloud.md#decisions-and-deliberate-limits).
@@ -1765,7 +1759,10 @@ Not in any track until the standalone primary is done.
 
 - **A1342: remaining returned-record facts and qualification.** Payment-clash acceptance is an
   internal API without a screen. Sale lines, reprints and real-box qualification remain open.
-  A1342’s marker is now stored and returned invoices are listed. Reports show a general notice, without identifying affected invoices or periods; duplicates are not identified. A filing result held only by the old box is not applied to a record
+  A1342’s marker is now stored and returned invoices are listed. Reports show a general notice,
+  without identifying affected invoices or periods. Automatic duplicate identification needs a
+  matching rule before it can be planned; acknowledgement, responsibility and resolution remain
+  unplanned. A filing result held only by the old box is not applied to a record
   already on the new main; a late payment on an older box's chain is not included in this return.
   An A802 correction's row and refund links do not travel (`invoice_corrections` and
   `invoice_correction_refunds` are not in the return), so cash an unfinished correction gave back
