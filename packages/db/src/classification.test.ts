@@ -1,3 +1,4 @@
+import { triggerRaised } from "./constraint-target.js";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { sql, type SQL } from "drizzle-orm";
@@ -5,10 +6,8 @@ import { describe, expect, it } from "vitest";
 import { tablesCreatedBy } from "@waitron/sync-enrolment";
 import { CORE_CHANGE_SOURCES, CORE_CLASSIFICATION } from "./classification.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
-import { TRIGGER_ABORT } from "./sql-state.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
-import { isRefusal } from "./unique-violation.js";
 
 const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
 
@@ -205,7 +204,7 @@ describe("the append-only tables core took in from other modules", () => {
     it.each(FOLDED_APPEND_ONLY)("%s accepts an insert and refuses an update", async (table) => {
       insertRow(table);
       const update = await captureError(() => suite.db.run(ROWS[table].update));
-      expect(isRefusal(update, TRIGGER_ABORT)).toBe(true);
+      expect(triggerRaised(update, `${table} is append-only`)).toBe(true);
       expect(engineErrorMessage(update)).toBe(`${table} is append-only`);
     });
 
@@ -214,7 +213,7 @@ describe("the append-only tables core took in from other modules", () => {
       const deletion = await captureError(() =>
         suite.db.run(sql`delete from ${sql.identifier(table)}`),
       );
-      expect(isRefusal(deletion, TRIGGER_ABORT)).toBe(true);
+      expect(triggerRaised(deletion, `${table} is append-only`)).toBe(true);
       expect(engineErrorMessage(deletion)).toBe(`${table} is append-only`);
       expect(suite.db.all(sql`select 1 from ${sql.identifier(table)}`)).toHaveLength(1);
     });

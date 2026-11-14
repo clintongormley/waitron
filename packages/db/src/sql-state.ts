@@ -38,7 +38,7 @@ export const RESTRICT_VIOLATION: RefusalClass = [1811] as const;
  * raise from a restricted delete. Only the MESSAGE separates them: a raise arrives with its own
  * text verbatim, a RESTRICT refusal with `FOREIGN KEY constraint failed` (both driven in
  * `constraint-target.db.test.ts`). That is why `./constraint-target.ts`'s `triggerRaised` and
- * `restrictRefused` ask for the text as well; `isRefusal` reads the number alone.
+ * `restrictRefused` ask for the text as well; `isRefusal` declines this ambiguous number.
  */
 export const TRIGGER_ABORT: RefusalClass = [1811] as const;
 

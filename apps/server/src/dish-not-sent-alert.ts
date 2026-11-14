@@ -3,7 +3,7 @@ import {
   isRefusal,
   NOT_NULL_VIOLATION,
   products,
-  TRIGGER_ABORT,
+  refusalCode,
   UNIQUE_VIOLATION,
   workingOrders,
 } from "@waitron/db";
@@ -39,9 +39,8 @@ export async function raiseDishesNotSent(
   try {
     await recordDishesNotSent(tx, cfg, saleId, workingOrderId, notSent, now);
   } catch (error) {
-    // A refusal backs out the statement alone, so the sale still commits; why that holds is at
-    // `clearBillRequestIfPaid` (`./bill-request.ts`). Anything else fails the sale.
-    if (!isRefusal(error, ALERT_REFUSALS)) throw error;
+    // Deliberately catch every trigger refusal so the payment settles.
+    if (!isRefusal(error, ALERT_REFUSALS) && refusalCode(error) !== 1811) throw error;
     // The alert's code: scripts/alert-codes.test.ts reads any dotted name here as an alert code.
     log?.("error", "route.dish_not_sent", {
       saleId,
@@ -52,7 +51,7 @@ export async function raiseDishesNotSent(
   }
 }
 
-const ALERT_REFUSALS = [...TRIGGER_ABORT, ...UNIQUE_VIOLATION, ...NOT_NULL_VIOLATION];
+const ALERT_REFUSALS = [...UNIQUE_VIOLATION, ...NOT_NULL_VIOLATION];
 
 async function recordDishesNotSent(
   tx: Transaction,

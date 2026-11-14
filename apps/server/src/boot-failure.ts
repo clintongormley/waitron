@@ -1,4 +1,4 @@
-import { MAX_CAUSE_DEPTH, diskFullIn, isAppError, sqliteFailureOf } from "@waitron/shared";
+import { firstCodeInCauseChain, diskFullIn, isAppError, sqliteFailureOf } from "@waitron/shared";
 import "./errors.js";
 import type { Statfs } from "./free-bytes.js";
 import { lowestFreeBytes } from "./start-space.js";
@@ -51,18 +51,6 @@ export const FULL_DISK_PRIMARY_CODES: readonly number[] = [10, 14];
 
 const FULL_DISK_PRIMARY = new Set(FULL_DISK_PRIMARY_CODES);
 
-function enospcIn(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
-    if (typeof current !== "object" || current === null) return false;
-    const layer = current as { code?: unknown; cause?: unknown };
-    if (layer.code === "ENOSPC") return true;
-    if (layer.cause === current) return false;
-    current = layer.cause;
-  }
-  return false;
-}
-
 /**
  * Whether a failure was a full disk. Beyond the engine's own full-disk code, the "cannot open" and
  * I/O families and ENOSPC count only below {@link FULL_DISK_BYTES}, because a missing folder raises
@@ -73,7 +61,7 @@ export function fullDiskFailure(error: unknown, freeBytes: number | null): boole
   if (freeBytes === null || freeBytes >= FULL_DISK_BYTES) return false;
   const failure = sqliteFailureOf(error);
   if (failure !== null && FULL_DISK_PRIMARY.has(failure.errcode & 0xff)) return true;
-  return enospcIn(error);
+  return firstCodeInCauseChain(error, (code) => code === "ENOSPC") !== null;
 }
 
 /** {@link classifyBootFailure}, except that an unreachable or unknown failure on a full disk is named one. */

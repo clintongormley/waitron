@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 
@@ -70,7 +71,7 @@ async function json<T>(fetchImpl: Fetch, url: string, notFound?: () => AppError)
 
 /** Read the loopback-only Mailpit API and expose only the fields Waitron's inbox renders. */
 export function createMailpitClient(baseUrl: string, fetchImpl: Fetch = fetch): MailpitClient {
-  const base = baseUrl.replace(/\/+$/u, "");
+  const base = trimTrailingSlashes(baseUrl);
   return {
     async list() {
       const result = await json<{ messages: RawMessageSummary[]; messages_count: number }>(

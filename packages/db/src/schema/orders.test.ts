@@ -1,15 +1,11 @@
+import { restrictRefused } from "../constraint-target.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { refusalOn, triggerRaised } from "../constraint-target.js";
-import {
-  CHECK_VIOLATION,
-  FOREIGN_KEY_VIOLATION,
-  RESTRICT_VIOLATION,
-  UNIQUE_VIOLATION,
-} from "../sql-state.js";
+import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { TRANSITION_REFUSAL } from "../trigger-refusals.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
@@ -763,7 +759,7 @@ describe("working_order_lines — the draft line's links", () => {
     // cooking. SQLite names no constraint in a foreign-key refusal, so the code separates a
     // RESTRICT reference from a NO ACTION one, the message excludes a trigger's `RAISE(ABORT)`,
     // and the last step of this case attributes the refusal.
-    expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(true);
+    expect(restrictRefused(error)).toBe(true);
     expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
 
     // The control, in the other direction: an unnamed product deletes, so the refusal above is the

@@ -1,3 +1,4 @@
+import { isSqlIdentifier } from "@waitron/shared";
 import { type SQL, sql } from "drizzle-orm";
 
 import type { RawResult } from "./node-sqlite-adapter.js";
@@ -18,12 +19,6 @@ export interface AppendOnlyTrigger {
   table: string;
   definition: string;
 }
-
-/**
- * The trigger statements below cannot be parameterised — SQLite will not bind a table name — so
- * the name is checked and refused rather than escaped.
- */
-const PLAIN_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** What a caller sees when it tries to change a row that is already written. */
 const suffix = "is append-only";
@@ -67,7 +62,7 @@ export function installAppendOnlyTriggers(
 /** The triggers {@link installAppendOnlyTriggers} creates, every name checked before any is built. */
 export function appendOnlyTriggers(tables: readonly string[]): AppendOnlyTrigger[] {
   for (const table of tables) {
-    if (!PLAIN_IDENTIFIER.test(table)) {
+    if (!isSqlIdentifier(table)) {
       throw new Error(`append-only trigger: ${table} is not a plain table name`);
     }
   }

@@ -1,3 +1,4 @@
+import { triggerRaised } from "../constraint-target.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -7,7 +8,6 @@ import {
   CHECK_VIOLATION,
   FOREIGN_KEY_VIOLATION,
   NOT_NULL_VIOLATION,
-  TRIGGER_ABORT,
   UNIQUE_VIOLATION,
 } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
@@ -538,11 +538,11 @@ describe("sales — immutability", () => {
     const update = await captureError(() =>
       suite.db.update(sales).set({ total: 99900 }).where(eq(sales.id, saleId)),
     );
-    expect(isRefusal(update, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(update, "sales is append-only")).toBe(true);
     expect(engineErrorMessage(update)).toBe("sales is append-only");
 
     const remove = await captureError(() => suite.db.delete(sales).where(eq(sales.id, saleId)));
-    expect(isRefusal(remove, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(remove, "sales is append-only")).toBe(true);
     expect(engineErrorMessage(remove)).toBe("sales is append-only");
   });
 

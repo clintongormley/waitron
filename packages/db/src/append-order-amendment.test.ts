@@ -1,3 +1,4 @@
+import { triggerRaised } from "./constraint-target.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 /**
  * `appendOrderAmendment`'s per-order hash chain: the genesis shape, the link, the stored hash's
@@ -22,7 +23,7 @@ import { appendOrderAmendment, type AppendAmendmentInput } from "./append-order-
 import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { verifyAmendmentChain, type VerifiableAmendment } from "./order-amendment-hash.js";
-import { FOREIGN_KEY_VIOLATION, TRIGGER_ABORT } from "./sql-state.js";
+import { FOREIGN_KEY_VIOLATION } from "./sql-state.js";
 import { isRefusal } from "./unique-violation.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
 import { seedDevice, seedNode, seedVenue } from "./testing/seed.js";
@@ -215,12 +216,12 @@ describe("order_amendments append helper", () => {
         .set({ reason: "forged" })
         .where(eq(orderAmendments.workingOrderId, order)),
     );
-    expect(isRefusal(eU, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(eU, "order_amendments is append-only")).toBe(true);
     expect(engineErrorMessage(eU)).toBe("order_amendments is append-only");
     const eD = await captureError(() =>
       suite.db.delete(orderAmendments).where(eq(orderAmendments.workingOrderId, order)),
     );
-    expect(isRefusal(eD, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(eD, "order_amendments is append-only")).toBe(true);
     expect(engineErrorMessage(eD)).toBe("order_amendments is append-only");
   });
 

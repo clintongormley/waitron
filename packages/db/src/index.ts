@@ -300,6 +300,7 @@ export {
   sameTarget,
   triggerRaised,
   type ConstraintTarget,
+  refusalCode,
 } from "./constraint-target.js";
 export {
   BILL_PAYMENT_CHANGE_REFUSAL,

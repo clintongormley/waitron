@@ -1,20 +1,11 @@
 import { refusalCode } from "./constraint-target.js";
 import { UNIQUE_VIOLATION, type RefusalClass } from "./sql-state.js";
 
-/**
- * Is this error (or anything it wraps) one of `refusal`'s result codes?
- *
- * The engine's result code may be at the top level or one wrapper down, depending on the path the
- * refusal came through, so this reads the first result code in the cause chain.
- *
- * It answers WHICH CLASS of refusal this is, and nothing about which key was refused; a write path
- * translating ONE specific refusal wants `./constraint-target.ts`'s `refusalOn`. A 1811 refusal (an
- * `ON DELETE RESTRICT` key and a trigger's raise share it) is told apart only by its words:
- * `restrictRefused` / `triggerRaised` in `./constraint-target.ts`.
- */
+/** Reads the first result code. The ambiguous 1811 requires restrictRefused/triggerRaised,
+ * which also match the message; a result code alone identifies no particular key. */
 export function isRefusal(error: unknown, refusal: RefusalClass): boolean {
   const code = refusalCode(error);
-  return code !== undefined && refusal.includes(code);
+  return code !== undefined && code !== 1811 && refusal.includes(code);
 }
 
 /** Is this (or anything it wraps) a uniqueness violation, on a primary key or any unique index? */

@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
@@ -2265,7 +2266,7 @@ async function bootServer(
         held,
         nodeId: config.node.nodeId,
         // The held chart and the mirror link are this box's own trusted records, so no SSRF screen.
-        peerUrl: `${origin.replace(/\/+$/, "")}/management-api/membership`,
+        peerUrl: `${trimTrailingSlashes(origin)}/management-api/membership`,
         fetchPeerMembership: (url) =>
           fetchPeerMembershipDocument(url, { authority, timeoutMs: 5_000 }),
         // Persist-if-accepted, so a newer verified chart is held even when it does not fence this node.

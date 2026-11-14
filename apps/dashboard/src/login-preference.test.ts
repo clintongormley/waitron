@@ -36,6 +36,15 @@ describe("login preference", () => {
     });
   });
 
+  it("normalizes a padded opted-in address before storing it", () => {
+    rememberSuccessfulLogin(" Owner@Example.com ", "password", true);
+    expect(readLoginPreference()).toEqual({
+      email: "owner@example.com",
+      method: "password",
+      persistent: true,
+    });
+  });
+
   it("ignores malformed storage and forgets both lifetimes", () => {
     sessionStorage.setItem("waitron-login-preference", '{"email":"not-email","method":"password"}');
     localStorage.setItem("waitron-login-preference", "broken");
@@ -151,6 +160,7 @@ describe("login preference", () => {
   it.each([
     ["an address that is not an email", { email: "owner", method: "password" }],
     ["a sign-in method this screen does not offer", { email: "owner@example.com", method: "sms" }],
+    ["a padded saved address", { email: " owner@example.com ", method: "password" }],
     ["no email at all", { method: "passkey" }],
   ])("ignores a saved shortcut holding %s", (_what, saved) => {
     localStorage.setItem("waitron-login-preference", JSON.stringify(saved));

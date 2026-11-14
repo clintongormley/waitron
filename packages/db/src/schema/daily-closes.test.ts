@@ -1,8 +1,7 @@
+import { triggerRaised } from "../constraint-target.js";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { TRIGGER_ABORT } from "../sql-state.js";
-import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
@@ -95,7 +94,7 @@ describe("frozen daily close schema (append-only triggers, columns, FK)", () => 
           .where(eq(dailyCloses.businessDay, "2026-08-04")),
       ),
     );
-    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(error, "daily_closes is append-only")).toBe(true);
     expect(engineErrorMessage(error)).toBe("daily_closes is append-only");
   });
 
@@ -106,7 +105,7 @@ describe("frozen daily close schema (append-only triggers, columns, FK)", () => 
         tx.delete(dailyCloses).where(eq(dailyCloses.businessDay, "2026-08-05")),
       ),
     );
-    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(error, "daily_closes is append-only")).toBe(true);
     expect(engineErrorMessage(error)).toBe("daily_closes is append-only");
   });
 });

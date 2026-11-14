@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import type { Hono } from "hono";
 import { readNodeMembership } from "@waitron/db";
 import type { SignedHandoverEnvelope } from "@waitron/handover";
@@ -26,7 +27,7 @@ const OPERATION_ID_MAX_LENGTH = 64;
 
 /** The address of an operation's page on the box at `contactUrl`. */
 export function handoverPageAt(contactUrl: string, operationId: string): string {
-  return `${contactUrl.replace(/\/+$/, "")}/handover/${operationId}`;
+  return `${trimTrailingSlashes(contactUrl)}/handover/${operationId}`;
 }
 
 export async function handoverPageOf(

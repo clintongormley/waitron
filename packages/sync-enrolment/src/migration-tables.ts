@@ -18,38 +18,48 @@ const DROP_TABLE =
 const RENAME_TABLE =
   /\balter\s+table\s+["`]?(?:public["`]?\.)?["`]?([a-z0-9_]+)["`]?\s+rename\s+to\s+["`]?([a-z0-9_]+)["`]?/gi;
 
-/** An unclosed `/*` is left as it is, so the SQL after it is still read. */
-function blankBlockComments(source: string): string {
-  let out = "";
+/** Blanks comments and closed single-quoted literals, preserving newlines and identifiers.
+ * Unclosed blocks and strings remain readable because this is a text scanner, not SQL validation. */
+export function stripSql(source: string): string {
+  const pieces: string[] = [];
   let from = 0;
-  for (;;) {
-    const open = source.indexOf("/*", from);
-    if (open === -1) break;
-    const close = source.indexOf("*/", open + 2);
-    if (close === -1) break;
-    out += source.slice(from, open) + source.slice(open, close + 2).replace(/[^\n]/g, " ");
-    from = close + 2;
+  let cursor = 0;
+  let unclosedBlock = false;
+  let unclosedString = false;
+  while (cursor < source.length) {
+    const char = source[cursor];
+    let end = cursor;
+    let blank = true;
+    if (source.startsWith("--", cursor)) {
+      const newline = source.indexOf("\n", cursor + 2);
+      end = newline === -1 ? source.length : newline;
+    } else if (!unclosedBlock && source.startsWith("/*", cursor)) {
+      const close = source.indexOf("*/", cursor + 2);
+      if (close === -1) unclosedBlock = true;
+      else end = close + 2;
+    } else if ((char === "'" && !unclosedString) || char === '"' || char === "`") {
+      blank = char === "'";
+      let next = cursor + 1;
+      while (next < source.length) {
+        if (source[next] !== char) next++;
+        else if (source[next + 1] === char) next += 2;
+        else {
+          end = next + 1;
+          break;
+        }
+      }
+      if (end === cursor && blank) unclosedString = true;
+    }
+    if (end > cursor) {
+      pieces.push(source.slice(from, cursor));
+      const token = source.slice(cursor, end);
+      pieces.push(blank ? token.replace(/[^\n]/g, " ") : token);
+      cursor = end;
+      from = end;
+    } else cursor++;
   }
-  return out + source.slice(from);
-}
-
-/** Drops everything from each line's first `--`, a carriage return before the line break included. */
-export function dropLineComments(source: string): string {
-  return source
-    .split("\n")
-    .map((line) => {
-      const at = line.indexOf("--");
-      return at === -1 ? line : line.slice(0, at);
-    })
-    .join("\n");
-}
-
-/** Blanks comments and string literals, so a CREATE/DROP TABLE mentioned in prose or a literal is
- * ignored. Naive by design. */
-function stripSql(source: string): string {
-  return dropLineComments(blankBlockComments(source)).replace(/'(?:[^']|'')*'/g, (literal) =>
-    literal.replace(/[^\n]/g, " "),
-  );
+  pieces.push(source.slice(from));
+  return pieces.join("");
 }
 
 interface Statement {

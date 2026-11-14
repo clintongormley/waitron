@@ -49,9 +49,6 @@ describe("sqliteFailureOf", () => {
     expect(sqliteFailureOf(undefined)).toBeNull();
   });
 
-  // This function repeats the walk in `cause-chain.ts` rather than reusing it — that loop's
-  // predicate returns a `code` string and cannot carry a number and a message out — so its own
-  // bound is worth a case here rather than resting on the sibling's.
   it("gives up rather than walking a chain without end", () => {
     const cyclic: { cause?: unknown } = {};
     cyclic.cause = cyclic;

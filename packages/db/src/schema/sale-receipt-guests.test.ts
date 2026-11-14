@@ -1,18 +1,13 @@
+import { triggerRaised } from "../constraint-target.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import {
-  CHECK_VIOLATION,
-  FOREIGN_KEY_VIOLATION,
-  TRIGGER_ABORT,
-  UNIQUE_VIOLATION,
-} from "../sql-state.js";
+import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { isRefusal } from "../unique-violation.js";
 import { saleReceiptGuests } from "./sale-receipt-guests.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
@@ -109,12 +104,12 @@ describe("sale receipt guests", () => {
         .set({ guestCount: 3 })
         .where(eq(saleReceiptGuests.saleId, saleIds[0]!)),
     );
-    expect(isRefusal(updated, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(updated, "sale_receipt_guests is append-only")).toBe(true);
     expect(engineErrorMessage(updated)).toBe("sale_receipt_guests is append-only");
     const deleted = await captureError(() =>
       suite.db.delete(saleReceiptGuests).where(eq(saleReceiptGuests.saleId, saleIds[0]!)),
     );
-    expect(isRefusal(deleted, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(deleted, "sale_receipt_guests is append-only")).toBe(true);
     expect(engineErrorMessage(deleted)).toBe("sale_receipt_guests is append-only");
   });
 });

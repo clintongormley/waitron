@@ -1,3 +1,4 @@
+import { tableExists } from "@waitron/db";
 import { venueDirOf } from "@waitron/store";
 import { DEMO_DEVELOPER_PRESETS, DEFAULT_DEMO_DEVELOPER_PRESET } from "@waitron/country-packs/demo";
 // Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue directory and
@@ -174,10 +175,9 @@ export async function inspectVenues(
 ): Promise<{ hasExpected: boolean; hasAny: boolean }> {
   const store = await openVenueDatabase(venueDir);
   try {
-    const present = await store.venue.execute<{ name: string }>(
-      sql`select name from sqlite_master where type = 'table' and name in (${"locations"}, ${"tenants"})`,
-    );
-    if (present.rows.length < 2) return { hasExpected: false, hasAny: false };
+    const hasLocations = await tableExists(store.venue, "locations");
+    const hasTenants = await tableExists(store.venue, "tenants");
+    if (!hasLocations || !hasTenants) return { hasExpected: false, hasAny: false };
 
     // `exists(...)` answers 0 or 1 on this engine, not a boolean, so each is compared rather than
     // returned: handing a caller `0` where it expects `false` would make every `if` read true.

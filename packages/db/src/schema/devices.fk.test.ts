@@ -1,9 +1,8 @@
+import { restrictRefused } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { RESTRICT_VIOLATION } from "../sql-state.js";
-import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
@@ -88,7 +87,7 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     const e = await captureError(() =>
       admin.execute(sql`delete from printers where id = ${slipPrinter}`),
     );
-    expect(isRefusal(e, RESTRICT_VIOLATION)).toBe(true);
+    expect(restrictRefused(e)).toBe(true);
     await admin.execute(sql`delete from devices`);
     await admin.execute(sql`delete from printers where id = ${slipPrinter}`);
   });
@@ -125,7 +124,7 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     );
     // RESTRICT refuses with a code distinct from the `FOREIGN_KEY_VIOLATION` a plain NO ACTION
     // gives.
-    expect(isRefusal(e, RESTRICT_VIOLATION)).toBe(true);
+    expect(restrictRefused(e)).toBe(true);
     // The message half matters: this schema's `raise(abort, …)` triggers report the same code
     // (`../sql-state.ts`), including one on this table, so the class alone would accept a trigger
     // refusal as a RESTRICT one.

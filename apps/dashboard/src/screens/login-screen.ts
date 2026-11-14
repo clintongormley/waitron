@@ -1,3 +1,4 @@
+import { isValidEmail } from "@waitron/shared";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -447,8 +448,7 @@ export class LoginScreen extends LitElement {
     if (this.step === "email") {
       const email = this.email.trim();
       if (email === "") errors.email = t("form.email_required");
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-        errors.email = codeMessage("person.email_invalid");
+      else if (!isValidEmail(email)) errors.email = codeMessage("person.email_invalid");
     } else if (this.step === "password" || this.step === "factor") {
       if (this.step === "factor" && this.secondFactor === "")
         errors["one-time-code"] = t("form.factor_required");

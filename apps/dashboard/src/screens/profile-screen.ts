@@ -17,7 +17,7 @@ import {
   type LeaveReason,
 } from "@waitron/ui";
 import { sameValue } from "../widgets/product-editor-model.js";
-import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
+import { deriveDisplayName, isValidEmail, isValidTelephone } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -510,8 +510,7 @@ export class ProfileScreen extends LitElement {
     if (!f.firstNames.trim()) errors.firstNames = t("form.first_names_required");
     if (!f.lastNames.trim()) errors.lastNames = t("form.last_names_required");
     if (!f.email.trim()) errors.email = t("form.email_required");
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
-      errors.email = codeMessage("person.email_invalid");
+    else if (!isValidEmail(f.email.trim())) errors.email = codeMessage("person.email_invalid");
     const tel = f.telephone.trim();
     if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
     return errors;

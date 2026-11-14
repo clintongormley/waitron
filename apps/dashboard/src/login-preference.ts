@@ -1,3 +1,4 @@
+import { isValidEmail } from "@waitron/shared";
 export type LoginMethod = "password" | "passkey" | "google";
 
 export interface LoginPreference {
@@ -21,7 +22,8 @@ function parse(value: string | null): Omit<LoginPreference, "persistent"> | null
     const candidate = JSON.parse(value) as { email?: unknown; method?: unknown };
     if (
       typeof candidate.email !== "string" ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email) ||
+      candidate.email !== candidate.email.trim() ||
+      !isValidEmail(candidate.email) ||
       (candidate.method !== "password" &&
         candidate.method !== "passkey" &&
         candidate.method !== "google")
@@ -73,7 +75,7 @@ export function rememberSuccessfulLogin(
     return;
   }
   const email = emailValue.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+  if (!isValidEmail(email)) return;
   try {
     getStorage("localStorage")?.setItem(KEY, JSON.stringify({ email, method }));
   } catch {
