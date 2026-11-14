@@ -8,11 +8,19 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { readFilingOverview } from "./filing-overview.js";
+import { readFilingWarnings } from "./filing-warnings.js";
 import { FISCAL_ROUTES } from "./routes.js";
+import { appendToChain } from "./chain.js";
+import { altaFor, seedNode, seedSale } from "./testing/seed.js";
 
 vi.mock("./filing-overview.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./filing-overview.js")>();
   return { ...actual, readFilingOverview: vi.fn(actual.readFilingOverview) };
+});
+
+vi.mock("./filing-warnings.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./filing-warnings.js")>();
+  return { ...actual, readFilingWarnings: vi.fn(actual.readFilingWarnings) };
 });
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -45,6 +53,7 @@ function mount(
 
 beforeEach(() => {
   vi.mocked(readFilingOverview).mockClear();
+  vi.mocked(readFilingWarnings).mockClear();
 });
 
 it("answers a manager with the overview, not cached, on a box without a submission loop", async () => {
@@ -82,6 +91,7 @@ it("refuses a supervisor, who may view reports but not export them", async () =>
   expect(res.status).toBe(403);
   expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
   expect(readFilingOverview).not.toHaveBeenCalled();
+  expect(readFilingWarnings).not.toHaveBeenCalled();
 });
 
 it("refuses a request with no management session", async () => {
@@ -98,5 +108,44 @@ it("reads every open case when asked for all of them, and ignores any other valu
   expect(vi.mocked(readFilingOverview).mock.calls.map(([, scope]) => scope.limit)).toEqual([
     null,
     200,
+  ]);
+});
+
+it("answers the open warnings beside the overview, and reads every one when asked for all", async () => {
+  const node = await seedNode(suite.db);
+  const saleId = await seedSale(suite.db, node, 1);
+  const alta = altaFor(node, saleId, 1, 1);
+  const ipsiLine = { ...alta.input.Desglose[0]!, Impuesto: "02" as const };
+  delete ipsiLine.ClaveRegimen;
+  await withTransaction(suite.db, (tx) =>
+    appendToChain(tx, node.nodeId, { ...alta, input: { ...alta.input, Desglose: [ipsiLine] } }),
+  );
+  const cookie = await sessionCookie("manager");
+  const app = mount();
+
+  const res = await app.request(PATH, { headers: { cookie } });
+  expect(res.status).toBe(200);
+  expect(((await res.json()) as { warnings: unknown }).warnings).toEqual({
+    replyMismatches: [],
+    recordWarnings: [
+      {
+        detectedAt: alta.input.generadoEn.toISOString(),
+        kind: "flagged",
+        fields: ["Desglose[0].ClaveRegimen"],
+        codes: ["CLAVE_REGIMEN_REQUIRED"],
+        record: {
+          numSerieFactura: "A/1",
+          fechaExpedicionFactura: "2026-07-20",
+          tipoRegistro: "alta",
+          estado: null,
+        },
+      },
+    ],
+    total: 1,
+  });
+  expect((await app.request(`${PATH}?cases=all`, { headers: { cookie } })).status).toBe(200);
+  expect(vi.mocked(readFilingWarnings).mock.calls.map(([, scope]) => scope.limit)).toEqual([
+    200,
+    null,
   ]);
 });

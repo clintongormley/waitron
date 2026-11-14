@@ -98,6 +98,7 @@ export function overview(over: Partial<FilingOverviewAnswer> = {}): FilingOvervi
     cases: [conflictCase("rec-1", "2026-11-03T11:02:00.000Z")],
     totalCases: 1,
     heldWithoutCase: 7,
+    warnings: { replyMismatches: [], recordWarnings: [], total: 0 },
     activeConflicts: [
       {
         source: "record",

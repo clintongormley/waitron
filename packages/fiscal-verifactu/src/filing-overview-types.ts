@@ -141,6 +141,7 @@ export interface FilingOverview {
 
 /** The answer of `GET /management-api/fiscal-filing`. */
 export interface FilingOverviewAnswer extends FilingOverview {
+  warnings: FilingWarnings;
   filing: boolean;
   awaitingCertificate: boolean;
 }

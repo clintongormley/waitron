@@ -203,8 +203,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "Este servidor no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Cada arranque lo vuelve a intentar, así que abre Estado del servidor y pulsa Reiniciar el servidor. Si el mensaje sigue y hay una copia en el bucket configurada, revisa la conexión a internet del servidor y el bucket en la página de Copias de seguridad, porque ese arranque lee el bucket, y después vuelve a pulsar Reiniciar el servidor.",
   },
   "chain.verification_failed": {
-    en: "The invoice record chain failed its integrity check on a sale. Contact support.",
-    es: "La cadena de registros de facturación no ha superado su comprobación de integridad en una venta. Contacta con soporte.",
+    en: "When an invoice was recorded, Waitron's check of the invoice record before it found a problem. The invoice was still recorded, and sales and sending to the tax agency (AEAT) carry on. Keep the box running and note when this appeared.",
+    es: "Al registrar una factura, la comprobación de Waitron del registro anterior ha encontrado un problema. La factura se ha registrado igualmente, y las ventas y los envíos a la AEAT continúan. Mantén el servidor encendido y anota cuándo ha aparecido esto.",
   },
   "clock.degraded": {
     en: "This device's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds.",
@@ -310,8 +310,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La AEAT ha respondido sobre un registro de facturación sin un estado que Waitron reconozca, ha dicho que ya tiene un registro para esta factura y Waitron no ha podido confirmar que sea este, o no ha dado ninguna respuesta que Waitron pueda asegurar que corresponde a este registro, así que no se sabe si la AEAT lo ha guardado. Waitron lo volverá a enviar salvo que esté en espera un registro anterior de su cadena. Mensaje de la AEAT, si lo hay: {mensaje} (código {codigo}).",
   },
   "fiscal.respuesta_descuadrada": {
-    en: "The tax agency (AEAT) answered a submission with a different number of lines than the invoice records Waitron sent, so Waitron applied none of them and will send each again unless an earlier record on its chain is on hold. Contact support.",
-    es: "La AEAT ha respondido a un envío con un número de líneas distinto del de registros de facturación que Waitron envió, así que Waitron no ha aplicado ninguna y volverá a enviar cada uno salvo que esté en espera un registro anterior de su cadena. Contacta con soporte.",
+    en: "The tax agency (AEAT) answered a submission with a different number of lines than the invoice records Waitron sent, so Waitron applied none of them and will send each again unless an earlier record on its chain is on hold. The records sent and AEAT's lines are on Fiscal filing.",
+    es: "La AEAT ha respondido a un envío con un número de líneas distinto del de registros de facturación que Waitron envió, así que Waitron no ha aplicado ninguna y volverá a enviar cada uno salvo que esté en espera un registro anterior de su cadena. Los registros enviados y las líneas de la AEAT están en Remisión a la AEAT.",
   },
   "fiscal.duplicado_anulado": {
     en: "The tax agency (AEAT) already holds this invoice record as cancelled. The record and AEAT's answer are on Fiscal filing.",
@@ -326,16 +326,16 @@ export const ALERT_MESSAGES: Readonly<
     es: "La huella de un registro de facturación no coincide con la copia de la AEAT. El registro y la respuesta de la AEAT están en Remisión a la AEAT.",
   },
   "fiscal.environment_mismatch": {
-    en: "An invoice record was made for the tax agency's {recordEnvironment} service, but this box sends to {hostEnvironment}. It has not been sent. Contact support.",
-    es: "Un registro de facturación se creó para el servicio de {recordEnvironment} de la AEAT, pero este servidor envía a {hostEnvironment}. No se ha enviado. Contacta con soporte.",
+    en: "An invoice record was made for the tax agency's {recordEnvironment} service, but this box sends to {hostEnvironment}. That record and the later ones on its chain are kept on this box and not sent; sales carry on. Keep the box running and note when this appeared.",
+    es: "Un registro de facturación se creó para el servicio de {recordEnvironment} de la AEAT, pero este servidor envía a {hostEnvironment}. Ese registro y los posteriores de su cadena se guardan en este servidor y no se envían; las ventas continúan. Mantén el servidor encendido y anota cuándo ha aparecido esto.",
   },
   "fiscal.environment_unknown": {
-    en: "An invoice record does not say which tax agency service it was made for, so it has not been sent. Contact support.",
-    es: "Un registro de facturación no indica para qué servicio de la AEAT se creó, así que no se ha enviado. Contacta con soporte.",
+    en: "An invoice record does not say which tax agency service it was made for. That record and the later ones on its chain are kept on this box and not sent; sales carry on. Keep the box running and note when this appeared.",
+    es: "Un registro de facturación no indica para qué servicio de la AEAT se creó. Ese registro y los posteriores de su cadena se guardan en este servidor y no se envían; las ventas continúan. Mantén el servidor encendido y anota cuándo ha aparecido esto.",
   },
   "fiscal.record_totals_disagree": {
-    en: "An invoice's totals do not match its tax lines. The tax agency accepts it, but check that sale's prices.",
-    es: "Los totales de una factura no coinciden con sus líneas de impuestos. La AEAT la acepta, pero revisa los precios de esa venta.",
+    en: "An invoice's totals do not match its tax lines. The tax agency accepts it, but check that sale's prices. The invoice is on Fiscal filing.",
+    es: "Los totales de una factura no coinciden con sus líneas de impuestos. La AEAT la acepta, pero revisa los precios de esa venta. La factura está en Remisión a la AEAT.",
   },
   "fiscal.fingerprint_mismatch": {
     en: "Invoice action refused: fingerprint check failed.",
@@ -350,8 +350,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La subsanación se ha rechazado porque la referencia de la factura o la marca de subsanación no es válida. Comprueba la factura seleccionada y los datos de la subsanación.",
   },
   "fiscal.record_flagged": {
-    en: "An invoice record has a problem the tax agency (AEAT) accepts, though it may flag it. Contact support.",
-    es: "Un registro de facturación tiene un problema que la AEAT acepta, aunque puede señalarlo. Contacta con soporte.",
+    en: "An invoice record has something the tax agency (AEAT) accepts, though it may point it out. The record went out as usual; the invoice and the fields involved are on Fiscal filing.",
+    es: "Un registro de facturación tiene algo que la AEAT acepta, aunque puede señalarlo. El registro se ha enviado como siempre; la factura y los campos afectados están en Remisión a la AEAT.",
   },
   "fiscal.reconcile_no_trace": {
     en: "Invoice {numSerieFactura} was sent, but the tax agency (AEAT) has no record of it. Contact support.",

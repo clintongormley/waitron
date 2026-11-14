@@ -3,7 +3,7 @@ import { clockBehindSource } from "./clock-behind-alerts.js";
 import { FISCAL_ALERTS } from "./index.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
-it("claims fiscal. incidents for the fiscal area under fiscal.view and clock.behind_chain, clock.records_misdated and clock.corrected incidents for the box area under system.manage, and contributes the submission and clock-behind sources", () => {
+it("claims fiscal. incidents for the fiscal area under fiscal.view, links the reply-mismatch and record-check warnings to Fiscal filing, and claims clock.behind_chain, clock.records_misdated and clock.corrected incidents for the box area under system.manage, and contributes the submission and clock-behind sources", () => {
   expect(FISCAL_ALERTS).toEqual({
     events: [
       { prefix: "fiscal.", area: "fiscal", permission: "fiscal.view" },
@@ -33,6 +33,24 @@ it("claims fiscal. incidents for the fiscal area under fiscal.view and clock.beh
       },
       {
         prefix: "fiscal.anulacion_retenida",
+        area: "fiscal",
+        permission: "fiscal.view",
+        screen: "fiscal-filing",
+      },
+      {
+        prefix: "fiscal.respuesta_descuadrada",
+        area: "fiscal",
+        permission: "fiscal.view",
+        screen: "fiscal-filing",
+      },
+      {
+        prefix: "fiscal.record_flagged",
+        area: "fiscal",
+        permission: "fiscal.view",
+        screen: "fiscal-filing",
+      },
+      {
+        prefix: "fiscal.record_totals_disagree",
         area: "fiscal",
         permission: "fiscal.view",
         screen: "fiscal-filing",

@@ -5,6 +5,7 @@ import { authorizeManager } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { createErrorBoundary, requireManagementSession, type Logger } from "@waitron/server-kit";
 import { readFilingOverview } from "./filing-overview.js";
+import { readFilingWarnings } from "./filing-warnings.js";
 
 const CASE_LIMIT = 200;
 
@@ -30,7 +31,11 @@ export function mountFilingOverview(
       const limit = c.req.query("cases") === "all" ? null : CASE_LIMIT;
       const overview = await withTransaction(ctx.db, async (tx) => {
         await authorizeManager(tx, { managementSessionId, permission: "report.export" });
-        return readFilingOverview(tx, { nodeId: ctx.recordGeneration?.nodeId ?? null, limit });
+        const read = await readFilingOverview(tx, {
+          nodeId: ctx.recordGeneration?.nodeId ?? null,
+          limit,
+        });
+        return { ...read, warnings: await readFilingWarnings(tx, { limit }) };
       });
       return c.json(
         {
