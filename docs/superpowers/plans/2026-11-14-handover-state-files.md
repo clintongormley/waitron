@@ -32,7 +32,7 @@ record, migration, fiscal write, hash, allocation or wire enum. Owner lands.
   (`apps/server/src/node-entry.ts:698,717`); if tracing another state identifies
   a needed new refusal, stop for watcher direction before building it.
   Forward/reverse checks read layout, recovery/optional lists and module backup
-  sources. Reverse table checks use the discovered local set, including
+  sources and declared settings document keys (main fl10 stores module selection there). Reverse table checks use the discovered local set, including
   `tenant_credentials` (`packages/db/src/classification.ts:460`). Accept
   legitimate folder/prefix/template rows, including fl9 module-records prepared
   and retained children; refuse stale names. A file inside a declared folder is

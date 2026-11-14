@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { modulesSettings } from "../packages/module/src/index.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { NODE_LOCAL_MANIFEST } from "../packages/handover/src/manifest.js";
 import { STATE_LAYOUT, VENUE_LITESTREAM_DIR } from "../packages/store/src/state-layout.js";
@@ -7,7 +8,7 @@ import { OPTIONAL_BACKUP_STATE } from "../apps/server/src/backup-optional-state.
 import { RECOVERY_FILES } from "../apps/server/src/state-secrets.js";
 
 /**
- * Checks declared local tables and state entries in both directions. Tables match exactly;
+ * Checks declared local tables and state entries in both directions. Tables and settings keys match exactly;
  * a file inside a declared folder is checked only to that folder. This does not inspect runtime
  * files, child names, resumption behavior or whether every writer declares its state entry.
  */
@@ -29,6 +30,11 @@ function missing(names: readonly string[], where: Where): string[] {
 
 const nodeTables = new Set(NODE_CLASSIFICATION.map((entry) => entry.table));
 const venueTables = new Set<string>();
+const settingsItems = new Set(
+  [modulesSettings(ALL_MODULES), ...ALL_MODULES.flatMap((module) => module.settings ?? [])].map(
+    (document) => `settings:${document.module}`,
+  ),
+);
 for (const module of ALL_MODULES) {
   const target = module.migrations?.database === "node" ? nodeTables : venueTables;
   for (const entry of module.classification ?? [])
@@ -52,7 +58,10 @@ describe("the handover manifest names every piece of a box's own state", () => {
     const stale = NODE_LOCAL_MANIFEST.filter((row) =>
       row.where === "node.db"
         ? !nodeTables.has(row.item)
-        : row.where === "venue.db" && !venueTables.has(row.item),
+        : row.where === "venue.db" &&
+          !(row.item.startsWith("settings:")
+            ? settingsItems.has(row.item)
+            : venueTables.has(row.item)),
     );
     expect(stale).toEqual([]);
   });
