@@ -79,6 +79,25 @@ async function setup(incidentRecorded = true) {
 }
 
 describe("SumUpCloudProvider.resolvePending", () => {
+  it("fails a zero-value provider capture without forwarding money", async () => {
+    const { fake, provider, attempting, state } = await setup();
+    await attempting("empty-charge", { status: "SUCCESSFUL" });
+    vi.spyOn(fake, "findTransaction").mockResolvedValue({
+      id: "zero",
+      status: "SUCCESSFUL",
+      amount: decimal("0.00"),
+      refundEvents: [],
+    });
+    await expect(provider.resolvePending(T0, await ownsEveryPayment(suite.db))).resolves.toEqual({
+      nextDueAt: null,
+      forwarded: 0,
+      declined: 1,
+      incidentsRaised: 1,
+    });
+    expect((await state("empty-charge")).state).toBe("failed");
+    expect(await suite.db.select().from(paymentRefunds)).toEqual([]);
+  });
+
   it.each([
     { refund: 7, want: "refunded", net: 0 },
     { refund: 2, want: "partially_refunded", net: 500 },

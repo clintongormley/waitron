@@ -1,9 +1,9 @@
-import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
+import { captureAlerts, heldAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import type { IncidentSink } from "@waitron/payments";
+import { PAYMENTS_MIGRATIONS, type IncidentSink } from "@waitron/payments";
 import { isAppError } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { SUMUP_CARD_PROVIDER, deferredClient, optionsFromSealed } from "./card-provider.js";
@@ -14,7 +14,7 @@ const KEY_ENV = {
 };
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,
 });
 const ring = loadKeyRing(KEY_ENV);
@@ -433,6 +433,36 @@ describe("SUMUP_CARD_PROVIDER without an injected fetch", () => {
     vi.unstubAllGlobals();
   });
 
+  it("builds a reconciler that reads the sealed merchant's history through the real client", async () => {
+    await seedSumUp({ apiKey: "sup_sk_x", merchantCode: "MABC123" });
+    const seen: Seen[] = [];
+    vi.stubGlobal(
+      "fetch",
+      routedFetch(
+        { "GET /v2.1/merchants/MABC123/transactions/history": () => json(200, { items: [] }) },
+        seen,
+      ),
+    );
+    const reconciler = SUMUP_CARD_PROVIDER.createReconciler!({
+      db: suite.db,
+      ring,
+      environment: "preproduction",
+      incidents: captureAlerts.raise,
+      captureAlerts,
+      heldAlerts,
+    });
+    expect(
+      await reconciler.reconcile({ from: new Date(0), to: new Date(1) }, new Date(2)),
+    ).toMatchObject({
+      checked: 0,
+      remediated: 0,
+      unlinkedCharges: 0,
+    });
+    expect(seen).toEqual([
+      { method: "GET", path: "/v2.1/merchants/MABC123/transactions/history", body: "" },
+    ]);
+  });
+
   it("connect reaches SumUp through the global fetch", async () => {
     const seen: Seen[] = [];
     vi.stubGlobal(
@@ -499,6 +529,15 @@ describe("optionsFromSealed", () => {
 });
 
 describe("deferredClient", () => {
+  it("prepares credentials without an HTTP request and refuses when they are missing", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const client = deferredClient({ db: suite.db, ring, fetch });
+    await expect(client.prepareCollect!()).rejects.toMatchObject({ code: "credentials.missing" });
+    await seedSumUp({ apiKey: "sup_sk_x", merchantCode: "MABC123" });
+    await expect(client.prepareCollect!()).resolves.toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("reads the sealed credential on first use, then reuses the resolved client", async () => {
     await seedSumUp({
       apiKey: "sup_sk_x",
