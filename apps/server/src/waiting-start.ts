@@ -139,10 +139,13 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     failEnd = reject;
   });
   let leaving = false;
+  let left: Promise<void> = Promise.resolve();
   // Set before the stepdown's first await, so an answer that lands while the restriction is being
   // written never continues the start the stepdown is about to restart.
   let steppingDown = false;
   let timer: NodeJS.Timeout | undefined;
+  let inAsk = false;
+  let stepdownsInFlight = 0;
   // The latest re-ask, settled once it has decided whether the wait ends (`endedWith` is then
   // set). The store stays open until it has settled, and a carry-on waits for it.
   let asking: Promise<void> = Promise.resolve();
@@ -152,11 +155,19 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   let carrying = false;
   let carryOnTurn: Promise<void> = Promise.resolve();
 
-  const leave = async (end: WaitEnd): Promise<void> => {
-    if (leaving) return;
-    leaving = true;
+  /** A second caller gets the leave already under way, so a stepdown's close waits for it. */
+  const leave = (end: WaitEnd): Promise<void> => {
+    if (!leaving) {
+      leaving = true;
+      left = finish(end);
+    }
+    return left;
+  };
+
+  const finish = async (end: WaitEnd): Promise<void> => {
     endedWith = end;
     clearTimeout(timer);
+    timer = undefined;
     try {
       await listeners.close();
     } catch (error) {
@@ -168,47 +179,71 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
       }
       log("warn", "waiting_start.close_failed", { errorCode: codeOf(error) });
     }
-    if (end.kind === "stopped") {
+    // A stepdown that began before the listeners closed is restarting the box, so the start that
+    // was about to go on stops instead.
+    const stopped = end.kind === "stopped" || steppingDown;
+    if (stopped) {
+      endedWith = { kind: "stopped" };
       await asking;
       await deps.closeStore();
     } else deps.health.takesNoSales = false;
-    resolveEnd(end);
+    resolveEnd(stopped ? { kind: "stopped" } : end);
   };
 
   const hooks: WaitingHooks = {
-    stepDown: (request) => {
+    stepDown: async (request) => {
       steppingDown = true;
-      return stepDown(
-        {
-          node: deps.node,
-          nodeId: deps.nodeId,
-          gate,
-          // Nothing runs in the background while the box waits but the re-ask, which
-          // `steppingDown` stops.
-          duties: { aborts: [], closers: [] },
-          close: () => leave({ kind: "stopped" }),
-          restart: deps.restart,
-          log,
-        },
-        request,
-      );
+      stepdownsInFlight += 1;
+      try {
+        return await stepDown(
+          {
+            node: deps.node,
+            nodeId: deps.nodeId,
+            gate,
+            // Nothing runs in the background while the box waits but the re-ask, which
+            // `steppingDown` stops.
+            duties: { aborts: [], closers: [] },
+            close: () => leave({ kind: "stopped" }),
+            restart: deps.restart,
+            log,
+          },
+          request,
+        );
+      } catch (error) {
+        // Refused before the gate closed: nothing was stopped and no restart is coming.
+        if (stepdownsInFlight === 1 && !gate.isClosed()) {
+          steppingDown = false;
+          resume();
+        }
+        throw error;
+      } finally {
+        stepdownsInFlight -= 1;
+      }
     },
   };
   for (const mount of deps.routes) mount(app, hooks);
 
   const schedule = (): void => {
     timer = setTimeout(() => {
+      timer = undefined;
       asking = ask();
     }, deps.intervalMs);
   };
 
+  /** Restarts the re-asks a stepdown stopped, unless a re-ask is still due or under way. */
+  const resume = (): void => {
+    if (timer === undefined && !inAsk && !carrying && !leaving) schedule();
+  };
+
   const ask = async (): Promise<void> => {
+    inAsk = true;
     let outcome: StartPeerCheckOutcome | null = null;
     try {
       outcome = await deps.recheck();
     } catch (error) {
       log("warn", "waiting_start.recheck_failed", { errorCode: codeOf(error) });
     }
+    inAsk = false;
     if (leaving || steppingDown) return;
     if (outcome !== null && outcome.result !== "wait") {
       // Not awaited: closing the listeners waits for requests in flight, and a carry-on awaiting
@@ -227,6 +262,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     await previous;
     carrying = true;
     clearTimeout(timer);
+    timer = undefined;
     // Not awaited: an await here would itself give a re-ask answered by the seam time to finish.
     void Promise.resolve(deps.onCarryOn?.("turn")).catch(() => {});
     await asking;

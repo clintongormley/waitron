@@ -317,6 +317,115 @@ describe("the waiting start", () => {
       expect(h.closeStore).toHaveBeenCalledTimes(1);
       expect(h.closeListeners).toHaveBeenCalledTimes(1);
     });
+
+    it("a stepdown refused before it stops anything leaves the box waiting and asking again", async () => {
+      await withNodeTransaction(suite.node, (tx) =>
+        recordHandoverRestrictionTx(tx, {
+          nodeId: NODE_ID,
+          operationId: null,
+          kind: "superseded",
+          successorNodeId: SPARE_ID,
+          membershipTerm: 4,
+        }),
+      );
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      let next: StartPeerCheckOutcome | null = null;
+      const recheck = vi.fn(() =>
+        next === null
+          ? new Promise<StartPeerCheckOutcome>((done) => (answer = done))
+          : Promise.resolve(next),
+      );
+      const h = harness(recheck, {
+        node: suite.node,
+        intervalMs: 1,
+        routes: [
+          (app, hooks) =>
+            app.post("/step", async (c) => {
+              // The re-ask in flight answers in the same turn as the stepdown begins, so it sees
+              // the stepdown under way and does not ask again.
+              answer(WAIT);
+              const stepping = hooks.stepDown({
+                kind: "superseded",
+                successorNodeId: TERRACE_ID,
+                membershipTerm: 5,
+                self: c,
+              });
+              try {
+                return c.json(await stepping);
+              } catch (error) {
+                return c.json({ refused: (error as { code?: string }).code }, 409);
+              }
+            }),
+        ],
+      });
+      await vi.waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
+      const stepped = await h.app().request("/step", { method: "POST" });
+      expect(await stepped.json()).toEqual({ refused: "handover.restriction_conflict" });
+      next = PROCEED;
+      const ended = await Promise.race([
+        h.waiting.ended,
+        new Promise((done) => setTimeout(() => done("still waiting"), 500)),
+      ]);
+      expect(ended).toEqual({ kind: "checked", outcome: PROCEED });
+      expect(recheck).toHaveBeenCalledTimes(2);
+      expect(h.restart).not.toHaveBeenCalled();
+      expect(h.closeStore).not.toHaveBeenCalled();
+    });
+
+    it("a stepdown in flight as a peer's answer ends the wait stops the start rather than continuing it", async () => {
+      const order: string[] = [];
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      const pending = new Promise<StartPeerCheckOutcome>((done) => (answer = done));
+      let release: () => void = () => {};
+      const held = new Promise<void>((done) => (release = done));
+      let stepAnswered: () => void = () => {};
+      const stepDone = new Promise<void>((done) => (stepAnswered = done));
+      // Slow enough that a restart not waiting for it would come first.
+      const closeStore = vi.fn(async () => {
+        await new Promise((done) => setTimeout(done, 30));
+        order.push("closeStore");
+      });
+      const restart = vi.fn(() => {
+        order.push("restart");
+      });
+      let app: Hono | undefined;
+      const h = harness(() => pending, {
+        node: suite.node,
+        intervalMs: 1,
+        closeStore,
+        restart,
+        // As a real listener does, closing waits for the requests in flight.
+        listen: (bound) => {
+          app = bound;
+          return { close: () => stepDone };
+        },
+        routes: [
+          (app, hooks) =>
+            app.post("/step", async (c) => {
+              await held;
+              return c.json(
+                await hooks.stepDown({
+                  kind: "superseded",
+                  successorNodeId: SPARE_ID,
+                  membershipTerm: 4,
+                  self: c,
+                }),
+              );
+            }),
+        ],
+      });
+      await new Promise((done) => setTimeout(done, 10));
+      const stepping = app!.request("/step", { method: "POST" }).finally(() => stepAnswered());
+      answer(PROCEED);
+      await new Promise((done) => setTimeout(done, 10));
+      release();
+      expect(await (await stepping).json()).toEqual({ restarting: true, replayed: false });
+      expect(await h.waiting.ended).toEqual({ kind: "stopped" });
+      expect(h.health.takesNoSales).toBe(true);
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+      expect(closeStore).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(["closeStore", "restart"]);
+    });
   });
 
   describe("carrying on as the main box", () => {
