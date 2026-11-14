@@ -6621,7 +6621,11 @@ zone's layouts are reached from the Floor plans page. Unassigned zones keep thei
 The sidebar returns to the bare list. An editor's deep link keeps that list underneath it;
 closing the editor returns focus to its originating row menu, or Add when that row is gone.
 
-Edit department is tabbed. Details holds name and trading name. Service holds three sections, each
+Edit department is tabbed. Details holds name, trading name and, when the installed fiscal module
+files one and the Receipts tab is offered (`venue.configure`), the invoice operation description. Details' Save writes the description through the
+receipt request the Receipts tab uses, with the saved receipt and not the Receipts tab's draft,
+after the department's settings; if that request is refused, the field shows the refusal and stays
+unsaved while the settings stand. Service holds three sections, each
 under its own heading: “Orders and payment”, with the service settings and the zones that differ,
 “Courses and the kitchen”, with the reminder to fire the next course and the switch for a manager's
 PIN to send after a period ends, and “Table states”, with
@@ -6637,8 +6641,9 @@ is clean, and closing asks one question covering both. Changing tab never asks a
 changes, because the screen's `navigationScopes` (`venue-departments-shell.ts`) lets an address
 change between the open department's offered tabs through. The address keeps the open tab (`view` is
 `service`, `receipt` or `transfers`; Details has none); the list's “Set up the tax-agency
-description” and the image library's receipt-logo link open Receipts, and an address naming an
-unknown view, or a tab not offered, opens Details and replaces the address without adding a history
+description” opens Details and focuses the description field once it appears, unless a tab
+change, a click or edit on Details, or another department comes first; the image library's
+receipt-logo link opens Receipts; and an address naming an unknown view, or a tab not offered, opens Details and replaces the address without adding a history
 entry. A refusal naming a field, or an invalid Save, of the shared draft shows the first of Details,
 Service and Transfers holding a marked field; a mark appearing in the receipt editor, such as a
 refusal naming a field, while another tab shows brings back Receipts (`department-receipt-invalid`).
@@ -6650,8 +6655,8 @@ paid-when choice and a collection-ticket choice. The zone's name and policy save
 Edit department preserves the department's receipt policy.
 
 The Receipts tab (`dashboard-department-receipt-editor`) holds receipt printing, trading-name
-printing, address printing, logo, phone, email, the installed tax-agency description field,
-subtitle and footer. Its fields stop at the form width, and the form and printed preview sit
+printing, address printing, logo, phone, email, subtitle and footer; a Receipts Save refused for
+the description says to correct it on Details. Its fields stop at the form width, and the form and printed preview sit
 beside each other where they fit and stack on a phone; the preview column holds an empty strut as
 wide as 80 mm paper (`paperStrut`, `apps/dashboard/src/widgets/print-paper.ts`), so it keeps its
 width before a preview draws. The tab does not repeat the venue's address; when the venue
@@ -6663,8 +6668,8 @@ logo; with none, one dashed **+ Add a logo** box. Focus returns to the logo cont
 library closes and after Remove. Language headings name the languages staff may print in, with
 the venue's receipt language first. A new department has no authored receipt content. When the
 installed fiscal module offers a default description (`venueFields.defaults.operationDescription`;
-Veri\*Factu's is “Venta en establecimiento”), a department without its own opens the description
-field filled in with the default and editable, the Departments list asks for no description, and
+Veri\*Factu's is “Venta en establecimiento”), a department without its own opens the Details tab's
+description field filled in with the default and editable, the Departments list asks for no description, and
 a sale there files the default; with no default offered, the field opens empty, the list shows
 “Set up the tax-agency description”, and a sale is refused with
 `department.operation_description_required`. Venue settings holds the receipt language; there is

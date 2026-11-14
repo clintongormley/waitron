@@ -764,8 +764,6 @@ export const en = {
   "receipts.invalid_logo": "Choose an image from the library.",
   "receipts.logo_not_found": "This image is no longer in the library. Choose another.",
   "receipts.footer_message_hint": "Printed at the bottom, e.g. a thank-you or opening hours",
-  "receipts.operation_description_hint":
-    "Sent to the tax agency with every sale; not printed on the receipt",
   "receipts.preview": "Preview",
   "receipts.preview_language": "Preview language",
   "receipts.translation_warning": "Some receipt text is missing in this language.",
@@ -781,10 +779,11 @@ export const en = {
   "receipt_language.warning":
     "By default, receipts print in {receipt}, which is not one of your content languages. Product names on them print in {default}, the default language.",
   "nav.content_languages": "Content languages",
-  "venue_settings.description": "Invoice operation description",
   "venue_settings.required": "Enter the invoice operation description.",
   "venue_settings.invalid":
     "The description was rejected. Use at most 500 characters and remove hidden control characters.",
+  "venue_settings.fix_on_details":
+    "The invoice operation description is missing or invalid. Correct it on the Details tab, then save again.",
   "venue_settings.retry": "Retry",
 
   "content_languages.title": "Content languages",
@@ -4946,8 +4945,6 @@ export const es: Record<StringKey, string> = {
   "receipts.invalid_logo": "Elige una imagen de la biblioteca.",
   "receipts.logo_not_found": "Esta imagen ya no está en la biblioteca. Elige otra.",
   "receipts.footer_message_hint": "Se imprime al final; p. ej., un agradecimiento o el horario",
-  "receipts.operation_description_hint":
-    "Se envía a Hacienda con cada venta; no se imprime en el recibo",
   "receipts.preview": "Vista previa",
   "receipts.preview_language": "Idioma de la vista previa",
   "receipts.translation_warning": "Falta texto del recibo en este idioma.",
@@ -4964,10 +4961,11 @@ export const es: Record<StringKey, string> = {
   "receipt_language.warning":
     "Por defecto, los recibos se imprimen en {receipt}, que no es uno de tus idiomas del contenido. Los nombres de los productos salen en {default}, el idioma predeterminado.",
   "nav.content_languages": "Idiomas del contenido",
-  "venue_settings.description": "Descripción de la operación",
   "venue_settings.required": "Introduce la descripción de la operación.",
   "venue_settings.invalid":
     "La descripción no es válida. Usa como máximo 500 caracteres y elimina los caracteres de control ocultos.",
+  "venue_settings.fix_on_details":
+    "La descripción de la operación falta o no es válida. Corrígela en la pestaña Datos y vuelve a guardar.",
   "venue_settings.retry": "Reintentar",
 
   "content_languages.title": "Idiomas del contenido",

@@ -417,9 +417,16 @@ export class VenueDepartmentsShell extends LitElement {
         this.#editorOrigin = { kind: "zone", id: zone.id };
     }
   }
-  #openReceipt(event: CustomEvent<{ departmentId: string }>) {
+  async #openDescription(event: CustomEvent<{ departmentId: string }>) {
     event.stopPropagation();
-    void this.#navigate({ department: event.detail.departmentId, view: "receipt", zone: null });
+    const generation = this.#generation;
+    const id = event.detail.departmentId;
+    await this.#navigate({ department: id, view: null, zone: null });
+    if (!this.#current(generation) || this.departmentId !== id || tabOf(this.view) !== "details")
+      return;
+    this.#editorOrigin = { kind: "department", id };
+    await this.updateComplete;
+    await this.shadowRoot?.querySelector("department-edit-dialog")?.focusDescription();
   }
   async #tabChange(event: CustomEvent<{ tab: DepartmentTab; replace: boolean }>) {
     event.stopPropagation();
@@ -491,7 +498,7 @@ export class VenueDepartmentsShell extends LitElement {
         .receiptAvailable=${(row: { id: string; name: string }) => offersReceiptEditor(this.renderPanel?.("department-receipt", row))}
         @open-department=${this.#open}
         @edit-zone=${this.#openZone}
-        @edit-receipt=${this.#openReceipt}
+        @edit-description=${this.#openDescription}
       ></departments-list>
       ${this.departmentId && !department ? html`<p role="status">${t("venue.department_not_found")}</p>` : nothing}
       ${

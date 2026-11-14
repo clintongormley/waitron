@@ -205,25 +205,23 @@ it("a failed initial read offers native Retry and uses the localized fallback fo
   expect(app.textContent).not.toContain("internal details");
   await userEvent.click(page.elementLocator(receiptRoot(el).querySelector("wt-button")!));
   await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
-  expect(receiptField(el, "operationDescription").value).toBe("Dining service");
+  expect(el.savedOperationDescription).toBe("Dining service");
 });
-it("Enter on an unchanged receipt sends nothing and Enter on an edited description saves exactly once", async () => {
+it("Enter on an unchanged receipt sends nothing and Enter on an edited email saves exactly once", async () => {
   const { el, api, events } = await mountReceiptEditor();
-  const description = receiptField(el, "operationDescription");
-  await description.updateComplete;
-  const input = description.shadowRoot!.querySelector("input");
+  const email = receiptField(el, "email");
+  await email.updateComplete;
+  const input = email.shadowRoot!.querySelector("input");
   expect(input).toBeInstanceOf(HTMLInputElement);
   await userEvent.click(page.elementLocator(input!));
   await userEvent.keyboard("{Enter}");
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
-  await editReceipt(el, "operationDescription", "Counter service");
+  await editReceipt(el, "email", "bar@example.com");
   await userEvent.click(page.elementLocator(input!));
   await userEvent.keyboard("{Enter}");
   await expect.poll(() => events).toEqual(["department-receipt-saved:bar"]);
   expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
-  expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt.operationDescription).toBe(
-    "Counter service",
-  );
+  expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt.email).toBe("bar@example.com");
 });
 it("an unassigned save refusal stays visible when another authored field changes", async () => {
   const api = receiptApi();
@@ -473,13 +471,13 @@ it("keeps a request failure beside the local correction summary when the draft b
   await expect
     .poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error)
     .toBe(codeMessage("management.failed"));
-  await editReceipt(el, "operationDescription", "");
-  expect(receiptField(el, "operationDescription").error).toBe(t("venue_settings.required"));
+  await editReceipt(el, "phone", "not a telephone");
+  expect(receiptField(el, "phone").error).toBe(t("receipts.invalid_phone"));
   expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(
     `${t("form.fix_fields")} ${codeMessage("management.failed")}`,
   );
   expect(receiptSave(el).disabled).toBe(true);
-  await editReceipt(el, "operationDescription", "Repaired");
+  await editReceipt(el, "phone", "+34 912 345 678");
   expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(
     codeMessage("management.failed"),
   );
@@ -517,7 +515,7 @@ it("an uncoded save refusal uses the localized fallback and leaves the exact dra
     ],
   ]);
 });
-it.each(["phone", "email", "operationDescription", "headerSubtitle-es-ES", "footerMessage-ca-ES"])(
+it.each(["phone", "email", "headerSubtitle-es-ES", "footerMessage-ca-ES"])(
   "contains the native %s field change event",
   async (name) => {
     const { el } = await mountReceiptEditor();
@@ -547,25 +545,30 @@ it.each(["en-GB", "es-ES"] as const)(
   },
 );
 
-it("focuses a server-refused description and keeps its refusal until that field changes", async () => {
-  const { el, api } = await mountReceiptEditor();
-  api.putDepartmentReceipt.mockRejectedValue({
-    code: "management.request_invalid",
-    params: { field: "operationDescription" },
-  });
-  await editReceipt(el, "operationDescription", "Rejected service");
-  await clickReceiptSave(el);
-  const description = receiptField(el, "operationDescription");
-  await expect.poll(() => description.error).toBe(t("venue_settings.invalid"));
-  await expect
-    .poll(() => description.shadowRoot!.activeElement)
-    .toBe(description.shadowRoot!.querySelector("input"));
-  expect(description.value).toBe("Rejected service");
-  expect(receiptSave(el).disabled).toBe(false);
-  await editReceipt(el, "email", "other@example.test");
-  expect(description.error).toBe(t("venue_settings.invalid"));
-  await editReceipt(el, "operationDescription", "Corrected service");
-  expect(description.error).toBe("");
-  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
-  expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
-});
+it.each([
+  [
+    "en-GB",
+    "The invoice operation description is missing or invalid. Correct it on the Details tab, then save again.",
+  ],
+  [
+    "es-ES",
+    "La descripción de la operación falta o no es válida. Corrígela en la pestaña Datos y vuelve a guardar.",
+  ],
+] as const)(
+  "a Receipts Save refused for the description, which this tab does not draw, sends the person to Details in %s",
+  async (locale, sentence) => {
+    setLocale(locale);
+    const { el, api } = await mountReceiptEditor();
+    api.putDepartmentReceipt.mockRejectedValue({
+      code: "management.request_invalid",
+      params: { field: "operationDescription" },
+    });
+    await editReceipt(el, "email", "other@example.test");
+    await clickReceiptSave(el);
+    await expect.poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(sentence);
+    expect(receiptField(el, "email").error).toBe("");
+    expect(receiptField(el, "email").value).toBe("other@example.test");
+    expect(receiptSave(el).disabled).toBe(false);
+    expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
+  },
+);

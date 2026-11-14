@@ -25,7 +25,7 @@ What constrains the next change to the wizard:
   `apps/server/src/setup-api.ts`). The wizard's venue form never adds it; a first setup carried
   over from an earlier attempt copies that attempt's stored venue, which holds it
   (`#acceptFirstIdentity` and `#replaceFirstSetup` in `apps/setup/src/setup-app.ts`). Product
-  sales use the description you save in the **Receipts** tab of each department's dialog, or the
+  sales use the description you save on the **Details** tab of each department's dialog, or the
   fiscal module's default description when the department has none; the venue's own description is
   not their fallback.
 

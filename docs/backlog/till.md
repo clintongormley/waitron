@@ -3605,10 +3605,6 @@ change covers the order screen; the held-order picker still leaves this decision
 - **`wt-floor-plan-preview` has no product user.** It remains in `packages/ui/demo/main.ts`, with
   its `--wt-floor-plan-preview-max-height` token in `packages/ui-core/src/tokens/structure.css` and
   its row in `docs/developers/design-system.md`. Retire it, or record why it is kept. Left open by A718.
-- **Check "closing the editor returns focus to its originating row menu"** in
-  `docs/developers/design-system.md` (Departments and zones): a review saw focus return to the
-  Receipt link, which A756 has since removed; the department dialog still opens from the row and
-  from "Set up the tax-agency description". Left open by A718.
 - **The pinned Actions column's left divider showed a gap between two zone rows** in a 1280 px
   light-theme screenshot of Departments and zones (`~/waitron-campaign-c/a718-shots/list-en-light-1280.png`,
   between Bar and Same). Not known whether it predates A718. Left open by A718.

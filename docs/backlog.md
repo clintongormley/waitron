@@ -666,11 +666,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   shows a closed venue as open. Needs a design. Not started.
 
 - **A1528. Department window: the owner's review (owner, 2026-11-14).**
-  - **"Invoice operation description" moves from the Receipts tab to the Details tab.** It prints
-    on no receipt or invoice PDF; it is the description filed in each Veri\*Factu record. Its
-    label and hint say it goes to AEAT and does not print. The Details tab's Save also sends the
-    receipt request the Receipts tab uses (same check); if that request fails, the field shows the
-    refusal and stays unsaved while the rest of the save stands (watcher, 2026-11-14 15:48).
   - **The title, tabs, Save and Cancel stay put; only the content between them scrolls**, on every
     tab. Save and Cancel go in `wt-modal`'s own footer slot, as other dialogs do
     (`department-dialogs.ts`); today `department-edit-dialog.ts` draws them inside the scrolling
