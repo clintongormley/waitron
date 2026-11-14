@@ -144,6 +144,27 @@ export async function partySurvivors(
 }
 
 /**
+ * The party and every party merged into it, directly or through a chain of merges, for several
+ * parties in one query, keyed by each party asked about.
+ */
+export async function partyFamilies(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const families = new Map(partyIds.map((id) => [id, [] as string[]]));
+  const { rows } = await tx.execute<{ root: string; id: string }>(sql`
+    with recursive family(root, id) as (
+      select value, value from json_each(${JSON.stringify(partyIds)})
+      union
+      select f.root, v.id from parties v join family f on v.merged_into_party_id = f.id
+    )
+    select root, id from family
+  `);
+  for (const row of rows) families.get(row.root)!.push(row.id);
+  return families;
+}
+
+/**
  * The tables each party's bill is at: its active tables, or, once it holds none, those of the party
  * at the end of its merges as `survivorOf` gives it (else as {@link partySurvivors} reads it);
  * empty when that party holds none either, or when the chain has no end.

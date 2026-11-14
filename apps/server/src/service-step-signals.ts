@@ -3,6 +3,7 @@ import {
   lineServiceCancellations,
   orderDrafts,
   orderGroupEvents,
+  partyFamilies,
   workingOrderLines,
   workingOrders,
   type Transaction,
@@ -10,7 +11,6 @@ import {
 import type { TableSignal } from "@waitron/shared";
 import { readStepCompletions, readTableStepRules } from "@waitron/venue-service";
 import { onShownBill } from "./order-groups.js";
-import { partyFamilies } from "./parties.js";
 import {
   liveSteps,
   servedTimes,

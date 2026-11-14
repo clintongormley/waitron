@@ -23,6 +23,7 @@ import { codeOf } from "@waitron/dashboard-kit";
 import {
   BUMP_MODES,
   CHANGES_AFTER_SENDING,
+  int4InRange,
   isBumpMode,
   isChangesAfterSending,
   isStationColour,
@@ -144,8 +145,7 @@ const equal = (a: Draft, b: Draft) =>
   sameSet(a.printerIds, b.printerIds) &&
   TIMING_FIELDS.every((field) => timingText(a[field]) === timingText(b[field]));
 
-export const isWholeMinutes = (value: number) =>
-  Number.isInteger(value) && value >= 1 && value <= 2_147_483_647;
+export const isWholeMinutes = (value: number) => int4InRange(value, 1);
 
 export const timingMessage = (field: TimingField) =>
   field === "readyWarningAfterMinutes"

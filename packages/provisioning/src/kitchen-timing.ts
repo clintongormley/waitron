@@ -4,6 +4,7 @@ import {
   DEFAULT_READY_WARNING_AFTER_MINUTES,
   DEFAULT_STATION_THRESHOLDS,
   compareStationNames,
+  int4InRange,
 } from "@waitron/shared";
 import type { StationThresholds, StationTiming } from "@waitron/shared";
 
@@ -12,9 +13,7 @@ const fields = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinute
 export type StationTimingPatch = Partial<StationTiming>;
 
 function isWholeMinutes(value: unknown): value is number {
-  return (
-    typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 2_147_483_647
-  );
+  return int4InRange(value, 1);
 }
 
 export function parseStationTimingPatch(body: Record<string, unknown>): StationTimingPatch {

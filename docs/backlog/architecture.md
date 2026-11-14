@@ -1386,20 +1386,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `defaultLayout` 68, `readDrafts` 49, `setLineCourse` 20, mostly in tests, plus 11 `void cfg;`
   lines.
 
-## Bundle: Small refactors
-
-3 entries, size S. These are refactors, not dead code: each moves or reshapes code that is still
-used. Moved out of "Remove code nothing reaches" on 2026-11-14.
-
-- An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
-  `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
-  constant (the theme colour is literal in three places).
-- `partyFamilies`, the reverse lookup of `partySurvivors`, stayed in `apps/server/src/parties.ts`,
-  while `partySurvivors` is in `packages/db/src/party-table-labels.ts`. Left open by the table
-  actions plan's Task 8 (#869, move guests, join and split tables) and C77/C86.
-- The device-management routes build their `devices ⨝ device_profiles` read inline
-  (`apps/server/src/device-api.ts`) where a `listDevices` store verb belongs.
-
 ## Bundle: Tighten the checks the A974 review probed
 
 3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

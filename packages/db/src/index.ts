@@ -282,6 +282,7 @@ export {
   billPartyTableLabels,
   billPartyTables,
   orderTableLabels,
+  partyFamilies,
   partySurvivorNames,
   partySurvivors,
   partyTableLabels,

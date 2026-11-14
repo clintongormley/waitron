@@ -2,7 +2,7 @@ import { listDepartmentReceiptReadiness } from "./department-receipts.js";
 import { and, eq } from "drizzle-orm";
 import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError } from "@waitron/shared";
+import { AppError, int4InRange } from "@waitron/shared";
 import { MAX_SERVICE_STEP_MINUTES, MAX_SERVICE_STEPS } from "./service-step-limits.js";
 import {
   departments,
@@ -237,12 +237,7 @@ function requireServiceSteps(value: unknown): ServiceStepInput[] {
 }
 
 function requireDisplayOrder(value: unknown): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isInteger(value) ||
-    value < -2_147_483_648 ||
-    value > 2_147_483_647
-  ) {
+  if (!int4InRange(value)) {
     throw new AppError("management.request_invalid", { field: "displayOrder" });
   }
   return value;

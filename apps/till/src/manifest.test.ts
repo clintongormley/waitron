@@ -4,7 +4,7 @@ import { buildManifest } from "./manifest.js";
 
 describe("till web app manifest", () => {
   it("declares an installable standalone app with 192 and 512 icons", () => {
-    const m = buildManifest();
+    const m = buildManifest("#000000");
     expect(m.name).toContain("Waitron");
     expect(m.display).toBe("standalone");
     expect(m.start_url).toBe("/");

@@ -167,6 +167,7 @@ export {
 export { isPlainWebAddress } from "./web-address.js";
 export { isValidTelephone } from "./telephone.js";
 export { isValidGuestCount, MAX_GUEST_COUNT } from "./guest-count.js";
+export { int4InRange } from "./int4-range.js";
 export { MEDIA_FILENAME } from "./media-filename.js";
 export { formatEquipmentCode, parseEquipmentCode, type EquipmentKind } from "./equipment-code.js";
 export { mayTakeOver, type EquipmentVia } from "./equipment-takeover.js";

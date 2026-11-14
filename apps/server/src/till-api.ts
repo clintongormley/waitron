@@ -13,6 +13,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   AppError,
   deviceOrigin,
+  int4InRange,
   isAppError,
   isValidEmail,
   isValidGuestCount,
@@ -1189,7 +1190,7 @@ function parseMoveTarget(value: unknown): { groupId: string } | "new" {
 /** A value that cannot be a line number gets the absent line's `tab.line_not_found`. */
 function requireLineNo(tabId: string, raw: string): number {
   const lineNo = Number(raw);
-  if (!Number.isInteger(lineNo) || lineNo < 1 || lineNo > 2_147_483_647) {
+  if (!int4InRange(lineNo, 1)) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
   return lineNo;
