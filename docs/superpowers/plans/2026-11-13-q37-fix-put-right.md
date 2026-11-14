@@ -315,7 +315,7 @@ lines, grouped):
 | `packages/reporting/src/vat-return.ts:39` via `activeSalesClause` (`business-day.ts:217-220`) | counts every sale, correctives included | count the replacement, leave out a replaced original (E) | 3b-1 |
 | `issuedSalesClause` / `reversedSalesClause` (`business-day.ts:229-244`): `vat-summary.ts:111,127`, `counts.ts:18-21`, `category-sales.ts:208,216`, `top-sellers.ts:71,78` | count correctives as rows on their day | leave out the replacement | 3b-1 |
 | `top-sellers.ts:105` | nets corrective lines against the invoice line they name | none needed: replacement lines name no line (`correctsLineId` null, Task 3a); a later refund names the replacement's lines, which are counted on the replacement's day — the replacement itself is out, so test that a refund of a replaced sale nets against nothing it should not | 3b-1 |
-| `apps/server/src/accountant-export.ts:194-212`, `:110` | one row per invoice, type "corrective" | replacement row typed `replacement`, replaced original typed `replaced` (M8 below) | 3b-1 |
+| `apps/server/src/accountant-export.ts:194-212`, `:110` | one row per invoice, type "corrective" | replacement row typed `replacement`, whose label says not to add it; the replaced original keeps its own type (M8 below) | 3b-1 |
 | `apps/server/src/sale-due.ts:17` (`correctionsCents`) | adds correctives' totals to what is due | `correctivesOf` | 3b-2 |
 | `packages/core/src/settle-sale.ts:51` | same, at settlement | `correctivesOf` | 3b-2 |
 | `packages/core/src/list-outstanding-sales.ts:47` | same, for unpaid sales | `correctivesOf` | 3b-2 |
@@ -340,8 +340,10 @@ lines, grouped):
 (`accountant-export.ts:95-112`; its only sum is a purchase's own lines, `:120`) **(read)**. So a
 "replacement" row counts toward any total only if the accountant sums the column. Both rows stay
 in the file — the refused original and its replacement are both invoices the venue keeps (owner,
-Q37(c)) — typed `replaced` and `replacement`, so a sum over the column leaves one out; the export's
-guide sentence says which.
+Q37(c)). Amended 2026-11-14 after review, to follow answer E: the original keeps its ordinary type,
+and the replacement's type reads "Replacement — do not add (repeats the original)" / "Rectificativa
+por sustitución — no sumar (repite la original)", so the file itself says which row counts; the
+"Original invoice number" column names the original.
 
 ## Protected files this plan touches, and why
 
@@ -707,7 +709,7 @@ count its lines in the PR description).
 Files: `packages/reporting/src/business-day.ts` (two clauses beside `notSubstituteClause()`:
 `notReplacementClause()`, used by `issuedSalesClause` and `reversedSalesClause`, and
 used by `activeSalesClause` too — the owner's answer E; there is no `notReplacedClause()`);
-`apps/server/src/accountant-export.ts:194-212` (types `replacement` and `replaced`).
+`apps/server/src/accountant-export.ts:194-212` (types `replacement`; the original keeps its type, M8).
 
 Failing tests first (each fails today because the replacement's 12.10 is added):
 
@@ -718,7 +720,7 @@ Failing tests first (each fails today because the replacement's 12.10 is added):
   replacement's day shows no extra sale, correction, VAT or quantity; the original's day is
   unchanged; a later by-differences refund of the replacement still counts on its own day.
 - `apps/server/src/accountant-export.test.ts`: the replacement's row reads `replacement` and the
-  original's `replaced`.
+  original keeps its own type (M8, amended 2026-11-14).
 
 Docs: `vat-return.ts:10-16`'s «corrections netted» and the three clauses' comments say how a
 replacement is counted.

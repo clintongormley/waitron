@@ -27,8 +27,7 @@ export interface AccountantInvoice {
   id: string;
   nodeId: string;
   invoiceNumber: string;
-  /** A replaced invoice and its replacement are both listed; a sum over the file counts one. */
-  invoiceType: "F1" | "F2" | "corrective" | "replacement" | "replaced";
+  invoiceType: "F1" | "F2" | "corrective" | "replacement";
   issueDate: string;
   customerName: string | null;
   customerTaxId: string | null;
@@ -198,7 +197,6 @@ export async function listAccountantExport(
 ): Promise<AccountantExport> {
   const original = alias(sales, "original_invoice");
   const originalSeries = alias(invoiceSeries, "original_series");
-  const replacement = alias(sales, "replacement_invoice");
   const civilDate = sql<string>`date(${sales.issuedAt}, printf('%+d minutes', ${sales.issuedOffsetMinutes}))`;
   const rows = await tx
     .select({
@@ -217,7 +215,6 @@ export async function listAccountantExport(
       vatBreakdown: sales.vatBreakdown,
       correctsSaleId: sales.correctsSaleId,
       replacesOriginal: sales.replacesOriginal,
-      replacedBy: replacement.id,
       originalCode: originalSeries.code,
       originalNumber: original.invoiceNumber,
       voidedAt: saleVoids.voidedAt,
@@ -226,27 +223,21 @@ export async function listAccountantExport(
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .leftJoin(original, eq(original.id, sales.correctsSaleId))
     .leftJoin(originalSeries, eq(originalSeries.id, original.seriesId))
-    .leftJoin(
-      replacement,
-      and(eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)),
-    )
     .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
     .leftJoin(saleSubstitutions, eq(saleSubstitutions.substitutionSaleId, sales.id))
     .where(and(between(civilDate, range.from, range.to), isNull(saleSubstitutions.id)))
     .orderBy(asc(civilDate), asc(sales.issuedAt), asc(sales.id));
   const invoices: AccountantInvoice[] = rows.map(
-    ({ code, number, originalCode, originalNumber, replacesOriginal, replacedBy, ...row }) => ({
+    ({ code, number, originalCode, originalNumber, replacesOriginal, ...row }) => ({
       ...row,
       invoiceNumber: formatInvoiceNumber(code, number),
       invoiceType: replacesOriginal
         ? "replacement"
-        : replacedBy !== null
-          ? "replaced"
-          : row.correctsSaleId !== null
-            ? "corrective"
-            : row.customerTaxId === null
-              ? "F2"
-              : "F1",
+        : row.correctsSaleId !== null
+          ? "corrective"
+          : row.customerTaxId === null
+            ? "F2"
+            : "F1",
       originalInvoiceNumber:
         originalCode === null || originalNumber === null
           ? null

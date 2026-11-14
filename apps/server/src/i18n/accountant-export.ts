@@ -28,8 +28,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     invoiceSheet: "Issued invoices",
     purchaseSheet: "Recorded purchases",
     corrective: "Corrective",
-    replacement: "Replacement",
-    replaced: "Replaced",
+    replacement: "Replacement — do not add (repeats the original)",
     regimes: { general: "General regime", equivalence_surcharge: "Equivalence surcharge" },
     vatKinds: { ordinary: "Ordinary goods", capital: "Capital goods" },
     identifierTypes: {
@@ -112,8 +111,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     invoiceSheet: "Facturas emitidas",
     purchaseSheet: "Compras registradas",
     corrective: "Rectificativa",
-    replacement: "Rectificativa por sustitución",
-    replaced: "Sustituida",
+    replacement: "Rectificativa por sustitución — no sumar (repite la original)",
     regimes: { general: "Régimen general", equivalence_surcharge: "Recargo de equivalencia" },
     vatKinds: { ordinary: "Bienes corrientes", capital: "Bienes de inversión" },
     identifierTypes: {

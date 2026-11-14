@@ -277,14 +277,17 @@ describe("accountant workbook", () => {
     expect(strFromU8(files["xl/styles.xml"]!)).toContain('numFmtId="2"');
   });
 
-  it.each(["en", "es"] as const)(
-    "names a replaced invoice and its replacement in %s",
-    async (language) => {
+  it.each([
+    ["en", "Replacement — do not add (repeats the original)"],
+    ["es", "Rectificativa por sustitución — no sumar (repite la original)"],
+  ] as const)(
+    "types a replaced invoice as its ordinary type and tells the reader not to add its replacement, in %s",
+    async (language, replacementType) => {
       const files = unzipSync(
         await renderAccountantWorkbook(
           {
             invoices: [
-              { ...invoice, invoiceType: "replaced", vatBreakdown: [] },
+              { ...invoice, invoiceType: "F2", vatBreakdown: [] },
               { ...invoice, id: "replacement-1", invoiceType: "replacement", vatBreakdown: [] },
             ],
             purchases: [],
@@ -294,10 +297,7 @@ describe("accountant workbook", () => {
         ),
       );
       const xml = strFromU8(files["xl/worksheets/sheet1.xml"]!);
-      expect([row(xml, 2)[3], row(xml, 3)[3]]).toEqual([
-        ACCOUNTANT_EXPORT_WORDS[language].replaced,
-        ACCOUNTANT_EXPORT_WORDS[language].replacement,
-      ]);
+      expect([row(xml, 2)[3], row(xml, 3)[3]]).toEqual(["F2", replacementType]);
     },
   );
 
@@ -557,7 +557,7 @@ describe("accountant period selection", () => {
     expect(rows[1]).toMatchObject({ total: "12.10", voidedAt: "2026-12-05T12:34:56.789Z" });
   });
 
-  it("types a replaced ticket `replaced` and its replacement `replacement`", async () => {
+  it("keeps a replaced ticket's own type and types its replacement `replacement`", async () => {
     const original = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: "2026-11-01T12:00:00.000Z",
@@ -595,7 +595,7 @@ describe("accountant period selection", () => {
 
     const rows = (await list()).invoices;
     expect(rows.map((row) => [row.id, row.invoiceType])).toEqual([
-      [original, "replaced"],
+      [original, "F2"],
       [replacement, "replacement"],
       [refund, "corrective"],
     ]);
