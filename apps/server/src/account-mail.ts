@@ -1,9 +1,10 @@
 import {
   issueQueuedAccountAction,
+  readPersonAccessRoles,
   type AccountMailParams,
   type IssuedAccountAction,
 } from "@waitron/identity";
-import { composeAccountEmail } from "./account-email.js";
+import { composeAccountEmail, type AccountEmail } from "./account-email.js";
 import type { MailKindOwner } from "./mail-sender.js";
 
 export function accountActionMail(deps: {
@@ -12,7 +13,11 @@ export function accountActionMail(deps: {
   venueLocale: string;
   readTimeZone: () => Promise<string>;
   readPrivacyNoticeUrl: () => Promise<string | null>;
-}): MailKindOwner<{ issued: IssuedAccountAction; origin?: string }> {
+}): MailKindOwner<{
+  issued: IssuedAccountAction;
+  origin?: string;
+  roles?: AccountEmail["roles"];
+}> {
   return {
     kind: "account_action",
     deliveryRule: "notice",
@@ -25,11 +30,14 @@ export function accountActionMail(deps: {
         { personId: mail.personId!, params },
         { codeKey: deps.codeKey, now },
       );
-      return issued === null
-        ? null
-        : { recipient: issued.email, prepared: { issued, origin: params.origin } };
+      if (issued === null) return null;
+      const roles =
+        issued.purpose === "invitation"
+          ? await readPersonAccessRoles(tx, mail.personId!, issued.locale ?? deps.venueLocale)
+          : undefined;
+      return { recipient: issued.email, prepared: { issued, origin: params.origin, roles } };
     },
-    async compose({ issued, origin }) {
+    async compose({ issued, origin, roles }) {
       let actionUrl = deps.emailChangeUrl;
       if (issued.purpose !== "email_change") {
         const url = new URL("/manage/account", origin ?? deps.emailChangeUrl);
@@ -41,7 +49,7 @@ export function accountActionMail(deps: {
       const timeZone = await deps.readTimeZone();
       const privacyNoticeUrl = await deps.readPrivacyNoticeUrl();
       return composeAccountEmail(
-        { ...issued, actionUrl, locale: issued.locale ?? deps.venueLocale },
+        { ...issued, actionUrl, locale: issued.locale ?? deps.venueLocale, roles },
         { timeZone, ...(privacyNoticeUrl === null ? {} : { privacyNoticeUrl }) },
       );
     },

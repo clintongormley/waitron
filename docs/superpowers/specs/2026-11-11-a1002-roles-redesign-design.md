@@ -3,7 +3,8 @@
 **Status: OWNER APPROVED, 2026-11-11** ("approved", in the main-checkout brainstorm session, with the
 help-bubble addition in §10). The owner also reviewed the "my call" defaults listed to them
 before approving. **Amended 2026-11-12 (owner, "Y"):** a role change leaves a person's links
-alone (§4).
+alone (§4). **Amended 2026-11-14 (owner, "(b) One email (Recommended)"):** a person who has not
+accepted their invitation gets no role-change email; the invitation lists their roles (§8).
 It replaces the [7 November design](2026-10-22-a1002-custom-roles-design.md) wherever the two
 differ. Where this document is silent, that design's decision stands only if §9 lists it as kept.
 The [cut 2 scope forecast](../plans/2026-11-10-a1002-cut2-scope-refresh.md) (branch
@@ -251,7 +252,9 @@ The settings-export work to translate role references inside comp settings (the 
   (`enqueueMail`, kind `role_membership_changed`), queued in the same transaction as the change and
   keyed by the activity entry, with no new sender or retry machinery. Changing a role's permissions
   does not email its holders. **Job-role changes are not emailed for now** (owner: "maybe just in
-  the activity log for now"). Setup and import send nothing.
+  the activity log for now"). Setup and import send nothing. A person who has not yet accepted
+  their invitation is not emailed about role changes; the invitation lists the roles it gives
+  instead (owner, 2026-11-14: "(b) One email (Recommended)").
 
 ## 9. What changes from the 7 November design
 

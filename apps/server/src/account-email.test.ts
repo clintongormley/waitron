@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { composeAccountEmail } from "./account-email.js";
 import { messageSender } from "./testing/account-mail.js";
 
 describe("account email", () => {
@@ -229,4 +230,38 @@ it("preserves a structured sender name in the account envelope", async () => {
     locale: "en-GB",
   });
   expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ from }));
+});
+
+describe("invitation roles", () => {
+  const invitation = {
+    purpose: "invitation" as const,
+    email: "ana@example.test",
+    displayName: "Ana",
+    actionUrl: "https://dashboard.example.test/manage/account?token=secret-token",
+    expiresAt: "2026-09-09T12:00:00.000Z",
+  };
+  const roles = [
+    { builtInKey: "staff" as const, name: null },
+    { builtInKey: null, name: "Bar <&" },
+  ];
+
+  it.each([
+    ["en-GB", "Your roles: Staff, Bar <&.", "Your roles: Staff, Bar &lt;&amp;."],
+    ["es-ES", "Tus roles: Empleado, Bar <&.", "Tus roles: Empleado, Bar &lt;&amp;."],
+  ])("lists the roles an invitation gives in %s", (locale, text, html) => {
+    const message = composeAccountEmail({ ...invitation, locale, roles }, { timeZone: "UTC" });
+    const lines = message.text.split("\n");
+    expect(lines.slice(0, 4)).toEqual([lines[0], "", text, ""]);
+    expect(lines[4]).toMatch(/:$/);
+    expect(message.html).toContain(`</p>\n<p>${html}</p>\n<p><a href=`);
+  });
+
+  it.each([[[]], [undefined]])("has no roles line for a person holding none (%j)", (held) => {
+    const message = composeAccountEmail(
+      { ...invitation, locale: "en-GB", ...(held === undefined ? {} : { roles: held }) },
+      { timeZone: "UTC" },
+    );
+    expect(message.text).not.toContain("roles");
+    expect(message.html).not.toContain("roles");
+  });
 });

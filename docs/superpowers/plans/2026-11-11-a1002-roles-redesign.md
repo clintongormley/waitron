@@ -4,7 +4,9 @@
 and the Fable second read. The owner's words: "approve", typed at 21:46 Madrid time (20:46:54 UTC)
 in the owner's main-checkout Claude session (`a914fa5c-626b-4ca9-a682-f12947d87788`), in answer to
 this revision's PR list and 40–50 hour estimate. Queued to lane K. **Amended 2026-11-12 (owner,
-"Y"):** a role change no longer expires links (PRs 11, 14 and 16).
+"Y"):** a role change no longer expires links (PRs 11, 14 and 16). **Amended 2026-11-14 (owner,
+"(b) One email (Recommended)"):** a person who has not accepted their invitation gets no
+role-change email; the invitation lists their roles (design §8).
 **Revision 3, 2026-11-11 evening:** the fresh-context read's findings, the Fable read
 (`~/waitron-campaign-m/reports/ra.md`) and the owner's answers to its proposals (recorded in the
 design by `e69416d2cd`) are applied: eighteen pull requests, re-sized from source on `c00b1a6f39`.

@@ -3,7 +3,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import { randomUUID, randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, personRoles, roles, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   completeAccountAction,
@@ -191,6 +191,18 @@ describe("account mail owner", () => {
         .mocked(deps.log)
         .mock.calls.every((c) => !JSON.stringify(c).includes("person@example.test")),
     ).toBe(true);
+  });
+  it("lists the roles the person holds when the invitation is sent, and none in a reset", async () => {
+    await suite.db.run(sql`update persons set status='pending' where id=${personId}`);
+    await queue("invitation");
+    await suite.db.insert(roles).values({ id: "bar", name: "Bar", nameFolded: "bar" });
+    await suite.db.insert(personRoles).values({ personId, roleId: "bar" });
+    await runMailPass(deps);
+    await queue("password_reset");
+    await runMailPass(deps);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toContain("\nYour roles: Staff, Bar.\n");
+    expect(messages[1]).not.toContain("roles");
   });
   it.each(["invitation", "email_change"] as const)(
     "composes %s with its current address and locale",

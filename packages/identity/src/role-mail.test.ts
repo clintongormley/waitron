@@ -17,7 +17,7 @@ const notice = {
   at,
 };
 
-it.each(["pending", "suspended"] as const)(
+it.each(["active", "suspended"] as const)(
   "queues for a %s person with an email, deduplicated by activity for one day",
   async (status) => {
     const [person] = await seedPersons(suite.db, {
@@ -49,6 +49,18 @@ it.each(["pending", "suspended"] as const)(
     });
   },
 );
+
+it("queues nothing for a person who has not accepted their invitation", async () => {
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Waiter",
+    email: "waiter@example.test",
+    status: "pending",
+  });
+  await withTransaction(suite.db, (tx) =>
+    queueRoleMembershipMail(tx, { ...notice, personId: person!.id }),
+  );
+  expect(await suite.db.select().from(outgoingMail)).toEqual([]);
+});
 
 it("queues nothing without an email", async () => {
   const [person] = await seedPersons(suite.db, { displayName: "Waiter" });
