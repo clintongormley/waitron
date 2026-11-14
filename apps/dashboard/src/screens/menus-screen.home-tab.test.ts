@@ -437,7 +437,7 @@ describe("the Home page tab's shortcuts", () => {
     expect(inPreview(el, "grip-t-burger")).not.toBeNull();
   });
 
-  it.each(["disabled only", "enabled alternate", "inactive product"])(
+  it.each(["disabled only", "nested disabled", "enabled alternate", "inactive product"])(
     "uses the structure for a hidden product's reason: %s",
     async (scenario) => {
       const document = menuDocument([], {});
@@ -449,6 +449,14 @@ describe("the Home page tab's shortcuts", () => {
           children: [productNode("m-burger", "p-burger")],
         },
       ];
+      if (scenario === "nested disabled")
+        nodes[0]!.children = [
+          {
+            memberId: "m-inner",
+            ref: { kind: "section", sectionId: "s-inner" },
+            children: [productNode("m-burger", "p-burger")],
+          },
+        ];
       if (scenario === "enabled alternate") nodes.push(productNode("m-own-burger", "p-burger"));
       const client = api({
         listCatalogues: vi
@@ -470,7 +478,7 @@ describe("the Home page tab's shortcuts", () => {
       const hidden = preview(el)!.shadowRoot!.querySelector('.tile[data-state="hidden"]')!;
       expect(text(hidden)).toContain(
         t(
-          scenario === "disabled only"
+          scenario === "disabled only" || scenario === "nested disabled"
             ? "home.not_shown_disabled_menu"
             : "home.not_shown_not_on_sale",
         ),
@@ -478,6 +486,19 @@ describe("the Home page tab's shortcuts", () => {
       expect(client.listCatalogues).toHaveBeenCalledTimes(1);
     },
   );
+
+  it("keeps an unchanged menu preview from rendering on unrelated screen updates", async () => {
+    const el = await mountHome();
+    const home = preview(el)!;
+    const updates = vi.spyOn(home as unknown as { updated(): void }, "updated");
+    onTestFinished(() => updates.mockRestore());
+    for (let i = 0; i < 3; i++) {
+      el.requestUpdate();
+      await el.updateComplete;
+      await home.updateComplete;
+    }
+    expect(updates).not.toHaveBeenCalled();
+  });
 
   it("follows the menu's home while the Home page tab shows, and stops on another tab", async () => {
     const live = new LiveData();
@@ -785,7 +806,7 @@ describe("the Home page tab's shortcuts", () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       expect(preview(el)!.device).toBe("till");
       for (const grid of frameOf(el).querySelectorAll<HTMLElement>(".grid"))
-        expect(getComputedStyle(grid).gridTemplateColumns.split(" ").length).toBeLessThan(6);
+        expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(4);
     });
 
     it("puts the settings just beside the handheld's frame 1280 px wide", async () => {

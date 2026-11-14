@@ -3371,7 +3371,8 @@ export const en = {
   "home.add_refused": "{name} was not added. {reason}",
   "home.preview_heading": "Preview",
   "home.table_preview": "Table order preview",
-  "home.table_preview_width": "A till as wide as this frame, with room for the order.",
+  "home.table_preview_width":
+    "A till as wide as this frame. Wider frames show the order beside the menu.",
   "home.preview_order": "Order",
   "home.device_handheld": "Handheld",
   "home.device_till": "Till",
@@ -7564,7 +7565,8 @@ export const es: Record<StringKey, string> = {
   "home.add_refused": "No se ha añadido {name}. {reason}",
   "home.preview_heading": "Vista previa",
   "home.table_preview": "Vista previa del pedido de mesa",
-  "home.table_preview_width": "Una caja tan ancha como este marco, con espacio para el pedido.",
+  "home.table_preview_width":
+    "Una caja tan ancha como este marco. Los marcos más anchos muestran el pedido junto a la carta.",
   "home.preview_order": "Pedido",
   "home.device_handheld": "Terminal de mano",
   "home.device_till": "Caja registradora",

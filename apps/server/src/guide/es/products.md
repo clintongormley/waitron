@@ -293,9 +293,8 @@ pedido de mesa**: representa una caja tan ancha como el marco y reserva espacio 
 Úsala para comprobar cuántas columnas caben junto al pedido. Con menos anchura, la carta ocupa
 todo el marco, como cuando la caja muestra solo Carta.
 
-Si un acceso directo indica que está en una carta incluida deshabilitada, habilita esa carta
-para volver a mostrarlo. Espera a que termine de guardarse un cambio de orden o de presentación
-antes de quitar un acceso directo con su papelera.
+Para sustituir un acceso directo oculto, quítalo con su papelera y añade un producto o una
+sección que esta carta muestre.
 
 ## Copia una carta {#copy-menu}
 

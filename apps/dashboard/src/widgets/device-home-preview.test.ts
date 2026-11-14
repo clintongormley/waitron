@@ -1050,7 +1050,7 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe(es);
   });
 
-  it("explains a product behind a disabled include, retaining an enabled alternate placement", async () => {
+  it("explains a product behind a disabled include; a visible placement still wins", async () => {
     const document = lunch([], [documentProduct("mi-water", "p-water")]);
     const { el } = await mount({
       document,

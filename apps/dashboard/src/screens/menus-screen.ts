@@ -840,6 +840,7 @@ export class MenusScreen extends LitElement {
   /** The products the add-products window's own list already holds, which it does not offer. */
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
+  #disabledIncludeProducts = new Set<string>();
   /** The tree row's ⋮, or the Home page tab's shortcut Remove button or add tile, that gets focus
    * back once nothing is out and the window it opened, if any, has closed. */
   #focusReturn:
@@ -912,6 +913,8 @@ export class MenusScreen extends LitElement {
       );
     }
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
+    if (changed.has("structure") || changed.has("products") || changed.has("menus"))
+      this.#disabledIncludeProducts = this.#productsInDisabledIncludes();
     if (changed.has("structure") || changed.has("products")) {
       const products = new Map(
         this.products.filter((product) => product.active).map(({ id, name }) => [id, name]),
@@ -3369,7 +3372,7 @@ export class MenusScreen extends LitElement {
     </fieldset>`;
   }
 
-  #disabledIncludeProducts(): Set<string> {
+  #productsInDisabledIncludes(): Set<string> {
     const disabled = new Set<string>();
     const enabled = new Set<string>();
     const menus = new Map(this.menus.map((menu) => [menu.id, menu.active]));
@@ -3394,7 +3397,7 @@ export class MenusScreen extends LitElement {
         .shortcuts=${home.shortcuts}
         .busy=${this.busy}
         .removeDisabled=${this.#homeRemoveDisabled}
-        .disabledIncludeProducts=${this.#disabledIncludeProducts()}
+        .disabledIncludeProducts=${this.#disabledIncludeProducts}
         @wt-shortcut-add=${(event: CustomEvent<{ kind: "product" | "section" }>) => {
           event.stopPropagation();
           this.#openShortcutPicker(event.detail.kind);
