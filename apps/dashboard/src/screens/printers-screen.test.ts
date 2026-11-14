@@ -21,6 +21,7 @@ import {
 } from "../widgets/test-helpers.js";
 import {
   chooseOption as pickOption,
+  chooseOptions,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -5763,7 +5764,16 @@ describe("printer setup refinements", () => {
       api: stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    expect(q(el, '[name="status-filter"]')).toBeNull();
+    const filterKeys = (name: string) =>
+      (
+        q(el, `[data-test="${name}"]`) as HTMLElement & {
+          columns: { key: string; filter?: unknown }[];
+        }
+      ).columns
+        .filter((column) => column.filter !== undefined)
+        .map((column) => column.key);
+    expect(filterKeys("printers-table")).toEqual(["paper", "agent"]);
+    expect(filterKeys("agents-table")).toEqual([]);
     expect(el.shadowRoot!.querySelectorAll("wt-tabs h2").length).toBe(0);
   });
 
@@ -12749,7 +12759,7 @@ describe("one table for every printer", () => {
       [...table(el).shadowRoot!.querySelectorAll("wt-combobox")].map((box) =>
         box.getAttribute("name"),
       ),
-    ).toEqual([]);
+    ).toEqual(["paper-filter", "agent-filter"]);
     expect(q(el, "[data-test=save-invoice-printer]")).toBeNull();
     expect(q(el, "[data-test^=page-printer-chosen-]")).toBeNull();
     expect(table(el).shadowRoot!.textContent).not.toContain("Printer for A4 invoices");
@@ -13793,4 +13803,146 @@ it("draws Check address level with the address fields beside it", async () => {
   } finally {
     await page.viewport(...before);
   }
+});
+
+describe("searching and filtering the printer tables", () => {
+  function tableOf(el: PrintersScreen, name: string): HTMLElement {
+    return q(el, `[data-test="${name}"]`)!;
+  }
+  async function searchTable(el: PrintersScreen, name: string, value: string): Promise<void> {
+    const search = tableOf(el, name).shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    search.value = value;
+    search.dispatchEvent(new Event("input"));
+    await flush(el);
+  }
+  function filterOf(el: PrintersScreen, name: string, key: string): HTMLElement {
+    return tableOf(el, name).shadowRoot!.querySelector<HTMLElement>(
+      `wt-combobox[data-filter="${key}"]`,
+    )!;
+  }
+  function rowKeys(el: PrintersScreen, name: string): string[] {
+    return [...tableOf(el, name).shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+      row.getAttribute("data-row-key")!,
+    );
+  }
+  const activeAgents: PrintAgentRow[] = [
+    agents[0]!,
+    { ...agents[1]!, id: "a3", name: "Terrace agent", active: true, host: "10.0.0.20" },
+  ];
+  const officePrinter: PagePrinterRow = {
+    id: "pp1",
+    name: "Back office",
+    host: "10.0.0.56",
+    port: 631,
+    resourcePath: "/ipp/print",
+    documentFormat: "application/pdf",
+    supportedFormats: ["application/pdf"],
+    media: "iso_a4_210x297mm",
+    resolutionDpi: 600,
+    active: true,
+    agentId: "a3",
+    agentName: "Terrace agent",
+  };
+  const barJob: PrintJobRow = {
+    ...jobs[0]!,
+    id: "j3",
+    printerId: "p3",
+    printerName: "Bar USB",
+    status: "queued",
+    lastError: null,
+  };
+
+  async function mountTables(): Promise<PrintersScreen> {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({
+        listAgents: vi.fn().mockResolvedValue(activeAgents),
+        listPrinters: vi
+          .fn()
+          .mockResolvedValue(
+            printers.map((p) => (p.id === "p3" ? { ...p, paperWidth: "58mm" as const } : p)),
+          ),
+        listPagePrinters: vi.fn().mockResolvedValue([officePrinter]),
+        listRecentJobs: vi.fn().mockResolvedValue([...jobs, barJob]),
+      }),
+    });
+    await flush(el);
+    return el;
+  }
+
+  it("narrows the agents to those whose name or address matches the search", async () => {
+    const el = await mountTables();
+    await selectTab(el, "agents");
+    await searchTable(el, "agents-table", "terrace");
+    expect(rowKeys(el, "agents-table")).toEqual(["a3"]);
+    await searchTable(el, "agents-table", "10.0.0.20");
+    expect(rowKeys(el, "agents-table")).toEqual(["a3"]);
+  });
+
+  it("narrows the printers to those whose name or agent matches the search", async () => {
+    const el = await mountTables();
+    await searchTable(el, "printers-table", "bar usb");
+    expect(rowKeys(el, "printers-table")).toEqual(["receipt:p3"]);
+    await searchTable(el, "printers-table", "terrace");
+    expect(rowKeys(el, "printers-table")).toEqual(["a4:pp1"]);
+  });
+
+  it("narrows the printers to the paper chosen", async () => {
+    const el = await mountTables();
+    await chooseOptions(filterOf(el, "printers-table", "paper"), ["58mm"]);
+    await flush(el);
+    expect(rowKeys(el, "printers-table")).toEqual(["receipt:p3"]);
+  });
+
+  it("narrows the printers to the agent chosen", async () => {
+    const el = await mountTables();
+    await chooseOptions(filterOf(el, "printers-table", "agent"), ["Terrace agent"]);
+    await flush(el);
+    expect(rowKeys(el, "printers-table")).toEqual(["a4:pp1"]);
+  });
+
+  it("narrows the print queue to the jobs whose printer matches the search", async () => {
+    const el = await mountTables();
+    await selectTab(el, "queue");
+    await searchTable(el, "jobs-table", "bar");
+    expect(rowKeys(el, "jobs-table")).toEqual(["j3"]);
+  });
+
+  it("narrows the print queue to the printer chosen", async () => {
+    const el = await mountTables();
+    await selectTab(el, "queue");
+    await chooseOptions(filterOf(el, "jobs-table", "printer"), ["p3"]);
+    await flush(el);
+    expect(rowKeys(el, "jobs-table")).toEqual(["j3"]);
+  });
+
+  it("narrows the print queue to the status chosen, offered in the order a job moves through", async () => {
+    const el = await mountTables();
+    await selectTab(el, "queue");
+    const filter = filterOf(el, "jobs-table", "status") as HTMLElement & {
+      options: { label: string }[];
+    };
+    expect(filter.options.map((o) => o.label)).toEqual([
+      t("printers.filter_status_all"),
+      jobStatusName("queued"),
+      jobStatusName("printing"),
+      jobStatusName("done"),
+      jobStatusName("failed"),
+    ]);
+    await chooseOptions(filter, ["failed"]);
+    await flush(el);
+    expect(rowKeys(el, "jobs-table")).toEqual(["j1"]);
+  });
+
+  it("translates the queue's filter panel", async () => {
+    const el = await mountTables();
+    await selectTab(el, "queue");
+    const filter = filterOf(el, "jobs-table", "status") as HTMLElement & {
+      searchPlaceholder: string;
+      noResultsLabel: string;
+    };
+    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual([
+      t("categories.combobox_search"),
+      t("categories.combobox_no_results"),
+    ]);
+  });
 });
