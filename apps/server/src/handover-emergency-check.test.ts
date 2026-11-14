@@ -53,7 +53,7 @@ it("keeps selected-archive provenance while binding the current copy, and refuse
   try {
     await mkdir(join(stateDir, "pair-copy"));
     await writeFile(
-      join(stateDir, "pair-copy", "ready.json"),
+      join(stateDir, "pair-copy", "placed.json"),
       JSON.stringify({ source: "selected-backup", sourceId: "a".repeat(64) }),
     );
     const deps = { venueDir: venueDir(), stateDir, modules: [] };
@@ -69,6 +69,10 @@ it("keeps selected-archive provenance while binding the current copy, and refuse
       Date.parse("2026-11-14T01:00:00Z"),
     );
     await writeFile(join(stateDir, "pair-copy", "venue.db"), "awaits restart");
+    await writeFile(
+      join(stateDir, "pair-copy", "ready.json"),
+      JSON.stringify({ source: "selected-backup", sourceId: "b".repeat(64) }),
+    );
     await expect(checkEmergencyCopy(deps)).rejects.toMatchObject({
       code: "handover.copy_mismatch",
     });

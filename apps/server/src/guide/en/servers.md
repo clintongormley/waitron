@@ -48,8 +48,8 @@ Open the spare’s HTTPS address with `/handover/emergency` at the end, for exam
 current authenticator code, if set up, then choose **Check this copy**. Read its latest dated
 activity. Anything newer may be missing; if no date is available, the page says so.
 
-To use an encrypted backup instead, choose its file and select **Use this backup**. If this box has
-no saved recovery key, enter the backup's key when asked. Keep this page open while the spare
+To use an encrypted backup instead, choose its file and select **Use this backup**. If asked,
+enter that backup's recovery key; this leaves the box's saved key unchanged. Keep this page open while the spare
 restarts, then review **Selected backup** and its latest activity before declaring. Choose a backup
 made after this spare joined its current main box.
 

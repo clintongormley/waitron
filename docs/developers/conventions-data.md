@@ -3673,7 +3673,7 @@ data in `<state>/pair-store/` (`apps/server/src/spare-store.ts:74`). The spare's
 restored from that store into `<state>/pair-copy/`, outside `scratch/` because it must survive the
 restart that puts it in place of `venue.db` (`apps/server/src/spare-copy.ts`,
 `spare-copy-placement.ts`). An admitted mirror's selected handover backup also waits there across
-its placing restart; `ready.json` keeps the archive's source id until activation, while preview and
+its placing restart; `ready.json` names only staged input and `placed.json` keeps the archive's source id until activation, while preview and
 declaration check the live copy after migration. That placement keeps the mirror's own `node.db`
 and secrets (`handover-copy-from-backup.ts`, `handover-copy-selection.ts`). Both folders are named in `packages/store/src/state-layout.ts` and
 deleted by a plain reset.

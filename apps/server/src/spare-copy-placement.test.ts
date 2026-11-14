@@ -104,14 +104,39 @@ describe("placeFirstCopy", () => {
       expect(readFileSync(join(venueDir, NODE_FILE))).toEqual(nodeBefore);
       expect(existsSync(join(copyFolder(), VENUE_FILE))).toBe(false);
       if (mode === "mirror") {
-        expect(JSON.parse(readFileSync(join(copyFolder(), PAIR_COPY_READY_FILE), "utf8"))).toEqual(
+        expect(JSON.parse(readFileSync(join(copyFolder(), "placed.json"), "utf8"))).toEqual(
           selection,
         );
         expect(await place()).toBe(false);
         expect(readFileSync(live(), "utf8")).toBe("the main box's venue");
+        await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "primary"));
+        await rm(join(venueDir, NODE_FILE));
+        await suite.node.archiveTo(join(venueDir, NODE_FILE));
+        expect(await place()).toBe(false);
+        expect(existsSync(copyFolder())).toBe(false);
+        expect(readFileSync(live(), "utf8")).toBe("the main box's venue");
       } else expect(existsSync(copyFolder())).toBe(false);
     },
   );
+
+  it("finishes selected provenance after a crash just after the live rename", async () => {
+    spareWithReadyCopy();
+    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "mirror"));
+    await rm(join(venueDir, NODE_FILE));
+    await suite.node.archiveTo(join(venueDir, NODE_FILE));
+    const selection = { source: "selected-backup", sourceId: "a".repeat(64) };
+    writeFileSync(join(copyFolder(), PAIR_COPY_READY_FILE), JSON.stringify(selection));
+    renames.after = (to) => {
+      if (to === live()) throw new Error("stopped after live rename");
+    };
+    await expect(place()).rejects.toThrow("stopped after live rename");
+    renames.after = undefined;
+    writeFileSync(`${live()}-wal`, "the next ahead check's wal");
+    expect(await place()).toBe(true);
+    expect(readFileSync(`${live()}-wal`, "utf8")).toBe("the next ahead check's wal");
+    expect(JSON.parse(readFileSync(join(copyFolder(), "placed.json"), "utf8"))).toEqual(selection);
+    expect(existsSync(join(copyFolder(), PAIR_COPY_READY_FILE))).toBe(false);
+  });
 
   it("puts the copy in place before the store opens, keeping node.db, secrets.env and tls/", async () => {
     spareWithReadyCopy();

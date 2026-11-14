@@ -395,7 +395,7 @@ describe("activating on a real placed copy", () => {
   it("clears selected-copy provenance after the activation commits", async () => {
     const store = await placedSpare();
     const { app } = spareOn(store);
-    const marker = join(dirs().spareState, "pair-copy", "ready.json");
+    const marker = join(dirs().spareState, "pair-copy", "placed.json");
     await mkdir(join(dirs().spareState, "pair-copy"));
     await writeFile(
       marker,

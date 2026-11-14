@@ -54,7 +54,7 @@ copia**. Revisa su última actividad con fecha. Puede faltar la actividad poster
 ninguna fecha disponible, la página lo indica.
 
 Para usar una copia de seguridad cifrada, elige su archivo y pulsa **Usar esta copia de seguridad**.
-Si este equipo no tiene una clave guardada, introduce la clave de la copia cuando se te pida.
+Si se te pide, introduce la clave de esa copia; no cambia la clave guardada en este equipo.
 Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
 última actividad antes de declarar. Elige una copia hecha después de que este equipo de reserva
 se uniera a su principal actual.

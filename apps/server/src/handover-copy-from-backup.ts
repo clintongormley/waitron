@@ -1,4 +1,5 @@
 import "./errors.js";
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { nodeSigningPublicKey } from "@waitron/credentials";
@@ -33,8 +34,8 @@ export async function stageBackupAsCopy(
     migrationsRoot: string | null;
   },
 ): Promise<SelectedCopy> {
-  const { held, key } = await readHeldKey(deps.readRecoveryKey);
-  const recoveryKey = held ? key : checkedRecoveryKey(deps.recoveryKey);
+  const recoveryKey =
+    checkedRecoveryKey(deps.recoveryKey) ?? (await readHeldKey(deps.readRecoveryKey)).key;
   if (recoveryKey === undefined) throw new AppError("handover.backup_key_missing", {});
   const validated = await validateArtifactFile({
     ...deps,
@@ -79,10 +80,17 @@ export async function stageBackupAsCopy(
     // A stopped replacement must never leave an old marker vouching for partial new bytes.
     await rm(join(folder, COPY_READY_FILE), { force: true });
     await reachDisk(folder);
-    await copyFile(path, join(folder, VENUE_FILE));
-    await reachDisk(join(folder, VENUE_FILE));
     const selection: SelectedCopy = { source: "selected-backup", sourceId: validated.sourceId };
-    await writeFileDurable(join(folder, COPY_READY_FILE), JSON.stringify(selection), 0o600);
+    try {
+      await copyFile(path, join(folder, VENUE_FILE));
+      await reachDisk(join(folder, VENUE_FILE));
+      await writeFileDurable(join(folder, COPY_READY_FILE), JSON.stringify(selection), 0o600);
+    } catch (error) {
+      // A published marker still owns a whole checked copy, even if its folder sync failed.
+      if (!existsSync(join(folder, COPY_READY_FILE)))
+        await rm(join(folder, VENUE_FILE), { force: true }).catch(() => {});
+      throw error;
+    }
     return selection;
   } finally {
     await validated.discard();

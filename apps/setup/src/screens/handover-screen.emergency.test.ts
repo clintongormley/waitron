@@ -69,6 +69,7 @@ async function mount(
     changeBeforeDeclare?: boolean;
     backup?: boolean;
     backupRefusal?: string;
+    backupNeedsKeyCode?: string;
     theme?: "light" | "dark";
   } = {},
 ) {
@@ -104,7 +105,12 @@ async function mount(
       if (options.backupRefusal || body.recoveryKey === undefined)
         return new Response(
           JSON.stringify({
-            error: { code: options.backupRefusal ?? "handover.backup_key_missing" },
+            error: {
+              code:
+                options.backupRefusal ??
+                options.backupNeedsKeyCode ??
+                "handover.backup_key_missing",
+            },
           }),
           { status: 409 },
         );
@@ -261,10 +267,15 @@ it.each(
     ["light", "dark"].map((theme) => ({ locale, theme: theme as "light" | "dark" })),
   ),
 )(
-  "selects an archive with a missing key, resumes its preview, and declares that source ($locale, $theme)",
+  "asks for the archive key, resumes its preview, and declares that source ($locale, $theme)",
   async ({ locale, theme }) => {
     setLocale(locale);
-    const { el, posts } = await mount({ backup: true, theme });
+    const { el, posts } = await mount({
+      backup: true,
+      theme,
+      backupNeedsKeyCode:
+        theme === "dark" ? "recovery.passphrase_invalid" : "handover.backup_key_missing",
+    });
     await authenticate(el);
     const input = q<HTMLInputElement>(el, 'input[name="handover-backup"]');
     expect(input).not.toBeNull();

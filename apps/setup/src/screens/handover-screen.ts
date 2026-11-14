@@ -437,7 +437,8 @@ export class SetupHandoverScreen extends LitElement {
       this.#restartPolling();
     } catch (cause) {
       const code = (cause as { code?: string }).code;
-      if (code === "handover.backup_key_missing") this.needsBackupKey = true;
+      if (code === "handover.backup_key_missing" || code === "recovery.passphrase_invalid")
+        this.needsBackupKey = true;
       this.actionError = this.#emergencyError(cause);
       this.busy = false;
     }

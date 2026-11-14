@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
@@ -8,13 +8,17 @@ import { CORE_MIGRATIONS, nodes, withNodeTransaction, writeNodeMembership } from
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
-import { NODE_MIGRATIONS, pinPrimaryKeyTx } from "@waitron/node-db";
+import { NODE_MIGRATIONS, pinPrimaryKeyTx, setNodeModeTx } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { buildManifest } from "./backup-manifest.js";
 import { recoveryArchiveSourceId } from "./recovery-source.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
+import { placeFirstCopy } from "./spare-copy-placement.js";
+import { checkEmergencyCopy } from "./handover-emergency-check.js";
+import { loadBoxEnv } from "./box-env.js";
+import { loadRecoveryKey } from "./backup-config.js";
 
 const copyFault = vi.hoisted(() => ({ interrupt: false, markerAtWrite: [] as boolean[] }));
 vi.mock("node:fs/promises", async (original) => {
@@ -185,7 +189,7 @@ it.each(["missing-row", "wrong-key", "untrusted-chart", "missing-chart-node", "d
   },
 );
 
-it("uses a typed key only when no key is held", async () => {
+it("uses a typed archive key without changing the saved key", async () => {
   await expect(stage({ readRecoveryKey: async () => undefined })).rejects.toMatchObject({
     code: "handover.backup_key_missing",
   });
@@ -196,8 +200,35 @@ it("uses a typed key only when no key is held", async () => {
       },
       recoveryKey: key,
     }),
-  ).rejects.toMatchObject({ code: "handover.backup_key_missing" });
+  ).resolves.toHaveProperty("source", "selected-backup");
   await expect(
     stage({ readRecoveryKey: async () => undefined, recoveryKey: key }),
   ).resolves.toHaveProperty("source", "selected-backup");
+  const saved = "WAITRON_BACKUP_RECOVERY_KEY=a-newer-rotated-recovery-key\n";
+  await writeFile(join(root, "backup.env"), saved);
+  await expect(
+    stage({
+      readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv({}, root)),
+      recoveryKey: key,
+    }),
+  ).resolves.toHaveProperty("source", "selected-backup");
+  expect(await readFile(join(root, "backup.env"), "utf8")).toBe(saved);
+});
+
+it("keeps the placed source after a second selection is interrupted", async () => {
+  const venueDir = join(root, "live");
+  await mkdir(venueDir);
+  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "mirror"));
+  await suite.node.archiveTo(join(venueDir, "node.db"));
+  const first = await stage();
+  expect(await placeFirstCopy({ stateDir: root, venueDir, nodeId, log: () => {} })).toBe(true);
+  expect(await checkEmergencyCopy({ stateDir: root, venueDir, modules: [] })).toMatchObject(first);
+  copyFault.interrupt = true;
+  await expect(stage()).rejects.toMatchObject({ code: "EIO" });
+  copyFault.interrupt = false;
+  await expect(stat(join(root, "pair-copy", "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
+  await writeFile(join(root, "pair-copy", "venue.db"), "a crash left an unmarked partial copy");
+  expect(await placeFirstCopy({ stateDir: root, venueDir, nodeId, log: () => {} })).toBe(false);
+  expect(await checkEmergencyCopy({ stateDir: root, venueDir, modules: [] })).toMatchObject(first);
+  expect(await readdir(join(root, "pair-copy"))).toEqual(["placed.json"]);
 });
