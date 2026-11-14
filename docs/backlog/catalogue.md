@@ -661,13 +661,24 @@ decimal unit does — which would change the other readers of the till's `soldBy
 control (`apps/till/src/screens/till-table-order-screen.ts`), and the price label
 (`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
 
-## Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts
+## Modifiers' Spanish "Opciones" tab is cut at a 310 px screen on CI's Linux fonts
 
-**Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts** in
-A424 (#1452). A434's macOS Chromium probe measured the whole tab at screen widths 310 and
-390 px (tab 95.67 px; strip 106.42 and 186.42 px). The owner has not ruled on Modifiers;
-reproduce with the Linux fonts before choosing a change. The Printers tab's shorter label
-was the separate A434 ruling.
+**Modifiers' Spanish "Opciones" tab is cut at a 310 px screen on CI's Linux fonts.** First seen
+in A424 (#1452). Reproduced on 2026-11-14 by #3155's CI run 43560080952 (job `test-dashboard (4)`),
+with the Modifiers width test made strict for that run: the selected tab is 104.44 px wide in an
+88 px strip. English at 310 px, and both languages at 390 px, fit. 88 px is `wt-tabs`'s floor for
+the strip (twice `--wt-tap-min`), so the "Añadir lista de opciones" button beside it already has all
+the room the component allows. On the Mac the tab is 95.67 px in a 106.42 px strip. The owner has
+not ruled on Modifiers; the watcher (2026-11-14 06:27) left this for their review of that screen.
+Choices, all in `wt-tabs`, the screen otherwise unchanged:
+
+- (a) the strip never narrower than the selected tab; the button's area gives way and scrolls
+  inside itself (about 16 px of the button's end cut at 310 px on Linux) — recommended;
+- (b) the button moves to its own line under the tabs when they cannot share the row, reversing
+  A424's rule that a tab's action stays on the tab row's line at every width;
+- (c) keep today's behaviour (the tab shows its start under the fade, and scrolls) and record it as
+  accepted;
+- (d) leave it until the owner reviews the Modifiers screen.
 
 ## A670 — guest-menu sharing and fixed A4 presets
 
@@ -1022,13 +1033,12 @@ tests. Media still validates required image names and translates its refusal to
 
 ## Bundle: Tabs selected visible
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. The other entry, a selected tab that grows, was fixed by #3155.
 
-- **Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts**. The owner
-  has not ruled on Modifiers; reproduce with the Linux fonts before choosing a change.
-  [Detail](catalogue.md#modifiers-spanish-opciones-tab-was-cut-at-a-310-px-screen-on-cis-linux-fonts)
-- **A selected tab that grows while its strip keeps its width is not scrolled back into view** — left open by A487a (#1540).
-  [Detail](kitchen.md#a-selected-tab-that-grows-while-its-strip-keeps-its-width-is-not-scrolled-back-into-view)
+- **Modifiers' Spanish "Opciones" tab is cut at a 310 px screen on CI's Linux fonts** (104.44 px
+  tab in an 88 px strip). Needs the owner's choice; recommended: the strip never narrower than the
+  selected tab.
+  [Detail](catalogue.md#modifiers-spanish-opciones-tab-is-cut-at-a-310-px-screen-on-cis-linux-fonts)
 
 ## Bundle: Tree drag shared
 

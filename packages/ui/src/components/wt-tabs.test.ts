@@ -1141,6 +1141,115 @@ test("a selected tab that grows leaves a strip the reader scrolled where it is",
   expect(tablist(el).scrollLeft).toBe(0);
 });
 
+function selectedTab(el: WtTabs) {
+  return buttons(el).find((tab) => tab.getAttribute("aria-selected") === "true")!;
+}
+function expectWholeSelectedFits(el: WtTabs, width: number) {
+  const strip = tablist(el).getBoundingClientRect();
+  expect(strip.width).toBe(width);
+  expect(selectedTab(el).getBoundingClientRect().width).toBeLessThanOrEqual(strip.width);
+  expectSelectedInView(el);
+}
+/** Runs `grow` and checks the selected tab got wider and the strip scrolled further from its start. */
+async function expectGrowthScrolledIn(el: WtTabs, grow: () => Promise<void>) {
+  const width = tablist(el).getBoundingClientRect().width;
+  const tabBefore = selectedTab(el).getBoundingClientRect().width;
+  const scrollBefore = Math.abs(tablist(el).scrollLeft);
+  await grow();
+  expect(selectedTab(el).getBoundingClientRect().width).toBeGreaterThan(tabBefore);
+  expect(Math.abs(tablist(el).scrollLeft)).toBeGreaterThan(scrollBefore);
+  expectWholeSelectedFits(el, width);
+}
+async function relabelSelected(el: WtTabs, own: { label: string }[], label: string) {
+  own[2]!.label = label;
+  el.requestUpdate();
+  await el.updateComplete;
+  await frames();
+}
+
+test("a selected tab that grows by its font-size, in a strip whose width stays, is scrolled back so all of it is in view", async () => {
+  const { el } = await selectedWithLittleRoom();
+  await expectGrowthScrolledIn(el, async () => {
+    buttons(el)[2]!.style.fontSize = "18px";
+    await frames();
+  });
+});
+
+test("a selected tab whose label grows, with the same list of tabs, is scrolled back so all of it is in view", async () => {
+  const own = items.map((item) => ({ ...item }));
+  const { el } = await selectedWithLittleRoom(own);
+  await expectGrowthScrolledIn(el, () => relabelSelected(el, own, "Preparation routes too"));
+});
+
+test.each(["ltr", "rtl"] as const)(
+  "%s, a selected tab that shrinks, pulling the strip back to its new end, and then grows is scrolled back so all of it is in view",
+  async (dir) => {
+    const own = items.map((item) => ({ ...item }));
+    const { el } = await selectedWithLittleRoom(own);
+    host.dir = dir;
+    el.requestUpdate("value");
+    await el.updateComplete;
+    await frames();
+    const shown = Math.abs(tablist(el).scrollLeft);
+    await relabelSelected(el, own, "Prep");
+    expect(Math.abs(tablist(el).scrollLeft)).toBeLessThan(shown);
+    await expectGrowthScrolledIn(el, () => relabelSelected(el, own, "Preparation routes too"));
+  },
+);
+
+// Chromium rounds scrollWidth to the nearest pixel but cuts a right-to-left strip's far-end scroll
+// position toward zero, so a strip pulled back to an end of 70.69 px reports 70 against an end of
+// 71, the position it was left at.
+test("rtl, a selected tab that shrinks, pulling the strip back a pixel to an end it rounds up to where it was, and then grows is scrolled back so all of it is in view", async () => {
+  const el = await setup();
+  host.dir = "rtl";
+  host.style.width = "300px";
+  el.value = "routes";
+  await el.updateComplete;
+  const [first, second, selected] = buttons(el);
+  first!.style.width = "100px";
+  second!.style.width = "100px";
+  selected!.style.width = "150.7px";
+  await frames();
+  const shown = Math.abs(tablist(el).scrollLeft);
+  selected!.style.width = "146.7px";
+  await frames();
+  expect(Math.abs(tablist(el).scrollLeft)).toBe(shown - 1);
+  expect(maxScroll(el)).toBe(shown);
+  await expectGrowthScrolledIn(el, async () => {
+    selected!.style.width = "180px";
+    await frames();
+  });
+});
+
+test("a selected tab that shrinks leaves a strip the reader scrolled to its start where it is", async () => {
+  const { el } = await selectedWithLittleRoom();
+  const shown = tablist(el).scrollLeft;
+  await scrollStrip(el, 0);
+  buttons(el)[2]!.style.fontSize = "13px";
+  await frames();
+  expect(maxScroll(el)).toBeLessThan(shown);
+  expect(maxScroll(el)).toBeGreaterThan(1);
+  expect(tablist(el).scrollLeft).toBe(0);
+});
+
+test("a selected tab that shrinks leaves a strip the reader scrolled to its far end at that end", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  el.value = "menus";
+  await el.updateComplete;
+  await frames();
+  const shown = tablist(el).scrollLeft;
+  await scrollStrip(el, maxScroll(el));
+  const end = maxScroll(el);
+  expect(end).toBeGreaterThan(shown + 5);
+  buttons(el)[1]!.style.fontSize = "13px";
+  await frames();
+  expect(maxScroll(el)).toBeLessThan(end);
+  expect(maxScroll(el)).toBeGreaterThan(shown);
+  expect(tablist(el).scrollLeft).toBe(maxScroll(el));
+});
+
 test("stops watching a tab once another is selected, and watches the new one", async () => {
   const { el } = await selectedWithLittleRoom();
   const old = buttons(el)[2]!;

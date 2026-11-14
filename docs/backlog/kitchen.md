@@ -164,13 +164,6 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
   (`packages/venue-service/src/dashboard/routing-client.ts`) are called only by their own tests.
   Decide whether to remove them or use them; slice 4 Part A leaves both.
 
-## A selected tab that grows while its strip keeps its width is not scrolled back into view
-
-- (`packages/ui/src/components/wt-tabs.ts`) — left open by A487a (#1540): a late font load or a
-  longer label can leave it cut at the strip's edge, and `main` before #1540 behaved the same. Since
-  #1540 the fade is resized when the tab grows; scrolling it back was not added because doing so
-  broke the "leaves a strip the reader scrolled where it is when only its height changes" case.
-
 ## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
 
 Within one dish `ticket.already_started` is checked first (a bare raise of a started dish is not refused as started, A1382), but across a
