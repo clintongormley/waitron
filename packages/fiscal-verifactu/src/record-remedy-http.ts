@@ -3,9 +3,10 @@ import { sql } from "drizzle-orm";
 import { readHistoryNodes, readTenant, type Transaction } from "@waitron/db";
 import { prepareIssueClock } from "@waitron/fiscal";
 import type { ModuleRouteContext } from "@waitron/module";
+import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, compareDecimal, decimal, readSaleOrigin, saleId } from "@waitron/shared";
-import type { AltaInput } from "@waitron/verifactu";
-import { applyRecordCorrection, type RemedyKind } from "./record-remedy.js";
+import type { AltaInput, RegistroAlta } from "@waitron/verifactu";
+import { applyRecordCorrection, caseIdForRecord, type RemedyPolicy } from "./record-remedy.js";
 import { readCorrectedRecordFacts, type CorrectedRecordFacts } from "./record-remedy-facts.js";
 import { currentSif } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -95,11 +96,48 @@ function refuseChangedAmountsOrClass(
   });
 }
 
+/** A request's `YYYY-MM-DD` reference dates in the stored `DD-MM-YYYY` form. */
+function storedReferences(values: CorrectedRecordFacts["correctedInvoices"]) {
+  if (values == null) return values;
+  return values.map((value) => {
+    const [y, m, d] = value.FechaExpedicionFactura.split("-");
+    return { ...value, FechaExpedicionFactura: `${d}-${m}-${y}` };
+  });
+}
+
+function refuseChangedPrintedFacts(
+  registroId: string,
+  facts: CorrectedRecordFacts,
+  original: RegistroAlta,
+) {
+  if (facts.issuerName !== undefined && facts.issuerName !== original.NombreRazonEmisor)
+    throw new AppError("fiscal.remedy_issuer_changed", { registroId });
+  const printed = [
+    ["invoiceType", facts.invoiceType, original.TipoFactura],
+    ["recipients", facts.recipients, original.Destinatarios?.IDDestinatario],
+    ["correctionType", facts.correctionType, original.TipoRectificativa],
+    [
+      "correctedInvoices",
+      storedReferences(facts.correctedInvoices),
+      original.FacturasRectificadas?.IDFacturaRectificada,
+    ],
+    [
+      "substitutedInvoices",
+      storedReferences(facts.substitutedInvoices),
+      original.FacturasSustituidas?.IDFacturaSustituida,
+    ],
+  ] as const;
+  for (const [field, sent, filed] of printed) {
+    if (sent !== undefined && canonicalJson(sent) !== canonicalJson(filed ?? null))
+      throw new AppError("fiscal.remedy_printed_fact_changed", { registroId, field });
+  }
+}
+
 export async function applyCorrectedRecordFacts(
   tx: Transaction,
   generation: NonNullable<ModuleRouteContext["recordGeneration"]>,
   token: string,
-  enabledRemedies: ReadonlySet<RemedyKind>,
+  enabledRemedies: RemedyPolicy,
   raw: unknown,
 ) {
   const body = object(raw);
@@ -107,8 +145,9 @@ export async function applyCorrectedRecordFacts(
   const priorOutcome = body.priorOutcome === undefined ? "rejected" : body.priorOutcome;
   if (priorOutcome !== "rejected" && priorOutcome !== "accepted-with-errors") invalid();
   const facts = readCorrectedRecordFacts(body.facts);
-  const caseId = text(body.caseId);
   const registroId = text(body.registroId);
+  const caseId =
+    body.caseId === undefined ? await caseIdForRecord(tx, registroId) : text(body.caseId);
   const actionKey = text(body.actionKey);
   const reason = text(body.reason);
   generation.requireWritable();
@@ -130,6 +169,7 @@ export async function applyCorrectedRecordFacts(
   const original = fromRegistroRow(target);
   if (!("TipoFactura" in original)) throw new AppError("fiscal.remedy_invalid", { registroId });
   refuseChangedAmountsOrClass(registroId, facts, original);
+  refuseChangedPrintedFacts(registroId, facts, original);
   const clock = await prepareIssueClock(tx, { nodeId: generation.nodeId }, generation.clock);
   const reading = clock.now();
   const sif = await currentSif(tx, generation.nodeId);
@@ -145,27 +185,10 @@ export async function applyCorrectedRecordFacts(
     NumSerieFactura: string;
     FechaExpedicionFactura: string;
   }) => ({ ...value, FechaExpedicionFactura: day(value.FechaExpedicionFactura) });
-  const references = (values: NonNullable<typeof facts.correctedInvoices>) =>
-    values.map((value) => {
-      const [y, m, d] = value.FechaExpedicionFactura.split("-");
-      return { ...value, FechaExpedicionFactura: day(`${d}-${m}-${y}`) };
-    });
-  const correctionType =
-    facts.correctionType === undefined
-      ? original.TipoRectificativa
-      : (facts.correctionType ?? undefined);
-  const correctedInvoices =
-    facts.correctedInvoices === undefined
-      ? original.FacturasRectificadas?.IDFacturaRectificada.map(identity)
-      : facts.correctedInvoices === null
-        ? undefined
-        : references(facts.correctedInvoices);
-  const substitutedInvoices =
-    facts.substitutedInvoices === undefined
-      ? original.FacturasSustituidas?.IDFacturaSustituida.map(identity)
-      : facts.substitutedInvoices === null
-        ? undefined
-        : references(facts.substitutedInvoices);
+  // The correction type and references are refused unless they match the record, so they come from it.
+  const correctionType = original.TipoRectificativa;
+  const correctedInvoices = original.FacturasRectificadas?.IDFacturaRectificada.map(identity);
+  const substitutedInvoices = original.FacturasSustituidas?.IDFacturaSustituida.map(identity);
   const correctionAmounts =
     facts.correctionAmounts === undefined
       ? original.ImporteRectificacion

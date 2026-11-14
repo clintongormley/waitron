@@ -6,11 +6,12 @@ import type { TradingAdmission } from "./trading-admission.js";
 
 type Generation = NonNullable<ModuleRouteContext["recordGeneration"]>;
 export function moduleRecordGeneration(
-  deps: Omit<Generation, "requireWritable"> & {
+  deps: Omit<Generation, "requireWritable" | "requireClockConfirmed"> & {
     mode(): DeploymentMode;
     role(): SingletonRole;
     fenced(): boolean;
     trading: TradingAdmission;
+    clockUnconfirmed: () => boolean;
   },
 ): Generation {
   return {
@@ -22,6 +23,9 @@ export function moduleRecordGeneration(
       if (deps.mode() !== "primary" || deps.role() !== "primary" || deps.fenced())
         throw new AppError("node.read_only", {});
       deps.trading.require();
+    },
+    requireClockConfirmed() {
+      if (deps.clockUnconfirmed()) throw new AppError("clock.unconfirmed", {});
     },
   };
 }

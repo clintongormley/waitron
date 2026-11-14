@@ -23,12 +23,16 @@ export const REMEDY_KINDS = [
   "release-held-cancellation",
 ] as const;
 export type RemedyKind = (typeof REMEDY_KINDS)[number];
+/** A reach `record-correction` does not carry by itself: correcting a case AEAT accepted with errors. */
+export const ACCEPTED_WITH_ERRORS_CORRECTION = "accepted-with-errors-correction";
+/** Server policy: the remedy kinds it enables, and whether a correction may answer an acceptance with errors. */
+export type RemedyPolicy = ReadonlySet<RemedyKind | typeof ACCEPTED_WITH_ERRORS_CORRECTION>;
 
 export async function admitRecordRemedy(
   tx: Transaction,
   managementSessionId: string,
   kind: RemedyKind,
-  enabledRemedies: ReadonlySet<RemedyKind>,
+  enabledRemedies: RemedyPolicy,
 ): Promise<string> {
   const { authorizedBy } = await authorizeManager(tx, {
     managementSessionId,
@@ -47,6 +51,16 @@ export async function isInHistory(
   return (await readHistoryNodes(tx, nodeId)).some((id) => id === recordNodeId);
 }
 
+/** A record has at most one case (`filing_cases_registro_uq`), so its id names the case. */
+export async function caseIdForRecord(tx: Transaction, registroId: string): Promise<string> {
+  const [filingCase] = await tx
+    .select({ id: filingCases.id })
+    .from(filingCases)
+    .where(eq(filingCases.registroId, registroId));
+  if (filingCase === undefined) throw new AppError("fiscal.remedy_invalid", { registroId });
+  return filingCase.id;
+}
+
 export interface RecordCorrectionRequest {
   caseId: string;
   registroId: string;
@@ -61,7 +75,7 @@ export async function applyRecordCorrection(
     managementSessionId: string;
     nodeId: NodeId;
     environment: Entorno;
-    enabledRemedies: ReadonlySet<RemedyKind>;
+    enabledRemedies: RemedyPolicy;
     request: RecordCorrectionRequest;
     correctionDecision?: CorrectedRecordFacts & {
       priorOutcome: "rejected" | "accepted-with-errors";
@@ -81,6 +95,20 @@ export async function applyRecordCorrection(
   if (request.actionKey.trim() === "" || request.reason.trim() === "") {
     throw new AppError("fiscal.remedy_request_invalid", {});
   }
+  const [delivery] = await tx
+    .select()
+    .from(envios)
+    .where(eq(envios.registroId, request.registroId));
+  // Checked before a replay too, as the kind's own enablement is.
+  const answersAcceptance =
+    input.correctionDecision === undefined
+      ? delivery?.estado === "aceptado_con_errores"
+      : input.correctionDecision.priorOutcome === "accepted-with-errors";
+  if (answersAcceptance && !input.enabledRemedies.has(ACCEPTED_WITH_ERRORS_CORRECTION))
+    throw new AppError("fiscal.remedy_disabled", {
+      kind: "record-correction",
+      priorOutcome: "accepted-with-errors",
+    });
   const [target] = await tx
     .select()
     .from(registrosFacturacion)
@@ -136,10 +164,6 @@ export async function applyRecordCorrection(
     .where(eq(filingCases.id, request.caseId));
   if (filingCase === undefined)
     throw new AppError("filing_case.not_found", { caseId: request.caseId });
-  const [delivery] = await tx
-    .select()
-    .from(envios)
-    .where(eq(envios.registroId, request.registroId));
   const [cancellation] = await tx
     .select({ sinRegistroPrevio: registrosFacturacion.sinRegistroPrevio, estado: envios.estado })
     .from(registrosFacturacion)

@@ -153,6 +153,7 @@ describe("reads of a sale's filed alta", () => {
         ...steadyClock,
         now: () => ({ ...steadyClock.now(), instant: now, offsetMinutes: -300 }),
       },
+      requireClockConfirmed: () => {},
       requireWritable: () => {},
     };
     const plan = await planOf((tx) =>

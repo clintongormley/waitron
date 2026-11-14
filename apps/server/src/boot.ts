@@ -3245,6 +3245,7 @@ async function bootServer(
       role: () => holders.singletonRole.current,
       fenced: () => fenced,
       trading: tradingAdmission,
+      clockUnconfirmed: startClockHolds,
     }),
     liveOperations: createLiveModuleOperation({
       node: { nodeId: tradingContext.nodeId },

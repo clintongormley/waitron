@@ -4,7 +4,7 @@ import type { Transaction } from "@waitron/db";
 import type { ModuleRouteContext } from "@waitron/module";
 import { AppError, decimal, jobOrigin, seriesId } from "@waitron/shared";
 import { applyCorrectiveInvoice } from "./record-remedy-corrective.js";
-import type { RemedyKind } from "./record-remedy.js";
+import { caseIdForRecord, type RemedyPolicy } from "./record-remedy.js";
 import { makeVerifactuBackend } from "./slot.js";
 
 function invalid(): never {
@@ -72,7 +72,7 @@ export async function applyCorrectiveInvoiceRequest(
   ctx: Pick<ModuleRouteContext, "db">,
   generation: NonNullable<ModuleRouteContext["recordGeneration"]>,
   token: string,
-  enabledRemedies: ReadonlySet<RemedyKind>,
+  enabledRemedies: RemedyPolicy,
   raw: Record<string, unknown>,
 ) {
   only(raw, ["kind", "caseId", "registroId", "actionKey", "reason", "correction"]);
@@ -82,9 +82,10 @@ export async function applyCorrectiveInvoiceRequest(
   if (!Array.isArray(correction.lines) || correction.lines.length === 0) invalid();
   const lines = correction.lines.map(line);
   if (new Set(lines.map((item) => item.lineNo)).size !== lines.length) invalid();
+  const registroId = text(raw.registroId);
   const request = {
-    caseId: text(raw.caseId),
-    registroId: text(raw.registroId),
+    caseId: raw.caseId === undefined ? await caseIdForRecord(tx, registroId) : text(raw.caseId),
+    registroId,
     actionKey: text(raw.actionKey),
     reason: text(raw.reason),
     correction: {

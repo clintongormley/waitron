@@ -7,7 +7,7 @@ import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, readSaleOrigin, saleId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { recordCaseEvent } from "./filing-cases.js";
-import { admitRecordRemedy, isInHistory, type RemedyKind } from "./record-remedy.js";
+import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
 import type { RegistroRow } from "./registro-row.js";
 import { currentSif } from "./registro-sif.js";
 import { envios } from "./schema/envios.js";
@@ -24,7 +24,7 @@ export async function applyAbsentOriginalCancellation(
   tx: Transaction,
   generation: NonNullable<ModuleRouteContext["recordGeneration"]>,
   token: string,
-  enabledRemedies: ReadonlySet<RemedyKind>,
+  enabledRemedies: RemedyPolicy,
   raw: Record<string, unknown>,
 ): Promise<{ registroId: string; eventId: string }> {
   const personId = await admitRecordRemedy(

@@ -244,6 +244,7 @@ export async function openFilingCases(tx: Transaction, limit: number | null) {
         tipoFactura: registrosFacturacion.tipoFactura,
         importeTotal: registrosFacturacion.importeTotal,
         cuotaTotal: registrosFacturacion.cuotaTotal,
+        descripcionOperacion: registrosFacturacion.descripcionOperacion,
         huella: registrosFacturacion.huella,
         anteriorHuella: registrosFacturacion.anteriorHuella,
         fechaHoraHusoGenRegistro: registrosFacturacion.fechaHoraHusoGenRegistro,

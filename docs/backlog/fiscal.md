@@ -426,7 +426,10 @@ The generated storage migration adds the column and replaces indexes; it does no
 the table.
 Correction payload persistence, administrator-only remedy operations, held-case
 resolution and the real AEAT second-correction proof remain part of Task 8 before publication.
-Disputed production remedies stay disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision.
+Of the disputed production remedies, the corrective invoice (the replacement) waits on Q37-FIX
+Task 3, which waits on the owner's answers to questions A–E (lane L, 2026-11-14); the others stay
+disabled pending Q35/Q38/Q40 or a case-specific owner decision. Q37-FIX enables the correction
+record for rejected records only.
 
 **1 November 2026, Task 8 receipt replay check.** The receipt lookup explicitly selects the
 original issued alta by its empty correction link. `record-version-receipt.test.ts` stores
@@ -590,6 +593,11 @@ refund operations; all production remedies remain disabled. _2026-11-11: a chang
 total or correction amount is now refused with `fiscal.remedy_amount_changed`, before the saved
 decision is compared; a changed tax type, regime, taxed or not-subject class or exemption reason on
 a breakdown line is refused with `fiscal.remedy_class_changed` at the same point; see [A1481](#a1481-a-fix-never-changes-an-invoices-amounts-owner-2026-11-11)._
+_2026-11-14: Q37-FIX enables the correction record in production, for rejected records only; see
+the W41s entry. A changed
+issuer name is refused with `fiscal.remedy_issuer_changed`; a changed invoice type, recipients,
+correction type, corrected invoice or replaced invoice, or null for one the record carries, with
+`fiscal.remedy_printed_fact_changed`._
 
 **2 November 2026, Task 8 explicit accepted-with-errors description decisions.** With a synthetic
 server policy, `priorOutcome: "accepted-with-errors"` requires both an accepted-with-errors delivery
@@ -600,6 +608,12 @@ key is refused. Retries after a later delivery outcome and clock change preserve
 The tests compare earlier records, deliveries and case facts, including two successive synthetic
 accepted-with-errors corrections. These are local engineering checks, not AEAT acceptance or a
 decision that a particular invoice error permits this remedy. Production policies remain empty.
+_2026-11-14: Q37-FIX enables the correction record in production for rejected records only; a
+correction of an accepted-with-errors case stays refused (`fiscal.remedy_disabled` naming
+`priorOutcome`) unless a policy carries `ACCEPTED_WITH_ERRORS_CORRECTION`. A record of a former main
+this box took back keeps the reach A1342 gave it, both outcomes. Checked by the default-policy and
+returned-record cases in `packages/fiscal-verifactu/src/record-remedy-http.test.ts`; see the W41s
+entry._
 
 | Source, checked 2 November 2026 | Exact words | Scope |
 | --- | --- | --- |
@@ -1104,6 +1118,16 @@ invoice, which carries new amounts. Recorded in the campaign's `questions.md`, 2
 or exemption reason) is refused too, with `fiscal.remedy_class_changed` when its amounts are
 unchanged; a line whose amounts also changed is refused with `fiscal.remedy_amount_changed` first
 (owner, 2026-11-11, "Yes"; a missing tax type counts as IVA).
+
+### Q37-FIX: a correction record changes only the description (owner 2026-11-13, watcher 2026-11-14)
+
+The Fiscal filing page offers a correction record only for a record AEAT refused with code `1100`,
+and the server refuses a new issuer name through it with `fiscal.remedy_issuer_changed` (owner's
+picker answer, 2026-11-13 22:09, "Yes to both", recorded in the campaign's
+`desk/done/20261113-2205-L-q37-fix-remedy.md`). The watcher narrowed the offer to a refusal whose
+AEAT message names `DescripcionOperacion`, and had the server also refuse a changed invoice type,
+recipients, correction type, corrected invoice or replaced invoice with
+`fiscal.remedy_printed_fact_changed` (campaign `questions.md`, 2026-11-14 00:01 and 00:27).
 
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 

@@ -265,6 +265,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
         nodeId: receiverId,
         environment: "preproduction",
         clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant: now }) },
+        requireClockConfirmed: () => {},
         requireWritable: () => {},
         returnSource: (tx) =>
           formerMainForReturn({ db: current.db, node: current.node, ring, nodeId: receiverId }, tx),

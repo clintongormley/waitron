@@ -109,13 +109,28 @@ declare module "@waitron/shared" {
     "fiscal.record_invalid": { fields: string[]; codes: string[] };
     "fiscal.record_already_corrected": { registroId: string };
     "fiscal.remedy_invalid": { registroId: string };
-    "fiscal.remedy_disabled": { kind: string };
+    /** `priorOutcome` is set when the kind is on but its reach to that outcome is not. */
+    "fiscal.remedy_disabled": { kind: string; priorOutcome?: "accepted-with-errors" };
     "fiscal.remedy_request_invalid": Record<string, never>;
     /** A fix re-files the same invoice, so its rates, bases, VAT, total and a corrective's
      * `ImporteRectificacion` stay as filed; an amount error takes a corrective invoice. */
     "fiscal.remedy_amount_changed": {
       registroId: string;
       field: "breakdown" | "taxTotal" | "total" | "correctionAmounts";
+    };
+    /** The issuer's name is printed on the invoice, so changing it takes a corrective invoice. */
+    "fiscal.remedy_issuer_changed": { registroId: string };
+    /** A correction record re-sends the same invoice, so it keeps its invoice type, recipients,
+     * correction type and the invoices it corrects or replaces; changing or removing any of them
+     * takes a corrective invoice. */
+    "fiscal.remedy_printed_fact_changed": {
+      registroId: string;
+      field:
+        | "invoiceType"
+        | "recipients"
+        | "correctionType"
+        | "correctedInvoices"
+        | "substitutedInvoices";
     };
     /** A fix re-files the same invoice, so each breakdown line keeps its filed tax type, regime and
      * taxed, not-subject or exempt class. */

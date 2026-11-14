@@ -1,8 +1,8 @@
 # Fiscal filing
 
 **Fiscal filing** shows how this box's invoice records are being sent to AEAT, the tax agency, and
-which records need a decision. It only reads: nothing on this page sends, retries or changes a
-record.
+which records need a decision. It sends nothing by itself; an administrator can send a correction from
+a case that offers one.
 
 ## Open the page {#open}
 
@@ -35,6 +35,10 @@ Each row is a record that still needs a decision; **Reason** says why. **Held be
 the records waiting behind that one. Open the row's menu and choose **View** to see what the
 record is, where it stands, AEAT's reply in its own words (in Spanish), and **What happens now**.
 The codes and fingerprints your tax adviser may ask for are under **Technical details**.
+
+When AEAT refused a record for its operation description, the case shows AEAT's message beside the
+description: correct it there and choose **Send the correction**. Only an administrator can send
+it; anyone else can sign in as one from the case.
 
 The table lists the newest 200 cases. When there are more, it says how many; export them to see
 every one.

@@ -137,6 +137,7 @@ beforeEach(async () => {
           ...steadyClock,
           now: () => ({ ...steadyClock.now(), instant, offsetMinutes: -300 }),
         },
+        requireClockConfirmed: () => {},
         requireWritable: () => {
           if (!writable) throw new AppError("node.read_only", {});
         },
@@ -488,7 +489,7 @@ it("refuses a superseded version without selecting another record automatically"
       tx,
       input.generation,
       input.managementSessionId,
-      new Set(["record-correction"]),
+      new Set(["record-correction", remedies.ACCEPTED_WITH_ERRORS_CORRECTION]),
       {
         kind: "record-correction",
         caseId: input.request.caseId,

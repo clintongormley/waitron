@@ -122,6 +122,7 @@ function send(value: unknown = body, enabled: RemedyKind[] | null = [KIND], runt
             nodeId: runtimeNode,
             environment,
             clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant: NOW }) },
+            requireClockConfirmed: () => {},
             requireWritable: () => {
               if (!writable) throw new AppError("node.read_only", {});
             },

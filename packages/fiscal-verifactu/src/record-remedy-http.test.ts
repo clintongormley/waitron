@@ -22,6 +22,7 @@ import { recordTakeover } from "../test/takeover-fixture.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
+import { ACCEPTED_WITH_ERRORS_CORRECTION, type RemedyPolicy } from "./record-remedy.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
@@ -104,9 +105,22 @@ beforeEach(async () => {
   });
 });
 
+/** Enables both reaches of a correction record, so the accepted-with-errors cases below can run. */
+const BOTH_OUTCOMES: RemedyPolicy = new Set(["record-correction", ACCEPTED_WITH_ERRORS_CORRECTION]);
+
 function send(
   value: unknown = body,
   enabled = true,
+  runtime = true,
+  returnSource?: () => Promise<SeededNode["nodeId"] | null>,
+) {
+  return sendUnder(enabled ? BOTH_OUTCOMES : new Set(), value, runtime, returnSource);
+}
+
+/** Mounts the route under `policy`; `undefined` leaves the route's own default policy in place. */
+function sendUnder(
+  policy: RemedyPolicy | undefined,
+  value: unknown = body,
   runtime = true,
   returnSource?: () => Promise<SeededNode["nodeId"] | null>,
 ) {
@@ -121,6 +135,7 @@ function send(
             environment,
             clock,
             returnSource,
+            requireClockConfirmed: () => {},
             requireWritable: () => {
               if (!writable) throw new AppError("node.read_only", {});
               if (!tradingReady)
@@ -130,7 +145,7 @@ function send(
         : undefined,
     },
     () => {},
-    new Set(enabled ? ["record-correction"] : []),
+    policy,
   );
   return app.request("/management-api/fiscal-records/remedy", {
     method: "POST",
@@ -194,6 +209,60 @@ async function acceptedDescriptionDecision() {
     };
   });
 }
+
+it("refuses, under the default policy, a correction record for a case AEAT accepted with errors, writing nothing", async () => {
+  const decision = await acceptedDescriptionDecision();
+  const before = await snapshot();
+  const res = await sendUnder(undefined, decision);
+  expect(res.status).toBe(409);
+  expect(await res.json()).toEqual({
+    error: {
+      code: "fiscal.remedy_disabled",
+      params: { kind: "record-correction", priorOutcome: "accepted-with-errors" },
+    },
+  });
+  expect(await snapshot()).toEqual(before);
+  // Control: the same request under a policy that enables accepted-with-errors corrections is written.
+  const enabled = await sendUnder(BOTH_OUTCOMES, decision);
+  expect(enabled.status).toBe(200);
+  expect((await snapshot()).records).toHaveLength(before.records.length + 1);
+});
+
+it("refuses, under the default policy, a replay of an accepted-with-errors correction another policy wrote", async () => {
+  const decision = await acceptedDescriptionDecision();
+  expect((await sendUnder(BOTH_OUTCOMES, decision)).status).toBe(200);
+  const before = await snapshot();
+  const res = await sendUnder(undefined, decision);
+  expect(res.status).toBe(409);
+  expect(await res.json()).toMatchObject({
+    error: { code: "fiscal.remedy_disabled", params: { priorOutcome: "accepted-with-errors" } },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
+it.each([
+  ["no remedy enabled", new Set<never>()],
+  ["the default policy", undefined],
+])(
+  "corrects an accepted-with-errors case on a record of the former main this box took back, under %s",
+  async (_label, policy) => {
+    const decision = await acceptedDescriptionDecision();
+    generationNode = (await seedNode(suite.db, "Current main")).nodeId;
+    const before = await snapshot();
+    const res = await sendUnder(policy, decision, true, async () => node.nodeId);
+    expect(res.status, await res.clone().text()).toBe(200);
+    const result = (await res.json()) as { registroId: string };
+    const after = await snapshot();
+    expect(after.records).toHaveLength(before.records.length + 1);
+    expect(after.records.at(-1)).toMatchObject({
+      id: result.registroId,
+      nodeId: generationNode,
+      correctsRegistroId: decision.registroId,
+      subsanacion: "S",
+      rechazoPrevio: "N",
+    });
+  },
+);
 
 it("requires the shared confirmation before an enabled remedy changes records", async () => {
   await suite.db
@@ -438,6 +507,74 @@ it("appends a description correction through HTTP with the server's clock, insta
     status: "resolved",
     events: [{ id: result.eventId, personId, remedyRegistroId: result.registroId }],
   });
+});
+
+it("names the case by its record when the body sends no caseId", async () => {
+  const saleId = await seedSale(suite.db, node, 2);
+  const other = await withTransaction(suite.db, async (tx) => {
+    const record = await appendToChain(
+      tx,
+      node.nodeId,
+      altaFor(node, saleId, 2, 2, "preproduction"),
+    );
+    await tx
+      .insert(envios)
+      .values({ registroId: record.id, estado: "rechazado", codigoError: "1161" });
+    return openFilingCase(tx, {
+      registroId: record.id,
+      cause: "fiscal.registro_rechazado",
+      evidence: { codigo: 1161, mensaje: null, csv: null },
+      now: NOW,
+    });
+  });
+  const { caseId, ...withoutCase } = body;
+  // Both records have an open case, so a lookup that ignored the record names the wrong one for one of them.
+  const first = await send(withoutCase);
+  expect(first.status).toBe(200);
+  const firstResult = (await first.json()) as { registroId: string; eventId: string };
+  const second = await send({
+    ...withoutCase,
+    registroId: other.registroId,
+    actionKey: "http-other-record",
+  });
+  expect(second.status).toBe(200);
+  const secondResult = (await second.json()) as { registroId: string; eventId: string };
+  expect(await suite.db.select().from(filingCaseEvents)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: firstResult.eventId,
+        caseId,
+        remedyRegistroId: firstResult.registroId,
+      }),
+      expect.objectContaining({
+        id: secondResult.eventId,
+        caseId: other.id,
+        remedyRegistroId: secondResult.registroId,
+      }),
+    ]),
+  );
+  expect(await suite.db.select().from(filingCaseEvents)).toHaveLength(2);
+});
+
+it("refuses a body with no caseId whose record has no case, writing nothing", async () => {
+  const first = await send();
+  const saved = (await first.json()) as { registroId: string };
+  await suite.db
+    .update(envios)
+    .set({ estado: "rechazado", codigoError: "1161" })
+    .where(eq(envios.registroId, saved.registroId));
+  const before = await snapshot();
+  const res = await send({
+    ...body,
+    caseId: undefined,
+    registroId: saved.registroId,
+    actionKey: "http-no-case",
+  });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({
+    error: { code: "fiscal.remedy_invalid", params: { registroId: saved.registroId } },
+  });
+  expect(await snapshot()).toEqual(before);
 });
 
 it("replays an HTTP decision after the clock advances without a second record or case event", async () => {

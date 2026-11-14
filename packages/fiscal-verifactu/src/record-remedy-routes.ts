@@ -11,41 +11,32 @@ import {
   type Logger,
 } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { admitRecordRemedy, REMEDY_KINDS, type RemedyKind } from "./record-remedy.js";
+import {
+  ACCEPTED_WITH_ERRORS_CORRECTION,
+  admitRecordRemedy,
+  REMEDY_KINDS,
+  type RemedyKind,
+  type RemedyPolicy,
+} from "./record-remedy.js";
 import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
 import { applyAbsentOriginalCancellation } from "./record-remedy-absent.js";
 import { releaseHeldCancellation } from "./record-remedy-held.js";
 import { applyCorrectiveInvoiceRequest } from "./record-remedy-corrective-http.js";
 import { releaseRecordBrake } from "./record-remedy-brake.js";
+import { REMEDY_REFUSALS } from "./remedy-refusals.js";
 
-// Legal enablement belongs to server policy; a client request cannot grant it.
-const ENABLED_REMEDIES: ReadonlySet<RemedyKind> = new Set();
+// Legal enablement belongs to server policy; a client request cannot grant it. Without
+// ACCEPTED_WITH_ERRORS_CORRECTION a correction record for a case AEAT accepted with errors is
+// refused; the returned-record allowance below adds it for a former main's records.
+const ENABLED_REMEDIES: RemedyPolicy = new Set(["record-correction"]);
 
-const run = createErrorBoundary(
-  {
-    "management_session.required": 401,
-    "management_session.expired": 401,
-    "person.suspended": 403,
-    "authorization.not_permitted": 403,
-    "fiscal.remedy_disabled": 409,
-    "fiscal.remedy_invalid": 400,
-    "filing_case.action_mismatch": 409,
-    "filing_case.already_resolved": 409,
-    "fiscal.record_already_corrected": 409,
-    "fiscal.chain_handed_over": 409,
-    "node.read_only": 409,
-    "clock.behind_chain": 409,
-    "clock.unusable": 409,
-    "venue.time_zone_not_ready": 409,
-  },
-  "fiscal-remedy.failed",
-);
+const run = createErrorBoundary(REMEDY_REFUSALS, "fiscal-remedy.failed");
 
 export function mountRecordRemedies(
   app: Hono,
   ctx: Pick<ModuleRouteContext, "db" | "recordGeneration">,
   log: Logger,
-  enabledRemedies: ReadonlySet<RemedyKind> = ENABLED_REMEDIES,
+  enabledRemedies: RemedyPolicy = ENABLED_REMEDIES,
 ): void {
   app.post("/management-api/fiscal-records/remedy", (c) =>
     run(c, log, async () => {
@@ -75,11 +66,16 @@ export function mountRecordRemedies(
                 )
               : [];
           if (source && source !== ctx.recordGeneration.nodeId && target?.node_id === source)
-            allowed = new Set<RemedyKind>([...enabledRemedies, "record-correction"]);
+            allowed = new Set([
+              ...enabledRemedies,
+              "record-correction",
+              ACCEPTED_WITH_ERRORS_CORRECTION,
+            ]);
         }
         await admitRecordRemedy(tx, token, kind, allowed);
         if (ctx.recordGeneration === undefined)
           throw new AppError("fiscal.remedy_disabled", { kind });
+        ctx.recordGeneration.requireClockConfirmed();
         await requireFreshManagementSignIn(tx, token);
         if (kind === "record-correction")
           return applyCorrectedRecordFacts(tx, ctx.recordGeneration, token, allowed, body);

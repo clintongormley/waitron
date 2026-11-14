@@ -98,6 +98,7 @@ function remedy(
         nodeId: venue.cfg.nodeId,
         environment,
         clock: venue.clock,
+        requireClockConfirmed: () => {},
         requireWritable: () => {},
       },
     },
@@ -552,7 +553,7 @@ it.each([3000, 1100, null])(
 );
 
 it.each(["production", "preproduction"] as const)(
-  "keeps every built-in remedy disabled with a complete %s host context",
+  "enables only record-correction by default, and refuses a request's claimed enablement, with a complete %s host context",
   async (environment) => {
     const before = await fiscalFacts();
     for (const kind of REMEDY_KINDS) {
@@ -568,11 +569,42 @@ it.each(["production", "preproduction"] as const)(
         undefined,
         environment,
       );
-      expect(response).toMatchObject({
-        status: 409,
-        json: { code: "fiscal.remedy_disabled", params: { kind } },
-      });
+      expect(response).toMatchObject(
+        kind === "record-correction"
+          ? { status: 400, json: { code: "fiscal.remedy_request_invalid", params: {} } }
+          : { status: 409, json: { code: "fiscal.remedy_disabled", params: { kind } } },
+      );
     }
     expect(await fiscalFacts()).toEqual(before);
   },
 );
+
+it("writes a correction record under the default policy for a refused invoice whose description alone changes", async () => {
+  const originalCase = await rejectOriginal();
+  const before = await fiscalFacts();
+  const response = await remedy({
+    kind: "record-correction",
+    registroId: originalId,
+    caseId: originalCase.id,
+    actionKey: "default-policy-correction",
+    reason: "Correct the description AEAT refused",
+    facts: { description: "Corrected restaurant service" },
+  });
+  expect(response).toMatchObject({ status: 200 });
+  const after = await fiscalFacts();
+  expect(after.records.slice(0, before.records.length)).toEqual(before.records);
+  expect(after.records).toHaveLength(before.records.length + 1);
+  const original = before.records.find((row) => row.id === originalId)!;
+  expect(after.records.at(-1)).toMatchObject({
+    id: response.json.registroId,
+    correctsRegistroId: originalId,
+    numSerieFactura: original.numSerieFactura,
+    descripcionOperacion: "Corrected restaurant service",
+    importeTotal: original.importeTotal,
+    subsanacion: "S",
+    rechazoPrevio: "X",
+  });
+  expect(after.cases.find((row) => row.id === originalCase.id)).toMatchObject({
+    status: "resolved",
+  });
+});

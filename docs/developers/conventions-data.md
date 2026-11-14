@@ -4763,8 +4763,9 @@ pending and raises no `payment.bill_settle_failed` for it, also when the gate st
 partway through a pass; it records it at its first pass once the gate opens (`bill-payments-loop.test.ts`). The gate holds while the box files records (`filesRecords()`) and the start
 is `waiting` or a clock set is with the host, each asked at each call, so a box that starts filing while it waits is gated from
 that call. Orders still reach the kitchen (the owner's "Orders still go"): sending one is not among
-the wrapped calls (read, not run). The administrator's record remedies call the chain directly and are outside the gate;
-production enables none of them (plan R7, run).
+the wrapped calls (read, not run). The administrator's record remedies call the chain directly, so their route asks the gate before
+any remedy runs (`packages/fiscal-verifactu/src/record-remedy-routes.ts`, `requireClockConfirmed`;
+`boot.start-clock-gate.test.ts` sends one through boot); production enables only the correction record.
 
 **"Check the time" on a till while the start waits** (`apps/server/src/till-box-clock-api.ts`,
 `apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,
@@ -4810,7 +4811,8 @@ Guards: `apps/server/src/start-clock-check.test.ts`, `apps/server/src/start-cloc
 `apps/server/src/clock-watch.start-up.test.ts` and `apps/server/src/till-box-clock-api.test.ts`,
 weaker than the rule: `clock-unconfirmed-gate.test.ts` calls the seat's four writers and sends the
 money routes it lists through a seat wrapped as boot wraps it, and `boot.start-clock-gate.test.ts`
-sends one cash sale through boot itself; a new money route is covered only once that file lists it.
+sends one cash sale and one correction-record request through boot itself; a new money route is
+covered only once that file lists it.
 
 ### The box sets its own clock
 
@@ -6841,3 +6843,6 @@ rule, guard and pointer.
 > weaker than the rule: the seat's four writers and the money routes
 > `clock-unconfirmed-gate.test.ts` lists, on a seat wrapped as boot wraps it, and one cash sale
 > through boot; the record remedies, off in production, are outside it.
+
+_2026-11-14 (Q37-FIX): production now enables the correction record, for rejected records only; its route asks the start's
+gate, and `boot.start-clock-gate.test.ts` sends one correction-record request through boot._

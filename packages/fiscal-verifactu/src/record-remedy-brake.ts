@@ -6,7 +6,7 @@ import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError } from "@waitron/shared";
 import { releaseBrakeHold } from "./drain.js";
 import { recordCaseEvent } from "./filing-cases.js";
-import { admitRecordRemedy, isInHistory, type RemedyKind } from "./record-remedy.js";
+import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
@@ -14,7 +14,7 @@ export async function releaseRecordBrake(
   tx: Transaction,
   generation: NonNullable<ModuleRouteContext["recordGeneration"]>,
   token: string,
-  enabledRemedies: ReadonlySet<RemedyKind>,
+  enabledRemedies: RemedyPolicy,
   raw: Record<string, unknown>,
 ): Promise<{ registroId: string; eventId: string }> {
   const personId = await admitRecordRemedy(tx, token, "release-brake", enabledRemedies);

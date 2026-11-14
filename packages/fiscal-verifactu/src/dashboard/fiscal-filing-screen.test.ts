@@ -5,11 +5,15 @@ import {
   currentLocale,
   formatIsoMinute,
   setLocale,
+  type DashboardPermissionContinuation,
   type DashboardRequest,
 } from "@waitron/dashboard-kit";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { FiscalFilingScreen } from "./fiscal-filing-screen.js";
-import type { FilingOverviewAnswer } from "../filing-overview-types.js";
+import type { FilingCaseView, FilingOverviewAnswer } from "../filing-overview-types.js";
+import { REMEDY_REFUSALS, type RemedyRefusal } from "../remedy-refusals.js";
+import { REFUSAL_WORDS } from "./put-right-words.js";
+import { t } from "./strings.js";
 import {
   IDENTITY_CHANGE,
   NOT_ISSUED_HERE,
@@ -35,9 +39,13 @@ afterEach(() => {
 
 async function mount(
   request: ReturnType<typeof vi.fn>,
+  permissionContinuation?: DashboardPermissionContinuation,
 ): Promise<{ screen: FiscalFilingScreen; request: ReturnType<typeof vi.fn> }> {
   const entry = VERIFACTU_DASHBOARD.moreScreens!.find((s) => s.screen.id === "fiscal-filing")!;
-  const handle = entry.create({ request: request as unknown as DashboardRequest });
+  const handle = entry.create({
+    request: request as unknown as DashboardRequest,
+    permissionContinuation,
+  });
   const host = document.createElement("div");
   document.body.append(host);
   hosts.push(host);
@@ -521,7 +529,10 @@ describe("vf-fiscal-filing-screen", () => {
     ["alta", "X9", "An invoice record."],
   ] as const)("names the record %s %s in plain words", async (tipoRegistro, tipoFactura, line) => {
     const base = conflictCase("rec-1", "2026-11-03T11:02:00.000Z");
-    const amounts = tipoRegistro === "anulacion" ? { importeTotal: null, cuotaTotal: null } : {};
+    const amounts =
+      tipoRegistro === "anulacion"
+        ? { importeTotal: null, cuotaTotal: null, descripcionOperacion: null }
+        : {};
     const found = { ...base, record: { ...base.record, tipoRegistro, tipoFactura, ...amounts } };
     const { screen } = await mount(vi.fn(async () => overview({ cases: [found] })));
     const details = await openDetails(screen);
@@ -529,17 +540,17 @@ describe("vf-fiscal-filing-screen", () => {
     expect(details.querySelector("[data-test=total]") === null).toBe(tipoRegistro === "anulacion");
   });
 
-  it("says once that Waitron cannot correct the records while there are cases, and not without", async () => {
+  it("says once, while there are cases, to open one to see whether it can be put right", async () => {
     const { screen } = await mount(vi.fn(async () => overview()));
-    expect(screen.shadowRoot!.querySelectorAll("[data-test=no-correction]")).toHaveLength(1);
-    expect(text(screen, "[data-test=cases] [data-test=no-correction]")).toBe(
-      "Waitron cannot correct these records yet.",
+    expect(screen.shadowRoot!.querySelectorAll("[data-test=open-to-put-right]")).toHaveLength(1);
+    expect(text(screen, "[data-test=cases] [data-test=open-to-put-right]")).toBe(
+      "Open a case to see whether Waitron can put it right.",
     );
 
     const { screen: empty } = await mount(
       vi.fn(async () => overview({ cases: [], totalCases: 0 })),
     );
-    expect(empty.shadowRoot!.querySelector("[data-test=no-correction]")).toBeNull();
+    expect(empty.shadowRoot!.querySelector("[data-test=open-to-put-right]")).toBeNull();
   });
 
   it("says the list is the newest 200 when there are more", async () => {
@@ -573,5 +584,418 @@ describe("vf-fiscal-filing-screen", () => {
     expect(names).toEqual([`fiscal-filing-${day}.json`]);
     expect(blobs).toHaveLength(1);
     expect(JSON.parse(await blobs[0]!.text())).toEqual(all);
+  });
+});
+
+const REMEDY = "/management-api/fiscal-records/remedy";
+const NAMES_DESCRIPTION = "Valor o tipo incorrecto del campo: DescripcionOperacion";
+
+function refusedCase(code: number, message: string, tipoFactura = "F2"): FilingCaseView {
+  const base = conflictCase("rec-1", "2026-11-03T11:02:00.000Z");
+  return {
+    ...base,
+    cause: "fiscal.registro_rechazado",
+    evidence: { codigo: code, mensaje: message, csv: null },
+    record: { ...base.record, tipoFactura },
+    submission: { ...base.submission!, codigoError: String(code), mensajeError: message },
+    conflicts: [],
+  };
+}
+
+function continuation(permissions: string[]) {
+  const signIn = vi.fn(async () => "signed-in" as const);
+  const value: DashboardPermissionContinuation = {
+    snapshot: () => ({ accountGeneration: 1, authenticated: true, permissions }),
+    subscribe: () => () => {},
+    signIn,
+  };
+  return { value, signIn };
+}
+
+const refusal = (code: string) => Object.assign(new Error(code), { code });
+
+/** Answers the page's reads with `found`, and the remedy with `remedy`. */
+function server(found: FilingCaseView, remedy: () => Promise<unknown> = async () => ({})) {
+  return vi.fn(async (path: string) =>
+    path === REMEDY ? remedy() : overview({ cases: [found], totalCases: 1 }),
+  );
+}
+
+function field(details: HTMLElement) {
+  return details.querySelector("wt-textarea[name=operationDescription]") as HTMLElement & {
+    value: string;
+    updateComplete: Promise<unknown>;
+  };
+}
+
+async function type(screen: FiscalFilingScreen, details: HTMLElement, value: string) {
+  const area = field(details).shadowRoot!.querySelector("textarea")!;
+  area.value = value;
+  area.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await screen.updateComplete;
+}
+
+function action(details: HTMLElement): HTMLElement & { disabled: boolean } {
+  return details.querySelector("[data-test=put-right]") as HTMLElement & { disabled: boolean };
+}
+
+const remedyCalls = (request: ReturnType<typeof vi.fn>) =>
+  request.mock.calls.filter(([path]) => path === REMEDY);
+
+describe("putting a case right", () => {
+  it("corrects the description beside AEAT's message, and sends it once it changed", async () => {
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION));
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    expect(flat(details.querySelector("[data-test=put-right-heading]"))).toBe(
+      "Correct the description",
+    );
+    expect(field(details).value).toBe("Venta en establecimiento");
+    expect(flat(details.querySelector("[data-test=aeat-message]"))).toContain(NAMES_DESCRIPTION);
+    expect(action(details).disabled).toBe(true);
+    expect(flat(action(details))).toBe("Send the correction");
+
+    await type(screen, details, "Servicio de restauración");
+    expect(action(details).disabled).toBe(false);
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    const [, method, body] = remedyCalls(request)[0]!;
+    expect(method).toBe("POST");
+    expect(body).toEqual({
+      kind: "record-correction",
+      registroId: "rec-1",
+      actionKey: expect.stringMatching(/.+/),
+      reason: expect.stringContaining("1100"),
+      facts: { description: "Servicio de restauración" },
+    });
+    expect(body).not.toHaveProperty("caseId");
+    await vi.waitFor(() => expect(details).toHaveProperty("open", false));
+    await vi.waitFor(() => expect(request.mock.calls.length).toBe(3));
+  });
+
+  it("asks for a description, and Stop sends nothing", async () => {
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION));
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "");
+    action(details).click();
+    await screen.updateComplete;
+    expect((field(details) as unknown as { error: string }).error).toBe(
+      "Write the operation description.",
+    );
+    expect(
+      (details.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+    ).toBe("Correct the field marked above.");
+    (details.querySelector("[data-test=stop]") as HTMLElement).click();
+    await vi.waitFor(() => expect(details).toHaveProperty("open", false));
+    expect(remedyCalls(request)).toHaveLength(0);
+  });
+
+  it("marks a description holding a character AEAT refuses, and sends nothing", async () => {
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION));
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "Servicio\u000Bde restauración");
+    action(details).click();
+    await screen.updateComplete;
+    expect((field(details) as unknown as { error: string }).error).toBe(
+      "Remove the invisible character AEAT does not accept; it may have come with pasted text.",
+    );
+    expect(
+      (details.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+    ).toBe("Correct the field marked above.");
+    expect(remedyCalls(request)).toHaveLength(0);
+  });
+
+  it.each([
+    ["another field", 1100, "Valor o tipo incorrecto del campo: NumSerieFactura", "F2"],
+    ["a future date on a simplified invoice", 1112, "Fecha superior a la actual", "F2"],
+  ])("cannot put right a refusal for %s", async (_name, code, message, tipoFactura) => {
+    const { screen } = await mount(
+      server(refusedCase(code, message, tipoFactura)),
+      continuation(["fiscal.remedy"]).value,
+    );
+    const details = await openDetails(screen);
+    expect(flat(details.querySelector("[data-test=put-right-none]"))).toBe(
+      "Waitron cannot put this one right yet. The case stays open.",
+    );
+    expect(details.querySelector("wt-textarea")).toBeNull();
+    expect(action(details)).toBeNull();
+  });
+
+  it("says a full invoice needs a corrective Waitron cannot issue yet", async () => {
+    const { screen } = await mount(server(refusedCase(1112, "Fecha superior a la actual", "F1")));
+    const details = await openDetails(screen);
+    expect(flat(details.querySelector("[data-test=put-right-none]"))).toBe(
+      "Waitron cannot put this one right yet: a full invoice needs a corrective invoice Waitron cannot issue yet.",
+    );
+  });
+
+  it("offers an administrator's sign-in to someone without the permission", async () => {
+    const { value, signIn } = continuation(["report.export"]);
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION));
+    const { screen } = await mount(request, value);
+    const details = await openDetails(screen);
+    expect(flat(action(details))).toBe("Sign in as an administrator to put this right");
+    expect(action(details).disabled).toBe(false);
+    action(details).click();
+    await vi.waitFor(() => expect(signIn).toHaveBeenCalledOnce());
+    expect(signIn).toHaveBeenCalledWith({
+      permission: "fiscal.remedy",
+      signal: expect.any(AbortSignal),
+    });
+    expect(remedyCalls(request)).toHaveLength(0);
+  });
+
+  it("keeps what was typed when an administrator signs in here, and sends it", async () => {
+    let permissions = ["report.export"];
+    let generation = 1;
+    type Snapshot = ReturnType<DashboardPermissionContinuation["snapshot"]>;
+    const listeners = new Set<(snapshot: Snapshot) => void>();
+    const auth: DashboardPermissionContinuation = {
+      snapshot: () => ({ accountGeneration: generation, authenticated: true, permissions }),
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      signIn: async () => {
+        permissions = ["report.export", "fiscal.remedy"];
+        generation += 1;
+        for (const listener of listeners) listener(auth.snapshot());
+        return "signed-in";
+      },
+    };
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION));
+    const { screen } = await mount(request, auth);
+    const details = await openDetails(screen);
+    await type(screen, details, "Servicio de restauración");
+    action(details).click();
+    await vi.waitFor(() => expect(flat(action(details))).toBe("Send the correction"));
+    expect(field(details).value).toBe("Servicio de restauración");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    expect(remedyCalls(request)[0]![2]).toMatchObject({
+      facts: { description: "Servicio de restauración" },
+    });
+  });
+
+  it("shows a refusal under the actions, keeps Send, and sends the same request again", async () => {
+    const remedy = vi
+      .fn<() => Promise<unknown>>()
+      .mockRejectedValueOnce(refusal("clock.unconfirmed"))
+      .mockResolvedValueOnce({});
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION), remedy);
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "Servicio de restauración");
+    action(details).click();
+    const actions = details.querySelector("wt-form-actions") as HTMLElement & { error: string };
+    await vi.waitFor(() =>
+      expect(actions.error).toBe(
+        "The server is waiting for its time to be confirmed. Confirm it on a till or on the Box status page, then send again.",
+      ),
+    );
+    expect(action(details).disabled).toBe(false);
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(2));
+    expect(remedyCalls(request)[1]![2]).toEqual(remedyCalls(request)[0]![2]);
+  });
+
+  it.each([
+    "filing_case.already_resolved",
+    "fiscal.record_already_corrected",
+    "filing_case.action_mismatch",
+    "fiscal.remedy_invalid",
+    "filing_case.not_found",
+  ])(
+    "reads the page again and closes the case when the case changed meanwhile: %s",
+    async (code) => {
+      const request = server(refusedCase(1100, NAMES_DESCRIPTION), async () => {
+        throw refusal(code);
+      });
+      const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+      const details = await openDetails(screen);
+      await type(screen, details, "Servicio de restauración");
+      action(details).click();
+      await vi.waitFor(() => expect(request.mock.calls.length).toBe(3));
+      expect(request.mock.calls[2]![0]).toBe("/management-api/fiscal-filing");
+      await vi.waitFor(() => expect(details).toHaveProperty("open", false));
+      await screen.updateComplete;
+      expect(text(screen, "[data-test=case-changed]")).toBe(
+        "This case was already put right, or it changed; nothing more was sent.",
+      );
+    },
+  );
+
+  it("reads the page again when a send succeeds after its case was closed", async () => {
+    let answer!: (value: unknown) => void;
+    const request = server(
+      refusedCase(1100, NAMES_DESCRIPTION),
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "Servicio de restauración");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    const closed = new Promise((resolve) =>
+      details.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await (
+      details as HTMLElement & { requestClose(reason: string): Promise<boolean> }
+    ).requestClose("cancel");
+    await closed;
+    await screen.updateComplete;
+    expect(request.mock.calls.length).toBe(2);
+    answer({});
+    await vi.waitFor(() => expect(request.mock.calls.length).toBe(3));
+    expect(request.mock.calls[2]![0]).toBe("/management-api/fiscal-filing");
+  });
+
+  /** Closes the case dialog with the dialog's own cancel, and waits until it has closed. */
+  async function closeDialog(screen: FiscalFilingScreen, details: HTMLElement) {
+    const closed = new Promise((resolve) =>
+      details.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await (
+      details as HTMLElement & { requestClose(reason: string): Promise<boolean> }
+    ).requestClose("cancel");
+    await closed;
+    await screen.updateComplete;
+  }
+
+  it("keeps a reopened case's unsent description when an earlier opening's send succeeds", async () => {
+    let finish!: (value: unknown) => void;
+    const request = server(
+      refusedCase(1100, NAMES_DESCRIPTION),
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "First description");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    await closeDialog(screen, details);
+    const reopened = await openDetails(screen);
+    await type(screen, reopened, "Second unsent description");
+    finish({});
+    await vi.waitFor(() => expect(request.mock.calls.length).toBe(3));
+    await screen.updateComplete;
+    expect(reopened).toHaveProperty("open", true);
+    expect(field(reopened).value).toBe("Second unsent description");
+  });
+
+  it("keeps a reopened case's own send pending when an earlier opening's send is refused", async () => {
+    let refuseFirst!: (error: Error) => void;
+    let finishSecond!: (value: unknown) => void;
+    let sends = 0;
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION), () =>
+      ++sends === 1
+        ? new Promise((_resolve, reject) => (refuseFirst = reject))
+        : new Promise((resolve) => (finishSecond = resolve)),
+    );
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "First description");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    await closeDialog(screen, details);
+    const reopened = await openDetails(screen);
+    await type(screen, reopened, "Second description");
+    action(reopened).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(2));
+    expect(action(reopened).disabled).toBe(true);
+    refuseFirst(refusal("clock.unconfirmed"));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await screen.updateComplete;
+    expect(action(reopened).disabled).toBe(true);
+    const actions = reopened.querySelector("wt-form-actions") as HTMLElement & { error: string };
+    expect(actions.error).toBe("");
+    finishSecond({});
+    await vi.waitFor(() => expect(reopened).toHaveProperty("open", false));
+  });
+
+  it("keeps a reopened case open when an earlier opening's send finds the case changed", async () => {
+    let refuseFirst!: (error: Error) => void;
+    let finishSecond!: (value: unknown) => void;
+    let sends = 0;
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION), () =>
+      ++sends === 1
+        ? new Promise((_resolve, reject) => (refuseFirst = reject))
+        : new Promise((resolve) => (finishSecond = resolve)),
+    );
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "First description");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    await closeDialog(screen, details);
+    const reopened = await openDetails(screen);
+    await type(screen, reopened, "Second description");
+    action(reopened).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(2));
+    expect(request.mock.calls.length).toBe(3);
+    refuseFirst(refusal("filing_case.action_mismatch"));
+    await vi.waitFor(() => expect(request.mock.calls.length).toBe(4));
+    expect(request.mock.calls[3]![0]).toBe("/management-api/fiscal-filing");
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await screen.updateComplete;
+    expect(reopened).toHaveProperty("open", true);
+    expect(field(reopened).value).toBe("Second description");
+    expect(action(reopened).disabled).toBe(true);
+    expect(screen.shadowRoot!.querySelector("[data-test=case-changed]")).toBeNull();
+    finishSecond({});
+    await vi.waitFor(() => expect(reopened).toHaveProperty("open", false));
+    expect(screen.shadowRoot!.querySelector("[data-test=case-changed]")).toBeNull();
+  });
+
+  it("keeps the administrator sign-in available after the sign-in throws", async () => {
+    const auth = continuation(["report.export"]);
+    auth.signIn.mockImplementation(() => {
+      throw new Error("offline");
+    });
+    const { screen } = await mount(server(refusedCase(1100, NAMES_DESCRIPTION)), auth.value);
+    const details = await openDetails(screen);
+    action(details).click();
+    await screen.updateComplete;
+    expect(auth.signIn).toHaveBeenCalledOnce();
+    expect(action(details).disabled).toBe(false);
+    expect(action(details)).toHaveProperty("loading", false);
+  });
+
+  it("counts the description in characters, as the library does, not in UTF-16 units", async () => {
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION));
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    const area = field(details).shadowRoot!.querySelector("textarea")!;
+    expect(area.hasAttribute("maxlength")).toBe(false);
+    await type(screen, details, "🍷".repeat(501));
+    action(details).click();
+    await screen.updateComplete;
+    expect((field(details) as unknown as { error: string }).error).toBe(
+      "Keep the description to 500 characters.",
+    );
+    expect(remedyCalls(request)).toHaveLength(0);
+
+    const exactly = "🍷".repeat(500);
+    expect(exactly.length).toBe(1000);
+    await type(screen, details, exactly);
+    expect((field(details) as unknown as { error: string }).error).toBe("");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    expect(remedyCalls(request)[0]![2]).toMatchObject({ facts: { description: exactly } });
+  });
+
+  it("words every refusal the remedy route can give, in English and in Spanish", () => {
+    for (const code of Object.keys(REMEDY_REFUSALS) as RemedyRefusal[]) {
+      expect(REFUSAL_WORDS[code], code).toBeDefined();
+      setLocale("en");
+      const english = t(REFUSAL_WORDS[code]);
+      setLocale("es");
+      const spanish = t(REFUSAL_WORDS[code]);
+      expect(english, code).toMatch(/\.$/);
+      expect(spanish, code).toMatch(/\.$/);
+      expect(spanish, code).not.toBe(english);
+    }
   });
 });

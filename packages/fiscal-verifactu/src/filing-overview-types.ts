@@ -77,6 +77,8 @@ export interface FilingCaseView {
     tipoFactura: string | null;
     importeTotal: string | null;
     cuotaTotal: string | null;
+    /** Null on a cancellation, which carries no description. */
+    descripcionOperacion: string | null;
     huella: string;
     anteriorHuella: string | null;
     fechaHoraHusoGenRegistro: string;

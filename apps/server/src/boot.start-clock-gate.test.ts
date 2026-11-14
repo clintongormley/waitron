@@ -5,8 +5,12 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { startManagementSession } from "@waitron/identity";
 import { emptyDrainResult } from "@waitron/fiscal";
+import { remedyRequestBody } from "@waitron/fiscal-verifactu/test/remedy-request.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import type { BoxHostClient } from "./box-host-client.js";
@@ -16,6 +20,7 @@ import { provisionBillVenue, fiscalRecordCount, type BillVenue } from "./testing
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePorts } from "./testing/free-ports.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { listener } from "./testing/ephemeral-listener.js";
 import { clockServiceAnswer, synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -277,5 +282,53 @@ describe("the start clock gate as boot wires it", () => {
     expect(after.status, after.body).toBe(200);
     expect(fiscalRecordCount(venue, after.workingOrderId)).toBe(1);
     expect(fiscalRecordCount(venue)).toBe(records + 1);
+  });
+
+  it("refuses a record correction with 409 clock.unconfirmed while the start waits, and writes no record", async () => {
+    const records = fiscalRecordCount(venue);
+    const [admin] = await seedPersons(suite.db, {
+      displayName: "Remedy administrator",
+      role: "admin",
+      status: "active",
+    });
+    const session = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId: admin!.id }),
+    );
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
+    const correct = async () => {
+      const origin = `http://127.0.0.1:${httpPort()}`;
+      const answer = await fetch(`${origin}/management-api/fiscal-records/remedy`, {
+        method: "POST",
+        headers: {
+          origin,
+          "content-type": "application/json",
+          cookie: `waitron_management_session=${session.token}`,
+        },
+        body: JSON.stringify(
+          remedyRequestBody({
+            kind: "record-correction",
+            caseId: randomUUID(),
+            recordId: randomUUID(),
+            actionKey: "correct-facts",
+            reason: "Correct the stored record facts",
+            facts: { description: "Corrected restaurant service" },
+          }),
+        ),
+      });
+      return { status: answer.status, body: await answer.text() };
+    };
+
+    const { waiting, confirmed } = await serving(unsynchronisedHost().host, async () => {
+      const waiting = await correct();
+      built.start!.confirm("by_devices", {});
+      return { waiting, confirmed: await correct() };
+    });
+
+    expect(waiting.status, waiting.body).toBe(409);
+    expect(JSON.parse(waiting.body)).toEqual({ error: { code: "clock.unconfirmed", params: {} } });
+    // Control: once confirmed, the same request reaches the remedy, which finds no such case.
+    expect(confirmed.status, confirmed.body).toBe(400);
+    expect(JSON.parse(confirmed.body)).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+    expect(fiscalRecordCount(venue)).toBe(records);
   });
 });

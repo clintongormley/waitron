@@ -1,8 +1,8 @@
 # Remisión a la AEAT
 
 **Remisión a la AEAT** muestra cómo se envían a la AEAT, la agencia tributaria, los registros de
-facturación de este servidor y cuáles necesitan una decisión. Solo lee: nada en esta página envía,
-reintenta ni cambia un registro.
+facturación de este servidor y cuáles necesitan una decisión. No envía nada por sí sola; un
+administrador puede enviar una subsanación desde un caso que la ofrezca.
 
 ## Abre la página {#open}
 
@@ -38,6 +38,11 @@ detrás** cuenta los registros que esperan detrás de él. Abre el menú de la f
 para ver qué es el registro, en qué punto está, la respuesta de la AEAT con sus propias palabras y
 **Qué pasa ahora**. Los códigos y las huellas que puede pedirte tu asesor fiscal están en
 **Detalles técnicos**.
+
+Cuando la AEAT rechazó un registro por su descripción de la operación, el caso muestra el mensaje de
+la AEAT junto a la descripción: corrígela ahí y elige **Enviar la subsanación**. Solo un
+administrador puede enviarla; cualquier otra persona puede iniciar sesión como administrador desde
+el caso.
 
 La tabla muestra los 200 casos más recientes. Si hay más, indica cuántos; expórtalos para verlos
 todos.
