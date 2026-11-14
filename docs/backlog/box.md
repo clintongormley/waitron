@@ -1484,11 +1484,8 @@ once released. Belongs with A1016.
 
 ## Bundle: Backups screen leftovers
 
-9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **At 390 px wide, the configuration export's password label overlaps its Show password button.**
-  Found while looking at the Backups screen for A1187 PR D. The markup came with #296 and is
-  believed to predate that branch; nobody photographed it before.
 - **Backups says "try again" after a saved-settings failure it has no words for.**
   That names nothing to try, beside a "What the box recorded" panel saying Read again turns nothing on.
   [Detail](box.md#backups-says-try-again-after-a-saved-settings-failure-it-has-no-words-for).
@@ -1507,9 +1504,6 @@ once released. Belongs with A1016.
 - **Loose ends left by SQLite slice 2 Task 2a (#557, a recovery key that does not need an archive
   destination).**
   [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-2a-557-a-recovery-key-that-does-not-need-an-archive-destination)
-- **A blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }`** — left open by
-  A178 (#1010 to #1019), seen while building, not changed: the same parsing is on `main` before
-  A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not checked.
 
 ## Bundle: Box status rows
 
