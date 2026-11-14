@@ -392,6 +392,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   their 128 MiB budget; Start again's deletion fingerprints and Cloud snapshot creation also read
   whole database files. Replace these buffers with file-based processing while preserving their
   exact-content checks. Ordinary first-setup admission no longer uses these snapshots.
+  Setup backup uploads also need a streamed path: the measured 30-day backup exceeds their budget.
   [Detail](backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
 
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**

@@ -404,6 +404,13 @@ whole-file reads are separate work:
   archives within their 256 MiB upload limit (`setup-api.ts`, `setup-recovery-preparation-api.ts`).
   These are transfer limits and buffers, not ordinary-start database admission.
 
+Measured on 14 November 2026 with bench revision `95e668a747`: 30 days at 250 bills
+a day, seed 1, produced 1,061,224 rows and a 1,268,463,901-byte encrypted backup
+(1,209.70 MiB). Scaling that artifact by 12 for the bench's 360-day year gives
+15,221,566,812 bytes (14,516.42 MiB); the year figure is a linear estimate.
+The backup used synthetic identity files and empty media folders. Even the measured month
+exceeds the setup upload limit of 256 MiB. The streamed-upload plan still needs watcher clearance.
+
 An oversized committed attempt's Finish request now passes the readable-database gate and refuses
 later with `setup.not_ready` (HTTP 503); the old size classification refused
 `setup.attempt_uncertain` (409). The whole-branch review ran both versions and found no publication
