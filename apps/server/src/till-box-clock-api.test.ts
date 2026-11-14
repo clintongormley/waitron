@@ -594,6 +594,57 @@ it("sets a waiting box whose clock reads before 28-10-2024 at reason start, and 
   expect(start.status).toBe("by_person");
 });
 
+it("refuses a keep when the box's clock moved between its challenge and its confirm", async () => {
+  const { box, start } = await waitingBox();
+  const asked = await ask(box, staffCookie);
+  box.setClock(boxTime(box) + 2 * DAY);
+  await expectRefused(
+    box,
+    confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box),
+      keep: true,
+    }),
+    409,
+    setRefused("stale"),
+  );
+  expect(start.status).toBe("waiting");
+});
+
+it("keeps the box's time when its clock ran with its steady clock between challenge and confirm", async () => {
+  const { box, start } = await waitingBox();
+  const asked = await ask(box, staffCookie);
+  box.setClock(boxTime(box) + 3_000);
+  box.setSteady(3_000);
+  const answer = await confirmWith(box, staffCookie, {
+    challengeId: asked.json.challengeId,
+    deviceAt: boxTime(box),
+    keep: true,
+  });
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(start.status).toBe("by_person");
+});
+
+it.each([
+  [1_000, 200, "by_person"],
+  [1_001, 409, "waiting"],
+] as const)(
+  "after a step of %i ms between challenge and keep, answers %i and the start is %s",
+  async (stepMs, status, after) => {
+    const { box, start } = await waitingBox();
+    const asked = await ask(box, staffCookie);
+    box.setClock(boxTime(box) + stepMs);
+    const answer = await confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box),
+      keep: true,
+    });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(status);
+    if (status === 409) expect(answer.json).toEqual(setRefused("stale"));
+    expect(start.status).toBe(after);
+  },
+);
+
 it("keeps the box's time from a till whose own clock reads 1970", async () => {
   const { box, start } = await waitingBox();
   const asked = await ask(box, staffCookie);

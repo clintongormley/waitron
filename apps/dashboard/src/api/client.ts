@@ -1953,6 +1953,8 @@ export interface BoxHealth {
     authority:
       { state: "unknown" } | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
     sync: { synced: boolean; source: "timedatectl" | "unavailable"; warn: boolean };
+    /** Present only while the box files records and its start waits for its time. */
+    waiting?: { boxAt: string; agreed: number; hostAnswers: boolean };
   };
   printers: { id: string; name: string }[];
   /** Null when the payments module is off. */
@@ -1982,7 +1984,8 @@ export interface ClockChallengeView {
   boxAt: string;
 }
 
-/** LOCAL copy of `POST /api/box/clock-set`'s answer (`apps/server/src/box-health-api.ts`). */
+/** LOCAL copy of the answer of `POST /api/box/clock-set` and `POST /api/box/clock-confirm`
+ * (`apps/server/src/box-health-api.ts`). */
 export interface ClockSetView {
   confirmationId: string | null;
   stepMs: number;
@@ -4918,6 +4921,11 @@ export class DashboardApi {
    * milliseconds since the epoch. */
   clockSet(input: { challengeId: string; deviceAt: number }): Promise<ClockSetView> {
     return this.#request<ClockSetView>("/api/box/clock-set", "POST", input);
+  }
+
+  /** Confirms a waiting start's time as the box shows it. */
+  clockConfirm(input: { challengeId: string; asShown: true }): Promise<ClockSetView> {
+    return this.#request<ClockSetView>("/api/box/clock-confirm", "POST", input);
   }
 
   async restartBox(): Promise<void> {

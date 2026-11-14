@@ -691,3 +691,42 @@ describe("spare copy row", () => {
     expect(copy.line).toBe("Update pending");
   });
 });
+
+describe("the Clock row while the start waits for its time", () => {
+  const BOX_AT = "2026-10-22T19:45:00.000Z";
+  const UNCONFIRMED = alert("clock.unconfirmed", "box", {
+    severity: "error",
+    params: { agreed: 1, hostSilent: false },
+  });
+  const waitingHealth = (hostAnswers: boolean) =>
+    quietHealth({
+      clock: { ...quietHealth().clock, waiting: { boxAt: BOX_AT, agreed: 1, hostAnswers } },
+    });
+
+  it("stops the row with what it waits for and the box's date and time, in place of the bell's sentence", () => {
+    const { rows, other } = boxStatusRows(waitingHealth(true), [UNCONFIRMED]);
+    expect(row(rows, "clock")).toMatchObject({
+      state: "stopped",
+      line: `Waiting for devices to connect and agree with the box's time (1 of 2 so far): no payments are taken. The box's clock says ${formatIsoMinute(BOX_AT)}.`,
+      alerts: [],
+    });
+    expect(other).toBe(0);
+  });
+
+  it("tells the Sales row that payments wait, pointing at the Clock row", () => {
+    expect(row(boxStatusRows(waitingHealth(true), []).rows, "sales")).toMatchObject({
+      state: "stopped",
+      line: "Payments wait until the box's time is confirmed: see the Clock row",
+    });
+  });
+
+  it("leaves the bell's sentence off the Clock row once the wait has ended", () => {
+    const { rows, other } = boxStatusRows(quietHealth(), [UNCONFIRMED]);
+    expect(row(rows, "clock")).toMatchObject({
+      state: "ok",
+      line: t("box_status.clock.ok"),
+      alerts: [],
+    });
+    expect(other).toBe(0);
+  });
+});

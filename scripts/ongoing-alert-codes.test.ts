@@ -17,6 +17,7 @@ const ONGOING_CODE_SOURCES = [
   "packages/fiscal-verifactu/src/clock-behind-alerts.ts",
   "apps/server/src/clock-disagrees-alert.ts",
   "apps/server/src/clock-sync-alert.ts",
+  "apps/server/src/clock-unconfirmed-alert.ts",
 ];
 
 const CODE_RE = /code: "([a-z0-9_]+\.[a-z0-9_]+)"/g;

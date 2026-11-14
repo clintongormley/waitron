@@ -31,11 +31,12 @@ Each part has a row with a coloured dot:
 
 - **Green** means the part is fine.
 - **Amber** means it needs attention, but everything still works.
-- **Red** means something can't be saved: the disk is full, or the clock is too wrong to record a
-  sale. Each of these also turns **Sales** red.
+- **Red** means something can't be saved or paid: the disk is full, the clock is too wrong to
+  record a sale, or payments wait for the box's time to be confirmed. Each of these also turns
+  **Sales** red.
 
 A row shows the alerts the bell shows for that part, in the bell's words. The **Bucket copy**,
-**Printers** and **Card readers** rows have a **Go to …** button, such as **Go to Backups**, that
+**Spare box**, **Printers** and **Card readers** rows have a **Go to …** button, such as **Go to Backups**, that
 opens their own page when you can open it, and an alert that has a page of its own adds a button for
 that page too. Alerts that belong to none of the rows are counted below the rows, beside **See all
 alerts**.
@@ -214,8 +215,8 @@ an administrator sets it with **Check with this device's time**, or, during
 [start-up](box-status.md#clock-at-start), a staff member from a till.
 
 The **Clock** row then shows administrators a **Check with this device's time** button.
-Anyone else who can open this page sees **Only an administrator can check the box's clock with
-this device's time. Signing in as one signs you out here first.** and a **Sign in as an
+Anyone else who can open this page sees **Only an administrator can confirm or correct the box's
+date and time. Signing in as one signs you out here first.** and a **Sign in as an
 administrator** button. The button opens a dialog that shows both times: **The box's clock says …
 This device says …**
 
@@ -226,7 +227,10 @@ This device says …**
 - Otherwise it says **The box could not show that its clock is within a minute of your device's.
   Check that your device's time is right; if it is, connect the box to the internet so it can
   correct its clock.** and offers only **Close**. Because of the time the answer takes, two times a
-  little under a minute apart can still get this message.
+  little under a minute apart can still get this message. While payments
+  [wait for the box's time](box-status.md#clock-waiting) and the part of the box that reads its
+  internet time is not answering, it says instead that the box's time cannot be corrected until that
+  part answers.
 
 Setting the clock can sign you out of the dashboard. When the clock moves by more than half an
 hour, either way, every dashboard session that was in use just before ends, so the dialog adds
@@ -281,6 +285,26 @@ Two tills or handhelds that agree with the box confirm its time after a start by
 
 Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, once
 the internet has confirmed the box's time, a staff member can no longer set the clock from a till.
+
+## When payments wait for the box's time {#clock-waiting}
+
+After a start, the box takes no payment until its time is confirmed. Orders still reach the kitchen.
+The **Clock** row then says **Waiting for devices to connect and agree with the box's time**, with
+the box's date and time, and the bell has an alert saying so.
+
+The box confirms its time by itself as soon as it reaches the internet, or once two tills or
+handhelds that are switched on and connected agree with its clock, even at the sign-in screen.
+
+An administrator can confirm it sooner on this page:
+
+- If the date and time the **Clock** row shows are right, press **The date and time are right**.
+- Or press **Check with this device's time**. When your device is within a minute of the box, that
+  confirms the box's time. When they are further apart and the box can set its clock, the dialog
+  offers **Use this time**, which sets the box's clock from your device and confirms it.
+
+While the part of the box that reads its internet time is not answering, the **Clock** row says so,
+and the box waits like this at every start. Its time can then be confirmed, but not corrected, until
+that part answers.
 
 ## The box's time service {#clock-service}
 

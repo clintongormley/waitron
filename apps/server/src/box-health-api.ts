@@ -11,13 +11,19 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import { AppError, diskFullIn } from "@waitron/shared";
-import type { ClockSetRefusal, clockCorrection } from "./clock-correction.js";
+import {
+  wallMovedAgainstSteady,
+  type ClockSetRefusal,
+  type clockCorrection,
+} from "./clock-correction.js";
 import { displayNameOf, type BoxHealth } from "./box-health.js";
 import { clockChallenges } from "./clock-challenges.js";
+import { clockUnusableAt } from "./clock-unusable.js";
 import "./errors.js";
 import type { FreedSpace } from "./free-space-now.js";
 import type { Logger } from "./logger.js";
 import { requestFromBox } from "./request-from-box.js";
+import type { ChainHeads, StartClockState } from "./start-clock-check.js";
 import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 
 export interface BoxHealthApiDeps {
@@ -26,8 +32,8 @@ export interface BoxHealthApiDeps {
   freeSpace: (personId: string) => Promise<FreedSpace>;
   /** Stops this server process; Docker starts it again. */
   restart: () => void;
-  /** With a correction and a seat that records a step, mounts `POST /api/box/clock-challenge` and
-   * `POST /api/box/clock-set`. */
+  /** With a correction and a seat that records a step, mounts `POST /api/box/clock-challenge`,
+   * `POST /api/box/clock-set` and `POST /api/box/clock-confirm`. */
   clockSet: {
     backend: FiscalBackend;
     clock: TrustedClock;
@@ -35,7 +41,12 @@ export interface BoxHealthApiDeps {
     steady: () => number;
     requestFromBox?: (c: Context) => boolean;
     devMode: boolean;
-    correction?: Pick<ReturnType<typeof clockCorrection>, "set" | "steps">;
+    correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "set" | "steps">;
+    /** The start's clock check; without it no confirmation is admitted. */
+    start?: {
+      state: Pick<StartClockState, "status" | "confirm">;
+      heads(tx: Transaction): Promise<ChainHeads>;
+    };
   };
 }
 
@@ -93,6 +104,19 @@ export function clockSetBody(body: unknown): { challengeId: string; deviceAt: nu
   )
     throw new AppError("management.request_invalid", { field: "deviceAt" });
   return { challengeId, deviceAt };
+}
+
+/** `{ challengeId, asShown: true }`: confirm the box's time as it stands. */
+function clockConfirmBody(body: unknown): { challengeId: string } {
+  const fields =
+    typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as { challengeId?: unknown; asShown?: unknown })
+      : {};
+  const { challengeId, asShown } = fields;
+  if (typeof challengeId !== "string" || challengeId === "")
+    throw new AppError("management.request_invalid", { field: "challengeId" });
+  if (asShown !== true) throw new AppError("management.request_invalid", { field: "asShown" });
+  return { challengeId };
 }
 
 export async function requiredNameOf(tx: Transaction, personId: string): Promise<string> {
@@ -170,8 +194,9 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       // The device read its clock at the round trip's midpoint, give or take half of it.
       const halfMs = challenge.elapsedMs / 2;
       const boxAtMs = reading.instant.getTime() - halfMs;
+      const startWaits = clockSet.start?.state.status === "waiting";
       const answer = await correction.set({
-        reason: "unusable",
+        reason: startWaits ? "start" : "unusable",
         source: "admin",
         offsetMs: Math.round(deviceAt - boxAtMs),
         measuredAt: { wallMs: boxAtMs, monoMs: steadyMs - halfMs },
@@ -196,6 +221,58 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
           stepMs: answer.stepMs,
           confirmedAt: answer.confirmedAt,
         },
+        200,
+      );
+    }),
+  );
+  const confirmRun = createErrorBoundary(STATUS, "box-clock-confirm.failed");
+  app.post("/api/box/clock-confirm", (c) =>
+    confirmRun(c, log, async () => {
+      refuseOnTheBox(c);
+      const sessionId = requireManagementSession(c);
+      const { authorizedBy } = await withTransaction(deps.db, (tx) =>
+        authorizeAdmin(tx, sessionId),
+      );
+      const { challengeId } = clockConfirmBody(await readRawJsonBody<unknown>(c));
+      const stepsSeen = correction.steps();
+      const reading = clockSet.clock.now();
+      const steadyMs = clockSet.steady();
+      const challenge = challenges.take(sessionId, challengeId);
+      if (challenge === null) throw new AppError("clock.check_expired", {});
+      const refuse = (reason: "stale" | "stopped" | "not_stopped") =>
+        new AppError("clock.set_refused", { reason });
+      const start = clockSet.start;
+      // It sets nothing, so it writes no row (plan A1420 D3). Taken around the whole transaction,
+      // never inside it: a set in the turn waits for the write lock a transaction holds.
+      const confirmed = await correction.inTurn(() =>
+        withTransaction(deps.db, async (tx) => {
+          const now = clockSet.clock.now();
+          const nowReading = { wallMs: now.instant.getTime(), monoMs: clockSet.steady() };
+          if (
+            correction.steps() !== stepsSeen ||
+            wallMovedAgainstSteady(
+              { wallMs: reading.instant.getTime(), monoMs: steadyMs },
+              nowReading,
+            ) ||
+            // What was confirmed is the time the challenge showed.
+            wallMovedAgainstSteady(challenge.issuedAt, nowReading)
+          )
+            throw refuse("stale");
+          if (clockUnusableAt(backend, now)) throw refuse("stopped");
+          if (start === undefined || start.state.status !== "waiting") throw refuse("not_stopped");
+          const heads = await start.heads(tx);
+          start.state.confirm("by_person", heads);
+          return { now, heads };
+        }),
+      );
+      log("info", "clock_start.confirmed", {
+        source: "admin",
+        person: authorizedBy,
+        boxAt: confirmed.now.instant.toISOString(),
+        heads: confirmed.heads,
+      });
+      return c.json(
+        { confirmationId: null, stepMs: 0, confirmedAt: confirmed.now.instant.toISOString() },
         200,
       );
     }),

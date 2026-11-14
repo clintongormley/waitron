@@ -4366,7 +4366,7 @@ How it moves (plan D3):
   equipment read, every 15 seconds while it shows the PIN screen or someone is signed in on it, and
   the store keeps a reading for five minutes (plan R11). Tablets at the PIN screen count: two
   switched on and connected confirm the box's time with nobody signed in (PR 1c).
-- **A person on a till** (below) confirms `by_person`.
+- **A person on a till, or an administrator on Box status** (below), confirms `by_person`.
 - **Back to waiting.** A clock set that moved the clock by more than a second but could not be
   verified (the host gave no successful answer, or the clock did not land within 2 seconds of the target) sends a start that is
   `by_devices` or `by_person` back to `waiting` and logs `clock_start.step_unverified`, whatever the
@@ -4413,7 +4413,12 @@ till's profile and the person are still checked. The confirm then takes one of t
 - `keep: true` ("The server") confirms the box's time as it stands, whatever the
   till reads: no host call, no row, state `by_person`, one `clock_start.confirmed` line with
   source `staff` or `admin`. While the clock reads before 28-10-2024 it is refused
-  `clock.set_refused` with reason `stopped`, writing nothing;
+  `clock.set_refused` with reason `stopped`, writing nothing; it is refused `stale` when a set
+  landed after the confirm arrived, or the box's clock moved more than a second against its
+  steady clock since the challenge was issued. The till's dialog sends no keep when the fresh
+  challenge's time is more than a minute (the dialog shows minutes) from the time it showed,
+  carried forward on the till's steady clock: it shows its own stale refusal instead
+  (`apps/till/src/widgets/box-time-dialog.ts`);
 - a till within a minute confirms the same way ("Yes"). On a clock reading before 28-10-2024 a
   "Yes" is refused, leaving the start waiting: the till then reads before that date too, so the
   confirm refuses it `target_invalid` (run, in `till-box-clock-api.test.ts`);
@@ -4426,6 +4431,21 @@ Once the start is `by_devices` or `by_person`, the challenge is refused `not_sto
 clock reads before 28-10-2024, and staff are admitted whatever the start-up window says until the
 start is `by_internet`. `keep: true` is refused `stopped` while the clock reads before 28-10-2024,
 and `not_stopped` once the start is `by_internet`.
+
+**"The date and time are right" on Box status while the start waits**
+(`apps/server/src/box-health-api.ts`). An administrator (`system.box_admin`) asks
+`POST /api/box/clock-challenge`, then sends `POST /api/box/clock-confirm` with
+`{ challengeId, asShown: true }`; both are refused `same_machine` from the box's own screen. It
+confirms the box's time as it stands: no host call, no row, state `by_person`, one
+`clock_start.confirmed` line with source `admin`. It is refused `clock.set_refused` with reason
+`stale` when a set landed after the confirm arrived, or the box's clock moved more than a second
+against its steady clock while it was handled or since the challenge was issued; `stopped` while
+the clock reads before 28-10-2024; and `not_stopped` when the start is not waiting. The page
+(`apps/dashboard/src/screens/box-status-screen.ts`) sends no confirm when the fresh challenge's
+time is more than a minute (the Clock row shows minutes) from the row's, carried forward on the
+device's steady clock since the read that drew it; it says the time changed and reads the box
+again.
+
 A box whose host service does not answer waits at every start and cannot be set through it, so
 devices or a person confirm its time as it stands (plan D12).
 
@@ -4442,7 +4462,7 @@ covered only once that file lists it.
 Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
 The app's container cannot set the clock, so a small root program on the box's own system, outside
 the container — the **host service** — sets it when the server asks. The box sets its clock
-inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time, while a start waits for its time to be
+inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time or an administrator's own device, while a start waits for its time to be
 confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), and from the setup,
 restore and handover pages' clock step. It opens no stop of its own.
 
@@ -4496,8 +4516,8 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
 **Who may set it** (`apps/server/src/clock-correction.ts`, one correction per server, built in
 `boot.ts`; setup mode builds its own, in the last item):
 
-- an administrator, from their own device, while the clock reads before 28-10-2024:
-  `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `system.box_admin`), after
+- an administrator, from their own device, while the clock reads before 28-10-2024 or the start
+  waits for its time: `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `system.box_admin`), after
   `POST /api/box/clock-challenge`;
 - on a till, `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
   (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, while

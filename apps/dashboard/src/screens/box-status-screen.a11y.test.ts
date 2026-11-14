@@ -239,6 +239,97 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       expect(el.shadowRoot!.querySelector(`[data-test=${drawn}]`)).not.toBeNull();
       await expectNoA11yViolations(host);
     });
+
+    it.each([
+      ["nothing pressed", null, "clock-check"],
+      [
+        "a refused confirmation",
+        { code: "clock.set_refused", params: { reason: "not_stopped" } },
+        "clock-confirm-refused",
+      ],
+    ] as const)(
+      "renders a start waiting for its time accessibly with %s",
+      async (_name, refusal, drawn) => {
+        const waiting = health({
+          clock: {
+            ...health().clock,
+            sync: { synced: false, source: "timedatectl", warn: true },
+            waiting: { boxAt: "2026-10-22T18:10:00.000Z", agreed: 1, hostAnswers: true },
+          },
+        });
+        const api = Object.assign(stubApi(waiting), {
+          clockChallenge: challenged(),
+          clockConfirm: vi.fn().mockRejectedValue(refusal),
+        });
+        const { el, host } = await mountWidget<BoxStatusScreen>(
+          "dashboard-box-status-screen",
+          { api, canOpen: () => true, canCheckClock: true },
+          theme,
+        );
+        await flush(el);
+        if (refusal !== null) {
+          await userEvent.click(
+            el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-confirm]")!,
+          );
+          await flush(el);
+        }
+        if (refusal !== null) expect(api.clockConfirm).toHaveBeenCalledOnce();
+        expect(el.shadowRoot!.querySelector(`[data-test=${drawn}]`)).not.toBeNull();
+        await expectNoA11yViolations(host);
+      },
+    );
+
+    it("renders the dialog accessibly once this device's agreeing time confirmed a waiting start", async () => {
+      const spy = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-22T18:10:20.000Z"));
+      onTestFinished(() => spy.mockRestore());
+      const waiting = health({
+        clock: {
+          ...health().clock,
+          sync: { synced: false, source: "timedatectl", warn: true },
+          waiting: { boxAt: "2026-10-22T18:10:00.000Z", agreed: 1, hostAnswers: true },
+        },
+      });
+      const clockConfirm = vi.fn().mockResolvedValue({
+        confirmationId: null,
+        stepMs: 0,
+        confirmedAt: "2026-10-22T18:10:00.000Z",
+      });
+      const api = Object.assign(stubApi(waiting), { clockChallenge: challenged(), clockConfirm });
+      const { el, host } = await mountWidget<BoxStatusScreen>(
+        "dashboard-box-status-screen",
+        { api, canOpen: () => true, canCheckClock: true },
+        theme,
+      );
+      await flush(el);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-check]")!);
+      await flush(el);
+      expect(clockConfirm).toHaveBeenCalledOnce();
+      expect(el.shadowRoot!.querySelector("[data-test=clock-confirmed]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
+
+    it("renders the open dialog accessibly with differing times while the box's clock service is silent", async () => {
+      const spy = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-24T18:10:00.000Z"));
+      onTestFinished(() => spy.mockRestore());
+      const silent = health({
+        clock: {
+          ...health().clock,
+          sync: { synced: false, source: "unavailable", warn: false },
+          waiting: { boxAt: "2026-10-22T18:10:00.000Z", agreed: 0, hostAnswers: false },
+        },
+      });
+      const api = Object.assign(stubApi(silent), { clockChallenge: challenged() });
+      const { el, host } = await mountWidget<BoxStatusScreen>(
+        "dashboard-box-status-screen",
+        { api, canOpen: () => true, canCheckClock: true },
+        theme,
+      );
+      await flush(el);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-check]")!);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=clock-check-verdict]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
   });
 
   describe("the restart of the box", () => {

@@ -32,6 +32,10 @@ export interface BoxTimeApi {
 /** How far this till's clock may be from the box's and still agree with it. */
 const AGREES_MS = 60_000;
 
+/** How far the box's time at a keep may be from the time shown, carried forward on this till's
+ * steady clock: the dialog shows the box's time to the minute. */
+const KEEP_WITHIN_MS = 60_000;
+
 type Choice = "server" | "device" | "yes";
 
 type View =
@@ -40,6 +44,8 @@ type View =
       kind: "ask";
       boxAt: number;
       tillAt: number;
+      /** When `boxAt` arrived, on this till's steady clock. */
+      readAt: number;
       keepOffered: boolean;
       sending: Choice | null;
       /** Asked to correct this device's own time instead of choosing. */
@@ -142,6 +148,7 @@ export class TillBoxTimeDialog extends LitElement {
         kind: "ask",
         boxAt: Date.parse(boxAt),
         tillAt: Date.now(),
+        readAt: performance.now(),
         keepOffered: keepOffered === true,
         sending: null,
         correcting: false,
@@ -157,9 +164,21 @@ export class TillBoxTimeDialog extends LitElement {
     if (this.view.kind !== "ask" || this.view.sending !== null) return;
     const keep = choice === "server";
     const override = this.#override;
-    this.view = { ...this.view, sending: choice };
+    const shown = this.view;
+    this.view = { ...shown, sending: choice };
     try {
-      const { challengeId } = await this.api.boxClockChallenge(override);
+      const { challengeId, boxAt } = await this.api.boxClockChallenge(override);
+      // A keep confirms the time this dialog showed, not whatever the box reads now.
+      const expected = shown.boxAt + (performance.now() - shown.readAt);
+      if (keep && !(Math.abs(Date.parse(boxAt) - expected) <= KEEP_WITHIN_MS)) {
+        this.view = {
+          kind: "refused",
+          text: t("box_time.refused.moved"),
+          checkAgain: true,
+          admin: false,
+        };
+        return;
+      }
       const deviceAt = Date.now();
       const answer = await this.api.boxClockConfirm({
         challengeId,

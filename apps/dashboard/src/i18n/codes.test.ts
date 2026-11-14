@@ -787,10 +787,10 @@ it("words a missing or expired clock check in both languages", () => {
 
 it("words a refusal while the start's time is unconfirmed in both languages", () => {
   expect(codeMessage("clock.unconfirmed", "en")).toBe(
-    "Not recorded: the box is waiting for its time to be confirmed. Use “Check the time” on a till.",
+    "Not recorded: the box is waiting for its time to be confirmed. Confirm it on the Box status page, or with “Check the time” on a till.",
   );
   expect(codeMessage("clock.unconfirmed", "es")).toBe(
-    "No se ha registrado: el servidor espera a que se confirme su hora. Usa «Comprobar la hora» en una caja.",
+    "No se ha registrado: el servidor espera a que se confirme su hora. Confírmala en Estado del servidor o con «Comprobar la hora» en una caja.",
   );
 });
 

@@ -6397,8 +6397,9 @@ alert list.
   say Not connected. Names are decoded as UTF-8 and rendered as text. Its guide link opens
   the page's `network` section. It offers no network changes.
 
-- **Rows.** One card per part, in order: Sales, Tax agency, Bucket copy, Printers, Card readers
-  (left out when the payments module is off), Clock and Disk space. Each has a dot, the part's name
+- **Rows.** One card per part, in order: Sales, Tax agency, Bucket copy, Spare box (only while
+  this box copies to a paired spare), Printers, Card readers (left out when the payments module is
+  off), Clock and Disk space. Each has a dot, the part's name
   in bold, a line of state, a muted line of detail, the sentence of each bell alert on that row, and
   its actions: a Go to for the row's own screen and its alerts' screens, each once, never this page,
   and only those the person can open, then Free or Check with this device's time (below). The rows share one
@@ -6406,13 +6407,15 @@ alert list.
   rows, as picture 4 draws them; where the screen's own area is 600px wide or less the name sits
   above the words and the actions go under them.
 - **Dots.** A `--wt-space-3` circle: `--wt-color-success` for fine, `--wt-color-warning` for needs
-  attention, `--wt-color-danger` for something can't be saved, with the state's words in visually
-  hidden text beside it. Red is a staff notice of severity `error` (`storage.disk_full`,
-  `clock.unusable`); amber is any other notice and any bell alert on that row,
+  attention, `--wt-color-danger` for something can't be saved or paid, with the state's words in
+  visually hidden text beside it. Red is a staff notice of severity `error` (`storage.disk_full`,
+  `clock.unusable`), and the Clock and Sales rows while the start waits for its time (the health
+  read's `clock.waiting`); amber is any other notice and any bell alert on that row,
   whatever the alert's own severity, and the Clock row when the box's own read
-  of AEAT's time is at `warning`, because amber means everything still
-  works. The legend says "red: something can't be saved", not "nothing", because an unusable clock
-  refuses sales while orders still save.
+  of AEAT's time is at `warning`, and the Spare box row when the spare is not following, its delay
+  is unknown, or it is more than 60 seconds behind, because amber means everything still
+  works. The legend says "red: something can't be saved or paid", not "nothing", because an
+  unusable clock refuses sales while orders still save, and a waiting start takes no payment.
 - **Under the rows.** A note when a staff-notice check, or the read of the records waiting to be
   sent, could not be made; a note when the bell's
   alerts could not be read (the rows still show, from the box's read); "{n} other alerts" with

@@ -742,7 +742,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(openButton(el)).toBeNull();
     expect(text(signIn(el))).toBe(t("staff.sign_in_as_admin"));
     expect(text(q(el, "[data-test=row-clock] [data-test=clock-admin-hint]"))).toBe(
-      t("box_status.clock.admin.sign_in_hint"),
+      "Only an administrator can confirm or correct the box's date and time. Signing in as one signs you out here first.",
     );
     const asked = vi.fn();
     document.body.addEventListener("admin-sign-in", asked);
@@ -760,7 +760,9 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(tooltip.getAttribute("mode")).toBe("help-mode");
     expect(tooltip.getAttribute("aria-label")).toBe("What this check does");
     expect(tooltip.getAttribute("aria-label")).toBe(t("box_status.clock_check_help_label"));
-    expect(text(tooltip)).toBe(t("box_status.clock_check_help"));
+    expect(text(tooltip)).toBe(
+      "Compares the box's clock with this device's. While payments wait for the box's time, a match within a minute confirms it and payments start again; otherwise, if the box can set its own clock, you can set it from this device. Check that this device shows the right time first. It does not work on the box's own screen.",
+    );
     expect(tooltip.getAttribute("guide-label")).toBe(t("box_status.clock_check_help_guide"));
   });
 
@@ -1250,6 +1252,327 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       await open(el);
       expect(q(el, "[data-test=clock-set-done]")).toBeNull();
       expect(text(q(el, "[data-test=clock-set-question]"))).toBe(QUESTION);
+    });
+  });
+
+  describe("while the start waits for its time", () => {
+    const WAITING_CLOCK: BoxHealth["clock"] = {
+      ...health().clock,
+      sync: { synced: false, source: "timedatectl", warn: true },
+      waiting: { boxAt: BOX_AT, agreed: 1, hostAnswers: true },
+    };
+    const SILENT_CLOCK: BoxHealth["clock"] = {
+      ...health().clock,
+      sync: { synced: false, source: "unavailable", warn: false },
+      waiting: { boxAt: BOX_AT, agreed: 0, hostAnswers: false },
+    };
+    const CONFIRMED = { confirmationId: null, stepMs: 0, confirmedAt: BOX_AT };
+    const confirmButton = (el: BoxStatusScreen) =>
+      q(el, "[data-test=row-clock] [data-test=clock-confirm]") as HTMLElement | null;
+
+    function waitingApi(
+      clock: BoxHealth["clock"] = WAITING_CLOCK,
+      overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
+    ): DashboardApi {
+      return clockApi(
+        { notices: [], clock },
+        {
+          clockConfirm: vi.fn().mockResolvedValue(CONFIRMED),
+          clockSet: vi.fn().mockResolvedValue({
+            confirmationId: "c-2",
+            stepMs: 172_800_000,
+            confirmedAt: BOX_AT,
+          }),
+          ...overrides,
+        },
+      );
+    }
+
+    it("offers the confirmation, with its help, and the check with this device's time", async () => {
+      const el = await mountClock(waitingApi());
+      expect(q(el, "[data-test=row-clock]")!.getAttribute("data-state")).toBe("stopped");
+      expect(text(confirmButton(el))).toBe("The date and time are right");
+      expect(text(q(el, "[data-test=row-clock] [data-test=clock-confirm-help]"))).toBe(
+        "Press this only if the date and time above match a clock you trust. If they do not, use “Check with this device's time”.",
+      );
+      expect(text(openButton(el))).toBe(t("box_status.clock.admin.open"));
+    });
+
+    it("confirms the box's time as shown, and the row goes once the box is read again", async () => {
+      const api = waitingApi();
+      vi.mocked(api.getBoxHealth)
+        .mockResolvedValueOnce({ ...health(), clock: WAITING_CLOCK })
+        .mockResolvedValue(health());
+      const el = await mountClock(api);
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(api.clockConfirm).toHaveBeenCalledExactlyOnceWith({
+        challengeId: "ch-1",
+        asShown: true,
+      });
+      expect(api.liveData.refresh).toHaveBeenCalled();
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=row-clock]")!.getAttribute("data-state")).toBe("ok"),
+      );
+      expect(confirmButton(el)).toBeNull();
+      expect(openButton(el)).toBeNull();
+    });
+
+    it("shows a confirmation refused because the clock changed beside its button", async () => {
+      const el = await mountClock(
+        waitingApi(WAITING_CLOCK, { clockConfirm: vi.fn().mockRejectedValue(REFUSED("stale")) }),
+      );
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      const refusal = q(el, "[data-test=row-clock] [data-test=clock-confirm-refused]");
+      expect(refusal!.getAttribute("role")).toBe("alert");
+      expect(text(refusal)).toBe(
+        "The box's clock changed while this was being sent. Check the date and time above again, then press the button again.",
+      );
+      expect(confirmButton(el)!.hasAttribute("disabled")).toBe(false);
+    });
+
+    it.each([
+      ["en", "/help/en/box-status#clock-waiting"],
+      ["es", "/help/es/box-status#clock-waiting"],
+    ])(
+      "the check's help tooltip links to the guide's waiting section in %s",
+      async (locale, href) => {
+        setLocale(locale);
+        const el = await mountClock(waitingApi());
+        const tooltip = q(el, "[data-test=row-clock] .clock-check-action wt-help-tooltip")!;
+        expect(tooltip.getAttribute("guide-href")).toBe(href);
+      },
+    );
+
+    it("does not confirm, and says the clock changed, when the box's time is two days off the row's", async () => {
+      const api = waitingApi(WAITING_CLOCK, {
+        clockChallenge: vi.fn().mockResolvedValue({
+          challengeId: "ch-1",
+          boxAt: new Date(Date.parse(BOX_AT) + 2 * 24 * 60 * 60_000).toISOString(),
+        }),
+      });
+      const el = await mountClock(api);
+      vi.mocked(api.liveData.refresh).mockClear();
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(api.clockConfirm).not.toHaveBeenCalled();
+      expect(text(q(el, "[data-test=row-clock] [data-test=clock-confirm-refused]"))).toBe(
+        "The box's time has changed since this page showed it. Check the time on the Clock row, then press the button again.",
+      );
+      expect(api.liveData.refresh).toHaveBeenCalled();
+    });
+
+    it("says in Spanish that the box's time changed since the page showed it", async () => {
+      setLocale("es");
+      const el = await mountClock(
+        waitingApi(WAITING_CLOCK, {
+          clockChallenge: vi.fn().mockResolvedValue({
+            challengeId: "ch-1",
+            boxAt: new Date(Date.parse(BOX_AT) + 2 * 24 * 60 * 60_000).toISOString(),
+          }),
+        }),
+      );
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(text(q(el, "[data-test=row-clock] [data-test=clock-confirm-refused]"))).toBe(
+        "La hora del servidor ha cambiado desde que esta página la mostró. Comprueba la hora en la fila Reloj y pulsa el botón otra vez.",
+      );
+    });
+
+    it.each([
+      [30_000, true],
+      [61_000, false],
+    ])("with the box's time %i ms off the row's, confirms: %s", async (offMs, confirms) => {
+      const api = waitingApi(WAITING_CLOCK, {
+        clockChallenge: vi.fn().mockResolvedValue({
+          challengeId: "ch-1",
+          boxAt: new Date(Date.parse(BOX_AT) + offMs).toISOString(),
+        }),
+      });
+      const el = await mountClock(api);
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(vi.mocked(api.clockConfirm).mock.calls.length).toBe(confirms ? 1 : 0);
+    });
+
+    describe("pressed ten minutes after the row was read", () => {
+      const LATER_MS = 10 * 60_000;
+      async function pressLater(freshAt: number) {
+        let steady = 5_000;
+        const spy = vi.spyOn(performance, "now").mockImplementation(() => steady);
+        onTestFinished(() => spy.mockRestore());
+        const api = waitingApi(WAITING_CLOCK, {
+          clockChallenge: vi
+            .fn()
+            .mockResolvedValue({ challengeId: "ch-1", boxAt: new Date(freshAt).toISOString() }),
+        });
+        const el = await mountClock(api);
+        steady += LATER_MS;
+        await userEvent.click(confirmButton(el)!);
+        await flush(el);
+        return { api, el };
+      }
+
+      it("confirms when the box's clock ran on by those ten minutes", async () => {
+        const { api } = await pressLater(Date.parse(BOX_AT) + LATER_MS);
+        expect(api.clockConfirm).toHaveBeenCalledExactlyOnceWith({
+          challengeId: "ch-1",
+          asShown: true,
+        });
+      });
+
+      it("does not confirm when the box's clock still reads the row's time", async () => {
+        const { api, el } = await pressLater(Date.parse(BOX_AT));
+        expect(api.clockConfirm).not.toHaveBeenCalled();
+        expect(q(el, "[data-test=row-clock] [data-test=clock-confirm-refused]")).not.toBeNull();
+      });
+    });
+
+    it("forgets a refused confirmation once a read shows the wait has ended", async () => {
+      const api = waitingApi(WAITING_CLOCK, {
+        clockConfirm: vi.fn().mockRejectedValue(REFUSED("stale")),
+      });
+      vi.mocked(api.getBoxHealth)
+        .mockResolvedValueOnce({ ...health(), clock: WAITING_CLOCK })
+        .mockResolvedValueOnce({ ...health(), clock: WAITING_CLOCK })
+        .mockResolvedValueOnce(health())
+        .mockResolvedValue({ ...health(), clock: WAITING_CLOCK });
+      const el = await mountClock(api);
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(q(el, "[data-test=clock-confirm-refused]")).not.toBeNull();
+      api.liveData.refresh();
+      await flush(el);
+      expect(confirmButton(el)).toBeNull();
+      api.liveData.refresh();
+      await flush(el);
+      expect(confirmButton(el)).not.toBeNull();
+      expect(q(el, "[data-test=clock-confirm-refused]")).toBeNull();
+    });
+
+    it("holds the check with this device's time while the confirmation is sent", async () => {
+      let answer: (value: unknown) => void = () => undefined;
+      const el = await mountClock(
+        waitingApi(WAITING_CLOCK, {
+          clockConfirm: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+        }),
+      );
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(openButton(el)!.hasAttribute("disabled")).toBe(true);
+      answer(CONFIRMED);
+      await flush(el);
+      expect(openButton(el)?.hasAttribute("disabled") ?? false).toBe(false);
+    });
+
+    it("sets the clock from this device when it is two days off the box's", async () => {
+      deviceNow("2026-10-24T18:10:00.000Z");
+      const api = waitingApi();
+      const el = await mountClock(api);
+      await open(el);
+      await userEvent.click(q(el, "[data-test=clock-set-confirm]")!);
+      await flush(el);
+      expect(api.clockSet).toHaveBeenCalledExactlyOnceWith({
+        challengeId: "ch-2",
+        deviceAt: Date.parse("2026-10-24T18:10:00.000Z"),
+      });
+      expect(api.clockConfirm).not.toHaveBeenCalled();
+      expect(text(q(el, "[data-test=clock-set-done]"))).toBe(
+        "The box's clock is set. Sign in again to go on.",
+      );
+    });
+
+    it("confirms the box's time when this device agrees within a minute", async () => {
+      deviceNow("2026-10-22T18:10:20.000Z");
+      const api = waitingApi();
+      const el = await mountClock(api);
+      await open(el);
+      expect(api.clockConfirm).toHaveBeenCalledExactlyOnceWith({
+        challengeId: "ch-1",
+        asShown: true,
+      });
+      expect(api.clockSet).not.toHaveBeenCalled();
+      expect(text(q(el, "[data-test=clock-confirmed]"))).toBe(
+        "This device agrees, so the box's time is confirmed.",
+      );
+      expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
+      expect(api.liveData.refresh).toHaveBeenCalled();
+    });
+
+    it("offers the confirmation and the check with this device's time, and says why it waits, when the box's clock service is silent", async () => {
+      const el = await mountClock(waitingApi(SILENT_CLOCK));
+      expect(text(openButton(el))).toBe("Check with this device's time");
+      expect(text(confirmButton(el))).toBe(t("box_status.clock.confirm"));
+      expect(text(q(el, "[data-test=row-clock] .line"))).toBe(
+        `${fill("box_status.clock.waiting", { agreed: "0", boxAt: formatIsoMinute(BOX_AT) })} It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.`,
+      );
+      expect(text(q(el, "[data-test=row-clock] [data-test=clock-confirm-help]"))).toBe(
+        "Press this only if the date and time above match a clock you trust, or use “Check with this device's time” to compare them. If they do not match, the box cannot correct its clock while the part that reads its internet time is not answering, so payments keep waiting.",
+      );
+    });
+
+    it("confirms the box's time when this device agrees within a minute, while the box's clock service is silent", async () => {
+      deviceNow("2026-10-22T18:10:20.000Z");
+      const api = waitingApi(SILENT_CLOCK);
+      const el = await mountClock(api);
+      await open(el);
+      expect(api.clockConfirm).toHaveBeenCalledExactlyOnceWith({
+        challengeId: "ch-1",
+        asShown: true,
+      });
+      expect(api.clockSet).not.toHaveBeenCalled();
+      expect(text(q(el, "[data-test=clock-confirmed]"))).toBe(
+        "This device agrees, so the box's time is confirmed.",
+      );
+      expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
+    });
+
+    it.each([
+      ["no time service to read", SILENT_CLOCK],
+      [
+        "a time service read apart from the start's look",
+        { ...SILENT_CLOCK, sync: { synced: false, source: "timedatectl" as const, warn: true } },
+      ],
+    ])(
+      "offers no set, and says the time cannot be corrected, when this device is two days off while the box's clock service is silent (%s)",
+      async (_label, clock) => {
+        deviceNow("2026-10-24T18:10:00.000Z");
+        const api = waitingApi(clock);
+        const el = await mountClock(api);
+        await open(el);
+        expect(q(el, "[data-test=clock-set-question]")).toBeNull();
+        expect(text(q(el, "[data-test=clock-check-times]"))).toBe(
+          `The box's clock says ${atSeconds(BOX_AT)}. This device says ${atSeconds("2026-10-24T18:10:00.000Z")}.`,
+        );
+        expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
+          "The box could not show that its clock is within a minute of your device's, and its time cannot be corrected until the part of the box that reads its internet time answers, so payments keep waiting.",
+        );
+        expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
+        expect(api.clockConfirm).not.toHaveBeenCalled();
+        expect(api.clockSet).not.toHaveBeenCalled();
+      },
+    );
+
+    it("offers the check with this device's time, but not the confirmation, while the clock reads before 28-10-2024", async () => {
+      const el = await mountClock(clockApi({ notices: [CLOCK_UNUSABLE], clock: WAITING_CLOCK }));
+      expect(openButton(el)).not.toBeNull();
+      expect(confirmButton(el)).toBeNull();
+      expect(q(el, "[data-test=row-clock] [data-test=clock-confirm-help]")).toBeNull();
+    });
+
+    it("offers a manager an administrator sign-in in place of both", async () => {
+      const el = await mountClock(waitingApi(), false);
+      expect(confirmButton(el)).toBeNull();
+      expect(openButton(el)).toBeNull();
+      expect(q(el, "[data-test=row-clock] [data-test=clock-admin-sign-in]")).not.toBeNull();
+    });
+
+    it("offers neither once the start is confirmed", async () => {
+      const el = await mountClock(waitingApi({ ...WAITING_CLOCK, waiting: undefined }));
+      expect(q(el, "[data-test=row-clock]")!.getAttribute("data-state")).toBe("ok");
+      expect(confirmButton(el)).toBeNull();
+      expect(openButton(el)).toBeNull();
     });
   });
 });

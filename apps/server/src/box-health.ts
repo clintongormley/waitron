@@ -16,6 +16,7 @@ import {
   type StaffNoticeLog,
 } from "./staff-notices.js";
 import type { AuthorityClockStatus, TimeHealth } from "./time-health.js";
+import type { StartClockWaiting } from "./clock-unconfirmed-alert.js";
 import type { FiscalOutboxState } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
 import { sql } from "drizzle-orm";
@@ -32,7 +33,12 @@ export interface BoxHealth {
   outbox: (FiscalOutboxState & { awaitingCertificate: boolean }) | null;
   stream: StreamView;
   spare?: SpareFollowView | null;
-  clock: { authority: AuthorityClockStatus; sync: TimeHealth };
+  clock: {
+    authority: AuthorityClockStatus;
+    sync: TimeHealth;
+    /** Present only while this box files records and its start waits for its time. */
+    waiting?: StartClockWaiting & { boxAt: string };
+  };
   printers: { id: string; name: string }[];
   /** Null when the payments module is off: its table does not exist. */
   readers: { id: string; name: string }[] | null;
@@ -61,6 +67,8 @@ export interface BoxHealthReaders {
     awaitingCertificate: () => boolean;
   };
   authorityClock: () => AuthorityClockStatus;
+  /** Absent where nothing waits for the start's time. */
+  startClock?: () => StartClockWaiting | null;
   timeHealth: () => Promise<TimeHealth>;
   disk: Pick<DiskFullState, "since">;
   space: Pick<FreeSpaceState, "current">;
@@ -165,6 +173,7 @@ export async function collectBoxHealth(
   const stream: StreamView & { pruneBlockedSince?: string } = { ...readers.stream() };
   delete stream.pruneBlockedSince;
 
+  const waiting = readers.startClock?.() ?? null;
   return {
     at,
     sales: { lastAt: rows.lastAt },
@@ -174,7 +183,11 @@ export async function collectBoxHealth(
     outbox,
     stream,
     ...(readers.spare === undefined ? {} : { spare: await readers.spare() }),
-    clock: { authority: readers.authorityClock(), sync },
+    clock: {
+      authority: readers.authorityClock(),
+      sync,
+      ...(waiting === null ? {} : { waiting: { boxAt: at, ...waiting } }),
+    },
     printers: rows.printers,
     readers: rows.readers,
     canFree: readers.canFree(),

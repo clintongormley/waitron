@@ -1666,14 +1666,14 @@ declare module "@waitron/shared" {
      * production (`unreachable`). Built as data by the clock-sync alert source, never thrown. */
     "clock.sync_off": { reason: "off" | "stopped" | "unsynchronised" | "unreachable" };
     /** The box did not set or confirm its clock from an administrator's device or a till, and
-     * asked its host to set nothing: the request came from the box itself, no stop holds, the host
-     * service did not answer, the time service says the clock is synchronised, the person's
-     * device is within a minute of the box (`agrees`), the device's time was measured before a
-     * step of the box's clock, the time would be before 28-10-2024 or from 2100 on
-     * (`target_invalid`), an earlier step's record could not yet be written
-     * (`pending_step`), a till asked the box to keep its time while a stop holds
-     * (`stopped`), or, for a staff member on a till, the box's start-up is over
-     * (`not_start_up`). */
+     * asked its host to set nothing: the request came from the box itself, no stop holds or the
+     * start is not waiting (`not_stopped`), the host service did not answer, the time service says
+     * the clock is synchronised, the person's device is within a minute of the box (`agrees`), the
+     * device's time was measured before a step of the box's clock, the time would be before
+     * 28-10-2024 or from 2100 on (`target_invalid`), an earlier step's record could not yet be
+     * written (`pending_step`), a till or an administrator asked the box to keep its time while
+     * the clock reads before 28-10-2024 (`stopped`), or, for a staff member on a till, the box's
+     * start-up is over (`not_start_up`). */
     "clock.set_refused": {
       reason:
         | "same_machine"
@@ -1692,8 +1692,12 @@ declare module "@waitron/shared" {
      * to. */
     "clock.set_failed": { reason: "refused" | "unverified" };
     /** The box has not confirmed its time since this start, so it writes no fiscal record and
-     * takes or gives back no money until the time service, two devices or a person confirms it. */
-    "clock.unconfirmed": Record<string, never>;
+     * takes or gives back no money until the time service, two devices or a person confirms it.
+     * Thrown as a refusal with no values. Built as data with `agreed`, how many devices agree with
+     * the box so far (`startClockAgreed`), by the clock-unconfirmed alert source and the till's
+     * clock-check notice source; the alert source adds `hostSilent`, that the start's latest look
+     * could not hear the box's clock service. */
+    "clock.unconfirmed": { agreed?: number; hostSilent?: boolean };
     /** The box's host service cannot take this request: `missing`, no connection to its socket
      * was made (`detail` is the connection error's code); `unsupported`, the host does not take the
      * request (`detail` is the host's word). */

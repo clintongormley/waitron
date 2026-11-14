@@ -36,11 +36,12 @@ Cada parte tiene una fila con un punto de color:
 
 - **Verde** significa que la parte está bien.
 - **Ámbar** significa que necesita atención, pero todo sigue funcionando.
-- **Rojo** significa que algo no se puede guardar: el disco está lleno, o la hora del servidor es tan
-  incorrecta que no se puede registrar una venta. Cualquiera de ellos pone también en rojo **Ventas**.
+- **Rojo** significa que algo no se puede guardar o cobrar: el disco está lleno, la hora del
+  servidor es tan incorrecta que no se puede registrar una venta, o los cobros esperan a que se
+  confirme la hora del servidor. Cualquiera de ellos pone también en rojo **Ventas**.
 
 Cada fila muestra los mismos avisos que la campana para esa parte, con las mismas palabras. Las
-filas **Copia en el bucket**, **Impresoras** y **Lectores de tarjetas** tienen un botón **Ir a …**,
+filas **Copia en el bucket**, **Equipo de reserva**, **Impresoras** y **Lectores de tarjetas** tienen un botón **Ir a …**,
 como **Ir a Copias de seguridad**, que abre su propia página cuando puedes abrirla, y un aviso que
 tiene su propia página añade un botón para esa página. Los avisos que no corresponden a ninguna fila
 se cuentan bajo las filas, junto a **Ver todos los avisos**.
@@ -231,7 +232,7 @@ durante el [arranque](box-status.md#clock-at-start), un empleado desde una caja.
 
 La fila **Reloj** muestra entonces a los administradores un botón
 **Comprobar con la hora de este dispositivo**. Cualquier otra persona que pueda abrir esta página ve
-**Solo un administrador puede comprobar la hora del servidor con la de este dispositivo. Iniciar
+**Solo un administrador puede confirmar o corregir la fecha y la hora del servidor. Iniciar
 sesión como administrador cierra primero tu sesión aquí.** y un botón **Iniciar sesión como
 administrador**. El botón abre un diálogo que muestra las dos horas: **El reloj del servidor marca …
 Este dispositivo marca …**
@@ -245,6 +246,9 @@ Este dispositivo marca …**
   dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el servidor a
   internet para que corrija la hora.** y solo ofrece **Cerrar**. Por el tiempo que tarda la
   respuesta, dos horas separadas por algo menos de un minuto también pueden recibir este mensaje.
+  Mientras los cobros [esperan la hora del servidor](box-status.md#clock-waiting) y no responde la
+  parte del servidor que lee su hora de internet, dice en cambio que la hora del servidor no se puede
+  corregir hasta que esa parte responda.
 
 Poner la hora puede cerrar tu sesión en el panel de gestión. Cuando el reloj se mueve más de media
 hora, en cualquier sentido, termina toda sesión del panel que se estaba usando justo antes, así que
@@ -305,6 +309,29 @@ Dos cajas o terminales que coinciden con el servidor confirman su hora tras un a
 
 El arranque termina en cuanto el servidor ve que el reloj ya no para los cobros. Desde entonces, en cuanto
 internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja.
+
+## Cuando los cobros esperan la hora del servidor {#clock-waiting}
+
+Tras un arranque, el servidor no acepta cobros hasta que se confirma su hora. Los pedidos siguen
+llegando a cocina. La fila **Reloj** dice entonces **Esperando a que se conecten dispositivos y
+coincidan con la hora del servidor**, con la fecha y la hora del servidor, y la campana muestra un aviso
+que lo dice.
+
+El servidor confirma su hora solo en cuanto llega a internet, o en cuanto dos cajas o terminales
+encendidos y conectados coinciden con su reloj, aunque estén en la pantalla de inicio de sesión.
+
+Un administrador puede confirmarla antes en esta página:
+
+- Si la fecha y la hora que muestra la fila **Reloj** son correctas, pulsa **La fecha y la hora son
+  correctas**.
+- O pulsa **Comprobar con la hora de este dispositivo**. Si tu dispositivo está a menos de un minuto
+  del servidor, eso confirma la hora del servidor. Si la diferencia es mayor y el servidor puede poner su
+  reloj en hora, el diálogo ofrece **Usar esta hora**, que pone el reloj del servidor a la hora de tu
+  dispositivo y la confirma.
+
+Mientras no responda la parte del servidor que lee su hora de internet, la fila **Reloj** lo dice y el
+servidor espera así en cada arranque. Su hora se puede confirmar entonces, pero no corregir, hasta que
+esa parte responda.
 
 ## El servicio de hora del servidor {#clock-service}
 

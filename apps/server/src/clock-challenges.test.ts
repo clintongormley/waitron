@@ -19,7 +19,10 @@ describe("the clock challenge keeper", () => {
     const issued = k.challenges.issue("session-a");
     expect(issued).toEqual({ challengeId: expect.any(String), boxAt: WALL });
     k.pass(5_000);
-    expect(k.challenges.take("session-a", issued.challengeId)).toEqual({ elapsedMs: 5_000 });
+    expect(k.challenges.take("session-a", issued.challengeId)).toEqual({
+      elapsedMs: 5_000,
+      issuedAt: { wallMs: WALL, monoMs: 1_000 },
+    });
   });
 
   it("refuses a challenge answered after 5 001 ms on the steady clock", () => {
@@ -34,7 +37,10 @@ describe("the clock challenge keeper", () => {
     const { challengeId } = k.challenges.issue("session-a");
     k.clocks.wall += 60_000;
     k.clocks.steady += 10;
-    expect(k.challenges.take("session-a", challengeId)).toEqual({ elapsedMs: 10 });
+    expect(k.challenges.take("session-a", challengeId)).toEqual({
+      elapsedMs: 10,
+      issuedAt: { wallMs: WALL, monoMs: 1_000 },
+    });
   });
 
   it("refuses a challenge answered twice", () => {

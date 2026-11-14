@@ -33,11 +33,16 @@ const RESTART_AWAY_MS = 30_000;
 /** The server's margin for an administrator's device agreeing with the box. */
 const AGREE_WITHIN_MS = 60_000;
 
+/** How far the box's time may be from the Clock row's, carried forward, when "The date and time
+ * are right" is pressed: the row shows the box's time to the minute. */
+const STILL_SHOWN_WITHIN_MS = 60_000;
+
 /** The reasons a refused set names that have their own sentence. */
 const SET_REFUSALS = {
   same_machine: "box_status.clock.admin.set.refused.same_machine",
   not_stopped: "box_status.clock.admin.set.refused.not_stopped",
   synchronised: "box_status.clock.admin.set.refused.synchronised",
+  stopped: "box_status.clock.admin.set.refused.stopped",
   stale: "box_status.clock.admin.set.refused.stale",
   host_unavailable: "box_status.clock.admin.set.refused.host_unavailable",
   target_invalid: "box_status.clock.admin.set.refused.target_invalid",
@@ -272,10 +277,13 @@ export class BoxStatusScreen extends LitElement {
   /** The times the open check compares; null while it is asked for, or when it was refused. */
   @state() private clockReading: ClockReading | null = null;
   @state() private settingClock = false;
-  /** Set once the box has set its clock from this device's; null otherwise. */
-  @state() private clockSetDone: { signInAgain: boolean } | null = null;
+  /** What the open check did to the box's clock; null until it did anything. */
+  @state() private clockDone: "set" | "set-sign-in" | "confirmed" | null = null;
   /** The check's refusal, shown above the dialog's buttons. */
   @state() private clockCheckError = "";
+  @state() private confirmingClock = false;
+  /** The Clock row's confirmation refusal; the next press clears it. */
+  @state() private clockConfirmError = "";
   @state() private restartOpen = false;
   @state() private restarting = false;
   @state() private restartAsked = false;
@@ -284,6 +292,8 @@ export class BoxStatusScreen extends LitElement {
   #restartAccepted: { at: number; outageSeen: boolean } | null = null;
   /** Bumped at every opening, so an answer for a closed check is dropped. */
   #clockCheckRun = 0;
+  /** When the health read now shown arrived, on this device's steady clock. */
+  #healthReadAt = 0;
 
   // One controller per read: a controller's error callback does not say which query failed.
   readonly #healthQueries = new DashboardQueries(
@@ -319,6 +329,8 @@ export class BoxStatusScreen extends LitElement {
     void this.#healthQueries
       .watch("getBoxHealth", [], (health) => {
         this.health = health;
+        this.#healthReadAt = performance.now();
+        if (health.clock.waiting === undefined) this.clockConfirmError = "";
         this.awaitingFigure = false;
         this.awaitingRetryRead = false;
         this.#nothingLeftToRetry = this.#nothingToRetry(health);
@@ -377,7 +389,12 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #clockCheckNeeded(health: BoxHealth): boolean {
-    return clockUnusable(health);
+    return clockUnusable(health) || health.clock.waiting !== undefined;
+  }
+
+  /** A set needs the box's clock service, so none is offered while the start's look hears none. */
+  #clockHostSilent(health: BoxHealth | null): boolean {
+    return health?.clock.waiting?.hostAnswers === false;
   }
 
   /** From the last read; the box judges it again when asked. */
@@ -387,7 +404,8 @@ export class BoxStatusScreen extends LitElement {
       this.canCheckClock &&
       health.clock.sync.source === "timedatectl" &&
       !health.clock.sync.synced &&
-      clockUnusable(health)
+      this.#clockCheckNeeded(health) &&
+      !this.#clockHostSilent(health)
     );
   }
 
@@ -398,8 +416,7 @@ export class BoxStatusScreen extends LitElement {
     const halfMs = (Date.now() - sentAt) / 2;
     const deviceAt = sentAt + halfMs;
     const box = Date.parse(boxAt);
-    // A hint for which buttons to draw only: the server judges the answer again, with the same
-    // margin, and refuses `differs`.
+    // The box refuses a set within the same margin (`agrees`); a confirmation trusts this one.
     const agrees = Math.abs(deviceAt - box) + halfMs <= AGREE_WITHIN_MS;
     return { challengeId, reading: { boxAt: box, deviceAt, agrees } };
   }
@@ -413,11 +430,18 @@ export class BoxStatusScreen extends LitElement {
     const run = ++this.#clockCheckRun;
     this.clockReading = null;
     this.clockCheckError = "";
-    this.clockSetDone = null;
+    this.clockDone = null;
     this.clockCheckOpen = true;
     try {
-      const { reading } = await this.#readBoxTime();
-      if (run === this.#clockCheckRun) this.clockReading = reading;
+      const { challengeId, reading } = await this.#readBoxTime();
+      if (run !== this.#clockCheckRun) return;
+      if (reading.agrees && this.health?.clock.waiting !== undefined) {
+        await this.api.clockConfirm({ challengeId, asShown: true });
+        if (run !== this.#clockCheckRun) return;
+        this.clockDone = "confirmed";
+        this.api.liveData.refresh();
+      }
+      this.clockReading = reading;
     } catch (error) {
       if (run === this.#clockCheckRun) this.#clockRefused(error);
     }
@@ -432,7 +456,7 @@ export class BoxStatusScreen extends LitElement {
       const { challengeId, reading } = await this.#readBoxTime();
       fresh = reading;
       const { stepMs } = await this.api.clockSet({ challengeId, deviceAt: Date.now() });
-      this.clockSetDone = { signInAgain: Math.abs(stepMs) > SESSION_IDLE_MS };
+      this.clockDone = Math.abs(stepMs) > SESSION_IDLE_MS ? "set-sign-in" : "set";
     } catch (error) {
       const reason = setRefusalReason(error);
       if (fresh !== null && reason === "agrees") {
@@ -451,6 +475,49 @@ export class BoxStatusScreen extends LitElement {
     }
   }
 
+  async #confirmClock(): Promise<void> {
+    if (this.confirmingClock) return;
+    this.confirmingClock = true;
+    this.clockConfirmError = "";
+    const shownAt = this.health?.clock.waiting?.boxAt;
+    const readAt = this.#healthReadAt;
+    try {
+      const { challengeId, boxAt } = await this.api.clockChallenge();
+      const expected =
+        shownAt === undefined ? NaN : Date.parse(shownAt) + (performance.now() - readAt);
+      if (!(Math.abs(Date.parse(boxAt) - expected) <= STILL_SHOWN_WITHIN_MS)) {
+        this.clockConfirmError = t("box_status.clock.confirm_refused_moved");
+        return;
+      }
+      await this.api.clockConfirm({ challengeId, asShown: true });
+    } catch (error) {
+      this.clockConfirmError =
+        setRefusalReason(error) === "stale"
+          ? t("box_status.clock.confirm_refused_stale")
+          : setRefusal(error);
+    } finally {
+      this.api.liveData.refresh();
+      this.confirmingClock = false;
+    }
+  }
+
+  #clockActions(health: BoxHealth): TemplateResult | typeof nothing {
+    if (!this.#clockCheckNeeded(health)) return nothing;
+    if (!this.canCheckClock) return this.#clockAdminSignIn();
+    return html`${
+      offersConfirm(health)
+        ? html`<wt-button
+            variant="secondary"
+            data-test="clock-confirm"
+            ?disabled=${this.confirmingClock}
+            ?loading=${this.confirmingClock}
+            @click=${() => void this.#confirmClock()}
+            >${t("box_status.clock.confirm")}</wt-button
+          >`
+        : nothing
+    }${this.#clockCheckButton(health)}`;
+  }
+
   #closeClockCheck(): void {
     this.#clockCheckRun += 1;
     this.clockCheckOpen = false;
@@ -466,17 +533,22 @@ export class BoxStatusScreen extends LitElement {
     >`;
   }
 
-  #clockCheckButton(): TemplateResult {
+  #clockCheckButton(health: BoxHealth): TemplateResult {
     return html`<span class="clock-check-action">
       <wt-button
         variant="secondary"
         data-test="clock-check"
+        ?disabled=${this.confirmingClock}
         @click=${() => void this.#openClockCheck()}
         >${t("box_status.clock.admin.open")}</wt-button
       ><wt-help-tooltip
         mode="help-mode"
         aria-label=${t("box_status.clock_check_help_label")}
-        guide-href=${guideHref("box-status.clock-own-device")}
+        guide-href=${guideHref(
+          health.clock.waiting === undefined
+            ? "box-status.clock-own-device"
+            : "box-status.clock-waiting",
+        )}
         guide-label=${t("box_status.clock_check_help_guide")}
         >${t("box_status.clock_check_help")}</wt-help-tooltip
       >
@@ -486,7 +558,7 @@ export class BoxStatusScreen extends LitElement {
   #renderClockCheckDialog(): TemplateResult | typeof nothing {
     if (!this.canCheckClock) return nothing;
     const reading = this.clockReading;
-    const done = this.clockSetDone;
+    const done = this.clockDone;
     const offeringSet =
       done === null && reading !== null && !reading.agrees && this.#canSetClock(this.health);
     const cancel = html`<wt-button
@@ -510,10 +582,8 @@ export class BoxStatusScreen extends LitElement {
     >
       ${
         done !== null
-          ? html`<p data-test="clock-set-done">
-              ${t("box_status.clock.admin.set.done")}${
-                done.signInAgain ? ` ${t("box_status.clock.admin.set.sign_in_again")}` : nothing
-              }
+          ? html`<p data-test=${done === "confirmed" ? "clock-confirmed" : "clock-set-done"}>
+              ${clockDoneWords(done)}
             </p>`
           : reading === null
             ? nothing
@@ -538,7 +608,11 @@ export class BoxStatusScreen extends LitElement {
                     reading.agrees
                       ? nothing
                       : html`<p data-test="clock-check-verdict">
-                          ${t("box_status.clock.admin.differ")}
+                          ${t(
+                            this.#clockHostSilent(this.health)
+                              ? "box_status.clock.admin.differ_host_silent"
+                              : "box_status.clock.admin.differ",
+                          )}
                         </p>`
                   }`
       }
@@ -722,6 +796,24 @@ export class BoxStatusScreen extends LitElement {
             : nothing
         }
         ${
+          row.id === "clock" && this.canCheckClock && offersConfirm(health)
+            ? html`<p class="aside" data-test="clock-confirm-help">
+                  ${t(
+                    this.#clockHostSilent(health)
+                      ? "box_status.clock.confirm_help_host_silent"
+                      : "box_status.clock.confirm_help",
+                  )}
+                </p>
+                ${
+                  this.clockConfirmError === ""
+                    ? nothing
+                    : html`<p class="refusal" role="alert" data-test="clock-confirm-refused">
+                        ${this.clockConfirmError}
+                      </p>`
+                }`
+            : nothing
+        }
+        ${
           disk && !health.canFree
             ? html`<p class="aside" data-test="read-only">${t("box_status.free_read_only")}</p>`
             : nothing
@@ -753,13 +845,7 @@ export class BoxStatusScreen extends LitElement {
         ${outbox === null ? nothing : this.#retryAction(health)}
         ${this.#screensOf(row).map((screen) => this.#goToButton(screen))}
         ${disk ? this.#freeAction(health) : nothing}
-        ${
-          row.id !== "clock" || !this.#clockCheckNeeded(health)
-            ? nothing
-            : this.canCheckClock
-              ? this.#clockCheckButton()
-              : this.#clockAdminSignIn()
-        }
+        ${row.id === "clock" ? this.#clockActions(health) : nothing}
       </div>
     </li>`;
   }
@@ -979,6 +1065,17 @@ export class BoxStatusScreen extends LitElement {
 function atSeconds(ms: number): string {
   const at = new Date(ms);
   return `${formatIsoMinute(at.toISOString())}:${String(at.getSeconds()).padStart(2, "0")}`;
+}
+
+function clockDoneWords(done: "set" | "set-sign-in" | "confirmed"): string {
+  if (done === "confirmed") return t("box_status.clock.admin.confirmed");
+  const set = t("box_status.clock.admin.set.done");
+  return done === "set" ? set : `${set} ${t("box_status.clock.admin.set.sign_in_again")}`;
+}
+
+/** A waiting start's time as it stands, which the box refuses before 28-10-2024. */
+function offersConfirm(health: BoxHealth): boolean {
+  return health.clock.waiting !== undefined && !clockUnusable(health);
 }
 
 /** A clock before 28-10-2024. */

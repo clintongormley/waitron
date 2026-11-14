@@ -283,7 +283,15 @@ export function mountTillBoxClockApi(
             withTransaction(db, async (tx) => {
               await admitted(tx, session);
               const now = clock.now();
-              if (stale(now)) refuse("stale");
+              // A keep confirms the time the challenge showed, so a move since its issue voids it.
+              if (
+                stale(now) ||
+                wallMovedAgainstSteady(challenge.issuedAt, {
+                  wallMs: now.instant.getTime(),
+                  monoMs: boxClock.steady(),
+                })
+              )
+                refuse("stale");
               // Judged first, so a stop that holds never reaches `noStop()`, which shuts the window.
               if (unusableAt(now)) refuse("stopped");
               // Keeping the box's time is offered only until the internet confirms the start.

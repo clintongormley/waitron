@@ -293,6 +293,7 @@ import { mountDeviceApi } from "./device-api.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import { bootReader } from "./boot-reader.js";
 import { clockDisagreesAlertSource } from "./clock-disagrees-alert.js";
+import { clockUnconfirmedAlertSource, startClockWaiting } from "./clock-unconfirmed-alert.js";
 import { clockUnusableAt } from "./clock-unusable.js";
 import { mountJoinApi } from "./join-api.js";
 import { publishState } from "./live-publish.js";
@@ -2441,6 +2442,8 @@ async function bootServer(
   // Bound once the clock correction is built below; until then no set can be with the host.
   let clockSetting = () => false;
   const startClockHolds = startClockGateHolds(startClock, filesRecords, () => clockSetting());
+  const startClockWaits = () =>
+    startClockWaiting({ state: startClock, filesRecords, witnesses: clockWitnesses });
   const nodeBackend = gateSeatOnStartClock(
     makeFiscalBackend(setsToMigrate, filingModule, db, env),
     startClockHolds,
@@ -3701,6 +3704,7 @@ async function bootServer(
         clockUnusableAt(nodeBackend, { instant: at, offsetMinutes: tillClock.now().offsetMinutes }),
     ),
     clockDisagreesAlertSource(clockWitnesses),
+    clockUnconfirmedAlertSource(startClockWaits),
     printingAlertSource(),
     contentSuggestionsAlertSource(),
     invoiceDeliveryAlertSource({ testPages }),
@@ -3797,6 +3801,7 @@ async function bootServer(
                 },
               }),
           authorityClock: authorityClock.read,
+          startClock: startClockWaits,
           timeHealth: readTimeHealth,
           disk: diskFull,
           space: freeSpace,
@@ -3830,6 +3835,7 @@ async function bootServer(
         requestFromBox: seams.requestFromBox,
         devMode: config.devMode,
         correction,
+        start: { state: startClock, heads: recordHeads },
       },
     },
     log,
