@@ -1206,18 +1206,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `defaultLayout` 68, `readDrafts` 49, `setLineCourse` 20, mostly in tests, plus 11 `void cfg;`
   lines.
 
-## Bundle: Recovery wording into `i18n`, with table names to match
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The Start again choice's words move into `apps/server/src/i18n/`.** `START_AGAIN_PAGE_TEXT`
-  (`apps/server/src/recovery-start-again.ts`) is the last recovery-page wording outside `i18n/`.
-  It stays a table of its own, apart from `OPERATOR_TEXT`, and must load without the database.
-- **The recovery page's tables keep their old names.** `OPERATOR_TEXT`, `GENERIC_TEXT` and
-  `OperatorText` in `apps/server/src/i18n/recovery-page.ts` do not end in `_WORDS` like the
-  folder's other tables, and `recovery-surface.ts` passes them on so A968 (#2419) left every test
-  unedited. Renaming them means changing the importing tests too.
-
 ## Bundle: Printer, reader and device delete wording and tidying
 
 2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

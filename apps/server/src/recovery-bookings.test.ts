@@ -23,7 +23,7 @@ import {
   writeRecoveryState,
   type RecoveryState,
 } from "./recovery-state.js";
-import { BOOKINGS_RECOVERY_TEXT } from "./i18n/recovery-page.js";
+import { BOOKINGS_RECOVERY_WORDS } from "./i18n/recovery-page.js";
 import * as recoveryState from "./recovery-state.js";
 import { MODULES_SETTINGS } from "./modules.js";
 
@@ -103,7 +103,7 @@ it("offers effective-On recovery alongside the environment form, in both languag
   const f = await fixture();
   for (const [locale, action] of [
     ["en-GB", "Switch Bookings off and start again"],
-    ["es-ES", BOOKINGS_RECOVERY_TEXT["es-ES"].move],
+    ["es-ES", BOOKINGS_RECOVERY_WORDS["es-ES"].move],
   ]) {
     const body = await (await f.request(undefined, true, locale)).text();
     expect(body).toContain(action);

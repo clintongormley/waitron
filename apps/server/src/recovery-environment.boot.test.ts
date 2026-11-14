@@ -40,7 +40,7 @@ import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { escapeHtml } from "./html-page.js";
 import { mountEnvironmentChoice, type EnvironmentView } from "./recovery-environment.js";
-import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
+import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const dirs: string[] = [];
@@ -243,7 +243,7 @@ it("a Move whose answer fails to draw answers the moved page in the person's lan
   const [stem] = await readdir(join(f.stateDir, "records/set-aside"));
   expect(body).toContain('<html lang="es-ES">');
   expect(body).toContain(
-    escapeHtml(START_AGAIN_PAGE_TEXT["es-ES"].moved(`state/records/set-aside/${stem!}`)),
+    escapeHtml(START_AGAIN_PAGE_WORDS["es-ES"].moved(`state/records/set-aside/${stem!}`)),
   );
   expect(render).toHaveBeenCalledOnce();
   expect(onFinished).toHaveBeenCalledOnce();

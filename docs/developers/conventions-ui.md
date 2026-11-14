@@ -1478,11 +1478,11 @@ turns the answer into a 500 nor leaves `GET /` off it.
 The one sentence on this page that says something is removed is the Move choice's `moveDetail`
 ("… and the rest of the interrupted setup is removed."), the owner's approved exception of
 2026-10-25 15:24 to never suggesting a removal. The choice's words live in their own table,
-`START_AGAIN_PAGE_TEXT`, apart from `OPERATOR_TEXT`. Guard: the case "never suggests deleting in
-the Start again choices, except the one owner-approved sentence" in
-`apps/server/src/recovery-surface.test.ts`, weaker than its name: it reads `START_AGAIN_PAGE_TEXT`'s
-strings in both languages, with `moveDetail` pinned word for word, not the rendered page.
-`OPERATOR_TEXT`'s rows are read by the separate case "never suggests wiping anything, in either
+`START_AGAIN_PAGE_WORDS` in `apps/server/src/i18n/start-again-page.ts`, apart from
+`OPERATOR_WORDS`. Guard: the case "never suggests deleting in the Start again choices, except the
+one owner-approved sentence" in `apps/server/src/recovery-surface.test.ts`, weaker than its name:
+it reads `START_AGAIN_PAGE_WORDS`'s strings in both languages, with `moveDetail` pinned word for
+word, not the rendered page. `OPERATOR_WORDS`'s rows are read by the separate case "never suggests wiping anything, in either
 language", which reads each row's action only, with narrower patterns, never its title.
 
 Strings on the page that come from outside the image: the error CODE, `lastFailureAt`, the LOG TAIL,

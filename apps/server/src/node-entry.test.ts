@@ -40,7 +40,8 @@ import {
   type RecoveryState,
 } from "./recovery-state.js";
 import { escapeHtml } from "./html-page.js";
-import { OPERATOR_TEXT, recoveryApp } from "./recovery-surface.js";
+import { OPERATOR_WORDS } from "./i18n/recovery-page.js";
+import { recoveryApp } from "./recovery-surface.js";
 import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { assertNotAhead, recoveryTlsFiles, runEntry, serveRecovery } from "./node-entry.js";
 
@@ -654,7 +655,7 @@ describe("runEntry", () => {
     expect(d.startServer).not.toHaveBeenCalled();
     const page = await (await serveRecovery.mock.calls[0]![0].request("/")).text();
     expect(page).toContain(
-      escapeHtml(OPERATOR_TEXT["append_only.triggers_changed"]!["en-GB"].title),
+      escapeHtml(OPERATOR_WORDS["append_only.triggers_changed"]!["en-GB"].title),
     );
     expect(page).toContain("<h1>Waitron stopped</h1>");
     expect(page).toContain("<p>Missing triggers: sales_append_only_delete</p>");

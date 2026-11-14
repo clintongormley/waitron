@@ -1,5 +1,5 @@
 import { discardRestoreSetAside } from "./restore.js";
-import { RESTORE_DISCARD_TEXT } from "./i18n/recovery-page.js";
+import { RESTORE_DISCARD_WORDS } from "./i18n/recovery-page.js";
 import type { Hono } from "hono";
 import { AppError, type SupportedLocale } from "@waitron/shared";
 import { lockVenueDatabase } from "@waitron/db";
@@ -45,7 +45,7 @@ export async function renderRestoreDiscard(
   view: AdministratorView,
   log?: Logger,
 ): Promise<string> {
-  const text = RESTORE_DISCARD_TEXT[view.locale];
+  const text = RESTORE_DISCARD_WORDS[view.locale];
   if (view.stopped) return `<p>${escapeHtml(text.stopped)}</p>`;
   if (
     view.message?.kind !== "moved" &&
@@ -139,8 +139,8 @@ export function mountRestoreDiscard(
       completedPage: (locale: SupportedLocale) =>
         renderDocument(
           locale,
-          RESTORE_DISCARD_TEXT[locale].move,
-          `<p>${escapeHtml(RESTORE_DISCARD_TEXT[locale].done)}</p>`,
+          RESTORE_DISCARD_WORDS[locale].move,
+          `<p>${escapeHtml(RESTORE_DISCARD_WORDS[locale].done)}</p>`,
         ),
       choose: async (authorize) => {
         const hold = await lockVenueDatabase(deps.roots.venueDir);

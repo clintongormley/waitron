@@ -2,7 +2,7 @@ import type { ErrorCode, SupportedLocale } from "@waitron/shared";
 import type { VenueHolderKind } from "@waitron/db";
 
 /** Keyed by locale, so an entry with no Spanish fails the typecheck. */
-export type OperatorText = Readonly<
+export type OperatorWords = Readonly<
   Record<
     SupportedLocale,
     {
@@ -111,7 +111,7 @@ export const RECOVERY_PAGE_WORDS: Readonly<
  * "Two minutes" is the holder's watchdog bound (`WATCHDOG_KILL_MS`,
  * `packages/store/src/venue-liveness.ts`).
  */
-export function holderStalledText(kind: VenueHolderKind | undefined): OperatorText {
+export function holderStalledText(kind: VenueHolderKind | undefined): OperatorWords {
   const name = HOLDER_NAMES[kind ?? "script"];
   return {
     "en-GB": {
@@ -170,7 +170,7 @@ const PRODUCER_ACTION_ES =
  * records that cannot be re-created, so the action is always restore or reinstall (owner decision,
  * 2026-09-10).
  */
-export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>> = {
+export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords>>> = {
   "provisioning.database_ahead": {
     "en-GB": {
       title:
@@ -573,7 +573,7 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
  * Promises no recorded reason: a failure reading or counting the recovery state reaches
  * `node-entry.ts`'s outer handler, which logs its code and no detail.
  */
-export const GENERIC_TEXT: OperatorText = {
+export const GENERIC_WORDS: OperatorWords = {
   "en-GB": {
     title: "Waitron could not start.",
     action:
@@ -586,7 +586,7 @@ export const GENERIC_TEXT: OperatorText = {
   },
 };
 
-export const ENVIRONMENT_RECOVERY_TEXT: Readonly<
+export const ENVIRONMENT_RECOVERY_WORDS: Readonly<
   Record<
     SupportedLocale,
     {
@@ -623,7 +623,7 @@ export const ENVIRONMENT_RECOVERY_TEXT: Readonly<
   },
 };
 
-export const RESTORE_DISCARD_TEXT = {
+export const RESTORE_DISCARD_WORDS = {
   "en-GB": {
     move: "Throw this restore away",
     stop: "Stop",
@@ -654,7 +654,7 @@ export const RESTORE_DISCARD_TEXT = {
   },
 } as const;
 
-export const BOOKINGS_RECOVERY_TEXT = {
+export const BOOKINGS_RECOVERY_WORDS = {
   "en-GB": {
     detail:
       "You can switch Bookings off and try starting Waitron again. Saved bookings stay on this box. Use an active administrator's password; an administrator without a password cannot use this action.",

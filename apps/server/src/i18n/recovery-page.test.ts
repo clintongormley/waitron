@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   BOOT_INCOMPLETE,
-  ENVIRONMENT_RECOVERY_TEXT,
-  GENERIC_TEXT,
-  OPERATOR_TEXT,
+  ENVIRONMENT_RECOVERY_WORDS,
+  GENERIC_WORDS,
+  OPERATOR_WORDS,
   RECOVERY_PAGE_WORDS,
   holderStalledText,
 } from "./recovery-page.js";
@@ -19,7 +19,7 @@ describe("recovery page wording", () => {
   });
 
   it("provides the generic line in both languages", () => {
-    expect(GENERIC_TEXT).toEqual({
+    expect(GENERIC_WORDS).toEqual({
       "en-GB": {
         title: "Waitron could not start.",
         action:
@@ -34,7 +34,7 @@ describe("recovery page wording", () => {
   });
 
   it("provides the database-ahead wording in both languages", () => {
-    expect(OPERATOR_TEXT["provisioning.database_ahead"]).toEqual({
+    expect(OPERATOR_WORDS["provisioning.database_ahead"]).toEqual({
       "en-GB": {
         title:
           "This box's database was set up by a different version of Waitron than the one installed.",
@@ -52,8 +52,8 @@ describe("recovery page wording", () => {
 
   it("keys the unfinished-start wording by its recorded code", () => {
     expect(BOOT_INCOMPLETE).toBe("server.boot_incomplete");
-    expect(Object.hasOwn(OPERATOR_TEXT, "server.boot_incomplete")).toBe(true);
-    expect(OPERATOR_TEXT[BOOT_INCOMPLETE]).toBeDefined();
+    expect(Object.hasOwn(OPERATOR_WORDS, "server.boot_incomplete")).toBe(true);
+    expect(OPERATOR_WORDS[BOOT_INCOMPLETE]).toBeDefined();
   });
 
   it("names the stalled holder in the title", () => {
@@ -82,18 +82,18 @@ describe("recovery page wording", () => {
 
   it("sends nobody to someone else on any row, in either language", () => {
     const rows: [string, Record<string, string>][] = [
-      ...Object.entries(OPERATOR_TEXT).flatMap(([code, text]) =>
+      ...Object.entries(OPERATOR_WORDS).flatMap(([code, text]) =>
         (["en-GB", "es-ES"] as const).map(
           (lang) => [`${code} ${lang}`, { ...text![lang] }] as [string, Record<string, string>],
         ),
       ),
       ...(["en-GB", "es-ES"] as const).map(
         (lang) =>
-          [`generic ${lang}`, { ...GENERIC_TEXT[lang] }] as [string, Record<string, string>],
+          [`generic ${lang}`, { ...GENERIC_WORDS[lang] }] as [string, Record<string, string>],
       ),
       ...(["en-GB", "es-ES"] as const).map(
         (lang) =>
-          [`environment ${lang}`, { ...ENVIRONMENT_RECOVERY_TEXT[lang] }] as [
+          [`environment ${lang}`, { ...ENVIRONMENT_RECOVERY_WORDS[lang] }] as [
             string,
             Record<string, string>,
           ],
