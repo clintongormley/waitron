@@ -3,21 +3,18 @@
 // routes, with the real promotion standing behind the activation. The restart the promotion asks
 // for is not run: the case carries on against the same open databases.
 import { Socket } from "node:net";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { expect } from "vitest";
 import type { KeyRing } from "@waitron/credentials";
 import {
-  invoiceSeries,
   openVenueDatabase,
   readStandardSeriesId,
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
 import { FISCAL_CLASSIFICATION } from "@waitron/fiscal-verifactu";
-import { registrosFacturacion as registros } from "@waitron/fiscal-verifactu/src/schema/registros.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import type { WaitronModule } from "@waitron/module";
 import { createFirstSetupCoordinator, createPasswordThrottle } from "@waitron/provisioning";
 import { nodeId as asNodeId } from "@waitron/shared";
@@ -198,28 +195,31 @@ export function takeoverRoutes(args: {
   return { app, takeOver };
 }
 
-/** A cash sale on `nodeId`'s standard series, and the fiscal record it wrote. */
+/** Every fiscal row in `db` that belongs to `nodeId`, by table. */
+export async function fiscalRowsOf(db: Database, nodeId: string) {
+  const rows = await fiscalRows(db);
+  return Object.fromEntries(
+    Object.entries(rows).map(([table, list]) => [
+      table,
+      list.filter((row) => (row as { node_id?: unknown }).node_id === nodeId),
+    ]),
+  );
+}
+
+type Row = Record<string, unknown>;
+
+/** A cash sale on `nodeId`'s standard series, the fiscal record it wrote and that record's installation. */
 export async function saleOn(db: Database, nodeId: string) {
   const seriesId = await readStandardSeriesId(db, nodeId);
-  const { saleId } = await recordFixtureSale(db, {
+  const { fiscal } = await recordFixtureSale(db, {
     nodeId,
     seriesId,
     description: "Coffee",
     baseAmount: "2.00",
     vatRate: "10.00",
   });
-  const [record] = await db.select().from(registros).where(eq(registros.saleId, saleId));
-  return { seriesId, record: record! };
-}
-
-/** `nodeId`'s installations and series codes in `db`. */
-export async function filingOf(db: Database, nodeId: string) {
-  return {
-    installations: (await db.select().from(registroSif).where(eq(registroSif.nodeId, nodeId))).map(
-      (row) => ({ id: row.id, name: row.numeroInstalacion }),
-    ),
-    series: (await db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, nodeId))).map(
-      (row) => ({ id: row.id, code: row.code }),
-    ),
-  };
+  const all = Object.values(await fiscalRows(db)).flat() as Row[];
+  const record = all.find((row) => row.id === fiscal.recordId)!;
+  const installation = all.find((row) => row.id === record.sif_id)!;
+  return { seriesId, record, installation };
 }

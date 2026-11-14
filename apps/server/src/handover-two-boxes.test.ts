@@ -47,7 +47,7 @@ import { mountPeerStatusApi } from "./peer-status-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import {
   boxRequest,
-  filingOf,
+  fiscalRowsOf,
   fiscalRows,
   placeCopy,
   saleOn,
@@ -374,8 +374,12 @@ describe("a controlled handover to the joined spare, then the old box back by em
       });
       opened.push(c);
       const modules = enabledModules(ALL_MODULES, await readModuleConfig(spareState));
-      const oldFiling = await filingOf(c.venue, mainId);
-      expect(oldFiling.installations).toHaveLength(1);
+      const oldRows = await fiscalRowsOf(c.venue, mainId);
+      const codes = (rows: Record<string, unknown[]>) =>
+        (rows.invoice_series as Array<{ id: string; code: string }>).map(({ code }) => code);
+      const seriesIds = (rows: Record<string, unknown[]>) =>
+        (rows.invoice_series as Array<{ id: string }>).map(({ id }) => id);
+      expect(codes(oldRows)).not.toEqual([]);
       const handedOver = await takeoverRoutes({
         store: c,
         nodeId: spareId,
@@ -389,18 +393,16 @@ describe("a controlled handover to the joined spare, then the old box back by em
         waitUntil,
       }).takeOver();
       expect((await readNodeMode(c.node, spareId)).mode).toBe("primary");
-      const cFiling = await filingOf(c.venue, spareId);
-      expect(cFiling.installations.map(({ name }) => name)).toEqual([handedOver.identity]);
-      expect(handedOver.identity).not.toBe(oldFiling.installations[0]!.name);
-      for (const { code } of cFiling.series)
-        expect(oldFiling.series.map((row) => row.code)).not.toContain(code);
+      const cRows = await fiscalRowsOf(c.venue, spareId);
+      expect(codes(cRows)).not.toEqual([]);
+      for (const code of codes(cRows)) expect(codes(oldRows)).not.toContain(code);
+      expect(JSON.stringify(oldRows)).not.toContain(handedOver.identity);
       const cSale = await saleOn(c.venue, spareId);
-      expect(cFiling.series.map(({ id }) => id)).toContain(cSale.seriesId);
-      expect(cSale.record).toMatchObject({
-        nodeId: spareId,
-        sifId: cFiling.installations[0]!.id,
-      });
-      expect(await filingOf(c.venue, mainId)).toEqual(oldFiling);
+      expect(seriesIds(cRows)).toContain(cSale.seriesId);
+      expect(cSale.record).toMatchObject({ node_id: spareId });
+      expect(cSale.installation).toMatchObject({ node_id: spareId });
+      expect(Object.values(cSale.installation)).toContain(handedOver.identity);
+      expect(await fiscalRowsOf(c.venue, mainId)).toEqual(oldRows);
 
       // The old box is reset (both databases new) and joins the new main box under a new id.
       await holdBoxSecrets(spareState);
@@ -425,8 +427,8 @@ describe("a controlled handover to the joined spare, then the old box back by em
       for (const rows of Object.values(await fiscalRows(resetBox.db))) expect(rows).toEqual([]);
       expect(await readdir(resetState)).not.toContain(MODULE_PREPARATION_STATE_FILE);
 
-      // Stand-ins, as `joined` has them for the first join: the new box's row and the chart
-      // vouching for its key; then its mirror copy of the venue.
+      // The main box's join duty writes the new box's row once its store answers (`spare-join.ts`);
+      // here the test writes it. The mirror's copy of the venue is a vacuum of the main box's file.
       const cKey = await readNodeIdentityKey(c.node, RING, spareId);
       const [cRow] = await c.venue.select().from(nodes).where(eq(nodes.id, spareId));
       await withTransaction(c.venue, (tx) =>
@@ -439,14 +441,6 @@ describe("a controlled handover to the joined spare, then the old box back by em
           endorsement: endorseKey(newId, rejoined.standby.publicKey, spareId, cKey),
         }),
       );
-      const { body: cChart } = (await readNodeMembership(c.venue))!;
-      const chartBody = { ...cChart, term: cChart.term + 1 };
-      await writeNodeMembership(c.venue, {
-        body: chartBody,
-        signerNodeId: spareId,
-        signature: signDocumentBody(chartBody, cKey),
-        endorsements: [endorseKey(newId, rejoined.standby.publicKey, spareId, cKey)],
-      });
       const cFiscalAtSwitchOff = await fiscalRows(c.venue);
       const bVenue = join(scratch, "b-venue");
       await mkdir(bVenue);
@@ -454,7 +448,7 @@ describe("a controlled handover to the joined spare, then the old box back by em
       resetBox.node.run(sql`vacuum into ${join(bVenue, "node.db")}`);
       const b = await openVenueDatabase(bVenue);
       opened.push(b);
-      const cChainOnB = await filingOf(b.venue, spareId);
+      const cChainOnB = await fiscalRowsOf(b.venue, spareId);
 
       // C is switched off; B declares the emergency and takes over on the copy it holds.
       const declaration = new Hono();
@@ -504,15 +498,16 @@ describe("a controlled handover to the joined spare, then the old box back by em
         waitUntil,
       }).takeOver();
       expect((await readNodeMode(b.node, newId)).mode).toBe("primary");
-      const bFiling = await filingOf(b.venue, newId);
-      expect(bFiling.installations.map(({ name }) => name)).toEqual([tookOver.identity]);
-      expect([handedOver.identity, oldFiling.installations[0]!.name]).not.toContain(
-        tookOver.identity,
-      );
+      const bRows = await fiscalRowsOf(b.venue, newId);
+      for (const code of codes(bRows))
+        expect([...codes(oldRows), ...codes(cRows)]).not.toContain(code);
+      expect(JSON.stringify([oldRows, cChainOnB])).not.toContain(tookOver.identity);
       const bSale = await saleOn(b.venue, newId);
-      expect(bFiling.series.map(({ id }) => id)).toContain(bSale.seriesId);
-      expect(bSale.record).toMatchObject({ nodeId: newId, sifId: bFiling.installations[0]!.id });
-      expect(await filingOf(b.venue, spareId)).toEqual(cChainOnB);
+      expect(seriesIds(bRows)).toContain(bSale.seriesId);
+      expect(bSale.record).toMatchObject({ node_id: newId });
+      expect(bSale.installation).toMatchObject({ node_id: newId });
+      expect(Object.values(bSale.installation)).toContain(tookOver.identity);
+      expect(await fiscalRowsOf(b.venue, spareId)).toEqual(cChainOnB);
       expect(await fiscalRows(c.venue)).toEqual(cFiscalAtSwitchOff);
     } finally {
       for (const store of opened) await store.close();
