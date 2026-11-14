@@ -1,6 +1,6 @@
 import { tableExists } from "@waitron/db";
 import { venueDirOf } from "@waitron/store";
-import { DEMO_DEVELOPER_PRESETS, DEFAULT_DEMO_DEVELOPER_PRESET } from "@waitron/country-packs/demo";
+import { DEMO_DEVELOPER_PRESETS } from "@waitron/country-packs/demo";
 // Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue directory and
 // write its identity to `apps/server/.env`. Run from the repo root via `pnpm dev:setup`; never
 // against a production directory — it chains real fiscal records under `preproduction`, and it
@@ -35,7 +35,7 @@ import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant, type SeedDemoResult } from "./demo-seed/seed.js";
 import { demoSeedEnvironment } from "./demo-seed/seed-sales.js";
 import { DEMO_ADMIN_EMAIL, DEMO_DASHBOARD_PASSWORD } from "./demo-seed/credentials.js";
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/locale.js";
+import type { SeedLocale } from "./demo-seed/locale.js";
 import { readDemoSeedSelection } from "./demo-seed/data-set.js";
 import { applyDeveloperDemoVenue } from "./demo-seed/allocation.js";
 
@@ -200,10 +200,7 @@ async function provisionVenue(
   const pack = getCountryPack(preset.country)!;
   const identity = pack.demo!;
   const province = findAdministrativeArea(pack, preset.province)!.name;
-  const receiptLocale =
-    preset === DEFAULT_DEMO_DEVELOPER_PRESET
-      ? SEED_INVOICE_LOCALE[seedLocale]
-      : receiptLanguageRules(pack, province).defaultLocale;
+  const receiptLocale = receiptLanguageRules(pack, province).defaultLocale;
   const venue = await applyDeveloperDemoVenue(
     planVenue(
       {

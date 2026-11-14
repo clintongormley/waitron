@@ -639,7 +639,7 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Bundle: Receipt language loose ends
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - The provisioning command (`waitron-provision`) can still store two languages, or one no pack
   offers; the first entry is the default receipt language. It does not hold Catalonia to Catalan:
@@ -649,8 +649,6 @@ Hardware and inbox checks to complete in the owner session.
 - The till reads its fallback receipt language only when it
   starts (again after a server switch or an enrolment), so a change reaches those after a
   reload. The on-screen ticket follows each sale's own language.
-- The dev and demo seed's English mode stores `en-GB`; Venue settings' Defaults card shows it as
-  the saved language although it is not offered.
 
 ## Bundle: A print agent somewhere other than the box
 
