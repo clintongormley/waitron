@@ -431,6 +431,13 @@ it.each(["en", "es"] as const)(
         field(el, "season-3-month").shadowRoot!.querySelector(".value")!.textContent!.trim(),
       ).toBe(locale === "en" ? "Sept" : "sept");
       const binCell = rows[0]!.querySelector<HTMLElement>("td.bin")!;
+      const heading = root(el).querySelector("thead th:nth-child(3)")!;
+      const label = document.createRange();
+      label.selectNodeContents(heading);
+      expect(
+        label.getBoundingClientRect().right,
+        "Starts on and its required mark clear the bin",
+      ).toBeLessThanOrEqual(binCell.getBoundingClientRect().left);
       rows.forEach((row, index) => {
         const day = row.querySelector("wt-combobox[name$=-day]")!.getBoundingClientRect();
         const name = row.querySelector("wt-input")!.getBoundingClientRect();

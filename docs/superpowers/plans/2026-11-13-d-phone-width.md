@@ -43,3 +43,5 @@ The second Prep minimum is removed after the reviewer’s deletion control and t
 ## Final fixes read — 2026-11-14
 
 Claude’s sole fixes read completed in 122 s. The Name and Day fields touched after removing all Name-cell padding; the new gap assertion first failed in both languages. Removing only start padding leaves a gap and still clears the bin with the wide-font case. The case now uses the existing Verdana/DejaVu Sans fallback pair and checks Sept/sept on the actual closed month. Both phone cases pass; no further review round. The watcher’s 01:29 decision already clears the desktop abbreviation; the reviewer’s inability to inspect campaign files is not new owner approval. Final captures stay local.
+
+Final visual checking also exposed the Starts on required mark under the bin. A range assertion failed in both wide-font locales (Spanish332.64>317); wrapping only that heading below480px passes both cases without moving fields. Final production +34/-5 =39, within the watcher’s40. All109 changed-file cases pass after both fixes.

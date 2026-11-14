@@ -132,6 +132,9 @@ export class SeasonsWindow extends LitElement {
         min-width: calc(var(--wt-space-6) * 4.5);
       }
       @container (width < 480px) {
+        th:nth-child(3) {
+          white-space: normal;
+        }
         th:nth-child(2),
         .name {
           padding-inline-start: 0;
