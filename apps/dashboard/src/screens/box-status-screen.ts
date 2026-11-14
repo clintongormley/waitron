@@ -30,7 +30,8 @@ const LEAST_TO_FREE = 500_000;
  * when no read caught the box away: the whole outage can fall between two health reads. */
 const RESTART_AWAY_MS = 30_000;
 
-/** The server's margin for an administrator's device agreeing with the box. */
+/** The server's margin for an administrator's device agreeing with the box, and how far the box's
+ * time may be from the Clock row's when "The date and time are right" is pressed. */
 const AGREE_WITHIN_MS = 60_000;
 
 /** The reasons a refused set names that have their own sentence. */
@@ -288,6 +289,8 @@ export class BoxStatusScreen extends LitElement {
   #restartAccepted: { at: number; outageSeen: boolean } | null = null;
   /** Bumped at every opening, so an answer for a closed check is dropped. */
   #clockCheckRun = 0;
+  /** When the health read now shown arrived, on this device's steady clock. */
+  #healthReadAt = 0;
 
   // One controller per read: a controller's error callback does not say which query failed.
   readonly #healthQueries = new DashboardQueries(
@@ -323,6 +326,7 @@ export class BoxStatusScreen extends LitElement {
     void this.#healthQueries
       .watch("getBoxHealth", [], (health) => {
         this.health = health;
+        this.#healthReadAt = performance.now();
         if (health.clock.waiting === undefined) this.clockConfirmError = "";
         this.awaitingFigure = false;
         this.awaitingRetryRead = false;
@@ -385,10 +389,6 @@ export class BoxStatusScreen extends LitElement {
     return clockUnusable(health) || health.clock.waiting !== undefined;
   }
 
-  #deviceCheckOffered(health: BoxHealth): boolean {
-    return clockUnusable(health) || health.clock.waiting !== undefined;
-  }
-
   /** A set needs the box's clock service, so none is offered while the start's look hears none. */
   #clockHostSilent(health: BoxHealth | null): boolean {
     return health?.clock.waiting?.hostAnswers === false;
@@ -401,7 +401,7 @@ export class BoxStatusScreen extends LitElement {
       this.canCheckClock &&
       health.clock.sync.source === "timedatectl" &&
       !health.clock.sync.synced &&
-      this.#deviceCheckOffered(health) &&
+      this.#clockCheckNeeded(health) &&
       !this.#clockHostSilent(health)
     );
   }
@@ -476,8 +476,18 @@ export class BoxStatusScreen extends LitElement {
     if (this.confirmingClock) return;
     this.confirmingClock = true;
     this.clockConfirmError = "";
+    const shownAt = this.health?.clock.waiting?.boxAt;
+    const readAt = this.#healthReadAt;
     try {
-      const { challengeId } = await this.api.clockChallenge();
+      const { challengeId, boxAt } = await this.api.clockChallenge();
+      // The row shows the box's time to the minute; a box now further from it than that is not
+      // the time the person confirmed.
+      const expected =
+        shownAt === undefined ? NaN : Date.parse(shownAt) + (performance.now() - readAt);
+      if (!(Math.abs(Date.parse(boxAt) - expected) <= AGREE_WITHIN_MS)) {
+        this.clockConfirmError = t("box_status.clock.confirm_refused_stale");
+        return;
+      }
       await this.api.clockConfirm({ challengeId, asShown: true });
     } catch (error) {
       this.clockConfirmError =
@@ -504,7 +514,7 @@ export class BoxStatusScreen extends LitElement {
             >${t("box_status.clock.confirm")}</wt-button
           >`
         : nothing
-    }${this.#deviceCheckOffered(health) ? this.#clockCheckButton() : nothing}`;
+    }${this.#clockCheckNeeded(health) ? this.#clockCheckButton() : nothing}`;
   }
 
   #closeClockCheck(): void {

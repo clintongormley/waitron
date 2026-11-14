@@ -1332,6 +1332,24 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       expect(confirmButton(el)!.hasAttribute("disabled")).toBe(false);
     });
 
+    it("does not confirm, and says the clock changed, when the box's time is two days off the row's", async () => {
+      const api = waitingApi(WAITING_CLOCK, {
+        clockChallenge: vi.fn().mockResolvedValue({
+          challengeId: "ch-1",
+          boxAt: new Date(Date.parse(BOX_AT) + 2 * 24 * 60 * 60_000).toISOString(),
+        }),
+      });
+      const el = await mountClock(api);
+      vi.mocked(api.liveData.refresh).mockClear();
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(api.clockConfirm).not.toHaveBeenCalled();
+      expect(text(q(el, "[data-test=row-clock] [data-test=clock-confirm-refused]"))).toBe(
+        t("box_status.clock.confirm_refused_stale"),
+      );
+      expect(api.liveData.refresh).toHaveBeenCalled();
+    });
+
     it("forgets a refused confirmation once a read shows the wait has ended", async () => {
       const api = waitingApi(WAITING_CLOCK, {
         clockConfirm: vi.fn().mockRejectedValue(REFUSED("stale")),

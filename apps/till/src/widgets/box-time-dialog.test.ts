@@ -626,6 +626,19 @@ describe("till-box-time-dialog while the server waits for its time to be confirm
     expect(done).toBe(1);
   });
 
+  it("keeps nothing, and says the server's clock changed, when the fresh time is two days off the one shown", async () => {
+    const api = waiting(BOX_BEHIND);
+    const el = await open(api);
+    const moved = new Date(Date.parse(BOX_BEHIND) + 2 * 24 * 60 * 60_000).toISOString();
+    api.boxClockChallenge.mockResolvedValue({ challengeId: "c2", boxAt: moved, keepOffered: true });
+    await press(el, "server");
+    expect(api.boxClockConfirm).not.toHaveBeenCalled();
+    expect(shownError(el)).toBe(en["box_time.refused.stale"]);
+    expect(controls(el)).toEqual(["close", "check-again"]);
+    await press(el, "check-again");
+    expect(words(el)).toContain(clockDateTime(Date.parse(moved)));
+  });
+
   it("sends this till's time, without keep, on This device", async () => {
     const api = waiting(BOX_BEHIND, okConfirm(800_000_000_000));
     const el = await open(api);
