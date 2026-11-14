@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
-import { recordCorrection, type RecordCorrectionInput } from "@waitron/core";
+import { correctionTargetFor, recordCorrection, type RecordCorrectionInput } from "@waitron/core";
 import type { Transaction } from "@waitron/db";
 import { prepareIssueClock } from "@waitron/fiscal";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -130,11 +130,15 @@ export async function applyCorrectiveInvoice(
     cancellation !== undefined
   )
     throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
+  // `recordCorrection` would credit a replaced invoice's replacement, not this case's record.
+  const correctsSaleId = saleId(target.saleId);
+  if ((await correctionTargetFor(tx, correctsSaleId)) !== correctsSaleId)
+    throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
   const clock = await prepareIssueClock(tx, { nodeId: generation.nodeId }, generation.clock);
   const result = await recordCorrection(tx, input.backend, {
     ...request.correction,
     nodeId: generation.nodeId,
-    correctsSaleId: saleId(target.saleId),
+    correctsSaleId,
     authz: { managementSessionId: input.managementSessionId },
     clock,
   });

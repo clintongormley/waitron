@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
@@ -403,6 +404,24 @@ it.each([
 it("refuses another record's case even with the same totals", async () => {
   const other = await anotherInvoice();
   input.request.registroId = other.registroId;
+  await refuses("fiscal.remedy_invalid");
+});
+// The Veri*Factu backend does not file a replacement yet (`fiscal.correction_unsupported`), so the
+// replacement is a sale row alone, which is all `correctionTargetFor` reads.
+it("refuses a case whose invoice was replaced, rather than crediting the replacement", async () => {
+  const [registro] = await suite.db
+    .select({ saleId: registrosFacturacion.saleId })
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, input.request.registroId));
+  const [original] = await suite.db.select().from(sales).where(eq(sales.id, registro!.saleId));
+  await suite.db.insert(sales).values({
+    ...original!,
+    id: randomUUID(),
+    seriesId: input.request.correction.seriesId,
+    invoiceNumber: 99,
+    correctsSaleId: original!.id,
+    replacesOriginal: true,
+  });
   await refuses("fiscal.remedy_invalid");
 });
 it.each([false, true])("keeps the enabled policy effective on replay=%s", async (replay) => {
