@@ -7180,7 +7180,9 @@ describe("the Structure tree", () => {
           { checked: false },
         );
         await includeForm(el).updateComplete;
+        const closed = dialogClosed(includeModal(el));
         includeForm(el).shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+        await closed;
         await vi.waitFor(() => expect(includeModal(el).open).toBe(false));
         await vi.waitFor(() => expect(topLevelKeys(el)).not.toContain("included-wine"));
       },
@@ -7208,7 +7210,9 @@ describe("the Structure tree", () => {
         await rowAction(el, "m-drinks/m-beer", "delete");
       },
       close: async (el, client) => {
+        const closed = dialogClosed(modal(el, "delete-section"));
         inModal(el, "delete-section", '[data-test="delete-section-save"]').click();
+        await closed;
         await vi.waitFor(() => expect(modal(el, "delete-section").open).toBe(false));
         await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
       },

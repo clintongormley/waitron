@@ -475,12 +475,6 @@ Left open:
   another group still refuses a partial move of a line with extras (`tab.transfer_modifier_line`):
   part of a weighed dish.
   **Next action:** decide whether that partial move should split extras too.
-- **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
-  each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
-  presses, Chromium 153 let every Escape be refused, and a dialog without `closedby` passed the
-  repeated-Escape tests. **Next action:** decide
-  whether "closes on a real Escape press" should wait for its `wt-close` instead, keeping the
-  timer for the stays-open tests.
 - The till's "Amount off (€)" writes the euro sign into the label rather than taking the
   venue's currency. How a comp or discount appears on the invoice is still asesor Q29.
 

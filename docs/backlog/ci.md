@@ -515,17 +515,6 @@ The remaining work concerns live routing qualification and the action-repository
   move and also shrinks the denominator the ui caller’s aggregate bar of 90 in `mutation-sharded.yml` is measured against.
   Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
 
-## Bundle: Tests that close a dialog and check too soon, and pressEscape
-
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Tests that close a dialog and then check after a single `flush` were not searched**
-  [Detail](ci.md#tests-that-close-a-dialog-and-then-check-after-a-single-flush-a452-1487).
-- **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after each
-  Escape.** **Next action:** decide whether "closes on a real Escape press" should wait for its
-  `wt-close` instead, keeping the timer for the stays-open tests. Left open by service Task 11
-  (#916). [Detail](till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
-
 ## Decisions and deliberate limits
 
 - **A1473 point 4 and reverse movement were dropped by the owner on 13 November 2026.** Reopen only after a measured stall leaves a job waiting with free room for a reason other than a refusal or a recorded turn (watcher, 09:55).
@@ -901,17 +890,6 @@ output.
 Since #602 the comment at `.github/workflows/ci.yml` about line 268 says the three-shell receipt is
 in `.husky/pre-push`; that file holds no such receipt. Restore the receipt there or cut the pointer
 from the comment.
-
-## Tests that close a dialog and then check after a single `flush` (A452, #1487)
-
-A452 made browser tests wait for a dialog's `wt-close` before checking what a screen does on close,
-but its search found only a click or Escape followed within three lines by a wait; one followed by
-a single-frame `flush` and an assertion was fixed in the Printers tests alone. Popovers (combobox,
-help tooltip, row actions) report their toggle late too, and were not looked at.
-
-**Next action:** search the browser suites for a dialog close followed by `flush` and an assertion
-on a close-driven effect, and for a close followed by a poll of the dialog's `open` and a check on
-what the closed screen refuses (A927), and decide whether the popovers need the same treatment.
 
 ## The runner's action-repository download at job setup remains unqualified (A935)
 

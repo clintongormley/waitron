@@ -2037,8 +2037,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Cross-app links in the split Vite dev stack — OPEN, unqueued.**
   [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack).
 
-- **Tests that close a dialog and check too soon, and pressEscape** (bundle of 2, size M). [Detail](backlog/ci.md#bundle-tests-that-close-a-dialog-and-check-too-soon-and-pressescape)
-
 - **The server holds two separate 100-character limits for text a request sends**
   [Detail](backlog/ci.md#the-server-holds-two-separate-100-character-limits-for-text-a-request-sends).
 

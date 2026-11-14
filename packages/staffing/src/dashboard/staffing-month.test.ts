@@ -82,12 +82,18 @@ async function openBox(el: StaffingMonthView, date: string) {
   await vi.waitFor(() => expect(box.shown).toBe(true));
   return box;
 }
+const boxClosed = (box: Element) =>
+  new Promise<Event>((resolve) =>
+    box.addEventListener("calendar-day-box-close", resolve, { once: true }),
+  );
 async function pressBoxButton(el: StaffingMonthView, label: string) {
   const button = [...dayBox(el)!.querySelectorAll<HTMLElement>("wt-button")].find(
     (candidate) => candidate.textContent!.trim() === label,
   )!;
   expect(button).toBeDefined();
+  const closed = boxClosed(dayBox(el)!);
   button.click();
+  await closed;
   await settled(el);
 }
 async function useViewport(width: number, height: number) {
@@ -1093,9 +1099,11 @@ describe("the day box", () => {
   it("acts once and stays closed when a new read arrives as a box button closes it", async () => {
     const { el, open } = await mount({ canWrite: true });
     await openBox(el, "2026-12-03");
+    const closed = boxClosed(dayBox(el)!);
     dayBox(el)!.querySelector<HTMLElement>("wt-button")!.click();
     const view = el as unknown as { read: StaffingMonth };
     view.read = { ...view.read };
+    await closed;
     await settled(el);
     expect(open).toHaveBeenCalledTimes(1);
     expect(dayBox(el)).toBeNull();
@@ -1104,7 +1112,9 @@ describe("the day box", () => {
   it("acts on no close a button did not ask for, nor on one pressed before the box was shown", async () => {
     const { el, open } = await mount({ canWrite: true });
     await openBox(el, "2026-12-03");
+    let closed = boxClosed(dayBox(el)!);
     await userEvent.keyboard("{Escape}");
+    await closed;
     await settled(el);
     expect(dayBox(el)).toBeNull();
     dayButton(el, "2026-12-04")!.click();
@@ -1114,7 +1124,9 @@ describe("the day box", () => {
     box.querySelector<HTMLElement>("wt-button")!.click();
     await settled(el);
     await vi.waitFor(() => expect(box.shown).toBe(true));
+    closed = boxClosed(box);
     await userEvent.keyboard("{Escape}");
+    await closed;
     await settled(el);
     expect(dayBox(el)).toBeNull();
     expect(open).not.toHaveBeenCalled();
@@ -1144,7 +1156,9 @@ describe("the day box", () => {
     const heard = vi.fn();
     el.parentElement!.addEventListener("calendar-day-box-close", heard);
     await openBox(el, "2026-12-03");
+    const closed = boxClosed(dayBox(el)!);
     await userEvent.keyboard("{Escape}");
+    await closed;
     await settled(el);
     expect(dayBox(el)).toBeNull();
     expect(heard).not.toHaveBeenCalled();
@@ -1159,7 +1173,9 @@ describe("the day box", () => {
     });
     const { el } = await mount({ api });
     expect((await openBox(el, "2026-12-24")).line).toBe("Special day");
+    const closed = boxClosed(dayBox(el)!);
     await userEvent.keyboard("{Escape}");
+    await closed;
     await settled(el);
     setLocale("es");
     el.requestUpdate();
@@ -1171,7 +1187,9 @@ describe("the day box", () => {
     const { el } = await mount({ canWrite: true });
     const box = await openBox(el, "2026-12-03");
     expect(box.shadowRoot!.activeElement?.id).toBe("heading");
+    const closed = boxClosed(box);
     await userEvent.keyboard("{Escape}");
+    await closed;
     await settled(el);
     expect(dayBox(el)).toBeNull();
     expect(root(el).activeElement).toBe(dayButton(el, "2026-12-03"));
