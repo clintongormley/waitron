@@ -8072,7 +8072,7 @@ describe("printers-screen Bluetooth pairing", () => {
     }
   });
 
-  it("shows the reason the agent gave for a failed pairing, with no Dismiss, until the next pairing", async () => {
+  it("shows the general sentence for a failed pairing that sent no code, with no Dismiss, until the next pairing", async () => {
     const background = stubApi({
       listDiscoveredPrinters: vi.fn().mockResolvedValue([
         {

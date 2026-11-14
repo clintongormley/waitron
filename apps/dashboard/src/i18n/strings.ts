@@ -2039,7 +2039,7 @@ export const en = {
   "printers.bluetooth_reason.pin_too_slow":
     "the printer stopped waiting for the PIN. Try again and enter it sooner",
   "printers.bluetooth_reason.unsupported_method":
-    "this printer asks for a pairing method Waitron does not support. Connect it by USB or over the network instead",
+    "this printer asks for a pairing method Waitron does not support. If it has a USB or network port, connect it that way instead",
   "printers.bluetooth_reason.not_found": "the printer was not found. Scan again, then pair",
   "printers.bluetooth_reason.out_of_range":
     "the printer is off or out of range. Switch it on, bring it closer and try again",
@@ -6232,9 +6232,9 @@ export const es: Record<StringKey, string> = {
   "printers.bluetooth_reason.pin_needed":
     "esta impresora necesita un PIN. Introdúcelo y vuelve a intentarlo",
   "printers.bluetooth_reason.pin_too_slow":
-    "la impresora dejó de esperar el PIN. Vuelve a intentarlo e introdúcelo antes",
+    "la impresora dejó de esperar el PIN. Vuelve a intentarlo e introdúcelo más rápido",
   "printers.bluetooth_reason.unsupported_method":
-    "esta impresora pide un método de emparejamiento que Waitron no admite. Conéctala por USB o por la red",
+    "esta impresora pide un método de emparejamiento que Waitron no admite. Si tiene USB o conexión de red, conéctala así",
   "printers.bluetooth_reason.not_found":
     "no se encontró la impresora. Vuelve a buscar y luego empareja",
   "printers.bluetooth_reason.out_of_range":

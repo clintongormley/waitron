@@ -3972,7 +3972,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect(bystanderRow).not.toHaveProperty("printerLike");
   });
 
-  it("sends a Forget without a PIN, and keeps a failed outcome's reason bounded to 500 characters", async () => {
+  it("sends a Forget without a PIN, and keeps a failed outcome's error bounded to 500 characters", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const mac = randomMac();
@@ -4151,7 +4151,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     }
   });
 
-  it("withholds a failed Pair's whole reason when the agent's outcome carries the PIN", async () => {
+  it("withholds a failed Pair's whole error when the agent's outcome carries the PIN", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const plain = randomMac();

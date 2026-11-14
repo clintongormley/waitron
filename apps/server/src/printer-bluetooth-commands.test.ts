@@ -91,7 +91,7 @@ describe("printer Bluetooth commands", () => {
     });
   });
 
-  it("drops a success's error and records a failure that sent none without one", () => {
+  it("drops a success's error, and records a failure that sent no error with none", () => {
     const { commands } = store();
     commands.enqueue("agent-1", "forget", A);
     commands.enqueue("agent-1", "forget", B);

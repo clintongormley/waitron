@@ -1274,7 +1274,7 @@ export interface PrinterAddressProbe {
 }
 
 /** The agent's reason codes (`BLUETOOTH_FAILURE_REASONS`, packages/print-agent/src/client.ts), repeated
- * here because the dashboard does not depend on that package. */
+ * here because the dashboard does not import that package. */
 export type BluetoothFailureReason =
   | "wrong_pin"
   | "pin_needed"
