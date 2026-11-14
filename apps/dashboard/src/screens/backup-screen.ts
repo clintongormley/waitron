@@ -1,5 +1,5 @@
 import { dashboardQuery } from "../api/live-queries.js";
-import { QueryController } from "@waitron/dashboard-kit";
+import { QueryController, hasCodeMessage } from "@waitron/dashboard-kit";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { isPlainWebAddress } from "@waitron/shared";
@@ -1353,7 +1353,11 @@ export class BackupScreen extends LitElement {
             ${
               s.loadErrorCode
                 ? html`<span class="line stale" data-test="load-failed"
-                      >${t("backup.status.load_failed")} ${codeMessage(s.loadErrorCode)}</span
+                      >${
+                        hasCodeMessage(s.loadErrorCode)
+                          ? `${t("backup.status.load_failed")} ${codeMessage(s.loadErrorCode)}`
+                          : codeMessage("backup.archive_settings_unusable")
+                      }</span
                     ><wt-button
                       class="evidence-open"
                       data-test="evidence-open"

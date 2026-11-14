@@ -18,9 +18,14 @@ export function registerCodeMessages(table: Record<string, { en: string; es: str
  * BCP-47 tag ("es-ES"): pickLocale strips the region before the lookup. An unregistered code degrades
  * to fallback copy and an unknown language to the English copy — always a readable sentence, NEVER the code.
  */
+/** Whether `code` has copy of its own, rather than the fallback `codeMessage` gives it. */
+export function hasCodeMessage(code: string): boolean {
+  // Inherited prototype members are not registered messages.
+  return Object.hasOwn(messages, code);
+}
+
 export function codeMessage(code: string, l: string = currentLocale()): string {
-  // Inherited prototype members are not registered messages and must use the fallback copy.
-  return pickLocale(Object.hasOwn(messages, code) ? messages[code] : GENERIC_ERROR, l);
+  return pickLocale(hasCodeMessage(code) ? messages[code] : GENERIC_ERROR, l);
 }
 
 /**

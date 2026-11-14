@@ -1189,6 +1189,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The saved settings for scheduled backups are not valid. Save them again on the Backups screen.",
     es: "Los ajustes guardados de las copias programadas no son válidos. Vuelve a guardarlos en la pantalla Copias de seguridad.",
   },
+  "backup.archive_settings_unusable": {
+    en: "Scheduled backups are off because their saved settings could not be used. What the box recorded shows what it found. Turn on backups replaces the saved choices; leave without applying to keep them. Sales continue.",
+    es: "Las copias programadas están desactivadas porque no se han podido usar sus ajustes guardados. Lo que ha registrado el equipo muestra lo que encontró. Activar las copias sustituye los ajustes guardados; sal sin aplicarlos para conservarlos. Las ventas continúan.",
+  },
   "backup.archive_settings_unreadable": {
     en: "The saved settings for scheduled backups can't be read. Save them again on the Backups screen to replace them.",
     es: "No se pueden leer los ajustes guardados de las copias programadas. Vuelve a guardarlos en la pantalla Copias de seguridad para sustituirlos.",

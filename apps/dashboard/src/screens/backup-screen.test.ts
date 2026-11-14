@@ -1,5 +1,5 @@
 import { useLocale } from "../testing/locale-setup.js";
-import { LiveData } from "@waitron/dashboard-kit";
+import { LiveData, hasCodeMessage } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -2217,6 +2217,42 @@ describe("A1089 unreadable archive settings choices", () => {
       }
     });
 
+    it(`a load failure with no words of its own says what happened and what each choice does (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({}, { ...OFF, loadErrorCode: "credentials.decrypt_failed" });
+        const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+        await flush(el);
+        const line = q(el, "[data-test=load-failed]")!.textContent!.trim();
+        const words = codeMessage("backup.archive_settings_unusable");
+        expect(hasCodeMessage("backup.archive_settings_unusable")).toBe(true);
+        expect(line).toBe(words);
+        expect(line).not.toContain(codeMessage("server.internal"));
+        expect(words).toContain(t("backup_evidence.heading"));
+        expect(words).toContain(t("backup.apply"));
+        expect(words).not.toMatch(/support|soporte|manager|responsable|encargad/i);
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it(`a load failure with words of its own still shows them (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({}, { ...OFF, loadErrorCode: "backup.archive_settings_invalid" });
+        const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+        await flush(el);
+        const line = q(el, "[data-test=load-failed]")!.textContent!;
+        expect(line).toContain(t("backup.status.load_failed"));
+        expect(line).toContain(codeMessage("backup.archive_settings_invalid"));
+        expect(line).not.toContain(codeMessage("backup.archive_settings_unusable"));
+      } finally {
+        setLocale(previous);
+      }
+    });
+
     it(`explains stopping without replacing unreadable settings (${locale})`, async () => {
       const previous = currentLocale();
       setLocale(locale);
@@ -2233,9 +2269,9 @@ describe("A1089 unreadable archive settings choices", () => {
         await flush(el);
         const message = alertMessage("backup.archive_settings_unusable", {}, locale);
         expect(message).toContain(t("backup.apply"));
-        expect(q(el, "[data-test=load-failed]")!.textContent).toContain(
-          codeMessage("credentials.decrypt_failed"),
-        );
+        const line = q(el, "[data-test=load-failed]")!.textContent!;
+        expect(line).toContain(codeMessage("backup.archive_settings_unusable"));
+        expect(line).not.toContain(codeMessage("credentials.decrypt_failed"));
         setInput(el, "[data-test=destination]", "/mnt/usb/reconsidered");
         await el.updateComplete;
         el.remove();
