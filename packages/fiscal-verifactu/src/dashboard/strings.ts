@@ -269,9 +269,9 @@ const en = {
     "Choose a day no later than the invoice's date, {date}.",
   "fiscal_filing.put_right.replace.confirm":
     "Waitron will issue a replacement corrective invoice for invoice {number} of {date}, total {total}, dated {today}.",
-  "fiscal_filing.put_right.replace.period": "The sale counts in the VAT return for {period}.",
+  "fiscal_filing.put_right.replace.period": "The VAT return counts the sale in {period}.",
   "fiscal_filing.put_right.replace.order":
-    "It goes to AEAT after any earlier invoices AEAT is holding back. The refused invoice stays as it is.",
+    "It goes to AEAT after any earlier invoices Waitron is holding back. The refused invoice stays as it is.",
   "fiscal_filing.put_right.replace.day_differs":
     "The server's date, {server}, and this device's, {device}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.",
   "fiscal_filing.put_right.replace.send": "Send the replacement",
@@ -295,7 +295,7 @@ const en = {
   "fiscal_filing.refused.changed":
     "This case was already put right, or it changed; nothing more was sent.",
   "fiscal_filing.refused.not_sent":
-    "Waitron could not send this correction, so nothing was sent. This is a fault in Waitron; the case stays open.",
+    "Waitron could not send this, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.disk_full":
     "The server's disk is full, so nothing was sent. Follow the disk alert, then send again.",
   "fiscal_filing.refused.record_invalid":
@@ -303,7 +303,7 @@ const en = {
   "fiscal_filing.refused.fingerprint":
     "The fingerprint check of the server's invoice records failed, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.try_again":
-    "The server could not add the correction to its invoice records this time, so nothing was sent. Send again.",
+    "The server could not add the new record to its invoice records this time, so nothing was sent. Send again.",
   "fiscal_filing.refused.setup":
     "The server found a problem with its own invoicing setup, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.operation_date":
@@ -647,9 +647,9 @@ const es: Record<AeatCertificateKey, string> = {
     "Elige un día que no sea posterior a la fecha de la factura, {date}.",
   "fiscal_filing.put_right.replace.confirm":
     "Waitron emitirá una factura rectificativa que sustituye a la factura {number} del {date}, con un total de {total}, con fecha {today}.",
-  "fiscal_filing.put_right.replace.period": "La venta cuenta en la declaración de IVA de {period}.",
+  "fiscal_filing.put_right.replace.period": "La declaración de IVA cuenta la venta en {period}.",
   "fiscal_filing.put_right.replace.order":
-    "Se envía a la AEAT después de las facturas anteriores que la AEAT tenga detenidas. La factura rechazada se queda como está.",
+    "Se envía a la AEAT después de las facturas anteriores que Waitron tenga detenidas. La factura rechazada se queda como está.",
   "fiscal_filing.put_right.replace.day_differs":
     "La fecha del servidor, {server}, y la de este dispositivo, {device}, no coinciden. Elige Parar, después Actualizar, y vuelve a abrir este caso. Si las fechas siguen sin coincidir, revisa la hora en Estado del servidor.",
   "fiscal_filing.put_right.replace.send": "Enviar la rectificativa",
@@ -674,7 +674,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.changed":
     "Este caso ya se había corregido o ha cambiado; no se ha enviado nada más.",
   "fiscal_filing.refused.not_sent":
-    "Waitron no ha podido enviar esta subsanación, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
+    "Waitron no ha podido enviarlo, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.refused.disk_full":
     "El disco del servidor está lleno, así que no se ha enviado nada. Sigue el aviso del disco y envía de nuevo.",
   "fiscal_filing.refused.record_invalid":
@@ -682,7 +682,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.fingerprint":
     "Ha fallado la comprobación de la huella de los registros de facturación del servidor, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.refused.try_again":
-    "El servidor no ha podido añadir la subsanación a sus registros de facturación esta vez, así que no se ha enviado nada. Envía de nuevo.",
+    "El servidor no ha podido añadir el registro a sus registros de facturación esta vez, así que no se ha enviado nada. Envía de nuevo.",
   "fiscal_filing.refused.setup":
     "El servidor ha encontrado un problema en su propia configuración de facturación, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.refused.operation_date":

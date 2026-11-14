@@ -539,6 +539,8 @@ A1406, A1407 and A1408.
   *(2026-11-14: still no corrective writer files an R4; Q37-FIX added an R5 by replacement.)*
 - **The VAT return sorts by issue date** (`computeVatReturn`), so a misdated sale lands in the wrong
   period in that report.
+  *(2026-11-14: a simplified invoice replaced through Q37-FIX counts in its real day's period; any
+  other sale still counts by its issue date.)*
 - **Three identical refusals hold the rest of a chain**, so a clock a day ahead could stop later filings.
   *(2026-11-14: since A1420 PR 2, a run of `1112` refusals holds nothing.)*
 - **Clocks running behind are not listed** for the owner, though they need the same remedy.

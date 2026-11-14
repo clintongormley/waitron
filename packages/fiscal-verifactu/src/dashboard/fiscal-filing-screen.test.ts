@@ -1357,11 +1357,11 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
       `Waitron will issue a replacement corrective invoice for invoice T1/41 of ${calendar("2026-11-03")}, total ${formatMoney("12.10", "en")}, dated ${calendar(deviceDay())}.`,
     );
     expect(confirmation()).toContain(
-      "It goes to AEAT after any earlier invoices AEAT is holding back. The refused invoice stays as it is.",
+      "It goes to AEAT after any earlier invoices Waitron is holding back. The refused invoice stays as it is.",
     );
     expect(confirmation()).not.toContain("VAT return");
     await pick(screen, details, "2026-10-31");
-    expect(confirmation()).toContain("The sale counts in the VAT return for October 2026.");
+    expect(confirmation()).toContain("The VAT return counts the sale in October 2026.");
   });
 
   it("keeps Send disabled, saying so, when the server's date and this device's differ", async () => {
