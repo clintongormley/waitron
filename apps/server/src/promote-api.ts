@@ -1,3 +1,4 @@
+import { peerBodyLimit } from "./peer-route-limits.js";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -123,10 +124,20 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
       throw new AppError("promotion.from_box_only", {});
   };
 
+  const limit = peerBodyLimit(1048576, "management.request_invalid");
+  for (const path of ["/management-api/promote/preparation", "/management-api/promote"]) {
+    app.use(path, (c, next) =>
+      run(c, log, async () => {
+        if (path.endsWith("/preparation")) c.header("Cache-Control", "no-store");
+        refuseFromNetworkOnMirror(c);
+        return (await limit(c, next)) ?? c.res;
+      }),
+    );
+  }
+
   app.post("/management-api/promote/preparation", (c) =>
     run(c, log, async () => {
       c.header("Cache-Control", "no-store");
-      refuseFromNetworkOnMirror(c);
       requireNodeOperationHttps(c);
       const body = await readJsonBody<{
         moduleOperation?: unknown;
@@ -166,7 +177,6 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
 
   app.post("/management-api/promote", (c) =>
     run(c, log, async () => {
-      refuseFromNetworkOnMirror(c);
       const turn = promotionTurn(deps.nodeDb);
       const afterSignIn = async (): Promise<void> => {
         turn.claim();

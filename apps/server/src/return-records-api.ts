@@ -1,3 +1,4 @@
+import { peerBodyLimit } from "./peer-route-limits.js";
 import { and, eq } from "drizzle-orm";
 import { readOpenHandoverOperation } from "@waitron/node-db";
 import { recordReturnBatchTx } from "./return-completion.js";
@@ -41,6 +42,7 @@ export function mountReturnRecordsApi(
     "return-records.failed",
   );
   mountReturnClashAcceptance(app, deps, log);
+  app.use("/api/node/return-records", peerBodyLimit(524288));
   app.post("/api/node/return-records", (c) =>
     run(c, log, async () => {
       const raw = await readJsonBody<unknown>(c);

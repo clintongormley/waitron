@@ -1,3 +1,4 @@
+import { peerBodyLimit } from "./peer-route-limits.js";
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
@@ -318,6 +319,7 @@ export function mountHandoverEmergencyApi(
             },
     };
   }
+  app.use("/api/node/handover/emergency/preview", peerBodyLimit(1048576));
   app.post("/api/node/handover/emergency/preview", (c) =>
     boundary(c, log, async () => {
       c.header("Cache-Control", "no-store");
@@ -451,6 +453,7 @@ export function mountHandoverEmergencyApi(
     checked.add(request.operationId);
     return { declaration };
   }
+  app.use("/api/node/handover/emergency/declare", peerBodyLimit(1048576));
   app.post("/api/node/handover/emergency/declare", (c) =>
     boundary(c, log, async () => {
       c.header("Cache-Control", "no-store");

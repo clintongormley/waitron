@@ -1,3 +1,4 @@
+import { peerBodyLimit } from "./peer-route-limits.js";
 import type { Hono } from "hono";
 import {
   persistNodeMembershipIfNewerTx,
@@ -65,6 +66,7 @@ export function saveVerifiedMembership(
 export function mountNodeMembershipApi(app: Hono, deps: NodeMembershipApiDeps, log: Logger): void {
   const run = createErrorBoundary({}, "node-membership.failed");
 
+  app.use("/api/node/membership", peerBodyLimit(262144));
   app.post("/api/node/membership", (c) =>
     run(c, log, async () => {
       const incoming = documentOf(await readRawJsonBody<unknown>(c));

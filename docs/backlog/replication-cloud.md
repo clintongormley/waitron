@@ -478,22 +478,6 @@ emailed notice in `apps/server/src/i18n/invoice-email-notice.ts`, since the prov
 receives what staff type into the till's address search and which suggestion they pick. Left
 open by A1171.
 
-## The peer-status route's minor follow-ups
-
-Left open by A1018 Slice 3 (`apps/server/src/peer-status-api.ts`):
-- A bad signature from a box the chart knows answers 403 `handover.peer_unknown`, not 401.
-- `operationId` is checked as a 1–64 character string, not as a UUID.
-- The route, and the two handover source routes (Slice 4, `apps/server/src/handover-source-api.ts`)
-  through the same `verifiedPeerQuery`, read a body of any size, read the chart and unseal this
-  box's key before the signature is checked; a small body limit, or checking the envelope's shape first, would bound it.
-- Slice 5's routes read the same way. A real mirror start took a 30 MiB unsigned body on the offer
-  (`apps/server/src/handover-destination-api.ts`) and answered 400 after reading it, and an unsigned
-  64 MiB body on the acceptance (`apps/server/src/handover-source-api.ts`) was buffered and parsed
-  before its 400. Neither sets a `bodyLimit`, as `cloud-api.ts` does.
-- `boot.adoption-allocation.test.ts` imports from `@waitron/db` twice, and its pending-adoption
-  case repeats its sibling's setup; `boot.restricted.test.ts`'s full-start case checks only the
-  answer's shape, not its signature.
-
 ## A1342: return a stopped box's records before reset
 
 **Automatic duplicate identification:** agree which returned invoices count as duplicates before
@@ -845,19 +829,6 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
   since at least #1587 (`git log -S`). A start with that leftover and no retry was not run.
 - **A1279: a local secondary promotes only over a chart it signed itself.** No production caller.
   [Detail](replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself)
-
-## Bundle: Size and attempt limits on box-to-box and handover routes
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The peer-status route's minor follow-ups.** A bad signature from a known box answers 403, the
-  operation id is not checked as a UUID, and a body of any size is read before the signature check,
-  here, on the two handover source routes (Slice 4), on the offer and on the acceptance (Slice 5).
-  Left open by A1018 Slice 3. [Detail](replication-cloud.md#the-peer-status-routes-minor-follow-ups)
-- **Nothing limits sign-in attempts on a box's operation routes.** Handover preparation, activation
-  and promote have no throttle, and one belongs on all of them. 32 attempts on an administrator's
-  email held their sign-in about 0.8 s and 64 about 2.5 s, with no refusal; nothing larger was run.
-  Left open by A1018 Slice 5 (Ruling R38).
 
 ## Bundle: Address search provider, province names, guide lines
 

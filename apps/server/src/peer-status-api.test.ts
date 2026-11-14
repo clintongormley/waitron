@@ -271,7 +271,7 @@ describe("POST /api/node/peer-status", () => {
     ).toBeNull();
   });
 
-  it("a stranger's key is refused 403 handover.peer_unknown", async () => {
+  it("a stranger's key is refused 401 handover.peer_unknown", async () => {
     const { app, peer } = await boxes();
     const stranger = generateNodeKeyPair();
     for (const signer of [
@@ -280,7 +280,7 @@ describe("POST /api/node/peer-status", () => {
       { nodeId: peer, privateKey: stranger.privateKey },
     ]) {
       const response = await ask(app, query(signer));
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(401);
       expect(await response.json()).toEqual({
         error: { code: "handover.peer_unknown", params: {} },
       });
@@ -290,7 +290,7 @@ describe("POST /api/node/peer-status", () => {
   it("an evicted box is refused", async () => {
     const { app, peer, peerKey } = await boxes("evicted");
     const response = await ask(app, query({ nodeId: peer, privateKey: peerKey }));
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(401);
     expect(await response.json()).toEqual({
       error: { code: "handover.peer_unknown", params: {} },
     });
@@ -325,6 +325,12 @@ describe("POST /api/node/peer-status", () => {
       [query(signer, { nonce: NONCE, atMs: "1" }), "atMs"],
       [query(signer, { nonce: NONCE, atMs: 1, operationId: 7 }), "operationId"],
       [query(signer, { nonce: NONCE, atMs: 1, operationId: "" }), "operationId"],
+      ...["not-a-uuid", OP.toUpperCase(), OP.replace("4aaa", "1aaa")].map(
+        (operationId): [unknown, string] => [
+          query(signer, { nonce: NONCE, atMs: 1, operationId, purpose: "status" }),
+          "operationId",
+        ],
+      ),
       [query(signer, { nonce: NONCE, atMs: 1, extra: "x" }), "body"],
     ];
     for (const [envelope, field] of cases) {
@@ -394,7 +400,7 @@ describe("POST /api/node/peer-status", () => {
     const signed = query({ nodeId: peer, privateKey: peerKey });
     const tampered = { ...signed, body: { ...signed.body, nonce: "m".repeat(24) } };
     const response = await ask(app, tampered);
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(401);
     expect(await response.json()).toEqual({
       error: { code: "handover.peer_unknown", params: {} },
     });

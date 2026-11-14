@@ -1,3 +1,4 @@
+import { peerBodyLimit } from "./peer-route-limits.js";
 // `POST /management-api/mirror-bundle`, on the singleton primary. The mirror calls it server-side, so
 // the admin's sign-in email, password and code ride in the body.
 import "./errors.js";
@@ -124,6 +125,7 @@ export function mountMirrorBundleApi(
   const run = createErrorBoundary(STATUS, "mirror.bundle_failed");
   const throttle = createPasswordThrottle();
 
+  app.use("/management-api/mirror-bundle", peerBodyLimit(1048576, "management.request_invalid"));
   app.post("/management-api/mirror-bundle", (c) =>
     run(c, log, async () => {
       // Every malformed credential field answers `password.invalid`, so the response never says which.

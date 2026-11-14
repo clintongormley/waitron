@@ -1,3 +1,4 @@
+import { peerBodyLimit } from "./peer-route-limits.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readdir, rename, rm, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -270,6 +271,7 @@ function readRelinquishment(
 export function mountHandoverSourceApi(app: Hono, deps: CaptureDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "handover-source.failed");
 
+  app.use("/api/node/handover/:operationId/indicator", peerBodyLimit(65536));
   app.post("/api/node/handover/:operationId/indicator", (c) =>
     run(c, log, async () => {
       const operationId = c.req.param("operationId");
@@ -278,6 +280,7 @@ export function mountHandoverSourceApi(app: Hono, deps: CaptureDeps, log: Logger
     }),
   );
 
+  app.use("/api/node/handover/:operationId/final-copy", peerBodyLimit(65536));
   app.post("/api/node/handover/:operationId/final-copy", (c) =>
     run(c, log, async () => {
       const connection = c.req.raw.signal;
@@ -302,6 +305,7 @@ export function mountHandoverSourceApi(app: Hono, deps: CaptureDeps, log: Logger
     }),
   );
 
+  app.use("/api/node/handover/:operationId/acceptance", peerBodyLimit(65536));
   app.post("/api/node/handover/:operationId/acceptance", (c) =>
     run(c, log, async () => {
       const raw = await readRawJsonBody<unknown>(c);
