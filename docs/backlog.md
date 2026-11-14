@@ -1767,8 +1767,6 @@ Not in any track until the standalone primary is done.
   route checks the query's `atMs` but never uses it, so there is no freshness window; a strict one
   would lock out a box with a wrong clock. Owner's choice. Left open by A1018 Slice 3 (Ruling R6).
 
-- **The waiting start's stuck and stale cases** (bundle of 3, 2 important, size S). [Detail](backlog/replication-cloud.md#bundle-the-waiting-starts-stuck-and-stale-cases)
-
 - **Size and attempt limits on box-to-box and handover routes** (bundle of 2, 2 important, size S). [Detail](backlog/replication-cloud.md#bundle-size-and-attempt-limits-on-box-to-box-and-handover-routes)
 
 - **Check everything at the offer, while the old box still sells** (bundle of 2, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-check-everything-at-the-offer-while-the-old-box-still-sells)
