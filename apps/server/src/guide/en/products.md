@@ -487,8 +487,8 @@ A guest link over mobile data and Cloud delivery are not available yet.
 ## Print a published menu {#guest-paper}
 
 In **Guest menu preview**, choose the guest language, then use **A4 printed menu** to choose
-**Bistro** for two balanced columns or **Lunch and wine** for a wider dish column with the last
-section in a narrow panel. Choose the font, spacing, colours and written allergen key. Use inline
+**Bistro** for two balanced columns or **Lunch and wine** for a wider dish column with a narrow panel for the last
+section when your menu has several sections. Choose the font, spacing, colours and written allergen key. Use inline
 words if you want declarations beside every dish.
 
 Choose a print logo from your image library, move sections up and add page breaks before sections.

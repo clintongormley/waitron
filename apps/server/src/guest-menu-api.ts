@@ -114,7 +114,10 @@ export function mountGuestMenuApi(
         return {
           html: renderGuestMenuPage(menu, venue.name, languages.defaultLanguage),
           versionId: live.versionId,
-          members: menu.members.map((member) => member.name),
+          members: menu.members.map((member) => ({
+            name: member.name,
+            section: member.kind === "section",
+          })),
           language: menu.language,
           languages: menu.languages,
         };

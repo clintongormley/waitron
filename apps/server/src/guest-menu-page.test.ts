@@ -259,3 +259,24 @@ it("starts a requested Bistro section on a new saved A4 page", async () => {
   expect(text(first.items)).not.toContain("Desserts");
   expect(text(second.items)).toContain("Desserts");
 });
+
+it("keeps a one-section Lunch-and-wine menu in the wide dishes column", async () => {
+  const p = await browser!.newPage({ viewport: { width: 900, height: 1200 } });
+  onTestFinished(() => p.close());
+  await p.setContent(
+    renderGuestMenuPage(menu, "The Restaurant", "en", false, {
+      preset: "lunch-wine",
+      font: "serif",
+      spacing: "compact",
+      key: "end",
+      ink: "#123456",
+      accent: "#654321",
+    }),
+  );
+  const width = await p
+    .locator("main > section")
+    .evaluate((el) => el.getBoundingClientRect().width);
+  expect(width).toBeGreaterThan(
+    (await p.locator("main").evaluate((el) => el.getBoundingClientRect().width)) * 0.6,
+  );
+});

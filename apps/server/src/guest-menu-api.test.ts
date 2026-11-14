@@ -326,7 +326,7 @@ it("renders the captured publication for paper, with only the selected library l
   expect(await wrongMenu.json()).toMatchObject({
     error: { code: "management.request_invalid", params: { field: "versionId" } },
   });
-  expect(captured.members.length).toBeGreaterThan(0);
+  expect(captured.members).toContainEqual({ name: "Something to drink", section: true });
   for (const [cookie, code] of [
     ["", "management_session.required"],
     [f.cookies.staff, "authorization.not_permitted"],

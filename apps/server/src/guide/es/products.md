@@ -515,7 +515,7 @@ El enlace para clientes con datos móviles y el envío a Cloud aún no están di
 
 En **Vista previa para clientes**, elige el idioma del cliente y usa **Carta impresa A4**.
 Elige **Bistró** para dos columnas equilibradas o **Menú y vinos** para una columna de platos más
-ancha y la última sección en un panel estrecho. Elige la tipografía, el espaciado, los colores y
+ancha y, cuando hay varias secciones, la última en un panel estrecho. Elige la tipografía, el espaciado, los colores y
 la leyenda de alérgenos. Usa las palabras junto a cada plato si prefieres leer allí las declaraciones.
 
 Elige un logotipo de tu biblioteca de imágenes, sube secciones y añade saltos de página antes de

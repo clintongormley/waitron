@@ -20,13 +20,19 @@ it("previews captured paper choices and saves only local appearance, without ena
   });
   const { el } = await mountWidget("dashboard-guest-menu-paper", {
     api,
+    settings: { enabled: false, available: false, revision: 0 },
     menuId: "menu",
     versionId: "v1",
     language: "en",
-    members: ["Lunch", "Wine"],
+    members: [
+      { name: "Lunch", section: true },
+      { name: "Wine", section: true },
+      { name: "Special dish", section: false },
+    ],
   } as never);
   await expect.poll(() => el.shadowRoot?.querySelector('[name="paper-preset"]')).toBeTruthy();
   const root = el.shadowRoot!;
+  expect(root.querySelectorAll(".member wt-switch").length).toBe(2);
   const save = () => root.querySelector<HTMLElementTagNameMap["wt-button"]>("#save-paper")!;
   await expect
     .poll(() => root.querySelector<HTMLElementTagNameMap["wt-button"]>("#preview-paper")!.disabled)
@@ -36,7 +42,15 @@ it("previews captured paper choices and saves only local appearance, without ena
     .querySelector('[name="paper-preset"]')!
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "lunch-wine" } }));
   await expect.poll(() => save().disabled).toBe(false);
+  root
+    .querySelectorAll(".member wt-switch")[1]!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
   await page.elementLocator(root.querySelectorAll(".member wt-button")[1]!).click();
+  await expect
+    .poll(
+      () => root.querySelector<HTMLElementTagNameMap["wt-switch"]>(".member wt-switch")!.checked,
+    )
+    .toBe(false);
   root
     .querySelectorAll(".member wt-switch")[1]!
     .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
@@ -50,7 +64,7 @@ it("previews captured paper choices and saves only local appearance, without ena
   expect(writes[0]).toMatchObject({
     versionId: "v1",
     language: "en",
-    order: [1, 0],
+    order: [1, 0, 2],
     breaks: [0],
     logo: "logo.webp",
     paper: { preset: "lunch-wine" },

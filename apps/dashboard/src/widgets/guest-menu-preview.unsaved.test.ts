@@ -16,7 +16,7 @@ class PaperLeaveApp extends LitElement {
             ? {
                 html: "<h1>Lunch</h1>",
                 versionId: "v1",
-                members: ["Lunch"],
+                members: [{ name: "Lunch", section: true }],
                 language: "en",
                 languages: ["en"],
               }

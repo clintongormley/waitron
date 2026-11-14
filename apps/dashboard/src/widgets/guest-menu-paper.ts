@@ -44,7 +44,7 @@ export class GuestMenuPaper extends LitElement {
   @property() menuId = "";
   @property() versionId = "";
   @property() language = "en";
-  @property({ attribute: false }) members: string[] = [];
+  @property({ attribute: false }) members: { name: string; section: boolean }[] = [];
   @property({ attribute: false }) draftParent?: object;
   @state() private paper: GuestMenuPaperAppearance = this.#defaults();
   @state() private order: number[] = [];
@@ -52,10 +52,11 @@ export class GuestMenuPaper extends LitElement {
   @state() private logo: string | null = null;
   @state() private printed = "";
   @state() private busy = false;
-  @state() private status: Awaited<ReturnType<DashboardApi["getGuestMenuSharing"]>> | null = null;
+  @property({ attribute: false }) settings: Awaited<
+    ReturnType<DashboardApi["getGuestMenuSharing"]>
+  > | null = null;
   @state() private error = "";
   #scope?: DraftScope<GuestMenuPaperAppearance>;
-  #generation = 0;
   #defaults(): GuestMenuPaperAppearance {
     return {
       preset: "bistro",
@@ -67,33 +68,21 @@ export class GuestMenuPaper extends LitElement {
     };
   }
   override disconnectedCallback() {
-    this.#generation++;
     this.#scope?.dispose();
     this.#scope = undefined;
     super.disconnectedCallback();
   }
   protected override willUpdate(changed: PropertyValues) {
     if (changed.has("versionId")) {
-      this.#generation++;
       this.order = this.members.map((_, i) => i);
       this.breaks = [];
       this.logo = null;
       this.printed = "";
       this.#scope?.dispose();
       this.#scope = undefined;
-      void this.#read();
     }
-    if (changed.has("language")) this.printed = "";
-  }
-  async #read() {
-    const generation = this.#generation;
-    this.status = null;
-    this.error = "";
-    try {
-      const status = await this.api.getGuestMenuSharing();
-      if (generation !== this.#generation || !this.isConnected) return;
-      this.status = status;
-      this.paper = { ...(status.paper ?? this.#defaults()) };
+    if (!this.#scope && this.settings) {
+      this.paper = { ...(this.settings.paper ?? this.#defaults()) };
       this.#scope = draftScopeFor(this, {
         id: this,
         parent: this.draftParent,
@@ -107,9 +96,14 @@ export class GuestMenuPaper extends LitElement {
         },
       }).scope;
       this.#scope.commit(this.paper);
-    } catch (error) {
-      if (generation === this.#generation) this.error = codeMessage(codeOf(error));
     }
+    if (changed.has("language")) this.printed = "";
+  }
+  #acceptSettings(value: NonNullable<GuestMenuPaper["settings"]>) {
+    this.settings = value;
+    this.dispatchEvent(
+      new CustomEvent("guest-settings-saved", { detail: value, bubbles: true, composed: true }),
+    );
   }
   #edit(patch: Partial<GuestMenuPaperAppearance>) {
     this.paper = { ...this.paper, ...patch };
@@ -118,22 +112,24 @@ export class GuestMenuPaper extends LitElement {
     this.#scope?.changed();
   }
   async #save() {
-    if (!this.status || this.busy || saveActionState(this.#scope).unchanged) return;
+    if (!this.settings || this.busy || saveActionState(this.#scope).unchanged) return;
     this.busy = true;
     this.error = "";
     const submitted = { ...this.paper };
     try {
-      this.status = await this.api.setGuestMenuSharing(
-        this.status.enabled,
-        this.status.revision,
-        submitted,
+      this.#acceptSettings(
+        await this.api.setGuestMenuSharing(
+          this.settings.enabled,
+          this.settings.revision,
+          submitted,
+        ),
       );
       this.#scope?.commit(submitted);
     } catch (error) {
       this.error = codeMessage(codeOf(error));
       if (codeOf(error) === "settings.out_of_date") {
         try {
-          this.status = await this.api.getGuestMenuSharing();
+          this.#acceptSettings(await this.api.getGuestMenuSharing());
         } catch {
           /* Retain the write refusal. */
         }
@@ -143,7 +139,7 @@ export class GuestMenuPaper extends LitElement {
     }
   }
   async #preview() {
-    if (!this.status || this.busy) return;
+    if (!this.settings || this.busy) return;
     this.busy = true;
     this.error = "";
     try {
@@ -179,7 +175,7 @@ export class GuestMenuPaper extends LitElement {
               name=${`paper-${key}`}
               label=${t(`menus.paper_${key}`)}
               .value=${this.paper[key]}
-              .disabled=${this.busy || !this.status}
+              .disabled=${this.busy || !this.settings}
               .options=${values.map((value) => ({ value, label: t(`menus.paper_${value}`) }))}
               @wt-change=${(e: CustomEvent<{ value: string }>) => {
                 e.stopPropagation();
@@ -187,7 +183,7 @@ export class GuestMenuPaper extends LitElement {
               }}
             ></wt-combobox>`,
         )}
-        ${(["ink", "accent"] as const).map((key) => colorField({ color: this.paper[key], noneChoice: { label: t("editor.color_use_default"), chip: this.#defaults()[key] }, name: `paper-${key}`, legend: t(`menus.paper_${key}`), busy: this.busy || !this.status, error: "", errorId: `paper-${key}-error`, change: (value) => this.#edit({ [key]: value ?? this.#defaults()[key] }) }))}
+        ${(["ink", "accent"] as const).map((key) => colorField({ color: this.paper[key], noneChoice: { label: t("editor.color_use_default"), chip: this.#defaults()[key] }, name: `paper-${key}`, legend: t(`menus.paper_${key}`), busy: this.busy || !this.settings, error: "", errorId: `paper-${key}-error`, change: (value) => this.#edit({ [key]: value ?? this.#defaults()[key] }) }))}
         <dashboard-image-upload
           venue-logo
           .api=${this.api}
@@ -206,47 +202,51 @@ export class GuestMenuPaper extends LitElement {
         ${this.order.map(
           (index, position) =>
             html`<div class="member">
-              <span>${this.members[index]}</span>
+              <span>${this.members[index]?.name}</span>
               <wt-button
                 variant="secondary"
                 .disabled=${position === 0 || this.busy}
-                aria-label=${`${t("menus.paper_up")} ${this.members[index]}`}
+                aria-label=${`${t("menus.paper_up")} ${this.members[index]?.name}`}
                 @click=${() => {
                   const order = [...this.order];
                   [order[position - 1], order[position]] = [order[position]!, order[position - 1]!];
                   this.order = order;
+                  this.breaks = this.breaks.filter((index) => index !== order[0]);
                   this.printed = "";
                 }}
                 >${t("menus.paper_up")}</wt-button
               >
-              <wt-switch
-                .checked=${this.breaks.includes(index)}
-                .disabled=${this.busy || position === 0}
-                @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
-                  e.stopPropagation();
-                  this.breaks = e.detail.checked
-                    ? [...this.breaks, index]
-                    : this.breaks.filter((i) => i !== index);
-                  this.printed = "";
-                }}
-                >${t("menus.paper_break")}</wt-switch
-              >
+              ${
+                this.members[index]?.section
+                  ? html`<wt-switch
+                      .checked=${this.breaks.includes(index)}
+                      .disabled=${this.busy || position === 0}
+                      @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+                        e.stopPropagation();
+                        this.breaks = e.detail.checked
+                          ? [...this.breaks, index]
+                          : this.breaks.filter((i) => i !== index);
+                        this.printed = "";
+                      }}
+                      >${t("menus.paper_break")}</wt-switch
+                    >`
+                  : nothing
+              }
             </div>`,
         )}
         <wt-form-actions error=${this.error}>
           <wt-button
             id="save-paper"
             variant=${action.variant}
-            .disabled=${this.busy || !this.status || action.unchanged}
+            .disabled=${this.busy || !this.settings || action.unchanged}
             @click=${() => this.#save()}
             >${t("menus.paper_save")}</wt-button
           >
         </wt-form-actions>
-        ${!this.status && this.error ? html`<wt-button variant="secondary" @click=${() => this.#read()}>${t("content_languages.retry")}</wt-button>` : nothing}
         <wt-button
           id="preview-paper"
-          variant=${this.status ? "primary" : "secondary"}
-          .disabled=${this.busy || !this.status}
+          variant=${this.settings ? "primary" : "secondary"}
+          .disabled=${this.busy || !this.settings}
           @click=${() => this.#preview()}
           >${t("menus.paper_preview")}</wt-button
         >

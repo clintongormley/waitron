@@ -39,8 +39,7 @@ export class GuestMenuPreview extends LitElement {
   @state() private error = "";
   @state() private source = "";
 
-  @state() private sharing: { enabled: boolean; revision: number; available: boolean } | null =
-    null;
+  @state() private sharing: Awaited<ReturnType<DashboardApi["getGuestMenuSharing"]>> | null = null;
   @state() private sharingBusy = false;
   @state() private sharingError = "";
 
@@ -173,7 +172,25 @@ export class GuestMenuPreview extends LitElement {
               ? html`<p>${t("menus.guest_unpublished")}</p>`
               : nothing
         }
-        ${this.answer?.versionId ? html`<dashboard-guest-menu-paper .api=${this.api} .menuId=${this.menuId} .versionId=${this.answer.versionId} .language=${this.answer.language} .members=${this.answer.members} .draftParent=${this}></dashboard-guest-menu-paper>` : nothing}
+        ${
+          this.answer?.versionId
+            ? html`<dashboard-guest-menu-paper
+                .api=${this.api}
+                .menuId=${this.menuId}
+                .versionId=${this.answer.versionId}
+                .language=${this.answer.language}
+                .members=${this.answer.members}
+                .settings=${this.sharing}
+                @guest-settings-saved=${(
+                  event: CustomEvent<NonNullable<GuestMenuPreview["sharing"]>>,
+                ) => {
+                  event.stopPropagation();
+                  this.sharing = event.detail;
+                }}
+                .draftParent=${this}
+              ></dashboard-guest-menu-paper>`
+            : nothing
+        }
         ${this.sharing?.available ? html`<a href="/public/menu" target="_blank" rel="noopener">${t("menus.guest_local_link")}</a>` : nothing}
         ${this.sharing ? html`<p>${t(!this.sharing.enabled ? "menus.guest_sharing_off" : this.sharing.available ? "menus.guest_sharing_on" : "menus.guest_sharing_unavailable")}</p>` : nothing}
         ${this.sharingError ? html`<p id="sharing-error" role="alert">${this.sharingError}</p>` : nothing}

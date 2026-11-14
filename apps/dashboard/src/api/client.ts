@@ -3185,7 +3185,7 @@ export class DashboardApi {
   ): Promise<{
     html: string;
     versionId: string;
-    members: string[];
+    members: { name: string; section: boolean }[];
     language: string;
     languages: string[];
   } | null> {
