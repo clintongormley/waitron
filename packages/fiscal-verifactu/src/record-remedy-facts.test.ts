@@ -664,6 +664,19 @@ it.each([{ description: "x".repeat(501) }].map((facts) => ({ facts })))(
   },
 );
 
+it("refuses a description holding a control character AEAT's XML cannot carry, at 400", async () => {
+  const before = await snapshot();
+  const res = await send({ description: "Servicio\u000Bde restauración" });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({
+    error: {
+      code: "fiscal.record_invalid",
+      params: { fields: ["DescripcionOperacion"], codes: ["CONTROL_CHAR"] },
+    },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
 describe("a fix never changes the invoice's amounts or what a line is", () => {
   const twelveTen = [
     {

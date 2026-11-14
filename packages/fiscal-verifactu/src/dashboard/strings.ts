@@ -226,6 +226,8 @@ const en = {
   "fiscal_filing.put_right.description": "Operation description",
   "fiscal_filing.put_right.description_required": "Write the operation description.",
   "fiscal_filing.put_right.description_too_long": "Keep the description to 500 characters.",
+  "fiscal_filing.put_right.description_control":
+    "Remove the invisible character AEAT does not accept; it may have come with pasted text.",
   "fiscal_filing.put_right.fix_fields": "Correct the field marked above.",
   "fiscal_filing.put_right.send": "Send the correction",
   "fiscal_filing.put_right.sending": "Sending…",
@@ -255,6 +257,14 @@ const en = {
   "fiscal_filing.refused.not_sent": "Waitron could not send this correction. Nothing was sent.",
   "fiscal_filing.refused.disk_full":
     "The server's disk is full, so nothing was sent. Follow the disk alert, then send again.",
+  "fiscal_filing.refused.record_invalid":
+    "The correction record failed Waitron's own check, so nothing was sent. The case stays open.",
+  "fiscal_filing.refused.fingerprint":
+    "The fingerprint check of the server's invoice records failed, so nothing was sent. The case stays open.",
+  "fiscal_filing.refused.try_again":
+    "The server could not add the correction to its invoice records this time, so nothing was sent. Send again.",
+  "fiscal_filing.refused.setup":
+    "The server found a problem with its own invoicing setup, so nothing was sent. The case stays open.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Refused",
   "fiscal_filing.cause.fiscal.aceptado_con_errores": "Accepted with errors",
   "fiscal_filing.cause.fiscal.anulacion_retenida": "Cancellation set aside",
@@ -545,6 +555,8 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.put_right.description_required": "Escribe la descripción de la operación.",
   "fiscal_filing.put_right.description_too_long":
     "La descripción no puede pasar de 500 caracteres.",
+  "fiscal_filing.put_right.description_control":
+    "Quita el carácter invisible que la AEAT no acepta; puede haber venido con un texto pegado.",
   "fiscal_filing.put_right.fix_fields": "Corrige el campo marcado arriba.",
   "fiscal_filing.put_right.send": "Enviar la subsanación",
   "fiscal_filing.put_right.sending": "Enviando…",
@@ -576,6 +588,14 @@ const es: Record<AeatCertificateKey, string> = {
     "Waitron no ha podido enviar esta subsanación. No se ha enviado nada.",
   "fiscal_filing.refused.disk_full":
     "El disco del servidor está lleno, así que no se ha enviado nada. Sigue el aviso del disco y envía de nuevo.",
+  "fiscal_filing.refused.record_invalid":
+    "El registro de subsanación no ha pasado la comprobación de Waitron, así que no se ha enviado nada. El caso sigue abierto.",
+  "fiscal_filing.refused.fingerprint":
+    "Ha fallado la comprobación de la huella de los registros de facturación del servidor, así que no se ha enviado nada. El caso sigue abierto.",
+  "fiscal_filing.refused.try_again":
+    "El servidor no ha podido añadir la subsanación a sus registros de facturación esta vez, así que no se ha enviado nada. Envía de nuevo.",
+  "fiscal_filing.refused.setup":
+    "El servidor ha encontrado un problema en su propia configuración de facturación, así que no se ha enviado nada. El caso sigue abierto.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Rechazado",
   "fiscal_filing.cause.fiscal.aceptado_con_errores": "Aceptado con errores",
   "fiscal_filing.cause.fiscal.anulacion_retenida": "Anulación apartada",

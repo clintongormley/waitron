@@ -37,7 +37,7 @@ import type {
   MissingHistory,
   NotIssuedHereView,
 } from "../filing-overview-types.js";
-import { putRightFor } from "../put-right.js";
+import { descriptionProblem, putRightFor } from "../put-right.js";
 import type { FiscalFilingClient } from "./fiscal-filing-client.js";
 import { refusalKey } from "./put-right-words.js";
 import { t } from "./strings.js";
@@ -606,8 +606,10 @@ export class FiscalFilingScreen extends LitElement {
   #descriptionError(): string {
     if (!this.attempted) return "";
     if (this.description.trim() === "") return t("fiscal_filing.put_right.description_required");
-    return this.description.length > DESCRIPTION_MAX
-      ? t("fiscal_filing.put_right.description_too_long")
+    if (this.description.length > DESCRIPTION_MAX)
+      return t("fiscal_filing.put_right.description_too_long");
+    return descriptionProblem(this.description) === "control_character"
+      ? t("fiscal_filing.put_right.description_control")
       : "";
   }
 

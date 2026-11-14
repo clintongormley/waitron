@@ -691,6 +691,22 @@ describe("putting a case right", () => {
     expect(remedyCalls(request)).toHaveLength(0);
   });
 
+  it("marks a description holding a character AEAT refuses, and sends nothing", async () => {
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION));
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "Servicio\u000Bde restauración");
+    action(details).click();
+    await screen.updateComplete;
+    expect((field(details) as unknown as { error: string }).error).toBe(
+      "Remove the invisible character AEAT does not accept; it may have come with pasted text.",
+    );
+    expect(
+      (details.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+    ).toBe("Correct the field marked above.");
+    expect(remedyCalls(request)).toHaveLength(0);
+  });
+
   it.each([
     ["another field", 1100, "Valor o tipo incorrecto del campo: NumSerieFactura", "F2"],
     ["a future date on a simplified invoice", 1112, "Fecha superior a la actual", "F2"],

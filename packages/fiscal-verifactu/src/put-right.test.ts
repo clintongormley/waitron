@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { buildAltaRecord, validate } from "@waitron/verifactu";
 import type { FilingCaseView } from "./filing-overview-types.js";
-import { putRightFor } from "./put-right.js";
+import { descriptionProblem, putRightFor } from "./put-right.js";
 
 function refused(
   code: number,
@@ -160,5 +161,69 @@ describe("putRightFor, cases no fix applies to", () => {
     expect(
       putRightFor({ ...refused(1112, { tipoFactura: "F1" }), cause: "fiscal.huella_divergente" }),
     ).toEqual({ kind: "none", why: "not-yet" });
+  });
+});
+
+describe("descriptionProblem, the case dialog's copy of the library's description checks", () => {
+  /** The library's own verdict on a record carrying `description`, for the codes the copy repeats. */
+  function libraryRefuses(description: string): boolean {
+    const at = new Date("2026-11-13T12:00:00.000Z");
+    const record = buildAltaRecord({
+      IDEmisorFactura: "89890001K",
+      NumSerieFactura: "A/1",
+      FechaExpedicionFactura: at,
+      NombreRazonEmisor: "Restaurante",
+      TipoFactura: "F2",
+      DescripcionOperacion: description,
+      Desglose: [
+        {
+          BaseImponibleOimporteNoSujeto: "100.00",
+          CuotaRepercutida: "10.00",
+          TipoImpositivo: "10.00",
+          ClaveRegimen: "01",
+          CalificacionOperacion: "S1",
+        },
+      ],
+      CuotaTotal: "10.00",
+      ImporteTotal: "110.00",
+      SistemaInformatico: {
+        NombreRazon: "Restaurante",
+        NIF: "89890001K",
+        NombreSistemaInformatico: "Waitron",
+        IdSistemaInformatico: "WT",
+        Version: "1.0.0",
+        NumeroInstalacion: "1",
+        TipoUsoPosibleSoloVerifactu: "S",
+        TipoUsoPosibleMultiOT: "N",
+        IndicadorMultiplesOT: "N",
+      },
+      Encadenamiento: { PrimerRegistro: "S" },
+      generadoEn: at,
+      offsetMinutes: 60,
+    });
+    return validate(record, { now: at }).some(
+      (issue) => issue.field === "DescripcionOperacion" && issue.code === "CONTROL_CHAR",
+    );
+  }
+
+  const samples = [
+    "Servicio de restauración",
+    ...Array.from({ length: 0x21 }, (_, code) => `Servicio${String.fromCodePoint(code)}de mesa`),
+    "\u007f",
+    "\u0085",
+    "\u00a0",
+    "\u2028",
+    "\ufeff",
+    "🍷".repeat(3),
+  ];
+  it.each(samples.map((sample) => [JSON.stringify(sample), sample]))(
+    "agrees with the library on %s",
+    (_name, sample) => {
+      expect(descriptionProblem(sample) === "control_character").toBe(libraryRefuses(sample));
+    },
+  );
+  it("finds a control character the library refuses, so the samples can tell the two apart", () => {
+    expect(libraryRefuses("Servicio\u000Bde mesa")).toBe(true);
+    expect(libraryRefuses("Servicio\tde mesa")).toBe(false);
   });
 });

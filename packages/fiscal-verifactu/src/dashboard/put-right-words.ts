@@ -26,6 +26,12 @@ export const REFUSAL_WORDS: Record<RemedyRefusal, AeatCertificateKey> = {
   "clock.unusable": "fiscal_filing.refused.clock_unusable",
   "venue.time_zone_not_ready": "fiscal_filing.refused.time_zone",
   "storage.disk_full": "fiscal_filing.refused.disk_full",
+  "fiscal.record_invalid": "fiscal_filing.refused.record_invalid",
+  "fiscal.fingerprint_mismatch": "fiscal_filing.refused.fingerprint",
+  "chain.append_contention": "fiscal_filing.refused.try_again",
+  "sif.not_registered": "fiscal_filing.refused.setup",
+  "venue.time_zone_invalid": "fiscal_filing.refused.time_zone",
+  "venue.time_zone_target_invalid": "fiscal_filing.refused.time_zone",
 };
 
 export function refusalKey(code: string): AeatCertificateKey | undefined {

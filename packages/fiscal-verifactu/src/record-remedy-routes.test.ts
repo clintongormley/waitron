@@ -177,17 +177,59 @@ it("refuses clock.unconfirmed before writing while the start's time check holds"
   });
 });
 
-it("lists every code the correction record's files throw among the refusals the page words", async () => {
-  // Reads `throw new AppError("…")` literals as text, in the files the correction record runs
-  // through; a code a called helper throws (a session or clock check) is listed by hand.
+/** This package's files a correction record runs through, the route's own included. */
+const CORRECTION_FILES = [
+  "record-remedy-routes.ts",
+  "record-remedy.ts",
+  "record-remedy-http.ts",
+  "record-remedy-facts.ts",
+  "chain.ts",
+  "clock-behind.ts",
+  "registro-row.ts",
+  "registro-sif.ts",
+  "filing-cases.ts",
+];
+/** Thrown in those files, but by a function a correction record never calls. */
+const NOT_ON_THE_CORRECTION_PATH: Record<string, string> = {
+  "sif.id_sistema_invalid": "registerSif and writeReservedSif only",
+  "sif.allocation_invalid": "registerSif and writeReservedSif only",
+  "filing_case.remedy_invalid": "recordCaseEvent is handed the new record, never the case's own",
+};
+/** Thrown on the correction path by code outside this package, so no file here names them. */
+const THROWN_ELSEWHERE = [
+  "management_session.required", // @waitron/server-kit, @waitron/identity
+  "management_session.expired", // @waitron/identity
+  "management_session.proof_required", // @waitron/identity requireFreshManagementSignIn
+  "person.suspended", // @waitron/identity
+  "authorization.not_permitted", // @waitron/identity authorizeManager
+  "node.read_only", // apps/server moduleRecordGeneration's requireWritable
+  "venue.time_zone_not_ready", // apps/server TradingAdmission, through requireWritable
+  "clock.unconfirmed", // apps/server moduleRecordGeneration's requireClockConfirmed
+  "venue.time_zone_invalid", // @waitron/fiscal prepareIssueClock
+  "venue.time_zone_target_invalid", // @waitron/fiscal prepareIssueClock
+  "storage.disk_full", // the error boundary, for any full-disk failure
+];
+
+it("lists every code thrown in this package's correction files, and the hand list of codes thrown outside it, among the refusals the page words", async () => {
+  // Reads `throw new AppError("…")`, `throw new IssuanceRefusedError("…")` and
+  // `throw new IssuanceRefusal(new AppError("…"` literals as text, in CORRECTION_FILES only.
   const thrown = new Set<string>();
-  for (const file of ["record-remedy-routes.ts", "record-remedy.ts", "record-remedy-http.ts"]) {
+  for (const file of CORRECTION_FILES) {
     const source = await readFile(new URL(`./${file}`, import.meta.url), "utf8");
-    for (const [, code] of source.matchAll(/throw new AppError\(\s*"([^"]+)"/g)) thrown.add(code!);
+    for (const [, code] of source.matchAll(
+      /throw new (?:IssuanceRefusal\(\s*new )?(?:AppError|IssuanceRefusedError)\(\s*"([^"]+)"/g,
+    ))
+      thrown.add(code!);
   }
-  expect(thrown.size).toBeGreaterThan(5);
+  expect(thrown).toContain("fiscal.fingerprint_mismatch");
+  expect(thrown).toContain("fiscal.chain_handed_over");
+  for (const code of Object.keys(NOT_ON_THE_CORRECTION_PATH)) expect(thrown).toContain(code);
   const listed = new Set(Object.keys(REMEDY_REFUSALS));
-  expect([...thrown].filter((code) => !listed.has(code))).toEqual([]);
+  expect(
+    [...thrown, ...THROWN_ELSEWHERE].filter(
+      (code) => !listed.has(code) && !Object.hasOwn(NOT_ON_THE_CORRECTION_PATH, code),
+    ),
+  ).toEqual([]);
 });
 
 it("answers a refusal with the status the refusal list gives it", async () => {
