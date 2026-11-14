@@ -4,8 +4,7 @@ export {
   importAccessRole,
   importAccessRoleMembership,
   ensureBuiltInRoles,
-  heldBuiltInKey,
-  setBuiltInMembership,
+  listAccessRoles,
   setPersonAccessRoles,
 } from "./roles.js";
 export {

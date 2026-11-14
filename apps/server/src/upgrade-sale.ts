@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import {
   hashPin,
-  setBuiltInMembership,
+  importAccessRoleMembership, ensureBuiltInRoles,
   foldForUniqueness,
   verifyPersonCredential,
   startManagementSession,
@@ -59,7 +59,7 @@ async function prepareSale(config: ServerConfig) {
           status: "active",
         })
         .returning({ id: persons.id });
-      await setBuiltInMembership(tx, person!.id, "admin");
+      await importAccessRoleMembership(tx, person!.id, (await ensureBuiltInRoles(tx))["admin"]);
       await verifyPersonCredential(tx, person!.id, pin);
       const session = await startManagementSession(tx, { personId: person!.id });
       const profile = await createDeviceProfile(tx, {

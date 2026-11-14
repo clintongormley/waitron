@@ -60,6 +60,8 @@ import {
   inspectAccountAction,
   listActiveStaff,
   listPersons,
+  listAccessRoles,
+  setPersonAccessRoles,
   loginManager,
   loginManagerById,
   loginWithGoogle,
@@ -75,7 +77,6 @@ import {
   verifyOwnCredentials,
   readProfileAdmissions,
   setProfileAdmission,
-  type BuiltInRoleKey,
   type ProfileAdmission,
   type TotpKeyRing,
 } from "@waitron/identity";
@@ -216,6 +217,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "profile.invalid": 400,
   "person.display_name_taken": 409,
   "person.last_admin": 409,
+  "person.roles_changed": 409,
+  "role.not_permitted": 403,
+  "role.not_found": 404,
   "person.transition_invalid": 409,
   "authorization.not_permitted": 403,
   "pin.too_short": 400,
@@ -1057,6 +1061,24 @@ export function mountManagementApi(
     }),
   );
 
+  app.get("/management-api/access-roles", (c) => run(c, log, async () => {
+    const sessionId = requireManagementSession(c);
+    return c.json(await withTransaction(deps.db, (tx) => listAccessRoles(tx, sessionId)));
+  }));
+
+  app.put("/management-api/staff/:id/access-roles", (c) => run(c, log, async () => {
+    const managementSessionId = requireManagementSession(c);
+    const personId = requirePersonId(c.req.param("id"));
+    const body = await readJsonBody<{ roleIds?: unknown; expectedRoleIds?: unknown }>(c);
+    for (const field of ["roleIds", "expectedRoleIds"] as const) {
+      if (!Array.isArray(body[field]) || body[field].some((id) => typeof id !== "string"))
+        throw new AppError("management.request_invalid", { field });
+    }
+    return c.json(await withTransaction(deps.db, (tx) => setPersonAccessRoles(tx, {
+      managementSessionId, personId, roleIds: body.roleIds as string[], expectedRoleIds: body.expectedRoleIds as string[],
+    })));
+  }));
+
   app.get("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1076,27 +1098,27 @@ export function mountManagementApi(
         firstNames?: string;
         lastNames?: string;
         telephone?: string | null;
-        role?: BuiltInRoleKey;
+        roleIds?: unknown;
         email?: string;
       }>(c);
       if (
         typeof body.displayName !== "string" ||
         typeof body.firstNames !== "string" ||
         typeof body.lastNames !== "string" ||
-        typeof body.role !== "string" ||
+        !Array.isArray(body.roleIds) || body.roleIds.some((id) => typeof id !== "string") ||
         (body.telephone !== undefined &&
           body.telephone !== null &&
           typeof body.telephone !== "string")
       ) {
         throw new AppError("management.request_invalid", {
-          field: "displayName|firstNames|lastNames|role|telephone",
+          field: "displayName|firstNames|lastNames|roleIds|telephone",
         });
       }
       if (typeof body.email !== "string") {
         throw new AppError("management.request_invalid", { field: "email" });
       }
       const { displayName, firstNames, lastNames, telephone = null, email } = body;
-      const role = requireEnum(body.role, "role", ["staff", "supervisor", "manager", "admin"]);
+
       const { created, delivery } = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, { managementSessionId: sessionId, permission: "person.admin" });
         await deps.assertAccountMailPrimary?.();
@@ -1107,7 +1129,7 @@ export function mountManagementApi(
           firstNames,
           lastNames,
           telephone,
-          role,
+          roleIds: body.roleIds as string[],
           email,
         });
         const delivery = await queueInvitationAnswer(tx, deps, {
@@ -1156,7 +1178,6 @@ export function mountManagementApi(
         lastNames?: unknown;
         telephone?: unknown;
         email?: unknown;
-        role?: unknown;
         status?: unknown;
       }>(c);
       for (const field of ["displayName", "firstNames", "lastNames", "email"] as const) {
@@ -1167,7 +1188,6 @@ export function mountManagementApi(
       if (body.telephone !== null && typeof body.telephone !== "string") {
         throw new AppError("management.request_invalid", { field: "telephone" });
       }
-      const role = requireEnum(body.role, "role", ["staff", "supervisor", "manager", "admin"]);
       const status = requireEnum(body.status, "status", ["pending", "active", "suspended"]);
       await withTransaction(deps.db, async (tx) => {
         await updatePersonDetails(tx, {
@@ -1178,7 +1198,6 @@ export function mountManagementApi(
           lastNames: body.lastNames as string,
           telephone: body.telephone as string | null,
           email: body.email as string,
-          role,
           status,
         });
       });

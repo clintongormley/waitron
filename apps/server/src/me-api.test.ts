@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { generateSync } from "otplib";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, personRoles, roles, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -208,6 +208,15 @@ async function insertAbsence(personId: string, startsOn: string, endsOn: string)
 }
 
 describe("mountMeApi — whoami", () => {
+  it("keeps a person with no access roles signed in and returns no fixed role", async () => {
+    const [person] = await seedPersons(suite.db, { displayName: "No access role" });
+    await suite.db.delete(personRoles).where(eq(personRoles.personId, person!.id));
+    const response = await send(mountApp(), "GET", "/management-api/session/me", { cookie: await cookieFor(person!.id) });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ personId: person!.id, roleIds: [], permissions: [], modules: MODULES });
+    expect(body).not.toHaveProperty("role");
+  });
   it("GET /management-api/session/me returns identity, locale, venue and module hints for a staff session", async () => {
     const res = await send(mountApp(), "GET", "/management-api/session/me", {
       cookie: await cookieFor(me),

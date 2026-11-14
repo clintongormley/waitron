@@ -1,22 +1,40 @@
-import { and, desc, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
 import {
   persons,
   personRoles,
   roles,
   recordActivity,
-  type Database,
   type Transaction,
 } from "@waitron/db";
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { foldForUniqueness } from "./fold.js";
-import { isDeclaredPermission, defaultPermissionsFor, type BuiltInRoleKey } from "./permissions.js";
+import { declaredPermissions, isDeclaredPermission, defaultPermissionsFor, type BuiltInRoleKey } from "./permissions.js";
+import { resolveManagementSession } from "./management-session.js";
+import { holds } from "./authority.js";
 import { authorizeManager } from "./manager-login.js";
 import { requireFreshManagementSignIn } from "./fresh-sign-in.js";
 import { assertUsableAdminRemains } from "./admin-anchor.js";
 import { queueRoleMembershipMail } from "./role-mail.js";
 
 export const BUILT_IN_ROLE_KEYS = ["staff", "supervisor", "manager", "admin"] as const;
+
+export async function listAccessRoles(tx: Transaction, managementSessionId: string) {
+  const session = await resolveManagementSession(tx, managementSessionId, { touch: false });
+  if (!holds(session.authority, "person.manage") && !holds(session.authority, "person.admin"))
+    throw new AppError("authorization.not_permitted", { permission: "person.manage" });
+  const rows = await tx.select({
+    id: roles.id, builtInKey: roles.builtInKey, name: roles.name,
+    permissions: roles.permissions, holderCount: count(personRoles.personId),
+  }).from(roles).leftJoin(personRoles, eq(personRoles.roleId, roles.id)).groupBy(roles.id);
+  return rows.sort((a, b) => {
+    if (a.builtInKey !== null || b.builtInKey !== null)
+      return (a.builtInKey === null ? 4 : BUILT_IN_ROLE_KEYS.indexOf(a.builtInKey)) -
+        (b.builtInKey === null ? 4 : BUILT_IN_ROLE_KEYS.indexOf(b.builtInKey));
+    return a.name!.localeCompare(b.name!, session.locale ?? "en");
+  }).map((role) => ({ ...role, permissions: role.builtInKey === "admin"
+    ? declaredPermissions() : role.permissions.filter(isDeclaredPermission) }));
+}
 
 export async function setPersonAccessRoles(
   tx: Transaction,
@@ -121,34 +139,6 @@ export async function ensureBuiltInRoles(tx: Transaction): Promise<Record<BuiltI
     for (const row of added) found.set(row.key!, row.id);
   }
   return Object.fromEntries(found) as Record<BuiltInRoleKey, string>;
-}
-
-export async function setBuiltInMembership(
-  tx: Transaction,
-  personId: string,
-  key: BuiltInRoleKey,
-): Promise<void> {
-  const builtIns = await ensureBuiltInRoles(tx);
-  await tx
-    .delete(personRoles)
-    .where(
-      and(eq(personRoles.personId, personId), inArray(personRoles.roleId, Object.values(builtIns))),
-    );
-  await tx.insert(personRoles).values({ personId, roleId: builtIns[key] });
-}
-
-export async function heldBuiltInKey(
-  tx: Database | Transaction,
-  personId: string,
-): Promise<BuiltInRoleKey | null> {
-  const [row] = await tx
-    .select({ key: roles.builtInKey })
-    .from(personRoles)
-    .innerJoin(roles, eq(roles.id, personRoles.roleId))
-    .innerJoin(persons, eq(persons.id, personRoles.personId))
-    .where(and(eq(personRoles.personId, personId), isNotNull(roles.builtInKey)))
-    .orderBy(desc(eq(roles.builtInKey, "admin")));
-  return row?.key ?? null;
 }
 
 export async function prepareAccessRoleImport(

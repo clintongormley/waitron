@@ -62,7 +62,6 @@ async function fixture(
     .set({
       permissions: [
         ...managerRole!.permissions,
-        "person.admin",
         ...(emailPermission ? ["person.email"] : []),
       ],
     })
@@ -112,6 +111,7 @@ async function fixture(
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   return {
+    cookie,
     manager: manager!,
     target: { ...target!, role: targetKind === "admin" ? "admin" : "staff" },
     send,
@@ -226,4 +226,71 @@ it("the staff role field cannot demote the last usable Admin", async () => {
     await suite.db.select().from(personRoles).where(eq(personRoles.personId, f.target.id)),
   ).toEqual([{ personId: f.target.id, roleId: adminRole!.id }]);
   expect(await suite.db.select().from(outgoingMail)).toEqual([]);
+});
+
+
+it("lists access roles and saves several memberships independently of details", async () => {
+  const f = await fixture("email", "waiter", false);
+  const listed = await f.send("/management-api/access-roles", "GET");
+  expect(listed.status).toBe(200);
+  const choices = await listed.json() as { id: string; builtInKey: string; holderCount: number; permissions: string[] }[];
+  expect(choices.map((role) => role.builtInKey)).toEqual(["staff", "supervisor", "manager", "admin"]);
+  expect(choices[0]!.holderCount).toBe(1);
+  const roleIds = choices.slice(0, 2).map((role) => role.id);
+  const response = await f.send(`/management-api/staff/${f.target.id}/access-roles`, "PUT", {
+    roleIds, expectedRoleIds: roleIds.slice(0, 1),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ roleIds });
+  const roster = await f.send("/management-api/staff", "GET");
+  const target = (await roster.json() as { personId: string; roleIds: string[] }[]).find((p) => p.personId === f.target.id)!;
+  expect(target.roleIds.sort()).toEqual([...roleIds].sort());
+  expect(target).not.toHaveProperty("role");
+});
+
+it("membership saves require a fresh sign-in while name-only saves do not", async () => {
+  const f = await fixture("email", "waiter", false);
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, f.cookie, false));
+  const membership = await f.send(`/management-api/staff/${f.target.id}/access-roles`, "PUT", {
+    roleIds: [], expectedRoleIds: [],
+  });
+  expect(membership.status).toBe(400);
+  expect(await membership.json()).toMatchObject({ error: { code: "management_session.proof_required" } });
+  const details = await f.send(`/management-api/staff/${f.target.id}`, "PUT", {
+    displayName: "Updated target", firstNames: "Target", lastNames: "Person", telephone: null,
+    email: f.target.email, status: f.target.status,
+  });
+  expect(details.status).toBe(204);
+  expect((await suite.db.select().from(persons).where(eq(persons.id, f.target.id)))[0]!.displayName).toBe("Updated target");
+});
+
+it.each([
+  ["role.not_found", 404], ["person.roles_changed", 409], ["role.not_permitted", 403],
+] as const)("membership routes map %s", async (code, status) => {
+  const f = await fixture("email", "waiter", false);
+  const builtIns = await suite.db.select().from(roles);
+  const staff = builtIns.find((r) => r.builtInKey === "staff")!.id;
+  const admin = builtIns.find((r) => r.builtInKey === "admin")!.id;
+  const response = await f.send(`/management-api/staff/${f.target.id}/access-roles`, "PUT", {
+    roleIds: code === "role.not_found" ? [crypto.randomUUID()] : [admin],
+    expectedRoleIds: code === "person.roles_changed" ? [] : [staff],
+  });
+  expect(response.status).toBe(status);
+  expect(await response.json()).toMatchObject({ error: { code } });
+});
+
+
+it("a default Manager invites several roles but cannot hand out Admin", async () => {
+  const f = await fixture("email", "waiter", false);
+  const choices = await suite.db.select().from(roles);
+  const ids = choices.filter((r) => r.builtInKey === "staff" || r.builtInKey === "supervisor").map((r) => r.id);
+  const body = { displayName: "New member", firstNames: "New", lastNames: "Member", telephone: null, email: "member@example.test", roleIds: ids };
+  const accepted = await f.send("/management-api/staff", "POST", body);
+  expect(accepted.status).toBe(201);
+  const { id } = await accepted.json() as { id: string };
+  expect((await suite.db.select().from(personRoles).where(eq(personRoles.personId, id))).map((r) => r.roleId).sort()).toEqual([...ids].sort());
+  const refused = await f.send("/management-api/staff", "POST", { ...body, displayName: "Forbidden", email: "forbidden@example.test", roleIds: [choices.find((r) => r.builtInKey === "admin")!.id] });
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toMatchObject({ error: { code: "role.not_permitted" } });
+  expect(await suite.db.select().from(persons).where(eq(persons.email, "forbidden@example.test"))).toEqual([]);
 });

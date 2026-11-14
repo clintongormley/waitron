@@ -1,4 +1,4 @@
-import { setBuiltInMembership, registerModulePermissions } from "@waitron/identity";
+import { importAccessRoleMembership, ensureBuiltInRoles, registerModulePermissions } from "@waitron/identity";
 import { createStarterStaffRole } from "@waitron/staffing";
 import { requireCountryTimeZone } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
@@ -244,7 +244,7 @@ export async function applyVenue(
               })
               .returning({ id: persons.id });
             createdAdministrator = created!.id;
-            await setBuiltInMembership(tx, created!.id, "admin");
+            await importAccessRoleMembership(tx, created!.id, (await ensureBuiltInRoles(tx))["admin"]);
             const [adminRole] = await tx
               .select({ id: roles.id })
               .from(roles)

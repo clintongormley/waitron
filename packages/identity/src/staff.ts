@@ -34,8 +34,7 @@ import {
   authorityForRoles,
   type PersonAuthority,
 } from "./authority.js";
-import type { BuiltInRoleKey } from "./permissions.js";
-import { heldBuiltInKey, setBuiltInMembership } from "./roles.js";
+import { setPersonAccessRoles } from "./roles.js";
 import {
   PERSONS_EMAIL,
   PERSONS_LIVE_DISPLAY_NAME,
@@ -213,7 +212,6 @@ export async function updatePersonDetails(
     lastNames: string;
     telephone: string | null;
     email: string;
-    role: BuiltInRoleKey;
     status: "pending" | "active" | "suspended";
   },
 ): Promise<void> {
@@ -226,25 +224,12 @@ export async function updatePersonDetails(
     .from(persons)
     .where(eq(persons.id, settleId(input.personId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
-  const personRole = await heldBuiltInKey(tx, person.id);
   if (input.status === "suspended" && authorizedBy === settleId(input.personId)) {
     throw new AppError("person.self_deactivation", {});
   }
   if (input.status !== person.status && input.status !== "suspended") {
     throw new AppError("person.transition_invalid", {});
   }
-  if (
-    input.role !== personRole &&
-    (authorizedBy !== person.id || input.role === "admin" || personRole === "admin")
-  ) {
-    if (
-      !holds(authority, "person.admin") ||
-      ((input.role === "admin" || personRole === "admin") && !authority.admin)
-    ) {
-      throw new AppError("authorization.not_permitted", { permission: "person.admin" });
-    }
-  }
-
   const displayName = requiredText(input.displayName, "displayName");
   const firstNames = requiredText(input.firstNames, "firstNames");
   const lastNames = requiredText(input.lastNames, "lastNames");
@@ -260,7 +245,7 @@ export async function updatePersonDetails(
         throw new AppError("authorization.not_permitted", { permission: "person.email" });
     }
   }
-  if (email !== person.email || input.role !== personRole || input.status !== person.status)
+  if (email !== person.email || input.status !== person.status)
     await requireFreshManagementSignIn(tx, input.managementSessionId);
   await assertDisplayNameAvailable(tx, displayName, person.id);
   await assertEmailAvailable(tx, email, person.id);
@@ -284,7 +269,6 @@ export async function updatePersonDetails(
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
   }
-  if (input.role !== personRole) await setBuiltInMembership(tx, person.id, input.role);
   if (becomesSuspended) await deleteSignInRows(tx, person.id);
   if (email !== person.email || input.status !== person.status)
     await revokePersonAccess(tx, person.id);
@@ -424,7 +408,7 @@ export async function invitePerson(
     firstNames: string;
     lastNames: string;
     telephone: string | null;
-    role: BuiltInRoleKey;
+    roleIds: string[];
     email: string;
   },
 ): Promise<{ id: string }> {
@@ -433,8 +417,6 @@ export async function invitePerson(
     permission: "person.manage",
   });
   requireAdminAuthority(authority);
-  if (input.role === "admin" && !authority.admin)
-    throw new AppError("authorization.not_permitted", { permission: "person.admin" });
   const displayName = requiredText(input.displayName, "displayName");
   const firstNames = requiredText(input.firstNames, "firstNames");
   const lastNames = requiredText(input.lastNames, "lastNames");
@@ -460,7 +442,8 @@ export async function invitePerson(
         emailFolded: foldForUniqueness(email),
       })
       .returning({ id: persons.id });
-    await setBuiltInMembership(tx, row!.id, input.role);
+
+    await setPersonAccessRoles(tx, { managementSessionId: input.managementSessionId, personId: row!.id, roleIds: input.roleIds, expectedRoleIds: [] });
     return { id: row!.id };
   } catch (error) {
     // Any unique violation off the email index is read as the display name: the insert leaves
@@ -542,7 +525,7 @@ export interface PersonSummary {
   telephone: string | null;
   /** The person's login email. Null is reserved for internal principals and low-level fixtures. */
   email: string | null;
-  role: BuiltInRoleKey | null;
+  roleIds: string[];
   status: "pending" | "active" | "suspended";
   hasPassword: boolean;
   hasTotp: boolean;
@@ -571,15 +554,13 @@ export async function listPersons(
     })
     .from(persons)
     .orderBy(persons.displayName);
-  const memberships = await tx
-    .select({ personId: personRoles.personId, key: roles.builtInKey })
-    .from(personRoles)
-    .innerJoin(roles, eq(roles.id, personRoles.roleId))
-    .where(isNotNull(roles.builtInKey));
-  const builtInKeys = new Map<string, BuiltInRoleKey>();
-  for (const membership of memberships)
-    if (!builtInKeys.has(membership.personId) || membership.key === "admin")
-      builtInKeys.set(membership.personId, membership.key!);
+  const memberships = await tx.select().from(personRoles);
+  const roleIds = new Map<string, string[]>();
+  for (const membership of memberships) {
+    const held = roleIds.get(membership.personId) ?? [];
+    held.push(membership.roleId);
+    roleIds.set(membership.personId, held);
+  }
   const result: PersonSummary[] = [];
   for (const r of rows)
     result.push({
@@ -589,7 +570,7 @@ export async function listPersons(
       lastNames: r.lastNames,
       telephone: r.telephone,
       email: r.email,
-      role: builtInKeys.get(r.personId) ?? null,
+      roleIds: roleIds.get(r.personId) ?? [],
       status: r.status as "pending" | "active" | "suspended",
       hasPassword: r.passwordHash !== null,
       hasTotp: r.totpSecret !== null,
