@@ -804,6 +804,8 @@ and removes real files, through file operations a test can replace.
   The fixed `publishWifiBootCopy` answers a valid decision with `failed` / `mount-unverified` and no
   file call until the Linux pull request adds the boot-mount check.
 
+**2026-11-14 binding:** [Wi-Fi host slice 1](../superpowers/plans/2026-11-14-b3-wifi-host.md) calls the publisher factory with its installed boot-mount inspector and persists the reported status. The fixed library entry still refuses unverified mounts; the November 3 description above is historical.
+
 **Built so far (2026-11-03), PR 6.** [PR 6](../superpowers/plans/2026-11-03-b3-6-disk-key-letters.md)
 (#2433) adds `scripts/box/disk-recovery-key.mjs`, called by nothing yet. It turns the disk recovery key
 between the 32 bytes the box keeps and the 64 letters a person reads and types, using systemd's
