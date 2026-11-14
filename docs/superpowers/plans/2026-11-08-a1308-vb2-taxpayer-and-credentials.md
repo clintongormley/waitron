@@ -299,3 +299,9 @@ At 00:33 the watcher cleared the missing-taxpayer README's two notice-presence e
 and ACTIVATION_ROWS 126 to 127. The read-only activation probe found exactly one new
 credentials.saved entry for email.smtp with no person and keyVersion 1. All existing exact
 holdings counts, kept/record/accepted checks, and copy checks stay.
+
+At 00:47 the watcher corrected item 4: getLocales stays on taxpayer because its venueName is the legal name; only getVenuePrivacy and getGoogleConfig move to settings.venue.
+
+After the initial rebase onto 4ffb0fe9bb, the base and candidate both use configuration format 32; vb2 still changes neither its version nor its bundle shape.
+
+At 00:52 the watcher cleared the backup-policy steadyPin update because the two retired purpose names leave its secrets list, with all equality and negative controls retained. The same note cleared six actor assertions in existing successful route/install cases, each checked against a null-actor mutation before the real code.

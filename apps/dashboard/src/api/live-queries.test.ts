@@ -234,6 +234,7 @@ it.each([
   ["getReceiptLanguage", [], "settings.business_day"],
   ["getVenueDefaults", [], "settings.business_day"],
   ["getVenueDefaults", [], "settings.menu"],
+  ["getLocales", [], "taxpayer"],
   ["getVenuePrivacy", [], "settings.venue"],
   ["getGoogleConfig", [], "settings.venue"],
   ["getFloorPlan", ["s1", "z1"], "floor_plans"],

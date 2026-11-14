@@ -528,8 +528,8 @@ export const QUERY_DEPENDENCIES = {
   getVenueDefaults: ["settings.business_day", "settings.venue", "settings.menu"],
   getVenuePrivacy: ["settings.venue"],
   getProfile: ["persons", "webauthn_credentials"],
-  // The venue's name; the language list itself is fixed.
-  getLocales: ["settings.venue"],
+  // The taxpayer's legal name; the language list itself is fixed.
+  getLocales: ["taxpayer"],
   getGoogleConfig: ["google_config", "settings.venue"],
   getEmailInbox: ["email_inbox"],
   // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.

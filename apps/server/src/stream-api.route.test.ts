@@ -934,6 +934,13 @@ describe("stream settings routes", () => {
     await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     const res = await app.request("/api/backup/stream", { method: "DELETE", headers: { cookie } });
     expect(res.status).toBe(200);
+    const manager = suite.db.all<{ id: string }>(
+      sql`select id from persons where email = ${MANAGER_EMAIL}`,
+    )[0]!;
+    expect(
+      (await readActivityForSubject(suite.db, { kind: "credential", id: STREAM_PURPOSE })).at(-1),
+    ).toMatchObject({ kind: "credentials.removed", personId: manager.id });
+
     expect(await res.json()).toMatchObject({ configured: false, bucket: null });
     expect(reload).toHaveBeenCalledTimes(2);
     // The second reload found the settings already gone.

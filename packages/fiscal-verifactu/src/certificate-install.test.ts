@@ -6,7 +6,7 @@ import {
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
-import { captureError, withTransaction } from "@waitron/db";
+import { readActivityForSubject, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -522,6 +522,9 @@ describe("installCertificate's write", () => {
     await installCertificate(depsFor(v, server, { authorize }), bodyFor(v, candidate), NOW);
     const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TENANT_A.nodeId));
     expect(latest?.personId).toBe("p-2");
+    expect(
+      (await readActivityForSubject(suite.db, { kind: "credential", id: "fiscal.aeat" })).at(-1),
+    ).toMatchObject({ kind: "credentials.saved", personId: "p-2" });
   });
 });
 

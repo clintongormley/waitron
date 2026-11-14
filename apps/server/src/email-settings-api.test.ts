@@ -3,7 +3,7 @@ import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/perso
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { settings as documents, withTransaction } from "@waitron/db";
+import { readActivityForSubject, settings as documents, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -814,6 +814,14 @@ describe("removing saved SMTP settings", () => {
 
     const response = await remove(app, venue.admin);
     expect(response.status).toBe(200);
+    const [admin] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    expect(
+      (await readActivityForSubject(suite.db, { kind: "credential", id: "email.smtp" })).at(-1),
+    ).toMatchObject({ kind: "credentials.removed", personId: admin!.id });
+
     expect(await response.json()).toEqual({ removed: true });
     expect(
       (await suite.db.select().from(documents)).find((row) => row.module === "mail")?.doc,

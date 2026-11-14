@@ -2,7 +2,7 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { withTransaction, taxpayer } from "@waitron/db";
+import { settings, withTransaction, taxpayer } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readPrivacyContact, venueFiscalSelection } from "@waitron/provisioning";
@@ -59,6 +59,13 @@ describe("the venue's privacy contact", () => {
       privacyEmail: "  privacy@example.com  ",
     });
     expect(response.status).toBe(200);
+    const [document] = await suite.db.select().from(settings).where(eq(settings.module, "venue"));
+    expect(document!.updatedBy).toBe(
+      suite.db.all<{ id: string }>(
+        sql`select id from persons where display_name = 'The Manager'`,
+      )[0]!.id,
+    );
+
     expect(await response.json()).toEqual(stored);
     expect(await (await read()).json()).toEqual(stored);
     expect(await taxpayerRow()).toEqual({ ...before, ...stored });

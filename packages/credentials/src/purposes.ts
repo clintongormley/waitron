@@ -17,7 +17,7 @@ export const PURPOSES = {
    * (`SOAP_ENDPOINTS_SELLO` versus `SOAP_ENDPOINTS`).
    *
    * Editing a provisioned purpose's fields blocks `rotate` whenever its row needs re-sealing, until
-   * it is re-provisioned (see `rotateCredentials`).
+   * it is re-provisioned.
    */
   "fiscal.aeat": ["pfxBase64", "passphrase", "certKind"],
   /**

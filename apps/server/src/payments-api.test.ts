@@ -9,6 +9,8 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import {
+  readActivityForSubject,
+  persons,
   billPayments,
   workingOrders,
   devices,
@@ -459,6 +461,16 @@ describe("providers list", () => {
     expect(stripeBefore.readerAdd).toBeDefined();
 
     await connectStripe(app, venue);
+    const [manager] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.displayName, "The Manager"));
+    expect(
+      (await readActivityForSubject(suite.db, { kind: "credential", id: "payments.stripe" })).at(
+        -1,
+      ),
+    ).toMatchObject({ kind: "credentials.saved", personId: manager!.id });
+
     const after = await send(app, "GET", "/management-api/payments/providers", {
       cookie: venue.managerCookie,
     });
@@ -1022,6 +1034,16 @@ describe("disconnect", () => {
       cookie: venue.managerCookie,
     });
     expect(gone.status).toBe(204);
+    const [manager] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.displayName, "The Manager"));
+    expect(
+      (await readActivityForSubject(suite.db, { kind: "credential", id: "payments.stripe" })).at(
+        -1,
+      ),
+    ).toMatchObject({ kind: "credentials.removed", personId: manager!.id });
+
     expect(await sealedStripe()).toBeNull();
   });
 });

@@ -943,8 +943,11 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   jr13's SIGSTOP probe is a stand-in only. 111 product
   environment variables become 51. Duplicate address names are merged, the print agent uses its host name,
   and host-script and full-disk tests use shared roots. The mail sender is a settings document;
-  its SMTP connection URL stays sealed. Privacy contact details live in venue settings; legal-name
-  changes and credential saves and removals leave activity entries. The remaining environment slices stay open.
+  its SMTP connection URL stays sealed. The remaining environment slices stay open.
+
+  Privacy contact details live in venue settings; legal-name changes and credential saves and
+  removals leave activity entries.
+
   There is one state-folder layout, and a box keeps its venue under that state folder.
   A first setup has no venue claim or separate setup lock; its record and attachments live
   in `flows/setup/`. The attempt, initial node-key verifier, public evidence and recovery-document
