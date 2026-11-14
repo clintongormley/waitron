@@ -37,7 +37,7 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { Decimal, TicketGrouping } from "@waitron/shared";
-import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
+import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/menu";
 import { enqueuePrintJob } from "@waitron/printing";
 import type { EscSetting, PaperWidth, Resolution } from "@waitron/printing";
 import {

@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { mountSetup } from "./setup-api.js";
 import type { WaitronModule } from "@waitron/module";
 import { sql } from "drizzle-orm";
-import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
+import { createCatalogue, createCategory, createProduct } from "@waitron/menu";
 import { loadKeyRing } from "@waitron/credentials";
 import { kitchenStations, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

@@ -17,7 +17,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedDeviceProfiles, seedActivityActor } from "@waitron/db/testing/seed.js";
-import { createCategory, createProduct, getExtraList, readCategory } from "@waitron/catalogue";
+import { createCategory, createProduct, getExtraList, readCategory } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";

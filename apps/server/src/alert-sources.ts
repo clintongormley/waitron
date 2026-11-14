@@ -4,7 +4,7 @@
 
 import { and, eq, inArray, isNotNull, lt, notExists, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { readActiveSuggestionJob, readSuggestionRun } from "@waitron/catalogue";
+import { readActiveSuggestionJob, readSuggestionRun } from "@waitron/menu";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
   type A4HoldCode,

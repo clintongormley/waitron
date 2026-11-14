@@ -1,7 +1,7 @@
 /**
  * Several publishes started together leave exactly one published roster version. The venue file's
  * write queue serialises them; the mechanism is recorded on `racePair`
- * (`packages/catalogue/test/fixtures.ts`).
+ * (`packages/menu/test/fixtures.ts`).
  *
  * Weaker than its name: serialised, the losers are refused on the ordinary re-read path, so no race
  * the guard could lose is staged. In the second case nothing collides on

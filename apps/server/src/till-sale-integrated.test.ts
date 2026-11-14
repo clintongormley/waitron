@@ -4,7 +4,7 @@ import { eq, getTableColumns, sql } from "drizzle-orm";
 import { sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createCategory, createProduct } from "@waitron/catalogue";
+import { createCategory, createProduct } from "@waitron/menu";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { fromRegistroRow, registrosFacturacion, type RegistroRow } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";

@@ -27,7 +27,7 @@ import {
   addProductToMenu,
   createProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import { parkOrder } from "./working-order.js";
 import { createStation } from "./kitchen.js";

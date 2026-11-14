@@ -1,5 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
-import { kitchenPresentationName } from "@waitron/catalogue";
+import { kitchenPresentationName } from "@waitron/menu";
 import { describe, expect, it } from "vitest";
 
 import { FEED_BEFORE_CUT, columnsFor, type EscSetting } from "@waitron/printing";

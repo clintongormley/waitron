@@ -23,7 +23,7 @@ import type { DailyClose } from "./types.js";
  * hash-chained `daily_closes` row, advancing the head in the same transaction.
  *
  * Two closers cannot read the same head, because one write transaction runs on the venue file at a
- * time (`assertExtraListForWrite` in `packages/catalogue/src/extras.ts` carries the receipt). There
+ * time (`assertExtraListForWrite` in `packages/menu/src/extras.ts` carries the receipt). There
  * is no retry: a sequence collision here is a bug, not a race.
  *
  * The immutability is the table's, not this function's: `daily_closes` is declared `appendOnly` in

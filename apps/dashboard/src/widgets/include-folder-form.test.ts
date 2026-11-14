@@ -9,7 +9,7 @@ import {
   mountWidget,
 } from "./test-helpers.js";
 import type { IncludeFolder, IncludeFolderInput, Presentation } from "@waitron/shared";
-import { folderPresentation } from "@waitron/catalogue/src/include-folder-presentation.js";
+import { folderPresentation } from "@waitron/menu/src/include-folder-presentation.js";
 import { resolveMenuText } from "@waitron/shared";
 import "./include-folder-form.js";
 afterEach(cleanupWidgets);

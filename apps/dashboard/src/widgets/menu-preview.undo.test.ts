@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import { menuChangeActions } from "@waitron/catalogue/src/menu-undo.js";
+import { menuChangeActions } from "@waitron/menu/src/menu-undo.js";
 import type { MenuTarget } from "@waitron/shared";
 import type { DocumentMember, MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
@@ -14,7 +14,7 @@ import {
   mountMenuPreview as mountWidget,
 } from "./test-helpers.js";
 
-vi.mock("@waitron/catalogue/src/menu-undo.js", { spy: true });
+vi.mock("@waitron/menu/src/menu-undo.js", { spy: true });
 
 beforeEach(() => {
   setLocale("en");

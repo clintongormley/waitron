@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createExtraList, updateProduct, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, updateProduct, writeProductModifiers } from "@waitron/menu";
 import {
   billWith,
   placeGrouped,

@@ -1,4 +1,4 @@
-import { validateImageBytes } from "@waitron/catalogue";
+import { validateImageBytes } from "@waitron/menu";
 import { AppError } from "@waitron/shared";
 import { DECODE_OPTIONS, loadSharp, MAX_INPUT_PIXELS } from "./load-sharp.js";
 import { imageFilename } from "./stored-filename.js";

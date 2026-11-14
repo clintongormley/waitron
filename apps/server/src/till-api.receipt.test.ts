@@ -34,8 +34,8 @@ import {
   updateProduct,
   writeContentLanguages,
   previewMenu,
-} from "@waitron/catalogue";
-import type { AvailableProduct } from "@waitron/catalogue";
+} from "@waitron/menu";
+import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -70,8 +70,8 @@ import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { mountCatalogueApi } from "./catalogue-api.js";
-import type { TranslationItemPage } from "@waitron/catalogue/src/content-translation-types.js";
+import { mountCatalogueApi } from "./menu-api.js";
+import type { TranslationItemPage } from "@waitron/menu/src/content-translation-types.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TradingContext } from "./trading-context.js";

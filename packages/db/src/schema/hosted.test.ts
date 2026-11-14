@@ -2,7 +2,7 @@ import { is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import * as adjustments from "./adjustments/index.js";
-import * as catalogue from "./catalogue/index.js";
+import * as catalogue from "./menu/index.js";
 import * as credentials from "./credentials/index.js";
 import * as handover from "./handover/index.js";
 import * as identity from "./identity/index.js";

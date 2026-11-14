@@ -8,7 +8,7 @@ import { captureError } from "../testing/errors.js";
 import { seedDeviceProfiles, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
-import { catalogues, products } from "./catalogue.js";
+import { catalogues, products } from "./menus.js";
 
 import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";

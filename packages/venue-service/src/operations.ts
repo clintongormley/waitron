@@ -51,7 +51,7 @@ import {
   type MenuDocument,
   type MenuOffer,
   type ServedMenu,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type {
   PreparedServiceDay,
   ServiceMode,
@@ -64,7 +64,7 @@ import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu
 import { readStarterStaffLanguage } from "./starter-language.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
-import { readDefaultCatalogueId } from "@waitron/catalogue";
+import { readDefaultCatalogueId } from "@waitron/menu";
 
 export interface Department {
   id: string;

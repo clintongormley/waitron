@@ -11,7 +11,7 @@ import {
   createCategory,
   createProduct,
   listAvailableProducts,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   billPayments,
   diningTables,

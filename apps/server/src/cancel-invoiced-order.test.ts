@@ -23,7 +23,7 @@ import {
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
-import { createExtraList, createProduct, units, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, createProduct, units, writeProductModifiers } from "@waitron/menu";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { createPinThrottle, hashPin, loginWithPin, PIN_THROTTLE_IDLE_MS } from "@waitron/identity";

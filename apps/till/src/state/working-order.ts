@@ -3,11 +3,11 @@
  * {@link WorkingOrderStore.clear} empties it, so a shift change never loses a half-built order.
  * Widgets never hold references to one another; they coordinate through this store's events.
  *
- * The `@waitron/catalogue` imports are DEEP, bypassing the barrel, which re-exports `operations.ts`
+ * The `@waitron/menu` imports are DEEP, bypassing the barrel, which re-exports `operations.ts`
  * and with it `@waitron/db` and Node builtins. A deep import is safe only while the module it reaches
  * pulls in nothing at runtime beyond `@waitron/shared` and its own siblings.
  */
-import { type BasketItem, priceBasket } from "@waitron/catalogue/src/pricing.js";
+import { type BasketItem, priceBasket } from "@waitron/menu/src/pricing.js";
 import {
   localToday,
   customerPresentationText,
@@ -17,9 +17,9 @@ import {
   subtractDecimal,
   sumDecimals,
 } from "@waitron/shared";
-import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
+import { prepareUnitSnapshot } from "@waitron/menu/src/unit-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
-import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
+import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
 import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross, takesExtras } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";

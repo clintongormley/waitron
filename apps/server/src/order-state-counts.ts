@@ -11,7 +11,7 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { menuItems, productUnits, unitOwnerJoin, units } from "@waitron/catalogue";
+import { menuItems, productUnits, unitOwnerJoin, units } from "@waitron/menu";
 import { initiatedAt } from "./kitchen-phase.js";
 
 export interface OrderStateCounts {

@@ -13,7 +13,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
-import { effectiveDefaultLabelId } from "@waitron/catalogue/src/option-default.js";
+import { effectiveDefaultLabelId } from "@waitron/menu/src/option-default.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-lozenge.js";
@@ -29,7 +29,7 @@ import { t } from "../i18n/t.js";
 
 /**
  * An ACTIVE list with no available option is refused here before saving, as `parseOptionListInput`
- * (packages/catalogue/src/option-contract.ts) refuses it; both take the default from
+ * (packages/menu/src/option-contract.ts) refuses it; both take the default from
  * `effectiveDefaultLabelId`.
  */
 @customElement("dashboard-option-list-form")

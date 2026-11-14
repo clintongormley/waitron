@@ -38,7 +38,7 @@ import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 
 import { readBillBalance, readPaymentsByBill, outstandingOf } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
-import { assignProductUnit, setProductVariants, units } from "@waitron/catalogue";
+import { assignProductUnit, setProductVariants, units } from "@waitron/menu";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { readOrderStateCounts } from "./order-state-counts.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";

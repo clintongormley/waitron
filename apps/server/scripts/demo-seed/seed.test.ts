@@ -19,7 +19,7 @@ import {
   listTranslationGapReport,
   menuStatus,
   readContentLanguages,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { resolveMakers, setRoutingCell } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";

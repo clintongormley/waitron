@@ -12,7 +12,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";

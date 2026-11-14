@@ -21,7 +21,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeContentLanguages } from "@waitron/catalogue";
+import { writeContentLanguages } from "@waitron/menu";
 import {
   setupSplitExtrasVenue,
   useSplitExtrasDb,

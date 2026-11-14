@@ -192,9 +192,9 @@ describe("configuration", () => {
       "packages/adjustments/src/starter-content.ts",
       "packages/adjustments/src/dashboard/starter-content.ts",
     ],
-    ["packages/catalogue/src/starter-content.ts", "packages/catalogue/src/starter-content.test.ts"],
-    ["packages/catalogue/src/starter-content.ts", "packages/catalogue/src/my-starter-content.ts"],
-    ["packages/catalogue/src/starter-content.ts", "apps/server/src/starter-content.ts"],
+    ["packages/menu/src/starter-content.ts", "packages/menu/src/starter-content.test.ts"],
+    ["packages/menu/src/starter-content.ts", "packages/menu/src/my-starter-content.ts"],
+    ["packages/menu/src/starter-content.ts", "apps/server/src/starter-content.ts"],
     ["packages/db/src/english-only.ts", "packages/core/src/english-only.ts"],
     ["packages/fiscal/src/no-regime-vocabulary.test.ts", "packages/db/src/english-only.test.ts"],
     [

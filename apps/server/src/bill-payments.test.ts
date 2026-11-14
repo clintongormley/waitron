@@ -41,7 +41,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { ensureFixtureJobRole, seedNode } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";

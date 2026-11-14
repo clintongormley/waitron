@@ -1,4 +1,4 @@
-import { units } from "@waitron/catalogue";
+import { units } from "@waitron/menu";
 import type { Database } from "@waitron/db";
 
 const EACH_NAMES = { en: "each", es: "unidad", ca: "unitat", gl: "unidade", eu: "unitatea" };

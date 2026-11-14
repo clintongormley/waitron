@@ -1,10 +1,10 @@
 import { cancelItemForTest } from "./testing/cancel-line.js";
-import { readDefaultCatalogueId } from "@waitron/catalogue";
+import { readDefaultCatalogueId } from "@waitron/menu";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
 import { parties, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";

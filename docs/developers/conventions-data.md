@@ -89,7 +89,7 @@ and for a zone a body names. A boundary (`createErrorBoundary`,
 `packages/server-kit/src/error-boundary.ts`) answers the status its table gives a code, and 400
 for a code its table leaves out — except a full disk anywhere in the error's causes, which answers
 `storage.disk_full`, at 507 unless the table names it; a route that needs another status for one code gets a second
-boundary over a spread of the table, as `runVariant` in `apps/server/src/catalogue-api.ts` does.
+boundary over a spread of the table, as `runVariant` in `apps/server/src/menu-api.ts` does.
 On 2026-10-08 `git grep -E 'status (===|!==) ?[0-9]{3}'` over the client trees found three
 status reads: the till's 403 check (`department-transfer-monitor.ts`), the setup app's 404 read as
 "already set up" (`setup-app.ts`) and the menus screen's `!== 200`; refusals are told apart by
@@ -165,7 +165,7 @@ English in its code and translated at setup from a translation file in the writi
 profiles (`packages/provisioning/src/starter-content.ts`), and for the service steps, the default
 seasons, the counter zone and the starter menu period
 (`packages/venue-service/src/starter-content.ts`); and for the units and the first
-menu (`packages/catalogue/src/starter-content.ts`), A918.
+menu (`packages/menu/src/starter-content.ts`), A918.
 A language map, such as a reason's names, gets the venue's starting content languages (the area's
 default content language, the languages the area requires every venue to keep, then English) that
 the file carries, plus English. A field holding one name, such as a reason's plain name, the
@@ -479,7 +479,7 @@ emitted SQL with `.toSQL()`.
 
 ## An untargeted `.onConflictDoNothing()` absorbs every unique conflict, not only the primary key's
 
-`writeItems` in `packages/catalogue/src/extras.ts` inserted each of an extras list's items with a
+`writeItems` in `packages/menu/src/extras.ts` inserted each of an extras list's items with a
 bare `.onConflictDoNothing()` and read "nothing came back" as "another transaction already holds
 this id". Verified with `.toSQL()` on drizzle 0.45.2: the untargeted call emits
 `… on conflict do nothing`, and the same insert with `{ target: extraListItems.id }` emits
@@ -502,7 +502,7 @@ the index refuses, although the body's final product set was legal. Measured 202
 product_id)` holding products A and B: inside one transaction, updating the first row to B printed
 `UNIQUE constraint failed: extra_list_items.list_id, extra_list_items.product_id`, errcode 2067, and
 deleting both rows then inserting the swapped pair committed. The case is `saves a body that
-exchanges two retained items' products` (`packages/catalogue/src/extras.concurrency.test.ts`). It
+exchanges two retained items' products` (`packages/menu/src/extras.concurrency.test.ts`). It
 now deletes every one of the list's rows and inserts the body's fresh, each under the id the body
 sent or a new one, which removes the intermediate state rather than ordering around it.
 
@@ -531,11 +531,11 @@ inserts then meet the first's committed rows on `(list_id, product_id)`.
 next caller's `begin` does not run until that `commit` has returned. That holds for every row in the
 file rather than for the one a clause named. SQLite has no row locks to take instead, and drizzle's
 SQLite query builder has no `.for()` at all — so `assertExtraListForWrite`
-(`packages/catalogue/src/extras.ts`, under the heading *Why this stopped being a lock*) is now the
+(`packages/menu/src/extras.ts`, under the heading *Why this stopped being a lock*) is now the
 404 it always also was, and nothing else.
 
 **The control.** The thing to observe is "the second one has not STARTED". That is `racePair` in
-`packages/catalogue/test/fixtures.ts`, which every concurrency case in the package goes through, and
+`packages/menu/test/fixtures.ts`, which every concurrency case in the package goes through, and
 its header records the reading in both directions taken back to back: two bodies started through
 `withTransaction` report `secondStarted === false` while the first is held, and the same two bodies
 started without it report `true`.
@@ -1075,7 +1075,7 @@ conversion it exists for and forbids the rest.
 whatever the declared type says (`packages/db/src/schema/columns.ts` states it at
 `smallCount`/`bigCount`), so nothing below the converters bounds a money value at all. The bound the
 system states is twelve integer digits — 99999999999999 cents, `MAX_MONEY_INTEGER_DIGITS`, enforced
-by `decimalToCents` on the amount after rounding it to cents, and by `packages/catalogue`'s price
+by `decimalToCents` on the amount after rounding it to cents, and by `packages/menu`'s price
 validators — and it is now the only thing
 enforcing anything. That figure is well inside the 9007199254740991 a JavaScript number counts
 exactly, so nothing in range loses a cent to the number type.
@@ -1321,8 +1321,8 @@ same cast-to-text rule. The money rule's two guards and both its hedges apply un
 
 ### The database never rounds a quantity — the converter owns the third place
 
-`packages/catalogue`'s precision guard — the `rejects excess precision before anything downstream
-can round it` case in `packages/catalogue/src/units.operations.test.ts` — holds no SQL rounding
+`packages/menu`'s precision guard — the `rejects excess precision before anything downstream
+can round it` case in `packages/menu/src/units.operations.test.ts` — holds no SQL rounding
 probe beside the converter, because this engine has no exact decimal type to compare it with. Run
 on 2026-09-22:
 
@@ -1478,7 +1478,7 @@ file under `packages/provisioning/src` calls `applyMigrations` at all (the one c
 `apps/server/scripts/dev-setup.ts` and `apps/server/scripts/dev-onboard.ts`, are converted: each
 calls `applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null))`, so each installs the
 triggers the way everything else does. The retired fake-backend demos now run as ordinary server
-integration tests in `catalogue-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`;
+integration tests in `menu-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`;
 `useVenueDb` applies their migration sets.
 
 **2026-09-22: the names do NOT come from the `ledger` class, and for one step group they were
@@ -4966,8 +4966,8 @@ and enum comparison follows a string type check.
 
 That suite went with the old modifier model in Task 13, and the assertion was carried across rather
 than dropped with it: `refuses an explicit null where a default is only taken on absence` exists in
-both `packages/catalogue/src/extra-contract.test.ts` and
-`packages/catalogue/src/option-contract.test.ts`. Neither is a test that merely passes — each was
+both `packages/menu/src/extra-contract.test.ts` and
+`packages/menu/src/option-contract.test.ts`. Neither is a test that merely passes — each was
 proven by mutating the code it covers, widening `bool`/`flag`'s `value === undefined` to
 `value == null` (and, in the extras file, `minPicks`'s `=== undefined ?` default beside it) and
 watching exactly that case go red while the rest of the file stayed green. That extras mutation, of
@@ -4976,7 +4976,7 @@ watching exactly that case go red while the rest of the file stayed green. That 
 **Some fields are deliberately outside the rule**, and a reader who takes the rule as universal will
 get them wrong. An extras list's `maxPicks` accepts an explicit null, because there null is the VALUE
 — it means uncapped — rather than a missing field (`row.maxPicks == null ? null : …`,
-`packages/catalogue/src/extra-contract.ts`). That is pinned by its own case, `keeps an explicit null
+`packages/menu/src/extra-contract.ts`). That is pinned by its own case, `keeps an explicit null
 maxPicks, because there null is the value`. The seat-a-table
 route's `guestCount` also accepts an explicit null as a value meaning no count; the absent field means
 the same thing (`requireGuestCount`, `apps/server/src/till-api.ts`). Its route case `seats without a
@@ -4994,7 +4994,7 @@ as no guests line, while an absent key takes the party's default (`recordReceipt
 cases on a party's bill pins the two halves on each of the four routes.
 
 An extras item's `maxQuantity` keeps an explicit null as no cap on that item, while an absent field
-defaults to one (`parseExtraListInput`, `packages/catalogue/src/extra-contract.ts`); the case
+defaults to one (`parseExtraListInput`, `packages/menu/src/extra-contract.ts`); the case
 `defaults an absent item maximum to one and preserves an explicit null` pins both. The setup
 request's `taxpayerDomicile` reads an explicit null the same as an absent field, as no registered
 business address, which a demo sends (`parseVenue`, `apps/server/src/setup-api.ts`); the case
@@ -5007,7 +5007,7 @@ second, each with the rest of its filtered run green.
 
 These are examples, not a complete list. An extras item's `price`, where null prices the extra
 from the product's unit price times its portion (`extraPrice` and `priceForExtraPortion`,
-`packages/catalogue/src/extra-contract.ts`), is another.
+`packages/menu/src/extra-contract.ts`), is another.
 
 ## A missing unique target now fails at WRITE time, not at migrate time
 

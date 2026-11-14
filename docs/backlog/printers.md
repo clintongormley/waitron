@@ -785,7 +785,7 @@ Hardware and inbox checks to complete in the owner session.
   language sets the receipt's fixed words, its dates and amounts, and the department's subtitle and
   footer. **Dish names, variant names, units and option answers are stored once, in the venue's
   default content language, when a line is added, and print in it whatever receipt language is
-  chosen** (`packages/catalogue/src/default-language-text.ts`); no translated dish names (owner,
+  chosen** (`packages/menu/src/default-language-text.ts`); no translated dish names (owner,
   2026-10-11). Until A497, no choice was offered when the original printed.
 
 - **A copy can be printed in another receipt language (C114, #1022; narrowed by A497, owner

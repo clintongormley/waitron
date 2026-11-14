@@ -1,5 +1,5 @@
 import { seedDeviceProfiles, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { writeContentLanguages } from "@waitron/catalogue";
+import { writeContentLanguages } from "@waitron/menu";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { deletePrinter } from "./printer-delete.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
@@ -59,8 +59,8 @@ import {
   createProduct,
   listAvailableProducts,
   readSavedContentLanguages,
-} from "@waitron/catalogue";
-import type { AvailableProduct } from "@waitron/catalogue";
+} from "@waitron/menu";
+import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";

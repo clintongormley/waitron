@@ -12,7 +12,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/catalogue";
+import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/menu";
 import { dishKitchenItems, dishKitchenItemsQuery, onDishesOrTheirExtras } from "./dish-kitchen.js";
 
 const suite = useVenueDb({

@@ -19,7 +19,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
-import { writeContentLanguages } from "@waitron/catalogue";
+import { writeContentLanguages } from "@waitron/menu";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createStation } from "./kitchen.js";

@@ -1,4 +1,4 @@
-import type { MenuUndoCommand } from "@waitron/catalogue/src/menu-undo.js";
+import type { MenuUndoCommand } from "@waitron/menu/src/menu-undo.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { homeDeviceName } from "../i18n/domain.js";
 import { fill } from "../i18n/t.js";

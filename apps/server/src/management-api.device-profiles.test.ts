@@ -13,7 +13,7 @@ import {
   printers,
   withTransaction,
 } from "@waitron/db";
-import { createCatalogue } from "@waitron/catalogue";
+import { createCatalogue } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedZone } from "@waitron/db/testing/seed.js";

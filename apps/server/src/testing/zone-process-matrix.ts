@@ -54,7 +54,7 @@ const familyCases = [
   ["core-only", 11, "zone-core-capabilities.test.ts"],
   ["readiness", 1, "fiscal-readiness-runner.verifactu.test.ts"],
   ["scripts", 4, "zone-script-callers.test.ts"],
-  ["catalogue-allergens", 1, "catalogue-allergen-workflow.test.ts"],
+  ["catalogue-allergens", 1, "menu-allergen-workflow.test.ts"],
   ["recorded-reporting", 3, "reporting-write-workflows.test.ts"],
   ["core-only-emergency", 9, "void-issue-clock.test.ts"],
 ] as const;

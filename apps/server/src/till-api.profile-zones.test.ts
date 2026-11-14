@@ -29,7 +29,7 @@ import { lookUpInvoices } from "./invoice-lookup-api.js";
 import { orderZoneCondition } from "./zone-access.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { addProductToMenu, createCatalogue, createProduct } from "@waitron/catalogue";
+import { addProductToMenu, createCatalogue, createProduct } from "@waitron/menu";
 import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
 import { hashPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";

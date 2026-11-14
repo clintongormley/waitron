@@ -11,7 +11,7 @@ import {
   createProduct,
   patchLiveMenu,
   readLiveMenu,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";

@@ -4,7 +4,7 @@ import { render, type TemplateResult } from "lit";
 import { setContentLanguages, type WtInput } from "@waitron/ui";
 import type { WtSwitch } from "@waitron/ui/src/components/wt-switch.js";
 import type { WtPriceInput } from "@waitron/ui/src/components/wt-price-input.js";
-import { MAX_MODIFIER_INTEGER } from "@waitron/catalogue/src/modifier-limits.js";
+import { MAX_MODIFIER_INTEGER } from "@waitron/menu/src/modifier-limits.js";
 import { setLocale } from "../i18n/t.js";
 import {
   type FieldContext,

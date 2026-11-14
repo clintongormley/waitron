@@ -7,14 +7,14 @@ their full text.
 
 **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
 engine — OPEN (found by #603).** Read only, not run: `MAX_MODIFIER_INTEGER`
-(`packages/catalogue/src/modifier-limits.ts`, 2147483647) and the extras contract's `whole` bound
+(`packages/menu/src/modifier-limits.ts`, 2147483647) and the extras contract's `whole` bound
 were PostgreSQL's integer maximum; the test names "refuses a pick bound above what the column can
 hold" and "refuses a maxQuantity above what the column can hold" (`src/extra-contract.test.ts`)
 assume a column limit.
 
-## Test titles in `packages/catalogue` a comments-only change cannot touch
+## Test titles in `packages/menu` a comments-only change cannot touch
 
-**Test titles in `packages/catalogue` a comments-only change cannot touch — OPEN (found by #603).** Read only, not run:
+**Test titles in `packages/menu` a comments-only change cannot touch — OPEN (found by #603).** Read only, not run:
 `describe("validateContainsTag (Task 4)")` and `describe("validateDietOverride (Task 4)")`
 (`src/dietary.test.ts`), "settles a product id sent in upper case in the database"
 (`src/product-modifiers.test.ts`, the code settles it now), "rebuilds every lookup index without the
@@ -35,8 +35,8 @@ measure a way to bound name sorting without changing its results.
 
 **A negative catalogue price can still be stored by a direct call — OPEN (left by #487).** A
 negative catalogue price is never valid (owner ruling 2026-09-21); the product-create and menu-item writes in
-`apps/server/src/catalogue-api.ts` refuse one at the request boundary. `createProduct` and
-`updateProduct` (`packages/catalogue/src/operations.ts`) still accept and store a negative when
+`apps/server/src/menu-api.ts` refuse one at the request boundary. `createProduct` and
+`updateProduct` (`packages/menu/src/operations.ts`) still accept and store a negative when
 called directly — a seed, a script or a future caller — and `products.unit_price` carries no
 `>= 0` check. Decide whether the screen belongs in the ops or as a `products.unit_price >= 0` check
 beside the sibling price checks the other catalogue tables carry; the column is an integer count of
@@ -45,7 +45,7 @@ cents, so a check constraint is now the only thing that would refuse it at the d
 ## Two price rules disagree about a value that is not negative
 
 **Two price rules disagree about a value that is not negative — OPEN (found 2026-09-21, task N4).**
-`isProductPrice` (`packages/catalogue/src/modifier-limits.ts:12`) allows at most two decimal places
+`isProductPrice` (`packages/menu/src/modifier-limits.ts:12`) allows at most two decimal places
 and ten whole digits; `stringToCents` (the `decimal()` + `decimalToCents` pair) that the
 screened catalogue writes use allows any number of decimals and twelve whole digits, and ROUNDS the
 excess. So `POST /management-api/products` with `unitPrice: "1.999"` stores `2.00` without saying
@@ -197,6 +197,9 @@ own agent still enrols as a new row beside it, as it did before (read, not run).
 On 2026-10-05 A261-3 also observed "ResizeObserver loop completed with undelivered
 notifications" while running `src/widgets/folder-made-at.test.ts` and
 `src/widgets/catalogue-browser.test.ts`. Its cause on that path has not been established.
+
+_2026-11-14, A1308 mn1: that browser suite now lives at `src/widgets/product-browser.test.ts`._
+
 A349's Preview, price-table and navigation suites also logged the message.
 That comparison does not establish which observer causes it or its effect on the rendered screen.
 A487a also saw it in `src/components/wt-tabs` runs. Which test logs it was not looked for.
@@ -286,7 +289,7 @@ the 2026-09-30 folders design; what remains:
   before it, checked at `002b79f69`).
 - **The Menus screen (#664).** Which section is being edited is not in the address, only the menu
   and the tab. Opening "Add to menus" sends one `getMenuStructure` request per menu, each reading
-  the whole section graph (`readMenuStructure`, `packages/catalogue/src/menu-structure.ts`); one
+  the whole section graph (`readMenuStructure`, `packages/menu/src/menu-structure.ts`); one
   server read returning every menu's structure would make it one. A refused change's message sits
   under the menu's heading, above the tabs, so on a phone the tree sits between it and the list it
   names; if someone else exactly undoes a move while it is saving, the move's answer is shown over
@@ -315,7 +318,7 @@ the 2026-09-30 folders design; what remains:
   and the profile's choice with one Device Home Page per menu).** The add-shortcut picker offers
   active products only, so a shortcut to a product switched off since, once removed, cannot be
   added again until the product is switched back on. Archiving a product turns its shortcut into
-  a Missing one (`takeOffMenus`, `packages/catalogue/src/menu-removal.ts`); how the Home page tab's
+  a Missing one (`takeOffMenus`, `packages/menu/src/menu-removal.ts`); how the Home page tab's
   preview draws a shortcut to a product switched off any other way was not checked.
 
 ## Extras and Options — deliberate limits, and what is left open
@@ -334,7 +337,7 @@ the 2026-09-30 folders design; what remains:
   base or a controller is the right vehicle before a third list form is written; the row editors
   genuinely differ and should NOT be merged.
 - **The seven string-parsing helpers are copied between the two contracts.**
-  `packages/catalogue/src/extra-contract.ts` and `option-contract.ts` carry byte-identical copies of
+  `packages/menu/src/extra-contract.ts` and `option-contract.ts` carry byte-identical copies of
   `invalid`, `record`, `keys`, `staffName`, `translations`, `kitchenName` and `id`, differing only in
   the error-code prefix. **Next action:** extract them, and decide at the same time whether
   `product-editor-input.ts`'s near-copies join them. A review also suggested moving
@@ -345,12 +348,12 @@ the 2026-09-30 folders design; what remains:
 - **A list switched on with no pickable label is refused only by the parser.**
   `parseOptionListInput` is the only door today; a path that writes `option_labels.available`
   directly, or flips `option_lists.active` with a plain update, could leave a list nobody can answer.
-- **`packages/catalogue/src/options.ts` still says `findContentTranslationGap` returns rather than
+- **`packages/menu/src/options.ts` still says `findContentTranslationGap` returns rather than
   throwing.** It throws `content.translation_invalid` for a non-text value.
 - **The definition reads behind a dish's offered lists take no lock, and whether the storage
   switch closed the gap is unestablished.** `readMenuExtras`, `readProductExtras`,
   `readOptionListsByIds` and `readProductModifiers`, reached from `walkAttachedModifiers`
-  (`packages/catalogue/src/offered-modifiers.ts`), are off the sale path since menus Task 7 except
+  (`packages/menu/src/offered-modifiers.ts`), are off the sale path since menus Task 7 except
   for an edit of a saved line whose dish the live version no longer offers (`productOptionLists`,
   `apps/server/src/working-order.ts`). The concern is a list edit committing mid-read, giving one
   order a snapshot mixing pre- and post-edit wording; not measured. **Next action:** trace those
@@ -434,7 +437,7 @@ names; folding them into the one helper was not part of W77a.
   apart from an included menu clearing its own price needs the published (frozen) menu document to
   record where each live price came from, which is a change to the published document's format.
   The case "leaves a menu out of also-on when its own matching change is its own setting" in
-  `packages/catalogue/src/menu-publication.test.ts` pins today's answer.
+  `packages/menu/src/menu-publication.test.ts` pins today's answer.
 
 ## In the real dashboard at a 390px window the table is 358px wide
 
@@ -513,7 +516,7 @@ From **Units and the old `pricing_unit` (#342, #375, #382) — what is left open
 From **Units and the old `pricing_unit` (#342, #375, #382) — what is left open.**
 
 - **`createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback**, and the
-  synthetic `EACH_UNIT` id is a literal in both `packages/catalogue/src/unit-validation.ts` and the
+  synthetic `EACH_UNIT` id is a literal in both `packages/menu/src/unit-validation.ts` and the
   till's `product-name.ts` with nothing pinning them equal. Since W75 (2026-10-04) `EACH_UNIT_ID`
   lives in that module, which the till already imports (`apps/till/src/state/working-order.ts`), so
   the till could import it instead of keeping its own literal.
@@ -558,7 +561,7 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 
 - **Translate all: a job that ends before any item is accounted for does not count its items as lost.**
   When a job ends after at least one of its items has been accounted for (`collected_refs` is not
-  empty), `recordSuggestionJobEnded` (`packages/catalogue/src/content-suggestion-jobs.ts`) counts
+  empty), `recordSuggestionJobEnded` (`packages/menu/src/content-suggestion-jobs.ts`) counts
   every item not yet accounted for as one that could not be done, so when the notice appears, it
   says so. A job that ends before any item is accounted for (Cloud expired
   it, the box's 24-hour clock ran out, or the service went off) keeps the counts of its last
@@ -585,7 +588,7 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
   status Cloud refuses as a request it will never accept…" in
   `apps/server/src/content-suggestion-runner.test.ts`, and "a last page that leaves a sent item
   unaccounted ends the job without a release" in
-  `packages/catalogue/src/content-suggestion-store.test.ts`. What would fix it is open.
+  `packages/menu/src/content-suggestion-store.test.ts`. What would fix it is open.
 
 ## Translate all: open points from the review of A689's second PR
 
@@ -612,9 +615,9 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 
 Found while checking the Modifiers guide for A582 slice 3. Deleting a list does not republish the
 menus: the delete route calls only the list's own remove (`mountListSurface`,
-`apps/server/src/catalogue-api.ts`; `deleteOptionList`, `packages/catalogue/src/options.ts`, has no
+`apps/server/src/menu-api.ts`; `deleteOptionList`, `packages/menu/src/options.ts`, has no
 publish), and the till's offers come from the published menu document, where a deleted list's
-options count as unavailable (`labelAvailable`, `packages/catalogue/src/menu-document.ts`). Measured
+options count as unavailable (`labelAvailable`, `packages/menu/src/menu-document.ts`). Measured
 with temporary cases in `apps/server/src/working-order.test.ts`, `order-groups.test.ts` and
 `tabs.test.ts`, since reverted:
 
@@ -737,7 +740,7 @@ whether it should change.
 ## Category authoring serialises across the whole database, and nobody has measured what that costs
 
 `withTransaction` admits one write transaction per venue file
-(`packages/catalogue/src/categories.ts`, above `listCategories`). **Next action:** measure it
+(`packages/menu/src/categories.ts`, above `listCategories`). **Next action:** measure it
 before anyone widens category authoring to more concurrent editors. Left open by product
 categories (#340, [API and integration guide](../developers/product-categories.md)).
 
@@ -768,7 +771,7 @@ box's colour").
 - The dashboard lets a manager attach an extras list to a product sold in a unit with decimals,
   on a scale or with the measure switch on, and the till then offers no extras for it, with no
   word to the manager. Refuse it, or say so, in the product editor (`writeProductModifiers`,
-  `packages/catalogue/src/product-modifiers.ts`, checks no unit).
+  `packages/menu/src/product-modifiers.ts`, checks no unit).
 
 ## The combined end-to-end journey has not been walked
 
@@ -903,7 +906,7 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 - **Translate all: open points from the review of A689's second PR.**
   [Detail](catalogue.md#translate-all-open-points-from-the-review-of-a689s-second-pr)
 - **Translate all: the notice's count can be higher than what the dialog shows.** `waiting`
-  (`readSuggestionRun`, `packages/catalogue/src/content-suggestion-jobs.ts`) counts every stored
+  (`readSuggestionRun`, `packages/menu/src/content-suggestion-jobs.ts`) counts every stored
   suggestion with text, including out-of-date ones, ones for deleted items or switched-off languages,
   and ones left from an earlier run. Opening the dialog clears the notice, which limits the effect.
 - **Translate all: three limits the translations dialog accepts for now (A689's fourth PR,
@@ -954,7 +957,7 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   [Detail](catalogue.md#extras-and-options--deliberate-limits-and-what-is-left-open)
 - **The Price heading reads "Price per portion" also over a row sold by the unit.** Still open from
   its review: neither screen counts a stored unit seeded as `each` as Each, which `isEachUnit`
-  (`packages/catalogue/src/units.ts`) does; no code outside tests seeds one. Left open by W75 (the
+  (`packages/menu/src/units.ts`) does; no code outside tests seeds one. Left open by W75 (the
   Extras editor shows Portion beside Price, #1194).
 - **At 390px the variant warning wraps in an extras list's narrow product column**, so a marked
   row is about twice as tall as its neighbours. Left open by A223 (#1098, an extras list's product
@@ -1013,11 +1016,11 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **`createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback**, and the
-  synthetic `EACH_UNIT` id is a literal in both `packages/catalogue/src/unit-validation.ts` and the
+  synthetic `EACH_UNIT` id is a literal in both `packages/menu/src/unit-validation.ts` and the
   till's `product-name.ts` with nothing pinning them equal.
   [Detail](catalogue.md#createproduct-and-updateproduct-duplicate-the-legacy-pricingunit-fallback)
 - **`EACH_UNIT` keeps Spanish, Catalan, Galician and Basque words in general code (left open by
-  A918 slice 4, #2141).** `packages/catalogue/src/units.ts:26-34` is never written into a venue, but the
+  A918 slice 4, #2141).** `packages/menu/src/units.ts:26-34` is never written into a venue, but the
   receipt reads its abbreviations to decide whether a line prints a unit
   (`apps/server/src/receipt-figures.ts:205-212`), so moving its words can change printed text: its
   own pull request waits for the owner.
@@ -1068,7 +1071,7 @@ retain the earlier scope and the six follow-ups.
 
 - Changing the catalogue that opens first keeps the previous default sellable as a member.
   Which catalogues you sell and which opens first are independent choices. The default-change
-  case in `packages/catalogue/src/operations.test.ts` checks both catalogues and their default flags.
+  case in `packages/menu/src/operations.test.ts` checks both catalogues and their default flags.
 
 - **Sold-out tiles (A292, #1310, 2026-10-06).** A sold-out painted tile's stripe is
   `--wt-space-1` (4px) with a one-pixel `--wt-color-text` line beside it, so in both themes every
@@ -1217,7 +1220,7 @@ text differ, this text wins. The editor is `apps/dashboard/src/widgets/product-e
    `apps/dashboard/src/widgets/product-editor.ts`), which is Catalan for a Catalan venue even with
    the dashboard in English, while "Each" comes from the dashboard's own strings
    (`editor.unit_each`); and after Each they come in the order of their random ids
-   (`packages/catalogue/src/units.ts`). Show each unit's name in the dashboard's language (falling
+   (`packages/menu/src/units.ts`). Show each unit's name in the dashboard's language (falling
    back as other content does when a unit has none), Each first, the rest alphabetical. Read, not
    run, 2026-10-15.
 
@@ -1268,7 +1271,7 @@ ties, disables diet-empty sections, and opens a section without changing the bas
 2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to
 review (listed in the PR). A product whose category the dashboard's category list does not hold
 lists under All products with no "missing" marker; the database refuses a stored product naming a
-category that does not exist (`packages/db/src/schema/catalogue.ts:51`, a foreign key; not tried),
+category that does not exist (`packages/db/src/schema/menus.ts:51`, a foreign key; not tried),
 so this is expected only while the dashboard's category list is behind.
 
 **Products: the Move dialog's destination categories (W82, #1210).** Two sibling categories with the same name are left as they are (owner: "leave it"): they still show as two identical entries, in the tree and in a search.
@@ -1303,7 +1306,7 @@ From "Extras and Options — deliberate limits, and what is left open"
   is a possible later addition.
 - **A menu offer carries all its product's extras and options lists; there is no per-menu extras
   editing (owner, 2026-10-01; #993).** The per-menu tables were dropped, and
-  `packages/catalogue/src/migrations.test.ts` checks they stay gone.
+  `packages/menu/src/migrations.test.ts` checks they stay gone.
 - **Extras only on a dish sold by the unit (owner, 2026-10-15; A663 Part 2d).** A dish whose unit
   has a scale or allows decimal places takes no extras, so 1 l of sangría cannot carry one; to sell
   it with extras, sell it in a unit with no scale, no decimals and the measure switch off (a jug).

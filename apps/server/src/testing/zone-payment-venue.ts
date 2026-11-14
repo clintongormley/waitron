@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { withTransaction, billPayments, sales } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { createCategory, createProduct } from "@waitron/catalogue";
+import { createCategory, createProduct } from "@waitron/menu";
 import { createPinThrottle, loginWithPin } from "@waitron/identity";
 import { insertCapturedPayment } from "@waitron/payments";
 import { decimal, deviceOrigin } from "@waitron/shared";

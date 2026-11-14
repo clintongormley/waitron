@@ -1,6 +1,6 @@
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { products, lineServiceCancellations } from "@waitron/db";
-import { createProduct, createExtraList, writeProductModifiers } from "@waitron/catalogue";
+import { createProduct, createExtraList, writeProductModifiers } from "@waitron/menu";
 import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";

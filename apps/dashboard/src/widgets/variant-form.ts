@@ -10,7 +10,7 @@ import "./image-upload.js";
 import type { ImageUploader } from "./image-upload.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { t } from "../i18n/t.js";
-import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
+import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import {
   nonBlankNames,
   optionalTextFields,

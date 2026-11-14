@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
-import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/catalogue";
+import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/menu";
 import type { BusinessDayClock } from "@waitron/shared";
 import type { CalendarColour, LocalDate } from "./hours-types.js";
 import {

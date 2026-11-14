@@ -1214,7 +1214,7 @@ declare module "@waitron/shared" {
 
     /** A setup or provisioning field cannot be used. Fiscal venue validators and the core and
      * catalogue configuration checks (`packages/db/src/configuration-transfer.ts`,
-     * `packages/catalogue/src/configuration-transfer.ts`) also raise this code;
+     * `packages/menu/src/configuration-transfer.ts`) also raise this code;
      * editing routes translate it to their own request error. `field` carries only the field name,
      * never its value, because certificate fields can contain credentials. */
     "setup.request_invalid": { field: string };

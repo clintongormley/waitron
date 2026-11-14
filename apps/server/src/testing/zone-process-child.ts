@@ -101,7 +101,7 @@ const familiesByKey: Record<string, { file: string; pattern: string; root?: stri
     pattern: "uses one supplied isolated issue reading",
   },
   scripts: { file: "src/zone-script-callers.test.ts", pattern: "." },
-  "catalogue-allergens": { file: "src/catalogue-allergen-workflow.test.ts", pattern: "." },
+  "catalogue-allergens": { file: "src/menu-allergen-workflow.test.ts", pattern: "." },
   "recorded-reporting": { file: "src/reporting-write-workflows.test.ts", pattern: "." },
   "core-only-emergency": {
     file: "src/void-issue-clock.test.ts",

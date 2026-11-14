@@ -1,5 +1,5 @@
 import { readOutsideCardDetails } from "./outside-card.js";
-import { setOptionLabelAvailability, updateProduct } from "@waitron/catalogue";
+import { setOptionLabelAvailability, updateProduct } from "@waitron/menu";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";

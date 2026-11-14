@@ -27,7 +27,7 @@ import {
   addProductToMenu,
   previewMenu,
   publishMenu,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   createDepartment,
   createServiceZone,

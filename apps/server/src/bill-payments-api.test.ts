@@ -46,7 +46,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { DEFAULT_PROFILE_CAPABILITIES } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";

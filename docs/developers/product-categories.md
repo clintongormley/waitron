@@ -60,7 +60,7 @@ stations' Routes tab; or choose an active station for that cell.
 If no active default is set, use Make default on Prep stations.
 
 A variant is always in its product's reporting category. Its effective category
-(`effectiveProductColumns.categoryId`, `packages/catalogue/src/variant-fallback.ts`), which
+(`effectiveProductColumns.categoryId`, `packages/menu/src/variant-fallback.ts`), which
 menus, sale classification and kitchen routing read, is the product's even where an
 older variant row still stores one of its own, and the product editor offers a variant no category
 choice. In the tree, variants sit under their product and move with
@@ -87,12 +87,12 @@ claims and ordered exceptions of
 route. Each section belongs to one menu. To share a set of products, include its menu in another
 menu (shown as one folder, or with its sections directly); you cannot attach another menu's individual section. Adding, moving or removing
 products in a section does not change their category or prep-station rules
-(`apps/server/src/catalogue-api.full-manifest.test.ts`).
+(`apps/server/src/menu-api.full-manifest.test.ts`).
 
 ### Section routes
 
 You edit sections within their owning menu. `mountSectionRoutes` in
-`apps/server/src/catalogue-api.ts` serves these routes behind the same manager session and
+`apps/server/src/menu-api.ts` serves these routes behind the same manager session and
 permission as the category routes below. A section answer is
 `{ id, internalName, names, image, color, members }`. A member is `{ id, position, ref }`, where
 `ref` is `{ kind: "product", productId }` or `{ kind: "section", sectionId }`.
@@ -161,7 +161,7 @@ changing that name must pass the check.
 of this menu's working copy and answers 201 with the new menu (`{ id, name, active, version }`). It
 copies the menu's own sections and their members, its Home shortcuts, its display settings, its
 products' menu prices and its variant prices (`duplicateMenu`,
-`packages/catalogue/src/menu-copy.ts`). An include, and a Home shortcut into an included menu,
+`packages/menu/src/menu-copy.ts`). An include, and a Home shortcut into an included menu,
 still name the other menu's sections. Published versions, scheduled publications and menu periods
 are not copied, so the copy starts unpublished. A blank name answers `management.request_invalid`
 (400, `field: "name"`); a name another menu holds, ignoring case, Unicode normalization and
@@ -292,7 +292,7 @@ were.
   live at once as a new version under the next number and gives `{ versionId, number, requeued }`
   (200). `requeued` lists each queued edition's copy as `{ versionId, number, activatesAt }`, lowest
   number first. Each change is `{ target, field, value }`; the fields each kind of target takes are
-  `PATCH_FIELDS` in `packages/catalogue/src/menu-patch-types.ts`. A missing or non-string
+  `PATCH_FIELDS` in `packages/menu/src/menu-patch-types.ts`. A missing or non-string
   `baseVersionId`, or a `changes` that is not a list, answers `management.request_invalid` (400,
   `field` naming it); a malformed menu id or `baseVersionId` answers `shared.invalid_id` (400). An
   unknown menu answers `catalogue.not_found` (404), a menu with no live version
@@ -310,7 +310,7 @@ the zone's assigned active menus. Reset the venue before using its
 menus; republishing an old document is not an upgrade path (owner, 2026-10-06, A291).
 Availability, course and reporting category are
 applied from current rows when serving that version; its VAT class is frozen, and it holds no VAT
-rate (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). Menu extras use product-level list attachments and settings, including their active filters;
+rate (`applyLiveFields`, `packages/menu/src/menu-document.ts`). Menu extras use product-level list attachments and settings, including their active filters;
 there are no per-menu extras publications or overrides.
 
 ### Device Home Page routes
@@ -435,7 +435,7 @@ answer; the other answer moves them without changing their active state. The arc
 
 Archiving a product archives its variants, removes its places in menu drafts and extras lists,
 and clears its variants' menu prices in the same transaction (`archiveProducts`,
-`packages/catalogue/src/archive.ts`). A Device Home Page shortcut in a draft becomes a missing
+`packages/menu/src/archive.ts`). A Device Home Page shortcut in a draft becomes a missing
 tile. View opens retained details instead of the editor. Archiving a variant on its own clears its
 menu prices and removes it from extras lists, without archiving its parent. Neither archive has
 an Enable action.
@@ -505,7 +505,7 @@ category, and a variant still storing a deleted category has it cleared.
 ## API
 
 These routes require a management session with `catalogue.manage`, the catalogue write permission
-in `apps/server/src/catalogue-api.ts`. A category is `{ id, name, parentId, color }`, where `name`
+in `apps/server/src/menu-api.ts`. A category is `{ id, name, parentId, color }`, where `name`
 is a trimmed plain string, `parentId` is an ID or null, and `color` is a lowercase `#rrggbb` or
 null. A blank name is `category.invalid` (400); a non-string name is `management.request_invalid`
 (400). A `color` that is neither a string nor null is `management.request_invalid` with
@@ -580,7 +580,7 @@ The folder migration does not convert old JSON names or preserve the removed fie
 opened without that reset can display a name as JSON text. Do not add a data backfill for this
 preproduction change.
 
-The folder move/delete tests in `packages/catalogue/src/catalogue-items.db.test.ts` check mixed
+The folder move/delete tests in `packages/menu/src/product-items.db.test.ts` check mixed
 selections, cycles, overlapping subtrees and rollback. `scripts/migration-upgrade.test.ts` checks
 the migration sequence, and the schema and trigger guards check the resulting constraints. These
 are separate checks: a successful fresh migration does not substitute for exercising an upgrade.

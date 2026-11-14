@@ -8,7 +8,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { staffPresentationName } from "@waitron/catalogue";
+import { staffPresentationName } from "@waitron/menu";
 import {
   AppError,
   perDishOptionQuantity,

@@ -17,7 +17,7 @@ import {
   setProductVariants,
   updateProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type { AllergySendTarget } from "@waitron/module";
 import {
   allergyTargets,

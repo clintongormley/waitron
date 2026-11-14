@@ -10,12 +10,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { withTransaction, floorZones } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  listAvailableProducts,
-  menuItems,
-  readLiveDocuments,
-  documentOffers,
-} from "@waitron/catalogue";
+import { listAvailableProducts, menuItems, readLiveDocuments, documentOffers } from "@waitron/menu";
 import { computeDailyClose } from "@waitron/reporting";
 import {
   compareDecimal,

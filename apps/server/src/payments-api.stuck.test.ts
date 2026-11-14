@@ -27,8 +27,8 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
-import { listAvailableProducts } from "@waitron/catalogue";
+} from "@waitron/menu";
+import { listAvailableProducts } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {

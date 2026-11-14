@@ -29,7 +29,7 @@ import { placeGrouped } from "./testing/adjustment-venue.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { splitDraft, takeOverDraft } from "./order-drafts.js";
 import { writePartyAllergy } from "@waitron/venue-service";
-import { createExtraList, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, writeProductModifiers } from "@waitron/menu";
 import type { ExtraSelection } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { createOpenOrder } from "./working-order.js";

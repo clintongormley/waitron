@@ -1,7 +1,7 @@
 import { configurationBundle } from "../test/configuration-bundle.js";
 import { validateConfigurationBundle } from "./configuration-transfer.js";
 import { expect, it } from "vitest";
-import { GUEST_MENU_SETTINGS } from "@waitron/catalogue";
+import { GUEST_MENU_SETTINGS } from "@waitron/menu";
 import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, readSettings, saveSettings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

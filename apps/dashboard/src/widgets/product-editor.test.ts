@@ -741,7 +741,7 @@ it("shuts the chooser from its Close button without changing the unit, putting f
   expect(reachedScreen).not.toHaveBeenCalled();
 });
 
-// Opened by a real press, as catalogue-screen.test.ts's unit-form Escape case is (C74).
+// Opened by a real press, as products-screen.test.ts's unit-form Escape case is (C74).
 it("shuts only the chooser on Escape, leaving the unit and the editor as they were", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -4362,7 +4362,7 @@ it("shows a variant's inherited price and description empty, with the parent's v
 });
 
 // Storage inherits a variant's description as ONE value across every language
-// (`packages/catalogue/src/variant-fallback.ts`), so a language left blank beside one with text reads
+// (`packages/menu/src/variant-fallback.ts`), so a language left blank beside one with text reads
 // blank, not the parent's.
 async function mountBilingualVariant(description: ProductEditorDraft["description"] = null) {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {

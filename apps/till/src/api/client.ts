@@ -522,7 +522,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
  * label; `extras` answers its extras lists, one entry per list, naming the PRODUCTS picked off it and
  * how many of each this dish takes. Each key is ABSENT on a line that answered nothing of that kind —
  * never `[]`. Every ACTIVE options list a dish attaches must be answered, or the line is refused
- * `options.label_required` (`validateOptionSelections`, `packages/catalogue/src/option-contract.ts`).
+ * `options.label_required` (`validateOptionSelections`, `packages/menu/src/option-contract.ts`).
  *
  * `note` is a NON-FISCAL free-text kitchen instruction, stored on the working-order line only, never on
  * the sale. It is ABSENT for a plain line — a whitespace-only note is omitted.

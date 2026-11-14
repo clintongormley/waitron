@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { KitchenAllergyBlock, KitchenNoteChange, StationNoticeDish } from "@waitron/module";
-import { kitchenPresentationName } from "@waitron/catalogue";
+import { kitchenPresentationName } from "@waitron/menu";
 import { businessDayStart } from "@waitron/reporting";
 import {
   AppError,

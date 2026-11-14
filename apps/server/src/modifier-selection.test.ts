@@ -5,7 +5,7 @@ import {
   type OptionLabel,
   type OptionList,
   type ResolvedExtraList,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   buildLineExtras,
   editLineExtras,

@@ -10,7 +10,7 @@ import {
   formatDecimalInput,
   saveActionState,
 } from "@waitron/ui";
-import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
+import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type {
   ComboboxOption,
@@ -36,7 +36,7 @@ import { extraNutrition } from "./diet-badges.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { allowsAllergenChoice, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import type { LineNutrition } from "../api/client.js";
-import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
+import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { LineSelection, OrderLine, SelectedExtra } from "../state/working-order.js";
 import type {

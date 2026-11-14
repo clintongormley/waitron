@@ -23,7 +23,7 @@ import {
   createProduct,
   setProductVariants,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";

@@ -9,7 +9,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import {

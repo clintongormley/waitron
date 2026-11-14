@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedCatalogues } from "./seed-catalogue.js";
+import { seedCatalogues } from "./seed-menus.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, readImageBytes } from "@waitron/media";
 import { seedMedia, demoMediaPath } from "./seed-media.js";

@@ -24,7 +24,7 @@ import {
   listStations,
   setProductCourse,
 } from "./kitchen.js";
-import { mountCatalogueApi } from "./catalogue-api.js";
+import { mountCatalogueApi } from "./menu-api.js";
 import { deleteCourse, readCourseDeleteImpact } from "./course-delete.js";
 import { deleteStation, readStationDeleteImpact } from "./station-delete.js";
 import { eq } from "drizzle-orm";

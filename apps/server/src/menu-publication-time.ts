@@ -1,5 +1,5 @@
 import { AppError } from "@waitron/shared";
-import type { LocalTime } from "@waitron/catalogue";
+import type { LocalTime } from "@waitron/menu";
 import { civilDateOf, validateTimeZone } from "@waitron/reporting";
 import { isLocalDate, localTimeOccurrences, offsetMinutes } from "@waitron/venue-service";
 import "./errors.js";

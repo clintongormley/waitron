@@ -7,7 +7,7 @@ import {
   createUnit,
   readContentLanguages,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   orderPortions,
   withTransaction,

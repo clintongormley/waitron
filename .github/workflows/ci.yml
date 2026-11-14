@@ -3660,7 +3660,7 @@ jobs:
           set -- "$@" --filter "!@waitron/country-packs"
           set -- "$@" --filter "!@waitron/dashboard-kit"
           set -- "$@" --filter "!@waitron/credentials"
-          set -- "$@" --filter "!@waitron/catalogue"
+          set -- "$@" --filter "!@waitron/menu"
           set -- "$@" --filter "!@waitron/workforce-es"
           set -- "$@" --filter "!@waitron/layouts"
           set -- "$@" --filter "!@waitron/printing"

@@ -10,7 +10,7 @@ import {
   deleteUnit,
   units,
   updateUnit,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   kitchenNotices,

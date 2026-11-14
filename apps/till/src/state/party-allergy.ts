@@ -1,5 +1,5 @@
 import type { ProductAllergens as AllergenMap } from "@waitron/shared";
-import { mergeAllergenMaps } from "@waitron/catalogue/src/derivation.js";
+import { mergeAllergenMaps } from "@waitron/menu/src/derivation.js";
 
 export function allergyClashes(allergens: AllergenMap | null, avoids: AllergenMap): string[] {
   return Object.keys(allergens ?? {})

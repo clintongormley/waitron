@@ -27,7 +27,7 @@ import {
   listContentTranslationGaps,
   previewMenu,
   publishMenu,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedTenant,
@@ -735,7 +735,7 @@ it("sorts by the default when the requested language was disabled while retainin
 });
 
 it("protects an image used by sections, a menu's own list among them, and counts each use", async () => {
-  const { createSectionIn, updateSection, sections } = await import("@waitron/catalogue");
+  const { createSectionIn, updateSection, sections } = await import("@waitron/menu");
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Drinks" } }, {});
@@ -776,7 +776,7 @@ it("protects an image used by sections, a menu's own list among them, and counts
 });
 
 it("protects the photo an include's folder names, even switched off, and counts the use", async () => {
-  const { sectionMembers, sections } = await import("@waitron/catalogue");
+  const { sectionMembers, sections } = await import("@waitron/menu");
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Folder photo" } }, {});
@@ -840,7 +840,7 @@ it("protects the photo an include's folder names, even switched off, and counts 
 });
 
 it("lists a folder photo held by a member that includes no section, under its missing name, as the count and the delete trigger see it", async () => {
-  const { sectionMembers, sections } = await import("@waitron/catalogue");
+  const { sectionMembers, sections } = await import("@waitron/menu");
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Folder photo" } }, {});
@@ -911,7 +911,7 @@ it("protects an image only a live menu version names, and releases it once anoth
     publishMenu,
     readMenuStructure,
     updateProduct,
-  } = await import("@waitron/catalogue");
+  } = await import("@waitron/menu");
   await seedTenant(suite.db);
   const publish = async (tx: Transaction, menuId: string) =>
     publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1");
@@ -963,7 +963,7 @@ it("protects an image only a queued menu edition names, counts it as a use, and 
     queueMenuPublication,
     readMenuStructure,
     updateProduct,
-  } = await import("@waitron/catalogue");
+  } = await import("@waitron/menu");
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
@@ -1023,7 +1023,7 @@ it("lists a live version and a queued edition of one menu in number order, then 
     queueMenuPublication,
     readMenuStructure,
     updateProduct,
-  } = await import("@waitron/catalogue");
+  } = await import("@waitron/menu");
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
@@ -1088,7 +1088,7 @@ it("protects the photo of a product a live menu version offers only as an extra"
     readMenuStructure,
     updateProduct,
     writeProductModifiers,
-  } = await import("@waitron/catalogue");
+  } = await import("@waitron/menu");
   await seedTenant(suite.db);
   const publish = async (tx: Transaction, menuId: string) =>
     publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1");

@@ -1012,7 +1012,7 @@ export async function markReconcileRemediated(
 /**
  * The read `recordVoid` and `recordRefund` decide on. It takes no lock: inside `withTransaction`,
  * which holds the venue file's write lock, the read is still true when the caller writes — the
- * pattern is stated on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ * pattern is stated on `assertExtraListForWrite` (`packages/menu/src/extras.ts`).
  */
 async function requireRow(tx: Transaction, params: Key): Promise<PaymentRow> {
   const [row] = await tx.select(PAYMENT_COLUMNS).from(payments).where(keyWhere(params));

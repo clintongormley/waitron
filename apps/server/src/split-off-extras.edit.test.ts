@@ -41,7 +41,7 @@ import {
   updateProduct,
   writeProductModifiers,
   updateExtraList,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { OPERATOR } from "./testing/party-venue.js";

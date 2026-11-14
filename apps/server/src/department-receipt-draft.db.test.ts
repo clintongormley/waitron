@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import {} from "@waitron/catalogue";
+import {} from "@waitron/menu";
 import { startManagementSession } from "@waitron/identity";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { type DepartmentReceiptWrite } from "@waitron/shared";

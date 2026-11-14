@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ResolvedExtraList } from "@waitron/catalogue";
+import type { ResolvedExtraList } from "@waitron/menu";
 import { editLineExtras, type ExtraProductFacts } from "./modifier-selection.js";
 
 describe("new extras unit preparation", () => {

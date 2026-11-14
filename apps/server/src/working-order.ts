@@ -37,7 +37,7 @@ import {
   workingOrderId as brandWorkingOrderId,
   worstBand,
 } from "@waitron/shared";
-import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
+import { prepareUnitSnapshot } from "@waitron/menu/src/unit-presentation.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
 import {
@@ -222,7 +222,7 @@ import {
   parentJoin,
   parentProducts,
   staffPresentationName,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type {
   BasketItemWithOptions,
   DietaryLabel,
@@ -233,7 +233,7 @@ import type {
   ProductAllergens,
   ResolvedExtraList,
   VatClass,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { formatInvoiceNumber, recordSale, refuseOverSimplifiedLimit } from "@waitron/core";
 import type {
   FloorAnnotator,

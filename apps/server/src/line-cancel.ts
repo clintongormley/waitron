@@ -23,7 +23,7 @@ import {
 } from "@waitron/shared";
 import { persons, type PinAttempts } from "@waitron/identity";
 import { findAdjustmentReason, policySnapshotOf, recordAdjustment } from "@waitron/adjustments";
-import { staffPresentationName } from "@waitron/catalogue";
+import { staffPresentationName } from "@waitron/menu";
 import type { CancellationContext, CancellationTarget } from "./line-cancel-context.js";
 import { requireRowCancellationContext } from "./line-cancel-context.js";
 import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";

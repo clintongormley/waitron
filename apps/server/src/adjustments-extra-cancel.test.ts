@@ -20,7 +20,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import { listStationNotices } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";

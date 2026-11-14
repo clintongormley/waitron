@@ -1,4 +1,4 @@
-import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
+import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import {
   LitElement,

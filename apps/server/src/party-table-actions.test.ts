@@ -6,7 +6,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import {
   captureError,

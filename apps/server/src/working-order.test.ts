@@ -55,9 +55,9 @@ import {
   units,
   updateCategory,
   EACH_UNIT,
-} from "@waitron/catalogue";
-import * as catalogue from "@waitron/catalogue";
-import type { DietaryLabel } from "@waitron/catalogue";
+} from "@waitron/menu";
+import * as catalogue from "@waitron/menu";
+import type { DietaryLabel } from "@waitron/menu";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { centsToDecimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { OrderFlow } from "./till-config.js";
@@ -8620,7 +8620,7 @@ describe("order path — extras and options", () => {
  * The reorder cases exist because the order a dish's lists are offered in is a stored position a
  * save re-numbers: a line parked before a reorder keeps the OLD one while the rebuilt side comes back
  * in the new one, and an edit must not read that as a changed answer. These two cases reorder through
- * `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`), which is one of the three
+ * `writeProductModifiers` (`packages/menu/src/product-modifiers.ts`), which is one of the three
  * columns that carry that position — `docs/developers/modifiers.md` lists all three.
  */
 describe("what a held-order edit preserves and what it replaces", () => {
@@ -9155,7 +9155,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
   /**
    * The body a till line sends is the same one an edit sends, so an edit that carries no `options`
    * key is refused exactly as a first order would be — `validateOptionSelections`
-   * (`packages/catalogue/src/option-contract.ts`) walks the dish's ACTIVE lists and throws for the
+   * (`packages/menu/src/option-contract.ts`) walks the dish's ACTIVE lists and throws for the
    * first one no answer names, whether the line is new or being changed.
    *
    * The next case is the control: the same edit body against a dish carrying NO options list, which

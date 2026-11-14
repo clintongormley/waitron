@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MenuUndoCommand } from "@waitron/catalogue/src/menu-undo.js";
+import type { MenuUndoCommand } from "@waitron/menu/src/menu-undo.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { sendMenuUndo, undoRefusalText, type MenuUndoApi } from "./menu-undo.js";

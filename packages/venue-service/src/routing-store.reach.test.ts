@@ -5,7 +5,7 @@ import {
   createExtraList,
   createProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   floorZones,

@@ -327,7 +327,7 @@ describe("gateOutputs", () => {
 
   // light_a and light_b are the two gates that are NOT membership of a named package: each fires
   // when the resolved scope holds a package in its bin (LIGHT_A_PACKAGES / LIGHT_B_PACKAGES) that
-  // declares tests. @waitron/core is in bin A, @waitron/catalogue in bin B.
+  // declares tests. @waitron/core is in bin A, @waitron/menu in bin B.
   it("assigns the contract package only to light A", () => {
     const contract = gates(packagesInScope(ls("@waitron/contract")));
     expect(contract.light_a).toBe("true");
@@ -339,13 +339,13 @@ describe("gateOutputs", () => {
     expect(a.light_a).toBe("true");
     expect(a.light_b).toBe("false");
 
-    const b = gates(packagesInScope(ls("@waitron/catalogue")));
+    const b = gates(packagesInScope(ls("@waitron/menu")));
     expect(b.light_a).toBe("false");
     expect(b.light_b).toBe("true");
 
     // A scope spanning both bins runs both, and an own-shard package alongside a bin package does
     // not suppress that bin's gate.
-    const both = gates(packagesInScope(ls("@waitron/core", "@waitron/catalogue", "@waitron/db")));
+    const both = gates(packagesInScope(ls("@waitron/core", "@waitron/menu", "@waitron/db")));
     expect(both.light_a).toBe("true");
     expect(both.light_b).toBe("true");
   });
@@ -389,9 +389,9 @@ describe("gateOutputs", () => {
   });
 
   it("runs a light gate when a testful package joins a test-less one in the SAME bin", () => {
-    // The testless members and @waitron/catalogue all live in bin B: a testless member must not
+    // The testless members and @waitron/menu all live in bin B: a testless member must not
     // suppress a testful one.
-    const g = gates(packagesInScope(ls(...PACKAGES_WITHOUT_TESTS, "@waitron/catalogue")));
+    const g = gates(packagesInScope(ls(...PACKAGES_WITHOUT_TESTS, "@waitron/menu")));
     expect(g.light_a).toBe("false");
     expect(g.light_b).toBe("true");
   });

@@ -46,7 +46,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^4.1.12",
-    "@waitron/catalogue": "workspace:*",
+    "@waitron/menu": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/venue-service": "workspace:*",
     "@waitron/verifactu": "^0.2.1",

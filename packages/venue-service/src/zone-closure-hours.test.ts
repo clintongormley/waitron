@@ -1,7 +1,7 @@
 import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createCatalogue } from "@waitron/catalogue";
+import { createCatalogue } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   kitchenStations,

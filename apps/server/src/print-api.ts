@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import type { LiveEvents } from "./live-api.js";
 import { publishState } from "./live-publish.js";
-import { readReceiptLanguage } from "@waitron/catalogue";
+import { readReceiptLanguage } from "@waitron/menu";
 // Load server-owned error codes; imported printing verbs load the printing registry.
 import "./errors.js";
 import { cardReaders } from "@waitron/payments";

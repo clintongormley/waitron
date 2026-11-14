@@ -1,6 +1,6 @@
 import { demoPlainText } from "./data-set.js";
-import { createExtraList, readProductModifiers, writeProductModifiers } from "@waitron/catalogue";
-import type { ProductModifierRef } from "@waitron/catalogue";
+import { createExtraList, readProductModifiers, writeProductModifiers } from "@waitron/menu";
+import type { ProductModifierRef } from "@waitron/menu";
 import type { Transaction } from "@waitron/db";
 import type { SeedOptionListsInput } from "./seed-option-lists.js";
 import { inLanguages } from "./in-languages.js";

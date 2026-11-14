@@ -46,8 +46,8 @@ import {
   writeContentLanguages,
   writeProductModifiers,
   rateLines,
-} from "@waitron/catalogue";
-import type { AvailableProduct } from "@waitron/catalogue";
+} from "@waitron/menu";
+import type { AvailableProduct } from "@waitron/menu";
 import {
   departments,
   departmentReceipts,

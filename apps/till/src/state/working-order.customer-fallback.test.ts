@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { priceBasket } from "@waitron/catalogue/src/pricing.js";
+import { priceBasket } from "@waitron/menu/src/pricing.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { WorkingOrderStore } from "./working-order.js";
 

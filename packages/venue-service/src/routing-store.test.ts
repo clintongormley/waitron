@@ -17,7 +17,7 @@ import {
   writeProductModifiers,
   sectionMembers,
   sections,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   catalogues,

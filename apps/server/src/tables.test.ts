@@ -27,7 +27,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { AppError, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 

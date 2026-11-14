@@ -5,8 +5,8 @@ import {
   type TranslationCell,
   type TranslationCellPage,
   type TranslationCellRef,
-} from "@waitron/catalogue/src/content-translation-types.js";
-import type { ContentSuggestionView } from "@waitron/catalogue/src/content-suggestion-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
+import type { ContentSuggestionView } from "@waitron/menu/src/content-suggestion-types.js";
 import { TranslationDrafts } from "./content-translations-model.js";
 
 const config: ContentLanguages = { defaultLanguage: "en", languages: ["en", "es", "fr"] };

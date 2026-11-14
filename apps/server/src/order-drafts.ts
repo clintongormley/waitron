@@ -14,7 +14,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
+import { readExtraSelections, readOptionSelections } from "@waitron/menu";
 import { persons } from "@waitron/identity";
 import type { AllergyPatch, ZoneMenuOffer } from "@waitron/module";
 import {

@@ -2,7 +2,7 @@ import { seedZone } from "@waitron/db/testing/seed.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { catalogues, floorZones, products, readVenue } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { addProducts, createCatalogue, menuItems, requireMenuRoot } from "@waitron/catalogue";
+import { addProducts, createCatalogue, menuItems, requireMenuRoot } from "@waitron/menu";
 import {
   configureZone,
   createDepartment,

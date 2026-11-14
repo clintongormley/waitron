@@ -6,11 +6,11 @@ import type {
   TranslationCell,
   TranslationCellRef,
   TranslationQuery,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import type {
   ContentSuggestionView,
   ContentSuggestionQuery,
-} from "@waitron/catalogue/src/content-suggestion-types.js";
+} from "@waitron/menu/src/content-suggestion-types.js";
 import type { DashboardApi } from "../api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";

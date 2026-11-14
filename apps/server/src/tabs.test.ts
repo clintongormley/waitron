@@ -47,7 +47,7 @@ import {
   units,
   updateUnit,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { createPrinter } from "@waitron/printing";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";

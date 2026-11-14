@@ -22,7 +22,7 @@ import {
   FOLLOWING_FOLDER,
   folderOverridesFrom,
   folderPresentation,
-} from "@waitron/catalogue/src/include-folder-presentation.js";
+} from "@waitron/menu/src/include-folder-presentation.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";

@@ -24,8 +24,8 @@ import {
   rateLines,
   readContentLanguages,
   toInvoiceLineDescriptions,
-} from "@waitron/catalogue";
-import type { GrossLine, VatClass } from "@waitron/catalogue";
+} from "@waitron/menu";
+import type { GrossLine, VatClass } from "@waitron/menu";
 import {
   AppError,
   decimal,

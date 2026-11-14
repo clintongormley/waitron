@@ -56,7 +56,7 @@ import {
   units,
   updateProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
@@ -4365,7 +4365,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
         .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
         .from(products)
         .where(eq(products.id, v.productId.steak));
-      // As the venue seed makes it (`packages/catalogue/src/provisioning.ts`): whole grams only.
+      // As the venue seed makes it (`packages/menu/src/provisioning.ts`): whole grams only.
       const grams = { en: "g", es: "g", ca: "g", gl: "g", eu: "g" };
       const [gram] = await tx
         .insert(units)

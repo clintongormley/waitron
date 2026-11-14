@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { customerOptionSnapshotLabels } from "@waitron/catalogue/src/option-snapshot-labels.js";
+import { customerOptionSnapshotLabels } from "@waitron/menu/src/option-snapshot-labels.js";
 import { deriveOptionSelections, optionSnapshotOf, sameOptionSelections } from "./held-options.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import type { OfferedModifier } from "../api/client.js";

@@ -8,7 +8,7 @@ import {
   createAdjustmentReason,
   type AdjustmentReasonInput,
 } from "@waitron/adjustments";
-import { createProduct } from "@waitron/catalogue";
+import { createProduct } from "@waitron/menu";
 import {
   drawerOpens,
   lineServiceCancellations,

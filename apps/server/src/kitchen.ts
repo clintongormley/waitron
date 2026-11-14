@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
+import { assertProductWritable, productWithId, type ProductScope } from "@waitron/menu";
 import { assertStationDestination } from "@waitron/venue-service";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -27,7 +27,7 @@ import type { StationTimingPatch } from "./kitchen-timing.js";
 // Nothing here authorizes. The write verbs are called only from the kitchen routes, gated by
 // `venue.configure` (`withVenueAuth` in management-api.ts) and, where a station's printers are
 // sent, `hardware.manage` too (`authorizeStationPrinters`), and from the product editor's save,
-// gated by `CATALOGUE_WRITE_PERMISSION` (catalogue-api.ts). The reads have other callers, not all
+// gated by `CATALOGUE_WRITE_PERMISSION` (menu-api.ts). The reads have other callers, not all
 // gated.
 
 export interface Station {

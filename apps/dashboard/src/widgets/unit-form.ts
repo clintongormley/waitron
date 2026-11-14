@@ -20,8 +20,8 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import type { DashboardApi, Unit, UnitInput } from "../api/client.js";
-import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
-import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
+import type { ExtraOfferUsage } from "@waitron/menu/src/extra-usage.js";
+import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 

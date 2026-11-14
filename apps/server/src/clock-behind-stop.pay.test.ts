@@ -8,7 +8,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";

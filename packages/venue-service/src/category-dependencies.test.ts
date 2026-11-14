@@ -9,7 +9,7 @@ import {
   deleteCategory,
   readCategory,
   updateProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   kitchenStations,

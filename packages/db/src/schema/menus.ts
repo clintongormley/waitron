@@ -1,0 +1,137 @@
+import { sql } from "drizzle-orm";
+import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import { bigCount, count, flag, id, json, label, money, newId, now, table, ts } from "./columns.js";
+import type { AllergenMap, ProductOrdering } from "@waitron/shared";
+import { kitchenCourses } from "./kitchen-courses.js";
+import { uniqueIndex } from "drizzle-orm/sqlite-core";
+
+export const catalogues = table(
+  "catalogues",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    name: label("name").notNull(),
+    active: flag("active").notNull().default(true),
+    isDefault: flag("is_default").notNull().default(false),
+    version: bigCount("version").notNull().default(1),
+    createdAt: ts("created_at").notNull().$defaultFn(now),
+    updatedAt: ts("updated_at").notNull().$defaultFn(now),
+  },
+  (t) => [
+    uniqueIndex("catalogues_one_default_uq")
+      .on(t.isDefault)
+      .where(sql`${t.isDefault} = 1`),
+  ],
+);
+
+/** The analytics taxonomy ("Food", "Drinks"). Orthogonal to catalogue; snapshotted onto
+ * the sale line as a label so a roll-up sums one canonical bucket across catalogues. */
+export const categories = table("categories", {
+  id: id("id").primaryKey().$defaultFn(newId),
+  name: label("name").notNull(),
+  createdAt: ts("created_at").notNull().$defaultFn(now),
+  updatedAt: ts("updated_at").notNull().$defaultFn(now),
+});
+
+/** A priced item. Deactivate via `active`, never delete (may sit behind historical sale-line
+ * snapshots). */
+export const products = table(
+  "products",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    catalogueId: id("catalogue_id")
+      .notNull()
+      /* v8 ignore start */
+      .references(() => catalogues.id),
+    /* v8 ignore stop */
+    // Set only on a VARIANT: the product it is a variant of. One level only, fixed when the row is
+    // created, and the row's `id` never changes either — all enforced by triggers, which cannot be
+    // declared here (`triggers/core.sql`). Same catalogue as the parent: the composite key
+    // below.
+    parentId: id("parent_id"),
+    // A variant's position among its parent's variants; unused with no parent.
+    variantOrder: count("variant_order").notNull().default(0),
+    setLunch: flag("set_lunch").notNull().default(false),
+    // The main reporting category; null is Uncategorised, and on a variant means its parent's.
+    /* v8 ignore start */
+    categoryId: id("category_id").references(() => categories.id),
+    /* v8 ignore stop */
+    // A line with no course fires earliest.
+    /* v8 ignore start */
+    courseId: id("course_id").references(() => kitchenCourses.id),
+    /* v8 ignore stop */
+    // Staff-facing product name, shown on the dashboard, till buttons/basket and reports.
+    name: label("name").notNull(),
+    // `name` folded as `@waitron/menu`'s `foldName` folds it; the unique staff-name check looks
+    // rows up by it. May be null, and the check does not see a row whose key is null.
+    nameKey: label("name_key"),
+    // Customer-facing translated name; null or a blank entry means "use `name`". Shown on receipts,
+    // invoice lines, the customer display and customer menus.
+    customerName: json<Record<string, string>>("customer_name"),
+    description: json<Record<string, string>>("description"),
+    kitchenName: label("kitchen_name"),
+    dietaryDeclarations: json<string[]>("dietary_declarations").default([]),
+    pricingUnit: label("pricing_unit"),
+    unitPrice: money("unit_price"),
+    vatClass: label("vat_class"),
+    // `active` is whether the product exists for the venue — deleting makes it false and removes no
+    // row — and `available` is "sold out for now". The till sells a product only when both are
+    // true. `available` is never inherited by a variant.
+    active: flag("active").notNull().default(true),
+    available: flag("available").notNull().default(true),
+    // Who may order the product on its own: `public`, `staff_only` or `not_sold_separately`. No
+    // CHECK, because adding one makes drizzle rebuild this table, whose children a rebuild deletes
+    // or refuses; the `products_ordering_check_*` triggers (`triggers/core.sql`) refuse
+    // any other value. Being offered as an extra does not read it.
+    ordering: label("ordering").$type<ProductOrdering>().notNull().default("public"),
+    // The photo's original hash filename is its stable reference; media resolves its current picture.
+    image: label("image"),
+    // Its own tile colour, lowercase #rrggbb; null takes its category's. A variant's own value is
+    // ignored: it reads its parent's.
+    color: label("color"),
+    // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
+    // till surfaces distinctly); {} = reviewed, contains none.
+    allergens: json<AllergenMap>("allergens"),
+    // Staff-authored allergen overlay — what a human explicitly declared. NULL = not reviewed.
+    manualAllergens: json<AllergenMap>("manual_allergens"),
+    dietOverride: json<{
+      vegan?: "yes" | "no";
+      vegetarian?: "yes" | "no";
+      halal?: "yes" | "no";
+      kosher?: "yes" | "no";
+      addContains?: string[];
+      removeContains?: string[];
+    }>("diet_override"),
+    // The published profile: the override laid over UNDECLARED_DIET.
+    diet: json<{
+      vegan: "yes" | "no" | "unknown";
+      vegetarian: "yes" | "no" | "unknown";
+      contains: string[];
+      halal?: "yes" | "no";
+      kosher?: "yes" | "no";
+    }>("diet"),
+    createdAt: ts("created_at").notNull().$defaultFn(now),
+    updatedAt: ts("updated_at").notNull().$defaultFn(now),
+  },
+  (t) => [
+    index("products_catalogue_id_idx").on(t.catalogueId),
+    index("products_name_key_idx").on(t.nameKey),
+    index("products_course_idx").on(t.courseId),
+    unique("products_id_catalogue_key").on(t.id, t.catalogueId),
+    // Target of catalogue's `menu_item_variant_overrides` key `(product_id, variant_id)`.
+    unique("products_parent_id_key").on(t.parentId, t.id),
+    foreignKey({
+      columns: [t.parentId, t.catalogueId],
+      foreignColumns: [t.id, t.catalogueId],
+    }).onDelete("restrict"),
+    // A product with no parent owns every value a variant may inherit.
+    check(
+      "products_top_level_owns_ck",
+      sql`${t.parentId} is not null or (${t.vatClass} is not null and ${t.pricingUnit} is not null and ${t.unitPrice} is not null and ${t.dietaryDeclarations} is not null)`,
+    ),
+    check("products_pricing_unit_ck", sql`${t.pricingUnit} in ('each','weight')`),
+    check(
+      "products_vat_class_ck",
+      sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,
+    ),
+  ],
+);

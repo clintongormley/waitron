@@ -15,7 +15,7 @@ import {
   setProductVariants,
   updateOptionList,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { mountTillApi } from "./till-api.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";

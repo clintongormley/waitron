@@ -54,7 +54,7 @@ async function fixture() {
 
 // The controller does not care which kind it is carrying, so two of them exercise every branch of
 // its lifecycle; the extras and options kinds are covered where the screen wires them up
-// (`catalogue-screen.test.ts`).
+// (`products-screen.test.ts`).
 it.each(["unit", "courses"] as const)(
   "keeps the dirty product after a durable %s create even if refresh fails",
   async (kind) => {

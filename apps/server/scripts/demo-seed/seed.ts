@@ -17,8 +17,8 @@ import {
   publishMenu,
   readContentLanguages,
   readReceiptLanguage,
-} from "@waitron/catalogue";
-import { seedCatalogues } from "./seed-catalogue.js";
+} from "@waitron/menu";
+import { seedCatalogues } from "./seed-menus.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedStaff } from "./seed-staff.js";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";

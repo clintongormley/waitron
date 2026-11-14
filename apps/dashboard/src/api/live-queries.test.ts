@@ -283,7 +283,7 @@ it("refreshes the open alerts passively and when incidents change", async () => 
 
 it.each([
   // The list reads also count what carries each list (`listOptionLists` in
-  // packages/catalogue/src/options.ts, `listExtraLists` in extras.ts).
+  // packages/menu/src/options.ts, `listExtraLists` in extras.ts).
   ["listOptionLists", [], ["option_lists", "option_labels", "product_modifiers"]],
   ["getOptionList", ["o1"], ["option_lists", "option_labels"]],
   ["listExtraLists", [], ["extra_lists", "extra_list_items", "product_modifiers"]],
@@ -312,7 +312,7 @@ it.each([
       "units",
     ],
   ],
-  // `readMenuHome` (packages/catalogue/src/menu-home.ts): the details row, the section graph with
+  // `readMenuHome` (packages/menu/src/menu-home.ts): the details row, the section graph with
   // its menus, and each shortcut's name from `products` or `sections`.
   [
     "getMenuHome",
@@ -473,7 +473,7 @@ it.each([
   ["joinRequests", ["print_agent"], ["join_requests"]],
   // The server works the rules out once at boot, so no table change moves them.
   ["getContentLanguageRules", [], []],
-  // `listTranslationGapReport` (packages/catalogue/src/content-translation-report.ts): the setting,
+  // `listTranslationGapReport` (packages/menu/src/content-translation-report.ts): the setting,
   // then each table it names a row from.
   [
     "getContentTranslationGaps",

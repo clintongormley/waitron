@@ -14,7 +14,7 @@ import {
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Course, Product, Unit } from "../api/client.js";
 import type { ListedVariant } from "@waitron/shared";
-import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";
 import { registerIcons, setHelpMode, type WtHelpTooltip } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -3174,7 +3174,7 @@ describe("the product list as a tree", () => {
     await userEvent.click(square);
     expect(focusedName(el)).toBe("category-name");
     // Stands in for the catalogue's chooser, which takes the cursor while it is open and hands it
-    // back to the input; that hand-back is pinned in catalogue-browser.test.ts.
+    // back to the input; that hand-back is pinned in product-browser.test.ts.
     outside.focus();
     expect(sent).toEqual([["name-color", {}]]);
     expect(root.querySelector('wt-input[name="category-name"]')).toBe(box);

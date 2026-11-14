@@ -8,7 +8,7 @@ import type {
   TranslationCellRef,
   TranslationCell,
   TranslationQuery,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import { fill, t, setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,

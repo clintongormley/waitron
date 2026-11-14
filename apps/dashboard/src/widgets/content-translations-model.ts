@@ -7,8 +7,8 @@ import {
   type TranslationCellKey,
   type TranslationCellPage,
   type TranslationCellRef,
-} from "@waitron/catalogue/src/content-translation-types.js";
-import type { ContentSuggestionView } from "@waitron/catalogue/src/content-suggestion-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
+import type { ContentSuggestionView } from "@waitron/menu/src/content-suggestion-types.js";
 
 export type ReviewChoice = "keep" | "replace" | "discard";
 export type DraftOrigin = "personal" | "suggested" | "fix";

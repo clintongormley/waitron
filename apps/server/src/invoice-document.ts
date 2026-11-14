@@ -18,7 +18,7 @@ import {
   thousandthsToDecimal,
   resolveReceiptTrim,
 } from "@waitron/shared";
-import { readReceiptLanguage } from "@waitron/catalogue";
+import { readReceiptLanguage } from "@waitron/menu";
 import type { TradingContext } from "./trading-context.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptLines } from "./receipt-adjustments.js";

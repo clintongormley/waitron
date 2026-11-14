@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { catalogues } from "./schema/catalogue.js";
+import { catalogues } from "./schema/menus.js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ResourceChange } from "@waitron/shared";
 import { installChangeFeed } from "./change-feed.js";

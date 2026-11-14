@@ -45,7 +45,7 @@ import {
   type DailyClose,
   type LiquidationPeriod,
 } from "@waitron/reporting";
-import { currentClassifications } from "@waitron/catalogue";
+import { currentClassifications } from "@waitron/menu";
 import { enqueuePrintJob } from "@waitron/printing";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";

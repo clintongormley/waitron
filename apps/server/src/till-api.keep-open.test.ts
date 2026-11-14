@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createCatalogue, addProductToMenu } from "@waitron/catalogue";
+import { createCatalogue, addProductToMenu } from "@waitron/menu";
 import {
   createPinThrottle,
   hashPin,

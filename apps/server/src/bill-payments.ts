@@ -23,7 +23,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { assertQuantityPrecision } from "@waitron/catalogue";
+import { assertQuantityPrecision } from "@waitron/menu";
 import {
   AppError,
   addDecimal,

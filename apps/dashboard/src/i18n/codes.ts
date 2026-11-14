@@ -1719,7 +1719,7 @@ registerCodeMessages(CODE_MESSAGES);
 
 export { codeOf };
 
-/** The field a refusal belongs beside, by what the error carries (packages/catalogue/src/errors.ts):
+/** The field a refusal belongs beside, by what the error carries (packages/menu/src/errors.ts):
  * `menu_section.translation_required` names a language, `menu_section.invalid` a field. */
 export function fieldOf(error: unknown): string {
   const params = (error as { params?: { field?: unknown; language?: unknown } }).params;

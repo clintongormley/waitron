@@ -14,7 +14,7 @@ import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocate
 import { planVenue, savePrivacyContact, venueFiscalSelection } from "@waitron/provisioning";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { enabledModules } from "@waitron/module";
-import { createCatalogue, createProduct } from "@waitron/catalogue";
+import { createCatalogue, createProduct } from "@waitron/menu";
 import { startServer, type StartedServer } from "./boot.js";
 import { runEntry } from "./node-entry.js";
 import { loadBoxEnv } from "./box-env.js";

@@ -20,7 +20,7 @@ import {
   createExtraList,
   createProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   centsToDecimal,
   nodeId as brandNodeId,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { grossBasketWithOptions, type PriceableProduct } from "@waitron/catalogue";
+import { grossBasketWithOptions, type PriceableProduct } from "@waitron/menu";
 import type { TrustedClock, TrustedTimeAnchor } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { issueMoment } from "./issue-moment.js";

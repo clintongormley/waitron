@@ -1,4 +1,4 @@
-import { effectiveDefaultLabelId } from "@waitron/catalogue/src/option-default.js";
+import { effectiveDefaultLabelId } from "@waitron/menu/src/option-default.js";
 import { compareDecimal, decimal } from "@waitron/shared";
 import {
   menuOfferToTillProduct,

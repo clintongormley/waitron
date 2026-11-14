@@ -33,7 +33,7 @@ their full text.
   form" and aggregate-pair history and a "KDS-1 §3d" pointer. "A line with no course fires
   earliest", which #623 cut from `working-order.ts` because a line sent with `hold: true` is held
   whatever its course, is still in `apps/server/src/kitchen.ts:264` and four
-  `packages/db/src/schema` files (`catalogue.ts`, `kitchen-courses.ts`, `ticket-items.ts`,
+  `packages/db/src/schema` files (`menus.ts`, `kitchen-courses.ts`, `ticket-items.ts`,
   `orders.ts`). Stale test titles: "lists the node's open orders" in `working-order.test.ts`;
   "(Task B1, …)" in `working-order.pay-and-dispatch.test.ts`; "an UNLOCKED read" in
   `tabs.test.ts`; "recordSale UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and
@@ -3079,7 +3079,7 @@ layout during service, screen plugins and Bizum.
   reaches the picker at all: the served offer and the till's menu-state poll replace a default that
   is missing or names an unavailable label with the first available label in the published
   version's order, or with null (`effectiveDefaultLabelId`,
-  `packages/catalogue/src/option-default.ts`; `withUnavailable`,
+  `packages/menu/src/option-default.ts`; `withUnavailable`,
   `apps/till/src/state/menu-refresh.ts`), and the till filters unavailable labels out before the
   picker is given them (`sellableModifiers`, `apps/till/src/api/client.ts`) — traced through the
   code, not run. An over-cap count is different: stepping cannot produce one, because `#step`

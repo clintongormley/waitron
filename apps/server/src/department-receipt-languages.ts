@@ -1,5 +1,5 @@
 import type { Transaction } from "@waitron/db";
-import { readReceiptLanguage } from "@waitron/catalogue";
+import { readReceiptLanguage } from "@waitron/menu";
 import { COUNTRY_PACKS } from "@waitron/country-packs";
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
 

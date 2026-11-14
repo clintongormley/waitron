@@ -14,7 +14,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
-import { createProduct, writeContentLanguages } from "@waitron/catalogue";
+import { createProduct, writeContentLanguages } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import type { OriginConfig } from "./trading-context.js";

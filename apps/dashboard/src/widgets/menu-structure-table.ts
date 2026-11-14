@@ -42,7 +42,7 @@ import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentat
 import {
   FOLLOWING_FOLDER,
   folderPresentation,
-} from "@waitron/catalogue/src/include-folder-presentation.js";
+} from "@waitron/menu/src/include-folder-presentation.js";
 import type { Presentation } from "@waitron/shared";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";

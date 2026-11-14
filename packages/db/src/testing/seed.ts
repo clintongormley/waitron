@@ -23,7 +23,7 @@ import {
 } from "../venue-settings.js";
 import { readSettings, saveSettings } from "../settings.js";
 import { dayCutoverChanges } from "../schema/day-cutover-changes.js";
-import { catalogues } from "../schema/catalogue.js";
+import { catalogues } from "../schema/menus.js";
 import { createVenueSettings, saveVenueFields, readVenueSettings, type Venue } from "../venue.js";
 
 import { deviceProfileAdmissionRoles } from "../schema/identity/profile-admission.js";

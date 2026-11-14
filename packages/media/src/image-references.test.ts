@@ -27,7 +27,7 @@ import {
   sections,
   updateProduct,
   updateSection,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 

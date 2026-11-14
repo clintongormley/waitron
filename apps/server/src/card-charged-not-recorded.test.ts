@@ -12,7 +12,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { insertCapturedPayment } from "@waitron/payments";
 import type { CollectParams, PaymentProvider } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";

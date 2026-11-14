@@ -4,7 +4,7 @@ import {
   seedDeviceProfiles,
   seedActivityActor,
 } from "@waitron/db/testing/seed.js";
-import { writeContentLanguages } from "@waitron/catalogue";
+import { writeContentLanguages } from "@waitron/menu";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";

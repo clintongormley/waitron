@@ -18,11 +18,11 @@ import {
   type ContentSuggestionRead,
   type TranslationContext,
   type TranslationItemPage,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { translationCloudFixture } from "../test/translation-cloud-fixture.js";
-import { mountCatalogueApi } from "./catalogue-api.js";
+import { mountCatalogueApi } from "./menu-api.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import {
   mountContentSuggestionsApi,

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {} from "@waitron/catalogue";
+import {} from "@waitron/menu";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });

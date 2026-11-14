@@ -38,7 +38,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   corrected in `health.ts` (`codeOf` logs `unknown` for a plain error carrying `code: "EIO"`).
   "Empties every table" in
   `packages/bookings/src/schema/bookings.test.ts` (near line 60) and
-  `packages/catalogue/src/migrations.test.ts` (near line 304) is wider than the reset, which
+  `packages/menu/src/migrations.test.ts` (near line 304) is wider than the reset, which
   leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
 
 ## `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same live-course definition; `fireCourse` calls `requireCourse`
@@ -482,11 +482,11 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   product and station names to what they create; they keep their `es-ES` invoice locale and
   `es-ES` description values, the operation description "Venta en establecimiento", the supplier
   name "Café del Puerto SL", the modelo 303 terms and the Spanish category-print heading check.
-  The catalogue API suite (`apps/server/src/catalogue-api.test.ts`) gives English menu, category,
+  The catalogue API suite (`apps/server/src/menu-api.test.ts`) gives English menu, category,
   product, variant, kitchen, options-list, label and extras-list names to what it creates; it
   keeps the customer names and descriptions it gives under `es`, `fr` and other language keys,
   its `es-ES` locale and the operation description "Venta". The full-manifest suite
-  (`apps/server/src/catalogue-api.full-manifest.test.ts`) gives its location, administrator,
+  (`apps/server/src/menu-api.full-manifest.test.ts`) gives its location, administrator,
   category, product and section English names, and keeps its `es-ES` locale, its Spanish street
   address and the operation description "Venta en establecimiento". The setup API suite
   (`apps/server/src/setup-api.test.ts`) uses English location, administrator, product,
@@ -869,11 +869,11 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   product and station names to what they create; they keep their `es-ES` invoice locale and
   `es-ES` description values, the operation description "Venta en establecimiento", the supplier
   name "Café del Puerto SL", the modelo 303 terms and the Spanish category-print heading check.
-  The catalogue API suite (`apps/server/src/catalogue-api.test.ts`) gives English menu, category,
+  The catalogue API suite (`apps/server/src/menu-api.test.ts`) gives English menu, category,
   product, variant, kitchen, options-list, label and extras-list names to what it creates; it
   keeps the customer names and descriptions it gives under `es`, `fr` and other language keys,
   its `es-ES` locale and the operation description "Venta". The full-manifest suite
-  (`apps/server/src/catalogue-api.full-manifest.test.ts`) gives its location, administrator,
+  (`apps/server/src/menu-api.full-manifest.test.ts`) gives its location, administrator,
   category, product and section English names, and keeps its `es-ES` locale, its Spanish street
   address and the operation description "Venta en establecimiento". The setup API suite
   (`apps/server/src/setup-api.test.ts`) uses English location, administrator, product,
@@ -961,6 +961,8 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   S23 builds no `venue_settings`, because the venue's settings become documents in the shared
   `settings` table. It also renames every leftover "tenant" name: the `tenants` table becomes
   `taxpayer`, and names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
+  Menu code uses `@waitron/menu` and menu/product file paths; its tables, identifiers, routes
+  and visible wording still await the menu slices that follow the path rename.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
@@ -1024,7 +1026,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   **Next action:** keep it in step with the unit or drop it.
   [Detail](catalogue.md#two-signals-say-whether-a-dish-is-sold-by-weight-and-they-can-disagree-in-storage)
 - **The catalogue picker was deleted and nothing replaced it.** `selectedCatalogueId`
-  (`catalogue-screen.ts`) takes the first catalogue in the list, which is also the one every new
+  (`products-screen.ts`) takes the first catalogue in the list, which is also the one every new
   product is created in; with two, the second becomes unreachable from the dashboard. **Next
   action:** decide whether more than one catalogue is a case Waitron supports.
 - **A backup setting in `trading.env` or `secrets.env` is not compared at a handover.** Only a hand
@@ -1107,22 +1109,22 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 26 entries, size M.
 
 - **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
-  now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/catalogue/src/extras.ts`)
+  now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/menu/src/extras.ts`)
   and `writeLabels` (`src/options.ts`); duplicate and foreign ids are refused earlier and one write
   runs at a time.
 - **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
   engine** — OPEN (found by #603). Read only, not run: both were PostgreSQL's integer maximum.
   [Detail](catalogue.md#max_modifier_integer-and-the-extras-contracts-whole-bound-have-no-stated-reason-on-this-engine)
 - **`assertRefsExist` still reads lists in sorted key order** — OPEN (found by #603). Read only, not
-  run: that order (`packages/catalogue/src/product-modifiers.ts`) served PostgreSQL's lock ordering
+  run: that order (`packages/menu/src/product-modifiers.ts`) served PostgreSQL's lock ordering
   only.
 - **Three configuration-transfer cases pin an insert order the importer's `pragma defer_foreign_keys`
   may make unnecessary for foreign keys** — OPEN (found by #603). Read only, not run: in
-  `packages/catalogue`'s `options.test.ts`, `product-modifiers.test.ts` and `extras.test.ts`;
+  `packages/menu`'s `options.test.ts`, `product-modifiers.test.ts` and `extras.test.ts`;
   whether to keep pinning it is the owner's call.
-- **Test titles in `packages/catalogue` a comments-only change cannot touch** — OPEN (found by
+- **Test titles in `packages/menu` a comments-only change cannot touch** — OPEN (found by
   #603). Four titles, in `dietary.test.ts`, `product-modifiers.test.ts` and `migrations.test.ts`.
-  [Detail](catalogue.md#test-titles-in-packagescatalogue-a-comments-only-change-cannot-touch)
+  [Detail](catalogue.md#test-titles-in-packagesmenu-a-comments-only-change-cannot-touch)
 - **A test comment still names the old savepoint error.**
   `packages/fiscal-verifactu/src/correction-path.e2e.test.ts:308` says its control "fails with
   `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword

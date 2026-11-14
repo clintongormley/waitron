@@ -8,7 +8,7 @@ import type {
   TranslationCell,
   TranslationItemPage,
   TranslationQuery,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import type { DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";

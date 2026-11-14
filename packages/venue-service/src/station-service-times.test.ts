@@ -1,12 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import {
-  addProductToMenu,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/catalogue";
+import { addProductToMenu, createCatalogue, createCategory, createProduct } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   floorZones,
@@ -320,7 +315,7 @@ it.each([
     if (kind === "inactive product")
       await db.update(products).set({ active: false }).where(eq(products.id, f.product));
     if (kind === "no menu product") {
-      const { sectionMembers } = await import("@waitron/catalogue");
+      const { sectionMembers } = await import("@waitron/menu");
       await db.delete(sectionMembers).where(eq(sectionMembers.productId, f.product));
     }
     if (kind === "whole venue closed")

@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { seedDevice, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCatalogue } from "@waitron/catalogue";
+import { createCatalogue } from "@waitron/menu";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { keepZoneOpen } from "./keep-open.js";

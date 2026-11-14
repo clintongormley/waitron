@@ -10,7 +10,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { insertCapturedPayment } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";

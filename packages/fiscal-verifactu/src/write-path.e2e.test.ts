@@ -26,7 +26,7 @@ import {
   setProductVariants,
   type BasketItem,
   type MenuOffer,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { decimal, deviceOrigin, jobOrigin } from "@waitron/shared";

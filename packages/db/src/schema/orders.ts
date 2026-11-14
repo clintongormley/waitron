@@ -15,7 +15,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
-import { products } from "./catalogue.js";
+import { products } from "./menus.js";
 import { devices } from "./devices.js";
 import { diningTables } from "./dining-tables.js";
 import { kitchenCourses } from "./kitchen-courses.js";
@@ -140,7 +140,7 @@ export const workingOrders = table(
  * product only as a value, never a key.
  *
  * The line-add snapshot IS the filed gross: a retrieved order is FILED from the locked gross unit
- * price without a re-price (grossLockedLines, @waitron/catalogue), at its class's rate on the day the
+ * price without a re-price (grossLockedLines, @waitron/menu), at its class's rate on the day the
  * invoice is issued.
  *
  * `descriptions` is a locale→string map holding exactly the venue's invoice locales as they

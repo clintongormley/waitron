@@ -14,7 +14,7 @@ import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
-import { catalogues, products } from "./catalogue.js";
+import { catalogues, products } from "./menus.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });

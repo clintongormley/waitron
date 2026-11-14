@@ -14,7 +14,7 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { validateAllergens } from "@waitron/catalogue";
+import { validateAllergens } from "@waitron/menu";
 import type { PartyAllergySnapshot } from "@waitron/module";
 import { AppError, isUuid } from "@waitron/shared";
 import "./errors.js";

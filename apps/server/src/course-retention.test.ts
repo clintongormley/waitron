@@ -27,7 +27,7 @@ import {
   createExtraList,
   updateProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";

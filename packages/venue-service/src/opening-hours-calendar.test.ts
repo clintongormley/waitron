@@ -4,12 +4,7 @@ import { sql } from "drizzle-orm";
 import { listVenueReadiness } from "./operations.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import {
-  buildMenuDocument,
-  createCatalogue,
-  menuDocumentHash,
-  publishMenu,
-} from "@waitron/catalogue";
+import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   settings as businessDaySettingsTable,

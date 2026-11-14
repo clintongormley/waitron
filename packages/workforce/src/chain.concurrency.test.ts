@@ -3,7 +3,7 @@
  *
  * Weaker than its name: nothing here checks that the writers actually overlap, and it does not show
  * that the venue file's write queue is what keeps positions distinct. `racePair`
- * (`packages/catalogue/test/fixtures.ts`) measures that a second writer has not started while the
+ * (`packages/menu/test/fixtures.ts`) measures that a second writer has not started while the
  * first is open.
  */
 import { beforeEach, describe, expect, it } from "vitest";

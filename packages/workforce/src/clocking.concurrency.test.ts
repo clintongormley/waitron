@@ -1,7 +1,7 @@
 /**
  * Two clock-ins for one person, started together, leave ONE open shift: a double `in` makes
  * `projectWorkSessions` undercount paid time. The venue file's write queue serialises them; the
- * mechanism is recorded on `racePair` (`packages/catalogue/test/fixtures.ts`).
+ * mechanism is recorded on `racePair` (`packages/menu/test/fixtures.ts`).
  *
  * Weaker than its name: it asserts the outcome only. It cannot stage the interleaving that produced
  * the double `in`, and nothing confirms the two callers are separate beyond being two

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray, and, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, expect, it } from "vitest";
-import { createProduct } from "@waitron/catalogue";
+import { createProduct } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   catalogues,

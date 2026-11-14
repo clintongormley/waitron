@@ -10,13 +10,13 @@ import {
   readMenuStructure,
   sections,
   updateSection,
-} from "@waitron/catalogue";
-import { createCategory } from "@waitron/catalogue/src/categories.js";
-import { menuChangeActions } from "@waitron/catalogue/src/menu-undo.js";
-import { updateMenuItem } from "@waitron/catalogue/src/operations.js";
-import { addMember, createSectionIn } from "@waitron/catalogue/src/sections.js";
-import { seedLegacySellingUnits, seedVenueWithSeries } from "@waitron/catalogue/test/fixtures.js";
-import { offerOf } from "@waitron/catalogue/test/menus-fixture.js";
+} from "@waitron/menu";
+import { createCategory } from "@waitron/menu/src/categories.js";
+import { menuChangeActions } from "@waitron/menu/src/menu-undo.js";
+import { updateMenuItem } from "@waitron/menu/src/operations.js";
+import { addMember, createSectionIn } from "@waitron/menu/src/sections.js";
+import { seedLegacySellingUnits, seedVenueWithSeries } from "@waitron/menu/test/fixtures.js";
+import { offerOf } from "@waitron/menu/test/menus-fixture.js";
 import { mediaImages } from "@waitron/media";
 
 // The catalogue's own test database has no media tables, so it cannot store a section photo

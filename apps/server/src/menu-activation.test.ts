@@ -18,8 +18,8 @@ import {
   publishMenu,
   queueMenuPublication,
   updateProduct,
-} from "@waitron/catalogue";
-import { menusFixture, type MenusFixture } from "@waitron/catalogue/test/menus-fixture.js";
+} from "@waitron/menu";
+import { menusFixture, type MenusFixture } from "@waitron/menu/test/menus-fixture.js";
 import { AppError } from "@waitron/shared";
 import { changeSubscriber, LiveEvents } from "./live-api.js";
 import type { Logger, LogLevel } from "./logger.js";

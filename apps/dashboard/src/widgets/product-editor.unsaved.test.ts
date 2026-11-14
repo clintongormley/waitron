@@ -12,7 +12,7 @@ import {
 } from "./test-helpers.js";
 import { ProductEditor } from "./product-editor.js";
 import type { DashboardApi } from "../api/client.js";
-import "../screens/catalogue-screen.js";
+import "../screens/products-screen.js";
 import type { ProductEditorDraft } from "./product-editor-model.js";
 
 registerIcons(DASHBOARD_ICONS);

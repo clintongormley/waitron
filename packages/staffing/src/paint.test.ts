@@ -3,12 +3,7 @@ import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import {
-  addProductToMenu,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/catalogue";
+import { addProductToMenu, createCatalogue, createCategory, createProduct } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   floorZones,

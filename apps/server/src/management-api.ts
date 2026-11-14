@@ -10,7 +10,7 @@ import "./errors.js";
 // The registry of `printer.not_found`, which `requireListedPrinters` throws.
 import "@waitron/printing";
 // The registry of `product.not_found`, which `requireProductId` throws.
-import "@waitron/catalogue";
+import "@waitron/menu";
 import { parseStationTimingPatch } from "./kitchen-timing.js";
 import { readPassCoverage } from "./pass-coverage.js";
 import type { Context, Hono } from "hono";

@@ -1,5 +1,7 @@
 # A913 — non-English text in general code: the audit
 
+_2026-11-14, A1308 mn1: `catalogue-allergen-workflow.test.ts` is now `menu-allergen-workflow.test.ts`, and the seed script `seed-catalogue.ts` is now `seed-menus.ts`. The older names below record the audited tree._
+
 _2026-11-10, A1488: the working-time export writes its coded values and yes/no values as words in the file's language; the access-holder row in Bucket B records the earlier tree._
 
 _2026-11-10, A1308 slice 4b: `WAITRON_TILL_LOCALE` is gone; kitchen-ticket units and the other `cfg.locale` readers follow the venue's display language (`readVenueLocale`). References below describe the earlier setting._
@@ -23,7 +25,7 @@ _2026-10-27, A965: receipt resources now include English without adding it to Sp
 
 _2026-10-27, A963: Spain's country pack now owns the invoice-recipient address rule and country names. New recipient addresses keep the country code separately; printed country names follow the receipt language. The address-suffix findings below record the earlier tree. See the [implementation plan](../superpowers/plans/2026-10-27-a963-invoice-address-country.md)._
 
-_2026-10-27, A918 slice 4: setup names the units and the first menu from `packages/catalogue/src/starter-content.ts`, and A918 is finished; the queue line below that names it records the earlier backlog._
+_2026-10-27, A918 slice 4: setup names the units and the first menu from `packages/menu/src/starter-content.ts`, and A918 is finished; the queue line below that names it records the earlier backlog._
 
 _2026-10-27, A918 slice 3: setup names the service steps, the default seasons, the counter zone and the starter period in English in code, translated from `packages/venue-service/src/starter-content.ts` into the staff language; the service-steps row below and the first finding's steps record the earlier tree._
 
@@ -178,7 +180,7 @@ the demo scripts `allergens-demo.ts`, `daily-close-demo.ts`, `daily-close-z-demo
 `modelo-303-demo.ts`, `cloud-integration-fixture.ts` (dish, device, node and person names).
 
 **A trap for the fix:** the demo seed finds the default station by its Spanish name
-(`apps/server/scripts/demo-seed/seed-catalogue.ts:46–56`, `name = 'Cocina'`, then renames it). Renaming
+(`apps/server/scripts/demo-seed/seed-menus.ts:46–56`, `name = 'Cocina'`, then renames it). Renaming
 the provisioned station breaks that lookup; finding it by `is_default` (as `dev-setup.ts` does) avoids it.
 
 ## Bucket E — identifiers, file names and comments
@@ -250,7 +252,7 @@ Why tests spell it, largest first:
 | apps/till | 190 | data | `apps/till/src/i18n/strings.ts` | screen checks ~225; data ~1,590 + ~1,390 |
 | apps/dashboard | 177 | data, screen checks | `apps/dashboard/src/i18n/strings.ts` | screen checks ~420; data ~1,290 |
 | packages/venue-service | 80 | data, screen checks | `src/dashboard/strings.ts` | screen checks ~180; data ~330 + ~290 |
-| packages/catalogue | 31 | second-language content | not needed | data ~230 |
+| packages/menu | 31 | second-language content | not needed | data ~230 |
 | apps/setup | 30 | screen checks | `apps/setup/src/i18n/strings/*.ts` | ~126 |
 | packages/ui | 27 | Spanish sample labels on components | none | ~100 |
 | packages/db | 16 (+32 operation description) | data | not needed | small |

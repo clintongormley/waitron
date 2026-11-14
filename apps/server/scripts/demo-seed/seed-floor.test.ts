@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { listAvailableProducts } from "@waitron/catalogue";
+import { listAvailableProducts } from "@waitron/menu";
 import { listSalePolicies, readFloorPlanSets, resolveMakers } from "@waitron/venue-service";
 import { readLayout } from "../../src/floor-plan.js";
 import { defaultLayout } from "../../src/testing/floor-sets.js";
@@ -19,7 +19,7 @@ import { createTable } from "../../src/testing/live-table.js";
 
 import { DEMO_TABLES } from "./testing/data.js";
 import { seedFloor } from "./seed-floor.js";
-import { seedCatalogues } from "./seed-catalogue.js";
+import { seedCatalogues } from "./seed-menus.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 
 import type { SeedLocale } from "./locale.js";

@@ -2,7 +2,7 @@ import type {
   TranslationQuery,
   TranslationItemPage,
   TranslationCell,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, LanguageTranslationGaps } from "../api/client.js";
 import type { AddContentLanguageDialog } from "../widgets/add-content-language.js";

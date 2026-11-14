@@ -15,7 +15,7 @@ import { invoiceSeries } from "./schema/series.js";
  * of `next_number` and the write of its successor cannot be separated. There is
  * no second allocator to overlap with: one write transaction runs on the venue
  * file at a time, and the pattern is stated once, with its control, on
- * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ * `assertExtraListForWrite` (`packages/menu/src/extras.ts`).
  *
  * Allocation is transactional. A rollback returns the number, and the next
  * caller receives it again; no gap appears. This is correct rather than a

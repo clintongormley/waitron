@@ -1,4 +1,4 @@
-import { baseFromGross, EACH_UNIT } from "@waitron/catalogue";
+import { baseFromGross, EACH_UNIT } from "@waitron/menu";
 import {
   addDecimal,
   compareDecimal,

@@ -113,7 +113,7 @@ function twoDigits(n: number): string {
  * creator, or two creators pick off a stale reserved set (colliding numbers) and both pass the cap.
  * What arranges it is the venue file's write queue, which `withTransaction`
  * (`packages/db/src/tenancy.ts`) runs its body inside, not a lock this function takes. Receipt:
- * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ * `assertExtraListForWrite` (`packages/menu/src/extras.ts`).
  */
 export async function createJoinRequest(
   tx: Transaction,

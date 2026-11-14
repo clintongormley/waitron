@@ -31,7 +31,7 @@ import {
   createExtraList,
   writeProductModifiers,
   deactivateCatalogue,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   departmentSalePolicies,
   createServiceZone,

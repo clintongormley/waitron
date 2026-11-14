@@ -2,8 +2,8 @@
 // rather than raw-inserting.
 
 import { randomUUID } from "node:crypto";
-import { createOptionList, writeProductModifiers } from "@waitron/catalogue";
-import type { ProductModifierRef } from "@waitron/catalogue";
+import { createOptionList, writeProductModifiers } from "@waitron/menu";
+import type { ProductModifierRef } from "@waitron/menu";
 import type { Transaction } from "@waitron/db";
 import type { SeedLocale } from "./locale.js";
 import { demoPlainText, type DemoDataSet } from "./data-set.js";

@@ -8,15 +8,15 @@ import {
   resolveTranslationCells,
   saveContentTranslations,
   type TranslationContext,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type {
   TranslationCellEdit,
   TranslationCellRef,
   TranslationQuery,
   TranslationRef,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import type { Logger } from "./logger.js";
-import "@waitron/catalogue/src/errors.js";
+import "@waitron/menu/src/errors.js";
 
 export type GatedWork = <T>(
   c: Context,

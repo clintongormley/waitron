@@ -26,7 +26,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
 import {
   centsToDecimal,
   decimal,

@@ -4,7 +4,7 @@ import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addProductToMenu, createCatalogue, createProduct, units } from "@waitron/catalogue";
+import { addProductToMenu, createCatalogue, createProduct, units } from "@waitron/menu";
 import {
   departments,
   departmentTransferRequests,

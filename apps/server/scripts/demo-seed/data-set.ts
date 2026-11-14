@@ -1,6 +1,6 @@
 import { readTenant, readVenue, type Database } from "@waitron/db";
 import { resolveCountryDemoIdentity } from "@waitron/country";
-import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/catalogue";
+import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/menu";
 import type { BuiltInRoleKey } from "@waitron/identity";
 import type { AdjustmentReasonInput } from "@waitron/adjustments";
 import type {

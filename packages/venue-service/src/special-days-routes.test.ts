@@ -3,12 +3,7 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  buildMenuDocument,
-  createCatalogue,
-  menuDocumentHash,
-  publishMenu,
-} from "@waitron/catalogue";
+import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   settings as businessDaySettingsTable,

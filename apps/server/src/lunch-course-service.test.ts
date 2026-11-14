@@ -19,7 +19,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { updateProduct, updateExtraList, writeProductModifiers } from "@waitron/catalogue";
+import { updateProduct, updateExtraList, writeProductModifiers } from "@waitron/menu";
 import { workingLineContexts, setRoutingCell } from "@waitron/venue-service";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";

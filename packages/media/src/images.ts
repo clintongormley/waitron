@@ -10,7 +10,7 @@ import {
   sections,
   staffPresentationName,
   validateContentTranslations,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   catalogues,
   customThemes,
@@ -425,7 +425,7 @@ export async function deleteImage(
 ): Promise<{ deleted: boolean; uses: ImageUsage[] }> {
   // No attach can slip between the usage check and the delete: one write transaction runs on the
   // venue file at a time (the pattern is on `assertExtraListForWrite`,
-  // `packages/catalogue/src/extras.ts`).
+  // `packages/menu/src/extras.ts`).
   const [image] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)

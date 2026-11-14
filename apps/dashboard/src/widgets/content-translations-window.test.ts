@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import type {
   TranslationCell,
   TranslationItem,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import { TranslationDrafts } from "./content-translations-model.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";

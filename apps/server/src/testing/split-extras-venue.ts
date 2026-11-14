@@ -12,7 +12,7 @@ import {
   createProduct,
   readContentLanguages,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TradingContext } from "../trading-context.js";

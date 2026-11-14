@@ -15,7 +15,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
-import { createProduct } from "@waitron/catalogue";
+import { createProduct } from "@waitron/menu";
 import { previewCorrectionAmounts, recordSubstitution } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import { latestRecord } from "@waitron/fiscal-verifactu/src/clock-behind.js";

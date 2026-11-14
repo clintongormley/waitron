@@ -5,7 +5,7 @@ import { DEMO_MEDIA_ROOTS } from "@waitron/country-packs/demo";
 import { eq } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, uploadImage } from "@waitron/media";
-import { customerPresentationText, readContentLanguages } from "@waitron/catalogue";
+import { customerPresentationText, readContentLanguages } from "@waitron/menu";
 import { FALLBACK_LOCALE } from "@waitron/shared";
 
 export function demoMediaPath(

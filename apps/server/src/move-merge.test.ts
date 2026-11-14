@@ -37,7 +37,7 @@ import {
   createCategory,
   createProduct,
   units,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { centsToDecimal, decimalToCents, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 

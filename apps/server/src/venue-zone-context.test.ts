@@ -11,7 +11,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { type BusinessDayClock } from "@waitron/shared";
-import { createCatalogue } from "@waitron/catalogue";
+import { createCatalogue } from "@waitron/menu";
 import { createDepartment, saveMenuPeriod, replaceMenuWeek } from "@waitron/venue-service";
 import * as details from "./venue-details.js";
 import * as businessDay from "./business-day-start.js";

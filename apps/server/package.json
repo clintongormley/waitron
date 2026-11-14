@@ -37,7 +37,7 @@
     "@hono/node-server": "^2.1.6",
     "@waitron/adjustments": "workspace:*",
     "@waitron/bookings": "workspace:*",
-    "@waitron/catalogue": "workspace:*",
+    "@waitron/menu": "workspace:*",
     "@waitron/composition": "workspace:*",
     "@waitron/contract": "workspace:*",
     "@waitron/core": "workspace:*",

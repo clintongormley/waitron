@@ -316,7 +316,7 @@ export const QUERY_DEPENDENCIES = {
   listCatalogues: ["catalogues"],
   // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
   getMenuStructure: ["menu_details", "sections", "section_members", "catalogues"],
-  // `menuPrices` (packages/catalogue/src/operations.ts): the structure's tables for the placements,
+  // `menuPrices` (packages/menu/src/operations.ts): the structure's tables for the placements,
   // then each reached product's menu item, menu and price, and its variants' overrides.
   getMenuPrices: [
     "menu_details",
@@ -335,7 +335,7 @@ export const QUERY_DEPENDENCIES = {
     "product_units",
     "units",
   ],
-  // The tables `menuStatus` and `previewMenu` read (packages/catalogue/src/menu-publication.ts); a
+  // The tables `menuStatus` and `previewMenu` read (packages/menu/src/menu-publication.ts); a
   // category's colour and the venue default colour are part of each offer's colour.
   getMenuRead: MENU_PUBLICATION_READS,
   getMenuStatuses: MENU_PUBLICATION_READS,
@@ -350,7 +350,7 @@ export const QUERY_DEPENDENCIES = {
     "settings.business_day",
     "settings.venue",
   ],
-  // `readMenuHome` (packages/catalogue/src/menu-home.ts): the details row, the section graph with
+  // `readMenuHome` (packages/menu/src/menu-home.ts): the details row, the section graph with
   // its menus, and each shortcut's name.
   getMenuHome: ["menu_details", "sections", "section_members", "products", "catalogues"],
   listCategories: ["categories", "category_details"],
@@ -361,7 +361,7 @@ export const QUERY_DEPENDENCIES = {
     "products",
     "categories",
     // A product's attached extras and options lists, read from `product_modifiers` alone
-    // (`readProductModifiers`, packages/catalogue/src/product-modifiers.ts) — it names no list
+    // (`readProductModifiers`, packages/menu/src/product-modifiers.ts) — it names no list
     // table, so neither is named here.
     "product_modifiers",
   ],
@@ -391,7 +391,7 @@ export const QUERY_DEPENDENCIES = {
     "special_day_dates",
   ],
   // The extras and options lists: the list table, then its children (`listOptionLists` and
-  // `getOptionList` in packages/catalogue/src/options.ts, `listExtraLists` and `getExtraList` in
+  // `getOptionList` in packages/menu/src/options.ts, `listExtraLists` and `getExtraList` in
   // extras.ts). The two list reads also count what carries each list: `product_modifiers` for
   // both. The single-list reads count nothing.
   listOptionLists: ["option_lists", "option_labels", "product_modifiers"],

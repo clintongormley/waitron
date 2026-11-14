@@ -92,7 +92,7 @@ export interface ChainHead {
  *
  * No row lock: the sequence read here decides the next position several statements later, and
  * that is safe because one write transaction runs on the venue file at a time (the pattern is
- * stated on `assertExtraListForWrite`, `packages/catalogue/src/extras.ts`). What refuses a forked
+ * stated on `assertExtraListForWrite`, `packages/menu/src/extras.ts`). What refuses a forked
  * position whatever wrote it is `registros_facturacion`'s unique index on the chain position.
  */
 async function selectHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead | undefined> {

@@ -17,7 +17,7 @@
   "dependencies": {
     "@waitron/adjustments": "workspace:*",
     "@waitron/bookings": "workspace:*",
-    "@waitron/catalogue": "workspace:*",
+    "@waitron/menu": "workspace:*",
     "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal-none": "workspace:*",

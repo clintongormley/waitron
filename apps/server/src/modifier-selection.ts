@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { EACH_UNIT, validateExtraSelections, validateOptionSelections } from "@waitron/catalogue";
+import { EACH_UNIT, validateExtraSelections, validateOptionSelections } from "@waitron/menu";
 import {
   newCustomerText,
   AppError,
@@ -8,8 +8,8 @@ import {
   multiplyDecimal,
   resolveSnapshotText,
 } from "@waitron/shared";
-import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
-import type { OptionList, ResolvedExtraList, VatClass } from "@waitron/catalogue";
+import { prepareUnitSnapshot } from "@waitron/menu/src/unit-presentation.js";
+import type { OptionList, ResolvedExtraList, VatClass } from "@waitron/menu";
 import type { OptionSnapshot } from "@waitron/shared";
 
 /** A product offered as an extra, as the published offer serves it. */
@@ -40,7 +40,7 @@ export interface ExtraChild {
   vatClass: VatClass;
   /**
    * The picks for ONE dish, NOT multiplied by the dish count: `grossBasketWithOptions`
-   * (`packages/catalogue/src/pricing.ts`) does that multiplication.
+   * (`packages/menu/src/pricing.ts`) does that multiplication.
    */
   quantity: number;
   physicalQuantity?: string;

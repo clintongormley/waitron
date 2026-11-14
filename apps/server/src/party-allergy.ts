@@ -13,7 +13,7 @@ import {
   parentJoin,
   parentProducts,
   staffPresentationName,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type {
   AllergyDish,
   AllergySendTarget,

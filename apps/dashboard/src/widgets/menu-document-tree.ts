@@ -5,7 +5,7 @@ import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import type { ContentLanguages, DocumentMember, MenuDocument, MenuTarget } from "@waitron/shared";
 import { languageDisplayName, resolveMenuText, type MenuView } from "@waitron/shared";
-import { indexMenuOccurrences } from "@waitron/catalogue/src/menu-navigation.js";
+import { indexMenuOccurrences } from "@waitron/menu/src/menu-navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { productMedia, productMediaFrame, productMediaStyles } from "./product-media.js";

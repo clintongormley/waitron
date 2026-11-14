@@ -1,5 +1,5 @@
 import type { Transaction } from "@waitron/db";
-import { readReceiptLanguage } from "@waitron/catalogue";
+import { readReceiptLanguage } from "@waitron/menu";
 import { resolveReceiptTrim, type ReceiptPresentation } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { readVenueAddress } from "./venue-address.js";

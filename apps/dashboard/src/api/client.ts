@@ -6,7 +6,7 @@ export type { AllergenEntry };
 import type { BusinessDayClock, DepartmentReceiptWrite } from "@waitron/shared";
 import type { PlanPlacement, VenueThemeAnswer } from "@waitron/ui";
 import type { ThemeChoices, ThemeWarning } from "@waitron/ui-core/theme";
-import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
+import type { CatalogueSettings } from "@waitron/menu/src/settings-types.js";
 export type { CatalogueSettings };
 import type { Setting, CombinedOffer, ValueSource, Place } from "@waitron/shared";
 export type { Setting, CombinedOffer, ValueSource, Place };
@@ -90,7 +90,7 @@ import type {
   ProductVariantInput as ProductEditorVariant,
   ProductEditorBody as ProductEditorInput,
 } from "@waitron/shared";
-import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
+import type { ExtraOfferUsage } from "@waitron/menu/src/extra-usage.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
 export type { DepartmentReceiptModel as DepartmentReceiptSettings } from "./department-receipts.js";
 import type { DepartmentReceiptModel as DepartmentReceiptSettings } from "./department-receipts.js";
@@ -279,7 +279,7 @@ import type {
   TranslationItemPage,
   TranslationQuery,
   TranslationRef,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 export type {
   TranslationBatch,
   TranslationCellRef,
@@ -292,7 +292,7 @@ import type {
   ContentSuggestionRead,
   ContentSuggestionView,
   SuggestionRunView,
-} from "@waitron/catalogue/src/content-suggestion-types.js";
+} from "@waitron/menu/src/content-suggestion-types.js";
 export type {
   ContentSuggestionQuery,
   ContentSuggestionRead,
@@ -307,7 +307,7 @@ import type {
   MenuPatchChange,
   MenuPatchResult,
   MenuPatchTarget,
-} from "@waitron/catalogue/src/menu-patch-types.js";
+} from "@waitron/menu/src/menu-patch-types.js";
 export type { LiveMenu, MenuPatchChange, MenuPatchResult, MenuPatchTarget };
 import type {
   DocumentMember,

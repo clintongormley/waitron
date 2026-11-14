@@ -94,7 +94,7 @@ import {
   queueMenuPublication,
   readMenuStructure,
   updateProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { DEFAULT_MIGRATIONS_ROOT, MAX_UPLOAD_BYTES, type StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { listBoxIpv4 } from "./box-reach.js";

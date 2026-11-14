@@ -1,10 +1,10 @@
-// Deep-import the catalogue leaf: the `@waitron/catalogue` barrel would pull drizzle and the DB layer
+// Deep-import the catalogue leaf: the `@waitron/menu` barrel would pull drizzle and the DB layer
 // into the browser bundle.
 import {
   customerOptionSnapshotLabels,
   optionSnapshotLabels,
   staffOptionSnapshotLabels,
-} from "@waitron/catalogue/src/option-snapshot-labels.js";
+} from "@waitron/menu/src/option-snapshot-labels.js";
 import type { OptionSnapshot } from "@waitron/shared";
 
 /**
@@ -17,7 +17,7 @@ export type OptionReader =
 
 /**
  * One `<list>: <label>` line per frozen options answer. The wording rules live in
- * `packages/catalogue/src/option-snapshot-labels.ts`, which the printed kitchen ticket and receipt
+ * `packages/menu/src/option-snapshot-labels.ts`, which the printed kitchen ticket and receipt
  * call too, so a screen and its paper twin cannot disagree.
  *
  * Extras are not here: each pick is its own priced child line.

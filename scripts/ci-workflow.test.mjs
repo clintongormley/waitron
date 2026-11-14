@@ -6620,14 +6620,14 @@ describe("scoped selection commands", () => {
           ...process.env,
           GITHUB_WORKSPACE: repoRoot,
           SCOPE: "packages",
-          PACKAGES: "@waitron/shared @waitron/catalogue",
+          PACKAGES: "@waitron/shared @waitron/menu",
         },
         encoding: "utf8",
         timeout: 15000,
       });
       expect(result.status, result.stderr).toBe(0);
       const filters = result.stdout.split("\n")[0].match(/--filter [^!\s]\S*/g);
-      expect(filters).toEqual(["--filter @waitron/shared", "--filter @waitron/catalogue"]);
+      expect(filters).toEqual(["--filter @waitron/shared", "--filter @waitron/menu"]);
     },
   );
 

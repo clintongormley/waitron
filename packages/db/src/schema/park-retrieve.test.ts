@@ -9,7 +9,7 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
-import { catalogues, products } from "./catalogue.js";
+import { catalogues, products } from "./menus.js";
 import { invoiceSeries } from "./series.js";
 
 const BOGUS_PRODUCT = "99999999-9999-4999-8999-999999999999";

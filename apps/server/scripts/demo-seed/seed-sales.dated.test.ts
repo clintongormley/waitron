@@ -10,7 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { localCalendarDate } from "@waitron/catalogue";
+import { localCalendarDate } from "@waitron/menu";
 import { ALL_MODULES } from "../../src/modules.js";
 import { seedSales } from "./seed-sales.js";
 

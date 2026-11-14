@@ -65,7 +65,7 @@ import {
 } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { ADJUSTMENTS_TABLES } from "@waitron/adjustments";
-import { CATALOGUE_TABLES } from "@waitron/catalogue";
+import { CATALOGUE_TABLES } from "@waitron/menu";
 import { CREDENTIALS_TABLES } from "@waitron/credentials";
 import { HANDOVER_TABLES } from "@waitron/handover";
 import { IDENTITY_TABLES } from "@waitron/identity";

@@ -75,7 +75,7 @@ import {
   listMembers,
   listAvailableProducts,
   removeMember,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   AppError,
   PERSON_HEADER,

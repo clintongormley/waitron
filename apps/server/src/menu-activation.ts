@@ -1,4 +1,4 @@
-import { activateDueMenuPublications } from "@waitron/catalogue";
+import { activateDueMenuPublications } from "@waitron/menu";
 import { withTransaction, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import type { JobDefinition } from "./job-runner.js";

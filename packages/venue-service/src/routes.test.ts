@@ -3,12 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  addProductToMenu,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/catalogue";
+import { addProductToMenu, createCatalogue, createCategory, createProduct } from "@waitron/menu";
 import {
   departments,
   departmentSalePolicies,

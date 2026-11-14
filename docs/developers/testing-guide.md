@@ -381,7 +381,7 @@ sentence on each field; this is the shape of it. Four fields are required:
   A module set whose table definitions have moved into a folder of `@waitron/db` or
   `@waitron/workforce` while its suite stayed in the module package imports that folder's barrel
   through the owning package's `exports` entry instead, as
-  `import * as barrel from "@waitron/db/schema/catalogue.js"`. These are the declarations the
+  `import * as barrel from "@waitron/db/schema/menu.js"`. These are the declarations the
   subject set is supposed to have built. A package with no barrel
   hands in the schema file its `drizzle.config.ts` generates from, as `packages/bookings` does;
   the suite reads only the exports that are tables.

@@ -9,7 +9,7 @@ import {
   type TranslationCell,
   type TranslationCellRef,
   type TranslationItem,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
