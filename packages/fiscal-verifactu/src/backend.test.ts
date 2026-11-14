@@ -777,7 +777,7 @@ describe("recordSale — invoice type selection", () => {
       await sellWithRecipient(`77777777-7777-4777-8777-77777777${invoiceNumber}0`, invoiceNumber, {
         taxId: id,
         legalName: "Client SARL",
-        countryCode: "FR",
+        countryCode: "BE",
         identifierType,
         identifierCountryCode: "fr",
       });

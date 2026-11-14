@@ -261,8 +261,8 @@ the existing recipient checks and F1 series selection remain in place.
 
 **Next action:** complete the physical 58/80 mm paper and QR checks, the asesor's
 manual-remedy confirmation and current business-invoice delivery qualification as separate work.
-Future structured B2B integration has its own entry above. F3 conversion, F1's
-R1–R4 correction path and foreign-recipient `IDOtro`/`IDType` remain separate decisions.
+Future structured B2B integration has its own entry above. F3 conversion and F1's
+R1–R4 correction path remain separate decisions.
 
 ## When the business e-invoicing regime starts
 
