@@ -1,6 +1,9 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { hashPin } from "@waitron/identity";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { taxpayer, withTransaction } from "@waitron/db";
+import { readSettings, settings, taxpayer, VENUE_SETTINGS, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readPrivacyContact, savePrivacyContact, type PrivacyContact } from "./index.js";
@@ -140,4 +143,47 @@ describe("readPrivacyContact and savePrivacyContact", () => {
     });
     expect(await stored()).toEqual(before);
   });
+});
+
+it("saves privacy in the venue document and leaves the taxpayer row untouched", async () => {
+  await seedVenue(suite.db);
+  const before = await stored();
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      savePrivacyContact(
+        tx,
+        {
+          privacyEmail: "privacy@example.test",
+        },
+        null,
+      ),
+    ),
+  ).toEqual({ privacyNoticeUrl: null, privacyEmail: "privacy@example.test" });
+  expect(await stored()).toEqual(before);
+  expect((await readSettings(suite.db, VENUE_SETTINGS)).doc).toMatchObject({
+    privacyNoticeUrl: null,
+    privacyEmail: "privacy@example.test",
+  });
+});
+
+it("records the saving person on the venue document", async () => {
+  await seedVenue(suite.db);
+  const [person] = await withTransaction(suite.db, (tx) =>
+    seedPersons(tx, {
+      displayName: "Privacy manager",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    }),
+  );
+  await withTransaction(suite.db, (tx) =>
+    savePrivacyContact(
+      tx,
+      {
+        privacyEmail: "privacy@example.test",
+      },
+      person!.id,
+    ),
+  );
+  const [document] = await suite.db.select().from(settings).where(eq(settings.module, "venue"));
+  expect(document!.updatedBy).toBe(person!.id);
 });
