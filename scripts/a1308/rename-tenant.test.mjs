@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { URL, fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { coveredFiles, main, renamePath, renameText, residuals } from "./rename-tenant.mjs";
 
