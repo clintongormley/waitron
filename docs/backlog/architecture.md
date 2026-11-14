@@ -961,6 +961,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   Menu code uses `@waitron/menu` and menu/product file paths. Product defaults and starter-unit
   history share `settings.menu`; translation runs store their total on the first batch only.
   The remaining menu tables, identifiers, routes and visible wording await the following slices.
+  Membership reads its term from the signed document, and an alert's handler references a person.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 

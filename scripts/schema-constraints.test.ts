@@ -159,6 +159,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["floor_reset_tables", ["zone_id"], "floor_zones"],
   ["table_merges", ["zone_id"], "floor_zones"],
   ["incidents", ["device_id"], "devices"],
+  ["incidents", ["acknowledged_by"], "persons"],
   ["incidents", ["sale_id"], "sales"],
   ["invoice_correction_refunds", ["invoice_correction_id"], "invoice_corrections"],
   ["invoice_correction_refunds", ["tender_refund_id"], "tender_refunds"],

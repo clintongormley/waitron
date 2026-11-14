@@ -1431,6 +1431,7 @@ CREATE TABLE `incidents` (
 	`acknowledged_note` text,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`acknowledged_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "incidents_severity_ck" CHECK("incidents"."severity" in ('warning', 'error')),
 	CONSTRAINT "incidents_code_ck" CHECK("incidents"."code" <> ''),
 	CONSTRAINT "incidents_source_ck" CHECK("incidents"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'backup')),

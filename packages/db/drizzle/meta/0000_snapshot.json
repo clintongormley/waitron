@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8e1a726c-1975-42f2-853c-60568c1a3884",
+  "id": "6ab1825e-a249-47f2-802c-392c85719f24",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -9642,6 +9642,19 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "incidents_acknowledged_by_persons_id_fk": {
+          "name": "incidents_acknowledged_by_persons_id_fk",
+          "tableFrom": "incidents",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "acknowledged_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },

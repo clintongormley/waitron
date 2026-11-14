@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, persons, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
@@ -21,6 +21,10 @@ const sink: HeldAlertSink = {
 
 const MANAGER = "22222222-2222-4222-8222-222222222222";
 const SETTLED = new Date("2026-06-30T20:30:00.000Z");
+
+beforeEach(async () => {
+  await suite.db.insert(persons).values({ id: MANAGER, displayName: "Manager" });
+});
 
 let refCounter = 0;
 

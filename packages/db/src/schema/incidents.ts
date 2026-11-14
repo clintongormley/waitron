@@ -4,6 +4,7 @@ import { id, json, label, newId, table, tsString } from "./columns.js";
 import { devices } from "./devices.js";
 import { incidentSourceColumn, originChecks } from "./origin.js";
 import { sales } from "./sales.js";
+import { persons } from "./identity/persons.js";
 
 export type IncidentSeverity = "warning" | "error";
 
@@ -40,7 +41,7 @@ export const incidents = table(
     // (`toString()` moves with `TZ`; `toISOString()` does not), and nothing formatted is ever stored.
     detectedAt: tsString("detected_at").notNull(),
     acknowledgedAt: tsString("acknowledged_at"),
-    acknowledgedBy: id("acknowledged_by"),
+    acknowledgedBy: id("acknowledged_by").references(() => persons.id, { onDelete: "restrict" }),
     acknowledgedNote: label("acknowledged_note"),
   },
   (t) => [
