@@ -1291,14 +1291,6 @@ once released. Belongs with A1016.
   look images for #2250 were taken before its review changed the "not a pack" refusal and added the
   space mark.
 
-## Backups says "try again" after a saved-settings failure it has no words for.
-
-- **Backups says "try again" after a saved-settings failure it has no words for.** The "Backups
-  are off because the saved settings can't be used" line appends the code's dashboard message
-  (`backup-screen.ts`, from #1642), and a code with none, such as `credentials.decrypt_failed`,
-  falls back to "Something went wrong, try again". That names nothing to try, beside a "What the box
-  recorded" panel saying Read again turns nothing on.
-
 ## A route whose failure is the system's `ENOSPC` still answers `server.internal`.
 
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
@@ -1484,13 +1476,8 @@ once released. Belongs with A1016.
 
 ## Bundle: Backups screen leftovers
 
-7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **Backups says "try again" after a saved-settings failure it has no words for.**
-  That names nothing to try, beside a "What the box recorded" panel saying Read again turns nothing on.
-  [Detail](box.md#backups-says-try-again-after-a-saved-settings-failure-it-has-no-words-for).
-- **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
-  the Backups screen. Left open by A538-4.
 - **Two small leftovers in the Backups destination form, reported by A639's review and not fixed
   there (#1695).** Neither was reproduced outside the reviewer's run.
   [Detail](box.md#two-small-leftovers-in-the-backups-destination-form-a639-1695)
