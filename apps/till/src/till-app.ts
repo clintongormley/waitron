@@ -9228,7 +9228,7 @@ export class TillApp extends LitElement {
       this.#handingOver.delete(id);
     }
     if (!live()) return;
-    if (!handedOver) return this.#refreshWaiting();
+    if (!handedOver) return this.#refreshAfterWrite("waiting", "refresh.waiting");
     // The counter's prep-queue card offers its own Collect, which would now be refused.
     await this.#refreshAfterWrite("station", "refresh.station_after_hand_over");
     if (!live()) return;

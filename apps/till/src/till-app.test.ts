@@ -18773,6 +18773,44 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     }
   });
 
+  it("a waiting-list read after a refused hand over still out when the till's request limit passes is cancelled and said in the list's notice", async () => {
+    const listCounterWaiting = vi.fn().mockResolvedValue([paidOrder]);
+    const { el } = await counterWaiting({
+      ...invoiceFirst,
+      markCollected: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      listCounterWaiting,
+    });
+    const reads = listCounterWaiting.mock.calls.length;
+    listCounterWaiting.mockImplementation(
+      (options?: { signal?: AbortSignal }) =>
+        new Promise((_, reject) =>
+          options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+        ),
+    );
+    const said = () =>
+      el.shadowRoot!.querySelector('[data-refresh-notice="waiting"]')?.textContent ?? "";
+    vi.useFakeTimers();
+    try {
+      emit(waitingList(el)!, "hand-over-order", { id: "wo-paid" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(listCounterWaiting).toHaveBeenCalledTimes(reads + 1);
+      const [options] = listCounterWaiting.mock.lastCall as [{ signal?: AbortSignal }?];
+
+      // TABLE_REQUEST_LIMIT_MS in till-app.ts.
+      await vi.advanceTimersByTimeAsync(149_999);
+      await el.updateComplete;
+      expect(options?.signal?.aborted).toBe(false);
+      expect(said()).not.toContain(t("refresh.waiting"));
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+      expect(options?.signal?.aborted).toBe(true);
+      expect(said()).toContain(t("refresh.waiting"));
+      expect(alert(el)!.textContent).toContain(t("waiting.hand_over_error"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("the waiting list is read again after the kitchen queue's Collect when the kitchen queue cannot be", async () => {
     const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
     const listCounterWaiting = vi.fn().mockResolvedValueOnce([paidOrder]).mockResolvedValue([]);
