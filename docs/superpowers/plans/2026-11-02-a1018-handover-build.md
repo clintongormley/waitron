@@ -4355,5 +4355,6 @@ round-7 correction, and typechecked the required fields against Tasks 5a.1 and 5
 
 The state-entry decisions and summary/check follow-ups from Slice 4 are covered by
 [the handover state-files plan](2026-11-14-handover-state-files.md).
-The completeness guard checks table names exactly, but a file inside a declared
-folder only to that folder; it does not prove runtime admission or operation resumption.
+The completeness guard checks table names exactly and settings rows only for staleness.
+A child file or prefix-matched name is checked only to its declared folder or prefix;
+it does not prove runtime admission or operation resumption.

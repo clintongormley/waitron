@@ -17,7 +17,7 @@ record, migration, fiscal write, hash, allocation or wire enum. Owner lands.
 
 ## Build
 
-- [ ] **Manifest, 50 minutes.** Modify `packages/handover/src/manifest.ts` and
+- [x] **Manifest, 50 minutes.** Modify `packages/handover/src/manifest.ts` and
   its `manifest.test.ts`; extend `scripts/handover-manifest-complete.test.ts`.
   Read `packages/store/src/state-layout.ts:71` without editing it. Use exact file
   names, `name/` for folders and `name*` for prefixes. Each new row explains why
@@ -32,18 +32,18 @@ record, migration, fiscal write, hash, allocation or wire enum. Owner lands.
   (`apps/server/src/node-entry.ts:698,717`); if tracing another state identifies
   a needed new refusal, stop for watcher direction before building it.
   Forward/reverse checks read layout, recovery/optional lists and module backup
-  sources and declared settings document keys (main fl10 stores module selection there). Reverse table checks use the discovered local set, including
+  sources. Settings rows are checked only for staleness against declared keys\n  (main fl10 stores module selection there). Reverse table checks use the discovered local set, including
   `tenant_credentials` (`packages/db/src/classification.ts:460`). Accept
   legitimate folder/prefix/template rows, including fl9 module-records prepared
   and retained children; refuse stale names. A file inside a declared folder is
-  checked only to that folder; table names are checked exactly. Preserve existing
+  checked only to that folder, and a prefix-matched name only to that prefix;\n  table names are checked exactly. Preserve existing
   class assertions without duplicating every added row. Disposable deletion and
   stale-name controls must fail; document that this checks declarations only.
   Update the manifest's guard-limit comment; accept the existing
   `isManifestStateFile` validator's widened vocabulary, correcting its comment
   in `apps/server/src/handover-manifest.ts:112` rather than adding another list.
 
-- [ ] **Fiscal summaries/checks, 65 minutes.** Modify
+- [x] **Fiscal summaries/checks, 65 minutes.** Modify
   `packages/fiscal-verifactu/src/handover-summary{,.test}.ts`:
   schema-derived ack identifiers, escaped before SQL interpolation, preserve
   digest tuple order/nulls; reject undefined required values and absent heads.
@@ -60,7 +60,7 @@ record, migration, fiscal write, hash, allocation or wire enum. Owner lands.
   drops add coverage and already pass. Preserve generic zero-table acceptance
   in `backup-verification-chain.test.ts`; leave rehashing unchanged.
 
-- [ ] **Payments, 20 minutes.** In
+- [x] **Payments, 20 minutes.** In
   `packages/payments/src/handover-summary{,.test}.ts`, observe manual pending
   refunds wrongly included, then exclude them using `manual = false`.
   Preserve connected/provider and bill-refund assertions. This mirrors

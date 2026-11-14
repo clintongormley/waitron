@@ -8,9 +8,10 @@ import { OPTIONAL_BACKUP_STATE } from "../apps/server/src/backup-optional-state.
 import { RECOVERY_FILES } from "../apps/server/src/state-secrets.js";
 
 /**
- * Checks declared local tables and state entries in both directions. Tables and settings keys match exactly;
- * a file inside a declared folder is checked only to that folder. This does not inspect runtime
- * files, child names, resumption behavior or whether every writer declares its state entry.
+ * Checks declared local tables and state entries in both directions; settings rows are checked
+ * only for staleness. Tables and settings keys match exactly. A child file or prefix-matched
+ * name is checked only to its declared folder or prefix. Runtime files, child names, resumption
+ * behavior and undeclared writer paths are not inspected.
  */
 
 type Where = (typeof NODE_LOCAL_MANIFEST)[number]["where"];

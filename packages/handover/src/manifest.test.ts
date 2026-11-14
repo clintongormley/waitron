@@ -61,6 +61,14 @@ describe("the node-local manifest", () => {
     expect(classOf("change_log")).toBe("rebuildable");
   });
 
+  it("carries no state beyond the key ring, backup settings and retained preparations", () => {
+    expect(
+      NODE_LOCAL_MANIFEST.filter((row) => row.where === "state" && row.class === "transferred").map(
+        (row) => row.item,
+      ),
+    ).toEqual(["secrets.env", "backup.env", "module-preparation-state.json"]);
+  });
+
   it("says what M2 does with every item", () => {
     expect(NODE_LOCAL_MANIFEST.filter((row) => row.treatment.trim() === "")).toEqual([]);
   });
