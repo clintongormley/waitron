@@ -245,7 +245,9 @@ External provenance, read 2026-11-09:
 | Routing omits queued runs created over 24 hours ago | [GitHub Actions limits](https://docs.github.com/en/actions/reference/limits), read 2026-11-14: self-hosted job queue time is “24 hours” | This routing cutoff uses run creation time; it is not evidence that GitHub cancelled an old record. Recovery keeps its full lists. |
 | Only the server planning step installs gh | [GitHub runner context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#runner-context): “self-hosted for self-hosted runners configured by the repository owner” | Test `runner.environment` so hosted jobs keep their existing tools. |
 
-The existing health check reads CI's queued and running workflows. A job's wait is dated from its own
+The routing health check reads CI's queued and running workflows, bounding its queued
+list to the same 24-hour run-created window. Standalone health and recovery commands
+keep full lists, including their cancellation reads. A job's wait is dated from its own
 `started_at`, or its own `created_at` when no start is reported; neither available means its age is unknown.
 If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five

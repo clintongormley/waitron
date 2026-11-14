@@ -162,6 +162,7 @@ export async function serverHealth(options, unavailable) {
 }
 
 export async function serverRoute(options) {
+  // The run-created cutoff also omits queued retries of older runs.
   const since = new Date((options.now ?? Date.now()) - 86_400_000).toISOString();
   const recent = {
     ...options,
