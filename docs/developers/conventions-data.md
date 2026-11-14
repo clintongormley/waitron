@@ -1172,7 +1172,11 @@ its payments and settlement stay on it, and a later refund corrects the replacem
 `docs/superpowers/plans/2026-11-13-q37-fix-put-right.md`, "How the sale is counted once"). So what
 a sale owes is its total plus its own correctives except the replacement, plus the replacement's
 correctives. `correctivesOf(saleId)` in `packages/db/src/correctives-of.ts` is that set, as an
-id subquery; every money reader and every "has it been credited" test uses it.
+id subquery. Money readers and "has it been credited" tests use it. The lines the guard below
+allows instead, each with its reason there: the correction target's own sums and history in
+`packages/core/src/record-correction.ts` and `correction-history.ts`, the order list's number
+search, the lines that find a replacement itself, the first-corrective check in
+`record-replacement.ts`, and top-sellers' line netting.
 
 `scripts/corrective-sums.test.ts` holds the rule, and is weaker than its name. It reads non-test
 `.ts` files under `apps/*/src` and `packages/*/src`, leaving out `testing/` folders, one LINE at a
@@ -1180,8 +1184,8 @@ time, and flags an SQL equality on `corrects_sale_id` and a Drizzle `eq(` or `in
 first argument is a `correctsSaleId` column. Everything else passes it: a comparison split across
 lines, a column reached through an alias the pattern does not spell, a helper it does not
 recognise, and SQL outside those folders. The `sale_settlements_check_coverage` trigger in
-`packages/db/triggers/core.sql` is such SQL: it still adds every corrective, a replacement
-included. Each allowlist entry carries its reason, and an entry that no longer matches fails the
+`packages/db/triggers/core.sql` is such SQL: it spells the same rule out by hand, and
+`scripts/behavioural-triggers.test.ts` tests it with a refunded replacement. Each allowlist entry carries its reason, and an entry that no longer matches fails the
 guard.
 
 ## A quantity counts whole thousandths and a rate whole basis points, and neither is the money scale

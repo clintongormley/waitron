@@ -6,7 +6,8 @@ import type { Decimal, Origin, SaleId } from "@waitron/shared";
 
 /**
  * A sale issued (invoice printed, chained, filed) but not yet paid. `amountDue` is the printed
- * `total` net of every corrective invoice: a "take a fiver off" shows 65.00 against a 70.00 total.
+ * `total` net of the correctives `correctivesOf` lists: a "take a fiver off" shows 65.00 against a
+ * 70.00 total.
  */
 export interface OutstandingSale {
   saleId: SaleId;
@@ -16,7 +17,7 @@ export interface OutstandingSale {
   origin: Origin;
   /** The printed invoice total. */
   total: Decimal;
-  /** Signed sum of correctives; "0.00" when none. */
+  /** Signed sum of the correctives `correctivesOf` lists; "0.00" when none. */
   correctionTotal: Decimal;
   /** total + correctionTotal — what a consumer would collect. */
   amountDue: Decimal;

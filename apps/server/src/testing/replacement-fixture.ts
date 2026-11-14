@@ -7,8 +7,7 @@ import type { SaleId } from "@waitron/shared";
 /**
  * Inserts a corrective of `correctsSaleId` directly, numbered next in its node's rectificative
  * series: a replacement repeating the corrected sale's total, or, with `total`, an ordinary
- * corrective such as a refund of a replacement. Direct, because the replacement remedy and a
- * refund of a replacement are not reachable through a route yet; the reader is what is tested.
+ * corrective such as a refund of a replacement.
  */
 export async function insertCorrective(
   tx: Transaction,

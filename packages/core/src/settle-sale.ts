@@ -86,7 +86,6 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     });
   }
 
-  // The printed total, net of every corrective invoice, plus the tips.
   const due = sumDecimals([
     centsToDecimal(sale.total),
     rawCentsToDecimal(sale.corrections),
