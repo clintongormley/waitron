@@ -90,6 +90,9 @@ it.each([
   "revoke",
   "backup-reserve",
   "backup-publish",
+  "guest-menu-publish",
+  "guest-menu-status",
+  "guest-menu-withdraw",
   "backup-stream-configure",
   "backup-stream-observe",
   "staff-certificate-submit",
@@ -112,6 +115,16 @@ it.each([
     signed = proof(value);
   expect(verifyMachine(signed, publicKey, claims.origin, action, now)).toEqual(value);
   expect(() => check(signed)).toThrow(InstallationError);
+});
+it("refuses an unknown action in signed routing claims", () => {
+  const bytes = encodeMachine({ ...claims, action: "unknown" });
+  const signed = {
+    payload: bytes.toString("base64url"),
+    signature: sign(null, bytes, keys.privateKey).toString("base64url"),
+  };
+  expect(() => readMachineClaims(signed)).toThrowError(
+    expect.objectContaining({ code: "invalid_proof" }),
+  );
 });
 it.each([
   { operationId: "bad" },

@@ -9,6 +9,9 @@ export type MachineAction =
   | "revoke"
   | "backup-reserve"
   | "backup-publish"
+  | "guest-menu-publish"
+  | "guest-menu-status"
+  | "guest-menu-withdraw"
   | "backup-stream-configure"
   | "backup-stream-observe"
   | "staff-certificate-submit"
@@ -138,6 +141,9 @@ export function readMachineClaims(value: unknown): MachineClaims {
         "revoke",
         "backup-reserve",
         "backup-publish",
+        "guest-menu-publish",
+        "guest-menu-status",
+        "guest-menu-withdraw",
         "backup-stream-configure",
         "backup-stream-observe",
         "staff-certificate-submit",
