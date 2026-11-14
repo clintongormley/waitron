@@ -22,72 +22,85 @@ const SQL_EQUALITY = /\bcorrects_sale_id\s*=(?!=)|=\s*[\w$]+\.corrects_sale_id\b
 const DRIZZLE_MATCH = /\b(?:eq|inArray)\(\s*[\w$.]+\.correctsSaleId\s*,/;
 
 /**
- * The lines that may match, each by file and a fragment of the line, with why it is not a sum of
- * what a sale owes.
+ * The lines that may match, each by file, a fragment of the line and how many lines it matches,
+ * with why it is not a sum of what a sale owes. The count keeps a second copy of an allowed line
+ * from passing unseen.
  */
-const ALLOWED: readonly { file: string; fragment: string; reason: string }[] = [
+const ALLOWED: readonly { file: string; fragment: string; lines: number; reason: string }[] = [
   {
     file: "packages/db/src/correctives-of.ts",
     fragment: "corrects_sale_id = ${saleId}",
+    lines: 2,
     reason: "the helper itself",
   },
   {
     file: "apps/server/src/orders-list.ts",
     fragment: "where (x.id = r.sale_id or x.corrects_sale_id = r.sale_id",
+    lines: 1,
     reason:
       "the number search finds a bill by its own invoice or any corrective of it, its replacement included",
   },
   {
     file: "apps/server/src/orders-list.ts",
     fragment: "or x.corrects_sale_id in (select y.id from sales y where y.corrects_sale_id = r.sale_id",
+    lines: 1,
     reason: "the number search finds a bill by a corrective of its replacement",
   },
   {
     file: "apps/server/src/orders-list.ts",
     fragment: "eq(sales.correctsSaleId, saleId), eq(sales.replacesOriginal, true)",
+    lines: 1,
     reason: "finds the replacement itself, to list it as Replaced by",
   },
   {
     file: "apps/server/src/deferred-payment-export.ts",
     fragment: "eq(correction.correctsSaleId, deferredClosures.saleId)",
+    lines: 1,
     reason: "finds the replacement itself (joined with replacesOriginal), to name it",
   },
   {
     file: "packages/core/src/record-replacement.ts",
     fragment: "select count(*) from sales c where c.corrects_sale_id",
+    lines: 1,
     reason: "a replacement is refused after ANY earlier corrective (sale.replacement_not_first)",
   },
   {
     file: "packages/core/src/correction-target.ts",
     fragment: "eq(sales.correctsSaleId, saleId), eq(sales.replacesOriginal, true)",
+    lines: 1,
     reason: "finds the replacement itself, the invoice a later correction is filed against",
   },
   {
     file: "packages/core/src/record-correction.ts",
     fragment: "select sum(c.total) from sales c where c.corrects_sale_id",
+    lines: 1,
     reason:
       "what is left on the correction target, which has no replacement (correctionTargetFor), so its own correctives are all that change it",
   },
   {
     file: "packages/core/src/record-correction.ts",
     fragment: "select count(*) from sales c where c.corrects_sale_id",
+    lines: 1,
     reason: "the correction target's own earlier corrections; it has no replacement",
   },
   {
     file: "packages/core/src/record-correction.ts",
     fragment: "eq(sales.correctsSaleId, correctsSaleId)",
+    lines: 2,
     reason:
-      "the partial-refund history of the correction target: corrections whose lines name its lines",
+      "the partial-refund history of the correction target: its earlier corrections' VAT breakdowns and lines",
   },
   {
     file: "packages/core/src/correction-history.ts",
     fragment: "eq(sales.correctsSaleId, saleId)",
+    lines: 2,
     reason:
-      "the partial-refund history of the correction target: corrections whose lines name its lines",
+      "the partial-refund history of the correction target: its earlier corrections' figures and lines",
   },
   {
     file: "packages/reporting/src/top-sellers.ts",
     fragment: "cs.corrects_sale_id = il.sale_id and cl.corrects_line_id = il.id",
+    lines: 1,
     reason: "nets corrective lines against the invoice line they name; a replacement's name none",
   },
 ];
@@ -124,10 +137,8 @@ function correctiveMatches(file: string, source: string): string[] {
     .map((line) => `${file}: ${line.trim()}`);
 }
 
-function allowed(match: string): boolean {
-  return ALLOWED.some(
-    (entry) => match.startsWith(`${entry.file}: `) && match.includes(entry.fragment),
-  );
+function matchesEntry(match: string, entry: (typeof ALLOWED)[number]): boolean {
+  return match.startsWith(`${entry.file}: `) && match.includes(entry.fragment);
 }
 
 describe("sums of a sale's correctives go through correctivesOf", () => {
@@ -141,18 +152,18 @@ describe("sums of a sale's correctives go through correctivesOf", () => {
   });
 
   it("finds no corrective match outside the allowlist", () => {
-    expect(matches.filter((match) => !allowed(match))).toEqual([]);
+    expect(
+      matches.filter((match) => !ALLOWED.some((entry) => matchesEntry(match, entry))),
+    ).toEqual([]);
   });
 
-  it("keeps no allowlist entry that no longer matches anything", () => {
-    expect(
-      ALLOWED.filter(
-        (entry) =>
-          !matches.some(
-            (match) => match.startsWith(`${entry.file}: `) && match.includes(entry.fragment),
-          ),
-      ).map((entry) => `${entry.file}: ${entry.fragment}`),
-    ).toEqual([]);
+  it("matches each allowlist entry on exactly as many lines as it names", () => {
+    const wrong = ALLOWED.map((entry) => ({
+      entry: `${entry.file}: ${entry.fragment}`,
+      expected: entry.lines,
+      found: matches.filter((match) => matchesEntry(match, entry)).length,
+    })).filter(({ expected, found }) => expected !== found);
+    expect(wrong).toEqual([]);
   });
 });
 

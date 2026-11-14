@@ -1185,8 +1185,8 @@ first argument is a `correctsSaleId` column. Everything else passes it: a compar
 lines, a column reached through an alias the pattern does not spell, a helper it does not
 recognise, and SQL outside those folders. The `sale_settlements_check_coverage` trigger in
 `packages/db/triggers/core.sql` is such SQL: it spells the same rule out by hand, and
-`scripts/behavioural-triggers.test.ts` tests it with a refunded replacement. Each allowlist entry carries its reason, and an entry that no longer matches fails the
-guard.
+`scripts/behavioural-triggers.test.ts` tests it with a refunded replacement. Each allowlist entry carries its reason and the number of lines it matches; any other number
+fails the guard.
 
 ## A quantity counts whole thousandths and a rate whole basis points, and neither is the money scale
 
