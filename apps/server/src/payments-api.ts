@@ -1,3 +1,5 @@
+import { resolveVenueClock } from "@waitron/reporting";
+import { backupAuditDay, type BackupAuditRun } from "./backup-audit-day.js";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { withIssuanceTransaction } from "@waitron/core";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
@@ -7,12 +9,14 @@ import "./errors.js";
 import { profileAllows } from "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { isFencedStanding, standingOf } from "@waitron/membership";
 import { isReadableChart } from "./membership-trust.js";
 import { readTakenOverFrom } from "./handover-collection.js";
 import {
   AppError,
+  businessDayAt,
+  businessDayBounds,
   centsToDecimal,
   compareDecimal,
   decimal,
@@ -21,6 +25,7 @@ import {
   sumDecimals,
 } from "@waitron/shared";
 import {
+  withTransaction,
   billPaymentRefunds,
   billPayments,
   deviceProfiles,
@@ -39,6 +44,9 @@ import {
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   PAYMENTS_SETTINGS,
+  scheduledRuns,
+  type BackupPaymentMatch,
+  type BackupPaymentUnmatched,
   appendReaderToProfiles,
   cardProviderById,
   cardReaders,
@@ -82,6 +90,7 @@ import {
 import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
+import { requirePeriod } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { requireBodyUuid, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { DeploymentEnvironment } from "./config.js";
@@ -737,6 +746,48 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await gated(sessionId, (tx) => markCardReaderUnpaired(tx, id, unpairedAt));
         return c.json(await gated(sessionId, (tx) => deleteCardReader(tx, deps.providers, id)));
       });
+    }),
+  );
+
+  app.get("/management-api/payments/backup-audit", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const result = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, { managementSessionId: sessionId, permission: PAYMENTS_MANAGE });
+        const clock = {
+          ...(await resolveVenueClock(tx, deps.cfg.nodeId)),
+          dayCutover: "00:00",
+          cutoverChanges: [],
+        };
+        const today = businessDayAt(clock, deps.clock.now().instant);
+        const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
+          .toISOString()
+          .slice(0, 10);
+        const day = requirePeriod(c.req.query("day") ?? yesterday, "day");
+        const bounds = businessDayBounds(clock, day);
+        const runs = await tx
+          .select({
+            periodFrom: scheduledRuns.periodFrom,
+            periodTo: scheduledRuns.periodTo,
+            generation: scheduledRuns.generation,
+            summary: scheduledRuns.summary,
+          })
+          .from(scheduledRuns)
+          .where(
+            and(
+              eq(scheduledRuns.duty, "payments.reconcile.sumup"),
+              eq(scheduledRuns.state, "succeeded"),
+              lt(scheduledRuns.periodFrom, bounds.endAt),
+              gte(scheduledRuns.periodTo, bounds.startAt),
+            ),
+          );
+        return backupAuditDay(
+          day,
+          clock.timeZone,
+          runs as BackupAuditRun<BackupPaymentMatch | BackupPaymentUnmatched>[],
+        );
+      });
+      return c.json(result);
     }),
   );
 

@@ -61,6 +61,13 @@ machines** shows the current payment state and successful refunds, even if they 
 **Download for accountant (XLSX)** includes a separate sheet of these payments, selected by
 calendar date rather than business-day cutover.
 
+
+In **Card payments**, open **Backup-machine comparison** to check a calendar day in the venue’s
+time zone. A match links one same-account entry to one SumUp charge with the same amount,
+including tips, within five minutes. Check ambiguous or unmatched charges in SumUp before making
+any correction. The comparison sends no refunds. An incomplete day waits for the remaining daily
+check; the complete day is available after the following UTC midnight’s check.
+
 ## Choose documents after paying {#settlement-document}
 
 After the final payment, choose **Receipt**, **Full invoice** or **None**. An edit that finishes

@@ -68,6 +68,36 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
     expect(outcome.summary.unlinkedCharges).toBe(3);
   });
 
+  it("persists backup matches and exceptions for the manager view", async () => {
+    const result = {
+      ...emptyResult(PERIOD),
+      backupMatches: [
+        {
+          references: ["charge"],
+          amount: "10.25",
+          settledAt: "2026-07-24T12:00:00.000Z",
+          paymentRef: "manual-7",
+          workingOrderId: "order-7",
+          externalMachine: "Backup Solo",
+          externalRef: "operation-7",
+        },
+      ],
+      backupUnmatched: [
+        {
+          references: ["unknown"],
+          amount: "9.00",
+          settledAt: "2026-07-24T14:00:00.000Z",
+          reason: "unmatched" as const,
+        },
+      ],
+    };
+    const outcome = await reconcilerAsDuty(reconcilerReturning(result)).run(PERIOD, NOW);
+    expect(JSON.parse(JSON.stringify(outcome.summary))).toMatchObject({
+      backupMatches: result.backupMatches,
+      backupUnmatched: result.backupUnmatched,
+    });
+  });
+
   it("asks for a parked day to be tried again one day later", () => {
     const duty = reconcilerAsDuty(reconcilerReturning(emptyResult(PERIOD)));
     expect(duty.retryParkedAfterMs).toBe(24 * 60 * 60 * 1000);

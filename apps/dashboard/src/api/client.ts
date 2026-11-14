@@ -2233,6 +2233,27 @@ export interface ModuleRow {
   revision?: number;
 }
 
+export interface BackupAuditView {
+  day: string;
+  timeZone: string;
+  complete: boolean;
+  backupMatches: {
+    references: string[];
+    amount: string;
+    settledAt: string;
+    paymentRef: string;
+    workingOrderId: string;
+    externalMachine: string | null;
+    externalRef: string | null;
+  }[];
+  backupUnmatched: {
+    references: string[];
+    amount: string;
+    settledAt: string;
+    reason: "ambiguous" | "unmatched";
+  }[];
+}
+
 export interface PaymentProviderRow {
   providerId: string;
   state: "connected" | "not_connected";
@@ -5011,6 +5032,15 @@ export class DashboardApi {
 
   listModules(): Promise<ModuleRow[]> {
     return this.#request<ModuleRow[]>("/management-api/modules", "GET");
+  }
+
+  getBackupAudit(day?: string): Promise<BackupAuditView> {
+    return this.#request(
+      `/management-api/payments/backup-audit${day ? `?day=${encodeURIComponent(day)}` : ""}`,
+      "GET",
+      undefined,
+      { passive: true },
+    );
   }
 
   listPaymentProviders(): Promise<PaymentProviderRow[]> {

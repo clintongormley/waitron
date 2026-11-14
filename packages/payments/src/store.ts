@@ -750,6 +750,29 @@ export async function listAuditCandidates(
     .orderBy(payments.paymentRef);
 }
 
+export async function listBackupPayments(tx: Transaction, period: { from: Date; to: Date }) {
+  const rows = await tx
+    .select({
+      paymentRef: payments.paymentRef,
+      workingOrderId: payments.workingOrderId,
+      amount: payments.amount,
+      settledAt: payments.settledAt,
+      externalMachine: payments.externalMachine,
+      externalRef: payments.externalRef,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.provider, "manual"),
+        eq(payments.externalProvider, "connected_account"),
+        inArray(payments.state, ["captured", "partially_refunded", "refunded"]),
+        gte(payments.settledAt, period.from.toISOString()),
+        lt(payments.settledAt, period.to.toISOString()),
+      ),
+    );
+  return rows.map((row) => ({ ...row, amount: centsToDecimal(row.amount) }));
+}
+
 /** Keeps an `IN` list under the engine's bind-parameter ceiling however large the input. */
 export const CHUNK_SIZE = 1000;
 

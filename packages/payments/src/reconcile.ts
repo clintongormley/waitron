@@ -81,11 +81,30 @@ export interface PaymentMismatch {
   workingOrderId: string | null;
 }
 
+export interface BackupPaymentMatch {
+  references: string[];
+  amount: string;
+  settledAt: string;
+  paymentRef: string;
+  workingOrderId: string;
+  externalMachine: string | null;
+  externalRef: string | null;
+}
+
+export interface BackupPaymentUnmatched {
+  references: string[];
+  amount: string;
+  settledAt: string;
+  reason: "ambiguous" | "unmatched";
+}
+
 export interface PaymentReconcileResult {
   period: ReconcilePeriod;
   /** LOCAL rows examined, not report entries. */
   checked: number;
   unlinkedCharges?: number;
+  backupMatches?: BackupPaymentMatch[];
+  backupUnmatched?: BackupPaymentUnmatched[];
   resweepAfter?: Date;
   unsettled: PaymentMismatch[];
   lostSettlement: PaymentMismatch[];

@@ -60,6 +60,11 @@ Cuando se rechaza un cobro, el terminal muestra la hora del servidor y la de la 
 has cobrado al cliente en otro datáfono, no vuelvas a cobrar: registra el pago cuando se pueda
 volver a cobrar.
 
+Abre **Pagos con tarjeta → Comparación del datáfono de reserva** para comparar los pagos anotados
+de la misma cuenta con los cargos de SumUp. Comprueba en SumUp los pagos sin una coincidencia
+única. Conserva el número de operación y el datáfono al anotar cada pago; esta comparación no
+envía devoluciones.
+
 Si el terminal dice que se ha cobrado con tarjeta pero el pago no se ha registrado, no vuelvas a
 cobrar. Puede pasar si la hora cambia mientras el lector está cobrando la tarjeta.
 Lo que hay que hacer después depende de cómo se cobró la tarjeta:

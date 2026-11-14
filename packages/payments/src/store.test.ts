@@ -36,6 +36,7 @@ import {
   insertInitiated,
   listAttempting,
   listAuditCandidates,
+  listBackupPayments,
   listReconcilable,
   markReconcileRemediated,
   recordFailedRefund,
@@ -1739,6 +1740,46 @@ describe("audit candidates", () => {
         externalRef: "client",
         workingOrderId: seeded.workingOrderId,
         state: "attempting",
+      },
+    ]);
+  });
+});
+
+it("reads exact gross amounts for same-account backup entries, including later refunds", async () => {
+  const seeded = await seedTenant();
+  await withTransaction(suite.db, async (tx) => {
+    for (const [paymentRef, provider, externalProvider, settledAt] of [
+      ["backup", "manual", "connected_account", SETTLED],
+      ["outside", "manual", "other", SETTLED],
+      ["integrated", "fake", "connected_account", SETTLED],
+      ["next-day", "manual", "connected_account", new Date("2026-07-23T00:00:00Z")],
+    ] as const)
+      await insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
+        provider,
+        paymentRef,
+        amount: decimal("12.10"),
+        settledAt,
+        externalProvider,
+        externalRef: "operation-3",
+        externalMachine: "Backup machine",
+      });
+    await tx.update(payments).set({ state: "refunded" }).where(eq(payments.paymentRef, "backup"));
+    expect(
+      await listBackupPayments(tx, {
+        from: new Date("2026-07-22T00:00:00Z"),
+        to: new Date("2026-07-23T00:00:00Z"),
+      }),
+    ).toEqual([
+      {
+        paymentRef: "backup",
+        workingOrderId: seeded.workingOrderId,
+        amount: "12.10",
+        settledAt: "2026-07-22T10:00:00.000Z",
+        externalRef: "operation-3",
+        externalMachine: "Backup machine",
       },
     ]);
   });

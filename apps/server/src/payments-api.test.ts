@@ -38,6 +38,7 @@ import {
   deviceProfileCardReaders,
   deviceCardReaders,
   payments,
+  scheduledRuns,
   type CardProviderContribution,
 } from "@waitron/payments";
 import {
@@ -3248,3 +3249,49 @@ it.each(["pair", "adopt"] as const)(
     expect(remove).toHaveBeenCalledTimes(mode === "pair" ? 1 : 0);
   },
 );
+
+describe("backup-machine audit read", () => {
+  it("requires manager access and selects the latest successful local-day summaries", async () => {
+    const venue = await seedVenueWithStaff();
+    const app = mountApp(venue);
+    const path = "/management-api/payments/backup-audit?day=2026-07-02";
+    expect((await send(app, "GET", path)).status).toBe(401);
+    expect((await send(app, "GET", path, { cookie: venue.staffCookie })).status).toBe(403);
+    const row = {
+      references: ["charge"],
+      amount: "10.25",
+      settledAt: "2026-07-01T22:30:00.000Z",
+      reason: "ambiguous",
+    };
+    for (const [from, generation, state, summary] of [
+      ["2026-07-01", 0, "succeeded", { backupMatches: [], backupUnmatched: [] }],
+      ["2026-07-01", 1, "succeeded", { backupMatches: [], backupUnmatched: [row] }],
+      ["2026-07-01", 2, "failed", { backupMatches: [], backupUnmatched: [] }],
+      ["2026-07-02", 0, "succeeded", { backupMatches: [], backupUnmatched: [] }],
+    ] as const)
+      await suite.db
+        .insert(scheduledRuns)
+        .values({
+          duty: "payments.reconcile.sumup",
+          periodFrom: `${from}T00:00:00.000Z`,
+          periodTo: from === "2026-07-01" ? "2026-07-02T00:00:00.000Z" : "2026-07-03T00:00:00.000Z",
+          generation,
+          state,
+          summary,
+        });
+    const answer = await send(app, "GET", path, { cookie: venue.managerCookie });
+    expect(answer.status, JSON.stringify(await answer.clone().json())).toBe(200);
+    expect(await answer.json()).toEqual({
+      day: "2026-07-02",
+      timeZone: "Europe/Madrid",
+      complete: true,
+      backupMatches: [],
+      backupUnmatched: [row],
+    });
+    const bad = await send(app, "GET", "/management-api/payments/backup-audit?day=2026-02-30", {
+      cookie: venue.managerCookie,
+    });
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+  });
+});

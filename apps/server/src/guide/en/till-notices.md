@@ -53,6 +53,10 @@ When a payment is refused, the till shows the server's time and the time of the 
 already charged the customer on another card machine, do not charge again: record the payment once
 payments are back.
 
+Open **Card payments → Backup-machine comparison** to compare the same-account payments you
+recorded with SumUp’s charges. Check payments without a unique match in SumUp. Keep the operation
+number and machine details when you record each payment; this comparison sends no refunds.
+
 If the till says a card was charged but the payment is not recorded, do not charge again. This can
 happen when the clock changes while the reader is charging the card. What to do next depends on how the
 card was taken:
