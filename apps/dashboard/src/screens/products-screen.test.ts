@@ -2257,7 +2257,7 @@ describe("catalogue-screen", () => {
       expect(popup.matches(":popover-open")).toBe(true);
       expect(
         [...actions.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
-      ).toEqual([t("action.rename"), t("action.delete")]);
+      ).toEqual([t("kitchen.rename_course"), t("action.delete")]);
       await userEvent.keyboard("{Escape}");
       await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
       expect(dialog.open).toBe(true);

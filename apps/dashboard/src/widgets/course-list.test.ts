@@ -1189,22 +1189,35 @@ describe("layout", () => {
       await page.viewport(...previous);
     }
   });
-  it("offers Rename and Delete in the row menu and focuses the existing name editor", async () => {
-    const { el } = await mount(stubApi());
-    const menu = q<HTMLElementTagNameMap["wt-row-actions"]>(el, "wt-row-actions")!;
-    await menu.updateComplete;
-    const trigger = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
-    await userEvent.click(trigger);
-    const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-    expect(popup.matches(":popover-open")).toBe(true);
-    const rename = menu.querySelector<HTMLElement>('[data-action="rename"]');
-    expect(rename).not.toBeNull();
-    expect(menu.querySelector('[data-action="delete"]')).not.toBeNull();
-    await userEvent.click(rename!);
-    await vi.waitFor(() => expect(field(el)?.value).toBe("Starters"));
-    expect(popup.matches(":popover-open")).toBe(false);
-    expect(el.shadowRoot!.activeElement).toBe(field(el));
-  });
+  it.each([
+    ["en", "Rename", "Delete"],
+    ["es", "Cambiar nombre", "Eliminar"],
+  ])(
+    "offers named Rename/Delete actions and focuses the editor (%s)",
+    async (locale, renameText, deleteText) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mount(stubApi());
+        const menu = q<HTMLElementTagNameMap["wt-row-actions"]>(el, "wt-row-actions")!;
+        await menu.updateComplete;
+        const trigger = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+        await userEvent.click(trigger);
+        const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        expect(popup.matches(":popover-open")).toBe(true);
+        const rename = menu.querySelector<HTMLElement>('[data-action="rename"]');
+        expect(rename?.textContent!.trim()).toBe(renameText);
+        expect(menu.querySelector('[data-action="delete"]')!.textContent!.trim()).toBe(deleteText);
+        expect(menu.querySelector('[data-action="delete"]')).not.toBeNull();
+        await userEvent.click(rename!);
+        await vi.waitFor(() => expect(field(el)?.value).toBe("Starters"));
+        expect(popup.matches(":popover-open")).toBe(false);
+        expect(el.shadowRoot!.activeElement).toBe(field(el));
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
 
   it.each([
     [1280, "light"],
@@ -1371,7 +1384,7 @@ describe("permanent delete lifecycle", () => {
         [...q(el, `tr[data-course="${id}"] wt-row-actions`)!.querySelectorAll("wt-button")].map(
           (b) => b.textContent!.trim(),
         ),
-      ).toEqual([t("action.rename"), t("action.delete")]);
+      ).toEqual([t("kitchen.rename_course"), t("action.delete")]);
     expect(
       [...el.shadowRoot!.querySelectorAll("th")].map((h) =>
         (h.querySelector(".timing-title") ?? h).textContent!.trim(),

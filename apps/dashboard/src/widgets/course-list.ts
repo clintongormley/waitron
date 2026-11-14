@@ -528,7 +528,7 @@ export class CourseList extends LitElement {
           variant="ghost"
           data-action="rename"
           @click=${() => void this.#open(course.id, course.name)}
-          >${t("action.rename")}</wt-button
+          >${t("kitchen.rename_course")}</wt-button
         >
         <wt-button
           align="start"
