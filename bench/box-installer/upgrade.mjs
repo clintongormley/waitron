@@ -33,6 +33,26 @@ cmp /opt/waitron/before.json /opt/waitron/after.json
 docker inspect $(docker compose --project-directory /opt/waitron -f /opt/waitron/compose.yml ps -q) | jq -e 'all(.[]; .HostConfig.RestartPolicy.Name=="unless-stopped")'
 `;
 const apply = `flock -n /opt/waitron.upgrade.lock ${cli} apply /opt/waitron /bin/bash /opt/waitron-host/prepare-fixture.sh`;
+export const failedOnlineTrialProbe = `
+app=$(docker compose --project-directory /opt/waitron -f /opt/waitron/compose.yml ps -q app)
+docker inspect --format '{{.Id}} {{.State.StartedAt}}' "$app" >/opt/waitron/online-before
+if A950_PROBE=trial PATH=/opt/waitron-host/probe-bin:$PATH ${apply} >/opt/waitron/online-result 2>/opt/waitron/online-error; then exit 1; fi
+grep -q 'Online migration trial failed:.*injected trial refusal.*selling version and its data are unchanged' /opt/waitron/online-error
+docker inspect --format '{{.Id}} {{.State.StartedAt}}' "$app" >/opt/waitron/online-after
+cmp /opt/waitron/online-before /opt/waitron/online-after
+${fingerprint} >/opt/waitron/after.json
+cmp /opt/waitron/before.json /opt/waitron/after.json
+test ! -e /opt/waitron.upgrade-trial
+test -z "$(find /opt/waitron.upgrades -mindepth 1 -maxdepth 1 -print -quit)"
+`;
+const dockerShim = `#!/bin/bash
+if [ "$A950_PROBE" = trial ] && [ "$1" = run ]; then
+ for arg in "$@"; do
+  if [ "$arg" = trial ]; then echo 'injected trial refusal' >&2; exit 1; fi
+ done
+fi
+exec /usr/bin/docker "$@"
+`;
 const shim = String.raw`#!/bin/bash
 set -e
 /bin/cp "$@"
@@ -79,6 +99,8 @@ printf '%s\\n' ${quote(`#!/bin/bash\n${prepare}\n`)} >/opt/waitron-host/prepare-
 mkdir /opt/waitron-host/probe-bin
 printf '%s' ${quote(shim)} >/opt/waitron-host/probe-bin/cp
 chmod 700 /opt/waitron-host/probe-bin/cp
+printf '%s' ${quote(dockerShim)} >/opt/waitron-host/probe-bin/docker
+chmod 700 /opt/waitron-host/probe-bin/docker
 timedatectl set-ntp true
 sync
 echo A950_STAGED
@@ -90,6 +112,7 @@ export function upgradePayload(mode) {
   if (mode === "manual")
     return `set -euxo pipefail
 ${start}
+${failedOnlineTrialProbe}
 ${apply} >/opt/waitron/success.json
 jq -e '.phase=="committed" and .target=="candidate" and ([.checks[]|select(.name=="sale" and .ok==true and .details.total=="1.00" and .details.fiscalRecords==2)]|length)==1' /opt/waitron/success.json
 ${compare}

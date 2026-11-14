@@ -151,6 +151,27 @@ describe("contained upgrade data checks", () => {
     await rebound.close();
   });
 
+  it("runs trial data checks on the copy without opening a listener or making a sale", async () => {
+    const checks = await import("./upgrade-checks.js");
+    const sale = await import("./upgrade-sale.js");
+    const { runUpgradeChecks } = await import("./upgrade-check-entry.js");
+    const { env } = await copiedConfig();
+    const listener = vi
+      .spyOn(checks, "openUpgradeListener")
+      .mockRejectedValue(new Error("trial listener forbidden"));
+    const sell = vi
+      .spyOn(sale, "checkUpgradeSale")
+      .mockRejectedValue(new Error("trial sale forbidden"));
+    const report = await runUpgradeChecks(
+      { ...env, WAITRON_MIGRATIONS_DIR: migrations },
+      () => {},
+      "trial",
+    );
+    expect(report).toEqual({ mode: "trading", menus: 3, orders: 1, fiscalRecords: 1 });
+    expect(listener).not.toHaveBeenCalled();
+    expect(sell).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       name: "a newer recorded migration",

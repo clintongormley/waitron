@@ -344,3 +344,16 @@ Run its focused checks with `pnpm exec vitest run scripts/box/upgrades/{host,boo
 The adapter accepts the shipped single-file Compose layout; it refuses a running project launched with additional override files. Construction leaves the installed file unchanged. Installation pins image IDs while retaining other `.env` interpolation: choosing images belongs to the upgrade command, rather than later edits to `WAITRON_IMAGE`. Online reopening waits for Compose health checks before copies are deleted; Docker may require the selected image’s last temporary tag to stay while its container uses it.
 
 Image preparation resolves the candidate’s Linux host-platform manifest and pulls by digest, leaving installed mutable tags alone. It checks the old image-line layout before stopping and allows the installer’s180-second startup interval on reopen. PR8 must carry the B3 recipe’s shell-only AppArmor export into its supervisor environment.
+
+## Online trial before a manual upgrade
+
+A running box captures each live database through SQLite with the state volume mounted read-only,
+then runs the candidate’s data checks on the disposable copy with networking disabled. A failure
+ends the attempt before the writers stop. A pass still proceeds through every final stopped check
+and the mandatory copy sale, because the live captures are separate snapshots. An already-stopped
+app skips this trial and keeps that final repair path. The host discards the trial copy; after an
+interrupted attempt it removes its named leftover trial folder on the next attempt.
+
+Use `bench/box-installer/run.mjs --case upgrade-manual` with the inputs described in that rig’s
+README to check the Linux mounts and pre-stop failure path. Current-build synthetic rehearsal
+does not qualify historical releases or add an index entry.

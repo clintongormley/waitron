@@ -213,3 +213,24 @@ it("makes the copy cut observable when the controller captures subprocess stdout
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it("makes an unexpectedly successful online failure probe fail the Linux rehearsal", async () => {
+  const { failedOnlineTrialProbe } = await import("../../bench/box-installer/upgrade.mjs");
+  const root = mkdtempSync(join(tmpdir(), "upgrade-online-probe-"));
+  try {
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "docker"), "#!/bin/sh\necho app-id\n", { mode: 0o700 });
+    writeFileSync(join(bin, "flock"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    const commands = failedOnlineTrialProbe.replaceAll("/opt/waitron", join(root, "box"));
+    mkdirSync(join(root, "box"));
+    const result = spawnSync("bash", ["-ec", commands], {
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(result.status, result.stderr).toBe(1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

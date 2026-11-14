@@ -173,7 +173,9 @@ each operation. Build the fixture with the same migration set as the image.
 After building the recipe above, run `upgrade-manual` or `upgrade-power-cut` with
 `B3_INSTALLER_IMAGE=/work/output/waitron-install-dev.img` and
 `B3_UPGRADE_STATE=/inputs/source-state.tar`. Use a separate `--run-dir` for each case.
-The manual case requires a successful disposable-copy sale, then exercises Restore and
+The manual case first injects a failed online trial and checks that the app’s container and
+start time, issued sales and open order stay unchanged. It then requires a real online capture
+through the read-only Linux mount and a successful disposable-copy sale, then exercises Restore and
 Keep after an owned port blocker refuses readiness, then checks a normal reboot and the
 restored container restart policies. The power-cut case kills QEMU during
 the initial copy and during restore, then checks the held boot and repeated restore.

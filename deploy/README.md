@@ -244,11 +244,18 @@ by the default installation; automatic connection and Settings wiring remain ope
 ## Checked manual upgrades
 
 Use the current `waitron.sh` on a Linux host running systemd. For an existing single-box
-venue, `sudo bash waitron.sh install <ref>` pins the old images, stops the writers and keeps
+venue, `sudo bash waitron.sh install <ref>` pins the old images and tries the candidate’s
+database changes on a fresh copy while the current version keeps selling. A failed online
+trial ends the attempt before selling stops and names the failed check. A pass is advice:
+the command still stops the writers and keeps
 a copy of their data and configuration. It checks a disposable copy, including a real primary
 cash sale, before reopening the candidate. The test sale never reaches the live venue.
 
-If a check fails, the box stays stopped. Read `sudo bash waitron.sh status`, then choose
+An already-stopped app skips the online trial, so you can repair a broken version through
+the same stopped-copy checks and mandatory sale. The trial copy is discarded and is never
+used for Restore. A leftover trial folder from an interrupted attempt is removed on the next attempt.
+
+If a final stopped-copy check fails, the box stays stopped. Read `sudo bash waitron.sh status`, then choose
 `sudo bash waitron.sh restore` to return to the stopped copy, or `sudo bash waitron.sh keep`
 to start the candidate despite the failed checks. Keep still uses the ordinary boot guards.
 Restore puts back the copied data, Compose configuration and old images; the host clock
@@ -258,8 +265,7 @@ an attempt is held. On an unfinished setup, Keep continues setup; choose Restore
 using `--reset install` instead.
 
 The USB recipe installs the script at `/opt/waitron-host/waitron.sh`. Status, Restore and
-Keep use the retained host runtime and make no bootstrap downloads. Automatic updates and
-the advisory online migration trial remain separate work.
+Keep use the retained host runtime and make no bootstrap downloads. Automatic updates remain separate work.
 
 ## Updating and operating
 

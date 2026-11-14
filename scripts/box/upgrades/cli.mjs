@@ -10,8 +10,8 @@ import { applyUpgrade, upgradeStatus } from "./transaction.mjs";
 import { checkUpgradeCandidate, removeUpgradeCheckContainers } from "./candidate.mjs";
 
 const execute = promisify(execFile);
-const command = (file, args, input) => {
-  const result = execute(file, args, { maxBuffer: 4 * 1024 * 1024 });
+const command = (file, args, input, options = {}) => {
+  const result = execute(file, args, { maxBuffer: 4 * 1024 * 1024, ...options });
   if (input !== undefined) result.child.stdin.end(input);
   return result;
 };
