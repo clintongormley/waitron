@@ -107,8 +107,7 @@ export interface PrinterInTrouble {
 }
 
 /** Every active printer with a job in trouble at `now` ({@link printJobInTrouble}), leaving out jobs
- * an Unpair ended and kitchen tickets that leave nothing waiting there ({@link kitchenJobsNotWaiting}),
- * so a printer counts what the tables' printing problems count. */
+ * an Unpair ended and kitchen tickets that leave nothing waiting there ({@link kitchenJobsNotWaiting}). */
 export async function printersInTrouble(tx: Transaction, now: Date): Promise<PrinterInTrouble[]> {
   const jobs = await tx
     .select({

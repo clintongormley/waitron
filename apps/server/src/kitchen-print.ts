@@ -2675,10 +2675,10 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
 }
 
 /**
- * Of `jobs`, the kitchen tickets that leave nothing waiting at their own printer by
- * {@link readPrintProblems}' rule: each link is covered by a later printed reprint there, or a Reprint
- * of its bill would link nothing on that printer to its station. A Printers-screen resend carries no
- * links, so it is judged by its original's. A job with no links is never in the answer.
+ * Of `jobs`, the kitchen tickets that leave nothing waiting at their own printer: each link is
+ * covered by a later printed reprint there, or a Reprint of its bill would link nothing on that
+ * printer to its station. A Printers-screen resend carries no links, so it is judged by its
+ * original's. A job with no links is never in the answer.
  */
 export async function kitchenJobsNotWaiting(
   tx: Transaction,

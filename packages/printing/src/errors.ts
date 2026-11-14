@@ -20,9 +20,8 @@ declare module "@waitron/shared" {
      * is echoed so the dashboard can point at the existing registration. */
     "printer.already_registered": { localKey: string };
     /** An ongoing dashboard alert: `{count}` print jobs are stuck at printer `{printer}` — waiting too
-     * long or out of delivery attempts, other than jobs a succeeded Unpair ended (`printer.unpaired`)
-     * and jobs a later resend of the same job has printed. Not thrown; raised by the printing alert
-     * source. */
+     * long or out of delivery attempts, as `printersInTrouble` (apps/server/src/print-job-trouble.ts)
+     * counts them. Not thrown; raised by the printing alert source. */
     "printer.jobs_waiting": { printer: string; count: number };
     /** A queue-only reason: no fresh visible report names this USB/Bluetooth printer. */
     "printer.not_visible": Record<string, never>;
