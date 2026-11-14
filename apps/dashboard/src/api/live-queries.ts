@@ -214,8 +214,6 @@ export const QUERY_DEPENDENCIES = {
     "table_merges",
   ],
   getDailyClose: [
-    "payments",
-    "payment_refunds",
     "sale_substitutions",
     "sale_lines",
     "settings.business_day",
