@@ -14,6 +14,8 @@ import type {
   InvoiceCorrectionView,
 } from "../api/invoice-correction-types.js";
 import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
+import { scopePrefix } from "../state/tender-refund.js";
+import { REASON_MAX } from "../state/bill-payment.js";
 import "./invoice-correction-dialog.js";
 import type {
   InvoiceCorrectionCardLeg,
@@ -1156,4 +1158,182 @@ describe("what an open correction files, and why it cannot", () => {
       );
     },
   );
+});
+
+describe("the correction window's other paths", () => {
+  afterEach(() => localStorage.clear());
+  const lost = () => new TypeError("Failed to fetch");
+  const actionsError = (el: TillInvoiceCorrectionDialog) =>
+    root(el).querySelector("wt-form-actions")!.error;
+
+  it("refuses a note longer than the limit under the note, sending nothing", async () => {
+    const { el, api } = await mountSending();
+    await type(el, "6.05");
+    await choose(el, "other");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-split]")).not.toBeNull());
+    const note = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=note]")!;
+    await userEvent.fill(
+      page.elementLocator(note.shadowRoot!.querySelector("input")!),
+      "x".repeat(REASON_MAX + 1),
+    );
+    await el.updateComplete;
+
+    confirm(el).click();
+    await el.updateComplete;
+    expect(note.error).toBe(t("bill_refund.reason_long"));
+    expect(actionsError(el)).toBe(t("form.fix_fields"));
+    expect(api.openInvoiceCorrection).not.toHaveBeenCalled();
+  });
+
+  it("offers the reasons again through Retry when they could not be read on opening", async () => {
+    const api = sendingApi();
+    api.listAdjustmentReasons.mockRejectedValueOnce(lost());
+    const { el } = await mountSending(api);
+    const retry = () => root(el).querySelector<HTMLElement>("[data-reasons-retry]");
+    await vi.waitFor(() => expect(retry()).not.toBeNull());
+
+    retry()!.click();
+    await vi.waitFor(() => expect(retry()).toBeNull());
+    expect(api.listAdjustmentReasons).toHaveBeenCalledTimes(2);
+    expect(
+      root(el)
+        .querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=reason]")!
+        .options.map((option) => option.label),
+    ).toEqual(["Overcharged", "Other"]);
+  });
+
+  it("asks for the preview again when pressed and sends nothing when that preview refuses the amount", async () => {
+    const api = sendingApi();
+    api.previewInvoiceCorrection
+      .mockRejectedValueOnce(lost())
+      .mockRejectedValueOnce(refused("sale.correction_amount_invalid"));
+    const { el } = await mountSending(api);
+    await type(el, "6.05");
+    await choose(el, "overcharged");
+    await vi.waitFor(() => expect(actionsError(el)).toBe(t("invoice_correction.read_failed")));
+
+    confirm(el).click();
+    await vi.waitFor(() =>
+      expect(grossField(el).error).toBe(codeMessage("sale.correction_amount_invalid")),
+    );
+    expect(api.previewInvoiceCorrection).toHaveBeenCalledTimes(2);
+    expect(api.openInvoiceCorrection).not.toHaveBeenCalled();
+  });
+
+  it("previews again and shows the new split when Open is refused because the split changed", async () => {
+    const api = sendingApi();
+    const changed = [{ rate: "10.00", base: "5.50", tax: "0.55" }];
+    api.openInvoiceCorrection.mockRejectedValueOnce(refused("invoice_correction.split_changed"));
+    const { el } = await mountSending(api);
+    await confirmCorrection(el);
+    api.previewInvoiceCorrection.mockResolvedValue({ ...answer("6.05"), vatBreakdown: changed });
+
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-split]"))).toBe(
+        t("invoice_correction.split")
+          .replace("{rate}", "10")
+          .replace("{base}", "€5.50")
+          .replace("{tax}", "€0.55"),
+      ),
+    );
+    expect(actionsError(el)).toBe(codeMessage("invoice_correction.split_changed"));
+    expect(api.openInvoiceCorrection).toHaveBeenCalledOnce();
+  });
+
+  it("shows the Open saved by another window of this till instead of sending a new amount", async () => {
+    const { el, api } = await mountSending();
+    const other = new InvoiceCorrectionSession(SCOPE, {
+      openInvoiceCorrection: () => Promise.reject(lost()),
+      giveInvoiceCorrectionCash: () => Promise.reject(lost()),
+    });
+    await other
+      .open("sale-1", { gross: "2.00", reasonId: "overcharged", note: null, expectedSplit: SPLIT })
+      .catch(() => {});
+
+    await confirmCorrection(el);
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-saved]"))).toBe(
+        t("invoice_correction.saved").replaceAll("{amount}", "€2.00"),
+      ),
+    );
+    expect(api.openInvoiceCorrection).not.toHaveBeenCalled();
+  });
+
+  it("keeps offering the card when the payments cannot be read again after some cash is given", async () => {
+    const api = sendingApi();
+    api.giveInvoiceCorrectionCash.mockResolvedValueOnce({
+      correction: { ...OPEN, moneyBack: "3.00", left: "3.05" },
+      refunds: [],
+      replayed: false,
+    } as never);
+    const { el } = await mountSending(api, "correction-1");
+    api.getRefundableTenders.mockRejectedValue(lost());
+
+    root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-cash-given]"))).toBe(
+        t("invoice_correction.cash_given").replace("{amount}", "€6.05"),
+      ),
+    );
+    expect(text(root(el).querySelector("[data-choice=card]"))).toBe(
+      `${t("invoice_correction.refund_card")} · 0042`,
+    );
+    expect(actionsError(el)).toBe("");
+  });
+
+  it("offers the cash still left when the saved cash request cannot be read", async () => {
+    localStorage.setItem(
+      `${scopePrefix(SCOPE)}${JSON.stringify(["invoice-correction-cash", "correction-1"])}`,
+      "{not json",
+    );
+    const { el } = await mountSending(sendingApi(), "correction-1");
+
+    expect(text(root(el).querySelector("[data-choice=cash]"))).toBe(
+      t("invoice_correction.give_cash").replace("{amount}", "€6.05"),
+    );
+  });
+
+  it("shows why the people who may sign in could not be read, offering no sign-in", async () => {
+    const api = sendingApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    api.listApprovers.mockRejectedValueOnce(refused("sale.correction_unsupported"));
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+    await vi.waitFor(() =>
+      expect(actionsError(el)).toBe(codeMessage("sale.correction_unsupported")),
+    );
+    expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+  });
+
+  it("drops the sign-in when it is cancelled, sending nothing more", async () => {
+    const api = sendingApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+    const pin = await pinDialog(el);
+    pin.dispatchEvent(new CustomEvent("override-cancel"));
+    await el.updateComplete;
+    expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+    expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce();
+  });
+
+  it("reads the correction again on Check again, showing what is back now", async () => {
+    const api = sendingApi();
+    const { el } = await mountSending(api, "correction-1");
+    api.getInvoiceCorrection.mockResolvedValue({ ...OPEN, moneyBack: "2.00", left: "4.05" });
+
+    root(el).querySelector<HTMLElement>("[data-choice=check]")!.click();
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-left]"))).toBe(
+        t("invoice_correction.left_back").replace("{amount}", "€4.05"),
+      ),
+    );
+    expect(api.getInvoiceCorrection).toHaveBeenCalledTimes(2);
+  });
 });
