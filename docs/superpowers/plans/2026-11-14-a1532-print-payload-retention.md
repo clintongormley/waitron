@@ -3,9 +3,9 @@
 **Authority and finish line.** The owner chose “a week is fine” (Lane J queue,
 2026-11-14 17:02); the watcher's same-time questions.md note says “The owner chose a week”.
 Watcher 17:37 clears R16's existing housekeeping seat, all printouts and 30-day measurement.
-This plan still needs its corrected Claude read and watcher clearance. Old terminal jobs lose
-bytes and retain rows/links. Preserve reprints rebuilt from sale data, including the original
-printer where that path serves it; explain refusals only where missing saved bytes are needed.
+Claude read the plan and its fixes; watcher 17:49 cleared build with the test scope below. Old terminal jobs lose
+bytes and retain rows/links. Expired print-queue reprints refuse consistently; sale receipts
+and invoices can be rebuilt from Orders at any age.
 
 **Policy.** Keep NOT NULL and bind `new Uint8Array(0)`; no schema/migration. In a real
 `useVenueDb` test first assert `typeof(payload) = 'blob'` and `length(payload) = 0`.
@@ -24,17 +24,17 @@ each `withTransaction`, retain all other values, and yield a real event-loop tur
 signal between batches. Choose the batch by the measurement below, not an invented bound.
 
 In `invoice-print.ts`, export one shared empty-document assertion: apply it before resend
-side effects only when `to` is absent (copying saved bytes). In `print-job-reprint.ts`, apply
-it only in the `saleId === null` branch before `readPrintArea`; preserve fresh sale layouts
-for alternate/original targets that path supports. In `print-api.ts`, apply it before preview. No printing-package API or transport-gate change.
+side effects, even with supplied fresh bytes. In `print-job-reprint.ts`, apply it before both
+printer paths/layout so expiry beats own-printer-only refusals. In `print-api.ts`, apply it
+before preview. No printing-package API or transport-gate change.
 Declare `print_job.sale_payload_expired` / `print_job.payload_expired` in server `errors.ts`;
 map them to 409 in `print-api.ts`, `till-api.ts` and `orders-api.ts`. Add English/Spanish
 wording in dashboard and till `src/i18n/codes.ts`: bytes were removed after a week; rebuild
 sale receipts/invoices from Orders. Other printouts cannot be reprinted; the till explicitly
 names kitchen tickets, refund receipts, payment slips and reports as examples.
 Use `saleId` to distinguish them. Keep existing reprint availability and request-error UI.
-Watcher 17:47 clarifies the queued refusal means printouts that cannot be rebuilt; existing
-fresh sale-layout reprints stay available, and Orders also rebuilds them. Consumer trace includes
+Watcher 17:49 withdraws the 17:47 exception: all expired queue reprints refuse and point
+sale receipts/invoices to Orders; there is no alternate-printer exception. Consumer trace includes
 resend, invoice retry/switch, alternate-printer layout, queue width,
 preview and practice preview; the latter already accepts empty bytes, so add no special filter.
 
@@ -42,11 +42,10 @@ preview and practice preview; the latter already accepts empty bytes, so add no 
 case, preserved retryable/undecided failures (including moved/unpaired), repeat sweeps, cursor
 progress over ineligible rows, yielding/stop, daily scheduling and unchanged audit/link/problem
 rows. Reuse generic runner/backoff tests; `boot.failed-start.test.ts` checks registration/cleanup.
-`invoice-print-api.test.ts`, `print-job-reprint.test.ts`, `print-api.test.ts`,
-`till-api.receipt.test.ts`, `transaction-receipt-api.test.ts` and
-`orders-invoice-deliveries.test.ts` each test their own affected answer and no new job/delivery;
-`orders-reprint.test.ts` retains rebuilding old sales; reprint tests keep fresh sale layouts
-working with empty saved payloads on each supported target, while raw-copy paths refuse. Dashboard's reprint-dialog/printers-screen
+`invoice-print-api.test.ts` owns refusal with no new job/delivery, once. Add one 409 case
+at each print/till/Orders API; the till mount also serves transaction-receipt-api. Add the
+expiry-before-own-printer-only case in `print-job-reprint.test.ts` and one preview case.
+`orders-reprint.test.ts` retains rebuilding old sales. Dashboard's reprint-dialog/printers-screen
 files and till `i18n/codes.test.ts` check localized wording through existing flows. Run changed
 files, server guide-content, root guide-links, alert-codes and errors-reachable guards.
 
@@ -59,6 +58,6 @@ Baseline: database 1,296,785,408 bytes; print table 782,790,656. No promised sav
 Update backlog printers/index and EN/ES server printers guides; retain virtual-printer work.
 Update only print-retention wording in R16 jobs.md and append a dated pointer to historical jr7.
 Tell lane E in the PR and append one line to its questions.md so jr7 reuses this seat.
-Estimate +180–260/−20–40 production, +220–320/−0–20 tests, no test support, +80/−20 docs.
+Estimate +180–260/−20–40 production, +300–420/−0–20 tests (outside opinion beyond 1.5×), no test support, +80/−20 docs.
 Leave jr7's other steps, A664, row deletion, production VACUUM, new clock gates, streamed uploads,
 new records/protocols/deadlines/approval systems and fiscal writers out.
