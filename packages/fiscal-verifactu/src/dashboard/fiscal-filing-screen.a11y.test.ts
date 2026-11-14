@@ -216,7 +216,8 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
     await page.viewport(1280, 1000);
     const screen = await show({ ...FUTURE_DATE, today: null }, theme);
     const details = await openDetails(screen);
-    expect(details.querySelector("[data-test=replacement-undated]")).not.toBeNull();
+    const actions = details.querySelector("wt-form-actions") as HTMLElement & { error: string };
+    expect(actions.error).toContain("cannot date a replacement");
     await expectNoA11yViolations(host);
   });
 

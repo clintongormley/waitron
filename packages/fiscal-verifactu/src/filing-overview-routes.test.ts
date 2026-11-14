@@ -123,8 +123,87 @@ it("answers no day, and logs why, when the venue's zone cannot place the box's c
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({ today: null });
   expect(log).toHaveBeenCalledWith("warn", "fiscal.filing_day_unread", {
-    code: "venue.time_zone_conversion_failed",
+    errorCode: "venue.time_zone_conversion_failed",
+    reason: "invalid_instant",
   });
+});
+
+it("logs a day-read failure's own log-only reason as logReason, beside its params", async () => {
+  const node = await seedNode(suite.db);
+  const log = vi.fn<Logger>();
+  const app = mount(
+    undefined,
+    {
+      nodeId: node.nodeId,
+      clock: {
+        ...steadyClock,
+        now: () => {
+          throw new AppError("venue.not_found", {}, { reason: "no business day row" });
+        },
+      },
+    } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>,
+    log,
+  );
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ today: null });
+  expect(log).toHaveBeenCalledWith("warn", "fiscal.filing_day_unread", {
+    errorCode: "venue.not_found",
+    logReason: "no business day row",
+  });
+});
+
+it.each([
+  new AppError("venue.time_zone_invalid", { reason: "missing" }),
+  new AppError("venue.time_zone_target_invalid", { reason: "mismatch" }),
+  new AppError("venue.time_zone_conversion_failed", { reason: "unreadable_offset" }),
+  new AppError("venue.not_found", {}),
+  new AppError("settings.invalid", { module: "venue", field: "timeZone" }),
+])("answers no day, rather than fail the page, on %s", async (refusal) => {
+  const node = await seedNode(suite.db);
+  const log = vi.fn<Logger>();
+  const app = mount(
+    undefined,
+    {
+      nodeId: node.nodeId,
+      clock: {
+        ...steadyClock,
+        now: () => {
+          throw refusal;
+        },
+      },
+    } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>,
+    log,
+  );
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ today: null });
+  expect(log).toHaveBeenCalledWith("warn", "fiscal.filing_day_unread", {
+    errorCode: refusal.code,
+    ...refusal.params,
+  });
+});
+
+it("fails the read on a Waitron error that is not about the venue's zone, venue or settings", async () => {
+  const node = await seedNode(suite.db);
+  const log = vi.fn<Logger>();
+  const app = mount(
+    undefined,
+    {
+      nodeId: node.nodeId,
+      clock: {
+        ...steadyClock,
+        now: () => {
+          throw new AppError("storage.disk_full", {});
+        },
+      },
+    } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>,
+    log,
+  );
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(507);
+  expect((await res.json()).error.code).toBe("storage.disk_full");
+  expect(log).not.toHaveBeenCalledWith("warn", "fiscal.filing_day_unread", expect.anything());
 });
 
 it("fails the read, rather than answer a day, when the clock fails with an error that is not Waitron's", async () => {

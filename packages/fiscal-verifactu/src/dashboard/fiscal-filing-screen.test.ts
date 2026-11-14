@@ -1490,15 +1490,18 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
 
   it.each([
     // 23:30 in UTC, 18:30 in New York (this browser's zone), already 1 March in Madrid.
-    ["2026-02-28T23:30:00.000Z", "2026-03-01", "2026-02-28"],
-    ["2026-11-15T00:30:00.000Z", "2026-11-15", "2026-11-14"],
+    ["2026-02-28T23:30:00.000Z", 60, "2026-03-01", "2026-02-28"],
+    ["2026-11-15T00:30:00.000Z", 60, "2026-11-15", "2026-11-14"],
+    // 10:30 in UTC is already 00:30 on 1 March fourteen hours east, an offset no machine running
+    // these tests has, so the device's own zone gives 28 February wherever it runs.
+    ["2026-02-28T10:30:00.000Z", 840, "2026-03-01", "2026-02-28"],
   ])(
-    "lets a device in another zone send when the clocks agree, dated the box's day, at %s",
-    async (instant, boxDay, browserDay) => {
+    "lets the device send when its clock gives the box's venue day, whatever its own zone, at %s",
+    async (instant, offsetMinutes, boxDay, browserDay) => {
       vi.useFakeTimers({ toFake: ["Date"], now: new Date(instant) });
       try {
-        const madrid = { day: boxDay, offsetMinutes: 60 };
-        const request = replacementServer(futureCase("2026-11-20"), async () => ({}), madrid);
+        const venue = { day: boxDay, offsetMinutes };
+        const request = replacementServer(futureCase("2026-11-20"), async () => ({}), venue);
         const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
         const details = await openDetails(screen);
         await pick(screen, details, browserDay);
@@ -1526,6 +1529,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
       const details = await openDetails(screen);
       await pick(screen, details, "2026-02-27");
       expect(bottomMessage(details)).toBe(differs("2026-03-01", "2026-02-28"));
+      expect(action(details).getAttribute("variant")).toBe("secondary");
       expect(action(details).disabled).toBe(true);
       action(details).click();
       await screen.updateComplete;
@@ -1535,16 +1539,19 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     }
   });
 
-  it("says the server cannot date a replacement now, keeping Send disabled, when the page could not read the box's day", async () => {
+  it("says in the bottom message that the server cannot date a replacement now, with Send quiet and disabled, when the page could not read the box's day", async () => {
     const request = replacementServer(futureCase("2026-11-03"), async () => ({}), null);
     const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
     const details = await openDetails(screen);
+    const undated =
+      "The server cannot date a replacement now, so nothing can be sent. Check the venue's time zone in Venue settings, then choose Refresh and open this case again.";
+    expect(bottomMessage(details)).toBe(undated);
+    expect(action(details).getAttribute("variant")).toBe("secondary");
     await pick(screen, details, "2026-11-02");
     expect(details.querySelector("[data-test=replacement-confirmation]")).toBeNull();
-    expect(flat(details.querySelector("[data-test=replacement-undated]"))).toBe(
-      "The server cannot date a replacement now because the venue's time zone or this server's setup is not ready, so nothing can be sent. Check Venue settings, then open this case again.",
-    );
-    expect(bottomMessage(details)).toBe("");
+    expect(details.querySelector(".put-right")?.textContent).not.toContain("cannot date");
+    expect(bottomMessage(details)).toBe(undated);
+    expect(action(details).getAttribute("variant")).toBe("secondary");
     expect(action(details).disabled).toBe(true);
     action(details).click();
     await screen.updateComplete;

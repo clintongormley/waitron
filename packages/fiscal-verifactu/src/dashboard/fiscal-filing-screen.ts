@@ -816,10 +816,15 @@ export class FiscalFilingScreen extends LitElement {
     return this.refusal === DAY_REFUSED ? t(REFUSAL_WORDS[DAY_REFUSED]) : "";
   }
 
-  /** What holds Send: the day's own check once Send was chosen, the box not saying its day, or
-   * the venue's day by this device's clock differing from the box's. */
+  /** The box not saying its day, or the venue's day by this device's clock differing from it:
+   * states that rule Send out before any press, so it is drawn quiet (A427). */
+  #replacementRuledOut(): boolean {
+    return this.#serverDay() === null || this.#daysDiffer();
+  }
+
+  /** What holds Send: the day's own check once Send was chosen, or a state that rules it out. */
   #replacementBlocked(problem: string): boolean {
-    return (this.attempted && problem !== "") || this.#serverDay() === null || this.#daysDiffer();
+    return (this.attempted && problem !== "") || this.#replacementRuledOut();
   }
 
   #bottom(problem: string): string {
@@ -832,6 +837,7 @@ export class FiscalFilingScreen extends LitElement {
     const fix = marked === "" ? "" : t("fiscal_filing.put_right.fix_fields");
     const today = this.#serverDay();
     const device = this.#deviceDay();
+    const undated = replaces && today === null ? t("fiscal_filing.put_right.replace.undated") : "";
     const differs =
       replaces && today !== null && device !== null && today !== device
         ? t("fiscal_filing.put_right.replace.day_differs", {
@@ -839,7 +845,7 @@ export class FiscalFilingScreen extends LitElement {
             device: calendarDay(device),
           })
         : "";
-    return [said, fix, differs].filter((part) => part !== "").join(" ");
+    return [said, fix, undated, differs].filter((part) => part !== "").join(" ");
   }
 
   #needsAdmin(): boolean {
@@ -960,9 +966,7 @@ export class FiscalFilingScreen extends LitElement {
       ></wt-input>
       ${
         today === null
-          ? html`<p data-test="replacement-undated">
-              ${t("fiscal_filing.put_right.replace.undated")}
-            </p>`
+          ? nothing
           : html`<div class="confirmation" data-test="replacement-confirmation">
               <p>
                 ${t("fiscal_filing.put_right.replace.confirm", {
@@ -1027,6 +1031,7 @@ export class FiscalFilingScreen extends LitElement {
     const stop = () => void this.#dialog().requestClose("cancel");
     const replaces = this.#replaces();
     const blocked = replaces ? this.#replacementBlocked(problem) : this.#descriptionError() !== "";
+    const variant = replaces && this.#replacementRuledOut() ? "secondary" : action.variant;
     return html`<wt-form-actions slot="footer" .error=${this.#bottom(problem)}>
       <wt-button
         slot="cancel"
@@ -1047,7 +1052,7 @@ export class FiscalFilingScreen extends LitElement {
             >`
           : html`<wt-button
               data-test="put-right"
-              variant=${action.variant}
+              variant=${variant}
               ?disabled=${action.unchanged || this.sending || blocked}
               @click=${() => void this.#send(found)}
               >${t(

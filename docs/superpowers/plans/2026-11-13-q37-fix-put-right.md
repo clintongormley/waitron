@@ -1025,10 +1025,12 @@ refused invoice's number, date and total, the VAT period the sale will count in,
 replacement's date — the box's own day, which the overview answers as `today`
 (`filing-overview-routes.ts`, `boxToday`) with the venue's offset beside it: the remedy route's
 clock read through `prepareIssueClock` in the venue's zone, as the replacement is dated. It is null
-on a box that issues no records, that the venue does not list, or whose venue zone or settings
-cannot be read — states in which the route refuses anyway — and the dialog then says, in place of
-the confirmation, that the server cannot date a replacement now and to check Venue settings and
-open the case again, with Send disabled. When that day differs from the venue's day by this
+on a box that issues no records here, or when the venue does not list this box or its time zone,
+venue row or settings cannot be read — each of those logged as `fiscal.filing_day_unread`, and
+states in which the route refuses anyway; any other error fails the read. The dialog then shows no
+confirmation, and its bottom message says the server cannot date a replacement now, to check the
+venue's time zone in Venue settings, then choose Refresh and open the case again, with Send
+disabled and drawn quiet. When that day differs from the venue's day by this
 device's clock (this device's time at the venue's offset, so a device in another zone is not
 stopped), Send stays disabled with one sentence in the form's bottom message saying the two dates
 differ and that the time can be checked and confirmed on Box status (a server whose clock is still ahead would file a replacement

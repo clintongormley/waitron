@@ -5,12 +5,22 @@ import { prepareIssueClock } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { createErrorBoundary, requireManagementSession, type Logger } from "@waitron/server-kit";
-import { AppError, localCalendarDate } from "@waitron/shared";
+import { AppError, localCalendarDate, type ErrorCode } from "@waitron/shared";
 import type { BoxToday } from "./filing-overview-types.js";
 import { readFilingOverview } from "./filing-overview.js";
 import { readFilingWarnings } from "./filing-warnings.js";
 
 const CASE_LIMIT = 200;
+
+/** What `prepareIssueClock` raises when the venue row, its settings or its time zone cannot
+ * date a record here. Any other error fails the read, as it would any other route. */
+const DAY_UNREAD_CODES: ReadonlySet<string> = new Set<ErrorCode>([
+  "venue.time_zone_invalid",
+  "venue.time_zone_target_invalid",
+  "venue.time_zone_conversion_failed",
+  "venue.not_found",
+  "settings.invalid",
+]);
 
 /**
  * The day a replacement corrective issued now would carry, and the venue's offset that gives it:
@@ -28,8 +38,12 @@ async function boxToday(
     const { instant, offsetMinutes } = clock.now();
     return { day: localCalendarDate(instant, offsetMinutes), offsetMinutes };
   } catch (error) {
-    if (!(error instanceof AppError)) throw error;
-    log("warn", "fiscal.filing_day_unread", { code: error.code });
+    if (!(error instanceof AppError) || !DAY_UNREAD_CODES.has(error.code)) throw error;
+    log("warn", "fiscal.filing_day_unread", {
+      errorCode: error.code,
+      ...error.params,
+      ...(error.reason === undefined ? {} : { logReason: error.reason }),
+    });
     return null;
   }
 }
