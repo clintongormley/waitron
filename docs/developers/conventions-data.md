@@ -4227,7 +4227,9 @@ needs the venue's PRIMARY.** AEAT, the card network and the internet are never o
 whichever node is primary, except that, on a box that files records and whose time service is not
 synchronised, a start, or a clock jump of over a minute once the clock watch's next look (15 seconds
 after the last ends) finds it, waits for two devices or a person to confirm its time before any
-later payment (owner, 2026-11-10; the jump, 2026-11-11; [below](#every-start-confirms-the-boxs-time-before-it-trades)): records chain locally
+later payment (owner, 2026-11-10; the jump, 2026-11-11; [below](#every-start-confirms-the-boxs-time-before-it-trades)),
+and AEAT refusing as dated in the future (`1112`) a record written since its time was last confirmed
+makes it wait for a person or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, the watcher's): records chain locally
 and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
 is an outbox, never inline.
 
@@ -4377,14 +4379,15 @@ host that throws, or a host that answers `available: false`, which the state kee
 
 How it moves (A1420 plan D3; A1506 plan row 3):
 
-- **`by_internet` is left only after a clock jump** (below); nothing else moves it.
+- **`by_internet` is left only after a clock jump or a future-date refusal** (below); nothing else
+  moves it.
 - **The time service.** Until the start is `by_internet`, each clock-watch look (every 15 seconds,
   `CLOCK_WATCH_MS`, on every node) reads the time service through the same shared reading, so the
   host program, which systemd starts once per request, runs at most once a minute. A synchronised
   answer confirms `by_internet`, from `waiting`, `by_devices` or `by_person`.
-- **Two devices.** While waiting, each look also offers the stored device readings: two or more
-  devices at different network addresses, each within 5 seconds (`START_CLOCK_MARGIN_MS`) of the
-  box and of each other, confirm `by_devices` and log `clock_start.confirmed` with source
+- **Two devices.** While waiting, except for a future-date refusal (below), each look also offers
+  the stored device readings: two or more devices at different network addresses, each within 5
+  seconds (`START_CLOCK_MARGIN_MS`) of the box and of each other, confirm `by_devices` and log `clock_start.confirmed` with source
   `devices` and their ids. They set nothing. A till or handheld sends its clock with each
   equipment read, every 15 seconds while it shows the PIN screen or someone is signed in on it, and
   the store keeps a reading for five minutes (plan R11). Tablets at the PIN screen count: two
@@ -4419,6 +4422,26 @@ How it moves (A1420 plan D3; A1506 plan row 3):
   second against its own steady clock (`performance.now()`) since it arrived. The cause reaches Box status as
   `clock.waiting.cause`, and the till's `clock.unconfirmed` notice and the dashboard bell's
   `clock.unconfirmed` alert as `params.cause`, which word a jump's wait apart from a start's.
+- **A future-date refusal** (`lookForRefusal` in `apps/server/src/clock-watch.ts`, A1420 PR 2,
+  task 10). Each look, whatever the status, asks the seat's optional
+  `latestFutureDateRefusal?(tx, nodeId, abovePosition)` for the highest sale on this box's chain
+  that AEAT refused with code `1112` (dated in the future), above both the position the latest
+  confirmation's heads hold for this box and the highest refusal an earlier look found while the
+  time service was synchronised; before the first confirmation in a process it asks nothing, so a
+  restart never stops on an older refusal. Such a sale, with the time service not
+  synchronised (a host that does not answer or throws counts as not synchronised), sends the box
+  back to `waiting` with cause `future_date_refused` and the sale's issue date (`refusedOn`), and
+  logs `clock_start.future_date_refused` as a warning (`backToWaitingForRefusal`,
+  `apps/server/src/start-clock-check.ts`). Synchronised, nothing changes, and
+  `clock_start.future_date_refused_synchronised` is logged, naming that highest sale, once for
+  each look that finds one; this process does not look at the refusals up to it again. Two devices
+  agreeing do not end this wait, and a later jump does not replace its cause; a person, on a till
+  or on Box status, or the time service synchronising does. The refusal holds no later record:
+  the drain keeps sending (`packages/fiscal-verifactu/src/drain.future-date.test.ts`). Boot hands
+  the watch this box's chain (`boot.start-clock-gate.test.ts`), and the tests are
+  `apps/server/src/clock-watch.future-date.test.ts`. The cause and `refusedOn` reach the bell's
+  alert, and the cause the till's notice and Box status's **Clock** row, which say the tax agency
+  refused a sale and offer no device count.
 
 A confirmation that sets nothing writes a log line and no row. Each confirmation keeps the chain
 heads it was made at, read through the seat's optional `recordHeads?(tx)` (`packages/fiscal/src/backend.ts`).
@@ -4452,7 +4475,9 @@ any remedy runs (`packages/fiscal-verifactu/src/record-remedy-routes.ts`, `requi
 `apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,
 staff signed in on a till see `clock.unconfirmed`, "Payments wait: the server is waiting for
 devices to connect and agree with its time (… of 2 so far)" (after a jump, "Payments wait: the
-server's clock jumped …"), with “Check the time”, whatever the
+server's clock jumped …"; after AEAT refuses a sale as dated in the future, "The tax agency refused
+a sale because the server's date was ahead. Payments wait until someone checks the time.", with no
+count), with “Check the time”, whatever the
 start-up window says. The PIN screen shows the same line, without the action. The count shows at most 1, since two confirm at the next look. While
 the start waits, the challenge needs no stop and does not ask the start-up window; it
 answers `keepOffered: true` unless the clock reads before 28-10-2024. The
@@ -4495,7 +4520,8 @@ device's steady clock since the read that drew it; it says the time changed and 
 again.
 
 A box whose host service does not answer waits at every start and cannot be set through it, so
-devices or a person confirm its time as it stands (plan D12).
+devices (not in a wait for AEAT's future-date refusal) or a person confirm its time as it stands
+(plan D12).
 
 Guards: `apps/server/src/start-clock-check.test.ts`, `apps/server/src/start-clock-gate.test.ts`,
 `apps/server/src/clock-unconfirmed-gate.test.ts`, `apps/server/src/boot.start-clock-gate.test.ts`,

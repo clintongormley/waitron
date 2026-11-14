@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ClockServiceStatus } from "./box-host-client.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import {
+  backToWaitingForRefusal,
   backToWaitingUnlessSynchronised,
   lookAtClockService,
   startClockAgreed,
@@ -149,6 +150,83 @@ describe("moving between states", () => {
       mark: { "node-a": 4 },
     });
     expect(state.unconfirmed()).toBe(true);
+  });
+});
+
+describe("waiting because AEAT refused a sale as dated in the future", () => {
+  it("keeps that cause and the refused sale's date when sent back to waiting for a jump, and clears the date on confirmation", () => {
+    const state = startClockState();
+    state.confirm("by_person", { "node-a": 4 });
+    state.backToWaiting("future_date_refused", "2027-03-15");
+    state.backToWaiting("clock_jumped");
+    expect(state).toMatchObject({
+      status: "waiting",
+      cause: "future_date_refused",
+      refusedOn: "2027-03-15",
+    });
+    state.confirm("by_person", { "node-a": 6 });
+    expect(state).toMatchObject({ status: "by_person", cause: null, refusedOn: null });
+  });
+
+  it("stays confirmed when a person confirms while the time service is read", async () => {
+    const state = startClockState();
+    state.confirm("by_person", { "node-a": 4 });
+    const clockStatus = vi.fn(async () => {
+      state.confirm("by_person", { "node-a": 6 });
+      return clockServiceAnswer(false);
+    });
+    await expect(
+      backToWaitingForRefusal({ state, clockStatus }, "node-a", {
+        position: 5,
+        issuedOn: "2027-03-15",
+      }),
+    ).resolves.toBe("unchanged");
+    expect(state.status).toBe("by_person");
+  });
+
+  it.each([
+    [
+      "throws",
+      async (): Promise<ClockServiceStatus> => {
+        throw new Error("socket gone");
+      },
+    ],
+    [
+      "answers unavailable",
+      async (): Promise<ClockServiceStatus> => ({ available: false, reason: "timeout" }),
+    ],
+  ])(
+    "notes that the host does not answer when it %s as a box confirmed by the internet goes back to waiting",
+    async (_name, failing) => {
+      const l = look(async () => clockServiceAnswer(true));
+      await startClockCheck(l.deps);
+      expect(l.state).toMatchObject({ status: "by_internet", hostAnswers: true });
+      await expect(
+        backToWaitingForRefusal({ state: l.state, clockStatus: failing }, "node-a", {
+          position: 8,
+          issuedOn: "2027-03-15",
+        }),
+      ).resolves.toBe("moved");
+      expect(l.state).toMatchObject({
+        status: "waiting",
+        cause: "future_date_refused",
+        hostAnswers: false,
+      });
+    },
+  );
+
+  it("notes that the host answers again when it answers unsynchronised", async () => {
+    const state = startClockState();
+    state.confirm("by_person", { "node-a": 4 });
+    state.noteHost(false);
+    await expect(
+      backToWaitingForRefusal(
+        { state, clockStatus: async () => clockServiceAnswer(false) },
+        "node-a",
+        { position: 5, issuedOn: "2027-03-15" },
+      ),
+    ).resolves.toBe("moved");
+    expect(state).toMatchObject({ status: "waiting", hostAnswers: true });
   });
 });
 

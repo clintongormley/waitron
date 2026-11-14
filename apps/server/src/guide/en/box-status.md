@@ -282,7 +282,7 @@ box's clock. Each of these the box accepts restarts payments. When the box sets 
 staff member and the till. When the till's time is used, other devices' readings do not stop it.
 
 Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, once
-the internet has confirmed the box's time, a staff member can no longer set the clock from a till, until its clock jumps and it waits for its time
+the internet has confirmed the box's time, a staff member can no longer set the clock from a till, until its clock jumps, or the tax agency refuses a sale as dated in the future, and it waits for its time
 again.
 
 ## When payments wait for the box's time {#clock-waiting}
@@ -294,8 +294,14 @@ jumps by more than a minute, forwards or back, while it is not kept in time over
 **Clock** row then starts with **The box's clock jumped**, and its time is confirmed in the same
 ways.
 
-The box confirms its time by itself as soon as it reaches the internet, or once two tills or
-handhelds that are switched on and connected agree with its clock, even at the sign-in screen.
+The box also waits when the tax agency refuses a sale as dated in the future while the box is not
+kept in time over the internet: the **Clock** row then starts with **The tax agency refused a
+sale**. Devices agreeing with the box do not end this wait: confirm or correct the time on this page,
+or staff use **Check the time** on a till.
+
+The box confirms its time by itself as soon as it reaches the internet, or, unless it waits because
+of a refused sale, once two tills or handhelds that are switched on and connected agree with its
+clock, even at the sign-in screen.
 
 An administrator can confirm it sooner on this page:
 

@@ -49,6 +49,24 @@ describe("a word-list placeholder", () => {
   it("shows a dash for a list nobody registered, never the value", () => {
     expect(alertMessage("test.unlisted", { shade: "red" }, "en")).toBe("Shade —.");
   });
+
+  it("fills the chosen words' own slots from the alert's params, but not a word list inside them", () => {
+    registerAlertWords({
+      test_dated: {
+        words: {
+          red: { en: "Red since {since:date}, {shade:test_dated}.", es: "ES {since:date}" },
+        },
+        otherwise: { en: "{count} shades.", es: "{count} ES" },
+      },
+    });
+    registerAlertMessages({
+      "test.dated_words": { en: "{shade:test_dated}", es: "{shade:test_dated}" },
+    });
+    const params = { shade: "red", since: "2026-11-02", count: 3 };
+    expect(alertMessage("test.dated_words", params, "en")).toBe("Red since 2 Nov 2026, —.");
+    expect(alertMessage("test.dated_words", params, "es")).toBe("ES 2 nov 2026");
+    expect(alertMessage("test.dated_words", { ...params, shade: "blue" }, "en")).toBe("3 shades.");
+  });
 });
 
 describe("a money placeholder", () => {

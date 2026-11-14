@@ -56,9 +56,13 @@ Esperando a que los dispositivos coincidan con su hora (0 de 2 por ahora) · Com
 rojo. El reloj del servidor se ha movido más de un minuto mientras no se ponía en hora por internet,
 así que los cobros esperan. Vuelven a funcionar de las mismas maneras.
 
+**Hacienda rechazó una venta porque la fecha del servidor iba adelantada. Los cobros esperan hasta
+que alguien compruebe la hora. · Comprobar la hora** es rojo. Que los dispositivos coincidan con el
+servidor no vuelve a activar los cobros: usa **Comprobar la hora**.
+
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
 significa que la hora del servidor está en duda y el servidor no ha podido confirmarla por sí
-mismo. Termina cualquiera de las tres líneas rojas de la hora de arriba. Un cobro rechazado dice
+mismo. Termina cualquiera de las líneas rojas de la hora de arriba. Un cobro rechazado dice
 entonces que uses **Comprobar la hora** arriba de la pantalla. Pulsa **Comprobar la hora** para
 abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo
 cualquiera con la sesión iniciada en la caja.
@@ -69,8 +73,8 @@ la hora de la propia caja.
 - Cuando las dos horas están a más de un minuto, pregunta cuál es la correcta. Pulsa **Este
   dispositivo** si la hora de la caja es la buena: el reloj del servidor se pone a esa hora y se
   puede volver a cobrar. Pulsa **El servidor** si la hora del servidor es la
-  buena: cuando **Los cobros esperan** es la única línea roja de la hora, el servidor mantiene su
-  hora y se puede volver a cobrar; si no, el diálogo te pide que corrijas la hora de la caja, como
+  buena: cuando una línea roja de la hora dice que los cobros esperan y no se muestra **No se
+  pueden registrar ventas**, el servidor mantiene su hora y se puede volver a cobrar; si no, el diálogo te pide que corrijas la hora de la caja, como
   con **Las dos horas están mal**. Pulsa **Las dos horas están mal** si ninguna lo es.
 - Cuando coinciden, pregunta si la hora es correcta. Pulsa **Sí** si lo es; se puede volver a
   cobrar. Pulsa **No** si no lo es.

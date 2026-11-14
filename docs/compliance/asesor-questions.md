@@ -420,6 +420,7 @@ copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were a
   as a duplicate and to a cancellation it never received. Given «no pueden quedar RF generados sin
   remitir a la AEAT» (developer FAQ §5) and the hourly retry (OM art. 16.4), may we hold them, or
   must they be sent? If we may, until when, and what must we keep?
+  *(2026-11-14: since A1420 PR 2, a run of `1112` refusals, a date in the future, holds nothing.)*
 
 **Review list: read, and correct only where we are wrong.**
 
@@ -3687,7 +3688,7 @@ What Waitron does today, in `packages/fiscal-verifactu/src/drain.ts`:
    unknown, a later record not yet sent waits, and goes once that earlier record has its answer.
 2. After three refusals in a row with one code, the chain's next records are held; the first held
    record is sent again once an hour, and an accept or a refusal with another code can release
-   the rest.
+   the rest. *(2026-11-14: since A1420 PR 2, a run of `1112` refusals, a date in the future, holds nothing.)*
 
 After a single refusal, Waitron keeps sending the later records (design D2). Since 2026-10-12 that
 includes a duplicate refusal (3000) where AEAT holds a different or cancelled record under that

@@ -49,8 +49,12 @@ for devices to agree with its time (0 of 2 so far) · Check the time** is red. T
 moved by more than a minute while it was not kept in time over the internet, so payments wait. They
 start again in the same ways.
 
+**The tax agency refused a sale because the server's date was ahead. Payments wait until someone
+checks the time. · Check the time** is red. Devices agreeing with the server do not start payments
+again: use **Check the time**.
+
 **Check the time** at the end of a red clock line, instead of **Tell a manager**, means the server's
-clock is in doubt and the server could not confirm it by itself. It ends any of the three red
+clock is in doubt and the server could not confirm it by itself. It ends any of the red
 clock lines above. A refused payment then says to use **Check the time** at the top
 of the screen. Tap **Check the time** to open its dialog; when another notice shows first, open the
 list and tap it there. Anyone signed in on the till can use it.
@@ -60,8 +64,8 @@ what is sent.
 
 - When the two times are more than a minute apart, it asks which is correct. Press **This device**
   if the till's time is right: the server's clock is set to it and payments start again. Press **The
-  server** if the server's time is right: when **Payments wait** is the only red clock line, the
-  server keeps its time and payments start again; otherwise the dialog asks you to correct the
+  server** if the server's time is right: when a red clock line says payments wait and **Sales
+  can't be recorded** is not shown, the server keeps its time and payments start again; otherwise the dialog asks you to correct the
   till's time, as it does for **Both times are wrong**. Press **Both times are wrong** if neither
   is.
 - When they agree, it asks whether the time is correct. Press **Yes** if it is; payments start

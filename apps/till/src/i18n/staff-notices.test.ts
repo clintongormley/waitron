@@ -52,11 +52,29 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
   it.each([
     ["start", "staff_notice.clock.unconfirmed"],
     ["clock_jumped", "staff_notice.clock.unconfirmed_jumped"],
+    ["future_date_refused", "staff_notice.clock.unconfirmed_future_date"],
   ] as const)("words the wait by its cause %s, with its count", (cause, key) => {
     setLocale(locale);
     expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1, cause } })).toEqual({
       main: words[key].replace("{agreed}", "1"),
       hint: words["staff_notice.tell_manager"],
+    });
+  });
+
+  it("words a wait after a future-date refusal with no device count, and Check the time", () => {
+    setLocale(locale);
+    const notice = {
+      code: "clock.unconfirmed",
+      params: { agreed: 1, cause: "future_date_refused" },
+    };
+    expect(staffNoticeText(notice, true)).toEqual({
+      main: {
+        "en-GB":
+          "The tax agency refused a sale because the server's date was ahead. Payments wait until someone checks the time.",
+        "es-ES":
+          "Hacienda rechazó una venta porque la fecha del servidor iba adelantada. Los cobros esperan hasta que alguien compruebe la hora.",
+      }[locale],
+      hint: words["staff_notice.check_time"],
     });
   });
 

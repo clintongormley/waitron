@@ -11,11 +11,14 @@ export interface StartClockWaiting {
   hostAnswers: boolean;
   /** The state's cause, which is never null while it waits. */
   cause: StartClockCause | null;
+  /** The refused sale's issue date (`YYYY-MM-DD`), only while AEAT's future-date refusal is the
+   * cause. */
+  refusedOn?: string;
 }
 
 /** Null unless this box files records and its start check waits. */
 export function startClockWaiting(deps: {
-  state: Pick<StartClockState, "unconfirmed" | "hostAnswers" | "cause">;
+  state: Pick<StartClockState, "unconfirmed" | "hostAnswers" | "cause" | "refusedOn">;
   filesRecords: () => boolean;
   witnesses: Pick<ClockWitnessStore, "witnesses">;
 }): StartClockWaiting | null {
@@ -24,6 +27,7 @@ export function startClockWaiting(deps: {
     agreed: startClockAgreed(deps.witnesses.witnesses()),
     hostAnswers: deps.state.hostAnswers,
     cause: deps.state.cause,
+    ...(deps.state.refusedOn === null ? {} : { refusedOn: deps.state.refusedOn }),
   };
 }
 
@@ -41,7 +45,12 @@ export function clockUnconfirmedAlertSource(waiting: () => StartClockWaiting | n
           severity: "error",
           since: null,
           screen: "box-status",
-          params: { agreed: now.agreed, hostSilent: !now.hostAnswers, cause: now.cause },
+          params: {
+            agreed: now.agreed,
+            hostSilent: !now.hostAnswers,
+            cause: now.cause,
+            ...(now.refusedOn === undefined ? {} : { refusedOn: now.refusedOn }),
+          },
         },
       ]);
     },

@@ -306,7 +306,7 @@ correo nombran al empleado y a la caja. Cuando se usa la hora de la caja, las le
 dispositivos no lo impiden.
 
 El arranque termina en cuanto el servidor ve que el reloj ya no para los cobros. Desde entonces, en cuanto
-internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja, hasta que su reloj salte y vuelva a esperar su
+internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja, hasta que su reloj salte, o Hacienda rechace una venta por tener fecha futura, y vuelva a esperar su
 hora.
 
 ## Cuando los cobros esperan la hora del servidor {#clock-waiting}
@@ -318,8 +318,14 @@ que lo dice. El servidor también espera cuando su reloj salta más de un minuto
 atrás, mientras no se pone en hora por internet: la fila **Reloj** empieza entonces con **El reloj
 del servidor ha saltado**, y su hora se confirma de las mismas maneras.
 
-El servidor confirma su hora solo en cuanto llega a internet, o en cuanto dos cajas o terminales
-encendidos y conectados coinciden con su reloj, aunque estén en la pantalla de inicio de sesión.
+El servidor también espera cuando Hacienda rechaza una venta por tener fecha futura mientras el servidor
+no se pone en hora por internet: la fila **Reloj** empieza entonces con **Hacienda rechazó una
+venta**. Que los dispositivos coincidan con el servidor no termina esta espera: confirma o corrige la
+hora en esta página, o el personal usa **Comprobar la hora** en una caja.
+
+El servidor confirma su hora solo en cuanto llega a internet, o, salvo si espera por una venta
+rechazada, en cuanto dos cajas o terminales encendidos y conectados coinciden con su reloj, aunque
+estén en la pantalla de inicio de sesión.
 
 Un administrador puede confirmarla antes en esta página:
 

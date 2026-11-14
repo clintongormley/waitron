@@ -1,5 +1,5 @@
 import type { Transaction } from "@waitron/db";
-import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { FiscalBackend, FutureDateRefusal, TrustedClock } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
 import { bootReader } from "./boot-reader.js";
 import type { ClockServiceStatus } from "./box-host-client.js";
@@ -9,6 +9,7 @@ import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
 import type { JobDefinition } from "./job-runner.js";
 import {
+  backToWaitingForRefusal,
   backToWaitingUnlessSynchronised,
   lookAtClockService,
   type ChainHeads,
@@ -42,6 +43,14 @@ export function createClockWatch(deps: {
     /** Forgets a cached `clockStatus` reading, which may predate a jump. */
     clearClockStatus?: () => void;
     heads: (tx: Transaction) => Promise<ChainHeads>;
+    /** This box's chain and the latest sale on it above a position that AEAT refused as dated in
+     * the future. At each look, whatever the status, such a refusal of a sale recorded since the
+     * latest confirmation, and above any refusal an earlier look found while the time service was
+     * synchronised, sends the box back to waiting unless the time service is synchronised. */
+    futureDateRefusal?: {
+      nodeId: string;
+      latest: (tx: Transaction, abovePosition: number) => Promise<FutureDateRefusal | null>;
+    };
   };
   log: Logger;
   wall?: () => number;
@@ -59,6 +68,9 @@ export function createClockWatch(deps: {
   /** The reading a jump took is not served to the next look, so a service that synchronises
    * just after the jump is seen then rather than a minute later. */
   let freshAfterJump = false;
+  /** The highest refused position judged while the time service was synchronised: handled, so
+   * a later look never sends the box back to waiting for it. */
+  let judgedSynchronised = 0;
 
   function recordable(): boolean {
     try {
@@ -103,6 +115,25 @@ export function createClockWatch(deps: {
     });
   }
 
+  async function lookForRefusal(): Promise<void> {
+    const start = deps.start;
+    const refusals = start?.futureDateRefusal;
+    if (start === undefined || refusals === undefined) return;
+    const { state } = start;
+    if (state.mark === null) return;
+    if (state.status === "waiting" && state.cause === "future_date_refused") return;
+    const above = Math.max(state.mark[refusals.nodeId] ?? 0, judgedSynchronised);
+    const refusal = await deps.read((tx) => refusals.latest(tx, above));
+    if (refusal === null || stopped) return;
+    const outcome = await backToWaitingForRefusal(start, refusals.nodeId, refusal);
+    const fields = { position: refusal.position, issuedOn: refusal.issuedOn };
+    if (outcome === "moved") deps.log("warn", "clock_start.future_date_refused", fields);
+    if (outcome === "synchronised") {
+      judgedSynchronised = refusal.position;
+      deps.log("warn", "clock_start.future_date_refused_synchronised", fields);
+    }
+  }
+
   /** In the correction's turn, so no set moves the clock between the readings and its count. A
    * jump sends a box whose time service is not synchronised back to waiting. */
   async function lookForJump(): Promise<void> {
@@ -129,6 +160,12 @@ export function createClockWatch(deps: {
   async function check(): Promise<void> {
     try {
       await lookForStart();
+    } catch (error) {
+      deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+    }
+    if (stopped) return;
+    try {
+      await lookForRefusal();
     } catch (error) {
       deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
     }

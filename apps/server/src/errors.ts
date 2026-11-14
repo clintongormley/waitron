@@ -1701,12 +1701,13 @@ declare module "@waitron/shared" {
      * `unverified`, it moved further, but the box could not confirm it landed where it was asked
      * to. */
     "clock.set_failed": { reason: "refused" | "unverified" };
-    /** The box has not confirmed its time since this start, so it writes no fiscal record and
-     * takes or gives back no money until the time service, two devices or a person confirms it.
-     * Thrown as a refusal with no values. Built as data with `agreed`, how many devices agree with
-     * the box so far (`startClockAgreed`), by the clock-unconfirmed alert source and the till's
-     * clock-check notice source; the alert source adds `hostSilent`, that the start's latest look
-     * could not hear the box's clock service. */
+    /** The box waits to confirm its time, for a `StartClockCause`. The time service or a person
+     * ends any wait; two devices end all but `future_date_refused`. Thrown as a refusal with no
+     * values. The clock-unconfirmed alert source and the till's clock-check notice source build it
+     * as data, typed as a plain record rather than through this map: both send `agreed`
+     * (`startClockAgreed`) and `cause`; the alert source adds `hostSilent`, that the start check's latest
+     * read of the box's clock service went unanswered, and, for `future_date_refused`, `refusedOn`,
+     * the refused sale's issue date. */
     "clock.unconfirmed": { agreed?: number; hostSilent?: boolean };
     /** The box's host service cannot take this request: `missing`, no connection to its socket
      * was made (`detail` is the connection error's code); `unsupported`, the host does not take the

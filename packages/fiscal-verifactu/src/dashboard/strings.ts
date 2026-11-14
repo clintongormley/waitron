@@ -295,7 +295,7 @@ const en = {
   "fiscal_filing.cause.fiscal.huella_divergente": "AEAT holds a different record",
   "fiscal_filing.cause.fiscal.duplicado_anulado": "Cancelled at AEAT",
   "fiscal_filing.now.fiscal.registro_rechazado":
-    "Later records are still sent. After three refusals in a row with the same code, the records after them are held and the first is tried again every hour.",
+    "Later records are still sent. After three refusals in a row with the same code, other than a date in the future, the records after them are held and the first is tried again every hour.",
   "fiscal_filing.now.fiscal.aceptado_con_errores":
     "AEAT stored this record and counts it as accepted, with the error above.",
   "fiscal_filing.now.fiscal.anulacion_retenida":
@@ -649,7 +649,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.cause.fiscal.huella_divergente": "La AEAT tiene otro registro",
   "fiscal_filing.cause.fiscal.duplicado_anulado": "Anulada en la AEAT",
   "fiscal_filing.now.fiscal.registro_rechazado":
-    "Los registros posteriores se siguen enviando. Tras tres rechazos seguidos con el mismo código, los registros siguientes se detienen y el primero se vuelve a intentar cada hora.",
+    "Los registros posteriores se siguen enviando. Tras tres rechazos seguidos con el mismo código, salvo por una fecha futura, los registros siguientes se detienen y el primero se vuelve a intentar cada hora.",
   "fiscal_filing.now.fiscal.aceptado_con_errores":
     "La AEAT guardó este registro y lo cuenta como aceptado, con el error indicado.",
   "fiscal_filing.now.fiscal.anulacion_retenida":

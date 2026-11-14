@@ -72,6 +72,38 @@ describe("clock.unconfirmed", () => {
     });
   });
 
+  it("carries the refused sale's date when AEAT refused a sale as dated in the future", async () => {
+    const state = startClockState();
+    state.confirm("by_person", {});
+    state.backToWaiting("future_date_refused", "2026-11-14");
+    const waiting = startClockWaiting({
+      state,
+      filesRecords: () => true,
+      witnesses: createClockWitnessStore({ wall: () => BOX_MS, monotonic: () => 0 }),
+    });
+    expect(waiting).toEqual({
+      agreed: 0,
+      hostAnswers: true,
+      cause: "future_date_refused",
+      refusedOn: "2026-11-14",
+    });
+    expect(await read(waiting)).toEqual([
+      {
+        key: "clock.unconfirmed",
+        code: "clock.unconfirmed",
+        severity: "error",
+        since: null,
+        screen: "box-status",
+        params: {
+          agreed: 0,
+          hostSilent: false,
+          cause: "future_date_refused",
+          refusedOn: "2026-11-14",
+        },
+      },
+    ]);
+  });
+
   it.each([
     ["once the start is confirmed", true, true],
     ["on a box that files no records", false, false],

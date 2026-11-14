@@ -134,6 +134,11 @@ function clockOff(id: PartId, health: BoxHealth): boolean {
   return id === "clock" && health.clock.authority.state === "warning";
 }
 
+const WAITING_LINES: Readonly<Record<string, StringKey>> = {
+  clock_jumped: "box_status.clock.waiting_jumped",
+  future_date_refused: "box_status.clock.waiting_future_date",
+};
+
 function lineOf(
   id: PartId,
   health: BoxHealth,
@@ -154,13 +159,18 @@ function lineOf(
   if (words !== undefined) return t(STOPPED_WORDS[words.code]!);
   const waiting = id === "clock" ? health.clock.waiting : undefined;
   if (waiting !== undefined) {
-    const jumped = waiting.cause === "clock_jumped";
-    const line = fill(jumped ? "box_status.clock.waiting_jumped" : "box_status.clock.waiting", {
+    const key = WAITING_LINES[waiting.cause ?? "start"] ?? "box_status.clock.waiting";
+    const line = fill(key, {
       agreed: String(waiting.agreed),
       boxAt: formatIsoMinute(waiting.boxAt),
     });
     if (waiting.hostAnswers) return line;
-    return `${line} ${t(jumped ? "box_status.clock.waiting_host_silent_jumped" : "box_status.clock.waiting_host_silent")}`;
+    // Only the start's wait happens at every start.
+    const silent =
+      key === "box_status.clock.waiting"
+        ? "box_status.clock.waiting_host_silent"
+        : "box_status.clock.waiting_host_silent_jumped";
+    return `${line} ${t(silent)}`;
   }
   const first = alerts[0];
   if (notices.length === 0 && first !== undefined)

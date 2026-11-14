@@ -14,10 +14,11 @@ const FIXED = {
   "clock.check_time": "staff_notice.clock.check_time",
 } as const;
 
-/** The causes of a wait the till words; any other, `future_date_refused` included, is unknown. */
+/** The causes of a wait the till words; any other is unknown. */
 const WAIT_CAUSES = {
   start: "staff_notice.clock.unconfirmed",
   clock_jumped: "staff_notice.clock.unconfirmed_jumped",
+  future_date_refused: "staff_notice.clock.unconfirmed_future_date",
 } as const;
 
 function unknownText(): { main: string; hint: string } {

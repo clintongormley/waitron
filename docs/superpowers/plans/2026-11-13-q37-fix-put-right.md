@@ -262,6 +262,8 @@ the corrective included; its hourly probe releases the chain once a later, corre
 accepted (`drain.ts:786-822`) **(read)**. `release-brake` staying off delays a corrective by up to
 an hour; it does not block it.
 
+_2026-11-14: since A1420 PR 2, a run of `1112` refusals starts no hold._
+
 **A clock that ran ahead.** A `1112` case exists because the box's clock was ahead, so the chain's
 newest record can be dated later than now. Until real time passes it, `prepareIssueClock` refuses
 the replacement with `clock.behind_chain` (called at `record-remedy-corrective.ts:133`; the route
