@@ -153,6 +153,13 @@ describe("Opening hours year", () => {
     expect(runs).toEqual([
       { date: "2027-01-20", dates: ["2027-01-20", "2027-01-21", "2027-01-22"] },
     ]);
+    await userEvent.click(bar!.querySelector<HTMLElement>('[data-test="clear-selection"]')!);
+    await el.updateComplete;
+    expect(root(el).querySelector('[data-test="selection-bar"]')).toBeNull();
+    expect(pressed(el)).toEqual([]);
+    expect(root(el).activeElement?.closest<HTMLElement>("[data-date]")?.dataset.date).toBe(
+      "2027-01-22",
+    );
   });
 
   it("draws twelve Monday-first months holding only their own dates", async () => {

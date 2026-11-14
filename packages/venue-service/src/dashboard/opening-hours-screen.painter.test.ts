@@ -1162,7 +1162,7 @@ describe("the Calendar window address", () => {
         overPainter ? origin.replace("/window/periods", "") : origin,
       );
       if (overPainter) {
-        const painter = await shownPainter(el);
+        await shownPainter(el);
         requestCalendarWindow(el, "periods");
       }
       const guard = screenGuard(() => app);

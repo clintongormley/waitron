@@ -336,11 +336,17 @@ describe("a new special day", () => {
     await typeName(painter, "Autumn outing");
     painter.initialDates = ["2026-10-23", "2026-10-20"];
     await settle(painter);
-    expect(painter.shadowRoot!.querySelector("wt-input[name=name]")!.value).toBe("Autumn outing");
+    expect(
+      painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+        .value,
+    ).toBe("Autumn outing");
     painter.initialDates = ["2026-10-20", "2026-10-27"];
     await settle(painter);
     expect(chips(painter)).toEqual(["2026-10-20", "2026-10-27"]);
-    expect(painter.shadowRoot!.querySelector("wt-input[name=name]")!.value).toBe("");
+    expect(
+      painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+        .value,
+    ).toBe("");
   });
 
   it("a new day on a run takes the first date's holiday name", async () => {

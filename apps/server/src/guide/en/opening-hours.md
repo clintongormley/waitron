@@ -2,7 +2,7 @@
 
 ## Select days together {#select-days}
 
-In Year or Month, select a run with Shift-click and add separate dates with Cmd-click (Ctrl-click on Windows), or tap dates on your phone while the selection bar shows, then choose **Make a special day**.
+In Year or Month, select a run with Shift-click and add separate dates with Cmd-click (Ctrl-click on Windows). On a phone, press and hold a date, then drag to pick a run. While the selection bar shows, tap dates to add or remove them, then choose **Make a special day**.
 
 ## Holiday names {#holiday-names}
 
