@@ -342,15 +342,16 @@ speed gain or the four-minute goal; any
 remaining product-editor, product-list or menu cut still needs a demonstrated cause.
 The 12 November diagnosis traced the warm-cache rebuild to a cache writer without
 compiler tools. The root pnpm setting now skips the optional `cpu-features` and
-`ssh2` native builds. Keep the coverage-on whole-job comparison and the observed
-35-second archiver wait open; removing compilation alone does not measure a speed gain.
+`ssh2` native builds. The retained hosted qualification now measures the install without those native builds; see
+[the archiver evidence](#a1398-2-archiver-evidence). Keep the whole-job target separate from
+that install measurement.
 Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
 cause and its measurement to the watcher before splitting files or changing capacity.
 
 Dashboard uses six shards. The [14 November plan](../superpowers/plans/2026-11-14-a1398-next-browser-cut.md)
 records the measured dashboard/till baseline and the rationale for that count.
-The [parties task-wait cut](../superpowers/plans/2026-11-14-a1398-till-task-waits.md) replaces its repeated zero-delay timers with MessageChannel task turns, retaining the original assertions, rounds, fake timers and explicit waits. Judge the four-minute goal by healthy hosted whole-job timings; keep any remaining gap and the archiver wait open.
+The [parties task-wait cut](../superpowers/plans/2026-11-14-a1398-till-task-waits.md) replaces its repeated zero-delay timers with MessageChannel task turns, retaining the original assertions, rounds, fake timers and explicit waits. Judge the four-minute goal by healthy hosted whole-job timings; keep any remaining whole-job gap open. The historical archive-command interval is recorded below.
 
 ## Bundle A1398: Pack the other packages' test shards by measured time
 
@@ -527,6 +528,28 @@ The remaining work concerns live routing qualification and the action-repository
   Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
 
 ## Decisions and deliberate limits
+
+### A1398-2 archiver evidence
+
+The 34.972-second silent interval in [run 43034947887, till job 5](https://github.com/clintongormley/waitron/actions/runs/43034947887/job/130571604284)
+starts at `2026-11-11T14:21:08.2987746Z`, when `cpu-features` prints its `ar crs`
+command, and ends at `14:21:43.2702952Z`, when the same optional build prints
+`COPY Release/cpu_features.a`. The log locates the interval inside that native
+build; it has no process sample establishing what the archiver waited on.
+
+[PR #2955](https://github.com/clintongormley/waitron/pull/2955) disabled the optional
+`cpu-features` and `ssh2` builds. In retained hosted full run
+[43572788079, attempt 2](https://github.com/clintongormley/waitron/actions/runs/43572788079/attempts/2),
+all seven till install steps took four seconds at the API's one-second resolution.
+Each install log reports both build scripts ignored and contains no native-build
+output or `ar crs` command. The watcher accepted this run's till measurement on
+14 November at 09:44: whole till jobs took 189–221 seconds, with 3–9-second
+checkouts. The unrelated merge job's 14-second checkout was explicitly accepted
+for that measurement.
+
+You do not need another archiver change to remove this recorded build path. Its
+historical wait cause remains unknown; these observations do not measure a
+35-second saving attributable to the archiver alone or qualify every CI job.
 
 - **A1473 point 4 and reverse movement were dropped by the owner on 13 November 2026.** Reopen only after a measured stall leaves a job waiting with free room for a reason other than a refusal or a recorded turn (watcher, 09:55).
 
