@@ -511,11 +511,16 @@ it("keeps refund evidence in the audit and never sends or changes financial rows
   expect(refund).not.toHaveBeenCalled();
 });
 
-it.each([false, true])(
+it.each([false, true, "midnight"])(
   "reads a locally recorded backup refund through its known charge (historical=%s)",
   async (historical) => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
-    const capturedAt = historical ? "2026-06-01T12:00:00.000Z" : "2026-07-01T12:00:00.000Z";
+    const capturedAt =
+      historical === "midnight"
+        ? "2026-06-01T23:59:00.000Z"
+        : historical
+          ? "2026-06-01T12:00:00.000Z"
+          : "2026-07-01T12:00:00.000Z";
     await withTransaction(suite.db, async (tx) => {
       await insertCapturedPayment(tx, {
         provider: "manual",
@@ -535,18 +540,18 @@ it.each([false, true])(
       });
       await tx.execute(sql`update payment_refunds set created_at = '2026-07-01T13:00:00.000Z'`);
       if (historical)
-        await tx
-          .insert(scheduledRuns)
-          .values({
-            duty: "payments.reconcile.sumup",
-            periodFrom: "2026-06-01T00:00:00.000Z",
-            periodTo: "2026-06-02T00:00:00.000Z",
-            generation: 0,
-            state: "succeeded",
-            summary: {
-              backupMatches: [{ paymentRef: "backup-return", references: ["backup-charge"] }],
-            },
-          });
+        await tx.insert(scheduledRuns).values({
+          duty: "payments.reconcile.sumup",
+          periodFrom:
+            historical === "midnight" ? "2026-06-02T00:00:00.000Z" : "2026-06-01T00:00:00.000Z",
+          periodTo:
+            historical === "midnight" ? "2026-06-03T00:00:00.000Z" : "2026-06-02T00:00:00.000Z",
+          generation: 0,
+          state: "succeeded",
+          summary: {
+            backupMatches: [{ paymentRef: "backup-return", references: ["backup-charge"] }],
+          },
+        });
     });
     const client = new FakeSumUp();
     vi.spyOn(client, "historyPage").mockResolvedValue({
@@ -563,16 +568,14 @@ it.each([false, true])(
             },
           ],
     });
-    const find = vi
-      .spyOn(client, "findTransaction")
-      .mockResolvedValue({
-        id: "backup-charge",
-        status: "SUCCESSFUL",
-        amount: decimal("10.00"),
-        currency: "EUR",
-        timestamp: capturedAt,
-        refundEvents: [],
-      });
+    const find = vi.spyOn(client, "findTransaction").mockResolvedValue({
+      id: "backup-charge",
+      status: "SUCCESSFUL",
+      amount: decimal("10.00"),
+      currency: "EUR",
+      timestamp: capturedAt,
+      refundEvents: [],
+    });
     const result = await new SumUpReconciler({
       db: suite.db,
       resolveClient: async () => client,

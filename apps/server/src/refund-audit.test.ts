@@ -114,10 +114,11 @@ describe("refund comparison", () => {
       checkedAt: "2026-07-04T00:05:00.000Z",
       parents: [{ processorRef: "charge", events: [], issue: "not_found" }],
     };
-    expect(refundAudit(period, history, [row()])).toMatchObject({
-      complete: false,
-      exceptions: expect.arrayContaining([expect.objectContaining({ reason: "not_found" })]),
-    });
+    for (const current of [row(), { ...row(), state: "voided" as const, refunds: [] }])
+      expect(refundAudit(period, history, [current])).toMatchObject({
+        complete: false,
+        exceptions: expect.arrayContaining([expect.objectContaining({ reason: "not_found" })]),
+      });
   });
   it("selects the latest generation and detects missing UTC coverage on the venue day", () => {
     const history = runs();
@@ -164,10 +165,11 @@ it("does not call an unexamined refund missing at SumUp", () => {
       summary: { ...run.summary, refundEvidence: { ...run.summary.refundEvidence, parents: [] } },
     })),
   ]) {
-    expect(refundAudit(period, history, [row()])).toMatchObject({
-      complete: false,
-      exceptions: [{ reason: "not_checked" }],
-    });
+    for (const current of [row(), { ...row(), state: "voided" as const, refunds: [] }])
+      expect(refundAudit(period, history, [current])).toMatchObject({
+        complete: false,
+        exceptions: [{ reason: "not_checked" }],
+      });
   }
 });
 
@@ -188,6 +190,26 @@ it("clips a failed lookup to its known local refund day", () => {
       { ...row(), refunds: [{ ...row().refunds[0]!, createdAt: "2026-07-01T03:00:00.000Z" }] },
     ]),
   ).toMatchObject({ complete: true, exceptions: [] });
+  expect(refundAudit(period, history, [])).toMatchObject({
+    complete: false,
+    exceptions: [{ reason: "not_found", providerAt: null }],
+  });
+  expect(
+    refundAudit(
+      period,
+      history.map((run) => ({
+        ...run,
+        summary: {
+          ...run.summary,
+          refundEvidence: {
+            ...run.summary.refundEvidence,
+            parents: [{ ...run.summary.refundEvidence.parents[0]!, observedAt: [at] }],
+          },
+        },
+      })),
+      [],
+    ).exceptions,
+  ).toMatchObject([{ providerAt: at }]);
 });
 it("shows a recorded void even when the provider has no refund event", () => {
   expect(
@@ -219,5 +241,17 @@ it("keeps two unidentified equal refunds distinct without repeating a padded UTC
       refundEvidence: { complete: false, checkedAt: at, parents: [unknown, unknown] },
     },
   }));
-  expect(refundAudit(period, history, []).exceptions).toHaveLength(2);
+  const older = {
+    ...history[0]!,
+    periodFrom: "2026-06-01T00:00:00.000Z",
+    periodTo: "2026-06-02T00:00:00.000Z",
+    summary: {
+      refundEvidence: {
+        complete: false,
+        checkedAt: at,
+        parents: [{ ...unknown, unidentified: { amount: "3.00", at: null } }],
+      },
+    },
+  };
+  expect(refundAudit(period, [...history, older], []).exceptions).toHaveLength(2);
 });

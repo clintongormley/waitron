@@ -3321,7 +3321,7 @@ it.each(["sumup", "manual"])(
       externalRef: provider === "manual" ? "machine-operation" : "refund-charge",
       amount: 1000,
       state: "captured",
-      settledAt: "2026-06-01T12:00:00.000Z",
+      settledAt: provider === "manual" ? "2026-06-01T23:59:00.000Z" : "2026-06-01T12:00:00.000Z",
     });
     for (const day of ["2026-07-01", "2026-07-02"])
       await suite.db.insert(scheduledRuns).values({
@@ -3346,19 +3346,17 @@ it.each(["sumup", "manual"])(
         },
       });
     if (provider === "manual")
-      await suite.db
-        .insert(scheduledRuns)
-        .values({
-          duty: "payments.reconcile.sumup",
-          periodFrom: "2026-06-01T00:00:00.000Z",
-          periodTo: "2026-06-02T00:00:00.000Z",
-          generation: 0,
-          state: "succeeded",
-          summary: {
-            backupMatches: [{ paymentRef: "refund-payment", references: ["refund-charge"] }],
-            refundEvidence: { complete: true, checkedAt: "2026-06-02T00:05:00.000Z", parents: [] },
-          },
-        });
+      await suite.db.insert(scheduledRuns).values({
+        duty: "payments.reconcile.sumup",
+        periodFrom: "2026-06-02T00:00:00.000Z",
+        periodTo: "2026-06-03T00:00:00.000Z",
+        generation: 0,
+        state: "succeeded",
+        summary: {
+          backupMatches: [{ paymentRef: "refund-payment", references: ["refund-charge"] }],
+          refundEvidence: { complete: true, checkedAt: "2026-06-02T00:05:00.000Z", parents: [] },
+        },
+      });
     const read = async () => {
       const response = await app.request("/management-api/payments/backup-audit?day=2026-07-02", {
         headers: { cookie: venue.managerCookie, "x-waitron-live": "1" },
