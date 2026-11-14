@@ -33,12 +33,14 @@ vi.mock("./till-api.js", async (original) => {
 
 vi.mock("./stripe-account.js", async (original) => {
   const actual = await original<typeof import("./stripe-account.js")>();
-  const { FakeStripeReport } =
-    await import("../../../packages/payments-stripe/src/testing/fake-stripe-report.js");
   return {
     ...actual,
     stripeAccountResolver: () => async () => ({
-      report: new FakeStripeReport(),
+      report: {
+        listSettlements: async () => [],
+        listCheckoutSessions: async () => [],
+        paymentIntentForSession: async () => null,
+      },
       refund: {
         refund: async () => {
           throw new Error("unexpected refund");
