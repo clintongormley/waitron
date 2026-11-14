@@ -155,6 +155,13 @@ describe("foldInserts", () => {
     },
   );
 
+  it("removes a raw insert with only the folded key and stays unchanged on a second pass", () => {
+    const source = "await tx.execute(sql`insert into policies (zone_id) values (${Z})`);";
+    const out = foldInserts(source, path, [rule]);
+    expect(out).toEqual({ text: "", reports: [] });
+    expect(foldInserts(out.text, path, [rule])).toEqual(out);
+  });
+
   it.each([
     "insert into policies (zone_id, enabled) values (${zone}, coalesce(1, 0))",
     "insert into policies (zone_id, enabled) values (${zone})",

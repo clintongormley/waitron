@@ -432,6 +432,11 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
   only 14.224 s before the 420 s shard deadline, so that report does not establish a recovery-hour hang.
   Keep diagnostics on. On recurrence, retain the assertion trace and unfinished-file/process report
   before retrying; locate the pending operation before changing test or product behaviour.
+  Recurrence on 14 November: [run 43604245865, job 132475525462](https://github.com/clintongormley/waitron/actions/runs/43604245865/job/132475525462)
+  failed the same first-hour key-only PDF case before the deadline; the deadline again prevented
+  Vitest's final assertion trace. The complete failed log and process report are retained in lane E's
+  `receipts/a1308-5h/ci-rebased-fiscal.log`. History verification passed in 311.4 s; recovery-reader
+  began 20.8 s before the deadline. The unchanged first-hour file passed all 142 cases locally.
 - **The unexplained dashboard heading-order failure remains open** after #350. The
   `dashboard-app.a11y.test.ts` heading-order sighting is a different rule with no colour evidence,
   so nothing here explains it — treat it as still unexplained.
