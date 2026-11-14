@@ -1,8 +1,8 @@
 # Remisión a la AEAT
 
 **Remisión a la AEAT** muestra cómo se envían a la AEAT, la agencia tributaria, los registros de
-facturación de este servidor y cuáles necesitan una decisión. No envía nada por sí sola; desde un
-caso, un administrador puede enviar la única subsanación que ofrece.
+facturación de este servidor y cuáles necesitan una decisión. No envía nada por sí sola; un
+administrador puede enviar una subsanación desde un caso que la ofrezca.
 
 ## Abre la página {#open}
 

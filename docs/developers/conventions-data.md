@@ -6844,5 +6844,5 @@ rule, guard and pointer.
 > `clock-unconfirmed-gate.test.ts` lists, on a seat wrapped as boot wraps it, and one cash sale
 > through boot; the record remedies, off in production, are outside it.
 
-_2026-11-14 (Q37-FIX): production now enables the correction record; its route asks the start's
+_2026-11-14 (Q37-FIX): production now enables the correction record, for rejected records only; its route asks the start's
 gate, and `boot.start-clock-gate.test.ts` sends one correction-record request through boot._

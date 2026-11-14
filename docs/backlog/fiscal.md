@@ -429,7 +429,7 @@ resolution and the real AEAT second-correction proof remain part of Task 8 befor
 Of the disputed production remedies, the corrective invoice (the replacement) waits on Q37-FIX
 Task 3, which waits on the owner's answers to questions A–E (lane L, 2026-11-14); the others stay
 disabled pending Q35/Q38/Q40 or a case-specific owner decision. Q37-FIX enables the correction
-record.
+record for rejected records only.
 
 **1 November 2026, Task 8 receipt replay check.** The receipt lookup explicitly selects the
 original issued alta by its empty correction link. `record-version-receipt.test.ts` stores
@@ -593,7 +593,8 @@ refund operations; all production remedies remain disabled. _2026-11-11: a chang
 total or correction amount is now refused with `fiscal.remedy_amount_changed`, before the saved
 decision is compared; a changed tax type, regime, taxed or not-subject class or exemption reason on
 a breakdown line is refused with `fiscal.remedy_class_changed` at the same point; see [A1481](#a1481-a-fix-never-changes-an-invoices-amounts-owner-2026-11-11)._
-_2026-11-14: Q37-FIX enables the correction record in production; see the W41s entry. A changed
+_2026-11-14: Q37-FIX enables the correction record in production, for rejected records only; see
+the W41s entry. A changed
 issuer name is refused with `fiscal.remedy_issuer_changed`; a changed invoice type, recipients,
 correction type, corrected invoice or replaced invoice, or null for one the record carries, with
 `fiscal.remedy_printed_fact_changed`._
@@ -1118,7 +1119,7 @@ or exemption reason) is refused too, with `fiscal.remedy_class_changed` when its
 unchanged; a line whose amounts also changed is refused with `fiscal.remedy_amount_changed` first
 (owner, 2026-11-11, "Yes"; a missing tax type counts as IVA).
 
-### Q37-FIX: a correction record changes only the description (owner, 2026-11-13)
+### Q37-FIX: a correction record changes only the description (owner 2026-11-13, watcher 2026-11-14)
 
 The Fiscal filing page offers a correction record only for a record AEAT refused with code `1100`,
 and the server refuses a new issuer name through it with `fiscal.remedy_issuer_changed` (owner's
