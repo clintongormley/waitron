@@ -12,7 +12,7 @@ const row = (id: string | null = "r1", amount = "2.35"): RefundAuditRow => ({
   externalMachine: null,
   state: "partially_refunded",
   settledAt: "2026-06-01T12:00:00.000Z",
-  stateUpdatedAt: at,
+  updatedAt: at,
   refunds: [{ id: "local-r1", providerRefundRef: id, amount: amount as never, createdAt: at }],
 });
 const event = (id = "r1", amount = "2.35", time = at) => ({ id, amount, at: time });

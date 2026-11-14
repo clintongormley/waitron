@@ -78,8 +78,10 @@ export function refundAudit(
     for (const parent of evidence?.parents ?? []) {
       if (parent.unidentified) {
         if (
-          parent.unidentified.at === null ||
-          (parent.unidentified.at >= run.periodFrom && parent.unidentified.at < run.periodTo)
+          run.periodFrom < to &&
+          run.periodTo > from &&
+          (parent.unidentified.at === null ||
+            (parent.unidentified.at >= run.periodFrom && parent.unidentified.at < run.periodTo))
         )
           unidentified.push(parent.unidentified);
         continue;
@@ -157,7 +159,11 @@ export function refundAudit(
     const used = new Set<(typeof claims)[number]>();
     const ambiguous = new Set<(typeof claims)[number]>();
     const events = parent?.events ?? [];
-    if (parent === undefined && claims.some((claim) => inside(claim.local.createdAt)))
+    if (
+      parent === undefined &&
+      (claims.some((claim) => inside(claim.local.createdAt)) ||
+        own.some((row) => row.state === "voided" && inside(row.updatedAt)))
+    )
       result.complete = false;
     for (const event of events) {
       const exact = claims.filter((claim) => claim.local.providerRefundRef === event.id);
@@ -211,7 +217,7 @@ export function refundAudit(
         result.exceptions.push({ ...blank(id, claim.row, claim.local), reason: "ambiguous" });
     if (events.length === 0 && parent?.issue === undefined)
       for (const row of own)
-        if (row.state === "voided" && inside(row.stateUpdatedAt))
+        if (row.state === "voided" && inside(row.updatedAt))
           result.exceptions.push({ ...blank(id, row), reason: parent ? "void" : "not_checked" });
     for (const claim of claims)
       if (!used.has(claim) && inside(claim.local.createdAt))
@@ -222,7 +228,7 @@ export function refundAudit(
     const knownDates = [
       ...(parent?.observedAt ?? []),
       ...claims.map((claim) => claim.local.createdAt),
-      ...own.filter((row) => row.state === "voided").map((row) => row.stateUpdatedAt),
+      ...own.filter((row) => row.state === "voided").map((row) => row.updatedAt),
     ];
     if (parent?.issue !== undefined && (!knownDates.length || knownDates.some(inside))) {
       result.complete = false;

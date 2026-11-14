@@ -161,6 +161,14 @@ it("shows refund identity, evidence labels and checked times separately from bac
     exceptions: [
       { ...row, reason: "not_found" },
       { ...row, reason: "not_checked" },
+      {
+        ...row,
+        reason: "missing_reference",
+        processorRef: null,
+        providerRefundRef: null,
+        providerAt: null,
+        localAt: null,
+      },
       { ...row, reason: "void", providerAt: null, localAt: null },
     ],
     outside: [{ ...row, reason: "outside" }],
@@ -179,7 +187,8 @@ it("shows refund identity, evidence labels and checked times separately from bac
     "Local record",
     "SumUp record",
     "Refund not checked against SumUp yet",
-    "Refund date unavailable",
+    "Date unknown",
+    "No reference: check in SumUp. Entries may describe the same refund.",
   ])
     expect(el.shadowRoot!.textContent).toContain(text);
 });

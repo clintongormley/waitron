@@ -812,7 +812,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
                     parent.capturedAt ? [parent.capturedAt] : [],
                   ) ?? [],
               ),
-            ].map((at) => `${at.slice(0, 10)}T00:00:00.000Z`),
+            ].flatMap((at) =>
+              [-300_000, 0, 300_000].map(
+                (offset) =>
+                  `${new Date(Date.parse(at) + offset).toISOString().slice(0, 10)}T00:00:00.000Z`,
+              ),
+            ),
           ),
         ];
         const manualRefs = new Set(

@@ -76,7 +76,8 @@ Los grupos de devoluciones comparan la consulta guardada de SumUp con tus anotac
 Actualiza después de anotar un resultado. Una coincidencia confirmada tiene el mismo identificador
 e importe; una coincidencia solo por importe no está verificada, así que compruébala en SumUp antes
 de actuar. Compara ambas fechas y la fecha de consulta. Si faltan datos, verás el motivo; la vista
-no envía dinero ni anota un resultado. Las devoluciones de otros proveedores o de pagos de reserva
+no envía dinero ni anota un resultado. Si faltan la fecha o la referencia, compruébalo en SumUp; las
+entradas sin referencia pueden describir la misma devolución. Las devoluciones de otros proveedores o de pagos de reserva
 sin vínculo único aparecen por separado. Si devuelves un pago antiguo desde la aplicación de
 SumUp, compruébalo también allí: esta vista solo lo encuentra si SumUp lo incluye el día de la
 devolución. Ese caso aún no se ha probado con SumUp.

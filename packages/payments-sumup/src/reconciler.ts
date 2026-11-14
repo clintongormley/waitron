@@ -51,7 +51,10 @@ export class SumUpReconciler implements PaymentReconciler {
           this.provider,
           refundRows.flatMap((row) =>
             manualRefs.has(row.paymentRef) && row.settledAt !== null
-              ? [`${row.settledAt.slice(0, 10)}T00:00:00.000Z`]
+              ? [-300_000, 0, 300_000].map(
+                  (offset) =>
+                    `${new Date(Date.parse(row.settledAt!) + offset).toISOString().slice(0, 10)}T00:00:00.000Z`,
+                )
               : [],
           ),
         );

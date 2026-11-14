@@ -71,7 +71,8 @@ The refund groups compare the saved SumUp check with your current refund records
 recording an outcome. A confirmed match has the same refund ID and amount; an amount agreement is
 unverified, so check it in SumUp before acting. Compare both dates and the provider checked times.
 An incomplete comparison tells you which evidence is missing; it does not send money or record an
-outcome. Refunds on other providers, or backup payments without a unique link, appear separately.
+outcome. If a date or reference is unknown, check in SumUp; entries without a reference may describe
+the same refund. Refunds on other providers, or backup payments without a unique link, appear separately.
 If you refund an older payment in SumUp’s app, check it there too: this view finds it only if SumUp
 lists it on the refund day. That path has not yet been tested with SumUp.
 

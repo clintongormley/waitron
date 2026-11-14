@@ -875,7 +875,7 @@ export async function listRefundAuditRows(
     externalMachine: row.externalMachine,
     state: row.state,
     settledAt: row.settledAt,
-    stateUpdatedAt: row.updatedAt,
+    updatedAt: row.updatedAt,
     refunds: refunds
       .filter((refund) => refund.paymentId === row.id)
       .map((refund) => ({
