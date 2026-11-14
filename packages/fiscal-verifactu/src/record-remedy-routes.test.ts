@@ -237,3 +237,30 @@ it("answers a refusal with the status the refusal list gives it", async () => {
   expect(res.status).toBe(REMEDY_REFUSALS["fiscal.remedy_request_invalid"]);
   expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_request_invalid" } });
 });
+
+it("answers a fingerprint refusal with 409, as the sale routes do", async () => {
+  const app = new Hono();
+  mountRecordRemedies(
+    app,
+    {
+      db: suite.db,
+      recordGeneration: {
+        nodeId: nodeId(crypto.randomUUID()),
+        environment: "preproduction",
+        clock: steadyClock,
+        requireWritable() {},
+        requireClockConfirmed() {
+          throw new AppError("fiscal.fingerprint_mismatch", {});
+        },
+      },
+    },
+    () => {},
+  );
+  const res = await app.request("/management-api/fiscal-records/remedy", {
+    method: "POST",
+    headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ kind: "record-correction" }),
+  });
+  expect(await res.json()).toEqual({ error: { code: "fiscal.fingerprint_mismatch", params: {} } });
+  expect(res.status).toBe(409);
+});

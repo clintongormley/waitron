@@ -26,7 +26,7 @@ export const REMEDY_REFUSALS = {
   "venue.time_zone_not_ready": 409,
   "storage.disk_full": 507,
   "fiscal.record_invalid": 400,
-  "fiscal.fingerprint_mismatch": 400,
+  "fiscal.fingerprint_mismatch": 409,
   "chain.append_contention": 400,
   "sif.not_registered": 400,
   "venue.time_zone_invalid": 400,
