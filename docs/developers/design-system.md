@@ -544,7 +544,14 @@ differ without colour; its image, when shown, takes the folder icon's place.
 The tab is one column, the preview first, until its box is 800px wide, then two: the preview on the
 left, the device choice and display settings on the right. In the preview's home view each shortcut
 tile keeps its look and gains a grip ("Reorder: <name>") and a bin button ("Remove shortcut:
-<name>", greyed while a shortcut is being added or removed) (owner, 2026-10-17, A815). On the grip,
+<name>", greyed while a shortcut is being added or removed) (owner, 2026-10-17, A815).
+The bin also stays greyed during a reorder or display save, while grips remain usable during a
+reorder (watcher, 2026-11-14, MENU-HOME-TAB).
+The Till frame labels itself **Table order preview** and represents a till as wide as the frame:
+from 720px it reserves the table order's 3:2 menu/order share, gap and order inset; below that the
+menu uses the full width. This is a representative table layout, not a fixed-size till screenshot
+(watcher, 2026-11-14, MENU-HOME-TAB).
+On the grip,
 the arrow keys move the shortcut one position, Up and Down included, and a drag moves it among the
 shortcuts with a drop marker; Escape cancels a drag. A shortcut whose target the menu no longer
 reaches and one the menu reaches but a device would not show are both dashed, muted tiles; the first

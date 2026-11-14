@@ -272,6 +272,16 @@ place that refuses it does not undo the save. The window names the places that f
 them ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
+## Check the menu's home page {#menu-home}
+
+Open a menu's **Home page** tab to arrange its shortcuts and choose its tile layout.
+Choose **Till** to check the **Table order preview**: it represents a till as wide as the frame,
+with space reserved for the order. Use it to judge how many columns fit beside the order.
+At narrower widths, the menu takes the full frame, as it does when the till shows Menu on its own.
+
+To replace a shortcut marked **Not shown**, remove it with its bin button, then add a product or section
+that this menu shows.
+
 ## Copy a menu {#copy-menu}
 
 When your next menu is similar to one you already have, start with a copy. In **Products and

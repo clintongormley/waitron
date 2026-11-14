@@ -840,6 +840,7 @@ export class MenusScreen extends LitElement {
   /** The products the add-products window's own list already holds, which it does not offer. */
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
+  #disabledIncludeProducts = new Set<string>();
   /** The tree row's ⋮, or the Home page tab's shortcut Remove button or add tile, that gets focus
    * back once nothing is out and the window it opened, if any, has closed. */
   #focusReturn:
@@ -912,6 +913,8 @@ export class MenusScreen extends LitElement {
       );
     }
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
+    if (changed.has("structure") || changed.has("products") || changed.has("menus"))
+      this.#disabledIncludeProducts = this.#productsInDisabledIncludes();
     if (changed.has("structure") || changed.has("products")) {
       const products = new Map(
         this.products.filter((product) => product.active).map(({ id, name }) => [id, name]),
@@ -1788,6 +1791,7 @@ export class MenusScreen extends LitElement {
   #returnFocus(): void {
     const target = this.#focusReturn;
     if (!target || !this.#windowShut || this.busy) return;
+    if ("shortcuts" in target && target.shortcuts.length > 0 && this.#homeRemoveDisabled) return;
     this.#focusReturn = null;
     if (target.menuId !== this.menuId) return;
     if ("key" in target) {
@@ -2019,11 +2023,13 @@ export class MenusScreen extends LitElement {
       await this.#rereadHome(menuId, true);
       this.busy = false;
     });
+    void this.#writes.idle.then(() => this.requestUpdate());
   }
 
   /** Focus then goes to the removed shortcut's Remove button while it is still drawn, as after a
    * refusal, else the next shortcut's, else the previous one's, else the tile that adds products. */
   #removeHomeShortcut(memberId: string): void {
+    if (this.#homeRemoveDisabled) return;
     const order = this.#shortcutOrder();
     const at = order.indexOf(memberId);
     this.#focusReturn = {
@@ -2124,6 +2130,14 @@ export class MenusScreen extends LitElement {
     return (this.menuHome?.shortcuts ?? []).map(({ memberId }) => memberId);
   }
 
+  get #homeRemoveDisabled(): boolean {
+    return (
+      this.busy ||
+      this.homePending?.menuId === this.menuId ||
+      this.#writes.pending(`home:${this.menuId}`) > 0
+    );
+  }
+
   /** Not `busy`, as for a member's move: the keyboard user's focus stays on the grip. The last queued
    * write's answer is shown only while the order on screen is the one the move was sent over, or
    * the answer itself; any other order may be a newer change, so the home is read again. */
@@ -2161,6 +2175,8 @@ export class MenusScreen extends LitElement {
         await this.#rereadHome(menuId);
       },
     );
+    this.requestUpdate();
+    void this.#writes.idle.then(() => this.requestUpdate());
   }
 
   /** Saves one display setting of the device shown. A refusal naming a control of that device goes
@@ -3356,6 +3372,23 @@ export class MenusScreen extends LitElement {
     </fieldset>`;
   }
 
+  #productsInDisabledIncludes(): Set<string> {
+    const disabled = new Set<string>();
+    const enabled = new Set<string>();
+    const menus = new Map(this.menus.map((menu) => [menu.id, menu.active]));
+    const walk = (nodes: readonly MenuStructureNode[], hidden: boolean): void => {
+      for (const node of nodes) {
+        if (node.ref.kind === "product") (hidden ? disabled : enabled).add(node.ref.productId);
+        else if (node.ref.kind === "section")
+          walk(node.children ?? [], hidden || menus.get(node.includedMenuId ?? "") === false);
+      }
+    };
+    walk(this.structure?.nodes ?? [], false);
+    return new Set(
+      this.#addable.filter(({ id }) => disabled.has(id) && !enabled.has(id)).map(({ id }) => id),
+    );
+  }
+
   #renderHomePreview(device: HomeDevice, home: MenuHome) {
     if (this.preview !== null)
       return html`<dashboard-device-home-preview
@@ -3363,6 +3396,8 @@ export class MenusScreen extends LitElement {
         device=${device}
         .shortcuts=${home.shortcuts}
         .busy=${this.busy}
+        .removeDisabled=${this.#homeRemoveDisabled}
+        .disabledIncludeProducts=${this.#disabledIncludeProducts}
         @wt-shortcut-add=${(event: CustomEvent<{ kind: "product" | "section" }>) => {
           event.stopPropagation();
           this.#openShortcutPicker(event.detail.kind);

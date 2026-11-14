@@ -92,12 +92,6 @@ Left open:
 Left open:
 
 - **A339 test-fixture follow-up:** `apps/dashboard/src/api/menu-read-controller.test.ts` and `live-queries.test.ts` still use handheld five/six in fake snapshots, including three distinct snapshots in the invalidation cases. These files were outside the branch and left unchanged. Replace those with valid, distinguishable snapshots using columns plus another display field, preserving every revision, read-count and late-answer assertion; do not collapse three distinct observations into two.
-- The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
-  the menu shares the screen with the order: from 720 px wide the table order screen gives it three
-  fifths (`apps/till/src/screens/till-table-order-screen.ts`), and on the demo counter at 1280 px
-  its grid was 796 px wide, six columns at a setting of 10. So the Till preview can show up to
-  about four more columns than the till does. Not changed, because the real width depends on the
-  till screen's layout.
 - On the till, opening a section from lower on the screen leaves the page scrolled, so the
   breadcrumb is out of view. I believe this predates W93: neither `main`'s nor W93's
   `apps/till/src/widgets/menu-browser.ts` scrolls on opening a section (read, not bisected).
@@ -107,12 +101,12 @@ Left open:
   tests cover the refusal; configuration export/import still leaves publications behind. Reset the
   venue instead of republishing old menus. Historical W93 Decision 5 has a dated superseding note.
 
-- The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) is a hand
-  copy of the till's menu browser (`apps/till/src/widgets/menu-browser.ts`): the thumbnail, the tile
-  painting, the section trail, the two-block home arrangement, the breadcrumb and about a hundred lines
-  of CSS. A change to the till's tiles has to be repeated by hand, and no test sees the two drift
-  apart. Proposed follow-up: move the shared logic and CSS beside `arrangeHome` in
-  `packages/shared/src/menu-document/device-home.ts`.
+- The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) still
+  copies the till's tile/breadcrumb markup, thumbnail/paint helpers and CSS
+  (`apps/till/src/widgets/menu-browser.ts`). Grid sizing, arrangement, trails and indexing already
+  use shared rules. The preview also copies table ordering's width switch, flex share, gap and
+  inset. A shared presentation boundary would need adapters for the till's ordering state and
+  the dashboard's shortcut controls; the MENU-HOME-TAB plan explains the deferred extraction.
 
 ## Two copies of the tree pointer drag — OPEN (W88)
 
@@ -728,14 +722,6 @@ Left by W109 (#1320, #1322); the decisions are in
 Spanish venue with no known province, is settled (owner, 2026-10-17: Spanish stays enabled
 everywhere; entered customer text is optional).
 
-## A Home page shortcut's bin button stays live while a shortcut reorder or a display setting is being saved
-
-It is greyed only while a shortcut is added or removed: `#moveShortcut`
-(`apps/dashboard/src/screens/menus-screen.ts`) leaves the screen's `busy` flag unset so a
-keyboard user's focus stays on the grip, and display saves use their own flag. A815 asked for the
-button "greyed while a save is out"; decide whether a remove during a reorder save should wait,
-be refused, or is fine as it is. Not tried in a browser. Left open by A815 (#1880).
-
 ## Loose ends left by A380 (#1385)
 
 - A configuration import stores a fixed folder name as given, spaces included, where a save
@@ -974,22 +960,12 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   row is about twice as tall as its neighbours. Left open by A223 (#1098, an extras list's product
   dropdown greys a product with variants).
 
-## Bundle: Menu home tab
+## Menu home preview rendering
 
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
-  the menu shares the screen with the order**
-  [Detail](catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
-- **A Home page tab product shortcut reached only through a disabled included menu reads "Not
-  shown: not on sale on this menu"**, where a section shortcut in that place reads "Not shown: in a
-  disabled included menu" (`#hiddenReason`, `apps/dashboard/src/widgets/device-home-preview.ts`).
-  Left open by A816 (#1880).
-- **A Home page shortcut's bin button stays live while a shortcut reorder or a display setting is
-  being saved.**
-  [Detail](catalogue.md#a-home-page-shortcuts-bin-button-stays-live-while-a-shortcut-reorder-or-a-display-setting-is-being-saved)
-- **The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) is a
-  hand copy of the till's menu browser**
+- **The dashboard's Home page preview still copies the till's presentation.** Tile and breadcrumb
+  markup, thumbnail/paint helpers, CSS and the table layout values remain separate; grid sizing,
+  arrangement, trails and indexing are shared. Extracting presentation needs adapters for till
+  ordering and dashboard shortcut editing.
   [Detail](catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
 
 ## Bundle: After A760 moves the bundle format: An import checks rows as a save does

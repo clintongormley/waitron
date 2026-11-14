@@ -134,6 +134,7 @@ export class DeviceHomePreview extends LitElement {
       :host {
         display: block;
         min-width: 0;
+        container: home-preview / inline-size;
       }
 
       .frame {
@@ -155,6 +156,45 @@ export class DeviceHomePreview extends LitElement {
 
       .frame[data-device="till"] {
         max-width: calc(var(--wt-tap-min) * 29);
+        padding: var(--wt-space-4);
+      }
+
+      .preview-menu {
+        display: grid;
+        gap: var(--wt-space-4);
+        min-width: 0;
+        align-content: start;
+      }
+
+      .preview-order {
+        display: none;
+        min-width: 0;
+      }
+
+      @container home-preview (max-width: 640px) {
+        .frame[data-device="till"] {
+          padding-inline: 0;
+        }
+      }
+
+      @container home-preview (min-width: 720px) {
+        .frame[data-device="till"] .preview-layout {
+          display: flex;
+          align-items: flex-start;
+          gap: var(--wt-space-4);
+        }
+
+        .frame[data-device="till"] .preview-menu {
+          flex: 3 1 0;
+        }
+
+        .frame[data-device="till"] .preview-order {
+          display: block;
+          flex: 2 1 0;
+          padding-inline-start: var(--wt-space-4);
+          border-inline-start: var(--wt-space-1) solid var(--wt-color-border);
+          background: var(--wt-color-surface);
+        }
       }
 
       section,
@@ -401,6 +441,10 @@ export class DeviceHomePreview extends LitElement {
   /** While set, nothing can be moved, removed or added. */
   @property({ type: Boolean }) busy = false;
 
+  @property({ type: Boolean }) removeDisabled = false;
+
+  @property({ attribute: false }) disabledIncludeProducts: ReadonlySet<string> = new Set();
+
   @state() private announcement = "";
 
   /** The shortcuts' member ids after moves the host has not answered with a new list yet. */
@@ -637,9 +681,6 @@ export class DeviceHomePreview extends LitElement {
     return ids.indexOf(memberId) < ids.indexOf(press.memberId) ? "before" : "after";
   }
 
-  /** Why a reachable shortcut draws nothing. The document places a product only with an offer on
-   * this menu, and leaves a reachable section out only behind a disabled included menu (`listOf`,
-   * packages/catalogue/src/menu-document.ts). */
   #hiddenReason(ref: DocumentTile, placed: Placed): string {
     if (ref.kind === "section")
       return t(
@@ -647,11 +688,11 @@ export class DeviceHomePreview extends LitElement {
           ? "home.not_shown_nothing_to_order"
           : "home.not_shown_disabled_menu",
       );
-    return t(
-      ref.kind === "product" && placed.products.has(ref.productId)
-        ? "home.not_shown_extra_only"
-        : "home.not_shown_not_on_sale",
-    );
+    if (ref.kind === "product") {
+      if (placed.products.has(ref.productId)) return t("home.not_shown_extra_only");
+      if (this.disabledIncludeProducts.has(ref.productId)) return t("home.not_shown_disabled_menu");
+    }
+    return t("home.not_shown_not_on_sale");
   }
 
   /** A shortcut's face and the name it is known by: the device's tile, or a dashed, muted
@@ -724,9 +765,9 @@ export class DeviceHomePreview extends LitElement {
           variant="ghost"
           data-test=${`remove-${memberId}`}
           aria-label=${`${t("home.remove")}: ${name}`}
-          .disabled=${this.busy}
+          .disabled=${this.busy || this.removeDisabled}
           @click=${() => {
-            if (!this.busy) this.#send("wt-shortcut-remove", { memberId });
+            if (!this.busy && !this.removeDisabled) this.#send("wt-shortcut-remove", { memberId });
           }}
           ><wt-icon name="bin"></wt-icon
         ></wt-button>
@@ -953,20 +994,31 @@ export class DeviceHomePreview extends LitElement {
     else if (trail.length > 0) view = this.#sectionView(trail, index, display);
     else view = this.#home(document, index, placed, display);
     return html`<div class="frame" data-device=${this.device}>
-      <div data-region="search">
-        <p class="note" data-test="search-note">${t("home.search_note")}</p>
-        <wt-input
-          type="search"
-          name="home-preview-search"
-          label=${t("home.search")}
-          .value=${this.query}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.query = event.detail.value;
-          }}
-        ></wt-input>
+      ${
+        this.device === "till"
+          ? html`<p class="note">${t("home.table_preview")}</p>
+              <p class="note">${t("home.table_preview_width")}</p>`
+          : nothing
+      }
+      <div class="preview-layout">
+        <div class="preview-menu">
+          <div data-region="search">
+            <p class="note" data-test="search-note">${t("home.search_note")}</p>
+            <wt-input
+              type="search"
+              name="home-preview-search"
+              label=${t("home.search")}
+              .value=${this.query}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.query = event.detail.value;
+              }}
+            ></wt-input>
+          </div>
+          ${view}
+        </div>
+        ${this.device === "till" ? html`<div class="preview-order"><p>${t("home.preview_order")}</p></div>` : nothing}
       </div>
-      ${view}
       ${
         this.shortcuts === null
           ? nothing
