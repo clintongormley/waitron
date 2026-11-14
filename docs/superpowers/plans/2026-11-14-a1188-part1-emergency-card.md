@@ -1,0 +1,30 @@
+# A1188 part 1: emergency facts and dashboard card
+
+**Request:** “when the venue's box has died, the venue can be started in Waitron Cloud (emergency start).” This implements only [29 October design](../specs/2026-10-29-a1188-cloud-emergency-start-design.md) §§1,2,11: prepare while the box works. Finish with one Cloud services card showing availability, address, issuance/observation dates, approximate daily price, eligible people and an on-demand code. It cannot start hosting. Start-read integration and the till link/dialog belong to part 2; activation stays separate. A1187's pack exists; its emergency page is A1187-2. Add no pack, standalone printed card or printing implementation.
+
+**Gate:** watcher `questions.md`, 14 November 12:49, requests this plan and a short Cloud PR against `docs/waitron-integration-contract.md`, following #1212. Codex drafted this plan; Claude reviews it before watcher clearance. The accompanying Cloud contract PR supplies two primitive signing vectors with a synthetic lease. Build nothing until Cloud agrees and the watcher clears the plan. Endpoint/lease qualification stays with Cloud; the proposals below are not owner decisions.
+
+## Cloud must confirm
+
+1. Code: exactly six hyphen-separated groups of four uppercase symbols from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, 29 ASCII characters. Accept `ABCD-EFGH-JKLM-NPQR-STUV-WXYZ` and `2345-6789-ABCD-EFGH-JKLM-NPQR`; reject lowercase, O/I/0/1, missing groups, spaces and normalization.
+2. Additional code-read cap: 6/authenticated installation/60 seconds, using Cloud limiter semantics; inherited 30/installation and 60/IP per minute and display 1/minute stay unchanged. Return 429 `rate_limited` with `Retry-After`.
+3. Exact 403 `emergency_hosting_closed` plus reason `setting_off|level_inactive|no_payment_method|not_provisioned` maps to `cloud.emergency_hosting_closed`; exact 403 `emergency_hosting_installation_ineligible` maps to `cloud.unavailable`, without revocation. Actual 403 `revoked` retires registration. Keep machine-v1 encoding/body unchanged; add the two proposed actions to `packages/contract/src/signing/installation-proof.ts` and its test.
+4. Published `hostedMonthlyCents/30`, rounded once half-up to whole cents using exact integer/Decimal arithmetic: 9000→300, 10000→333, 10005→334, 14→0, 15→1. Label an approximate informational quote excluding VAT, showing the returned rate. Unpublished means unavailable. Change no invoice calculation.
+
+Source: Cloud contract blob `9fcb2de1d02373b936a45a393b8030d713df591a`, “Emergency hosting display and code”, plus the accompanying proposal PR. Its boundaries are accepted; endpoints/runtime remain unqualified.
+
+## Build and prove by layer
+
+Use paths below relative to each app's `src/`, unless stated otherwise.
+
+**Server transport:** create `cloud-emergency.ts` and `cloud-emergency.test.ts`, following A1185 `cloud-billing.ts` and `machinePayload`. Validate closed shapes, registration/asOf, canonical distinct HTTPS address, prices and code/address/date coherence. Test signing, malformed replies, refusal mappings, redirect/size limits and complete-read deadline here once.
+
+**Coordination:** extend `cloud-client.ts`; add `cloud-client.emergency.test.ts` following `cloud-client.billing.test.ts`. Share display reads independently of billing; fence registration/request generations and caller cancellation. Extend existing saved connection state outside `venue.db` with registration-bound address/open/issue/asOf facts, never code. Retain validated hints through failure as stale; false replaces true; disconnect/replacement/revocation clear them. Code reads never share/cache/replay. Test restart persistence, races and secret absence. Support: `apps/server/test/cloud-installation-fixture.ts`, `emergency-display-vector.json`, `emergency-code-vector.json` in that directory.
+
+**Local API:** extend `cloud-api.ts`, `cloud-api.test.ts`, `errors.ts`. Display keeps existing `system.manage` screen permission; code additionally requires current `node.manage`, rechecked after Cloud waits. Test permission loss and exact public answers here, without repeating transport failures. Reuse identity `listActivePersonsWithPermission`; query only authenticator-presence booleans for active holders, returning names/readiness without secrets.
+
+**Dashboard:** extend `api/client.ts`, `api/live-queries.ts`, `api/live-queries.test.ts`, `screens/cloud-services-screen.ts`; add `api/cloud-emergency.test.ts`, `screens/cloud-services-screen.emergency.test.ts`, `screens/cloud-emergency-card.ts` and `screens/cloud-emergency-card.test.ts`. Test off/unavailable/stale states, price vectors, ready/missing-authenticator people, explicit reveal, throttling and late replies. Clear interaction memory on close/leave/registration change. No code in disk/logs/subscriptions/browser storage. Update `i18n/strings.ts`, `i18n/codes.ts`, and server `guide/en/servers.md`, `guide/es/servers.md`; inspect both themes/phone width and accessibility.
+
+For each behavior, run its named test red before implementation, then green: `pnpm --filter @waitron/server test src/cloud-emergency.test.ts` (substitute coordination/API file); `pnpm --filter @waitron/dashboard test src/screens/cloud-emergency-card.test.ts` (substitute API/live-query file). Preserve billing-v1 tests. No whole-package runs solely for finishing.
+
+Estimate: production 400–550, tests 450–650, support 80–120, docs 60–100 changed lines; total 990–1420, 4–6 hours. Slice 1a: facts/price/staleness card, production 250–350, tests 250–350, support 40–60, docs 30–50 (570–810, about 2–3 hours). Slice 1b: code/readiness on that card, production 150–200, tests 200–300, support 40–60, docs 30–50 (420–610, about 2–3 hours). Each goes through TDD/review/CI separately; growth above 1.5 times its estimate goes to the watcher.
