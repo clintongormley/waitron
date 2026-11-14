@@ -211,11 +211,11 @@ export function createNetworkChange({
           "connection.autoconnect",
           "no",
         ]);
+        state.previous = null;
+        await save(state);
       } catch {
-        /* The old profile may have been removed; publication remains independent. */
+        /* Keep unfinished demotion for the next run; publication remains independent. */
       }
-      state.previous = null;
-      await save(state);
     }
     await publish(state);
   }

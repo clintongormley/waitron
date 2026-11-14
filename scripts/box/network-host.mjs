@@ -139,8 +139,9 @@ export async function handleNetworkRead(
       const profile = await networkProfile(bus, radio);
       if (profile)
         savedSsidHex = Buffer.from(profile.settings["802-11-wireless"].ssid.data).toString("hex");
-    } catch {
-      // A failed Wi-Fi selection must not discard the independently observed Ethernet address.
+    } catch (error) {
+      if (!["ambiguous radio", "ambiguous saved profiles"].includes(error?.message)) throw error;
+      // Ambiguous Wi-Fi selection does not invalidate the observed Ethernet address.
       journal.ambiguousProfiles = true;
     }
     return answer({

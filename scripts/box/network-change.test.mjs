@@ -715,26 +715,45 @@ it("publishes the authoritative saved network at startup without an operation or
   expect((await fs.stat(join(f.hostRoot, "network.json"))).mtimeMs).toBe(before.mtimeMs);
 });
 
-it("does not repeat historical demotion when startup observes outside settings", async () => {
-  const f = await fixture();
-  await f.service.accept(fields, { source: "person", person: "waiter-1" });
-  await f.service.work();
-  const original = f.run.getMockImplementation();
-  f.run.mockImplementation(async (command, args) => {
-    const result = await original(command, args);
-    if (!args.includes("GetSecrets")) return result;
-    const settings = JSON.parse(result);
-    settings.data[0]["802-11-wireless-security"].psk.data = "outside-password";
-    return JSON.stringify(settings);
-  });
-  f.reboot();
-  const start = f.run.mock.calls.length;
-  await f.service.work();
-  expect(
-    parseWifiRecord(await fs.readFile(join(f.bootRoot, "waitron-recovery/wifi.json"))).network.psk,
-  ).toBe("outside-password");
-  expect(f.run.mock.calls.slice(start).filter(([command]) => command === "nmcli")).toEqual([]);
-});
+it.each([false, true])(
+  "does not repeat historical demotion after it completes (retry %s)",
+  async (retry) => {
+    const f = await fixture();
+    const demoteRun = f.run.getMockImplementation();
+    f.run.mockImplementation((command, args) => {
+      if (retry && args.includes(previous) && args.includes("modify")) {
+        retry = false;
+        throw Error("demotion timed out");
+      }
+      return demoteRun(command, args);
+    });
+    const needsRetry = retry;
+    await f.service.accept(fields, { source: "person", person: "waiter-1" });
+    await f.service.work();
+    if (needsRetry) {
+      expect(JSON.parse(await fs.readFile(join(f.hostRoot, "network.json"), "utf8")).previous).toBe(
+        previous,
+      );
+      await f.service.work();
+    }
+    const original = f.run.getMockImplementation();
+    f.run.mockImplementation(async (command, args) => {
+      const result = await original(command, args);
+      if (!args.includes("GetSecrets")) return result;
+      const settings = JSON.parse(result);
+      settings.data[0]["802-11-wireless-security"].psk.data = "outside-password";
+      return JSON.stringify(settings);
+    });
+    f.reboot();
+    const start = f.run.mock.calls.length;
+    await f.service.work();
+    expect(
+      parseWifiRecord(await fs.readFile(join(f.bootRoot, "waitron-recovery/wifi.json"))).network
+        .psk,
+    ).toBe("outside-password");
+    expect(f.run.mock.calls.slice(start).filter(([command]) => command === "nmcli")).toEqual([]);
+  },
+);
 
 it("queues canonical forget, rechecks its target after restart and removes the boot copy", async () => {
   const f = await fixture({ disconnected: true });

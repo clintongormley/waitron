@@ -251,14 +251,19 @@ it.each([
   ]);
 });
 
-it.each(["failure", "invalid-json"])("sanitises an observation %s", async (kind) => {
-  const { handleNetworkRead } = await import("./network-host.mjs");
-  const run = () => {
-    if (kind === "failure") throw new Error("private SSID and settings");
-    return "private SSID and settings";
-  };
-  expect(await handleNetworkRead(line, { run })).toBe('{"ok":false,"reason":"host_failed"}\n');
-});
+it.each(["failure", "invalid-json", "wifi-failure"])(
+  "sanitises an observation %s",
+  async (kind) => {
+    const { handleNetworkRead } = await import("./network-host.mjs");
+    const source = host();
+    const run = (command, args) => {
+      if (kind === "wifi-failure" && !args.includes("GetSettings")) return source(command, args);
+      if (kind !== "invalid-json") throw new Error("private SSID and settings");
+      return "private SSID and settings";
+    };
+    expect(await handleNetworkRead(line, { run })).toBe('{"ok":false,"reason":"host_failed"}\n');
+  },
+);
 
 it("shares three seconds across commands and caps output without invoking a shell", async () => {
   const { networkCommand } = await import("./network-host.mjs");
