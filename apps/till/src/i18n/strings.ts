@@ -2034,6 +2034,7 @@ export const en = {
   "box_time.refused.host_unavailable":
     "This server cannot read or set its own clock: the part of the server that does that is not answering. If the server can reach the internet, its own time service may still put the clock right by itself.",
   "box_time.refused.stale": "The server's clock changed while this was being checked.",
+  "box_time.refused.moved": "The server's time has changed since it was shown here.",
   "box_time.refused.check_expired": "This took too long.",
   "box_time.refused.same_machine":
     "This screen is the server itself, so its clock is the server's own. Check from a till or handheld instead.",
@@ -4064,6 +4065,7 @@ export const es: Record<StringKey, string> = {
   "box_time.refused.host_unavailable":
     "Este servidor no puede leer ni poner su propio reloj en hora: la parte del servidor que lo hace no responde. Si el servidor tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo.",
   "box_time.refused.stale": "El reloj del servidor ha cambiado mientras se comprobaba.",
+  "box_time.refused.moved": "La hora del servidor ha cambiado desde que se mostró aquí.",
   "box_time.refused.check_expired": "Ha tardado demasiado.",
   "box_time.refused.same_machine":
     "Esta pantalla es el propio servidor, así que su reloj es el del servidor. Compruébalo desde una caja o un terminal de mano.",

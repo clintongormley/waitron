@@ -633,7 +633,7 @@ describe("till-box-time-dialog while the server waits for its time to be confirm
     api.boxClockChallenge.mockResolvedValue({ challengeId: "c2", boxAt: moved, keepOffered: true });
     await press(el, "server");
     expect(api.boxClockConfirm).not.toHaveBeenCalled();
-    expect(shownError(el)).toBe(en["box_time.refused.stale"]);
+    expect(shownError(el)).toBe(en["box_time.refused.moved"]);
     expect(controls(el)).toEqual(["close", "check-again"]);
     await press(el, "check-again");
     expect(words(el)).toContain(clockDateTime(Date.parse(moved)));
@@ -666,7 +666,7 @@ describe("till-box-time-dialog while the server waits for its time to be confirm
     it("keeps nothing when the server's clock still reads the time shown", async () => {
       const { api, el } = await keepPressedLater(Date.parse(BOX_BEHIND));
       expect(api.boxClockConfirm).not.toHaveBeenCalled();
-      expect(shownError(el)).toBe(en["box_time.refused.stale"]);
+      expect(shownError(el)).toBe(en["box_time.refused.moved"]);
     });
   });
 
@@ -694,7 +694,7 @@ describe("till-box-time-dialog while the server waits for its time to be confirm
     });
     await press(el, "server");
     expect(api.boxClockConfirm).not.toHaveBeenCalled();
-    expect(shownError(el)).toBe(en["box_time.refused.stale"]);
+    expect(shownError(el)).toBe(en["box_time.refused.moved"]);
   });
 
   it("sends this till's time, without keep, on This device", async () => {

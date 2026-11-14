@@ -171,7 +171,12 @@ export class TillBoxTimeDialog extends LitElement {
       // A keep confirms the time this dialog showed, not whatever the box reads now.
       const expected = shown.boxAt + (performance.now() - shown.readAt);
       if (keep && !(Math.abs(Date.parse(boxAt) - expected) <= KEEP_WITHIN_MS)) {
-        this.#refused({ code: "clock.set_refused", reason: "stale" });
+        this.view = {
+          kind: "refused",
+          text: t("box_time.refused.moved"),
+          checkAgain: true,
+          admin: false,
+        };
         return;
       }
       const deviceAt = Date.now();

@@ -4439,6 +4439,7 @@ the clock reads before 28-10-2024; and `not_stopped` when the start is not waiti
 time is more than a minute (the Clock row shows minutes) from the row's, carried forward on the
 device's steady clock since the read that drew it; it says the time changed and reads the box
 again.
+
 A box whose host service does not answer waits at every start and cannot be set through it, so
 devices or a person confirm its time as it stands (plan D12).
 
