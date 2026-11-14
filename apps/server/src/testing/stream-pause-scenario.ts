@@ -316,7 +316,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
             seriesCode: "A",
             rectificativeSeriesCode: "R",
             admin: {
-              displayName: "Administradora",
+              displayName: "Administrator",
               firstNames: "Test",
               lastNames: "Operator",
               pinHash: fixturePinHash(ADMIN_PIN),

@@ -232,7 +232,7 @@ export function provisionVenueBody(taxId: string) {
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
     admin: {
-      displayName: "Administradora",
+      displayName: "Administrator",
       pin: "1234",
       password: "dashPass123",
       email: "admin@waitron.dev",
