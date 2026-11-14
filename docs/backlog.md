@@ -387,20 +387,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
-- **A1541. The demo's Restaurant and bar has Bar, Lunch and Dinner periods in place of "Open"
-  (owner, 2026-11-14).** Today it seeds one period named "Open" (`menuPeriodName`,
-  `packages/country-es/src/demo/casa-delgado-es.ts`), serving the full menu all day; its name reads
-  as a status wherever periods are listed. Seed instead, in every season's week:
-
-  | Period | Times                                  | Customer menu                  | Staff-only menu |
-  | ------ | -------------------------------------- | ------------------------------ | --------------- |
-  | Bar    | 09:00–13:00, 16:00–20:00, 23:00–00:00 | Drinks menu                    | —               |
-  | Lunch  | 13:00–16:00                            | Casa Delgado (food and drinks) | Set lunch       |
-  | Dinner | 20:00–23:00                            | Casa Delgado (food and drinks) | —               |
-
-  Names in every demo language, as "Open" is today. The Terrace's closure from 23:00 (A1542)
-  lines up with the end of Dinner. No migration. Not started.
-
 - **Recovery operations still buffer whole database files.** First-setup repair snapshots retain
   their 128 MiB budget; Start again's deletion fingerprints and Cloud snapshot creation also read
   whole database files. Replace these buffers with file-based processing while preserving their

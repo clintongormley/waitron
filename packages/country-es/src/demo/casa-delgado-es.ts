@@ -54,12 +54,17 @@ export const CASA_DELGADO_ES = {
     "ca-ES-valencia": "Nadal",
     gl: "Nadal",
   },
-  menuPeriodName: {
+  deliPeriodName: {
     en: "Open",
     es: "Abierto",
     ca: "Obert",
     "ca-ES-valencia": "Obert",
     gl: "Aberto",
+  },
+  restaurantPeriodNames: {
+    bar: { en: "Bar", es: "Bar", ca: "Bar", "ca-ES-valencia": "Bar", gl: "Bar" },
+    lunch: { en: "Lunch", es: "Comida", ca: "Dinar", "ca-ES-valencia": "Dinar", gl: "Xantar" },
+    dinner: { en: "Dinner", es: "Cena", ca: "Sopar", "ca-ES-valencia": "Sopar", gl: "Cea" },
   },
   menuPriceOverrides: [
     { menu: "drinks", productImage: "cana-cerveza.png", grossPrice: "3.00" },

@@ -194,8 +194,7 @@ export async function seedSales(
     const perDay = (weekend ? 16 : 9) + randInt(rng, 0, 8);
 
     for (let s = 0; s < perDay; s += 1) {
-      // Service windows in UTC: lunch 11:00-13:59, dinner 18:00-20:59, both inside one Madrid
-      // business day.
+      // Sale hours in UTC: 11:00-13:59 and 18:00-20:59, both inside one Madrid business day.
       const dinner = rng() < 0.55;
       const hour = dinner ? randInt(rng, 18, 20) : randInt(rng, 11, 13);
       const instant = new Date(

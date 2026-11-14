@@ -92,7 +92,7 @@ describe("seedFloor", () => {
     ]);
   });
 
-  it("seeds no station hours and routes drinks downstairs without an evening period", async () => {
+  it("seeds no station hours and routes drinks downstairs at dinner", async () => {
     await provisionVenue();
     const result = await withTransaction(suite.db, async (tx) => {
       const { menuIds } = await seedCatalogues(tx, {
@@ -107,9 +107,9 @@ describe("seedFloor", () => {
       });
       const { rows: hours } = await tx.execute(sql`
         select name from sqlite_master where type = 'table' and name = 'hours_week_cells'`);
-      const { rows: periods } = await tx.execute<{ name: string }>(sql`
-        select p.name from menu_periods p join departments d on d.id = p.department_id
-         order by d.name`);
+      const { rows: periods } = await tx.execute<{ department: string; name: string }>(sql`
+        select d.name as department, p.name from menu_periods p
+        join departments d on d.id = p.department_id order by d.name, p.name`);
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
         select id from floor_zones where name = 'Upstairs bar'`);
       const { rows: stations } = await tx.execute<{ id: string }>(sql`
@@ -123,7 +123,12 @@ describe("seedFloor", () => {
       return { hours, periods, makers, stationId: stations[0]!.id, productId: drink.id };
     });
     expect.soft(result.hours).toEqual([]);
-    expect(result.periods).toEqual([{ name: "Open" }, { name: "Open" }]);
+    expect(result.periods).toEqual([
+      { department: "Deli", name: "Open" },
+      { department: "Restaurant and bar", name: "Bar" },
+      { department: "Restaurant and bar", name: "Dinner" },
+      { department: "Restaurant and bar", name: "Lunch" },
+    ]);
     expect(result.makers).toEqual(
       [0, 1].map(
         () =>
