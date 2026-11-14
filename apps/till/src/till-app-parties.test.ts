@@ -432,6 +432,7 @@ const untilUnconfirmed = (el: TillApp) =>
     .poll(() => banner(el)?.textContent ?? "", { timeout: GIVE_UP_MS })
     .toContain(t("adjust.unconfirmed"));
 
+// Frame-driven effects need their own poll; this waits for a task, not a frame.
 function nextTask(): Promise<void> {
   return new Promise((resolve) => {
     const channel = new MessageChannel();
