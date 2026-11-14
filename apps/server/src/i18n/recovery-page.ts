@@ -299,12 +299,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "This box has lost its record of which box it is",
       action:
-        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. “Retry a normal boot” starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses “Carry on as the main box” there. In this version no screen clears this box or joins it to the venue again, so it can stay switched off. The venue's data stays on the main box.",
+        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. “Retry a normal boot” starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses “Carry on as the main box” there. An administrator can remove this box on the main box's Servers screen, so the main box stops waiting for it. The venue's data stays on the main box.",
     },
     "es-ES": {
       title: "Este equipo ha perdido el registro de qué equipo es",
       action:
-        "Guarda una copia de los datos del local, pero no su propio papel, así que no vende ni envía nada a Hacienda, por si es el equipo de reserva del local. El equipo principal sigue vendiendo. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo mientras falte el registro. Mientras este equipo esté parado, el equipo principal lo espera cada vez que arranca, hasta que un administrador elige allí «Seguir como equipo principal». En esta versión ninguna pantalla deja este equipo sin datos ni lo vuelve a unir al local, así que puede quedarse apagado. Los datos del local siguen en el equipo principal.",
+        "Guarda una copia de los datos del local, pero no su propio papel, así que no vende ni envía nada a Hacienda, por si es el equipo de reserva del local. El equipo principal sigue vendiendo. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo mientras falte el registro. Mientras este equipo esté parado, el equipo principal lo espera cada vez que arranca, hasta que un administrador elige allí «Seguir como equipo principal». Un administrador puede retirar este equipo en la pantalla Servidores del equipo principal, para que el equipo principal deje de esperarlo. Los datos del local siguen en el equipo principal.",
     },
   },
   "sif.allocation_invalid": {
