@@ -46,7 +46,7 @@ const suite = useVenueDb({
 
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [manager] = await seedPersons(tx, {
-        displayName: "manager-ana",
+        displayName: "Anna Manager",
         pinHash: hashPin("1234"),
         role: "manager",
       });
