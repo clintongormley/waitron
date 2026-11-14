@@ -161,10 +161,15 @@ async function imageFixture({
         throw new Error("append_only.triggers_changed");
       return {
         stdout:
-          onlineTrial === "malformed" ? "not-json" : JSON.stringify([{ name: mode, ok: true }]),
+          onlineTrial === "malformed"
+            ? "not-json"
+            : JSON.stringify([{ name: mode, ok: onlineTrial !== "refused" }]),
       };
     }
-    if (args[0] === "rm") return { stdout: "" };
+    if (args[0] === "rm") {
+      if (onlineTrial === "cleanup") throw new Error("container cleanup refused");
+      return { stdout: "" };
+    }
     if (args.includes("up")) opened = true;
     if (pullFailure && args[0] === "pull" && resolved.get(args[1]) === "agent:old")
       throw new Error("registry offline");
@@ -947,4 +952,24 @@ it("reports an output limit as output failure rather than a timeout", async () =
   await expect(t.f.host.prepareImages()).rejects.toThrow(
     "Online migration capture failed: too much output; the selling version and its data are unchanged",
   );
+});
+
+it.each([
+  ["refused", "missing or failed check report"],
+  ["cleanup", "container cleanup refused"],
+])(
+  "keeps the source running when %s invalidates online preparation",
+  async (onlineTrial, detail) => {
+    const t = await imageFixture({ prepare: false, onlineTrial, writers: true });
+    const before = await t.fs.readFile(t.join(t.root, "compose.yml"), "utf8");
+    await expect(t.f.host.prepareImages()).rejects.toThrow(detail);
+    expect(t.calls.some((args) => args.includes("--restart=no") || args[1] === "stop")).toBe(false);
+    expect(await t.fs.readFile(t.join(t.root, "compose.yml"), "utf8")).toBe(before);
+    await expect(t.fs.access(`${t.root}.upgrade-trial`)).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
+
+it("rejects a multiline environment value before it can introduce another variable", async () => {
+  const { upgradeEnvironment } = await import("./host.mjs");
+  expect(() => upgradeEnvironment({ VALUE: "first\nOTHER=value" })).toThrow("multiline");
 });
