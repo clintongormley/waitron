@@ -7,8 +7,8 @@ describe("the node-local manifest", () => {
     expect(new Set(items).size).toBe(items.length);
   });
 
-  it("places and classes every row as the plan's table decides", () => {
-    expect(NODE_LOCAL_MANIFEST.map((row) => `${row.item}|${row.where}|${row.class}`)).toEqual([
+  it("places and classes the original rows as the plan's table decides", () => {
+    const decisions = [
       "node_mode|node.db|destination-owned",
       "node_mirror_link|node.db|destination-owned",
       "node_pair_link|node.db|destination-owned",
@@ -38,14 +38,17 @@ describe("the node-local manifest", () => {
       "module-records/<module>.json#prepared|state|transferred",
       "module-records/<module>.json#retained|state|source-only",
       ".venue.db-litestream/|venue-folder|rebuildable",
-    ]);
+    ];
+    const actual = NODE_LOCAL_MANIFEST.map((row) => `${row.item}|${row.where}|${row.class}`);
+    for (const decision of decisions) expect(actual).toContain(decision);
   });
 
-  it("names exact file names, a template only for a module's kept file", () => {
+  it("names the readiness prefix and the module history template explicitly", () => {
     const patterned = NODE_LOCAL_MANIFEST.filter((row) => /[*<]/.test(row.item)).map((r) => r.item);
     expect(patterned).toEqual([
       "module-records/<module>.json#prepared",
       "module-records/<module>.json#retained",
+      "fiscal-readiness-db-*",
     ]);
   });
 
@@ -56,6 +59,14 @@ describe("the node-local manifest", () => {
     expect(classOf("tenant_credentials")).toBe("transferred");
     expect(classOf("trading.env")).toBe("destination-owned");
     expect(classOf("change_log")).toBe("rebuildable");
+  });
+
+  it("carries no state beyond the key ring, backup settings and retained preparations", () => {
+    expect(
+      NODE_LOCAL_MANIFEST.filter((row) => row.where === "state" && row.class === "transferred").map(
+        (row) => row.item,
+      ),
+    ).toEqual(["secrets.env", "backup.env", "module-records/<module>.json#prepared"]);
   });
 
   it("says what M2 does with every item", () => {

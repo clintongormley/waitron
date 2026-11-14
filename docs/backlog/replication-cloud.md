@@ -494,21 +494,6 @@ Left open by A1018 Slice 3 (`apps/server/src/peer-status-api.ts`):
   case repeats its sibling's setup; `boot.restricted.test.ts`'s full-start case checks only the
   answer's shape, not its signature.
 
-## The handover summaries' and checks' minor follow-ups
-
-Left open by A1018 Slice 4, each checked by reading the code, not run:
-- In `packages/fiscal-verifactu/src/handover-summary.ts`, `ENVIO_STATES` and the acks column list
-  are hand copies that no test ties to the schema; a misspelt column becomes the text
-  `"undefined"`; a head lookup that finds no row gives an empty head instead of an error.
-- `checkFiscalChains` (`packages/fiscal-verifactu/src/handover-chain-check.ts`) repeats the table
-  query `walkFiscalChains` makes and converts its count to a bigint needlessly; no test drops a
-  single fiscal table; a copy without the `nodes` table throws a raw error.
-- `summariseOpenPayments` (`packages/payments/src/handover-summary.ts`) lists pending manual card
-  refunds, though nothing on the new box would chase one (the refund recovery selects only
-  connected refunds).
-- `scripts/handover-manifest-complete.test.ts` has no reverse check: a manifest row naming a table
-  or file that no longer exists still passes.
-
 ## A1342: return a stopped box's records before reset
 
 **Automatic duplicate identification:** agree which returned invoices count as duplicates before
@@ -713,15 +698,6 @@ stepped down by then. Finding it while the old box still sells needs the old box
 in the offer. Left open by A1018 Slice 5 (Ruling R35).
 
 
-## A handover's manifest has no row for the box's other state-folder files.
-
-`recovery.json`,
-`setup-operation.json`, `flows/restore/record.json`, `reset-request.json`, `cloud/replacement.json`,
-`backup-room-note.json`, `spare-space` and `<state>/handover/<operationId>/` are not in
-`packages/handover/src/manifest.ts`; whether a handover needs rows for them is not decided. Left
-open by A1018 Slice 4 (Slice 4's Ruling R5).
-
-
 ## A hung integrity check on a copy has no time limit.
 
 Only an answer, an exit or a stop ends the
@@ -843,18 +819,6 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
   more boxes, when no key it trusts vouched for that main box; the refusal names no next step.
   Measured at the helper, not end to end.
   [Detail](replication-cloud.md#a1276-after-two-promotions-a-box-can-refuse-the-main-boxs-chart)
-
-## Bundle: Which state files a handover carries; summary checks
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A handover's manifest has no row for the box's other state-folder files.** Left open by A1018
-  Slice 4 (Slice 4's Ruling R5).
-  [Detail](replication-cloud.md#a-handovers-manifest-has-no-row-for-the-boxs-other-state-folder-files)
-- **The handover summaries' and checks' minor follow-ups.** Untested choices and hand-kept lists in
-  the module seat, the Veri*Factu summary and copy check, the payments summary and the manifest
-  guard. Left open by A1018 Slice 4.
-  [Detail](replication-cloud.md#the-handover-summaries-and-checks-minor-follow-ups)
 
 ## Bundle: Recheck that a spare gets later charts
 

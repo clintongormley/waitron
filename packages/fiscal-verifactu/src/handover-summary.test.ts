@@ -7,10 +7,15 @@ import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { archiveTo, openBackupQuery } from "@waitron/store";
+import { archiveTo, openBackupQuery, type BackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
-import { summariseChains, VERIFACTU_HANDOVER, type ChainSummary } from "./handover-summary.js";
+import {
+  summariseChains,
+  VERIFACTU_HANDOVER,
+  type ChainSummary,
+  ENVIO_STATES,
+} from "./handover-summary.js";
 import { registerSif } from "./registro-sif.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
@@ -278,6 +283,73 @@ describe("summariseChains", () => {
     expect(summaries).toHaveLength(1);
     expect(digest()).toEqual(before);
     expect(before[0]).not.toBeNull();
+  });
+
+  it("rejects incomplete query rows instead of signing undefined values", async () => {
+    const node = await seedNode(suite.db, "Incomplete");
+    await append(node, 1);
+    const [record] = records(node.nodeId);
+    await envio(record!.id, "enviando");
+    await ack(record!.id, null, "accepted");
+    const opened = await openBackupQuery(await copy());
+    try {
+      for (const field of [
+        "node_id",
+        "sif_id",
+        "id_sistema_informatico",
+        "numero_instalacion",
+        "records",
+        "head",
+        "id",
+        "huella",
+        "registro_id",
+        "submitted_at",
+        "csv",
+        "state",
+        "delivered_at",
+      ]) {
+        const incomplete: BackupQuery = {
+          async *rows(statement, params) {
+            for await (const row of opened.query.rows(statement, params)) {
+              const short = { ...row };
+              delete short[field];
+              yield short;
+            }
+          },
+        };
+        await expect(summariseChains(incomplete), field).rejects.toThrow(/incomplete/i);
+      }
+    } finally {
+      await opened.close();
+    }
+  });
+
+  it("rejects a chain whose head query returns no row", async () => {
+    const node = await seedNode(suite.db, "Missing head");
+    await append(node, 1);
+    const opened = await openBackupQuery(await copy());
+    try {
+      const incomplete: BackupQuery = {
+        async *rows(statement, params) {
+          if (statement.startsWith("select id, huella")) return;
+          yield* opened.query.rows(statement, params);
+        },
+      };
+      await expect(summariseChains(incomplete)).rejects.toThrow(/head/i);
+    } finally {
+      await opened.close();
+    }
+  });
+
+  it("uses every state admitted by the migrated envio CHECK and no other", () => {
+    const [row] = suite.db.all<{ sql: string }>(
+      sql`select sql from sqlite_schema where type = 'table' and name = 'envios'`,
+    );
+    const vocabulary = /"envios_estado_ck" CHECK\(.*? in \(([^)]+)\)/s.exec(row!.sql);
+    expect(vocabulary).not.toBeNull();
+    const states = [...vocabulary![1]!.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+    expect(states.length).toBeGreaterThan(0);
+    expect([...ENVIO_STATES].sort()).toEqual(states.sort());
   });
 
   it("is the module's handover summary", () => {

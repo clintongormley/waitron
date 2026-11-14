@@ -11,6 +11,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
 import { registerSif } from "./registro-sif.js";
 import { altaFor, anulacionFor, seedSale, seedNode, type SeededNode } from "./testing/seed.js";
+import { checkFiscalChains } from "./handover-chain-check.js";
 import { verifyBackupFiscalChains } from "./backup-verification-chain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 
@@ -593,6 +594,27 @@ describe("complete captured fiscal chains", () => {
     );
     expect(await verify()).toBe(false);
   });
+
+  it.each(["handover", "backup"] as const)(
+    "keeps a failed table lookup distinct from absent tables (%s)",
+    async (kind) => {
+      await capture(false);
+      await queries(async (a, b) => {
+        const unavailable: BackupQuery = {
+          async *rows(statement, values) {
+            if (statement.includes("sqlite_schema") && values?.includes("nodes"))
+              throw new Error("Fixture table lookup unavailable");
+            yield* a.rows(statement, values);
+          },
+        };
+        const result =
+          kind === "handover"
+            ? checkFiscalChains(unavailable)
+            : verifyBackupFiscalChains(unavailable, b);
+        await expect(result).rejects.toThrow("Fixture table lookup unavailable");
+      });
+    },
+  );
 
   it("keeps unexpected query failures distinct from invalid history", async () => {
     await capture(false);

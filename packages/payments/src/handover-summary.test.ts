@@ -191,10 +191,10 @@ describe("summariseOpenPayments", () => {
     expect(summary.payments.map((row) => row.paymentId)).toEqual([open]);
   });
 
-  it("lists every pending card refund and no completed or failed one", async () => {
+  it("lists pending connected card refunds and no manual, cash or finished one", async () => {
     const first = await refund("pending", "card", { provider: "sumup", ref: "pay-1" });
     const second = await refund("pending", "card", { provider: "stripe", ref: "pay-2" });
-    const manual = await refund("pending", "card", "manual");
+    await refund("pending", "card", "manual");
     await refund("pending", "cash", null);
     await refund("completed", "card", { provider: "sumup", ref: "pay-3" });
     await refund("failed", "card", { provider: "sumup", ref: "pay-4" });
@@ -207,7 +207,6 @@ describe("summariseOpenPayments", () => {
       [
         { refundId: first, provider: "sumup", providerPaymentRef: "pay-1" },
         { refundId: second, provider: "stripe", providerPaymentRef: "pay-2" },
-        { refundId: manual, provider: null, providerPaymentRef: null },
       ].sort((x, y) => (x.refundId < y.refundId ? -1 : 1)),
     );
     expect(summary.payments).toEqual([]);
