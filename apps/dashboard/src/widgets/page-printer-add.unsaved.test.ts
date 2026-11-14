@@ -191,3 +191,25 @@ it("closing at once with a suggested name does not ask; typing back to the sugge
   await expect.poll(() => app.closed).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
+
+it("focuses a missing name after Add and clears the messages for another discovery entry", async () => {
+  const { app, dialog } = await mount({ suggestedName: "Back office" });
+  await type(dialog, " ");
+  const field = dialog.shadowRoot!.querySelector("wt-input")!;
+  const input = field.shadowRoot!.querySelector("input")!;
+  input.blur();
+  expect(field.shadowRoot!.activeElement).toBeNull();
+  await add(dialog);
+  await expect.poll(() => field.shadowRoot!.activeElement).toBe(input);
+  expect(field.error).toBe(t("form.name_required"));
+  const footer = dialog.shadowRoot!.querySelector("wt-form-actions")!;
+  expect(footer.error).toBe(t("form.fix_fields"));
+  expect(app.api.registerPagePrinter).not.toHaveBeenCalled();
+  app.suggestedName = "";
+  app.entry = { ...entry, host: "10.0.0.57" };
+  app.requestUpdate();
+  await app.updateComplete;
+  await dialog.updateComplete;
+  expect(field.error).toBe("");
+  expect(footer.error).toBe("");
+});

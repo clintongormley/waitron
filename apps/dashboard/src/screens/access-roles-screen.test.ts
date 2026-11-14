@@ -281,6 +281,8 @@ it("submits a new role with Enter and focuses a missing required name", async ()
     .poll(() => name.shadowRoot!.activeElement)
     .toBe(name.shadowRoot!.querySelector("input"));
   expect(create).not.toHaveBeenCalled();
+  expect(q(el, "form-actions").getAttribute("error")).toBe(t("access_roles.fix_fields"));
+  expect((q(el, "save") as HTMLElementTagNameMap["wt-button"]).disabled).toBe(true);
   change(el, "role-name", "Cashier");
   await el.updateComplete;
   name
@@ -289,6 +291,11 @@ it("submits a new role with Enter and focuses a missing required name", async ()
   await expect
     .poll(() => create.mock.calls)
     .toEqual([[{ name: "Cashier", permissions: ["payment.take"] }]]);
+  await expect.poll(() => q(el, "editor")).toBeNull();
+  q(el, "create").click();
+  await el.updateComplete;
+  expect((q(el, "role-name") as HTMLElementTagNameMap["wt-input"]).error).toBe("");
+  expect(q(el, "form-actions").getAttribute("error")).toBe("");
 });
 it("submits a named copy with Enter", async () => {
   const create = vi.fn().mockResolvedValue({ id: "copy" });
