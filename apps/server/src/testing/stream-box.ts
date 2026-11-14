@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
+  ensureStreamId,
   nodes,
   openVenueDatabase,
   stampDeployment,
@@ -73,6 +74,7 @@ export interface StreamBox {
   nodeId: string;
   seriesId: string;
   locationId: string;
+  streamId: string;
   publicKey: string;
   /** The node's break-glass secret. */
   nodeSecret: string;
@@ -109,7 +111,8 @@ export async function provisionStreamBox(options: {
       planVenue(options.venue.request, modules),
       { db: seeding.venue, modules },
     );
-    const venueId = await venueLocationId(seeding.venue);
+    const locationId = await venueLocationId(seeding.venue);
+    const streamId = await withTransaction(seeding.venue, ensureStreamId);
     const nodeSecret = await mintBreakGlassSecret(
       { venue: seeding.venue, node: seeding.node },
       venue.nodeId,
@@ -127,7 +130,8 @@ export async function provisionStreamBox(options: {
     box = {
       nodeId: venue.nodeId,
       seriesId: venue.seriesIds[0]!,
-      locationId: venueId,
+      locationId,
+      streamId,
       publicKey: row!.publicKey!,
       nodeSecret,
     };
@@ -146,8 +150,7 @@ export async function provisionStreamBox(options: {
       WAITRON_ENV: "preproduction",
     }),
   );
-  if (options.streaming !== undefined)
-    await switchOnStreaming(dirs, box.locationId, options.streaming);
+  if (options.streaming !== undefined) await switchOnStreaming(dirs, options.streaming);
   return box;
 }
 
@@ -157,7 +160,6 @@ export async function provisionStreamBox(options: {
  */
 export async function switchOnStreaming(
   dirs: Pick<BoxDirs, "state" | "venue">,
-  venueId: string,
   streaming: { bucket: BucketConfig; recoveryKey: string },
 ): Promise<void> {
   const ring = loadKeyRing(parseEnvFile(await readFile(join(dirs.state, "secrets.env"), "utf8")));
@@ -166,7 +168,7 @@ export async function switchOnStreaming(
     await withTransaction(store.venue, (tx) =>
       putCredential(tx, ring, {
         purpose: "backup.stream",
-        value: streamSettingsPayload({ venueId, bucket: streaming.bucket }),
+        value: streamSettingsPayload({ bucket: streaming.bucket }),
       }),
     );
   } finally {
