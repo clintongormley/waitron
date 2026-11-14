@@ -1824,7 +1824,7 @@ Not in any track until the standalone primary is done.
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,
   2026-10-29).** Part of A1018 and Cloud's P6. Design approved 2026-10-29. Building waits for
   A947's strip and Cloud's half. Local selected-backup placement groundwork keeps the spare's own
-  identity; staff-usable fiscal joining still waits for A947 3b-F:
+  identity; since A947 3b-F (#3172) a spare of a Veri*Factu venue can join as well:
   [A1188 design](superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 
