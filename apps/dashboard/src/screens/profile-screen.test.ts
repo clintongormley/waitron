@@ -225,7 +225,7 @@ describe("your profile", () => {
     { locale: "es-ES", width: 310 },
     { locale: "es-ES", width: 390 },
   ])(
-    "keeps the Passkeys heading level with Add passkey on a $width px screen ($locale)",
+    "keeps the Passkeys heading level with Add passkey on a $width px screen, its whole tab in view ($locale)",
     async ({ locale, width }) => {
       const before = currentLocale();
       setLocale(locale);
@@ -249,9 +249,8 @@ describe("your profile", () => {
           .querySelector(".field-value")!
           .getBoundingClientRect();
         expect(selected.left).toBeGreaterThanOrEqual(strip.left - 1);
-        // A tab wider than its strip can only show its start; how wide either is depends on fonts.
-        if (selected.width <= strip.width)
-          expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
+        expect(selected.width).toBeLessThanOrEqual(strip.width);
+        expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
         expect(
           Math.abs(action.top + action.height / 2 - (heading.top + heading.height / 2)),
         ).toBeLessThanOrEqual(1);
