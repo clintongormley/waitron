@@ -465,7 +465,14 @@ loose ends below. Coordinate naming with A917 and failover addressing with A947.
   Linux one; a commit landing in the same file-time tick after a side-file restart is missed.
 - A sale whose write transaction began before the supervisor first subscribed after boot is not
   counted, so the lag reads low for it.
-- Whether Litestream uploads anything while the side file is unchanged is not measured.
+Measured 2026-11-14 on macOS arm64 with Litestream 0.5.18 and versitygw 1.8.0, using the
+production configuration and no application writes for 600,265 ms: five-second side-file samples
+changed once, then had the same size (284,312 bytes), header and SHA-256 for 119 samples. The
+bucket access log counted 12 listings, two reads, four uploads and one batch delete during that
+interval. Litestream uploaded a level-2 file at 11:50 while those sampled file readings stayed
+unchanged; a known write afterwards changed the header/hash and produced new level-0 objects.
+This establishes uploads during that sampled idle period, not continuous file immobility, daily
+snapshots or longer compaction intervals.
 
 ## Loose ends left by A549.
 
@@ -483,19 +490,45 @@ loose ends below. Coordinate naming with A917 and failover addressing with A947.
   seconds on either version, and the side file kept growing
   ([measured 2026-11-06](../research/2026-09-16-sqlite-failover-prototype.md#re-run-on-litestream-0518-2026-11-06)).
 
+Measured 2026-11-14 on macOS arm64 with the production supervisor, Litestream 0.5.18,
+versitygw 1.8.0, a 16 MiB test limit and synthetic 4 KiB row inserts paced by 80 ms waits:
+
+| Already streaming when the outage began | Frozen bucket, 200,078 ms | Refused connections, 200,018 ms |
+| --- | --- | --- |
+| Writes during outage | 2,347 | 2,327 |
+| Peak side file | 4,243,632 bytes | 4,239,512 bytes |
+| Side-file header resets | 7 | 7 |
+| Local level-0 bytes at end | 578,787 | 577,115 |
+| Natural child exits / restarts / pauses | 0 / 0 / 0 | 0 / 0 / 0 |
+| Longest measured insert | 48.95 ms | 57.20 ms |
+| Rows restored and compared, every column | 2,368 | 2,348 |
+
+Both restores reported `integrity_check: ok`. The frozen arm waited six seconds after reconnection;
+the refusal arm waited 150 seconds because a separate six-second attempt restored only the
+pre-outage rows while Litestream's log showed a 128-second retry delay. That earlier attempt
+measured 2,308 outage writes and a 1,510,476-byte local level-0 folder; it did not establish recovery.
+These insert times are not sale times. The existing route-based loop and forced-restart pause
+rigs also passed with both pinned binaries. This leaves the real-network outage question above
+open: frozen/refused loopback connections do not qualify dropped attempts, unreachable hosts,
+DNS, Linux or venue conditions, and this measured no bound on the local level-0 folder.
+
 ## Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error reports).
 
 - The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
   502 — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same
   code also covers a bad value in the recovery kit, where 400 is right.
-- A batch delete's `backup.stream_request_failed` still carries the file's name as the bucket
-  listed it in `key` (the `deleteMany` refusal in `packages/stream/src/s3-store.ts`); that the
-  prune logger drops it is a review seat's reading and one run, not a guard.
 - The status and `errorName` on the stream's log lines other than the pause check's 403 were
   shown by reading, by the store's scripted HTTP answers and by the supervisor's injected
   errors, not against a real bucket. Amazon S3's 403 to the pause check was logged with
   `backup.stream_request_failed`, 403 and `AccessDenied` (A538-10).
   [Detail](../backlog/box.md#the-status-and-errorname-on-the-streams-log-lines-other-than-the-pause-checks-403-were-shown-by-reading)
+
+Measured 2026-11-14 with versitygw 1.8.0: claiming a generation in a missing bucket returned
+`backup.stream_request_failed`, HTTP 404 and `NoSuchBucket`. Starting the supervisor against that
+bucket reported `stream.bucket_unusable` with reason `write_failed`, without starting replication.
+A listing with an unknown access key returned HTTP 404, named `XAdminUserNotFound` by versitygw;
+the client retained `other` as the fixed-list error name. These observations qualify those two
+loopback responses only; other providers and the remaining log paths above remain unqualified.
 
 ## The Backups screen's bucket fields copy the bucket copy panel's.
 
@@ -1408,17 +1441,12 @@ once released. Belongs with A1016.
 
 ## Bundle: Bucket copy: silent stops and a real outage
 
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S.
 
-- **The bucket stream prunes nothing, and says nothing, while it cannot read its marker.**
-  [Detail](box.md#the-bucket-stream-prunes-nothing-and-says-nothing-while-it-cannot-read-its-marker)
 - **Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).**
   `pnpm setup:litestream` skips the download when the installed binary already reports the
   pinned version, so the checksum protects fresh downloads only.
   [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-6-590-the-litestream-supervisor)
-- **Loose ends left by SQLite slice 2 Task 7 (#619, how current the bucket copy is).**
-  Whether Litestream uploads anything while the side file is unchanged is not measured.
-  [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-7-619-how-current-the-bucket-copy-is)
 - **Loose ends left by A549.**
   Whether the side file grows, and the pause fires, in a real network outage was not run.
   [Detail](box.md#loose-ends-left-by-a549)
@@ -2052,15 +2080,6 @@ session reads as written (negative or missing) and every other correction for th
 refused `correction.invalid` `unmatched_out` until a manager retimes the clock-in. Read, not run,
 except the retime. Left open by A798-B slice 9b, Task 15a. Design:
 [A1268 design §4](../superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md#4-part-2--readings-that-order-entries-by-time-after-a-backward-clock-step).
-
-## The bucket stream prunes nothing, and says nothing, while it cannot read its marker.
-
-Since slice 9b the daily prune of old stream generations ages them by the bucket's clock, read from
-the marker the stream writes when a generation opens (`#readBucketClock`,
-`packages/stream/src/supervisor.ts`). While the bucket's listing does not show that marker, the
-prune deletes nothing, every day, and logs nothing (a read that fails logs `stream.prune_failed`),
-so old generations can pile up in the bucket with no alert. Also not tested: a later generation whose marker cannot be read after an
-earlier one's could (read, not run). Left open by A798-B slice 9b, Task 15.
 
 ## timesyncd's clock file after a backward set has not been watched across a reboot.
 
