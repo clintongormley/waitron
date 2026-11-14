@@ -1396,8 +1396,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   - **Every dashboard table that can grow past about ten rows has the shared search bar and
     filters** (`wt-data-table`'s `searchable` and column `filter`s). Devices, Units, Modifiers and
     the product and staff lists already do. Missing on 2026-11-14: Printers' agents, printers
-    and print jobs tables (filters but no search bar), the card readers table (neither) and the
-    device profiles table A1529 adds. To check against the ten-row rule: alerts, orders, access
+    and print jobs tables (filters but no search bar) and the card readers table (neither).
+    To check against the ten-row rule: alerts, orders, access
     roles, handover intervals and modules. Content languages and servers stay short. A table
     whose data lives on the server takes "Shared database-backed table paging, search and
     sorting" below instead.

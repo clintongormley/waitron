@@ -207,9 +207,16 @@ describe("device-profiles-screen list mode", () => {
     onTestFinished(() => setLocale(before));
     setLocale("en-GB");
     const terrace = { ...profiles[0]!, id: "p3", name: "Terrace phone", allowedZoneIds: ["z2"] };
+    let finishNames!: (choices: ProfileScopeChoices) => void;
     const el = await mount(
       stubApi({
         listDeviceProfiles: vi.fn().mockResolvedValue([capableProfile, profiles[1], terrace]),
+        background: {
+          getProfileScopeChoices: () =>
+            new Promise<ProfileScopeChoices>((resolve) => {
+              finishNames = resolve;
+            }),
+        } as DashboardApi,
       }),
     );
     const table = el.shadowRoot!.querySelector("wt-data-table");
@@ -224,6 +231,9 @@ describe("device-profiles-screen list mode", () => {
     ]);
     expect(table!.searchable).toBe(true);
     const root = table!.shadowRoot!;
+    expect(root.querySelector('[data-test="profile-scope-p1"]')!.textContent).toBe("Loading…");
+    finishNames(scopeChoices);
+    await flush(el);
     expect(root.querySelector('[data-test="profile-scope-p1"]')!.textContent).toContain(
       "Restaurant",
     );
@@ -288,6 +298,50 @@ describe("device-profiles-screen list mode", () => {
     expect(scope).not.toContain("Dining room");
     expect(scope).toBe(t("device_profiles.scope_unavailable"));
     expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+    await profileAction(el, "edit-p1");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[data-test="editor-form"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it.each([
+    [{ departmentId: "absent" }, "Department unavailable"],
+    [{ allowedZoneIds: ["z4"] }, "Restaurant · Old bar (Deleted)"],
+    [{ allowedZoneIds: [] }, "Restaurant · No zones"],
+  ])("shows the saved serving scope as %s", async (scope, label) => {
+    const before = currentLocale();
+    onTestFinished(() => setLocale(before));
+    setLocale("en-GB");
+    const el = await mount(
+      stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([{ ...profiles[0]!, ...scope }]) }),
+    );
+    expect(profileListRoot(el).querySelector('[data-test="profile-scope-p1"]')!.textContent).toBe(
+      label,
+    );
+  });
+
+  it("uses fresh editor scope choices instead of the list's cached snapshot", async () => {
+    const choices = {
+      departments: [{ id: "d2", name: "Deli", active: true }],
+      zones: [{ id: "dz", name: "Counter", departmentId: "d2", active: true }],
+    };
+    const api = Object.assign(
+      stubApi({
+        getProfileScopeChoices: vi.fn().mockResolvedValue(choices),
+        getDeviceProfile: vi
+          .fn()
+          .mockResolvedValue({ ...profiles[0]!, departmentId: "d2", startingZoneId: "dz" }),
+      }),
+      { liveData: new LiveData() },
+    );
+    const el = await mount(api);
+    await profileAction(el, "edit-p1");
+    await flush(el);
+    const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      '[data-test="profile-department"]',
+    )!;
+    expect(field.options.map(({ value }) => value)).toEqual(["d2"]);
+    expect(field.value).toBe("d2");
   });
 
   it("opens the profile from its row", async () => {

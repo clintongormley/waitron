@@ -156,11 +156,12 @@ Para incluir a alguien en el cuadrante y en la lista de acceso de los dispositiv
 separado de los datos de la persona. Si alguien las cambia mientras editas, pulsa **Recargar** para
 ver sus puestos actuales antes de elegir de nuevo.
 
-## Quién puede iniciar sesión en un dispositivo {#device-profile-sign-in}
+## Buscar un perfil de dispositivo {#device-profiles}
 
-Abre **Hardware** y después **Perfiles de dispositivo** para buscar un perfil por nombre, formato, zona de
-servicio o capacidad. La búsqueda también encuentra las capacidades que quedan tras **+N más**.
-Selecciona su fila para editarlo o usa su menú **⋮** para editarlo, duplicarlo o eliminarlo.
+En **Hardware**, abre **Perfiles de dispositivo**. Busca el perfil que necesitas y selecciona su
+fila para editarlo. Usa su menú **⋮** para duplicarlo o eliminarlo.
+
+## Quién puede iniciar sesión en un dispositivo {#device-profile-sign-in}
 
 Abre **Perfiles de dispositivo** y edita el perfil que usa el dispositivo. En **Quién puede iniciar
 sesión**, selecciona sus puestos y guarda. Por ejemplo, selecciona Camarero para un móvil que usa

@@ -552,6 +552,14 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private profiles: DeviceProfile[] = [];
   @state() private listScopeChoices: ProfileScopeChoices | null = null;
+  @state() private listScopeError: string | null = null;
+  readonly #listScopeQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    (error) => {
+      this.listScopeError = codeOf(error);
+    },
+  );
 
   @state() private printers: Printer[] = [];
   @state() private pagePrinters: PagePrinterRow[] = [];
@@ -708,14 +716,16 @@ export class DeviceProfilesScreen extends LitElement {
         this.jobRolesRead = true;
       });
       await Promise.all([
-        this.#queries.watch(
-          "getProfileScopeChoices",
-          [],
-          (value) => {
-            this.listScopeChoices = value;
-          },
-          { passive: true },
-        ),
+        this.#listScopeQueries
+          .watch(
+            "names",
+            dashboardQuery(this.api.background ?? this.api, "getProfileScopeChoices", []),
+            (value) => {
+              this.listScopeChoices = value;
+              this.listScopeError = null;
+            },
+          )
+          .catch(() => {}),
         this.#jobRolesReady,
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.profiles = value;
@@ -1737,17 +1747,24 @@ export class DeviceProfilesScreen extends LitElement {
   #scopeSummary(profile: DeviceProfile): string {
     if (isSharedDisplay(profile.formFactor)) return t("device_profiles.scope_kitchen");
     const choices = this.listScopeChoices;
-    if (choices === null || this.#queries.failing("getProfileScopeChoices"))
-      return t("device_profiles.scope_unavailable");
+    if (this.listScopeError !== null) return t("device_profiles.scope_unavailable");
+    if (choices === null) return t("device_profiles.scope_loading");
     const department = choices.departments.find(({ id }) => id === profile.departmentId);
-    if (!department) return t("device_profiles.scope_unavailable");
+    if (!department) return t("device_profiles.department_unavailable");
     if (profile.allowedZoneIds === null)
       return `${department.name} · ${t("device_profiles.all_zones")}`;
-    const zones = profile.allowedZoneIds.map(
-      (id) =>
-        choices.zones.find((zone) => zone.id === id && zone.departmentId === department.id)?.name,
-    );
-    return zones.length === 0 || zones.some((name) => name === undefined)
+    const zones = profile.allowedZoneIds.map((id) => {
+      const zone = choices.zones.find(
+        (zone) => zone.id === id && zone.departmentId === department.id,
+      );
+      return zone === undefined
+        ? undefined
+        : zone.active
+          ? zone.name
+          : `${zone.name} (${t("device_profiles.zone_disabled_mark")})`;
+    });
+    if (zones.length === 0) return `${department.name} · ${t("device_profiles.no_zones")}`;
+    return zones.some((name) => name === undefined)
       ? t("device_profiles.scope_unavailable")
       : `${department.name} · ${zones.join(", ")}`;
   }
@@ -1844,6 +1861,7 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   #renderList(): TemplateResult {
+    const error = this.errorKey ?? this.listScopeError;
     return html`
       <div class="list-heading">
         <h1 class="title">${t("device_profiles.title")}</h1>
@@ -1885,11 +1903,7 @@ export class DeviceProfilesScreen extends LitElement {
         .loading=${!this.#profilesRead}
       ></wt-data-table>
       ${this.#renderDeleteDialog()}
-      ${
-        this.errorKey
-          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
-          : nothing
-      }
+      ${error ? html`<p class="error" role="alert">${codeMessage(error)}</p>` : nothing}
     `;
   }
 
