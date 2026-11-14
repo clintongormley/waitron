@@ -11,10 +11,12 @@ export function recordInvoiceNumber(row: typeof registrosFacturacion.$inferSelec
   return row.numSerieFactura;
 }
 
-/** Every stored invoice number, in the order a plain select returns them. */
+/** Every stored invoice number, sorted as text. */
 export function storedInvoiceNumbers(db: Database): string[] {
   return db
-    .all<{ n: string }>(sql`select num_serie_factura as n from registros_facturacion`)
+    .all<{
+      n: string;
+    }>(sql`select num_serie_factura as n from registros_facturacion order by num_serie_factura`)
     .map((row) => row.n);
 }
 

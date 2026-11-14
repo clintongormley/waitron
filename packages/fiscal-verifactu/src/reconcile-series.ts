@@ -5,13 +5,13 @@ import type { ReconcileScope } from "./reconcile.js";
 import type { LookupConflictEvidence } from "./conflict-types.js";
 import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
 
-type LiveSeries = { sif_id: string; series_id: string; code: string };
+type ReconciliationSeries = { sif_id: string; series_id: string; code: string };
 export async function readLiveReconciliationSeries(
   tx: Transaction,
   scope: ReconcileScope,
-): Promise<LiveSeries[]> {
+): Promise<ReconciliationSeries[]> {
   return (
-    await tx.execute<LiveSeries>(sql`
+    await tx.execute<ReconciliationSeries>(sql`
     select s.id as sif_id, i.id as series_id, i.code
     from registro_sif s join invoice_series i on i.node_id = s.node_id
     where s.node_id = ${scope.nodeId} and s.nif = ${scope.taxpayerId}
@@ -31,14 +31,17 @@ export async function liveLookupHeader(tx: Transaction, scope: ReconcileScope): 
 }
 
 /**
- * The live series, and each retired series paired with the identity revoked by the activation
- * that retired it: `invoice_series` names only the box, and an activation stamps both with one
- * timestamp (`allocation.ts`), so a plain join would pair every retired series with every revoked
- * identity.
+ * The live series, and each retired series paired with the identity whose revocation time equals
+ * its retirement time. An activation stamps both with one timestamp (`allocation.ts`);
+ * `invoice_series` names only the box, so without that equality a join would pair every retired
+ * series with every revoked identity.
  */
-async function readRetainableSeries(tx: Transaction, scope: ReconcileScope): Promise<LiveSeries[]> {
+async function readRetainableSeries(
+  tx: Transaction,
+  scope: ReconcileScope,
+): Promise<ReconciliationSeries[]> {
   return (
-    await tx.execute<LiveSeries>(sql`
+    await tx.execute<ReconciliationSeries>(sql`
     select s.id as sif_id, i.id as series_id, i.code
     from registro_sif s join invoice_series i on i.node_id = s.node_id
     where s.node_id = ${scope.nodeId} and s.nif = ${scope.taxpayerId}
