@@ -1,60 +1,19 @@
-# A1527: Find a setting inside its window
+# A1527: Find a department setting through Search pages
 
-Design draft, 14 November 2026. Proposed behaviour only; no owner design approval is claimed.
+Design for owner review, 14 November 2026. Lane-drafted and Claude-reviewed; no owner design approval is claimed. This document builds nothing.
 
-You remember **“Remind to fire the next course after”**, but not which window contains it.
-Type that label, or “remind”, into **Search pages**. Alongside existing page results, you see
-one setting result bearing that exact label and its location: **Departments and zones / Service**.
-Page matches keep their existing priority; setting-label matches precede matches found only in
-the location. Search uses the existing `destinationMatches` matching rules against labels in your
-current dashboard language, including the owning page, tab and menu section. In Spanish, the same
-setting is found as **“Avisar para marchar el siguiente curso tras”**. Switching language refreshes
-results without clearing what you typed. This adds no synonyms or cross-language search.
+**First usable slice.** Search the settings owned by the department window’s Details, Service and Transfers tabs. Receipts fields belong to the dashboard’s receipt editor and need its own later contribution; zone overrides and settings inside other row windows are also outside this first slice. Existing pages, Venue settings tabs, calendar views and module destinations remain searchable. The owner must decide whether this department-first slice is enough to start.
 
-Select the result by click or Enter. With several active departments, a **Which department?**
-chooser lists their current names and explains that the choice opens this setting for that
-department. It offers Cancel and makes no choice for you, even if a department is already open.
-With one active department, go straight there. With none, show **“There are no active departments.
-Add a department to configure this setting.”** Offer **Open Departments and zones** and Cancel;
-search itself creates nothing. Loading and failed reads are explained, with Retry for a failed
-read, rather than treated as an empty list.
+Type **“Remind to fire the next course after”**, or “remind”, into **Search pages**. A setting result shows the exact current-language label and **Departments and zones / Service**. Spanish finds **“Avisar para marchar el siguiente curso tras”**. Reuse the existing matching rules: setting-label matches rank ahead of location-only matches. Page results retain their current priority, including Enter opening the first page match before falling back to a destination. Clicking selects the chosen result. Only setting results gain the tab suffix; existing result formats stay unchanged.
 
-Choosing Restaurant opens its existing department window at
-`/manage/venue-operations/department/<id>/view/service`. After the window and tab render, scroll
-the reminder into view and focus its native control through the field component. Reveal a
-containing collapsed section where necessary. Search changes no value and never saves. Back,
-Forward and reload retain the existing department/tab route behaviour; field focus is a
-one-time navigation aid.
+Selecting the reminder asks **Which department?** when several active departments exist; the chooser uses current names and offers Cancel. With one, open it directly. With none, explain that there is no active department and offer Cancel, using the existing empty-state wording rather than adding a creation flow. Loading and failed reads are shown as such; Retry repeats a failed read. Choosing Restaurant opens the existing route `/manage/venue-operations/department/<id>/view/service`. Landing on the tab is the finish line: no field-focus, scroll, collapsed-section or reveal handoff is added. Back, Forward and reload keep existing route behavior.
 
-The smallest extension keeps `DashboardContribution.searchDestinations` and
-`DashboardSearchDestination` in `packages/dashboard-kit/src/contract.ts`. Add optional target
-metadata (field identity and tab label key) and an optional module-owned resolver returning
-labelled candidate paths. Static destinations retain their current path. The dashboard handles
-zero/one/many candidates; venue-service supplies active departments through `VenueServiceApi`,
-with existing permission checks. `collectSearchDestinations` validates resolved paths within
-the declared screen, as it does static paths. After `#openSearchDestination` completes guarded
-navigation, an optional reveal method on `DashboardScreenHandle` delegates through
-`venue-departments-shell` to `department-settings`. The dashboard shell never learns department rules.
+**Small extension of existing code.** Keep static `DashboardSearchDestination` entries unchanged. Department-setting entries add an optional tab label and a module-owned resolver, handed the existing `DashboardModuleContext` request seat at activation, returning active department names and candidate paths. The shell collects/searches declarations as today. On click, recheck the declaration by its identity and current gates, then resolve candidates. Validate their paths inside the declared screen at that boundary, returning a visible refusal on failure; do not feed asynchronous paths into the synchronous `collectSearchDestinations` validator or require the old static-href freshness match. The venue-service resolver uses `VenueServiceApi` and the shared offered-tab rule. Transfers needs at least two active departments; otherwise its settings do not contribute. Existing page/child permission and enabled-module checks still govern visibility, and read-only access stays read-only.
 
-Keep each form’s searchable field identity, existing translation key, tab and route builder in
-a small definition beside that form. Both rendered labels and contributed destinations consume
-it; department settings reuse their existing `fieldTab` mapping. There is no second translation
-list. Existing form fixtures provide the completeness check: rendered setting controls across
-offered tabs must correspond to declared targets, whose localized labels and resolved routes
-must reach those controls. New settings join this same definition and check. This is explicit
-form ownership, without a form framework or runtime crawler.
+**Keep the list current.** Declare each department setting’s stable identity, existing label key and owning tab beside `fieldTab`, sharing definitions with nested service fields. Both rendered labels and search use those definitions: no second list of translated text. The existing department fixture mounts each offered tab and checks its named setting controls against the declarations, traversing nested service controls. A service-steps editor or transfer-destinations group counts as one setting, not one result per row or department checkbox. Each declaration must open its actual tab and use the rendered label. New or removed controls therefore change this same check. Receipt completeness belongs to its later owning contribution.
 
-Only enabled modules and readable pages contribute results; child permissions apply too.
-Read-only access stays read-only. Conditional fields use the form’s availability rules to filter
-department choices, explaining when none qualify. Recheck availability and permissions before
-opening; a removed department or disappearing target gets an explanation, never a fallback
-editable field. Final navigation uses `navigationGuardFor(window).write` and existing
-`navigationScopes`: Keep editing retains draft, query and drawer; Discard proceeds. Switching
-offered tabs within the same department retains its draft.
+Final navigation uses `navigationGuardFor(window).write` and existing `navigationScopes`. Keep editing preserves the current draft, query and drawer; Discard proceeds. Switching offered tabs within the same department retains its draft. Removed departments or unavailable tabs are explained rather than silently opening a different editable target.
 
-A1529’s **Hardware** contains Device profiles, Devices, Printers and Card payments; **System**
-contains the remaining former Settings pages. Derive result locations from `#permittedNav`,
-never a duplicated hierarchy. Acceptance includes both reminder languages, zero/one/several
-departments, Keep/Discard, conditional and denied targets, and moved Hardware/System results.
-Scope excludes searching saved values, a server index, database, ledger, history or permission
-bypass. This design awaits owner review.
+**Hardware/System.** Existing destination locations already come from `#permittedNav`. A1529’s moved Device profiles, Devices, Printers and Card payments pages therefore follow Hardware, and remaining former Settings pages follow System without a second hierarchy. Whichever item lands second checks those names. This does not yet search individual controls inside Hardware windows; the owner should confirm whether those are required in the first slice.
+
+Acceptance: both reminder languages; zero/one/several departments; department choice opens Service; denied/disabled/Transfers availability; Keep/Discard; label/control completeness; moved Hardware/System page results. No search of saved values, cross-language synonyms, server index, database, history or permission bypass. Awaiting owner review of scope; no build is authorised.
