@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { Database } from "@waitron/db";
 import { lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
-import { connectionPair, drizzleNodeSqlite, VENUE_FILE } from "@waitron/store";
+import { connectionPair, drizzleNodeSqlite, VENUE_FILE, JOURNAL_SUFFIX } from "@waitron/store";
 import {
   canonicalFirstSetupRoots,
   openImmutableWhenWalEmpty,
@@ -40,7 +40,7 @@ async function readDatabase<T>(roots: Roots, body: (db: Database) => Promise<T>)
   const info = await lstat(path);
   if (!info.isFile()) throw new AppError("setup.not_ready", {});
   if (
-    await lstat(`${path}-journal`).then(
+    await lstat(`${path}${JOURNAL_SUFFIX}`).then(
       () => true,
       (error: NodeJS.ErrnoException) => {
         if (error.code === "ENOENT") return false;

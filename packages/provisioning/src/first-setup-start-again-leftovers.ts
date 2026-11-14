@@ -1,5 +1,7 @@
 import {
   RECOVERY_LOCK_FILE,
+  VENUE_LOCK_FILE,
+  VENUE_HOLDER_FILE,
   VENUE_FILE,
   NODE_FILE,
   MIGRATIONS_LOCK_FILE,
@@ -61,11 +63,13 @@ const SETUP_RECORD = FIRST_SETUP_FILE;
 const DATABASES = [VENUE_FILE, NODE_FILE] as const;
 const SIDE_PIECES = [WAL_SUFFIX, SHM_SUFFIX, JOURNAL_SUFFIX] as const;
 const LOCKS = new Set([
-  "venue.lock",
-  "venue.lock-journal",
-  "venue.holder.json",
+  VENUE_LOCK_FILE,
+  `${VENUE_LOCK_FILE}${JOURNAL_SUFFIX}`,
+  VENUE_HOLDER_FILE,
   MIGRATIONS_LOCK_FILE,
   RECOVERY_LOCK_FILE,
+  VENUE_LOCK_FILE,
+  VENUE_HOLDER_FILE,
 ]);
 const STEP = /^step-\d{6}$/;
 

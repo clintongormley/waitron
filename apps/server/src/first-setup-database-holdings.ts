@@ -1,5 +1,5 @@
 import { lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { SCRATCH_DIR, VENUE_FILE, appendOnlyTriggers } from "@waitron/store";
+import { SCRATCH_DIR, VENUE_FILE, appendOnlyTriggers, JOURNAL_SUFFIX } from "@waitron/store";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { manifestSets } from "@waitron/migrations";
@@ -80,7 +80,7 @@ export async function readSetupDatabase(
   let connection: DatabaseSync | undefined;
   let failed = false;
   try {
-    const journal = await lstat(`${database}-journal`).then(
+    const journal = await lstat(`${database}${JOURNAL_SUFFIX}`).then(
       () => true,
       (error: unknown) =>
         (error as NodeJS.ErrnoException).code === "ENOENT"

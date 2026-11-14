@@ -639,11 +639,11 @@ VENUE_STAMP_JS='
 const { DatabaseSync } = require("node:sqlite");
 const { existsSync } = require("node:fs");
 const { join } = require("node:path");
-const { VENUE_FILE, VENUE_DIR_NAME } = require("./state-layout.js");
 const state = process.env.WAITRON_STATE_DIR;
 if (!state) throw new Error("WAITRON_STATE_DIR is not set");
-const dir = join(state, VENUE_DIR_NAME);
-const file = join(dir, VENUE_FILE);
+// The start script must work against images that do not carry the TypeScript layout.
+const dir = join(state, "venue");
+const file = join(dir, "venue.db");
 if (!existsSync(file)) process.exit(0);
 const db = new DatabaseSync(file, { readOnly: true });
 const present = db.prepare("select name from sqlite_master where type = ? and name = ?").get("table", "deployment");

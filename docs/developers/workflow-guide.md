@@ -672,3 +672,17 @@ rule of that date, not text from `1d03a7c`.
   `docs/handoffs/` are gitignored — never open a PR for one. Historical docs record what was true when
   written: add a dated pointer rather than rewriting them. The legal track is separate, in
   `docs/compliance/action-plan.md`.
+
+
+## The installer reads the currently installed image before replacing it
+
+Keep the production stamp reader in `deploy/waitron.sh` self-contained. `cmd_install` refreshes
+its script before `confirm_reset`, then calls `select_image`; the reader can therefore run in an
+image built before that script. Its two path literals deliberately remain local.
+
+The STORE-NAMES review on 14 November 2026 ran the real `VENUE_STAMP_JS` and `is_production`
+against a synthetic database stamped production, with `trading.env` saying preproduction.
+The original reader refused reset. A reader requiring a new `state-layout.js` refused with that
+module present, but allowed reset with it absent. The module dependency was removed. Keep the
+real reader cases runnable without a bundled layout: `pnpm exec vitest run
+scripts/waitron-sh.test.mjs -t "the venue stamp reader"`.

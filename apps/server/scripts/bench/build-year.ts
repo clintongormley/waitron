@@ -1,4 +1,4 @@
-import { VENUE_FILE } from "@waitron/store";
+import { VENUE_FILE, WAL_SUFFIX, SHM_SUFFIX } from "@waitron/store";
 import { execFileSync } from "node:child_process";
 import {
   appendFileSync,
@@ -250,7 +250,7 @@ async function checkpoint(
   // write-ahead file the copy then leaves out.
   copyFolder(join(out, WORKING_DIR), next);
   for (const name of readdirSync(next))
-    if (name.endsWith("-wal") || name.endsWith("-shm")) rmSync(join(next, name));
+    if (name.endsWith(WAL_SUFFIX) || name.endsWith(SHM_SUFFIX)) rmSync(join(next, name));
   rmSync(old, { recursive: true, force: true });
   if (existsSync(copy)) renameSync(copy, old);
   renameSync(next, copy);
