@@ -61,7 +61,7 @@ export class ManualClock {
       () => {
         if (this.#sleeping.length === 0) throw new Error("nothing is asleep yet");
       },
-      { timeout },
+      { timeout, interval: 1 },
     );
   }
 
