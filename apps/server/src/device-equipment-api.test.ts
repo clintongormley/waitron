@@ -1822,6 +1822,20 @@ describe("GET /api/device/equipment's notices", () => {
       ]);
     });
 
+    it.each(["queued", "failed"] as const)(
+      "a kitchen printer whose late %s ticket is still being tried shows nothing once a later ticket prints, and the bell still names it",
+      async (status) => {
+        const id = await kitchenPrinter();
+        await job(id, ago(3 * MINUTE), { status, attempts: 0 });
+        await job(id, ago(MINUTE), { status: "done" });
+        expect(await printerNotices(printerApp(), venue.cookie)).toEqual([]);
+        const alerts = await inTx((tx) =>
+          printingAlertSource().read({ tx, now: READING.instant } as never),
+        );
+        expect(alerts.map((alert) => alert.key)).toContain(`printer.jobs_waiting:${id}`);
+      },
+    );
+
     it("a receipt printer's notice shows only on the till whose receipts go to it, and on one whose slips do", async () => {
       expect((await choose(venue.cookie, "receipt", { id: fp }, "list")).status).toBe(200);
       expect((await choose(venue.cookie2, "receipt", { id: pp }, "list")).status).toBe(200);

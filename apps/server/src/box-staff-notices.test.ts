@@ -201,6 +201,7 @@ describe("printer notices", () => {
     count: 1,
     oldest: "2026-10-22T09:50:00.000Z",
     stuckSince: "2026-10-22T09:55:00.000Z",
+    givenUp: false,
     kitchen: true,
     ...over,
   });
@@ -225,7 +226,7 @@ describe("printer notices", () => {
   it("a printer in trouble that has printed since asks for the failed ticket to be reprinted", async () => {
     const source = printerStaffNoticeSource({
       deviceId: "d1",
-      trouble: () => Promise.resolve([row({ id: "k", stuckSince: null })]),
+      trouble: () => Promise.resolve([row({ id: "k", stuckSince: null, givenUp: true })]),
       documentPrinters: vi.fn(),
     });
     expect(await source.read(CTX)).toEqual([
@@ -238,14 +239,23 @@ describe("printer notices", () => {
     ]);
   });
 
+  it("a printer that has printed since, with no ticket given up, shows nothing", async () => {
+    const source = printerStaffNoticeSource({
+      deviceId: "d1",
+      trouble: () => Promise.resolve([row({ id: "k", stuckSince: null, givenUp: false })]),
+      documentPrinters: vi.fn(),
+    });
+    expect(await source.read(CTX)).toEqual([]);
+  });
+
   it("another printer's failed ticket shows only on a device that prints its documents to it", async () => {
     const documentPrinters = vi.fn(() => Promise.resolve(new Set(["p2"])));
     const source = printerStaffNoticeSource({
       deviceId: "d1",
       trouble: () =>
         Promise.resolve([
-          row({ id: "p1", name: "Bar", kitchen: false, stuckSince: null }),
-          row({ id: "p2", name: "Terrace", kitchen: false, stuckSince: null }),
+          row({ id: "p1", name: "Bar", kitchen: false, stuckSince: null, givenUp: true }),
+          row({ id: "p2", name: "Terrace", kitchen: false, stuckSince: null, givenUp: true }),
         ]),
       documentPrinters,
     });
@@ -266,8 +276,20 @@ describe("printer notices", () => {
       trouble: () =>
         Promise.resolve([
           row({ id: "stuck", name: "Bar", stuckSince: "2026-10-22T09:55:00.000Z" }),
-          row({ id: "later", name: "Alpha", oldest: "2026-10-22T09:58:00.000Z", stuckSince: null }),
-          row({ id: "early", name: "Zed", oldest: "2026-10-22T09:50:00.000Z", stuckSince: null }),
+          row({
+            id: "later",
+            name: "Alpha",
+            oldest: "2026-10-22T09:58:00.000Z",
+            stuckSince: null,
+            givenUp: true,
+          }),
+          row({
+            id: "early",
+            name: "Zed",
+            oldest: "2026-10-22T09:50:00.000Z",
+            stuckSince: null,
+            givenUp: true,
+          }),
         ]),
       documentPrinters: vi.fn(),
     });

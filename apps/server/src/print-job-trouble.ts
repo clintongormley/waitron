@@ -18,6 +18,12 @@ export const JOBS_WAITING_MS = 2 * 60 * 1000;
 /** The statuses of a job that has not printed. */
 export const UNPRINTED_STATUSES = ["queued", "printing", "failed"] as const;
 
+/** Failed with no delivery attempts left: nothing prints it unless it is sent again. */
+const givenUpJob = and(
+  eq(printJobs.status, "failed"),
+  gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
+)!;
+
 const copy = alias(printJobs, "resend_copy");
 const link = alias(kitchenPrintJobs, "trouble_link");
 const reprintLink = alias(kitchenPrintJobs, "trouble_reprint_link");
@@ -52,7 +58,7 @@ export function printJobInTrouble(now: Date): SQL {
     eq(printJobs.kind, "document"),
     or(
       and(inArray(printJobs.status, UNPRINTED_STATUSES), lt(printJobs.createdAt, stuckBefore)),
-      and(eq(printJobs.status, "failed"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+      givenUpJob,
     ),
     not(
       sql`exists (select 1 from ${printJobs} as ${copy} where ${copy.status} = 'done'
@@ -117,6 +123,8 @@ export interface PrinterInTrouble {
   /** The oldest of them with no later document printed on this printer, as stored; null when a
    * later document has printed after every one of them. */
   readonly stuckSince: string | null;
+  /** One of them was given up ({@link givenUpJob}). */
+  readonly givenUp: boolean;
   /** An active kitchen station prints to it. */
   readonly kitchen: boolean;
 }
@@ -141,6 +149,7 @@ export function printersInTroubleQuery(tx: Transaction, now: Date) {
         stuckSince: sql<
           string | null
         >`min(case when ${noLaterPrintedDocument} then ${printJobs.createdAt} end)`,
+        givenUp: sql<number>`max(case when ${givenUpJob} then 1 else 0 end)`,
       })
       .from(printers)
       // As an inner join the planner scanned the whole index with `printers` inside (node:26-slim,
@@ -173,7 +182,14 @@ export async function printersInTrouble(tx: Transaction, now: Date): Promise<Pri
   );
   const byPrinter = new Map<
     string,
-    { id: string; printer: string; n: number; oldest: string; stuckSince: string | null }
+    {
+      id: string;
+      printer: string;
+      n: number;
+      oldest: string;
+      stuckSince: string | null;
+      givenUp: boolean;
+    }
   >();
   for (const group of groups) {
     if (group.ticketId !== null && notWaiting.has(group.ticketId)) continue;
@@ -187,10 +203,12 @@ export async function printersInTrouble(tx: Transaction, now: Date): Promise<Pri
         n: Number(group.n),
         oldest,
         stuckSince: group.stuckSince,
+        givenUp: Number(group.givenUp) === 1,
       });
       continue;
     }
     row.n += Number(group.n);
+    if (Number(group.givenUp) === 1) row.givenUp = true;
     if (oldest < row.oldest) row.oldest = oldest;
     if (
       group.stuckSince !== null &&
@@ -222,6 +240,7 @@ export async function printersInTrouble(tx: Transaction, now: Date): Promise<Pri
     count: r.n,
     oldest: r.oldest,
     stuckSince: r.stuckSince,
+    givenUp: r.givenUp,
     kitchen: kitchenIds.has(r.id),
   }));
 }

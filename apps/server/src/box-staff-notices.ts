@@ -126,8 +126,9 @@ export async function documentPrintersOf(
 }
 
 /** A kitchen printer in trouble for any device; another only for a device in `documentPrinters`.
- * A stuck printer says it is not printing; one that has printed a later document since asks for
- * the failed ticket to be reprinted. */
+ * A stuck printer says it is not printing; one that has printed a later document since says so
+ * only if it gave up on a ticket, asking for it to be reprinted: tickets still being tried show
+ * nothing. */
 export function printerStaffNoticeSource(deps: {
   deviceId: string;
   trouble: (tx: Transaction, now: Date) => Promise<readonly PrinterInTrouble[]>;
@@ -136,7 +137,9 @@ export function printerStaffNoticeSource(deps: {
   const documentPrinters = deps.documentPrinters ?? documentPrintersOf;
   return {
     async read({ tx, reading }) {
-      const rows = await deps.trouble(tx, reading.instant);
+      const rows = (await deps.trouble(tx, reading.instant)).filter(
+        (r) => r.stuckSince !== null || r.givenUp,
+      );
       if (rows.length === 0) return [];
       const mine = rows.every((r) => r.kitchen)
         ? new Set<string>()

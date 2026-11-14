@@ -956,8 +956,28 @@ describe("the printer's alert counts what the table counts", () => {
         count: 3,
         oldest: minsAgo(30),
         stuckSince: minsAgo(26),
+        givenUp: true,
         kitchen: true,
       },
+    ]);
+  });
+
+  it("marks a printer given up when only a kitchen ticket, not its other job, was given up", async () => {
+    const v = await setupVenue();
+    const now = new Date();
+    const minsAgo = (mins: number) => new Date(now.getTime() - mins * 60_000).toISOString();
+    const { jobId } = await inTx((tx) =>
+      enqueuePrintJob(tx, v.kitchenPrinterId, Uint8Array.from([1])),
+    );
+    await setJob(jobId, { createdAt: minsAgo(30), status: "queued" });
+    const table4 = await firedTable(v, "Table 4");
+    await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), {
+      createdAt: minsAgo(26),
+      ...exhausted,
+    });
+
+    expect(await inTx((tx) => printersInTrouble(tx, now))).toMatchObject([
+      { id: v.kitchenPrinterId, count: 2, givenUp: true },
     ]);
   });
 });
