@@ -5,8 +5,6 @@
 // Run from source, boot's default migrations root does not exist (each set lives in its package's
 // own `drizzle/`), so this assembles them with copy-migrations and points `WAITRON_MIGRATIONS_DIR`
 // at the result.
-//
-// `--env-file` errors on a missing path, so the state-dir files are added only when they exist.
 import { existsSync, readFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -20,7 +18,8 @@ const envFile = resolve(process.env.WAITRON_DEV_ENV_FILE?.trim() || join(pkgRoot
 if (!existsSync(envFile)) {
   console.error(
     `${envFile} is missing — run \`pnpm dev:setup\` (provisions a venue → trading mode) or ` +
-      "`pnpm dev:onboard` (no venue → setup mode) from the repo root first.\n" +
+      "`pnpm dev:onboard` (no venue → setup mode) from the repo root first (from a wa-wt stack: " +
+      "`wa-wt reset demo <worktree-name>`, or Claude's `wa-wt reset own demo <worktree-name>`).\n" +
       "Both write the settings file this reads, and migrate the local venue directory it points at.",
   );
   process.exit(1);
@@ -50,20 +49,22 @@ function parseEnvFile(text) {
 }
 
 // Resolved as `config.ts` resolves `stateDir`: unset or empty takes the default; a set value is
-// relative to the child's cwd (`pkgRoot`), not this process's.
-const envFileVars = parseEnvFile(readFileSync(envFile, "utf8"));
-const stateDirValue = envFileVars.WAITRON_STATE_DIR;
+// relative to the child's cwd (`pkgRoot`), not this process's. Node keeps a process value, even an
+// empty one, over `--env-file`'s, so the settings file is read only when the process sets none.
+const stateDirValue =
+  process.env.WAITRON_STATE_DIR ?? parseEnvFile(readFileSync(envFile, "utf8")).WAITRON_STATE_DIR;
 const stateDir =
   stateDirValue === undefined || stateDirValue === ""
     ? join(pkgRoot, "src", "state")
     : resolve(pkgRoot, stateDirValue);
 
-// Later `--env-file` flags override earlier ones.
-const envFileFlags = [`--env-file=${envFile}`];
-const secretsEnvFile = join(stateDir, "secrets.env");
-const tradingEnvFile = join(stateDir, "trading.env");
-if (existsSync(secretsEnvFile)) envFileFlags.push(`--env-file=${secretsEnvFile}`);
-if (existsSync(tradingEnvFile)) envFileFlags.push(`--env-file=${tradingEnvFile}`);
+// Later flags override earlier ones. `--env-file-if-exists` because setup writes `trading.env`
+// after this starts, and a `tsx watch` rerun reuses these flags.
+const envFileFlags = [
+  `--env-file=${envFile}`,
+  `--env-file-if-exists=${join(stateDir, "secrets.env")}`,
+  `--env-file-if-exists=${join(stateDir, "trading.env")}`,
+];
 
 const server = spawn("tsx", ["watch", ...envFileFlags, "src/bin.ts"], {
   cwd: pkgRoot,

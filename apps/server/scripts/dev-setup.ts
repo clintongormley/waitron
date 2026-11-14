@@ -2,9 +2,10 @@ import { tableExists } from "@waitron/db";
 import { venueDirOf } from "@waitron/store";
 import { DEMO_DEVELOPER_PRESETS } from "@waitron/country-packs/demo";
 // Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue directory and
-// write its identity to `apps/server/.env`. Run from the repo root via `pnpm dev:setup`; never
-// against a production directory — it chains real fiscal records under `preproduction`, and it
-// refuses `WAITRON_ENV=production` before touching the directory.
+// write its identity to `apps/server/.env`, or the file `WAITRON_DEV_ENV_FILE` names. Run from the
+// repo root via `pnpm dev:setup`; never against a production directory — it chains real fiscal
+// records under `preproduction`, and it refuses `WAITRON_ENV=production` before touching the
+// directory.
 //
 
 import {
@@ -360,7 +361,8 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
       `dev-setup: the venue directory already holds a venue, but ${envPath} does not name ` +
         "it (missing, stale, or mismatched). Refusing to provision a second venue — it would start a " +
         "new fiscal chain. Run `pnpm dev:reset` to remove the venue directory and re-provision from " +
-        "scratch.",
+        "scratch (from a wa-wt stack: `wa-wt reset demo <worktree-name>`, or Claude's " +
+        "`wa-wt reset own demo <worktree-name>`).",
     );
   }
 
