@@ -2701,7 +2701,7 @@ describe("POST /api/session refusals say nothing about the account", () => {
 });
 
 describe("a device's profile decides who may sign in on it", () => {
-  async function managersAndAnaDevice(): Promise<{
+  async function managersAndAnnaDevice(): Promise<{
     deviceId: string;
     cookie: string;
     profileId: string;
@@ -2730,7 +2730,7 @@ describe("a device's profile decides who may sign in on it", () => {
   it("GET /api/staff lists only the people the device's profile admits", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const { cookie } = await managersAndAnaDevice();
+    const { cookie } = await managersAndAnnaDevice();
     const open = await enrolTillDeviceCookie(suite.db);
 
     const restricted = await app.request("/api/staff", { headers: { cookie } });
@@ -2747,7 +2747,7 @@ describe("a device's profile decides who may sign in on it", () => {
   it("GET /api/staff?everyone=true lists every active person whatever device asks, for a roster rather than a sign-in list", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const { cookie } = await managersAndAnaDevice();
+    const { cookie } = await managersAndAnnaDevice();
 
     const res = await app.request("/api/staff?everyone=true", { headers: { cookie } });
 
@@ -2761,7 +2761,7 @@ describe("a device's profile decides who may sign in on it", () => {
   it("GET /api/staff reads the device from the dev header in dev mode", async () => {
     const app = new Hono();
     mountTillApi(app, { ...deps(suite.db), devMode: true }, collect([]));
-    const { deviceId } = await managersAndAnaDevice();
+    const { deviceId } = await managersAndAnnaDevice();
 
     const res = await app.request("/api/staff", { headers: { [DEV_DEVICE_HEADER]: deviceId } });
 
@@ -2772,7 +2772,7 @@ describe("a device's profile decides who may sign in on it", () => {
     const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect(lines));
-    const { deviceId, cookie } = await managersAndAnaDevice();
+    const { deviceId, cookie } = await managersAndAnnaDevice();
     const post = (personId: string, pin: string) =>
       app.request("/api/session", {
         method: "POST",
