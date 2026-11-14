@@ -3064,6 +3064,10 @@ name. The receipts are in the slice's ledger and review files, and the PR.
   would activate on the old series and silently drop one the old box added (backlog: settle before
   Slice 13 or 3b-F).
 - R40, the first hand-back's refusal is recorded, not fixed: Slice 13 must meet it (backlog).
+  **2026-11-14 update:** the [R40 plan](2026-11-14-a1018-r40-hand-back.md) fixes both controlled
+  module gates. Complete runtime hand-back and emergency reuse of a formerly serving box remain
+  open; Slice 13's old wipe work is dropped under the dated update below.
+
 - R41, placing stops when the old file's chart has moved on: M2 waits where it could have gone on,
   with the third box selling; a newer chart still naming M1 is not caught.
 - R42, a selling box that takes a chart naming another main box keeps selling: not fixed here. Two

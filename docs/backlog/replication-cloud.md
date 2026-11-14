@@ -731,10 +731,15 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 
 ## Bundle: Series and module-preparation gaps at handover
 
-2 entries, size M.
+3 entries, size M.
 
 - **A second live standard series made a sale answer `server.internal` in a test fixture;
   the production cause is untraced.** Left open by A1018 Slice 5 (Ruling R39).
+- **Emergency takeover onto a formerly serving box remains refused.** After a controlled
+  handover its old registration is still active, so the emergency allocation gate answers
+  `sif.allocation_invalid` with `standby_already_active`. R40 fixes controlled hand-back only.
+  Its uncontrolled reverse-direction test checks this refusal without fiscal changes at the
+  module boundary; the complete emergency server path remains unqualified. The remedy is unplanned.
 - **The module preparation file grows with every write, and a handover cannot promise room in it.**
   Every revision repeats all earlier entries under a 1 MiB cap. The handover's size check keeps room
   for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5
