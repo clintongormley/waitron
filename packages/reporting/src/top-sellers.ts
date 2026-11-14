@@ -23,21 +23,21 @@ function reaches(money: SQL, returned: SQL): SQL {
  * nested row is one non-blank `variant_name` within it. `limit` counts parent rows. The
  * customer-facing text is never read.
  *
- * Same predicates as the VAT roll-up (`issuedSalesClause`, `reversedSalesClause`); corrections are
- * NOT excluded — their negative lines net the total down. A correction line naming no line nets its
- * own quantity down too. One naming an original line (one that corrects nothing) takes back that
- * line's quantity only if it is the correction, in issue order (time, then invoice number), at
- * which the line's corrections first add up to its money (gross where the line stored one, else
- * net); any other counts no dishes. A correction of a correction counts the opposite of what the
- * line it corrects counted, whatever money it moves, judged at the moment the first correction in
- * its chain was issued. The sum leaves out a correction voided at or before the moment the one
- * being counted was issued, so a day's count never changes after the day. It assumes a line's
- * corrections, voided ones included, never take more than its money, as the exact-split and
- * whole-invoice paths refuse; past that, a void followed by a further correction can return the
- * dish twice. It also assumes a correction of a line that stored a gross states its own, as the
- * cancellation and the exact-split path do. It also assumes a corrected correction is the only
- * correction of that line, comes after every other correction of the original line, and, if it
- * counted the dish as sold again, is later reversed only in full.
+ * Same predicates as the VAT roll-up (`issuedSalesClause`, `reversedSalesClause`); corrections
+ * other than a replacement are NOT excluded — their negative lines net the total down. A correction
+ * line naming no line nets its own quantity down too. One naming an original line (one that
+ * corrects nothing) takes back that line's quantity only if it is the correction, in issue order
+ * (time, then invoice number), at which the line's corrections first add up to its money (gross
+ * where the line stored one, else net); any other counts no dishes. A correction of a correction
+ * counts the opposite of what the line it corrects counted, whatever money it moves, judged at the
+ * moment the first correction in its chain was issued. The sum leaves out a correction voided at or
+ * before the moment the one being counted was issued, so a day's count never changes after the day.
+ * It assumes a line's corrections, voided ones included, never take more than its money, as the
+ * exact-split and whole-invoice paths refuse; past that, a void followed by a further correction
+ * can return the dish twice. It also assumes a correction of a line that stored a gross states its
+ * own, as the cancellation and the exact-split path do. It also assumes a corrected correction is
+ * the only correction of that line, comes after every other correction of the original line, and,
+ * if it counted the dish as sold again, is later reversed only in full.
  *
  * Invalid inputs are a caller precondition and throw a plain `Error` before any query runs.
  */

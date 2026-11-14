@@ -50,8 +50,8 @@ export interface TopSeller {
   /** Dishes sold less dishes returned over the range, as `computeTopSellers` counts them, at three
    * decimal places; it can fall below zero. */
   quantity: Decimal;
-  /** Σ line_total over the range, as an amount; every correction, and the reversed lines of a sale
-   * whose void falls in the range, net in. */
+  /** Σ line_total over the range, as an amount; every correction except a replacement, and the
+   * reversed lines of a sale whose void falls in the range, net in. */
   total: Decimal;
   /** One row per variant sold under this name, by quantity then name; `[]` when none was. */
   variants: TopSellerVariant[];
@@ -110,7 +110,8 @@ export interface VatReturn {
   year: number;
   /** The liquidation period (month/quarter/year). */
   period: LiquidationPeriod;
-  /** Régimen-general IVA devengado per rate {rate, base, tax}, corrections netted (the output side). */
+  /** Régimen-general IVA devengado per rate {rate, base, tax}, corrections other than a replacement
+   * netted (the output side). */
   byRate: VatRateLine[];
   /** Σ base imponible devengada. */
   baseTotal: Decimal;
@@ -125,7 +126,7 @@ export interface VatReturn {
 export interface VatRateLine {
   /** Percentage literal as stored, e.g. "21.00". */
   rate: Decimal;
-  /** Net taxable base at this rate (corrections netted). */
+  /** Net taxable base at this rate (corrections other than a replacement netted). */
   base: Decimal;
   /** Net tax at this rate (the fiscal cuota). */
   tax: Decimal;
@@ -164,8 +165,8 @@ export interface CloseCounts {
   /** Ordinary altas issued in the business day (corrects_sale_id NULL), excl. F3 substitutes and
    * sales voided in the same business day. */
   sales: number;
-  /** Rectificativas issued in the business day (corrects_sale_id set), excl. those voided in the
-   * same business day. */
+  /** Rectificativas issued in the business day (corrects_sale_id set), excl. replacements and those
+   * voided in the same business day. */
   corrections: number;
   /** Void events (`sale_voids`) whose voided_at falls in the business day. */
   voids: number;

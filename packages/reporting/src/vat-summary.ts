@@ -22,9 +22,8 @@ import type { DailyCloseInput, PeriodVatInput, VatSummary } from "./types.js";
 /**
  * The shared VAT-aggregation core behind every per-rate summary. Reads the filed per-rate desglose
  * from `sales.vat_breakdown` — the cuota as filed, whichever method (direct or difference) computed
- * it — and sums base and tax per rate. Corrections (negative breakdowns) net in. `counted` selects
- * the sales added; `reversed`, when given, selects voided sales (`sv` joined to `s`) whose
- * breakdown is subtracted.
+ * it — and sums base and tax per rate. `counted` selects the sales added; `reversed`, when given,
+ * selects voided sales (`sv` joined to `s`) whose breakdown is subtracted.
  *
  * Exported for `vat-return.ts`'s modelo 303 aggregate; not in the public barrel.
  */
