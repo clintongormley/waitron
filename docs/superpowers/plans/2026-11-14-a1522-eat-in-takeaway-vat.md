@@ -66,11 +66,13 @@ The inputs the spec implies that no happy-path test meets. Each has its test in 
 
 Research, not code. It gates PR 2.
 
+**Done 2026-11-14:** no marker is needed, so PR 2 may start ([note](../../compliance/research/2026-11-14-takeaway-verifactu-record.md)).
+
 **Files:** create `docs/compliance/research/2026-11-14-takeaway-verifactu-record.md`.
 
-- [ ] **Step 1:** read the AEAT Veri*Factu schema for `RegistroAlta` → `Desglose` → `DetalleDesglose` (find the XSD and the technical specification the repo cites with `/usr/bin/grep -rln "DetalleDesglose" packages/fiscal-verifactu docs/compliance`). Record, quoting the source, every field of `DetalleDesglose` and whether any distinguishes goods from services. Today Waitron sends `ClaveRegimen "01"`, `CalificacionOperacion "S1"`, base, rate and tax (`packages/fiscal-verifactu/src/backend.ts:150-158`).
-- [ ] **Step 2:** record whether `DescripcionOperacion` (from `apps/server/src/sale-operation-description.ts`) has any rule a takeaway sale would break. Note it reads the zone's CURRENT department (`resolveSalePolicy(tx, context.zoneId)`), not the order's stored one.
-- [ ] **Step 3:** if either answer is "a marker is needed" or "unclear", stop and tell the driver: PR 2 waits for the owner. Otherwise write the note (a provenance row per source, quote then paraphrase) and commit: "docs: check that a takeaway sale needs no extra marker in the Veri*Factu record (A1522)".
+- [x] **Step 1:** read the AEAT Veri*Factu schema for `RegistroAlta` → `Desglose` → `DetalleDesglose` (find the XSD and the technical specification the repo cites with `/usr/bin/grep -rln "DetalleDesglose" packages/fiscal-verifactu docs/compliance`). Record, quoting the source, every field of `DetalleDesglose` and whether any distinguishes goods from services. Today Waitron sends `ClaveRegimen "01"`, `CalificacionOperacion "S1"`, base, rate and tax (`packages/fiscal-verifactu/src/backend.ts:150-158`).
+- [x] **Step 2:** record whether `DescripcionOperacion` (from `apps/server/src/sale-operation-description.ts`) has any rule a takeaway sale would break. Note it reads the zone's CURRENT department (`resolveSalePolicy(tx, context.zoneId)`), not the order's stored one.
+- [x] **Step 3:** if either answer is "a marker is needed" or "unclear", stop and tell the driver: PR 2 waits for the owner. Otherwise write the note (a provenance row per source, quote then paraphrase) and commit: "docs: check that a takeaway sale needs no extra marker in the Veri*Factu record (A1522)".
 
 ### Task 2: each fiscal region says whether it charges takeaway differently
 
