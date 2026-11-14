@@ -1063,7 +1063,7 @@ describe("servers screen at phone width", () => {
   );
 });
 
-it("shows cached spare delay, last copy and the switch limit through passive refresh", async () => {
+it("shows cached spare delay, last copy and how a switch brings the copy up to date through passive refresh", async () => {
   const liveData = new LiveData();
   const spare = {
     peerNodeId: STANDBY,
