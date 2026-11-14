@@ -552,6 +552,8 @@ export class FiscalFilingScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#unsubscribeLocale = subscribeLocale(() => this.requestUpdate());
+    // Unlike the certificate dialog's secrets, the description and its action key stay across a
+    // change of person, so an administrator who signs in here can send what was already typed.
     this.#unsubscribeAccount = this.permissionContinuation?.subscribe(() => this.requestUpdate());
     void this.#read();
   }

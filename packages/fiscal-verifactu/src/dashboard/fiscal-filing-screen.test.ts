@@ -747,6 +747,38 @@ describe("putting a case right", () => {
     expect(remedyCalls(request)).toHaveLength(0);
   });
 
+  it("keeps what was typed when an administrator signs in here, and sends it", async () => {
+    let permissions = ["report.export"];
+    let generation = 1;
+    type Snapshot = ReturnType<DashboardPermissionContinuation["snapshot"]>;
+    const listeners = new Set<(snapshot: Snapshot) => void>();
+    const auth: DashboardPermissionContinuation = {
+      snapshot: () => ({ accountGeneration: generation, authenticated: true, permissions }),
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      signIn: async () => {
+        permissions = ["report.export", "fiscal.remedy"];
+        generation += 1;
+        for (const listener of listeners) listener(auth.snapshot());
+        return "signed-in";
+      },
+    };
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION));
+    const { screen } = await mount(request, auth);
+    const details = await openDetails(screen);
+    await type(screen, details, "Servicio de restauración");
+    action(details).click();
+    await vi.waitFor(() => expect(flat(action(details))).toBe("Send the correction"));
+    expect(field(details).value).toBe("Servicio de restauración");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    expect(remedyCalls(request)[0]![2]).toMatchObject({
+      facts: { description: "Servicio de restauración" },
+    });
+  });
+
   it("shows a refusal under the actions, keeps Send, and sends the same request again", async () => {
     const remedy = vi
       .fn<() => Promise<unknown>>()
