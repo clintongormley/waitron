@@ -32,7 +32,6 @@ beforeEach(async () => {
 
 const unsupportedAlta = [
   { field: "RefExterna", value: "operator-reference" },
-  { field: "FechaOperacion", value: new Date("2026-07-19T00:00:00+02:00") },
   { field: "FacturaSimplificadaArt7273", value: "S" },
   { field: "FacturaSinIdentifDestinatarioArt61d", value: "N" },
   { field: "Macrodato", value: "N" },
@@ -126,7 +125,6 @@ it("leaves original records and the chain head intact when a correction contains
           ...pending.input,
           Subsanacion: "S",
           RechazoPrevio: "X",
-          FechaOperacion: new Date("2026-07-19T00:00:00+02:00"),
           Cupon: "N",
         },
       }),
@@ -134,8 +132,8 @@ it("leaves original records and the chain head intact when a correction contains
   ).rejects.toMatchObject({
     code: "fiscal.record_invalid",
     params: {
-      fields: ["FechaOperacion", "Cupon"],
-      codes: ["UNSUPPORTED_FIELD", "UNSUPPORTED_FIELD"],
+      fields: ["Cupon"],
+      codes: ["UNSUPPORTED_FIELD"],
     },
   });
   expect(await suite.db.select().from(registrosFacturacion)).toEqual(before);

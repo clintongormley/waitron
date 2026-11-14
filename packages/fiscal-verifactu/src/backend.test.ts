@@ -23,7 +23,10 @@ import {
   saleId as brandSaleId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
+import { computeHuella, serializeEnvio, validate } from "@waitron/verifactu";
+import type { RegistroAlta } from "@waitron/verifactu";
 import { VerifactuBackend } from "./backend.js";
+import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import { currentSif } from "./registro-sif.js";
 import { PRODUCER_PENDING, SOFTWARE_IDENTITY } from "./software-identity.js";
 import { envios } from "./schema/envios.js";
@@ -552,6 +555,232 @@ describe("recordCorrection — refusals", () => {
       tipoFactura: "F2",
       replaces: true,
     });
+  });
+});
+
+describe("recordCorrection — a replacement of a refused simplified invoice", () => {
+  const replacementId = brandSaleId("77777777-7777-4777-8777-777777777777");
+
+  /** The original sale's own figures (`saleInput`'s 14.41 ticket), under the replacement's number. */
+  function replacementSale(issuedAt: Date): SaleForFiscalRecord {
+    return {
+      origin: deviceOrigin(deviceId),
+      nodeId,
+      saleId: replacementId,
+      seriesId,
+      seriesCode: "R",
+      invoiceNumber: 1,
+      issuedAt,
+      offsetMinutes: 60,
+      descriptionOfOperation: "Venta en establecimiento",
+      total: decimal("14.41"),
+      vatBreakdown: [
+        { rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") },
+        { rate: decimal("10.00"), base: decimal("2.10"), tax: decimal("0.21") },
+      ],
+      counterparty: null,
+    };
+  }
+
+  /** The original's alta, given the delivery state AEAT's last answer left it in. */
+  async function originalWithDelivery(estado: string) {
+    const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
+    await suite.db.execute(sql`
+      update envios set estado = ${estado}
+      where registro_id = (select id from registros_facturacion where sale_id = ${saleId})
+    `);
+    return saleId;
+  }
+
+  async function replace(
+    original: ReturnType<typeof brandSaleId>,
+    issuedAt: Date,
+    operationDate?: string,
+  ) {
+    return withTransaction(suite.db, async (tx) => {
+      await tx.insert(sales).values({
+        id: replacementId,
+        source: "device",
+        deviceId,
+        nodeId,
+        seriesId,
+        invoiceNumber: 900,
+        issuedAt: issuedAt.toISOString(),
+        issuedOffsetMinutes: 60,
+        total: 1441,
+        vatBreakdown: [],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
+      return backend.recordCorrection(tx, replacementSale(issuedAt), {
+        correctsSaleId: original,
+        replaces: true,
+        ...(operationDate === undefined ? {} : { operationDate }),
+      });
+    });
+  }
+
+  async function storedReplacement() {
+    const { rows } = await suite.db.execute<Record<string, unknown>>(
+      sql`select * from registros_facturacion where sale_id = ${replacementId}`,
+    );
+    return rows.map((row) => decodeRegistroRow(row));
+  }
+
+  const laterDay = new Date("2026-03-05T19:40:00+01:00");
+
+  it("files one R5 by replacement with the original's figures and rectified amounts of zero", async () => {
+    const original = await originalWithDelivery("rechazado");
+    const [originalRow] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.saleId, original));
+
+    const ref = await replace(original, laterDay, "2026-03-01");
+
+    const rows = await storedReplacement();
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(ref.recordId).toBe(row.id);
+    expect({
+      tipoFactura: row.tipo_factura,
+      tipoRectificativa: row.tipo_rectificativa,
+      importeRectificacion: row.importe_rectificacion,
+      facturasRectificadas: row.facturas_rectificadas,
+      numSerieFactura: row.num_serie_factura,
+      fechaExpedicionFactura: row.fecha_expedicion_factura,
+      fechaOperacion: row.fecha_operacion,
+      desglose: row.desglose,
+      cuotaTotal: row.cuota_total,
+      importeTotal: row.importe_total,
+    }).toEqual({
+      tipoFactura: "R5",
+      tipoRectificativa: "S",
+      importeRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+      facturasRectificadas: {
+        IDFacturaRectificada: [
+          {
+            IDEmisorFactura: originalRow!.idEmisorFactura,
+            NumSerieFactura: "A/1",
+            FechaExpedicionFactura: "01-03-2026",
+          },
+        ],
+      },
+      numSerieFactura: "R/1",
+      fechaExpedicionFactura: "2026-03-05",
+      fechaOperacion: "2026-03-01",
+      desglose: originalRow!.desglose,
+      cuotaTotal: originalRow!.cuotaTotal,
+      importeTotal: originalRow!.importeTotal,
+    });
+    const [sidecar] = await suite.db.select().from(envios).where(eq(envios.registroId, row.id));
+    expect(sidecar?.estado).toBe("pendiente");
+
+    const record = fromRegistroRow(row) as RegistroAlta;
+    expect(validate(record, { now: laterDay })).toEqual([]);
+    const xml = serializeEnvio(
+      { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } },
+      [{ RegistroAlta: { ...record, RefExterna: "ref-1" } }],
+    );
+    expect(xml).toContain(
+      "<sf:TipoRectificativa>S</sf:TipoRectificativa><sf:FacturasRectificadas><sf:IDFacturaRectificada>" +
+        `<sf:IDEmisorFactura>${originalRow!.idEmisorFactura}</sf:IDEmisorFactura>` +
+        "<sf:NumSerieFactura>A/1</sf:NumSerieFactura><sf:FechaExpedicionFactura>01-03-2026</sf:FechaExpedicionFactura>" +
+        "</sf:IDFacturaRectificada></sf:FacturasRectificadas><sf:ImporteRectificacion>" +
+        "<sf:BaseRectificada>0.00</sf:BaseRectificada><sf:CuotaRectificada>0.00</sf:CuotaRectificada>" +
+        "</sf:ImporteRectificacion><sf:FechaOperacion>01-03-2026</sf:FechaOperacion>",
+    );
+  });
+
+  it("leaves the operation date out when it is the replacement's own issue date", async () => {
+    const original = await originalWithDelivery("rechazado");
+    const sameDay = new Date("2026-03-01T21:00:00+01:00");
+
+    await replace(original, sameDay, "2026-03-01");
+
+    const [row] = await storedReplacement();
+    expect(row!.fecha_operacion).toBeNull();
+    const record = fromRegistroRow(row!) as RegistroAlta;
+    expect(record).not.toHaveProperty("FechaOperacion");
+    expect(validate(record, { now: sameDay })).toEqual([]);
+    const xml = serializeEnvio(
+      { ObligadoEmision: { NombreRazon: row!.nombre_razon_emisor, NIF: row!.id_emisor_factura } },
+      [{ RegistroAlta: record }],
+    );
+    expect(xml).toContain("<sf:TipoRectificativa>S</sf:TipoRectificativa>");
+    expect(xml).not.toContain("FechaOperacion");
+  });
+
+  it("does not hash the operation date into the fingerprint", async () => {
+    const original = await originalWithDelivery("rechazado");
+    await replace(original, laterDay, "2026-03-01");
+    const [row] = await storedReplacement();
+
+    const withDate = fromRegistroRow(row!) as RegistroAlta;
+    const withoutDate = fromRegistroRow({ ...row!, fecha_operacion: null }) as RegistroAlta;
+
+    expect(withDate.FechaOperacion).toBe("01-03-2026");
+    expect(withoutDate).not.toHaveProperty("FechaOperacion");
+    expect(computeHuella(withDate)).toBe(row!.huella);
+    expect(computeHuella(withoutDate)).toBe(row!.huella);
+  });
+
+  it("refuses a replacement of an original AEAT accepted, and records nothing", async () => {
+    const original = await originalWithDelivery("aceptado");
+
+    await expect(replace(original, laterDay, "2026-03-01")).rejects.toMatchObject({
+      code: "fiscal.correction_unsupported",
+      params: { saleId: original, tipoFactura: "F2", replaces: true },
+    });
+    expect(await storedReplacement()).toEqual([]);
+  });
+
+  it("refuses a replacement of a refused original that is not a simplified invoice, and records nothing", async () => {
+    const original = brandSaleId("88888888-8888-4888-8888-888888888888");
+    await withTransaction(suite.db, async (tx) => {
+      await tx.insert(sales).values({
+        id: original,
+        source: "device",
+        deviceId,
+        nodeId,
+        seriesId,
+        invoiceNumber: 800,
+        issuedAt: "2026-03-01T12:05:00.000Z",
+        issuedOffsetMinutes: 60,
+        total: 0,
+        vatBreakdown: [],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
+      await backend.recordSale(tx, {
+        origin: deviceOrigin(deviceId),
+        nodeId,
+        saleId: original,
+        seriesId,
+        seriesCode: "A",
+        invoiceNumber: 800,
+        issuedAt: new Date("2026-03-01T12:05:00.000Z"),
+        offsetMinutes: 60,
+        descriptionOfOperation: "Venta en establecimiento",
+        total: decimal("12.10"),
+        vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
+        counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
+      });
+    });
+    await suite.db.execute(sql`
+      update envios set estado = 'rechazado'
+      where registro_id = (select id from registros_facturacion where sale_id = ${original})
+    `);
+
+    await expect(replace(original, laterDay, "2026-03-01")).rejects.toMatchObject({
+      code: "fiscal.correction_unsupported",
+      params: { saleId: original, tipoFactura: "F1", replaces: true },
+    });
+    expect(await storedReplacement()).toEqual([]);
   });
 });
 

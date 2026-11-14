@@ -117,7 +117,6 @@ export function toRegistroRow(
   const unsupported = isAlta(record)
     ? ([
         "RefExterna",
-        "FechaOperacion",
         "FacturaSimplificadaArt7273",
         "FacturaSinIdentifDestinatarioArt61d",
         "Macrodato",
@@ -180,6 +179,7 @@ export function toRegistroRow(
       facturasRectificadas: record.FacturasRectificadas ?? null,
       facturasSustituidas: record.FacturasSustituidas ?? null,
       importeRectificacion: record.ImporteRectificacion ?? null,
+      fechaOperacion: record.FechaOperacion !== undefined ? toIsoDate(record.FechaOperacion) : null,
       // The recipient, stored as-built so the drainer re-serialises the mandatory Destinatarios.
       // Not a huella input (`@waitron/verifactu` hashes 8 named fields, none of them the
       // recipient). NULL on a simplified F2 alta; set on an F3 canje and on an F1 full invoice.
@@ -208,6 +208,7 @@ export function toRegistroRow(
     facturasRectificadas: null,
     facturasSustituidas: null,
     importeRectificacion: null,
+    fechaOperacion: null,
     // A RegistroAnulacion carries no recipient either — Destinatarios belongs to a registro de alta
     // whose TipoFactura is a full invoice (F1/F3), never to an anulación.
     destinatarios: null,
@@ -278,6 +279,8 @@ export type RegistroRow = {
   facturas_rectificadas: RegistroAlta["FacturasRectificadas"] | null;
   facturas_sustituidas: RegistroAlta["FacturasSustituidas"] | null;
   importe_rectificacion: DesgloseRectificacion | null;
+  /** `YYYY-MM-DD`; not a huella input. */
+  fecha_operacion: string | null;
   // The recipient. NULL on a simplified F2 alta and on an anulación; set on an F3 canje and on an
   // F1 full invoice so the drainer can re-serialise it. Not a huella input, so rehydrating it
   // cannot change a recomputed huella.
@@ -424,6 +427,9 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
     }),
     ...(row.importe_rectificacion !== null && {
       ImporteRectificacion: row.importe_rectificacion,
+    }),
+    ...(row.fecha_operacion !== null && {
+      FechaOperacion: toAeatDate(row.fecha_operacion),
     }),
     // The recipient, spread back on ONLY when stored non-null, for the same reason as the four
     // rectificativa fields above. Not a huella input; it exists so the drainer files a complete F3

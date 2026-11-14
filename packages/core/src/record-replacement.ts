@@ -31,6 +31,8 @@ export interface RecordReplacementInput {
   seriesId: SeriesId;
   /** The invoice the replacement takes the place of. */
   correctsSaleId: SaleId;
+  /** The day the original sale really happened, `YYYY-MM-DD`, handed to the backend as is. */
+  operationDate?: string;
   /** Checked against permission `sale.rectify`; the authorizer is recorded on the sale. */
   authz: AuthzInput | { managementSessionId: string };
   clock: TrustedClock;
@@ -199,7 +201,11 @@ export async function recordReplacement(
       })),
       counterparty: null,
     },
-    { correctsSaleId: input.correctsSaleId, replaces: true },
+    {
+      correctsSaleId: input.correctsSaleId,
+      replaces: true,
+      ...(input.operationDate === undefined ? {} : { operationDate: input.operationDate }),
+    },
   );
 
   return { saleId, fiscal };

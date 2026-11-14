@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError, decimal, seriesId as brandSeriesId, deviceOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -240,6 +240,34 @@ describe("recordReplacement — the replacement sale", () => {
       [saleId, "correction", "12.10"],
     ]);
     expect(await backend.replacementsFor(nodeId)).toEqual([saleId]);
+  });
+
+  it("hands the backend the operation date it was given", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const recordCorrectionSpy = vi.spyOn(backend, "recordCorrection");
+
+    await replace(backend, originalId, { operationDate: "2026-02-27" });
+
+    expect(recordCorrectionSpy).toHaveBeenCalledOnce();
+    expect(recordCorrectionSpy.mock.calls[0]![2]).toEqual({
+      correctsSaleId: originalId,
+      replaces: true,
+      operationDate: "2026-02-27",
+    });
+  });
+
+  it("names no operation date to the backend when it was given none", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const recordCorrectionSpy = vi.spyOn(backend, "recordCorrection");
+
+    await replace(backend, originalId);
+
+    expect(recordCorrectionSpy.mock.calls[0]![2]).toEqual({
+      correctsSaleId: originalId,
+      replaces: true,
+    });
   });
 
   it("files the original's stored VAT split, not one derived again from its lines", async () => {

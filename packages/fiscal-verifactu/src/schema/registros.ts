@@ -76,6 +76,9 @@ export const registrosFacturacion = table(
     facturasRectificadas: json("facturas_rectificadas"),
     facturasSustituidas: json("facturas_sustituidas"),
     importeRectificacion: json("importe_rectificacion"),
+    // AEAT's FechaOperacion, written only on a replacement corrective whose sale happened on a
+    // day other than its own issue date. Not a huella input.
+    fechaOperacion: day("fecha_operacion"),
     // RegistroAlta["Destinatarios"]: NULL on a simplified F2 alta and on an anulación. Not a huella
     // input either.
     destinatarios: json("destinatarios"),

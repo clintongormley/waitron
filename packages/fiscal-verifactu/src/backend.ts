@@ -4,7 +4,7 @@ import { filedFiguresFor } from "./filed-figures.js";
 import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
 // Registers this package's own error codes on the shared registry.
 import "./errors.js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recipientIdentifierResult } from "@waitron/country-packs";
@@ -29,7 +29,7 @@ import type {
   VatBreakdownLine,
 } from "@waitron/fiscal";
 import { formatInvoiceNumber } from "@waitron/core";
-import { buildQrPayload } from "@waitron/verifactu";
+import { buildQrPayload, formatDate } from "@waitron/verifactu";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import type {
   AltaInput,
@@ -46,7 +46,7 @@ import { appendToChain, refuseUnlessServingPrimary } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import { assertNoActiveConflict } from "./conflict-evidence.js";
 import type { SifRegistration } from "./registro-sif.js";
-import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
+import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
@@ -117,6 +117,7 @@ type OriginalAlta = Pick<
  */
 type OriginalAltaForCorrection = Pick<
   RegistroRow,
+  | "id"
   | "id_emisor_factura"
   | "num_serie_factura"
   | "fecha_expedicion_factura"
@@ -294,6 +295,14 @@ export class VerifactuBackend implements FiscalBackend {
     };
   }
 
+  private async deliveryState(tx: Transaction, registroId: string): Promise<string | undefined> {
+    const [delivery] = await tx
+      .select({ estado: envios.estado })
+      .from(envios)
+      .where(eq(envios.registroId, registroId));
+    return delivery?.estado;
+  }
+
   /**
    * Derives the QR payload from the registro's own STORED columns, never from in-memory values, so
    * a reprint derives the same payload from what was persisted.
@@ -459,11 +468,11 @@ export class VerifactuBackend implements FiscalBackend {
   async recordCorrection(
     tx: Transaction,
     sale: SaleForFiscalRecord,
-    correction: { correctsSaleId: SaleId; replaces?: true },
+    correction: { correctsSaleId: SaleId; replaces?: true; operationDate?: string },
   ): Promise<FiscalRecordRef> {
     const chart = await this.admitIssuance(tx, sale.nodeId);
     const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
-      select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura,
+      select id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura,
         tipo_rectificativa
       from registros_facturacion
       where sale_id = ${correction.correctsSaleId} and tipo_registro = 'alta'
@@ -478,10 +487,19 @@ export class VerifactuBackend implements FiscalBackend {
       throw new AppError("fiscal.sale_not_recorded", { saleId: correction.correctsSaleId });
     }
     // An R5 by replacement stands in for the simplified invoice it replaced, so a later correction
-    // names it by differences, as for an F2. Filing a replacement itself takes "S", which this
-    // backend does not build yet; filing its full amounts as "I" would declare the sale twice.
+    // names it by differences, as for an F2.
     const replacement = original.tipo_factura === "R5" && original.tipo_rectificativa === "S";
-    if ((original.tipo_factura !== "F2" && !replacement) || correction.replaces === true) {
+    // A replacement files the sale's full amounts with nothing rectified, which is right only
+    // while AEAT holds nothing for the original: its latest version was refused.
+    const replacesRefusedF2 =
+      correction.replaces === true &&
+      original.tipo_factura === "F2" &&
+      (await this.deliveryState(tx, original.id)) === "rechazado";
+    if (
+      correction.replaces === true
+        ? !replacesRefusedF2
+        : original.tipo_factura !== "F2" && !replacement
+    ) {
       throw new AppError("fiscal.correction_unsupported", {
         saleId: correction.correctsSaleId,
         // Non-null on every alta; only an anulación stores NULL.
@@ -495,6 +513,14 @@ export class VerifactuBackend implements FiscalBackend {
 
     const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
+    const { operationDate } = correction;
+    const fechaOperacion =
+      replacesRefusedF2 &&
+      operationDate !== undefined &&
+      toAeatDate(operationDate) !== formatDate(sale.issuedAt, sale.offsetMinutes)
+        ? // The same offset cancellation as `recordVoid`'s `FechaExpedicionFacturaAnulada`.
+          new Date(Date.parse(`${operationDate}T00:00:00Z`) - sale.offsetMinutes * 60_000)
+        : undefined;
 
     const input: Omit<AltaInput, "Encadenamiento"> = {
       IDEmisorFactura: sif.nif,
@@ -503,9 +529,7 @@ export class VerifactuBackend implements FiscalBackend {
       FechaExpedicionFactura: sale.issuedAt,
       NombreRazonEmisor: tenant.legalName,
       TipoFactura: "R5",
-      // "I" (por diferencias). "S" (sustitución) would additionally require ImporteRectificacion
-      // (AEAT rule 1118).
-      TipoRectificativa: "I",
+      TipoRectificativa: replacesRefusedF2 ? "S" : "I",
       FacturasRectificadas: [
         {
           IDEmisorFactura: original.id_emisor_factura,
@@ -517,6 +541,11 @@ export class VerifactuBackend implements FiscalBackend {
           ),
         },
       ],
+      // Zero: AEAT holds no amount for the refused original, so there is none to take out.
+      ...(replacesRefusedF2 && {
+        ImporteRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+      }),
+      ...(fechaOperacion !== undefined && { FechaOperacion: fechaOperacion }),
       DescripcionOperacion: sale.descriptionOfOperation,
       Desglose: desglose,
       CuotaTotal: cuotaTotal,
