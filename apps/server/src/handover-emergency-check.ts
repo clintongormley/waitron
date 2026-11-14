@@ -4,7 +4,7 @@ import { canonicalize } from "@waitron/membership";
 import { sha256Hex } from "@waitron/handover";
 import { checkHandoverCopy, collectHandoverSummaries, type WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { openBackupQuery } from "@waitron/store";
+import { openBackupQuery, VENUE_FILE } from "@waitron/store";
 import { isCopyIntact } from "./handover-integrity.js";
 import { readSelectedCopy, readStagedCopy, type SelectedCopy } from "./handover-copy-selection.js";
 
