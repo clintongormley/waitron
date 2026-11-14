@@ -423,9 +423,19 @@ produced 230,623,991 bytes (output/input 0.177843); zstd -3 took 0.57 seconds an
 360-day estimates are 2,639.28 and 1,750.54 MiB respectively, still above the upload limit.
 The current writer passes `packArchiveStream` directly to `encryptArtifactFile`
 (`apps/server/src/backup-sweep.ts`); the packer reads raw file chunks and the cipher encrypts
-them without a compression step. Compression before encryption is an opportunity for the
-streamed-upload plan, not a format change made by this measurement. A1532's one-week print-payload retention comes before the
-streamed-upload plan, whose size figures must be measured again afterwards.
+them without a compression step. Compression before encryption is queued as A1533; the current writer remains unchanged.
+
+After A1532's one-week payload cleanup, the same 30-day sample has a 676,794,368-byte
+compact dump. On pinned `node:26-slim` digest `5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072`
+(Node 26.13.0, arm64), built-in gzip6 produced 144,176,204 bytes; zstd3 produced
+125,429,021 bytes. Both decoded to SHA-256
+`723ee9c29c6d54e04a1ca83395317940803736e6a4cdb13e88a5e786fe5fad58`.
+A1533 selects stable gzip. These are dump codec measurements, not completed compressed
+backup sizes. A synthetic near-256 MiB artifact probe using the current cipher and archive
+unpacker measured 1,128 MiB peak resident memory for raw input and 1,884 MiB with the proposed
+512 MiB decoded buffer cap. The watcher's explicit memory stop now holds implementation;
+[the reviewed plan](../superpowers/plans/2026-11-14-a1533-compressed-backups.md) records the decision still needed.
+The streamed-upload work remains open.
 
 An oversized committed attempt's Finish request now passes the readable-database gate and refuses
 later with `setup.not_ready` (HTTP 503); the old size classification refused
