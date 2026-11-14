@@ -30,6 +30,7 @@ import {
 import { FALLBACK_LOCALE, resolveActiveLocale, type LegalAbout } from "@waitron/shared";
 import { navMatches, destinationMatches, type NavSearchDestination } from "./nav-search.js";
 import { collectSearchDestinations, validSearchDestinationPath } from "./nav-destinations.js";
+import { departmentReceiptSearchDestinations } from "./department-receipt-setting-search.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -67,6 +68,7 @@ import {
   type DashboardRequest,
   type DashboardModuleContext,
   type DashboardSettingCandidate,
+  type DashboardSettingSearchDestination,
   type DashboardScreenHandle,
   type DashboardScreenPlacement,
   type DashboardSettingsPanel,
@@ -911,6 +913,8 @@ export class DashboardApp extends LitElement {
 
   @state() private navSearch = "";
   #moduleContexts = new Map<string, DashboardModuleContext>();
+  #coreSearchContext?: DashboardModuleContext;
+  #coreSettingDestinations: readonly DashboardSettingSearchDestination[] = [];
   #settingSearchEpoch = 0;
   @state() private settingSearch?: {
     destination: NavSearchDestination;
@@ -1210,6 +1214,8 @@ export class DashboardApp extends LitElement {
   override disconnectedCallback(): void {
     this.#closeSettingSearch();
     this.#moduleContexts.clear();
+    this.#coreSearchContext = undefined;
+    this.#coreSettingDestinations = [];
     this.sessionEpoch.advance();
     this.#permissionContinuation.disconnect();
     this.liveUpdates?.stop();
@@ -1607,6 +1613,8 @@ export class DashboardApp extends LitElement {
   #suspendIdentity(): void {
     this.#closeSettingSearch();
     this.#moduleContexts.clear();
+    this.#coreSearchContext = undefined;
+    this.#coreSettingDestinations = [];
     setHelpMode(false);
     this.leave.forceReset();
     navigationGuardFor(window)?.reset();
@@ -1644,6 +1652,7 @@ export class DashboardApp extends LitElement {
    */
   #activate(enabled: readonly string[]): void {
     this.#moduleContexts.clear();
+    this.#coreSearchContext = undefined;
     this.#enabledModules = [...enabled];
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
     const knownTabs = new Set<string>(VENUE_SETTINGS_TABS);
@@ -1653,6 +1662,13 @@ export class DashboardApp extends LitElement {
     this.#navGroups.clear();
     this.#activePanels = [];
     const calendarViews = this.#calendarViews(enabled);
+    this.#coreSearchContext = {
+      request: this.request,
+      liveData: this.api.liveData,
+      renderPanel: this.#renderPanel,
+    };
+    if (this.#coreSettingDestinations.length === 0)
+      this.#coreSettingDestinations = departmentReceiptSearchDestinations(this.api);
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
       const screens: readonly DashboardFurtherScreen[] = contributedScreens(c);
@@ -1679,13 +1695,7 @@ export class DashboardApp extends LitElement {
         request: this.request,
         permissionContinuation: this.#permissionContinuation,
         liveData: this.api.liveData,
-        renderPanel: (panel: string, subject: { id: string; name: string }) =>
-          panel === "department-receipt" && this.#sessionPermissions.includes("venue.configure")
-            ? html`<dashboard-department-receipt-editor
-                .api=${this.api}
-                .subject=${subject}
-              ></dashboard-department-receipt-editor>`
-            : null,
+        renderPanel: this.#renderPanel,
         calendarViews,
       };
       this.#moduleContexts.set(c.module, ctx);
@@ -1708,6 +1718,14 @@ export class DashboardApp extends LitElement {
       list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     this.#searchDestinations();
   }
+
+  #renderPanel = (panel: string, subject: { id: string; name: string }) =>
+    panel === "department-receipt" && this.#sessionPermissions.includes("venue.configure")
+      ? html`<dashboard-department-receipt-editor
+          .api=${this.api}
+          .subject=${subject}
+        ></dashboard-department-receipt-editor>`
+      : null;
 
   /** Gathered before any module's screens are created, because each module gets its own `ctx`. */
   #calendarViews(enabled: readonly string[]): CalendarViewEntry[] {
@@ -2639,9 +2657,14 @@ export class DashboardApp extends LitElement {
     const tabs = new Set(this.#settingsPanels().map((panel) => panel.tab));
     return collectSearchDestinations({
       pages,
-      declarations: DASHBOARD_MODULES.filter((c) =>
-        this.#enabledModules.includes(c.module),
-      ).flatMap((c) => c.searchDestinations ?? []),
+      declarations: [
+        ...this.#coreSettingDestinations.filter((item) =>
+          pages.some((page) => page.screen === item.screen),
+        ),
+        ...DASHBOARD_MODULES.filter((c) => this.#enabledModules.includes(c.module)).flatMap(
+          (c) => c.searchDestinations ?? [],
+        ),
+      ],
       calendarViews: this.#calendarViews(this.#enabledModules),
       settingsTabs: VENUE_SETTINGS_TABS.filter((tab) => tabs.has(tab)).map((id) => ({
         id,
@@ -2698,7 +2721,9 @@ export class DashboardApp extends LitElement {
     const isCurrent = () => this.isConnected && epoch === this.#settingSearchEpoch;
     const available = () => this.#searchDestinations().some((item) => item.setting === declaration);
     const module = DASHBOARD_MODULES.find((c) => c.searchDestinations?.includes(declaration));
-    const ctx = module && this.#moduleContexts.get(module.module);
+    const ctx = this.#coreSettingDestinations.includes(declaration)
+      ? this.#coreSearchContext
+      : module && this.#moduleContexts.get(module.module);
     try {
       if (!ctx || !available()) {
         this.settingSearch = { ...this.settingSearch, status: "unavailable" };

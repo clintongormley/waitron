@@ -36,6 +36,16 @@ import type {
   DepartmentReceiptModel,
   DepartmentReceiptClient,
 } from "../api/department-receipts.js";
+export const departmentReceiptSettingFields = [
+  { name: "printTradingName", labelKey: "receipts.print_trading_name", tab: "receipt" },
+  { name: "printAddress", labelKey: "receipts.print_address", tab: "receipt" },
+  { name: "logo", labelKey: "appearance.logo", tab: "receipt" },
+  { name: "phone", labelKey: "receipts.phone", tab: "receipt" },
+  { name: "email", labelKey: "receipts.email", tab: "receipt" },
+  { name: "headerSubtitle", labelKey: "receipts.subtitle", tab: "receipt" },
+  { name: "footerMessage", labelKey: "receipt.footer_message", tab: "receipt" },
+] as const;
+
 function comparableReceipt(value: DepartmentReceiptWrite): DepartmentReceiptWrite {
   return {
     ...value,
