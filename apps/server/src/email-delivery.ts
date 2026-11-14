@@ -12,6 +12,7 @@ import { MAIL_SETTINGS } from "./mail-settings.js";
 import { venueSmtpFrom } from "./email-sender-name.js";
 import type { SmtpConnection } from "./smtp-send.js";
 import type { OnboardingIntent } from "./trading-config.js";
+import "./errors.js";
 
 export type EmailDelivery =
   { mode: "smtp" | "local_capture"; smtp: SmtpConnection } | { mode: "unconfigured" };
