@@ -47,11 +47,11 @@ the database's environment before its first record (the stamp sites listed below
 does not cover the rest, and this plan builds nothing for them.** Traced, except where a test is
 named:
 
-- A record's environment is the process's `config.environment` (`apps/server/src/boot.ts:3194`,
+- A record's environment is the process's `config.environment` (`apps/server/src/boot.ts:3199`,
   `recordGeneration.environment`), and the drain compares it with the same value
-  (`apps/server/src/boot.ts:4174`, `drain.ts:698-711`).
+  (`apps/server/src/boot.ts:4179`, `drain.ts:698-711`).
 - A start whose environment differs from the database's stamp is refused before anything runs
-  (`apps/server/src/deployment-guard.ts:27`, called at `boot.ts:1307`). Every path that creates a
+  (`apps/server/src/deployment-guard.ts:27-31`, called at `boot.ts:1307`). Every path that creates a
   venue database stamps it before any record exists: first setup
   (`packages/provisioning/src/first-setup-command-deployment.ts:275`), provisioning
   (`apps/server/src/provision.ts:141`), adoption (`apps/server/src/adopt.ts:235`); a restore of a
