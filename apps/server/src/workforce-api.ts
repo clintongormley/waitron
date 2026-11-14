@@ -395,3 +395,5 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     }),
   );
 }
+
+export { WORK_TIME_RULES_NOT_FOUND } from "@waitron/workforce-es";

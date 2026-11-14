@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { withTransaction, saveSettings } from "@waitron/db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import { convenioConfig } from "@waitron/workforce-es";
+import { workTimeRulesConfig, WORK_TIME_RULES_NOT_FOUND } from "@waitron/workforce-es";
 import { mountTillApi, resolveCardCollector } from "./till-api.js";
 import { failAttempting, PAYMENTS_SETTINGS } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
@@ -103,9 +103,9 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
         "workforce-es": false,
       });
       await suite.db
-        .insert(convenioConfig)
+        .insert(workTimeRulesConfig)
         .values({ id: 1 })
-        .onConflictDoNothing({ target: convenioConfig.id });
+        .onConflictDoNothing({ target: workTimeRulesConfig.id });
       const env = {
         WAITRON_HTTP_LANDING_PORT: "0",
         WAITRON_HTTP_PORT: String(port),
@@ -169,7 +169,7 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
         headers: { cookie: venue.managerCookie },
       });
       expect(rules.status).toBe(409);
-      expect(await rules.json()).toMatchObject({ error: { code: "convenio.not_found" } });
+      expect(await rules.json()).toMatchObject({ error: { code: WORK_TIME_RULES_NOT_FOUND } });
       const events = await fetch(
         `${base}/management-api/events?resources=${encodeURIComponent(JSON.stringify(["settings.modules", "settings.payments", ...(installed ? ["payments"] : [])].map((type) => ({ type }))))}`,
         { headers: { cookie: venue.managerCookie } },

@@ -360,7 +360,7 @@ import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
 import { mountOrdersApi } from "./orders-api.js";
-import { mountWorkforceApi } from "./workforce-api.js";
+import { mountWorkforceApi, WORK_TIME_RULES_NOT_FOUND } from "./workforce-api.js";
 import { mountManagementAttendanceApi } from "./management-attendance-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
@@ -3363,7 +3363,7 @@ async function bootServer(
         ? {}
         : {
             resolveRules: async () => {
-              throw new AppError("convenio.not_found", {});
+              throw new AppError(WORK_TIME_RULES_NOT_FOUND, {});
             },
           }),
     },
