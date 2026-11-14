@@ -115,6 +115,9 @@ export class ImageLibrary extends LitElement {
         max-width: none;
         margin-block: var(--wt-space-4);
       }
+      .header-chooser::part(field) {
+        border-style: solid;
+      }
       .batch-progress {
         padding: var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
@@ -161,6 +164,7 @@ export class ImageLibrary extends LitElement {
       }
 
       header,
+      .header-actions,
       .filters,
       .actions,
       nav {
@@ -494,30 +498,29 @@ export class ImageLibrary extends LitElement {
       return next;
     });
   }
+  #batchChooser(empty = false) {
+    return html`<wt-file-input
+      class=${empty ? "batch-chooser" : "header-chooser"}
+      data-test=${empty ? "empty-library" : nothing}
+      name="image-files"
+      .compact=${!empty}
+      multiple
+      accept="image/jpeg,image/png,image/webp"
+      .locale=${currentLocale()}
+      .files=${[]}
+      .copy=${{ drop: empty ? t("image.drop_page") : "", choose: t(empty ? "image.choose_files" : "image.choose_photos"), replace: t("image.choose_another"), previewAlt: t("image.preview") }}
+      ?disabled=${!this.#canBatch()}
+      @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+        event.stopPropagation();
+        void this.#uploadBatch(event.detail.files);
+      }}
+    ></wt-file-input>`;
+  }
   #renderBatch() {
     const uploaded = this.batch.filter(
       (item) => item.status === "uploaded" || item.status === "reused",
     ).length;
-    return html`${
-      !this.picker
-        ? html`<wt-file-input
-            class="batch-chooser"
-            name="image-files"
-            compact
-            multiple
-            accept="image/jpeg,image/png,image/webp"
-            .locale=${currentLocale()}
-            .files=${[]}
-            .copy=${{ drop: t("image.drop_page"), choose: t("image.choose_files"), replace: t("image.choose_another"), previewAlt: t("image.preview") }}
-            ?disabled=${!this.#canBatch()}
-            @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
-              event.stopPropagation();
-              void this.#uploadBatch(event.detail.files);
-            }}
-          ></wt-file-input>`
-        : nothing
-    }
-    ${
+    return html` ${
       this.batch.length
         ? html`<div class="batch-progress" role="status">
               ${t(this.batch.length === 1 ? "image.batch_progress_one" : "image.batch_progress")
@@ -539,6 +542,7 @@ export class ImageLibrary extends LitElement {
   }
   @state() private images: LibraryImage[] = [];
   @state() private total = 0;
+  @state() private answeredSearch: string | null = null;
   @state() private search = "";
   @state() private sort: ImageQuery["sort"] = "relevance";
   @state() private direction: "asc" | "desc" = "desc";
@@ -656,6 +660,7 @@ export class ImageLibrary extends LitElement {
       this.offset = 0;
     }
     this.loadError = false;
+    this.answeredSearch = null;
     const query: ImageQuery = {
       search: this.search,
       language: currentLocale(),
@@ -682,6 +687,7 @@ export class ImageLibrary extends LitElement {
         (value) => {
           this.images = value.images;
           this.total = value.total;
+          this.answeredSearch = query.search;
           if (this.offset > 0 && this.offset >= value.total) {
             this.offset = Math.max(0, Math.ceil(value.total / 24) - 1) * 24;
             void this.#load(true);
@@ -1232,13 +1238,16 @@ export class ImageLibrary extends LitElement {
   override render() {
     return html`<header class=${this.picker ? "picker-header" : nothing}>
         ${this.picker ? nothing : html`<h1>${t("nav.images")}</h1>`}
-        <wt-button
-          data-test="upload"
-          variant=${this.picker ? "secondary" : "primary"}
-          ?disabled=${this.batchRunning}
-          @click=${() => this.#edit(null)}
-          >${t("image.upload_many")}</wt-button
-        >
+        <div class="header-actions">
+          ${this.picker ? nothing : this.#batchChooser()}
+          <wt-button
+            data-test="upload"
+            variant=${this.picker ? "secondary" : "primary"}
+            ?disabled=${this.batchRunning}
+            @click=${() => this.#edit(null)}
+            >${t("image.upload_many")}</wt-button
+          >
+        </div>
       </header>
       <div class="filters">
         <wt-input
@@ -1364,7 +1373,7 @@ export class ImageLibrary extends LitElement {
           </article>`;
         })}
       </div>
-      ${this.#batchImages().length === 0 && !this.loadError ? html`<p>${t("image.empty")}</p>` : nothing}
+      ${this.#batchImages().length === 0 && !this.loadError ? (!this.picker && this.answeredSearch === "" && this.total === 0 ? this.#batchChooser(true) : html`<p>${t("image.empty")}</p>`) : nothing}
       <nav aria-label=${t("image.page")}>
         <wt-button
           variant="secondary"
