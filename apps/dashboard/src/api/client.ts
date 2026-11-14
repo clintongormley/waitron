@@ -2859,6 +2859,37 @@ export class DashboardApi {
     return this.#request<AccessRole[]>("/management-api/access-roles", "GET");
   }
 
+  createAccessRole(input: {
+    name: string;
+    permissions: string[];
+    copiedFrom?: string;
+  }): Promise<{ id: string }> {
+    return this.#request("/management-api/access-roles", "POST", input);
+  }
+
+  renameAccessRole(id: string, name: string, expectedName: string): Promise<void> {
+    return this.#request(`/management-api/access-roles/${encodeURIComponent(id)}/name`, "PUT", {
+      name,
+      expectedName,
+    });
+  }
+
+  setAccessRolePermissions(
+    id: string,
+    permissions: string[],
+    expectedPermissions: string[],
+  ): Promise<void> {
+    return this.#request(
+      `/management-api/access-roles/${encodeURIComponent(id)}/permissions`,
+      "PUT",
+      { permissions, expectedPermissions },
+    );
+  }
+
+  deleteAccessRole(id: string): Promise<{ removedFrom: number }> {
+    return this.#request(`/management-api/access-roles/${encodeURIComponent(id)}`, "DELETE");
+  }
+
   setPersonAccessRoles(
     personId: string,
     roleIds: string[],

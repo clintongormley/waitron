@@ -3448,3 +3448,37 @@ it("reads returned invoices by offset without extending an unattended session", 
   expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
   expect(active).not.toHaveBeenCalled();
 });
+
+it("sends access-role lifecycle writes with their expected snapshots", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse({ id: "new" }))
+    .mockResolvedValueOnce(jsonResponse({}))
+    .mockResolvedValueOnce(jsonResponse({}))
+    .mockResolvedValueOnce(jsonResponse({ removedFrom: 2 }));
+  const api = new DashboardApi("", fetch);
+  expect(
+    await api.createAccessRole({ name: "Books", permissions: ["report.view"], copiedFrom: "a/b" }),
+  ).toEqual({ id: "new" });
+  await api.renameAccessRole("a/b", "Books", "Accountant");
+  await api.setAccessRolePermissions("a/b", ["report.view"], []);
+  expect(await api.deleteAccessRole("a/b")).toEqual({ removedFrom: 2 });
+  expect(fetch.mock.calls.map(([url, options]) => [url, options.method, options.body])).toEqual([
+    [
+      "/management-api/access-roles",
+      "POST",
+      JSON.stringify({ name: "Books", permissions: ["report.view"], copiedFrom: "a/b" }),
+    ],
+    [
+      "/management-api/access-roles/a%2Fb/name",
+      "PUT",
+      JSON.stringify({ name: "Books", expectedName: "Accountant" }),
+    ],
+    [
+      "/management-api/access-roles/a%2Fb/permissions",
+      "PUT",
+      JSON.stringify({ permissions: ["report.view"], expectedPermissions: [] }),
+    ],
+    ["/management-api/access-roles/a%2Fb", "DELETE", undefined],
+  ]);
+});

@@ -46,6 +46,13 @@ confirmation covers these actions in this browser for 15 minutes, or until your 
 Choose **Cancel** to leave the action undone. If the disk is full, open **Box status** and use
 **Free** to make room before confirming. See [Free space on the box](box-status.md#free-space).
 
+Open **Access roles** under **Team** to create a role for a job such as Accountant. Choose
+**Add access role**, enter a name, tick its permissions and press **Save**. Open an existing role
+to change its ticks. Use **Copy role** to start from its permissions with a new name. To remove
+a custom role, choose **Delete role** and check how many people will lose it before confirming.
+You can change or copy only roles whose permissions you hold. Admin always has every permission;
+its ticks are locked. Assign the role to people separately in **Users**.
+
 ## Your own account {#own-account}
 
 Open **Account settings** from the account menu to change your own sign-in details, even when
