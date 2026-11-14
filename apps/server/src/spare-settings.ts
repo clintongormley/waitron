@@ -100,8 +100,8 @@ export interface SpareSettingsDeps extends SendBackupSettingsDeps {
 /**
  * On the main box, sends its backup settings to the spare its pair link streams to, again after each
  * change, until the spare answers their digest. What was delivered is kept in memory only, so every
- * start sends once. A spare answers only after its first full start, so failures before then are
- * logged at `info`.
+ * start sends once. Failures are logged at `info` until this box first delivers to that spare after
+ * it starts, because a spare answers only after its first full start, and at `warn` after that.
  */
 export function runSpareSettings(deps: SpareSettingsDeps): { stop(): Promise<void> } {
   const checkMs = deps.checkMs ?? CHECK_MS;

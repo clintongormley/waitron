@@ -106,8 +106,7 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
 
 **4. Released by the hold, once A760 lands.** Build order: the pay window, A446 pre-bill,
-close the day, then A947 and its handover bundles, including the spare's backup settings, which
-A947 3b's plan still owes. A1150 (allergens from the live product) is needed before go-live and has
+close the day, then A947 and its handover bundles. A1150 (allergens from the live product) is needed before go-live and has
 no design yet.
 
 - [The pay window, after A739](backlog/till.md#bundle-the-pay-window-after-a739)

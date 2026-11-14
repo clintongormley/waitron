@@ -1,5 +1,6 @@
 // A main box M and a spare S, both started in this process: M is provisioned as the stream loop
-// provisions its box, and S starts from an empty state folder, so it boots in setup mode.
+// provisions its box, but with no bucket copy or recovery key until the test switches them on while
+// M is down, and S starts from an empty state folder, so it boots in setup mode.
 // `spare-join.e2e.test.ts` runs it against versitygw.
 import { randomUUID, X509Certificate } from "node:crypto";
 import { existsSync } from "node:fs";
