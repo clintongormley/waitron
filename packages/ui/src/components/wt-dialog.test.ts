@@ -1985,7 +1985,7 @@ test("listens on the document for a page-body Escape only while a dialog is open
   expect(listening.size).toBe(0);
 });
 
-test("scrolls a body row's new message only just into view", async () => {
+test("keeps a body row's new message in view without scrolling the body", async () => {
   const { el, body } = await openAtPhoneSize(
     '<input name="note" /><div style="height: 1800px">Lines</div><wt-form-actions><button>Check</button></wt-form-actions><div style="height: 1800px">More lines</div>',
   );
@@ -1993,7 +1993,13 @@ test("scrolls a body row's new message only just into view", async () => {
   expect(body.scrollTop).toBe(0);
   row.error = "Check the name.";
   const message = (await formMessageOf(row))!;
-  await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+  await vi.waitFor(() => {
+    const frame = body.getBoundingClientRect();
+    const box = message.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(frame.top);
+    expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
+  });
+  expect(body.scrollTop).toBe(0);
   const frameBox = body.getBoundingClientRect();
   const box = message.getBoundingClientRect();
   expect(box.bottom).toBeLessThanOrEqual(frameBox.bottom + 1);
