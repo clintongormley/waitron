@@ -1323,15 +1323,14 @@ async function bootServer(
   // `applyMigrations` opens and closes its own store, so running it BEFORE the long-lived open below
   // keeps the two from overlapping and leaves nothing open behind a failed migration. Setup mode
   // migrates the FULL schema, which the wizard needs; trading mode migrates only the enabled set.
-  const firstPass =
+  const firstPass = migrationOptionsFor(
     config.node === undefined
       ? []
-      : migrationOptionsFor(
-          orderedMigrationSets(availableModules).filter(
-            (set) => set.name === "core" || set.database === "node",
-          ),
-          config.migrationsRoot,
-        );
+      : orderedMigrationSets(availableModules).filter(
+          (set) => set.name === "core" || set.database === "node",
+        ),
+    config.migrationsRoot,
+  );
   const firstPassTables = firstPass.flatMap((set) => set.appendOnlyTables ?? []);
   const firstPassRestored = await missingBeforeMigration(config.venueDir, firstPassTables);
   if (firstPass.length > 0) {
