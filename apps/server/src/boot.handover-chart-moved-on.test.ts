@@ -132,7 +132,7 @@ async function startAndTryToActivate() {
   started = await startServer(await spareEnv(), undefined, {
     timings: { minTickMs: 200, maxTickMs: 600_000 },
     peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
-    stepdown: { mount: () => {}, restart: () => restarts.push("restart") },
+    restart: () => restarts.push("restart"),
   });
 
   const prepare = (proposal: unknown) =>
@@ -289,7 +289,7 @@ describe("a real restart after activating, then the same request again", () => {
       started = await startServer(await spareEnv(), undefined, {
         timings: { minTickMs: 200, maxTickMs: 600_000 },
         peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
-        stepdown: { mount: () => {}, restart: () => restarts.push("restart") },
+        restart: () => restarts.push("restart"),
       });
       const retry = await post("activate", sentActivation);
       await started.close();
@@ -354,7 +354,7 @@ describe("the emergency routes through a real spare start", () => {
     started = await startServer(env, undefined, {
       timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
-      stepdown: { mount: () => {}, restart: () => {} },
+      restart: () => {},
     });
     const moduleConfig = parseModuleConfig(
       JSON.parse(await readFile(join(dirs().spareState, "modules.json"), "utf8")),

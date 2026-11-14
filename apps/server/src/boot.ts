@@ -1024,13 +1024,9 @@ export interface StartServerSeams {
   observeApp?: (app: Hono) => void;
   /** Every card provider the till and the card sweeps reach, built on the server's own handle. */
   cardPool?: (deps: { db: Database }) => CardProviderPool;
-  /**
-   * The full start's stepdown, handed to a test that mounts its own route behind the handover gate;
-   * `restart` stands in for the SIGTERM.
-   */
+  /** The full start's stepdown, for a test that mounts its own route behind the handover gate. */
   stepdown?: {
     mount(app: Hono, stepDown: (request: StepDownRequest) => Promise<StepDownResult>): void;
-    restart(): void;
   };
   /**
    * Stands in for the start check on a box that is not a mirror. A suite sets it, saying why at the
@@ -1060,10 +1056,11 @@ export interface StartServerSeams {
    */
   boxLookup?: BoxLookup;
   /**
-   * Every restart a start asks for, so a test running servers in its own process is not stopped by
-   * a signal; `stepdown.restart`, when set, still takes the full start's and the latch start's.
+   * Takes every restart a start asks for, so a test running servers in its own process is not
+   * stopped: `"restart"` where production calls `restartProcess`, `"signal"` where it sends itself
+   * SIGTERM.
    */
-  restart?: () => void;
+  restart?: (kind: "restart" | "signal") => void;
   /** Awaited by the joining spare's first-copy job before each attempt. */
   spareCopy?: { hold?: Promise<void> };
 }
@@ -1413,8 +1410,11 @@ async function bootServer(
   let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
     Promise.reject(new Error("stepdown called on a start that has not provided one"));
   seams.stepdown?.mount(app, (request) => stepDownHere(request));
-  const restart = seams.stepdown?.restart ?? seams.restart ?? restartProcess;
-  const signalRestart = seams.restart ?? (() => process.kill(process.pid, "SIGTERM"));
+  const restartSeam = seams.restart;
+  const restart = restartSeam ? () => restartSeam("restart") : restartProcess;
+  const signalRestart = restartSeam
+    ? () => restartSeam("signal")
+    : () => process.kill(process.pid, "SIGTERM");
   const boxLookup = seams.boxLookup;
   const storeLookup =
     boxLookup === undefined ? undefined : (name: string) => boxLookup(name, { fresh: false });

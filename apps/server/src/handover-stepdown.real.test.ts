@@ -336,10 +336,10 @@ describe("a card sale in flight when the box steps down", () => {
             c.json(await stepDown({ binding, kind: "handed-over", self: c })),
           );
         },
-        restart: () => {
-          restarts += 1;
-          restarted.release();
-        },
+      },
+      restart: () => {
+        restarts += 1;
+        restarted.release();
       },
     });
     const base = `http://127.0.0.1:${httpPort()}`;

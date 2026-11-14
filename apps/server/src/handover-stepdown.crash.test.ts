@@ -227,8 +227,8 @@ await startServer(env, env, {
       app.post("/test/hold", () => { mark("held"); return new Promise(() => {}); });
       app.post("/test/stepdown", async (c) => c.json(await stepDown({ binding, kind: "handed-over", self: c })));
     },
-    restart() { mark("restart"); },
   },
+  restart() { mark("restart"); },
 });
 mark("started");`;
 

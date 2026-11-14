@@ -401,11 +401,7 @@ it("joining finishes when the copy holds this box's row, and the next start is a
   try {
     const { env, tls } = await joiningStartEnv(scratch, spare);
     let restarts = 0;
-    server = await startServer(
-      env,
-      {},
-      { stepdown: { mount() {}, restart: () => (restarts += 1) } },
-    );
+    server = await startServer(env, {}, { restart: () => (restarts += 1) });
     await vi.waitFor(() => expect(restarts).toBe(1));
     expect(await readPendingAdoption(scratch)).toBeNull();
     await server.close();

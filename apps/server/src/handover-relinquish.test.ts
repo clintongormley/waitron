@@ -804,7 +804,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     spare = await startServer(boxes.spareEnv, boxes.spareEnv, {
       timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
-      stepdown: { mount: () => {}, restart },
+      restart,
     });
     const sparePort = httpPort();
 
@@ -903,7 +903,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     spare = await startServer(boxes.spareEnv, boxes.spareEnv, {
       timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
-      stepdown: { mount: () => {}, restart: () => {} },
+      restart: () => {},
     });
 
     await vi.waitFor(
@@ -941,7 +941,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     spare = await startServer(boxes.spareEnv, boxes.spareEnv, {
       timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
-      stepdown: { mount: () => {}, restart: () => {} },
+      restart: () => {},
     });
 
     await vi.waitFor(

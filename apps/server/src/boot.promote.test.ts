@@ -785,7 +785,7 @@ describe("a mirror's promote and the backup room note", () => {
         WAITRON_STATE_DIR: stateDir,
       },
       undefined,
-      { timings: TIMINGS, stepdown: { mount: () => {}, restart: () => steps.push("restart") } },
+      { timings: TIMINGS, restart: () => steps.push("restart") },
     );
     const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
     try {
@@ -850,7 +850,7 @@ describe("a mirror's promote and the backup room note", () => {
         WAITRON_STATE_DIR: stateDir,
       },
       undefined,
-      { timings: TIMINGS, stepdown: { mount: () => {}, restart } },
+      { timings: TIMINGS, restart },
     );
     try {
       const request = seed.fixture.request("promote");

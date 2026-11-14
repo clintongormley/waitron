@@ -378,7 +378,7 @@ describe("the start check on a real start", () => {
             }),
             waitingStart: { intervalMs: 60_000, secure: () => true },
             stream: { store: bucket, mainCheckIntervalMs: 5 },
-            stepdown: { mount: () => {}, restart: restarted },
+            restart: restarted,
           },
           beforeStart: async (nodeId) => {
             const settings = {
@@ -694,7 +694,7 @@ describe("the start check on a real start", () => {
     const seams = (peerCheck: () => Promise<StartPeerCheckOutcome>): StartServerSeams => ({
       peerCheck,
       waitingStart: { intervalMs: 5 },
-      stepdown: { mount: () => {}, restart },
+      restart,
     });
     const acceptingSales = async () =>
       (
@@ -1033,8 +1033,8 @@ describe("the start check on a real start", () => {
       seams: {
         peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
         mdnsSocket: () => mdns.socket,
+        restart,
         stepdown: {
-          restart,
           mount: (app, stepDown) => {
             app.get("/test/held", async (c) => {
               entered();

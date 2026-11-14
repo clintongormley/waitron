@@ -346,7 +346,9 @@ function seamsFor(box: Box): StartServerSeams {
     boxHost: synchronisedBoxHost(),
     requestFromBox: () => false,
     requestProvenFromBox: () => false,
-    stepdown: { mount: () => {}, restart: () => box.restartAsked.release() },
+    // A signal goes to the spied `process.kill`, which the run counts as a stop nothing should ask for.
+    restart: (kind) =>
+      kind === "signal" ? void process.kill(process.pid, "SIGTERM") : box.restartAsked.release(),
     cardPool: ({ db }) => {
       const card = new FakePaymentProvider(db);
       Object.defineProperty(card, "provider", { value: "stripe" });
