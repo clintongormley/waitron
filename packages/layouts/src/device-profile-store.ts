@@ -16,7 +16,7 @@ import {
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { NAVIGATION_SCREENS } from "./device-types.js";
 import type { CapabilityFlag, FormFactor, NavigationScreen } from "./device-types.js";
 import {
@@ -317,4 +317,49 @@ export async function deleteDeviceProfile(
   } catch (error) {
     translateWriteError(error);
   }
+}
+
+export type DeviceListRow = Pick<
+  typeof devices.$inferSelect,
+  | "id"
+  | "deviceProfileId"
+  | "receiptPrinterId"
+  | "paymentSlipPrinterId"
+  | "cashDrawerPrinterId"
+  | "label"
+  | "active"
+  | "lastSeenAt"
+  | "batteryLevel"
+  | "batteryCharging"
+  | "batteryReportedAt"
+  | "enrolledAt"
+> & {
+  formFactor: (typeof deviceProfiles.$inferSelect)["formFactor"];
+  profileRetiredAt: (typeof deviceProfiles.$inferSelect)["retiredAt"];
+};
+
+/** The active, undeleted devices, newest-enrolled first, each with its profile's form factor. */
+export async function listDevices(tx: Transaction): Promise<DeviceListRow[]> {
+  // The inner join always matches: `device_profile_id` is NOT NULL with a RESTRICT FK.
+  return tx
+    .select({
+      id: devices.id,
+      formFactor: deviceProfiles.formFactor,
+      profileRetiredAt: deviceProfiles.retiredAt,
+      deviceProfileId: devices.deviceProfileId,
+      receiptPrinterId: devices.receiptPrinterId,
+      paymentSlipPrinterId: devices.paymentSlipPrinterId,
+      cashDrawerPrinterId: devices.cashDrawerPrinterId,
+      label: devices.label,
+      active: devices.active,
+      lastSeenAt: devices.lastSeenAt,
+      batteryLevel: devices.batteryLevel,
+      batteryCharging: devices.batteryCharging,
+      batteryReportedAt: devices.batteryReportedAt,
+      enrolledAt: devices.enrolledAt,
+    })
+    .from(devices)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+    .where(and(eq(devices.active, true), isNull(devices.deletedAt)))
+    .orderBy(desc(devices.enrolledAt));
 }

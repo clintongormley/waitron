@@ -19,6 +19,7 @@ import {
   chosenPrinterOf,
   kindOfFormFactor,
   listDeviceProfiles,
+  listDevices,
   refuseDeletedPrinters,
   type ProfilePrinterRole,
 } from "@waitron/layouts";
@@ -759,31 +760,10 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   app.get("/management-api/devices", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // The inner join always matches: `device_profile_id` is NOT NULL with a RESTRICT FK.
       const { rows, madeHere, alternatives, equipment, kitchenScreens } = await gated(
         sessionId,
         async (tx) => {
-          const rows = await tx
-            .select({
-              id: devices.id,
-              formFactor: deviceProfiles.formFactor,
-              profileRetiredAt: deviceProfiles.retiredAt,
-              deviceProfileId: devices.deviceProfileId,
-              receiptPrinterId: devices.receiptPrinterId,
-              paymentSlipPrinterId: devices.paymentSlipPrinterId,
-              cashDrawerPrinterId: devices.cashDrawerPrinterId,
-              label: devices.label,
-              active: devices.active,
-              lastSeenAt: devices.lastSeenAt,
-              batteryLevel: devices.batteryLevel,
-              batteryCharging: devices.batteryCharging,
-              batteryReportedAt: devices.batteryReportedAt,
-              enrolledAt: devices.enrolledAt,
-            })
-            .from(devices)
-            .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-            .where(and(eq(devices.active, true), isNull(devices.deletedAt)))
-            .orderBy(desc(devices.enrolledAt));
+          const rows = await listDevices(tx);
           return {
             rows,
             madeHere: await listMadeHereStations(tx),

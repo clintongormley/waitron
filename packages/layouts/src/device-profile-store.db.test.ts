@@ -34,6 +34,7 @@ import {
   getDeviceProfile,
   getDeviceProfileWithPrinters,
   listDeviceProfiles,
+  listDevices,
   readProfileStartingScreen,
   updateDeviceProfile,
 } from "./device-profile-store.js";
@@ -1145,6 +1146,78 @@ describe("what can refuse a write to device_profiles", () => {
         column: "device_profile_id",
         parent: "device_profiles",
         on_delete: "RESTRICT",
+      },
+    ]);
+  });
+});
+
+describe("listDevices", () => {
+  it("lists active, undeleted devices newest-enrolled first with their profile's form factor and retirement", async () => {
+    await suite.db.insert(locations).values({});
+    const [till, kds] = await seedDeviceProfiles(suite.db, [
+      { name: "Till", formFactor: "till", capabilities: [] },
+      {
+        name: "Kitchen",
+        formFactor: "kds",
+        capabilities: [],
+        retiredAt: "2026-11-01T09:00:00.000Z",
+      },
+    ]);
+    const device = (values: Partial<typeof devices.$inferInsert>) =>
+      suite.db
+        .insert(devices)
+        .values({ label: "Device", tokenHash: "seeded", deviceProfileId: till!.id, ...values })
+        .returning({ id: devices.id })
+        .then(([row]) => row!.id);
+    const older = await device({ label: "Older", enrolledAt: "2026-11-01T10:00:00.000Z" });
+    const newer = await device({
+      label: "Newer",
+      deviceProfileId: kds!.id,
+      enrolledAt: "2026-11-02T10:00:00.000Z",
+      lastSeenAt: "2026-11-02T11:00:00.000Z",
+      batteryLevel: 40,
+      batteryCharging: true,
+      batteryReportedAt: "2026-11-02T11:00:00.000Z",
+    });
+    await device({ label: "Inactive", active: false, enrolledAt: "2026-11-03T10:00:00.000Z" });
+    await device({
+      label: "Deleted",
+      deletedAt: "2026-11-04T10:00:00.000Z",
+      enrolledAt: "2026-11-04T09:00:00.000Z",
+    });
+
+    expect(await inTx((tx) => listDevices(tx))).toEqual([
+      {
+        id: newer,
+        formFactor: "kds",
+        profileRetiredAt: "2026-11-01T09:00:00.000Z",
+        deviceProfileId: kds!.id,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        cashDrawerPrinterId: null,
+        label: "Newer",
+        active: true,
+        lastSeenAt: "2026-11-02T11:00:00.000Z",
+        batteryLevel: 40,
+        batteryCharging: true,
+        batteryReportedAt: "2026-11-02T11:00:00.000Z",
+        enrolledAt: "2026-11-02T10:00:00.000Z",
+      },
+      {
+        id: older,
+        formFactor: "till",
+        profileRetiredAt: null,
+        deviceProfileId: till!.id,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        cashDrawerPrinterId: null,
+        label: "Older",
+        active: true,
+        lastSeenAt: null,
+        batteryLevel: null,
+        batteryCharging: null,
+        batteryReportedAt: null,
+        enrolledAt: "2026-11-01T10:00:00.000Z",
       },
     ]);
   });
