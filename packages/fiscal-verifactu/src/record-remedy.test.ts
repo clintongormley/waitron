@@ -72,6 +72,8 @@ beforeEach(async () => {
   });
 });
 
+const BOTH_OUTCOMES = ["record-correction", ACCEPTED_WITH_ERRORS_CORRECTION] as const;
+
 function apply(enabled = true, value = request, acceptance = false) {
   return withTransaction(suite.db, (tx) =>
     applyRecordCorrection(tx, {
@@ -79,9 +81,7 @@ function apply(enabled = true, value = request, acceptance = false) {
       nodeId: node.nodeId,
       environment: "preproduction",
       enabledRemedies: new Set(
-        enabled
-          ? ["record-correction", ...(acceptance ? [ACCEPTED_WITH_ERRORS_CORRECTION] : [])]
-          : [],
+        enabled ? (acceptance ? BOTH_OUTCOMES : ["record-correction" as const]) : [],
       ),
       request: value,
       now: NOW,
