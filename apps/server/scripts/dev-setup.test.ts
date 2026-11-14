@@ -1,3 +1,6 @@
+import { readModuleConfig } from "../src/module-config.js";
+import { readSettings } from "@waitron/db";
+import { MODULES_SETTINGS } from "../src/modules.js";
 import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -15,7 +18,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
+import { enabledModules, fiscalSlot } from "@waitron/module";
 import { loadConfig } from "../src/config.js";
 import { ALL_MODULES } from "../src/modules.js";
 import {
@@ -239,13 +242,16 @@ describe("devSetup against a real venue directory", () => {
     }
   });
 
-  it("writes a modules.json that resolves the fiscal slot to exactly one member (verifactu)", () => {
-    // An absent modules.json enables every fiscal-slot member and boot refuses
-    // `module.fiscal_slot_ambiguous`.
-    const raw: unknown = JSON.parse(readFileSync(join(workDir, "modules.json"), "utf8"));
-    const config = parseModuleConfig(raw, ALL_MODULES);
-    expect((raw as { modules: Record<string, boolean> }).modules["fiscal-none"]).toBe(false);
-    expect(fiscalSlot(enabledModules(ALL_MODULES, config), null).id).toBe("verifactu");
+  it("saves module settings that resolve the fiscal slot to exactly one member (verifactu)", async () => {
+    const store = await openVenueDatabase(venueDir);
+    try {
+      const raw = (await readSettings(store.venue, MODULES_SETTINGS)).doc;
+      const config = await readModuleConfig(store.venue);
+      expect(raw.modules["fiscal-none"]).toBe(false);
+      expect(fiscalSlot(enabledModules(ALL_MODULES, config), null).id).toBe("verifactu");
+    } finally {
+      await store.close();
+    }
   });
 
   it("writes a .env that loadConfig and loadKeyRing accept as valid server config", () => {
@@ -457,7 +463,6 @@ describe("devSetup under WAITRON_ENV=production", () => {
 
     expect(existsSync(envPath)).toBe(false);
     expect(existsSync(join(venueDir, "venue.db"))).toBe(false);
-    expect(existsSync(join(workDir, "modules.json"))).toBe(false);
 
     vi.stubEnv("WAITRON_ENV", "dev");
     const corrected = await devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} });

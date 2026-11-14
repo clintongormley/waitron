@@ -17,7 +17,7 @@ export interface VenueFiscalSelection {
 
 /**
  * Throws `fiscal.regime_not_implemented` for an unimplemented territory, the same code `planVenue`
- * raises. `base` defaults to empty because the CLI and setup-api have no operator `modules.json` at
+ * raises. `base` defaults to empty because the CLI and setup-api have no operator module settings at
  * provision.
  */
 export function venueFiscalSelection(

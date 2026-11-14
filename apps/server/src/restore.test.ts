@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { spawn } from "node:child_process";
@@ -22,7 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -1736,6 +1737,31 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
     { name: "secrets/backup.env", bytes: Buffer.from(BACKUP_ENV) },
     { name: "secrets/modules.json", bytes: Buffer.from(MODULES_JSON) },
   ];
+
+  it("a restored box takes the module list from the archive's database", async () => {
+    const source = join(stagingDir, "archive-venue");
+    await seedModuleSettings(source, { bookings: false, "fiscal-none": false });
+    const bytes = await readFile(join(source, "venue.db"));
+    await seedModuleSettings(venueDir, { bookings: true, "fiscal-none": false });
+    await restoreFromArtifact(
+      makeRestoreDeps({
+        skipSecrets: true,
+        artifact: buildArtifact(
+          FULL_ENTRIES.map((entry) => (entry.name === "db.dump" ? { ...entry, bytes } : entry)),
+        ),
+        migrate: applyMigrations,
+      }),
+    );
+    const restored = await openVenueDatabase(venueDir);
+    try {
+      expect([...(await readModuleConfig(restored.venue)).overrides]).toEqual([
+        ["bookings", false],
+        ["fiscal-none", false],
+      ]);
+    } finally {
+      await restored.close();
+    }
+  });
 
   it("restores both onto a FRESH state dir, leaving the box's OWN recovery.json untouched", async () => {
     // `recovery.json` is this box's own escalation counter and is never captured.

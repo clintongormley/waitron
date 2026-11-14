@@ -1,4 +1,4 @@
-import { MODULES_FILE, SECRETS_ENV_FILE, TRADING_ENV_FILE } from "@waitron/store";
+import { SECRETS_ENV_FILE, TRADING_ENV_FILE } from "@waitron/store";
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -12,6 +12,8 @@ import {
 import {
   applicationVersion,
   readNodeMembershipRow,
+  readSettings,
+  saveSettings,
   stampDeployment,
   withTransaction,
   writeNodeMembership,
@@ -26,7 +28,12 @@ import {
   verifyMembershipDocument,
 } from "@waitron/membership";
 import { appliedSchemaVersion } from "@waitron/migrations";
-import { enabledModules, modulesWithSets, serializeModuleConfig } from "@waitron/module";
+import {
+  enabledModules,
+  modulesWithSets,
+  modulesSettings,
+  serializeModuleConfig,
+} from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { FirstSetupCommandDeployment } from "./first-setup-command-activation.js";
 import type { createFirstSetupRuntime } from "./first-setup-runtime.js";
@@ -156,11 +163,15 @@ export function createFirstSetupCommandDeployment(options: {
         deps: {
           clearConfiguration: () => clearStagedConfigurationImport(state.stateDir),
           publishSelection: async () => {
-            await writeFileDurable(
-              join(state.stateDir, MODULES_FILE),
-              JSON.stringify({ modules: serializeModuleConfig(config) }, null, 2) + "\n",
-              0o600,
-            );
+            const definition = modulesSettings(runtime.modules);
+            await withTransaction(db, async (tx) => {
+              const saved = await readSettings(tx, definition);
+              await saveSettings(tx, definition, {
+                doc: { modules: serializeModuleConfig(config) },
+                expectedRevision: saved.revision,
+                personId: null,
+              });
+            });
           },
           publishIdentity: async (result, current) => {
             let own = await readNodeIdentity(db, node, ring, result.nodeId);

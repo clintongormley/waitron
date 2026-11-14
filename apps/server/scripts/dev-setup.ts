@@ -13,7 +13,7 @@ import {
   type CountryDemoDeveloperPreset,
 } from "@waitron/country";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { openVenueDatabase, withTransaction, type Database } from "@waitron/db";
@@ -50,7 +50,7 @@ export function defaultDevVenueDir(stateDir: string): string {
   return venueDirOf({}, stateDir);
 }
 
-/** Named once so the venue plan and the fiscal-slot `modules.json` select the same regime, and boot
+/** Named once so the venue plan and the fiscal-slot module settings select the same regime, and boot
  * does not refuse `module.fiscal_slot_ambiguous`. */
 export const DEV_VENUE_TERRITORY = "ES-common";
 
@@ -119,7 +119,7 @@ export interface DevSetupOptions {
   venueDir: string;
   envPath: string;
   /** Must be the same dir the server resolves at boot, or boot never reads the fiscal-slot
-   * `modules.json` written here. */
+   * module settings written here. */
   stateDir: string;
   httpPort?: string;
   log?: (line: string) => void;
@@ -318,19 +318,18 @@ async function seedDemoDevices(
   });
 }
 
-/**
- * Write the fiscal-slot `modules.json` so boot resolves the slot to one member: with no file, every
- * fiscal-slot member is on and boot refuses `module.fiscal_slot_ambiguous`. `mkdirSync` first because
- * `writeFileDurable` does not create the parent dir.
- */
-async function writeFiscalModulesJson(
-  stateDir: string,
+async function writeFiscalModuleSettings(
+  venueDir: string,
   log: (line: string) => void,
 ): Promise<void> {
   const config = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), DEV_VENUE_TERRITORY);
-  mkdirSync(stateDir, { recursive: true });
-  const path = await writeModuleConfig(stateDir, config);
-  log(`dev-setup: wrote ${path} (fiscal slot → verifactu; fiscal-none disabled)`);
+  const store = await openVenueDatabase(venueDir);
+  try {
+    await writeModuleConfig(store.venue, config, null);
+  } finally {
+    await store.close();
+  }
+  log("dev-setup: saved module settings (fiscal slot → verifactu; fiscal-none disabled)");
 }
 
 /**
@@ -339,7 +338,7 @@ async function writeFiscalModulesJson(
  * name; never deletes data itself.
  */
 export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
-  const { venueDir, envPath, stateDir, log = () => {} } = opts;
+  const { venueDir, envPath, log = () => {} } = opts;
 
   // Before the directory is read or migrated: the seed's own guard fires only after `applyVenue`
   // has committed, which leaves a directory only `pnpm dev:reset` recovers.
@@ -353,7 +352,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
 
   if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {
     log("dev-setup: reusing the already-provisioned venue (no new fiscal chain)");
-    await writeFiscalModulesJson(stateDir, log);
+    await writeFiscalModuleSettings(venueDir, log);
     return { reused: true, env: existing };
   }
 
@@ -390,7 +389,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   });
   writeFileSync(envPath, renderEnvFile(env));
   log(`dev-setup: wrote ${envPath}`);
-  await writeFiscalModulesJson(stateDir, log);
+  await writeFiscalModuleSettings(venueDir, log);
   return { reused: false, env };
 }
 

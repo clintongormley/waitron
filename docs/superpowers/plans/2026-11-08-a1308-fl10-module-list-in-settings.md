@@ -243,3 +243,10 @@ mandatory-module check stay as planned. At 04:14 the watcher replaced Task 1's
 workforce-off example with toggleable bookings: workforce became mandatory in A1002.
 The mandatory-workforce refusal and default-ambiguous assertions stay. These are
 watcher clearances, not a separate owner approval of the design.
+
+At 05:08 the watcher cleared the additional `upgrade-checks.ts` reader, using its
+already-open environment-checked probe, and retirement of module-config's malformed
+JSON, EISDIR and mode-0600 file checks. Default, enabled, unknown-module and round-trip
+assertions remain on the row. The fixture helper also accepts an already-open venue
+handle; directory fixtures migrate core only when `settings` is absent, so seeding
+cannot restore a deliberately dropped trigger before the boot under test.

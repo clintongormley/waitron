@@ -64,7 +64,11 @@ it("a trading boot never names a module with no set of its own as waiting to be 
     await mkdir(state);
     // GB-vat switches off the migrated Veri*Factu set, so boot logs its reconcile line, which also
     // names what it thinks is still to migrate.
-    await writeModuleConfig(state, venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat"));
+    await writeModuleConfig(
+      suite.db,
+      venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat"),
+      null,
+    );
     const sets = manifestSets();
     const options = migrationOptionsFor(sets, null);
     for (const [index, set] of sets.entries())

@@ -20,7 +20,7 @@ import "./errors.js";
 
 interface Options {
   modules: readonly WaitronModule[];
-  moduleConfig?: ModuleConfig;
+  moduleConfig?: () => ModuleConfig;
   owner: ReturnType<typeof createFirstSetupOwner>;
   store: FirstSetupStore;
   coordinator: FirstSetupCoordinator;
@@ -47,7 +47,7 @@ export function createFirstSetupPreparation(options: Options) {
   const assertSelection = (state: FirstSetupState) => {
     const selected = enabledModules(
       modules,
-      venueFiscalSelection(modules, state.frozen.request.fiscalTerritory, options.moduleConfig)
+      venueFiscalSelection(modules, state.frozen.request.fiscalTerritory, options.moduleConfig?.())
         .config,
     );
     if (

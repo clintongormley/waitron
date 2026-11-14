@@ -183,10 +183,7 @@ export function mountMirrorBundleApi(
         const signingKey = await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
         await assertHeldDocumentTrusted(trustDeps(deps, signingKey), held);
         await refuseBeforeReserving(deps, held, standby.nodeId, standbyAt);
-        // modules.json is read fresh, not from boot, as the operator may have edited it since. The
-        // spare would refuse the bundle for the same modules after the fetch, so the join is
-        // refused here first (D12).
-        const moduleConfig = await readModuleConfig(deps.stateDir);
+        const moduleConfig = await readModuleConfig(deps.appDb);
         assertAdoptionModules(enabledModules(ALL_MODULES, moduleConfig));
 
         const store = mintPairStoreKey();

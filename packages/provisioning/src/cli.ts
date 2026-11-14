@@ -60,7 +60,7 @@ export interface CliDeps {
     node: NodeDatabase;
   }) => FirstSetupCommandDeployment;
   initialVenue?: Pick<VenueApplyDeps, "moduleInputs" | "initialNodeId" | "initialAdministratorId">;
-  /** Absent, no `modules.json` is written. */
+  /** Absent, no module settings is written. */
   writeModuleConfig?: (config: ModuleConfig) => Promise<void>;
   readEnvironment: typeof readDeploymentEnvironment;
   /** Tells a migrated directory with no stamp (stamped) from one nothing has migrated (refused);

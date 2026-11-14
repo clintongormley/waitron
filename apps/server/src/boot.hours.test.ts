@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { seedModuleSettings } from "../test/module-settings.js";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -95,9 +96,9 @@ describe("hours boot with permanent workforce", () => {
         let result: AttendanceCommandResult | undefined;
         try {
           await copyMigrationsRoot(join(scratch, "migrations"));
-          await writeFile(
-            join(scratch, "modules.json"),
-            JSON.stringify({ modules: Object.fromEntries([...disabled].map((m) => [m, false])) }),
+          await seedModuleSettings(
+            suite.db,
+            Object.fromEntries([...disabled].map((m) => [m, false])),
           );
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const [port] = await freePorts(1);

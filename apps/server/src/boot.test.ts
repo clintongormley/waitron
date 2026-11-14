@@ -2,6 +2,7 @@ import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
+import { writeModuleConfig } from "./module-config.js";
 import { locations } from "@waitron/db";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
@@ -37,7 +38,17 @@ import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
+import {
+  afterEach,
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import { Agent } from "undici";
 import {
   captureError,
@@ -299,6 +310,11 @@ beforeAll(async () => {
   migrationsRoot = await mkdtemp(join(tmpdir(), "waitron-boot-migrations-"));
   await copyMigrationsRoot(migrationsRoot);
 }, 180_000);
+
+beforeEach(async () => {
+  await sharedDb.execute(sql`delete from settings where module = 'modules'`);
+  await writeModuleConfig(sharedDb, { overrides: new Map([["fiscal-none", false]]) }, null);
+});
 
 // A `beforeAll` that threw before a `mkdtemp` returned must not add an `rm(undefined)` failure beside
 // the real one.
@@ -575,10 +591,7 @@ describe("startServer, against a migrated venue directory", () => {
   it("boots and serves local requests when a saved Cloud replacement cannot be resumed", async () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-replacement-"));
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(sharedVenueDir, { "fiscal-none": false });
     await mkdir(join(stateDir, "cloud"), { recursive: true });
     await writeFile(join(stateDir, "cloud/replacement.json"), "corrupt", { mode: 0o600 });
     let server: StartedServer | undefined;
@@ -802,10 +815,7 @@ describe("startServer, against a migrated venue directory", () => {
     // real minted leaf, the shape a box has after one setup boot.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-trading-tls-"));
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(sharedVenueDir, { "fiscal-none": false });
     await ensureBoxSecrets({
       stateDir,
       hostnames: ["waitron.local", "localhost"],
@@ -851,10 +861,7 @@ describe("startServer, against a migrated venue directory", () => {
   describe("a trading start and the box's tls folder", () => {
     async function tradingStateDir(prefix: string): Promise<string> {
       const stateDir = await mkdtemp(join(tmpdir(), prefix));
-      await writeFile(
-        join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { "fiscal-none": false } }),
-      );
+      await seedModuleSettings(sharedVenueDir, { "fiscal-none": false });
       return stateDir;
     }
 
@@ -1117,23 +1124,28 @@ describe("startServer, against a migrated venue directory", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-modules-filter-state-"));
     const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-filter-venue-"));
-    await seedModuleSettings(venueDir, { bookings: false });
+    await seedModuleSettings(venueDir, { bookings: false, "fiscal-none": false });
+    const seed = await openVenueDatabase(venueDir);
+    try {
+      await seedSharedVenue(seed.venue);
+    } finally {
+      await seed.close();
+    }
+    await seedModuleSettings(venueDir, { bookings: false, "fiscal-none": false });
     let server: StartedServer | undefined;
     let probe: VenueDatabase | undefined;
     try {
-      try {
-        server = await startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: venueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_STATE_DIR: stateDir,
-          WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
-        });
-      } catch {
-        // Expected: the throw comes after the migration seam this test asserts.
-      }
+      server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: venueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_ENV: "preproduction",
+      });
+      const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/bookings`);
+      expect(response.status).toBe(404);
+      await response.text();
       probe = await openVenueDatabase(venueDir);
       // A scalar subquery answers one row whose column is NULL when the table is missing, where an
       // empty result would also be what a query selecting nothing at all returns.
@@ -1160,17 +1172,32 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
+  it("no modules row with both fiscal modules is ambiguous", async () => {
+    await sharedDb.execute(sql`delete from settings where module = 'modules'`);
+    const outcome = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: sharedVenueDir,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+    }).then(
+      async (server) => {
+        await server.close();
+        return undefined;
+      },
+      (error: unknown) => error,
+    );
+    expect(outcome).toMatchObject({ code: "module.fiscal_slot_ambiguous" });
+  }, 60_000);
+
   it("trading mode logs module.reconcile drift naming a soft-disabled module (SP-1b spec §3)", async () => {
-    // A module the database has migrated but modules.json no longer enables is `softDisabled`, and
+    // A module the database has migrated but module settings no longer enables is `softDisabled`, and
     // boot logs it at `info`. The shared directory is migrated for every module and seeded, so this
     // boot succeeds.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-drift-state-"));
     // `fiscal-none` disabled too, so the fiscal slot resolves to the seeded node's Veri*Factu.
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { bookings: false, "fiscal-none": false } }),
-    );
+    await seedModuleSettings(sharedVenueDir, { bookings: false, "fiscal-none": false });
     let server: StartedServer | undefined;
     try {
       const [started, reconcileLine] = await withCapturedStdout(async (lines) => {
@@ -1234,10 +1261,7 @@ describe("startServer, against a migrated venue directory", () => {
   it("starts in production from a bundle stamped as a release (the unreleased-build check passes it)", async () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-released-state-"));
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { bookings: false, "fiscal-none": false } }),
-    );
+    await seedModuleSettings(sharedVenueDir, { bookings: false, "fiscal-none": false });
     let server: StartedServer | undefined;
     try {
       server = await startServer(
@@ -1270,10 +1294,7 @@ describe("startServer, against a migrated venue directory", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-fiscaloff-state-"));
     try {
-      await writeFile(
-        join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { "fiscal-verifactu": false, "fiscal-none": false } }),
-      );
+      await seedModuleSettings(sharedVenueDir, { "fiscal-verifactu": false, "fiscal-none": false });
       await expect(
         startServer({
           ...KEY_ENV,
@@ -1291,15 +1312,14 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it.each(["identity", "credentials", "workforce", "staffing"])(
-    "refuses a trading boot whose modules.json switches %s off — module.mandatory_not_disableable",
+    "refuses a trading boot whose module settings switches %s off — module.mandatory_not_disableable",
     async (name) => {
       const port = await freePort();
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-mandatory-state-"));
       let started: Promise<StartedServer> | undefined;
       try {
-        await writeFile(
-          join(stateDir, "modules.json"),
-          JSON.stringify({ modules: { [name]: false, "fiscal-none": false } }),
+        await sharedDb.execute(
+          sql`update settings set doc = ${JSON.stringify({ modules: { [name]: false, "fiscal-none": false } })} where module = 'modules'`,
         );
         started = startServer({
           ...KEY_ENV,
@@ -1326,13 +1346,10 @@ describe("startServer, against a migrated venue directory", () => {
     60_000,
   );
 
-  it("starts a trading boot whose modules.json switches workforce-es off", async () => {
+  it("starts a trading boot whose module settings switches workforce-es off", async () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-workforce-es-off-state-"));
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "workforce-es": false, "fiscal-none": false } }),
-    );
+    await seedModuleSettings(sharedVenueDir, { "workforce-es": false, "fiscal-none": false });
     let server: StartedServer | undefined;
     try {
       server = await startServer({

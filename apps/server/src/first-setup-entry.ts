@@ -1,6 +1,10 @@
+import { decodeSettingsRow } from "@waitron/db";
+import { DatabaseSync } from "node:sqlite";
+import { join } from "node:path";
+import { parseModuleConfig } from "@waitron/module";
+import { MODULES_SETTINGS } from "./modules.js";
 import { mountSetupSpa } from "./setup-spa.js";
 import { isUnset } from "./env-value.js";
-import { readModuleConfig } from "./module-config.js";
 import { Hono } from "hono";
 import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
@@ -236,12 +240,26 @@ async function resolutionApp(
   log: Logger = () => {},
   spare?: SpareOption,
 ) {
-  const moduleConfig = await readModuleConfig(roots.stateDir).catch(() => undefined);
+  const moduleConfig = await (async () => {
+    const connection = new DatabaseSync(join(roots.venueDir, "venue.db"), { readOnly: true });
+    try {
+      const row = connection
+        .prepare("select version, revision, doc from settings where module = ?")
+        .get("modules") as { version: number; revision: number; doc: string } | undefined;
+      const saved = decodeSettingsRow(
+        row === undefined ? undefined : { ...row, doc: JSON.parse(row.doc) },
+        MODULES_SETTINGS,
+      );
+      return parseModuleConfig(saved.doc, ALL_MODULES);
+    } finally {
+      connection.close();
+    }
+  })().catch(() => undefined);
   const host = createFirstSetupModuleHost({
     ...roots,
     environment,
     modules: ALL_MODULES,
-    moduleConfig,
+    ...(moduleConfig === undefined ? {} : { moduleConfig: () => moduleConfig }),
   });
   const app = new Hono();
   app.get("/setup-api/status", async (c) => {

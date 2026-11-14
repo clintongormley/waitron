@@ -1,7 +1,8 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { listAdminHolders } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -86,9 +87,9 @@ describe("attendance boot with permanent workforce", () => {
       );
       const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-attendance-"));
       await copyMigrationsRoot(join(scratch, "migrations"));
-      await writeFile(
-        join(scratch, "modules.json"),
-        JSON.stringify({ modules: Object.fromEntries([...disabled].map((name) => [name, false])) }),
+      await seedModuleSettings(
+        suite.db,
+        Object.fromEntries([...disabled].map((name) => [name, false])),
       );
       const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
       const [port] = await freePorts(1);

@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { createJobRunner } from "./job-runner.js";
 import { existsSync } from "node:fs";
 import { cp, lstat, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -185,10 +186,7 @@ describe("boot's authority clock wiring", () => {
           recursive: true,
         });
       }
-      await writeFile(
-        join(scratch, "modules.json"),
-        JSON.stringify({ modules: { "fiscal-none": false } }),
-      );
+      await seedModuleSettings(suite.db, { "fiscal-none": false });
       const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
       // What a start that deleted old backups before this boot left for it.
       const venueDb = await lstat(database, { bigint: true });

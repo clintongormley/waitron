@@ -1,5 +1,6 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { existsSync } from "node:fs";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -88,10 +89,7 @@ async function withServer(
         recursive: true,
       });
     }
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     const env = {
       WAITRON_HTTP_LANDING_PORT: "0",

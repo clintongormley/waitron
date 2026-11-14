@@ -178,8 +178,6 @@ export async function provisionVenue(
     beforeCommit: deps.beforeCommit,
   });
 
-  // Without this file the default-on set enables BOTH fiscal modules and the trading boot fails
-  // `module.fiscal_slot_ambiguous`. Written after the commit, so a failed mint leaves none behind.
-  await writeModuleConfig(deps.stateDir, deps.moduleConfig);
+  await writeModuleConfig(deps.ownerDb, deps.moduleConfig, null);
   return result;
 }

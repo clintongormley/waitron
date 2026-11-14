@@ -30,7 +30,7 @@ export function renderSetupEnvFile(env: SetupEnv): string {
   return renderEnvFileLines(header, SETUP_ENV_KEYS, env);
 }
 
-/** No `stateDir`: a setup-mode box never resolves the fiscal slot, so no `modules.json` is written. */
+/** No `stateDir`: a setup-mode box never resolves the fiscal slot, so no module settings is written. */
 export interface DevOnboardOptions extends Omit<DevSetupOptions, "stateDir"> {
   environment: NodeJS.ProcessEnv;
 }

@@ -275,7 +275,7 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,
   "deployment.already_stamped": 409,
-  // A `provision-only` module (fiscal) is disabled in `modules.json`.
+  // A `provision-only` module (fiscal) is disabled in module settings.
   "module.provision_only_disabled": 409,
   // A configuration export with two categories in one place, or two Active products, sharing a
   // name; 409, as catalogue-api.ts answers it.

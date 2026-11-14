@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdir } from "node:fs/promises";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { connect, createServer as createNetServer } from "node:net";
@@ -305,6 +306,7 @@ async function seedVenueWithNode(directory: string): Promise<void> {
   const store = await openVenueDatabase(directory);
   try {
     const db = store.venue;
+    await seedModuleSettings(directory, { "fiscal-none": false });
     await db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "90444444J", legalName: "Failed Start SL" });
@@ -393,12 +395,14 @@ async function seededVenueDir(): Promise<string> {
  * otherwise. `leaf` adds a minted box certificate, which the trading listener serves and without
  * which no landing listener starts.
  */
+const moduleOverrides = new Map<string, Record<string, boolean>>();
+
 async function stateDir(
   modules: Record<string, boolean> = { "fiscal-none": false },
   { leaf = false }: { leaf?: boolean } = {},
 ) {
   const dir = await tempDir("waitron-failed-start-state-");
-  await writeFile(join(dir, "modules.json"), JSON.stringify({ modules }));
+  moduleOverrides.set(dir, modules);
   if (leaf) await cp(join(leafTemplate, "tls"), join(dir, "tls"), { recursive: true });
   return dir;
 }
@@ -463,6 +467,7 @@ function failLandingAfterMdns(
 
 /** With `landing`, the landing port is drawn beside the HTTP one, so the two cannot coincide. */
 async function tradingEnv(venueDir: string, state: string, { landing = false } = {}) {
+  await seedModuleSettings(venueDir, moduleOverrides.get(state) ?? { "fiscal-none": false });
   const [httpPort, landingPort] = await freePorts(landing ? 2 : 1);
   return {
     WAITRON_VENUE_DIR: venueDir,
@@ -1214,30 +1219,37 @@ describe("append-only triggers at boot", () => {
     expect(events).not.toContain("append_only.triggers_restored");
   }, 60_000);
 
-  it("a trigger dropped while the box was off is put back and the start goes on", async () => {
-    const venueDir = await seededVenueDir();
-    const state = await stateDir(undefined, { leaf: true });
-    tamper(venueDir, "drop trigger sales_append_only_delete;");
-    // The control: the drop took.
-    expect(await triggerFaults(venueDir, ["sales"])).toEqual({
-      missing: ["sales_append_only_delete"],
-      altered: [],
-    });
+  it.each([
+    ["sales", "sales_append_only_delete"],
+    ["registros_facturacion", "registros_facturacion_append_only_delete"],
+  ])(
+    "a %s trigger dropped while the box was off is put back and the start goes on",
+    async (table, trigger) => {
+      const venueDir = await seededVenueDir();
+      const state = await stateDir(undefined, { leaf: true });
+      tamper(venueDir, `drop trigger ${trigger};`);
+      // The control: the drop took.
+      expect(await triggerFaults(venueDir, [table])).toEqual({
+        missing: [trigger],
+        altered: [],
+      });
 
-    const env = await tradingEnv(venueDir, state);
-    const lines = await withLoggedLines(async () => {
-      const server = await startServer(env);
-      try {
-        await listening(Number(env.WAITRON_HTTP_PORT));
-      } finally {
-        await server.close();
-      }
-    });
-    expect(await triggerFaults(venueDir, ["sales"])).toEqual({ missing: [], altered: [] });
-    expect(lines.filter((line) => line.event === "append_only.triggers_restored")).toEqual([
-      expect.objectContaining({ level: "warn", triggers: ["sales_append_only_delete"] }),
-    ]);
-  }, 60_000);
+      const env = await tradingEnv(venueDir, state);
+      const lines = await withLoggedLines(async () => {
+        const server = await startServer(env);
+        try {
+          await listening(Number(env.WAITRON_HTTP_PORT));
+        } finally {
+          await server.close();
+        }
+      });
+      expect(await triggerFaults(venueDir, [table])).toEqual({ missing: [], altered: [] });
+      expect(lines.filter((line) => line.event === "append_only.triggers_restored")).toEqual([
+        expect.objectContaining({ level: "warn", triggers: [trigger] }),
+      ]);
+    },
+    60_000,
+  );
 });
 
 describe("which starts watch the append-only triggers", () => {

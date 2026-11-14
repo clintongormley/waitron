@@ -716,7 +716,7 @@ it("refuses changed operator module selection before any outside-use export whil
     stateDir: f.stateDir,
     venueDir: join(f.root, "venue"),
     modules: ALL_MODULES,
-    moduleConfig: { overrides: new Map([["bookings", false]]) },
+    moduleConfig: () => ({ overrides: new Map([["bookings", false]]) }),
   });
   const app = new Hono();
   mountSetup(app, { environment: "production", firstFiscal: changed }, () => {});

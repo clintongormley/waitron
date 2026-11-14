@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { seedModuleSettings } from "../test/module-settings.js";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
@@ -137,9 +138,9 @@ describe("attendance response boot with permanent workforce", () => {
         let resultIds: string[] = [];
         try {
           await copyMigrationsRoot(join(scratch, "migrations"));
-          await writeFile(
-            join(scratch, "modules.json"),
-            JSON.stringify({ modules: Object.fromEntries([...disabled].map((m) => [m, false])) }),
+          await seedModuleSettings(
+            suite.db,
+            Object.fromEntries([...disabled].map((m) => [m, false])),
           );
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const [port] = await freePorts(1);

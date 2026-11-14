@@ -1,7 +1,8 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { writeArchiveSettings } from "./archive-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createServer, type AddressInfo } from "node:net";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -78,10 +79,7 @@ async function prepareBox(
     await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
       recursive: true,
     });
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   const env = {
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_HTTP_PORT: String(port),

@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -119,10 +120,7 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
   let server: StartedServer | undefined;
   try {
     await copyMigrationsRoot(join(scratch, "migrations"));
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-verifactu": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-verifactu": false });
     await writePendingAdoption(scratch, pending);
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     const [port] = await freePorts(1);
@@ -201,10 +199,7 @@ it("the pending-adoption start answers the main box's signed query", async () =>
   let server: StartedServer | undefined;
   try {
     await copyMigrationsRoot(join(scratch, "migrations"));
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-verifactu": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-verifactu": false });
     await writePendingAdoption(scratch, {
       originNodeId: PRIMARY,
       standby: { nodeId: STANDBY, publicKey: standby.publicKey },
@@ -263,10 +258,7 @@ it("the pending-adoption start is handed a chart through its own route", async (
   let server: StartedServer | undefined;
   try {
     await copyMigrationsRoot(join(scratch, "migrations"));
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-verifactu": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-verifactu": false });
     await writePendingAdoption(scratch, {
       originNodeId: origin,
       standby: { nodeId: STANDBY, publicKey: "synthetic-public" },
@@ -354,10 +346,7 @@ async function joiningStartEnv(
   { standby, keyEnv }: Awaited<ReturnType<typeof seedJoiningSpare>>,
 ) {
   await copyMigrationsRoot(join(scratch, "migrations"));
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-verifactu": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-verifactu": false });
   await writePendingAdoption(scratch, {
     originNodeId: PRIMARY,
     standby: { nodeId: STANDBY, publicKey: standby.publicKey },

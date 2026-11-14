@@ -224,7 +224,7 @@ describe("provisionVenue", () => {
 
     expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
 
-    const written = await readModuleConfig(stateDir);
+    const written = await readModuleConfig(suite.db);
     expect(written.overrides.get("fiscal-none")).toBe(false);
     expect(written.overrides.get("fiscal-verifactu")).toBe(true);
   });
@@ -246,7 +246,7 @@ describe("provisionVenue", () => {
     expect(result.seriesIds).toHaveLength(3);
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 3, nodes: 1, registros: 0 });
 
-    const written = await readModuleConfig(stateDir);
+    const written = await readModuleConfig(suite.db);
     expect(written.overrides.get("fiscal-verifactu")).toBe(false);
     expect(written.overrides.get("fiscal-none")).toBe(true);
   });

@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { randomUUID } from "node:crypto";
 import { access, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -86,10 +87,7 @@ async function start(
       recursive: true,
     });
   }
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   const logDir = join(scratch, "logs");
   await mkdir(logDir);
   await writeFile(join(logDir, "waitron.log.3"), Buffer.alloc(1500, 1));

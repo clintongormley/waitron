@@ -420,7 +420,7 @@ describe("runStagedReset", () => {
               await writeTradingEnv(stateDir, cfg);
             },
             persistModuleConfig: async (config) => {
-              await writeModuleConfig(stateDir, config);
+              await writeModuleConfig(store.venue, config, null);
             },
             persistCredentialsRing: (ring) => writeCredentialsRing(stateDir, ring),
             persistBackupSettings: (settings) => replaceBackupSettings(stateDir, settings),

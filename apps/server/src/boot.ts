@@ -1813,7 +1813,7 @@ async function bootServer(
               environment: config.environment,
               persistTrading,
               persistModuleConfig: async (c) => {
-                await writeModuleConfig(config.stateDir, c);
+                await writeModuleConfig(db, c, null);
               },
               stateDir: config.stateDir,
               database: ownerDatabaseName,

@@ -100,13 +100,16 @@ export function createFirstSetupModuleHost(options: {
     recoveryDelivery,
     assertFreshAssignment,
     publishSelection(state: import("@waitron/provisioning").FirstSetupState) {
+      const database = options.database?.();
+      if (database === undefined) throw new AppError("setup.not_ready", {});
       return writeModuleConfig(
-        options.stateDir,
+        database,
         venueFiscalSelection(
           modules,
           state.frozen.request.fiscalTerritory,
           options.moduleConfig?.(),
         ).config,
+        null,
       );
     },
     assertSelection,

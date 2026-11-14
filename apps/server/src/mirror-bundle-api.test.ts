@@ -92,12 +92,12 @@ vi.mock("./module-config.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./module-config.js")>();
   return {
     ...actual,
-    readModuleConfig: async (stateDir: string) => {
+    readModuleConfig: async (db: Parameters<typeof actual.readModuleConfig>[0]) => {
       pause.moduleConfigReads += 1;
       const hook = pause.beforeModuleConfigRead;
       pause.beforeModuleConfigRead = undefined;
       await hook?.();
-      return actual.readModuleConfig(stateDir);
+      return actual.readModuleConfig(db);
     },
   };
 });

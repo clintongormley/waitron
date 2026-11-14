@@ -24,12 +24,7 @@ function read(
   return recoveryFiscalSelection(
     options.location ?? venue,
     { ...manifest, modules: options.versions ?? manifest.modules },
-    [
-      {
-        name: "secrets/modules.json",
-        bytes: Buffer.from(options.text ?? JSON.stringify(options.config ?? configured)),
-      },
-    ],
+    options.text === undefined ? (options.config ?? configured) : options.text,
     options.modules ?? ALL_MODULES,
     null,
     options.recorded ?? options.versions ?? manifest.modules,

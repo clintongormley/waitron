@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -64,10 +65,7 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
     join(scratch, "dashboard/index.html"),
     "<html><body>recovery-dashboard-entry</body></html>",
   );
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   const material = mintMtlsMaterial();
   await writeFile(join(scratch, "server.pem"), material.serverCertPem + material.serverKeyPem);
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;

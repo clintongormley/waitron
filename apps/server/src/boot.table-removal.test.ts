@@ -1,4 +1,5 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { seedModuleSettings } from "../test/module-settings.js";
+import { mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
@@ -138,15 +139,10 @@ for (const [mode, status] of [
         let server: StartedServer | undefined;
         try {
           await copyMigrationsRoot(join(scratch, "migrations"));
-          await writeFile(
-            join(scratch, "modules.json"),
-            JSON.stringify({
-              modules: {
-                "fiscal-none": false,
-                bookings: mode === "enabled",
-              },
-            }),
-          );
+          await seedModuleSettings(suite.db, {
+            "fiscal-none": false,
+            bookings: mode === "enabled",
+          });
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const [port] = await freePorts(1);
           server = await startServer({

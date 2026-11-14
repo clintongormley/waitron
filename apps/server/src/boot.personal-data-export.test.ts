@@ -1,6 +1,7 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
@@ -61,10 +62,7 @@ describe("the personal-data downloads in a real start", () => {
     let server: StartedServer | undefined;
     try {
       await copyMigrationsRoot(join(scratch, "migrations"));
-      await writeFile(
-        join(scratch, "modules.json"),
-        JSON.stringify({ modules: Object.fromEntries([...disabled].map((m) => [m, false])) }),
-      );
+      await seedModuleSettings(suite.db, Object.fromEntries([...disabled].map((m) => [m, false])));
       const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
       const [port] = await freePorts(1);
       server = await startServer({

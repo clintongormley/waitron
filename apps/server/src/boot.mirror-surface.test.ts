@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
@@ -145,19 +146,13 @@ async function boot(
     });
     await stampDeployment(suite.db, "preproduction");
     await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-verifactu": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-verifactu": false });
     await writePendingAdoption(stateDir, LATCH);
   } else {
     await suite.db.insert(nodes).values({ id: NODE, name: "Node" });
     await suite.db.insert(invoiceSeries).values({ id: SERIES, nodeId: NODE, code: "A" });
     await stampDeployment(suite.db, "preproduction");
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
     if (start === "mirror" || start === "mirror-zone-repair") {
       await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
       await writeMirrorLink(suite.node, NODE, {

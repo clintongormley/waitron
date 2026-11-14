@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { listAdminHolders } from "@waitron/identity";
 import { convenioConfig } from "@waitron/workforce-es";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -282,10 +283,7 @@ describe("read-only real boot clocking", () => {
       let server: StartedServer | undefined;
       try {
         await copyMigrationsRoot(join(scratch, "migrations"));
-        await writeFile(
-          join(scratch, "modules.json"),
-          JSON.stringify({ modules: { "fiscal-none": false } }),
-        );
+        await seedModuleSettings(suite.db, { "fiscal-none": false });
         const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
         const requestedPort = await occupiedPort();
         server = await startServer({
@@ -388,11 +386,9 @@ for (const spain of [false, true]) {
         let server: StartedServer | undefined;
         try {
           await copyMigrationsRoot(join(scratch, "migrations"));
-          await writeFile(
-            join(scratch, "modules.json"),
-            JSON.stringify({
-              modules: Object.fromEntries([...disabled].map((name) => [name, false])),
-            }),
+          await seedModuleSettings(
+            suite.db,
+            Object.fromEntries([...disabled].map((name) => [name, false])),
           );
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const requestedPort = await occupiedPort();
