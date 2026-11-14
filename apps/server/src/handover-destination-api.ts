@@ -114,7 +114,7 @@ export function mountHandoverDestinationApi(
 ): void {
   const run = createErrorBoundary(STATUS, "handover-destination.failed");
 
-  app.use("/api/node/handover/offer", peerBodyLimit(65536));
+  app.post("/api/node/handover/offer", peerBodyLimit(65536));
   app.post("/api/node/handover/offer", (c) =>
     run(c, log, async () => {
       const { envelope, binding, settings, imageMigrations } = await verifiedOffer(c, deps);
