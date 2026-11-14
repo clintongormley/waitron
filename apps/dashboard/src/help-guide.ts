@@ -18,6 +18,7 @@ export const GUIDE_LINKS = {
   "box-status.free-space": { page: "box-status", section: "free-space" },
   "box-status.retry-now": { page: "box-status", section: "retry-now" },
   "box-status.clock-own-device": { page: "box-status", section: "clock-own-device" },
+  "box-status.clock-waiting": { page: "box-status", section: "clock-waiting" },
   "box-status.network": { page: "box-status", section: "network" },
   "box-status.restart": { page: "box-status", section: "restart" },
   "data-protection.staff-notice": { page: "data-protection", section: "staff-notice" },

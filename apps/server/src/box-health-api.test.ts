@@ -405,7 +405,7 @@ describe("errors other than a full disk", () => {
   });
 });
 
-it.each(["clock-challenge", "clock-set"])(
+it.each(["clock-challenge", "clock-set", "clock-confirm"])(
   "refuses a default Manager at %s with the box administration permission",
   async (route) => {
     const { deps } = mount(suite.db);

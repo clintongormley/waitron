@@ -1332,6 +1332,19 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       expect(confirmButton(el)!.hasAttribute("disabled")).toBe(false);
     });
 
+    it.each([
+      ["en", "/help/en/box-status#clock-waiting"],
+      ["es", "/help/es/box-status#clock-waiting"],
+    ])(
+      "the check's help tooltip links to the guide's waiting section in %s",
+      async (locale, href) => {
+        setLocale(locale);
+        const el = await mountClock(waitingApi());
+        const tooltip = q(el, "[data-test=row-clock] .clock-check-action wt-help-tooltip")!;
+        expect(tooltip.getAttribute("guide-href")).toBe(href);
+      },
+    );
+
     it("does not confirm, and says the clock changed, when the box's time is two days off the row's", async () => {
       const api = waitingApi(WAITING_CLOCK, {
         clockChallenge: vi.fn().mockResolvedValue({

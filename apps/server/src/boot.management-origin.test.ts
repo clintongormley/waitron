@@ -168,6 +168,7 @@ describe("a management change in the running server", () => {
         ["/management-api/session/me/fresh-sign-in/passkey-options", "{}"],
         ["/api/box/clock-challenge", undefined],
         ["/api/box/clock-set", "{}"],
+        ["/api/box/clock-confirm", "{}"],
         ["/api/box/screen", JSON.stringify({ start: "till" })],
         ["/management-api/catalogues", JSON.stringify({ name: "From another page" })],
         ["/print-api/agent/jobs", undefined],

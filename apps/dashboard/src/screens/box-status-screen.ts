@@ -514,7 +514,7 @@ export class BoxStatusScreen extends LitElement {
             >${t("box_status.clock.confirm")}</wt-button
           >`
         : nothing
-    }${this.#clockCheckNeeded(health) ? this.#clockCheckButton() : nothing}`;
+    }${this.#clockCheckNeeded(health) ? this.#clockCheckButton(health) : nothing}`;
   }
 
   #closeClockCheck(): void {
@@ -532,7 +532,7 @@ export class BoxStatusScreen extends LitElement {
     >`;
   }
 
-  #clockCheckButton(): TemplateResult {
+  #clockCheckButton(health: BoxHealth): TemplateResult {
     return html`<span class="clock-check-action">
       <wt-button
         variant="secondary"
@@ -543,7 +543,11 @@ export class BoxStatusScreen extends LitElement {
       ><wt-help-tooltip
         mode="help-mode"
         aria-label=${t("box_status.clock_check_help_label")}
-        guide-href=${guideHref("box-status.clock-own-device")}
+        guide-href=${guideHref(
+          health.clock.waiting === undefined
+            ? "box-status.clock-own-device"
+            : "box-status.clock-waiting",
+        )}
         guide-label=${t("box_status.clock_check_help_guide")}
         >${t("box_status.clock_check_help")}</wt-help-tooltip
       >
