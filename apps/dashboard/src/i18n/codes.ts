@@ -1522,8 +1522,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los datos del local o su lista de equipos han cambiado durante el traspaso. Revisa Servidores en el equipo principal actual antes de iniciar otro.",
   },
   "handover.backup_settings_differ": {
-    en: "The two boxes have different backup settings. Choose Stop and make their backup settings match before handing over.",
-    es: "Los dos equipos tienen ajustes de copia de seguridad distintos. Elige Parar e iguala sus ajustes antes de traspasar el local.",
+    en: "The spare does not hold this box's backup settings, so it did not accept the handover. This box keeps selling, and sends the spare its settings by itself. Try again in a minute.",
+    es: "El equipo de reserva no tiene los ajustes de copia de seguridad de este equipo, así que no ha aceptado el traspaso. Este equipo sigue vendiendo y le envía sus ajustes solo. Vuelve a intentarlo dentro de un minuto.",
   },
   "handover.modules_differ": {
     en: "The two boxes have different software or enabled modules. Choose Stop and bring both boxes to the same software and module selection before handing over.",
