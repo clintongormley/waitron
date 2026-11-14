@@ -9,7 +9,6 @@ import {
   PAIRED_REUSE_MS,
   buildPdlQuery,
   createLinuxDevices,
-  scanNetwork,
 } from "./linux-devices.js";
 
 // A one-printer usblp sysfs tree (the real box's identity), so USB discovery is real in these
@@ -213,7 +212,6 @@ describe("createLinuxDevices — scan()", () => {
     const devices = createLinuxDevices({
       sysfsRoot: root,
       bluetooth: fakeBluetooth({ scan: btScan }),
-      scanNetwork,
     });
     expect(await devices.scan(["bluetooth"])).toEqual([btHit]);
     expect(scanNetwork).not.toHaveBeenCalled();
@@ -918,28 +916,27 @@ it("passes the Linux scan deadline through the real network composition to its s
   const devices = createLinuxDevices({
     sysfsRoot: root,
     bluetooth: fakeBluetooth(),
-    scanNetwork: (deadline) =>
-      scanNetwork(deadline, {
-        interfaces: () => ({
-          en0: [
-            {
-              address: "10.0.0.1",
-              cidr: "10.0.0.1/29",
-              family: "IPv4",
-              internal: false,
-              netmask: "255.255.255.248",
-              mac: "00:00:00:00:00:00",
-            },
-          ],
-        }),
-        mdns: async () => [],
-        now: () => now,
-        connect: async (host, _port, timeout) => {
-          calls.push([host, timeout]);
-          now = 2_000;
-          return true;
-        },
+    now: () => now,
+    networkScanDeps: {
+      interfaces: () => ({
+        en0: [
+          {
+            address: "10.0.0.1",
+            cidr: "10.0.0.1/29",
+            family: "IPv4",
+            internal: false,
+            netmask: "255.255.255.248",
+            mac: "00:00:00:00:00:00",
+          },
+        ],
       }),
+      mdns: async () => [],
+      connect: async (host, _port, timeout) => {
+        calls.push([host, timeout]);
+        now = 2_000;
+        return true;
+      },
+    },
   });
   const found = await devices.scan(["network_tcp"], 1_100);
   expect(calls).toEqual([["10.0.0.2", 100]]);

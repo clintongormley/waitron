@@ -411,9 +411,9 @@ export function createAgent(opts: AgentOptions): Agent {
             ? []
             : [{ device, expiresAt: hit.expiresAt, length: hit.target.expiresInMs }];
         });
-        wake();
       }
     } catch (error) {
+      if (generation === probeGeneration) probeFound = [];
       try {
         host.log.warn("address probe failed", { error: describeRejection(error) });
       } catch {
@@ -726,8 +726,9 @@ export function createAgent(opts: AgentOptions): Agent {
       nextProbeAt = 0;
       probeGeneration += 1;
     }
-    const sentScan = scanFound;
     const discoveryOpen = !passed(discoveryUntil, discoveryLength);
+    if (!discoveryOpen && !scanUnsent) scanFound = [];
+    const sentScan = scanFound;
     const scanned = discoveryOpen || scanUnsent ? [...sentScan] : [];
     if (discoveryOpen && !scanning && (!running || passed(nextScanAt, intervalMs))) void discover();
     const targets = networkProbes.filter(

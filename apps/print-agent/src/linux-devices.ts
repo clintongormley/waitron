@@ -29,6 +29,7 @@ export interface LinuxDeviceOptions {
   devRoot?: string;
   bluetooth?: BluetoothHost;
   scanNetwork?: (deadline?: number) => Promise<DiscoveredDevice[]>;
+  networkScanDeps?: NetworkScanDeps;
   /** A paired report's deadline: the wait for its devices' kinds gets only what the listing left of
    * it. With the default `bluetooth` it also kills a paired listing, and an `info` the report
    * starts, that BlueZ has not answered. */
@@ -79,7 +80,8 @@ export function createLinuxDevices(
     });
   const now = opts.now ?? Date.now;
   const scanNetworkImpl =
-    opts.scanNetwork ?? ((deadline?: number) => scanNetwork(deadline, { now }));
+    opts.scanNetwork ??
+    ((deadline?: number) => scanNetwork(deadline, { ...opts.networkScanDeps, now }));
   let availability: BluetoothAvailability | undefined;
   let listedAt = -Infinity;
   let listing: Promise<BluetoothDevice[]> | undefined;
