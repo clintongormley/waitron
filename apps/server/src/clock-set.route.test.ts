@@ -18,8 +18,10 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ClockServiceStatus } from "./box-host-client.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { clockCorrection } from "./clock-correction.js";
+import { createStaffApp } from "./cloud-remote.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
 import { startClockState, type StartClockState } from "./start-clock-check.js";
+import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { systemClock } from "./till-backend.js";
@@ -160,6 +162,8 @@ async function stoppedBox(
     noCorrection?: boolean;
     /** The start's clock check, handed to the correction and the routes. */
     start?: StartClockState;
+    /** The routes judge the request's source themselves, behind the own-page check. */
+    realSource?: boolean;
   } = {},
 ): Promise<Box> {
   const backend = options.backend ?? venue.backend;
@@ -218,6 +222,14 @@ async function stoppedBox(
   });
   const stepsBehind = options.stepsBehind ?? 0;
   const app = new Hono();
+  if (options.realSource === true)
+    app.use(
+      "*",
+      requireManagementChangeFromOwnPage(
+        async () => false,
+        () => {},
+      ),
+    );
   mountBoxHealthApi(
     app,
     {
@@ -229,7 +241,7 @@ async function stoppedBox(
         backend,
         clock,
         steady: () => steadyMs,
-        requestFromBox: () => fromBox,
+        ...(options.realSource === true ? {} : { requestFromBox: () => fromBox }),
         devMode: false,
         ...startDep,
         ...(options.noCorrection === true
@@ -380,6 +392,121 @@ it("refuses an administrator on the box itself, asking the host nothing", async 
     "same_machine",
   );
   expect(box.host.statusAsks).toBe(0);
+});
+
+const STAFF = "https://staff.example.test";
+const LOOPBACK = { incoming: { socket: { remoteAddress: "127.0.0.1" } } };
+
+/**
+ * A POST from the staff page to `app`, its socket on loopback, which the box takes for its own unless
+ * the staff entrance marked the request remote.
+ */
+async function postFromStaffPage(app: Hono, path: string, cookie: string, body?: unknown) {
+  const res = await app.request(
+    `${STAFF}${path}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: STAFF },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    },
+    LOOPBACK,
+  );
+  const parsed = (await res.json()) as Record<string, unknown>;
+  return { status: res.status, json: (parsed.error as Record<string, unknown>) ?? parsed };
+}
+
+it("sets the clock for an administrator through the staff entrance, even from loopback", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(0, { start, realSource: true });
+  const staff = createStaffApp(box.app, STAFF);
+  const before = written(box);
+
+  const asked = await postFromStaffPage(staff, "/api/box/clock-challenge", mario.cookie);
+  expect(asked).toEqual({
+    status: 200,
+    json: { challengeId: expect.any(String), boxAt: expect.any(String) },
+  });
+  const target = boxTime(box) + 10 * MINUTE;
+  const answer = await postFromStaffPage(staff, "/api/box/clock-set", mario.cookie, {
+    challengeId: asked.json.challengeId,
+    deviceAt: target,
+  });
+
+  expect(answer).toEqual({
+    status: 200,
+    json: {
+      confirmationId: expect.any(String),
+      stepMs: expect.any(Number),
+      confirmedAt: expect.any(String),
+    },
+  });
+  expect(box.host.sets).toEqual([
+    { targetMs: target, requester: { source: "admin", person: mario.id } },
+  ]);
+  expect(written(box)).toEqual({
+    rows: before.rows + 1,
+    corrected: before.corrected + 1,
+    hostSets: 1,
+  });
+  expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
+    source: "admin",
+    person_id: mario.id,
+  });
+  expect(start.status).toBe("by_person");
+});
+
+it("confirms the time for an administrator through the staff entrance, even from loopback", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(0, { start, realSource: true });
+  const staff = createStaffApp(box.app, STAFF);
+  const before = written(box);
+
+  const asked = await postFromStaffPage(staff, "/api/box/clock-challenge", mario.cookie);
+  expect(asked.status).toBe(200);
+  const answer = await postFromStaffPage(staff, "/api/box/clock-confirm", mario.cookie, {
+    challengeId: asked.json.challengeId,
+    asShown: true,
+  });
+
+  expect(answer).toEqual({
+    status: 200,
+    json: {
+      confirmationId: null,
+      stepMs: 0,
+      confirmedAt: new Date(boxTime(box)).toISOString(),
+    },
+  });
+  expect(written(box)).toEqual(before);
+  expect(box.host.statusAsks).toBe(0);
+  expect(start.status).toBe("by_person");
+});
+
+it("refuses the same administrator's requests sent unmarked from loopback", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(0, { start, realSource: true });
+  await expectRefused(
+    box,
+    postFromStaffPage(box.app, "/api/box/clock-challenge", mario.cookie),
+    "same_machine",
+  );
+  await expectRefused(
+    box,
+    postFromStaffPage(box.app, "/api/box/clock-set", mario.cookie, {
+      challengeId: randomUUID(),
+      deviceAt: boxTime(box) + 10 * MINUTE,
+    }),
+    "same_machine",
+  );
+  await expectRefused(
+    box,
+    postFromStaffPage(box.app, "/api/box/clock-confirm", mario.cookie, {
+      challengeId: randomUUID(),
+      asShown: true,
+    }),
+    "same_machine",
+  );
+  expect(box.host.statusAsks).toBe(0);
+  expect(start.status).toBe("waiting");
 });
 
 it("refuses a body that is not a challenge id and a whole number of milliseconds", async () => {

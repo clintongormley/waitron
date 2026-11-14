@@ -1134,6 +1134,12 @@ second machine. A request through the cloud tunnel arrives from loopback (`packa
 read), so a remote administrator is refused too, which fails safe. On a developer's laptop (`WAITRON_ENV=dev`)
 the administrator may confirm from the same machine; nowhere else.
 
+> **Pointer (2026-11-14):** the relay this sentence read (`packages/tunnel`) was retired in #2543.
+> Cloud's staff access now reaches the box's staff entrance (A951-S, `apps/server/src/cloud-remote.ts`),
+> which marks its requests remote, so an administrator coming in through it is not refused.
+> `apps/server/src/clock-set.route.test.ts` runs the challenge, set and confirm routes for one,
+> beside the same requests refused when sent unmarked from loopback.
+
 #### d. The box corrects its own clock
 
 The confirming source both checks and corrects: when AEAT, two agreeing devices or the
