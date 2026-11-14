@@ -701,9 +701,6 @@ did not reach a wrong-sale outcome, so they establish neither a product defect n
 control that creates an unwanted sale or record on the new bill and reaches those assertions,
 while retaining the dish-name, sale-count, record-count and open-status checks.
 
-In `made-here.routes.test.ts`, the cancellation case's quantity-two branch needs an observed count;
-the helper's constant status is not evidence of the write.
-
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.**
