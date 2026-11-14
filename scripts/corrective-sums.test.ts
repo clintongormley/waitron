@@ -42,7 +42,8 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
   },
   {
     file: "apps/server/src/orders-list.ts",
-    fragment: "or x.corrects_sale_id in (select y.id from sales y where y.corrects_sale_id = r.sale_id",
+    fragment:
+      "or x.corrects_sale_id in (select y.id from sales y where y.corrects_sale_id = r.sale_id",
     lines: 1,
     reason: "the number search finds a bill by a corrective of its replacement",
   },
@@ -152,9 +153,9 @@ describe("sums of a sale's correctives go through correctivesOf", () => {
   });
 
   it("finds no corrective match outside the allowlist", () => {
-    expect(
-      matches.filter((match) => !ALLOWED.some((entry) => matchesEntry(match, entry))),
-    ).toEqual([]);
+    expect(matches.filter((match) => !ALLOWED.some((entry) => matchesEntry(match, entry)))).toEqual(
+      [],
+    );
   });
 
   it("matches each allowlist entry on exactly as many lines as it names", () => {
