@@ -264,10 +264,11 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     treatment: "Not carried: recovery progress belongs to each box",
   },
   {
-    item: "module-evidence/",
+    item: "module-records/",
     where: "state",
     class: "source-only",
-    treatment: "Not carried: M1's retained evidence stays on M1; M2 keeps its own",
+    treatment:
+      "Not carried as a folder: the indicator carries M1's prepared selections; M2 keeps its own retained history",
   },
   {
     item: "stream/",

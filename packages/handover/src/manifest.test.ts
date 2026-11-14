@@ -66,7 +66,7 @@ describe("the node-local manifest", () => {
       NODE_LOCAL_MANIFEST.filter((row) => row.where === "state" && row.class === "transferred").map(
         (row) => row.item,
       ),
-    ).toEqual(["secrets.env", "backup.env", "module-preparation-state.json"]);
+    ).toEqual(["secrets.env", "backup.env", "module-records/<module>.json#prepared"]);
   });
 
   it("says what M2 does with every item", () => {
