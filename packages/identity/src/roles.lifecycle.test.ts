@@ -1,3 +1,4 @@
+import { BUILT_IN_ROLE_NAMES } from "@waitron/shared";
 import {
   CORE_MIGRATIONS,
   activityLog,
@@ -389,4 +390,64 @@ it("folds case and Unicode accents for duplicate names while preserving the acce
   });
   const plain = await create(actor.token, "Cafe", []);
   expect((await suite.db.select().from(roles).where(eq(roles.id, plain.id)))[0]!.name).toBe("Cafe");
+});
+
+it("reserves the built-in English names for both creation and renaming", async () => {
+  const { actor } = await fixture();
+  const { id } = await create(actor.token, "Viewer", []);
+  for (const name of [" Staff ", "SUPERVISOR", "manager", "Admin"]) {
+    expect(await refusalOf(() => create(actor.token, name, []))).toMatchObject({
+      code: "role.name_taken",
+    });
+    expect(
+      await refusalOf(() =>
+        withTransaction(suite.db, (tx) =>
+          identity.renameAccessRole(tx, {
+            managementSessionId: actor.token,
+            roleId: id,
+            name,
+            expectedName: "Viewer",
+          }),
+        ),
+      ),
+    ).toMatchObject({ code: "role.name_taken" });
+  }
+});
+
+it("reserves Spanish built-in names even when the editor uses English", async () => {
+  const { actor } = await fixture();
+  const { id } = await create(actor.token, "Viewer", []);
+  for (const words of Object.values(BUILT_IN_ROLE_NAMES)) {
+    const name = words.es;
+    expect(await refusalOf(() => create(actor.token, name, []))).toMatchObject({
+      code: "role.name_taken",
+    });
+    expect(
+      await refusalOf(() =>
+        withTransaction(suite.db, (tx) =>
+          identity.renameAccessRole(tx, {
+            managementSessionId: actor.token,
+            roleId: id,
+            name,
+            expectedName: "Viewer",
+          }),
+        ),
+      ),
+    ).toMatchObject({ code: "role.name_taken" });
+  }
+});
+
+it("refuses importing a custom role under a built-in name", async () => {
+  expect(
+    await refusalOf(() =>
+      withTransaction(suite.db, (tx) =>
+        identity.importAccessRole(tx, {
+          built_in_key: null,
+          name: "Admin",
+          permissions: "[]",
+          created_at: "2026-11-14T00:00:00Z",
+        }),
+      ),
+    ),
+  ).toMatchObject({ code: "role.name_taken" });
 });

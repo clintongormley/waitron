@@ -1,7 +1,7 @@
 import { and, count, eq, inArray, isNotNull, isNull, ne, notInArray } from "drizzle-orm";
 import { persons, personRoles, roles, recordActivity, type Transaction } from "@waitron/db";
 import "./errors.js";
-import { AppError } from "@waitron/shared";
+import { AppError, BUILT_IN_ROLE_NAMES } from "@waitron/shared";
 import { foldForUniqueness } from "./fold.js";
 import {
   declaredPermissions,
@@ -195,8 +195,7 @@ export async function importAccessRole(
   const [role] = await tx
     .insert(roles)
     .values({
-      name: (source.name as string).trim(),
-      nameFolded: foldForUniqueness(source.name as string),
+      ...(await checkedRoleName(tx, source.name as string)),
       permissions,
       createdAt: source.created_at as string,
     })
@@ -253,10 +252,17 @@ function checkedPermissions(permissions: readonly string[]): string[] {
   return [...new Set(permissions)];
 }
 
+const RESERVED_ROLE_NAMES = new Set(
+  Object.values(BUILT_IN_ROLE_NAMES)
+    .flatMap((names) => Object.values(names))
+    .map(foldForUniqueness),
+);
+
 async function checkedRoleName(tx: Transaction, input: string, roleId?: string) {
   const name = input.trim();
   if (name.length === 0) throw new AppError("role.name_required", {});
   const nameFolded = foldForUniqueness(name);
+  if (RESERVED_ROLE_NAMES.has(nameFolded)) throw new AppError("role.name_taken", { name });
   const [duplicate] = await tx
     .select({ id: roles.id })
     .from(roles)

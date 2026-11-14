@@ -530,3 +530,5 @@ export {
 export { guestMenuWords } from "./i18n/guest-menu.js";
 
 export { isSqlIdentifier } from "./sql-identifier.js";
+
+export { BUILT_IN_ROLE_NAMES } from "./i18n/access-role-names.js";

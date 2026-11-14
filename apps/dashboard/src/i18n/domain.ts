@@ -1,3 +1,4 @@
+import { BUILT_IN_ROLE_NAMES } from "@waitron/shared";
 import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
 import type {
   AccessRole,
@@ -7,13 +8,6 @@ import type {
   Printer,
 } from "../api/client.js";
 import { fill, t } from "./t.js";
-
-const ROLE_NAMES: NameTable = {
-  staff: { en: "Staff", es: "Empleado" },
-  supervisor: { en: "Supervisor", es: "Supervisor" },
-  manager: { en: "Manager", es: "Encargado" },
-  admin: { en: "Admin", es: "Administrador" },
-};
 
 const STATUS_NAMES: NameTable = {
   pending: { en: "Pending", es: "Pendiente" },
@@ -143,7 +137,7 @@ const PRINT_JOB_STATUS_NAMES: NameTable = {
 };
 
 export function roleName(value: string, locale: string = currentLocale()): string {
-  return resolveNameTable(ROLE_NAMES, value, locale);
+  return resolveNameTable(BUILT_IN_ROLE_NAMES, value, locale);
 }
 
 export function accessRoleName(

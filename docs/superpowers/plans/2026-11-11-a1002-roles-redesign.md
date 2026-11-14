@@ -1519,3 +1519,7 @@ deciden lo que puede hacer cada persona."
 ### PR16 name example correction — watcher, 2026-11-14 04:25
 
 Keep the shared `foldForUniqueness`: names ignore case but preserve accents, as the global constraints require. “Café” and “CAFÉ” collide; “Cafe” and “Café” can coexist. The watcher cleared correcting task16.1’s example; the shared fold is unchanged.
+
+### PR16 built-in names — watcher clearance, 2026-11-14 04:44
+
+The watcher cleared this material change after both run-it reviewers reproduced duplicate built-in/custom labels: refuse a custom name matching any built-in label in any interface language, using the existing role.name_taken error. The existing dashboard labels now have one shared translation table for display and identity's name check. Creation, renaming and import use the same check. The copy request still requires permissions as planned; source grants override that list. This is watcher clearance, not a new owner approval.
