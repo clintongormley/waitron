@@ -16,6 +16,12 @@ This contract mismatch still needs correction and a passing two-box run. Physica
 qualification remains the owner's; hosted placements remain A1188 and A1505. The earlier
 simulated-slice receipts below do not qualify those settings.
 
+**14 November fixture correction:** the test sends the complete preview copy, retaining its
+source, as the sibling declaration tests do. The command above now passes both cases, including
+the fresh identities, invoice writes and preservation of the copied fiscal rows. Every existing
+assertion is retained. This resolves the fixture mismatch between the separately CI-passed #3172
+and #3142 branches; it changes no production request contract. Physical qualification remains open.
+
 **Owner design approval, 24 October 2026, 04:07.** The owner approved the
 [current design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md)
 as published at Waitron `2c13c7f55dd53a6a7b4d4423ccdc166df5af7397`: both Harbour
