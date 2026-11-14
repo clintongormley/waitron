@@ -21,8 +21,8 @@ import {
 import { AppError, isAppError } from "@waitron/shared";
 import { authorizePersonLoginChange } from "./staff.js";
 import { normalizeEmail, isValidEmail } from "./email.js";
-import { assertPasswordLength, hashPassword } from "./verify-password.js";
-import { assertPinLength, hashPin } from "./verify-pin.js";
+import { assertPasswordLength, hashPasswordAsync } from "./verify-password.js";
+import { assertPinLength, hashPinAsync } from "./verify-pin.js";
 import { startManagementSession, type ManagementSession } from "./management-session.js";
 import { foldForUniqueness } from "./fold.js";
 import { PERSONS_EMAIL } from "./person-constraints.js";
@@ -322,14 +322,14 @@ async function finishClaimedAction(
   ) {
     throw new AppError("account_action.invalid", {});
   }
-  const passwordHash = hashPassword(input.password);
+  const passwordHash = await hashPasswordAsync(input.password);
   const updated = await tx
     .update(persons)
     .set({
       passwordHash,
       emailVerifiedAt: nowIso,
       ...(input.purpose === "invitation"
-        ? { pinHash: hashPin(input.pin!), status: "active" as const }
+        ? { pinHash: await hashPinAsync(input.pin!), status: "active" as const }
         : {}),
     })
     .where(eq(persons.id, personId))

@@ -2,7 +2,7 @@ import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
-import { hashSecret } from "@waitron/identity";
+import { hashSecretAsync } from "@waitron/identity";
 import {
   insertRecoveryPack,
   markRecoveryPackReceived,
@@ -100,7 +100,7 @@ export function createFirstSetupNodeKeys(options: Options) {
       nodeId: state.frozen.nodeId,
       frozenDigest: firstSetupFrozenDigest(state),
       name,
-      verifier: hashSecret(secret),
+      verifier: await hashSecretAsync(secret),
     };
     await updateSetupFlowSection(options.stateDir, "nodeKey", () => stage);
     transient = {

@@ -254,8 +254,7 @@ Test titles #653 could not touch in `boot.test.ts` carry the history tags
 
 ## Every synchronous `deriveKey` caller still blocks the event loop while it derives
 
-- Every synchronous `deriveKey` caller still blocks the event loop while it derives:
-  `encodeConfigurationBundle` (through `encryptArtifact`); everything reaching `decryptArtifact`
+- Remaining synchronous request paths include everything reaching `decryptArtifact`
   (`apps/server/src/artifact-cipher.ts`) — `decodeConfigurationBundle` (on the request path),
   `validateArtifact` (`apps/server/src/restore.ts`) and `unsealNodeState`
   (`apps/server/src/sealed-state.ts`).

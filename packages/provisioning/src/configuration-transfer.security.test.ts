@@ -14,6 +14,8 @@ import { configurationBundle } from "../test/configuration-bundle.js";
 import { request } from "../test/first-setup-request.js";
 import {
   buildConfigurationBundle,
+  encodeConfigurationBundleAsync,
+  decodeConfigurationBundle,
   exportConfigurationTables,
   importConfigurationTables,
   validateConfigurationBundle,
@@ -378,4 +380,16 @@ it("bounds both export and import row counts while permitting the exact maximum"
   } finally {
     await withTransaction(suite.db, (tx) => tx.execute(sql`drop table zz_transfer_rows`));
   }
+});
+
+it("encodes an asynchronously encrypted bundle readable by the existing decoder", async () => {
+  const bundle = configurationBundle();
+  const encoded = await encodeConfigurationBundleAsync(bundle, "twelve chars");
+  expect(decodeConfigurationBundle(encoded, "twelve chars")).toEqual(bundle);
+});
+
+it("refuses a short passphrase before asynchronous encryption", async () => {
+  await expect(
+    encodeConfigurationBundleAsync(configurationBundle(), "elevenchar!"),
+  ).rejects.toMatchObject(invalid("passphrase"));
 });

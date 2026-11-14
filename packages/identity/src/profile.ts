@@ -23,8 +23,8 @@ import {
   assertEmailAvailable,
   normalizeAndValidateEmail,
 } from "./staff.js";
-import { assertPasswordLength, hashPassword, verifyPassword } from "./verify-password.js";
-import { assertPinLength, hashPin } from "./verify-pin.js";
+import { assertPasswordLength, hashPasswordAsync, verifyPassword } from "./verify-password.js";
+import { assertPinLength, hashPinAsync } from "./verify-pin.js";
 import { verifyTotp } from "./totp.js";
 import { generateTotpSecret, totpAuthUri } from "./totp.js";
 import {
@@ -363,7 +363,7 @@ export async function changeOwnPin(
   assertPinLength(input.pin);
   await tx
     .update(persons)
-    .set({ pinHash: hashPin(input.pin) })
+    .set({ pinHash: await hashPinAsync(input.pin) })
     .where(eq(persons.id, person.id));
   await tx
     .update(sessions)
@@ -380,7 +380,7 @@ export async function changeOwnPassword(
   assertPasswordLength(input.password);
   await tx
     .update(persons)
-    .set({ passwordHash: hashPassword(input.password) })
+    .set({ passwordHash: await hashPasswordAsync(input.password) })
     .where(eq(persons.id, person.id));
   await invalidateLinks(tx, person.id);
   await tx

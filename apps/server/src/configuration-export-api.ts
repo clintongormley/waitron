@@ -6,7 +6,10 @@ import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
-import { buildConfigurationBundle, encodeConfigurationBundle } from "./configuration-transfer.js";
+import {
+  buildConfigurationBundle,
+  encodeConfigurationBundleAsync,
+} from "./configuration-transfer.js";
 import "./errors.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -57,7 +60,7 @@ export function mountConfigurationExportApi(
           deps.moduleVersions,
         );
       });
-      const artifact = encodeConfigurationBundle(bundle, passphrase);
+      const artifact = await encodeConfigurationBundleAsync(bundle, passphrase);
       c.header("content-type", "application/octet-stream");
       c.header("content-disposition", 'attachment; filename="waitron-configuration.enc"');
       c.header("cache-control", "no-store");

@@ -1,4 +1,4 @@
-import { hashSecret, verifySecretAsync } from "./secret-hash.js";
+import { hashSecret, hashSecretAsync, verifySecretAsync } from "./secret-hash.js";
 import { AppError } from "@waitron/shared";
 
 export const MIN_PIN_LENGTH = 4;
@@ -9,6 +9,10 @@ export function assertPinLength(pin: string): void {
 
 export function hashPin(pin: string): string {
   return hashSecret(pin);
+}
+
+export function hashPinAsync(pin: string): Promise<string> {
+  return hashSecretAsync(pin);
 }
 
 export function verifyPin(pin: string, stored: string): Promise<boolean> {

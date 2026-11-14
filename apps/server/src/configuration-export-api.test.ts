@@ -2,7 +2,7 @@ import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -18,6 +18,27 @@ import { decodeConfigurationBundle } from "./configuration-transfer.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+
+const encoding = vi.hoisted(() => ({ observe: false, order: [] as string[] }));
+vi.mock("./configuration-transfer.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./configuration-transfer.js")>();
+  return {
+    ...actual,
+    encodeConfigurationBundleAsync: async (
+      ...args: Parameters<typeof actual.encodeConfigurationBundleAsync>
+    ) => {
+      if (!encoding.observe) return actual.encodeConfigurationBundleAsync(...args);
+      const turn = setImmediate(() => encoding.order.push("turned"));
+      try {
+        const bytes = await actual.encodeConfigurationBundleAsync(...args);
+        encoding.order.push("encoded");
+        return bytes;
+      } finally {
+        clearImmediate(turn);
+      }
+    },
+  };
+});
 
 const noopLog: Logger = () => {};
 let venue: VenueResult;
@@ -142,6 +163,28 @@ describe("configuration export API", () => {
       });
     } finally {
       suite.db.execute(sql`delete from settings where module = 'adjustments'`);
+    }
+  });
+
+  it("awaits asynchronous encryption while the event loop keeps turning", async () => {
+    encoding.observe = true;
+    encoding.order = [];
+    try {
+      const response = await app().request("/management-api/configuration-export", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ passphrase: "a strong passphrase" }),
+      });
+      expect(response.status).toBe(200);
+      expect(encoding.order).toEqual(["turned", "encoded"]);
+      expect(
+        decodeConfigurationBundle(
+          new Uint8Array(await response.arrayBuffer()),
+          "a strong passphrase",
+        ).venue.legalName,
+      ).toBe("Prepared Export SL");
+    } finally {
+      encoding.observe = false;
     }
   });
 
