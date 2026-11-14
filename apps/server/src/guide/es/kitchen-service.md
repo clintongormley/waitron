@@ -445,12 +445,12 @@ platos de una estación en una zona de servicio, hacen falta las dos cosas:
   terminal de camarero), con la estación y la zona en sus listas. Un plato cuyo pedido no tiene zona
   de servicio necesita una vista de pase con todas las zonas.
 
-Puedes guardar una estación que espera al pase aunque ninguna vista de pase la cubra. Hasta que
-alguna la cubra, **Estaciones de preparación** lo dice encima de sus pestañas, zona por zona, por
-ejemplo: **Nadie marcha los platos de Parrilla en Terraza: ninguna vista de pase los cubre allí.
-Configura una en Dispositivos.** Si el local tiene más de una zona, una estación que ninguna
-vista de pase cubre en ninguna de ellas recibe una sola línea: **Ninguna vista de pase
-cubre Parrilla en ninguna zona. Configura una en Dispositivos.** El aviso también nombra una
+Puedes guardar una estación que espera al pase aunque ningún pase la cubra. Hasta que
+alguno la cubra, **Estaciones de preparación** lo dice encima de sus pestañas, zona por zona, por
+ejemplo: **Nadie marcha los platos de Parrilla en Terraza: ningún pase los cubre allí.
+Configura uno en Dispositivos.** Si el local tiene más de una zona, una estación que ningún
+pase cubre en ninguna de ellas recibe una sola línea: **Ningún pase
+cubre Parrilla en ninguna zona. Configura uno en Dispositivos.** El aviso también nombra una
 estación con platos que ya esperan al pase sin nada que los marche, aunque la estación ya no
 espere. Vuelve a comprobarlo cuando cambian las estaciones, las zonas, los dispositivos o los
 perfiles, y cada minuto.

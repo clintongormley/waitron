@@ -5685,8 +5685,8 @@ describe("A773 station policy: the pass coverage warning", () => {
       const el = await mount(api({ readPassCoverage: vi.fn().mockResolvedValue(gaps) }));
       await settle(el);
       expect(lines(el)).toEqual([
-        "Nothing fires dishes from Grill and Cold in Terrace: no pass view covers them there. Set one up under Devices.",
-        "Nothing fires dishes from Grill that have no service zone: only a pass view on every service zone covers them. Set one up under Devices.",
+        "Nothing fires dishes from Grill and Cold in Terrace: no pass covers them there. Set one up under Devices.",
+        "Nothing fires dishes from Grill that have no service zone: only a pass on every service zone covers them. Set one up under Devices.",
       ]);
       const section = warning(el)!;
       expect(section.getAttribute("role")).toBe("status");
@@ -5739,7 +5739,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "Nothing fires dishes from {devices} {zone} in {devices}: no pass view covers them there. Set one up under Devices.",
+      "Nothing fires dishes from {devices} {zone} in {devices}: no pass covers them there. Set one up under Devices.",
     ]);
     expect(warning(el)!.querySelectorAll("a")).toHaveLength(1);
   });
@@ -5774,9 +5774,9 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "No pass view covers Grill in any zone. Set one up under Devices.",
-      "Nothing fires dishes from Cold in Terrace: no pass view covers them there. Set one up under Devices.",
-      "Nothing fires dishes from Grill that have no service zone: only a pass view on every service zone covers them. Set one up under Devices.",
+      "No pass covers Grill in any zone. Set one up under Devices.",
+      "Nothing fires dishes from Cold in Terrace: no pass covers them there. Set one up under Devices.",
+      "Nothing fires dishes from Grill that have no service zone: only a pass on every service zone covers them. Set one up under Devices.",
     ]);
     for (const line of warning(el)!.querySelectorAll("p")) {
       expect(line.querySelectorAll("a")).toHaveLength(1);
@@ -5805,7 +5805,7 @@ describe("A773 station policy: the pass coverage warning", () => {
       await settle(el);
       expect(lines(el)).toEqual([
         locale === "en"
-          ? "No pass view covers Grill and Cold in any zone. Set one up under Devices."
+          ? "No pass covers Grill and Cold in any zone. Set one up under Devices."
           : filled("es", "prep.pass_gap_every_zone", { stations: "Grill y Cold" }),
       ]);
     },
@@ -5821,7 +5821,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "Nothing fires dishes from Grill in Terrace: no pass view covers them there. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Terrace: no pass covers them there. Set one up under Devices.",
     ]);
   });
 
@@ -5844,7 +5844,7 @@ describe("A773 station policy: the pass coverage warning", () => {
       }),
     );
     await settle(el);
-    expect(lines(el)).toEqual(["No pass view covers Grill in any zone. Set one up under Devices."]);
+    expect(lines(el)).toEqual(["No pass covers Grill in any zone. Set one up under Devices."]);
   });
 
   it("A1320 a station covered in one active zone keeps its per-zone lines", async () => {
@@ -5859,8 +5859,8 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "Nothing fires dishes from Grill in Terrace: no pass view covers them there. Set one up under Devices.",
-      "Nothing fires dishes from Grill in Hall: no pass view covers them there. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Terrace: no pass covers them there. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Hall: no pass covers them there. Set one up under Devices.",
     ]);
   });
 
@@ -5880,8 +5880,8 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "No pass view covers Grill in any zone. Set one up under Devices.",
-      "Nothing fires dishes from Grill in Terrace: no pass view covers them there. Set one up under Devices.",
+      "No pass covers Grill in any zone. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Terrace: no pass covers them there. Set one up under Devices.",
     ]);
   });
 
@@ -5900,7 +5900,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "No pass view covers {devices} {zone} in any zone. Set one up under Devices.",
+      "No pass covers {devices} {zone} in any zone. Set one up under Devices.",
     ]);
     expect(warning(el)!.querySelectorAll("a")).toHaveLength(1);
   });
@@ -5954,7 +5954,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     liveData.invalidate([{ type: "devices" }]);
     await vi.waitFor(() =>
       expect(lines(el)).toEqual([
-        "Nothing fires dishes from Grill that have no service zone: only a pass view on every service zone covers them. Set one up under Devices.",
+        "Nothing fires dishes from Grill that have no service zone: only a pass on every service zone covers them. Set one up under Devices.",
       ]),
     );
   });
@@ -5966,7 +5966,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     const el = await mount(api({ liveData, readPassCoverage }));
     await vi.waitFor(() =>
       expect(lines(el)).toEqual([
-        "Nothing fires dishes from Grill that have no service zone: only a pass view on every service zone covers them. Set one up under Devices.",
+        "Nothing fires dishes from Grill that have no service zone: only a pass on every service zone covers them. Set one up under Devices.",
       ]),
     );
     readPassCoverage.mockRejectedValue({ code: "connection.failed" });

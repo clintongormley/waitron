@@ -378,11 +378,10 @@ const en = {
   "prep.no_replacement": "No replacement",
   "prep.load_error": "Prep stations could not be loaded.",
   "prep.pass_gap":
-    "Nothing fires dishes from {stations} in {zone}: no pass view covers them there. Set one up under {devices}.",
+    "Nothing fires dishes from {stations} in {zone}: no pass covers them there. Set one up under {devices}.",
   "prep.pass_gap_no_zone":
-    "Nothing fires dishes from {stations} that have no service zone: only a pass view on every service zone covers them. Set one up under {devices}.",
-  "prep.pass_gap_every_zone":
-    "No pass view covers {stations} in any zone. Set one up under {devices}.",
+    "Nothing fires dishes from {stations} that have no service zone: only a pass on every service zone covers them. Set one up under {devices}.",
+  "prep.pass_gap_every_zone": "No pass covers {stations} in any zone. Set one up under {devices}.",
   "prep.pass_gap_error": "Which passes cover these stations could not be checked.",
   "prep.save_error": "The change could not be saved.",
   "prep.fix_fields": "Correct the highlighted fields to continue.",
@@ -1313,11 +1312,11 @@ const es: Record<keyof typeof en, string> = {
   "prep.no_replacement": "Sin sustituta",
   "prep.load_error": "No se pudieron cargar las estaciones de preparación.",
   "prep.pass_gap":
-    "Nadie marcha los platos de {stations} en {zone}: ninguna vista de pase los cubre allí. Configura una en {devices}.",
+    "Nadie marcha los platos de {stations} en {zone}: ningún pase los cubre allí. Configura uno en {devices}.",
   "prep.pass_gap_no_zone":
-    "Nadie marcha los platos de {stations} sin zona de servicio: solo los cubre una vista de pase con todas las zonas de servicio. Configura una en {devices}.",
+    "Nadie marcha los platos de {stations} sin zona de servicio: solo los cubre un pase con todas las zonas de servicio. Configura uno en {devices}.",
   "prep.pass_gap_every_zone":
-    "Ninguna vista de pase cubre {stations} en ninguna zona. Configura una en {devices}.",
+    "Ningún pase cubre {stations} en ninguna zona. Configura uno en {devices}.",
   "prep.pass_gap_error": "No se pudo comprobar qué pases cubren estas estaciones.",
   "prep.save_error": "No se pudo guardar el cambio.",
   "prep.fix_fields": "Corrige los campos marcados para continuar.",
