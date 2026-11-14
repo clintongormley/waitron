@@ -14,6 +14,15 @@ import type {
   Station,
 } from "../api/client.js";
 
+/** Finds `selector` in the screen, or in the editor's Save row, which draws the form's message. */
+function inScreenOrRow(el: DeviceProfilesScreen, selector: string): Element | null {
+  return (
+    el.shadowRoot!.querySelector(selector) ??
+    el.shadowRoot!.querySelector("wt-form-actions")?.shadowRoot?.querySelector(selector) ??
+    null
+  );
+}
+
 /**
  * Scanned in LIST and EDITOR mode. The `api` stub must resolve `listDeviceProfiles`,
  * `listPrinters` and `getDeviceProfile`, or a stray rejection pollutes the run.
@@ -218,9 +227,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
         expect(
           el.shadowRoot!.querySelector("[data-test=profile-zones-error]")?.textContent?.trim(),
         ).toBe(t("device_profiles.err_zones_required"));
-        expect(el.shadowRoot!.querySelector(".form-message")?.textContent?.trim()).toBe(
-          t("form.fix_fields"),
-        );
+        expect(inScreenOrRow(el, ".form-message")?.textContent?.trim()).toBe(t("form.fix_fields"));
         expect(await saveState(el)).toEqual(["secondary", true, true]);
         await expectNoA11yViolations(host);
         const zone = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(

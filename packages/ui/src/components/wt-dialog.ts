@@ -60,6 +60,7 @@ export class WtDialog extends LitElement {
       :host {
         --wt-table-max: none;
         --wt-tabs-sticky-surface: var(--wt-color-surface-raised);
+        --wt-form-actions-surface: var(--wt-color-surface-raised);
       }
 
       dialog {
@@ -148,6 +149,7 @@ export class WtDialog extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
+        --wt-form-actions-in-place: true;
       }
 
       /* A message taller than the room the body leaves scrolls, so the buttons below it stay in
@@ -637,8 +639,8 @@ export class WtDialog extends LitElement {
       .join(" ");
   }
 
-  /** A row in the body shows its own message, which may be below the scrolled-to part of a long
-   * body. The row dispatches the event once it has rendered, so the message is already there. */
+  /** A body row's own message is out of view once the body is scrolled past the row.
+   * The row dispatches the event once it has rendered, so the message is already there. */
   private onBodyMessage(event: FormErrorEvent): void {
     const row = event.composedPath()[0];
     if (row instanceof WtFormActions && !this.editing) {

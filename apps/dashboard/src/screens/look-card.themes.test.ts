@@ -816,10 +816,13 @@ describe("the editor's buttons at phone and desk widths", () => {
     await el.updateComplete;
     el.parentElement!.style.width = `${cardWidth}px`;
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // Scrolled to the end, so the held Save row rests where the form lays it out.
+    scrollTo(0, document.documentElement.scrollHeight);
     return el;
   }
 
   afterEach(async () => {
+    scrollTo(0, 0);
     await page.viewport(1280, 800);
   });
 
@@ -857,8 +860,9 @@ describe("the editor's buttons at phone and desk widths", () => {
     await typeInCode(el, "#12");
     await userEvent.click(button(el, "save"));
     await settle(el);
+    scrollTo(0, document.documentElement.scrollHeight);
     const actions = q(el, "wt-form-actions")!.getBoundingClientRect();
-    const row = q(el, ".buttons")!.getBoundingClientRect();
+    const row = q(el, "form")!.getBoundingClientRect();
     expect(actions.width).toBeCloseTo(row.width, 0);
     expect(actions.top).toBeGreaterThanOrEqual(box(el, "use-waitron").bottom);
   });

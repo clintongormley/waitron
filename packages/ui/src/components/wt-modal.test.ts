@@ -858,6 +858,17 @@ function expectInFooterInView(modal: WtModal, message: Element): void {
   expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
 }
 
+/** Waits until `message` lies wholly inside the modal's visible body. */
+async function waitUntilInsideBody(modal: WtModal, message: Element): Promise<void> {
+  const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  await vi.waitFor(() => {
+    const frame = body.getBoundingClientRect();
+    const box = message.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(frame.top);
+    expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
+  });
+}
+
 function expectInsideBody(modal: WtModal, message: Element): void {
   const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!.getBoundingClientRect();
   const box = message.getBoundingClientRect();
@@ -888,7 +899,7 @@ test("shows a message it already carries in view when it opens, without scrollin
   }
 });
 
-test("brings the message of actions placed in the body into view when it appears", async () => {
+test("keeps the message of actions placed in the body in view when it appears, without scrolling the body", async () => {
   await page.viewport(390, 500);
   try {
     const modal = (await mount(`<wt-modal heading="Pay">
@@ -903,7 +914,8 @@ test("brings the message of actions placed in the body into view when it appears
     actions.error = "Choose a payment method.";
     const message = (await formMessageOf(actions))!;
     expect(message.textContent).toBe("Choose a payment method.");
-    await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+    await waitUntilInsideBody(modal, message);
+    expect(body.scrollTop).toBe(0);
     expectInsideBody(modal, message);
   } finally {
     await page.viewport(1280, 900);
@@ -1009,12 +1021,13 @@ async function submitRefusedFromField(slot: string) {
   return form;
 }
 
-test("brings a refused save's message for actions in the body into view when Enter submitted it from a field", async () => {
+test("keeps a refused save's message for actions in the body in view, without scrolling the body, when Enter submitted it from a field", async () => {
   await page.viewport(390, 500);
   try {
     const { modal, body, actions, input, field } = await submitRefusedFromField("");
-    await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
     const message = (await formMessageOf(actions))!;
+    await waitUntilInsideBody(modal, message);
+    expect(body.scrollTop).toBe(0);
     expect(message.textContent).toBe(REFUSAL);
     expectInsideBody(modal, message);
     expect(input.shadowRoot!.activeElement).toBe(field);
@@ -1354,4 +1367,17 @@ test("shows the focus ring on its body when Shift+Tab brings focus back to it", 
   expect(modal.shadowRoot!.activeElement).toBe(body);
   expect(body.matches(":focus-visible")).toBe(true);
   expect(getComputedStyle(body).outlineStyle).toBe("solid");
+});
+
+test("gives a form's action row in its body the raised surface it paints, and keeps a footer row unpainted", async () => {
+  const el = await mount(`<wt-modal heading="Edit" open>
+    <wt-form-actions data-body-row><wt-button>Save</wt-button></wt-form-actions>
+    <wt-form-actions slot="footer"><wt-button>Save</wt-button></wt-form-actions>
+  </wt-modal>`);
+  host.style.setProperty("--wt-color-surface-raised", "rgb(10, 11, 12)");
+  host.style.setProperty("--wt-form-actions-surface", "rgb(1, 1, 1)");
+  const body = el.querySelector<HTMLElement>("[data-body-row]")!;
+  const footer = el.querySelector<HTMLElement>('[slot="footer"]')!;
+  expect(getComputedStyle(body).backgroundColor).toBe("rgb(10, 11, 12)");
+  expect(getComputedStyle(footer).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });

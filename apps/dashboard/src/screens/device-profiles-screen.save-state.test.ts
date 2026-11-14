@@ -17,6 +17,15 @@ import type {
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
 
+/** Finds `selector` in the screen, or in the editor's Save row, which draws the form's message. */
+function inScreenOrRow(el: DeviceProfilesScreen, selector: string): Element | null {
+  return (
+    el.shadowRoot!.querySelector(selector) ??
+    el.shadowRoot!.querySelector("wt-form-actions")?.shadowRoot?.querySelector(selector) ??
+    null
+  );
+}
+
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
 
@@ -282,7 +291,7 @@ function noComplaint(el: DeviceProfilesScreen) {
   ))
     expect(field.error ?? "").toBe("");
   expect(el.shadowRoot!.querySelector(".field-error")).toBeNull();
-  expect(el.shadowRoot!.querySelector(".form-message")?.textContent?.trim() ?? "").toBe("");
+  expect(inScreenOrRow(el, ".form-message")?.textContent?.trim() ?? "").toBe("");
 }
 
 async function openEdit(id = "p1", api: DashboardApi = stubApi()) {
@@ -368,7 +377,7 @@ describe("the device profile editor's Save", () => {
           }),
         );
         const zoneError = () => q(el, "profile-zones-error")?.textContent?.trim();
-        const bottom = () => el.shadowRoot!.querySelector(".form-message")?.textContent?.trim();
+        const bottom = () => inScreenOrRow(el, ".form-message")?.textContent?.trim();
         expect(zoneError()).toBe(t("device_profiles.err_zones_required"));
         expect(bottom()).toBe(t("form.fix_fields"));
         expect(await state(el)).toEqual(quiet);

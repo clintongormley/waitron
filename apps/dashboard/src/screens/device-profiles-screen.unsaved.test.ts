@@ -8,6 +8,12 @@ import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { DeviceProfilesScreen } from "./device-profiles-screen.js";
 
+/** The screen's text with its Save row's, which draws the form's message. */
+function shownText(el: DeviceProfilesScreen): string {
+  const row = el.shadowRoot!.querySelector("wt-form-actions");
+  return `${el.shadowRoot!.textContent ?? ""}${row?.shadowRoot?.textContent ?? ""}`;
+}
+
 registerIcons(DASHBOARD_ICONS);
 const profile: DeviceProfile = {
   id: "p1",
@@ -376,9 +382,7 @@ it("W69 a refused profile save preserves its dirty values", async () => {
   });
   change(screen, "profile-name", "New counter");
   q(screen, "profile-save")!.click();
-  await expect
-    .poll(() => screen.shadowRoot!.textContent)
-    .toContain(codeMessage("connection.failed"));
+  await expect.poll(() => shownText(screen)).toContain(codeMessage("connection.failed"));
   expect(q(screen, "editor-form")).not.toBeNull();
   expect(unload()).toBe(true);
 });
@@ -500,7 +504,7 @@ for (const phase of ["write", "refresh"] as const) {
     await expect.poll(() => q(screen, "edit-p1")).not.toBeNull();
     refuse();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(screen.shadowRoot!.textContent).not.toContain(codeMessage("connection.failed"));
+    expect(shownText(screen)).not.toContain(codeMessage("connection.failed"));
     expect(q(screen, "edit-p1")).not.toBeNull();
     expect(unload()).toBe(false);
   });
@@ -806,9 +810,7 @@ it("W100 a refused reader list keeps only the readers unsaved", async () => {
   change(screen, "profile-name", "New counter");
   change(screen, "profile-reader-rb", true);
   q(screen, "profile-save")!.click();
-  await expect
-    .poll(() => screen.shadowRoot!.textContent)
-    .toContain(codeMessage("connection.failed"));
+  await expect.poll(() => shownText(screen)).toContain(codeMessage("connection.failed"));
   expect(q(screen, "editor-form")).not.toBeNull();
   expect(unload()).toBe(true);
   change(screen, "profile-reader-rb", false);
@@ -865,9 +867,7 @@ it("W100 a department chosen while a refused reader save is in flight is sent by
   await expect.poll(() => typeof finish).toBe("function");
   change(screen, "profile-department", "d2");
   finish!();
-  await expect
-    .poll(() => screen.shadowRoot!.textContent)
-    .toContain(codeMessage("connection.failed"));
+  await expect.poll(() => shownText(screen)).toContain(codeMessage("connection.failed"));
   await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
   q(screen, "profile-save")!.click();
   await expect.poll(() => writes.length).toBe(2);
@@ -894,9 +894,7 @@ it("W100 a department saved before a refused reader save is not sent again", asy
   change(screen, "profile-department", "d2");
   change(screen, "profile-reader-rb", true);
   q(screen, "profile-save")!.click();
-  await expect
-    .poll(() => screen.shadowRoot!.textContent)
-    .toContain(codeMessage("connection.failed"));
+  await expect.poll(() => shownText(screen)).toContain(codeMessage("connection.failed"));
   expect(writes[0]![6]).toMatchObject({ departmentId: "d2" });
   await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
   q(screen, "profile-save")!.click();

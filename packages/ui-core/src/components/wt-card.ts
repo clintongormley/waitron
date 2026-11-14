@@ -13,6 +13,7 @@ export class WtCard extends LitElement {
 
       .card {
         background: var(--wt-color-surface);
+        --wt-form-actions-surface: var(--wt-color-surface);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);
         padding: var(--wt-space-4);
@@ -20,6 +21,7 @@ export class WtCard extends LitElement {
 
       :host([raised]) .card {
         background: var(--wt-color-surface-raised);
+        --wt-form-actions-surface: var(--wt-color-surface-raised);
         box-shadow: var(--wt-shadow-1);
       }
 

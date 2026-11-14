@@ -195,11 +195,14 @@ export class BackupScreen extends LitElement {
         font-size: var(--wt-font-size-md);
         color: var(--wt-color-text);
       }
-      .card {
-        max-width: var(--wt-form-max-width);
+      .card,
+      .form {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
+      }
+      .card {
+        max-width: var(--wt-form-max-width);
       }
       .status {
         padding: var(--wt-space-3);
@@ -1647,7 +1650,7 @@ export class BackupScreen extends LitElement {
 
   #renderConfigure(): TemplateResult {
     const s = this.#applyAction();
-    return html`
+    return html`<div class="form">
       ${this.#renderDestinationField()}
 
       <h2>${t("backup.key.title")}</h2>
@@ -1674,7 +1677,7 @@ export class BackupScreen extends LitElement {
           >${t("backup.apply")}</wt-button
         >
       </wt-form-actions>
-    `;
+    </div>`;
   }
 
   #settingsAction() {
@@ -1683,7 +1686,7 @@ export class BackupScreen extends LitElement {
 
   #renderEditSettings(): TemplateResult {
     const s = this.#settingsAction();
-    return html`
+    return html`<div class="form">
       <h2 data-test="edit-title">${t("backup.edit.title")}</h2>
       ${this.#renderDestinationField()}
 
@@ -1706,7 +1709,7 @@ export class BackupScreen extends LitElement {
           >${t("backup.edit.save")}</wt-button
         >
       </wt-form-actions>
-    `;
+    </div>`;
   }
 
   #renderKeyStep(): TemplateResult {
@@ -1915,7 +1918,7 @@ export class BackupScreen extends LitElement {
   }
 
   #renderRotate(): TemplateResult {
-    return html`
+    return html`<div class="form">
       <h2 data-test="rotate">${t("backup.rotate.title")}</h2>
       <p class="warning" data-test="rotate-warning" role="note">${t("backup.rotate.warning")}</p>
       <div class="key-actions">
@@ -1961,7 +1964,7 @@ export class BackupScreen extends LitElement {
           >${t("backup.rotate.confirm")}</wt-button
         >
       </wt-form-actions>
-    `;
+    </div>`;
   }
 }
 

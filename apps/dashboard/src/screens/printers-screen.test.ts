@@ -13773,3 +13773,24 @@ describe("the printer details' footer and its one Edit form", () => {
     expect(slotOf(actions.querySelector("[data-test=save-printer-details]")!)).toBe("");
   });
 });
+
+it("draws Check address level with the address fields beside it", async () => {
+  const before = [innerWidth, innerHeight] as const;
+  await page.viewport(1280, 900);
+  try {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    q(el, "[data-test=probe-panel] summary")!.click();
+    await flush(el);
+    const port = q(el, "[data-test=probe-port]")!.getBoundingClientRect();
+    const check = q(el, "[data-test=probe-printer]")!.getBoundingClientRect();
+    expect(check.left).toBeGreaterThan(port.right);
+    expect(check.bottom).toBeCloseTo(port.bottom, 0);
+  } finally {
+    await page.viewport(...before);
+  }
+});

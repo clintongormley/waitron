@@ -135,6 +135,7 @@ export class SectionAddProducts extends LitElement {
         padding: var(--wt-space-3) 0 var(--wt-space-5);
         border-top: 1px solid var(--wt-color-border);
         background: var(--wt-color-surface-raised);
+        --wt-form-actions-surface: var(--wt-color-surface-raised);
       }
       .bottom .count {
         margin: 0;

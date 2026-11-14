@@ -264,8 +264,18 @@ export class LookCard extends LitElement {
         margin: 0 0 var(--wt-space-4);
         color: var(--wt-color-text-muted);
       }
+      /* The Save row is a child of the form, so it is held while any of the form scrolls. */
       form {
         container-type: inline-size;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: last baseline;
+        gap: var(--wt-space-2);
+      }
+      .fields {
+        flex: 0 0 100%;
+        min-width: 0;
+        margin-bottom: calc(var(--wt-space-4) - var(--wt-space-2));
       }
       .editor {
         display: grid;
@@ -278,23 +288,17 @@ export class LookCard extends LitElement {
         gap: var(--wt-space-4);
         min-width: 0;
       }
-      .buttons {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-end;
-        gap: var(--wt-space-2);
-        margin-top: var(--wt-space-4);
-      }
-      .buttons > wt-form-actions {
+      form > wt-form-actions {
         flex: 1 1 auto;
         width: auto;
       }
-      .buttons > wt-form-actions.with-message {
+      form > wt-form-actions.with-message {
         flex-basis: 100%;
       }
       /* Room on a phone for fonts wider than macOS's system font, such as Linux's DejaVu Sans. */
       @container (width < 300px) {
-        .buttons wt-button::part(button) {
+        form > wt-button::part(button),
+        form > wt-form-actions > wt-button::part(button) {
           padding-inline: var(--wt-space-2);
         }
       }
@@ -985,160 +989,160 @@ export class LookCard extends LitElement {
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
       >
-        <div class="editor">
-          <div class="choices">
-            <dashboard-theme-logo-field
-              .api=${this.api}
+        <div class="fields">
+          <div class="editor">
+            <div class="choices">
+              <dashboard-theme-logo-field
+                .api=${this.api}
+                .logo=${draft.choices.logo}
+                ?busy=${busy}
+                .errors=${this.#logoErrors()}
+                .draftParent=${this}
+                @logo-change=${(event: CustomEvent<{ logo: ThemeLogo | null }>) => {
+                  event.stopPropagation();
+                  this.#change((d) => setLogo(d, event.detail.logo));
+                }}
+              ></dashboard-theme-logo-field>
+              ${colorField({
+                color: draft.choices.brandColor,
+                busy,
+                error: "",
+                name: "brandColorPicker",
+                errorId: "brand-color-error",
+                legend: t("appearance.brand"),
+                noneChoice: {
+                  label: t("appearance.brand_waitron"),
+                  chip: WAITRON_DEFAULTS.light[PRIMARY]!,
+                },
+                change: (colour) =>
+                  this.#change((d) => pickBrand(d, colour, this.#expected), { code: true }),
+                code: {
+                  name: "brandColor",
+                  label: t("appearance.brand_code"),
+                  value: draft.code,
+                  error: codeError,
+                  change: (text) =>
+                    this.#change((d) => typeCode(d, text, this.#expected), { code: true }),
+                },
+              })}
+              ${this.#brandLines(draft, busy)} ${this.#keptNote(draft)}
+              <wt-segmented-control
+                name="background"
+                label=${t("appearance.background")}
+                .options=${BACKGROUNDS.map((value) => ({
+                  value,
+                  label: t(`appearance.background.${value}`),
+                }))}
+                .value=${draft.choices.background}
+                ?disabled=${busy}
+                @wt-change=${(event: CustomEvent<{ value: Background }>) => {
+                  event.stopPropagation();
+                  this.#change((d) => setBackground(d, event.detail.value));
+                }}
+              ></wt-segmented-control>
+              <wt-segmented-control
+                name="corners"
+                label=${t("appearance.corners")}
+                .options=${CORNER_CHOICES.map((value) => ({
+                  value,
+                  label: t(`appearance.corners.${value}`),
+                }))}
+                .value=${draft.choices.corners}
+                ?disabled=${busy}
+                @wt-change=${(event: CustomEvent<{ value: Corners }>) => {
+                  event.stopPropagation();
+                  this.#change((d) => setCorners(d, event.detail.value));
+                }}
+              ></wt-segmented-control>
+              <wt-slider
+                name="textScale"
+                label=${t("appearance.text_size")}
+                min="100"
+                max="130"
+                step="5"
+                marks
+                continuous
+                .value=${draft.choices.textScale}
+                .format=${textScaleLabel}
+                .valueText=${textScaleSpoken}
+                hint=${t("appearance.text_size_hint")}
+                .error=${this.refusedTextScale}
+                ?disabled=${busy}
+                @wt-change=${(event: CustomEvent<{ value: number }>) => {
+                  event.stopPropagation();
+                  const { value } = event.detail;
+                  if (!isTextScale(value)) return;
+                  this.#change((d) => setTextScale(d, value));
+                }}
+              ></wt-slider>
+              <p class="sizes" data-test="text-sizes">${textSizesLine(this.#derived!)}</p>
+            </div>
+            <dashboard-theme-preview
+              .theme=${this.#derived!}
+              .name=${name}
               .logo=${draft.choices.logo}
-              ?busy=${busy}
-              .errors=${this.#logoErrors()}
-              .draftParent=${this}
-              @logo-change=${(event: CustomEvent<{ logo: ThemeLogo | null }>) => {
-                event.stopPropagation();
-                this.#change((d) => setLogo(d, event.detail.logo));
-              }}
-            ></dashboard-theme-logo-field>
-            ${colorField({
-              color: draft.choices.brandColor,
-              busy,
-              error: "",
-              name: "brandColorPicker",
-              errorId: "brand-color-error",
-              legend: t("appearance.brand"),
-              noneChoice: {
-                label: t("appearance.brand_waitron"),
-                chip: WAITRON_DEFAULTS.light[PRIMARY]!,
-              },
-              change: (colour) =>
-                this.#change((d) => pickBrand(d, colour, this.#expected), { code: true }),
-              code: {
-                name: "brandColor",
-                label: t("appearance.brand_code"),
-                value: draft.code,
-                error: codeError,
-                change: (text) =>
-                  this.#change((d) => typeCode(d, text, this.#expected), { code: true }),
-              },
-            })}
-            ${this.#brandLines(draft, busy)} ${this.#keptNote(draft)}
-            <wt-segmented-control
-              name="background"
-              label=${t("appearance.background")}
-              .options=${BACKGROUNDS.map((value) => ({
-                value,
-                label: t(`appearance.background.${value}`),
-              }))}
-              .value=${draft.choices.background}
-              ?disabled=${busy}
-              @wt-change=${(event: CustomEvent<{ value: Background }>) => {
-                event.stopPropagation();
-                this.#change((d) => setBackground(d, event.detail.value));
-              }}
-            ></wt-segmented-control>
-            <wt-segmented-control
-              name="corners"
-              label=${t("appearance.corners")}
-              .options=${CORNER_CHOICES.map((value) => ({
-                value,
-                label: t(`appearance.corners.${value}`),
-              }))}
-              .value=${draft.choices.corners}
-              ?disabled=${busy}
-              @wt-change=${(event: CustomEvent<{ value: Corners }>) => {
-                event.stopPropagation();
-                this.#change((d) => setCorners(d, event.detail.value));
-              }}
-            ></wt-segmented-control>
-            <wt-slider
-              name="textScale"
-              label=${t("appearance.text_size")}
-              min="100"
-              max="130"
-              step="5"
-              marks
-              continuous
-              .value=${draft.choices.textScale}
-              .format=${textScaleLabel}
-              .valueText=${textScaleSpoken}
-              hint=${t("appearance.text_size_hint")}
-              .error=${this.refusedTextScale}
-              ?disabled=${busy}
-              @wt-change=${(event: CustomEvent<{ value: number }>) => {
-                event.stopPropagation();
-                const { value } = event.detail;
-                if (!isTextScale(value)) return;
-                this.#change((d) => setTextScale(d, value));
-              }}
-            ></wt-slider>
-            <p class="sizes" data-test="text-sizes">${textSizesLine(this.#derived!)}</p>
+              .legalName=${this.legalName}
+            ></dashboard-theme-preview>
           </div>
-          <dashboard-theme-preview
-            .theme=${this.#derived!}
-            .name=${name}
-            .logo=${draft.choices.logo}
-            .legalName=${this.legalName}
-          ></dashboard-theme-preview>
+          ${keyed(
+            this.#session,
+            html`<dashboard-theme-advanced
+              .draft=${draft}
+              .derived=${this.#derived!}
+              .errors=${handErrors}
+              .textErrors=${textErrors}
+              .fixed=${this.handFixed}
+              ?busy=${busy}
+              @hand-pending=${() => this.#scope?.changed()}
+              @hand-change=${(event: CustomEvent<HandAction>) => {
+                event.stopPropagation();
+                this.#hand(event.detail);
+              }}
+              @text-change=${(event: CustomEvent<TextAction>) => {
+                event.stopPropagation();
+                this.#text(event.detail);
+              }}
+            ></dashboard-theme-advanced>`,
+          )}
+          ${this.#fixAllLine(busy)}
         </div>
-        ${keyed(
-          this.#session,
-          html`<dashboard-theme-advanced
-            .draft=${draft}
-            .derived=${this.#derived!}
-            .errors=${handErrors}
-            .textErrors=${textErrors}
-            .fixed=${this.handFixed}
-            ?busy=${busy}
-            @hand-pending=${() => this.#scope?.changed()}
-            @hand-change=${(event: CustomEvent<HandAction>) => {
-              event.stopPropagation();
-              this.#hand(event.detail);
-            }}
-            @text-change=${(event: CustomEvent<TextAction>) => {
-              event.stopPropagation();
-              this.#text(event.detail);
-            }}
-          ></dashboard-theme-advanced>`,
-        )}
-        ${this.#fixAllLine(busy)}
-        <div class="buttons">
+        <wt-button
+          data-test="use-waitron"
+          variant="secondary"
+          ?disabled=${busy || isWaitronLook(draft)}
+          @click=${() => this.#useWaitronLook()}
+          >${t("appearance.use_waitron")}</wt-button
+        >
+        <wt-form-actions class=${message ? "with-message" : ""} .error=${message}>
+          ${
+            editing.id === null
+              ? nothing
+              : html`<wt-button
+                  slot="secondary"
+                  data-test="save-as-new"
+                  variant="secondary"
+                  ?disabled=${busy || badForm}
+                  @click=${() => void this.#save("save-as-new")}
+                  >${t("appearance.save_as_new")}</wt-button
+                >`
+          }
           <wt-button
-            data-test="use-waitron"
+            slot="secondary"
+            data-test="cancel"
             variant="secondary"
-            ?disabled=${busy || isWaitronLook(draft)}
-            @click=${() => this.#useWaitronLook()}
-            >${t("appearance.use_waitron")}</wt-button
+            ?disabled=${busy}
+            @click=${() => this.#requestCancel()}
+            >${t("action.cancel")}</wt-button
           >
-          <wt-form-actions class=${message ? "with-message" : ""} .error=${message}>
-            ${
-              editing.id === null
-                ? nothing
-                : html`<wt-button
-                    slot="secondary"
-                    data-test="save-as-new"
-                    variant="secondary"
-                    ?disabled=${busy || badForm}
-                    @click=${() => void this.#save("save-as-new")}
-                    >${t("appearance.save_as_new")}</wt-button
-                  >`
-            }
-            <wt-button
-              slot="secondary"
-              data-test="cancel"
-              variant="secondary"
-              ?disabled=${busy}
-              @click=${() => this.#requestCancel()}
-              >${t("action.cancel")}</wt-button
-            >
-            <wt-button
-              data-test="save"
-              variant=${saveAction.variant}
-              ?loading=${busy}
-              ?disabled=${saveAction.unchanged || busy || badForm}
-              @click=${() => void this.#save("save")}
-              >${t("action.save")}</wt-button
-            >
-          </wt-form-actions>
-        </div>
+          <wt-button
+            data-test="save"
+            variant=${saveAction.variant}
+            ?loading=${busy}
+            ?disabled=${saveAction.unchanged || busy || badForm}
+            @click=${() => void this.#save("save")}
+            >${t("action.save")}</wt-button
+          >
+        </wt-form-actions>
       </form>
       ${this.#dialog(draft)}`;
   }

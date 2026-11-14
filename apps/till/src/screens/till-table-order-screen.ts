@@ -827,6 +827,7 @@ export class TillTableOrderScreen extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
+        --wt-form-actions-surface: var(--wt-color-surface);
       }
 
       .action-panel h2 {
@@ -1356,9 +1357,14 @@ export class TillTableOrderScreen extends LitElement {
         scroll-margin-block-end: calc(var(--draft-bar-size, 0px) + var(--order-dock-size, 0px));
       }
 
-      .action-panel,
+      .action-panel {
+        scroll-margin-block-end: var(--order-dock-size, 0px);
+      }
+
+      /* The dock comes later in the screen and is held at the same foot, so it would cover the row. */
       .action-panel wt-form-actions {
         scroll-margin-block-end: var(--order-dock-size, 0px);
+        bottom: var(--order-dock-size, 0px);
       }
     `,
     segmentedOptionStyles,

@@ -166,3 +166,13 @@ it.each(
     }
   },
 );
+
+it("gives a form's action row in the wizard's column the column's raised surface", async () => {
+  const { el } = await mountSetupApp();
+  const main = el.shadowRoot!.querySelector<HTMLElement>("main")!;
+  const style = getComputedStyle(main);
+  expect(style.getPropertyValue("--wt-form-actions-surface").trim()).toBe(
+    style.getPropertyValue("--wt-color-surface-raised").trim(),
+  );
+  expect(style.getPropertyValue("--wt-form-actions-surface").trim()).not.toBe("");
+});

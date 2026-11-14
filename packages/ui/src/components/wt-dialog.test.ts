@@ -1985,7 +1985,7 @@ test("listens on the document for a page-body Escape only while a dialog is open
   expect(listening.size).toBe(0);
 });
 
-test("scrolls a body row's new message only just into view", async () => {
+test("keeps a body row's new message in view without scrolling the body", async () => {
   const { el, body } = await openAtPhoneSize(
     '<input name="note" /><div style="height: 1800px">Lines</div><wt-form-actions><button>Check</button></wt-form-actions><div style="height: 1800px">More lines</div>',
   );
@@ -1993,12 +1993,116 @@ test("scrolls a body row's new message only just into view", async () => {
   expect(body.scrollTop).toBe(0);
   row.error = "Check the name.";
   const message = (await formMessageOf(row))!;
-  await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+  await vi.waitFor(() => {
+    const frame = body.getBoundingClientRect();
+    const box = message.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(frame.top);
+    expect(box.bottom).toBeLessThanOrEqual(frame.bottom);
+  });
+  expect(body.scrollTop).toBe(0);
   const frameBox = body.getBoundingClientRect();
   const box = message.getBoundingClientRect();
   expect(box.bottom).toBeLessThanOrEqual(frameBox.bottom + 1);
   expect(box.top, "in the lower half of the body").toBeGreaterThan(
     frameBox.top + frameBox.height / 2,
+  );
+});
+
+test("covers the body's bottom padding below a held body row, so nothing scrolls into view under it", async () => {
+  const { el, body } = await openAtPhoneSize(
+    '<div data-lines style="height: 1800px">Lines</div><wt-form-actions><button>Check</button></wt-form-actions>',
+  );
+  const row = el.querySelector("wt-form-actions")!;
+  await frame();
+  await frame();
+  const view = body.getBoundingClientRect();
+  const box = row.getBoundingClientRect();
+  expect(box.bottom, "the row is held above the body's bottom padding").toBeLessThan(
+    view.bottom - 1,
+  );
+  const x = box.left + box.width / 2;
+  for (const y of [box.bottom + 1, (box.bottom + view.bottom) / 2, view.bottom - 1])
+    expect(document.elementFromPoint(x, y), `at ${y}`).toBe(row);
+});
+
+test("paints no strip below a row held in a scroller of its own inside the body, which has no bottom padding", async () => {
+  const { el } = await openAtPhoneSize(
+    '<div data-inner style="height: 200px; overflow-y: auto; overflow-x: hidden"><div style="height: 1000px">Lines</div><wt-form-actions><button>Check</button></wt-form-actions></div><div data-after style="height: 1800px">After</div>',
+  );
+  const inner = el.querySelector<HTMLElement>("[data-inner]")!;
+  const row = el.querySelector("wt-form-actions")!;
+  const height = inner.scrollHeight;
+  await frame();
+  await frame();
+  const view = inner.getBoundingClientRect();
+  const box = row.getBoundingClientRect();
+  expect(box.bottom, "the row is held at the inner scroller's bottom").toBe(view.bottom);
+  expect(inner.scrollHeight, "nothing below the row adds to what the inner scroller holds").toBe(
+    height,
+  );
+  const strip = row.shadowRoot!.querySelector(".below")!.getBoundingClientRect();
+  expect(strip.height, "no strip below the row").toBe(0);
+});
+
+/** A body row with a field 300 px below it, the body scrolled until the row lies above its view. */
+async function openScrolledPastRow() {
+  const opened = await openAtPhoneSize(
+    '<div style="height: 1800px">Lines</div><wt-form-actions><button>Check</button></wt-form-actions><div style="height: 300px"></div><input name="note" aria-label="Note" /><div style="height: 1800px">More lines</div>',
+  );
+  const row = opened.el.querySelector("wt-form-actions")!;
+  const field = opened.el.querySelector("input")!;
+  field.scrollIntoView({ block: "center" });
+  field.focus();
+  await frame();
+  const scrolled = opened.body.scrollTop;
+  expect(row.getBoundingClientRect().bottom).toBeLessThan(opened.body.getBoundingClientRect().top);
+  return { ...opened, row, field, scrolled };
+}
+
+test("scrolls a body row's new message into view when the row lies above the visible body", async () => {
+  const { body, row, scrolled } = await openScrolledPastRow();
+  row.error = "Check the name.";
+  const message = (await formMessageOf(row))!;
+  await vi.waitFor(() => {
+    const frameBox = body.getBoundingClientRect();
+    const box = message.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(frameBox.top);
+    expect(box.bottom).toBeLessThanOrEqual(frameBox.bottom);
+  });
+  expect(body.scrollTop).toBeLessThan(scrolled);
+});
+
+test("leaves a field being typed in where it is when the message of a body row above the view changes", async () => {
+  const { row, field } = await openScrolledPastRow();
+  const at = field.getBoundingClientRect().top;
+  // A form that re-checks its fields on every keystroke.
+  field.addEventListener("input", () => (row.error = "Check the name."));
+  await userEvent.keyboard("k");
+  expect((await formMessageOf(row))?.textContent).toBe("Check the name.");
+  await frame();
+  // The message makes the row above taller; the browser's scroll anchoring keeps the field still.
+  expect(field.getBoundingClientRect().top).toBe(at);
+});
+
+test("scrolls a field Tab reaches under its body row until it is clear of the row", async () => {
+  const { el, body } = await openAtPhoneSize(
+    '<input name="first" aria-label="First" /><div data-gap></div><input name="second" aria-label="Second" /><div style="height: 1800px">Lines</div><wt-form-actions error="Check the name."><button>Check</button></wt-form-actions>',
+  );
+  const row = el.querySelector("wt-form-actions")!;
+  const [first, second] = el.querySelectorAll("input");
+  const gap = el.querySelector<HTMLElement>("[data-gap]")!;
+  gap.style.height = `${row.getBoundingClientRect().top + 5 - gap.getBoundingClientRect().top}px`;
+  expect(second!.getBoundingClientRect().top).toBeGreaterThan(row.getBoundingClientRect().top);
+  first!.focus();
+  await userEvent.tab();
+  expect(deepActiveElement()).toBe(second);
+  await vi.waitFor(() =>
+    expect(second!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      row.getBoundingClientRect().top,
+    ),
+  );
+  expect(second!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    body.getBoundingClientRect().top,
   );
 });
 
@@ -2845,3 +2949,43 @@ for (const [where, sibling] of [
     expect(deepActiveElement()).toBe(sibling ? earlier : button);
   });
 }
+
+test.each([
+  [
+    "placed in the footer",
+    '<wt-form-actions slot="footer"><wt-button>Save</wt-button></wt-form-actions>',
+  ],
+  [
+    "inside an element placed in the footer",
+    '<div slot="footer"><wt-form-actions><wt-button>Save</wt-button></wt-form-actions></div>',
+  ],
+])(
+  "keeps a form's action row %s as the footer draws it: not held, no padding, line or background",
+  async (_, footer) => {
+    const el = await mount(`<wt-dialog heading="Edit" open><p>Settings</p>${footer}</wt-dialog>`);
+    host.style.setProperty("--wt-space-2", "13px");
+    const row = el.querySelector("wt-form-actions")!;
+    const style = getComputedStyle(row);
+    const bar = getComputedStyle(row.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!);
+    expect(style.position).toBe("static");
+    expect([bar.paddingTop, style.paddingBottom, bar.borderTopWidth]).toEqual([
+      "0px",
+      "0px",
+      "0px",
+    ]);
+    expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  },
+);
+
+test("gives a form's action row in its body the raised surface it paints, and keeps a footer row unpainted", async () => {
+  const el = await mount(`<wt-dialog heading="Edit" open>
+    <wt-form-actions data-body-row><wt-button>Save</wt-button></wt-form-actions>
+    <wt-form-actions slot="footer"><wt-button>Save</wt-button></wt-form-actions>
+  </wt-dialog>`);
+  host.style.setProperty("--wt-color-surface-raised", "rgb(10, 11, 12)");
+  host.style.setProperty("--wt-form-actions-surface", "rgb(1, 1, 1)");
+  const body = el.querySelector<HTMLElement>("[data-body-row]")!;
+  const footer = el.querySelector<HTMLElement>('[slot="footer"]')!;
+  expect(getComputedStyle(body).backgroundColor).toBe("rgb(10, 11, 12)");
+  expect(getComputedStyle(footer).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+});

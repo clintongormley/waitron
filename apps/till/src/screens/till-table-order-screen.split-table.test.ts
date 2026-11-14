@@ -258,6 +258,8 @@ describe("Split a table's panel at phone width", () => {
       bottom(el).updateComplete,
     ]);
     expect(window.innerWidth).toBe(390);
+    // Scrolled to the end, so the held row rests where the panel lays it out.
+    scrollTo(0, document.documentElement.scrollHeight);
 
     const section = q(el, "[data-split-pick]")!;
     const token = (name: string) => parseFloat(getComputedStyle(section).getPropertyValue(name));

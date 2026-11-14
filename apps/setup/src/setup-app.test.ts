@@ -6567,3 +6567,23 @@ describe("a finish refused while a clock step's note is unsaved", () => {
     },
   );
 });
+
+it("leaves no strip of scrolled content below a form's held action row in the wizard", async () => {
+  const el = await mountSetupApp();
+  const form = document.createElement("div");
+  form.innerHTML =
+    '<div style="height: 3000px">Fields</div><wt-form-actions><button>Save</button></wt-form-actions>';
+  wizard(el).append(form);
+  const row = form.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    "wt-form-actions",
+  )!;
+  await row.updateComplete;
+  form.scrollIntoView({ block: "start" });
+  try {
+    const box = row.getBoundingClientRect();
+    expect(box.top).toBeGreaterThan(0);
+    expect(box.bottom).toBeCloseTo(document.documentElement.clientHeight, 0);
+  } finally {
+    scrollTo(0, 0);
+  }
+});

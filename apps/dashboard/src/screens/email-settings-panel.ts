@@ -26,6 +26,7 @@ export class EmailSettingsPanel extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
+        --wt-form-actions-surface: var(--wt-color-surface);
         padding: var(--wt-space-4);
       }
       h2 {

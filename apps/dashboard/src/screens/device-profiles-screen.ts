@@ -8,8 +8,6 @@ import {
   parseDecimalInput,
   baseStyles,
   pageTitleStyles,
-  formMessage,
-  formMessageStyles,
   draftScopeFor,
   saveActionState,
   UrlStateController,
@@ -388,7 +386,6 @@ export class DeviceProfilesScreen extends LitElement {
   static override styles = [
     baseStyles,
     pageTitleStyles,
-    formMessageStyles,
     css`
       :host {
         display: block;
@@ -2466,8 +2463,7 @@ export class DeviceProfilesScreen extends LitElement {
         ${ordering ? this.#renderWho(errors) : nothing} ${this.#renderCapabilities(errors)}
         ${this.#renderPrinterLists(errors)} ${ordering ? this.#renderReaders(errors) : nothing}
         ${ordering ? nothing : this.#renderKitchenScreens(errors)} ${this.#renderNarrowed()}
-        ${formMessage(message)}
-        <wt-form-actions .showError=${false}>
+        <wt-form-actions .error=${message}>
           <wt-button
             slot="cancel"
             variant="secondary"

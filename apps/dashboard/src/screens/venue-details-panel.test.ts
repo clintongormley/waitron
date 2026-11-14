@@ -775,6 +775,20 @@ it("draws the open Venue card's border in the primary colour", async () => {
   ).not.toBe(primary);
 });
 
+it("paints the open Venue card's action row in the card's colour inside the page column", async () => {
+  const el = await editing(rig().api);
+  // As the dashboard's main column does.
+  el.parentElement!.style.setProperty("--wt-form-actions-surface", "var(--wt-color-bg)");
+  const card = q(el, "section.settings-card[data-editing]")!;
+  expect(card.contains(actions(el))).toBe(true);
+  expect(getComputedStyle(card).backgroundColor).not.toBe(
+    getComputedStyle(el.parentElement!).backgroundColor,
+  );
+  expect(getComputedStyle(actions(el)).backgroundColor).toBe(
+    getComputedStyle(card).backgroundColor,
+  );
+});
+
 it("says the lock and the address note once at the foot of an unchanged form, and marks the locked time zone", async () => {
   setLocale("en-GB");
   const locked = venueDetailsFixture();

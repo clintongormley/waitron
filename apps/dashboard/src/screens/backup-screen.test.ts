@@ -2706,3 +2706,55 @@ describe("configuration export at phone width", () => {
     },
   );
 });
+
+describe("an archive form's action row in a short scroller", () => {
+  it.each([
+    {
+      form: "turning backups on",
+      status: OFF,
+      edit: false,
+      first: "[data-test=archive-folder-on]",
+      row: "[data-test=apply]",
+    },
+    {
+      form: "editing the settings",
+      status: ENABLED,
+      edit: true,
+      first: "[data-test=edit-title]",
+      row: "[data-test=save-settings]",
+    },
+    {
+      form: "replacing the key",
+      status: ENABLED,
+      edit: false,
+      first: "[data-test=rotate]",
+      row: "[data-test=rotate-confirm]",
+    },
+  ])(
+    "stays out of view beside the status panel until its form for $form scrolls in",
+    async ({ status, edit, first, row }) => {
+      const { el, host } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+        api: stubApi({}, status),
+        canManage: true,
+      });
+      await flush(el);
+      if (edit) {
+        q(el, "[data-test=edit-settings]")!.click();
+        await flush(el);
+      }
+      host.style.height = "300px";
+      host.style.overflow = "auto";
+      q(el, "[data-test=status]")!.scrollIntoView({ block: "end" });
+      const actions = q(el, row)!.closest("wt-form-actions")!;
+      const view = host.getBoundingClientRect();
+      expect(q(el, first)!.getBoundingClientRect().top).toBeGreaterThanOrEqual(view.bottom);
+      expect(actions.getBoundingClientRect().top).toBeGreaterThanOrEqual(view.bottom);
+
+      q(el, first)!.scrollIntoView({ block: "start" });
+      const box = actions.getBoundingClientRect();
+      expect(host.scrollTop).toBeGreaterThan(0);
+      expect(box.top).toBeGreaterThanOrEqual(view.top);
+      expect(box.bottom).toBeLessThanOrEqual(view.bottom + 0.5);
+    },
+  );
+});

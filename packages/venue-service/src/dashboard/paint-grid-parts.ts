@@ -597,6 +597,7 @@ export const paintGridStyles = css`
     border: 1px solid var(--wt-color-border);
     border-radius: var(--wt-radius-md);
     background: var(--wt-color-surface);
+    --wt-form-actions-surface: var(--wt-color-surface);
     color: var(--wt-color-text);
     box-shadow: var(--wt-shadow-2);
   }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
@@ -15,6 +15,7 @@ import type {
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 import type { TillPortionPicker } from "../widgets/portion-picker.js";
 import { DraftStore } from "../state/draft-sync.js";
+import { resized } from "./till-table-order-screen.test-helpers.js";
 
 function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine {
   return {
@@ -862,4 +863,63 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
       expect(buttonFill(confirm(el))).not.toBe(buttonFill(back));
     },
   );
+});
+
+describe("on a phone with the order's foot held at the bottom", () => {
+  it("holds the panel's Move dishes row above the foot, not under it", async () => {
+    const { width, height } = { width: innerWidth, height: innerHeight };
+    await page.viewport(390, 600);
+    try {
+      const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+        products: [],
+        lines: [...BEERS, HAM],
+        orderId: "wo-2",
+        party,
+        bills: BILLS,
+        billBalance: null,
+        tables: [table("t4")],
+        handheld: true,
+      });
+      await resized(el);
+      await openMoveDishes(el);
+      await resized(el);
+      const dock = el.shadowRoot!.querySelector<HTMLElement>("[data-order-dock]")!;
+      expect(dock.checkVisibility()).toBe(true);
+      // The panel's end 100 px below the window's, so its row is held at the window's foot.
+      scrollTo(0, scrollY + panel(el)!.getBoundingClientRect().bottom - (innerHeight + 100));
+      const row = panel(el)!.querySelector("wt-form-actions")!.getBoundingClientRect();
+      expect(row.bottom).toBeLessThan(panel(el)!.getBoundingClientRect().bottom - 50);
+      const button = confirm(el).getBoundingClientRect();
+      const x = button.left + button.width / 2;
+      const y = button.top + button.height / 2;
+      expect(y).toBeLessThan(innerHeight);
+      const hit = el.shadowRoot!.elementFromPoint(x, y);
+      expect(hit === confirm(el) || confirm(el).contains(hit)).toBe(true);
+      expect(button.bottom).toBeLessThanOrEqual(dock.getBoundingClientRect().top + 0.5);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  it("paints the panel's row in the panel's colour on the till's page", async () => {
+    const { el, host } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+      products: [],
+      lines: [...BEERS, HAM],
+      orderId: "wo-2",
+      party,
+      bills: BILLS,
+      billBalance: null,
+      tables: [table("t4")],
+    });
+    // As till-app does for the page.
+    host.style.setProperty("--wt-form-actions-surface", "var(--wt-color-bg)");
+    host.style.background = "var(--wt-color-bg)";
+    await openMoveDishes(el);
+    const aside = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
+    const row = panel(el)!.querySelector("wt-form-actions")!;
+    expect(getComputedStyle(aside).backgroundColor).not.toBe(
+      getComputedStyle(host).backgroundColor,
+    );
+    expect(getComputedStyle(row).backgroundColor).toBe(getComputedStyle(aside).backgroundColor);
+  });
 });

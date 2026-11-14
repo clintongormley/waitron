@@ -23,6 +23,21 @@ import { DashboardApi as RealDashboardApi } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
+/** The screen's text with its Save row's, which draws the form's message. */
+function shownText(el: DeviceProfilesScreen): string {
+  const row = el.shadowRoot!.querySelector("wt-form-actions");
+  return `${el.shadowRoot!.textContent ?? ""}${row?.shadowRoot?.textContent ?? ""}`;
+}
+
+/** Finds `selector` in the screen, or in the editor's Save row, which draws the form's message. */
+function inScreenOrRow(el: DeviceProfilesScreen, selector: string): Element | null {
+  return (
+    el.shadowRoot!.querySelector(selector) ??
+    el.shadowRoot!.querySelector("wt-form-actions")?.shadowRoot?.querySelector(selector) ??
+    null
+  );
+}
+
 afterEach(cleanupWidgets);
 
 /** Where and for whom a profile with nothing narrowed serves: every zone, every role. */
@@ -202,13 +217,13 @@ describe("device-profiles-screen list mode", () => {
     const el = await mount(
       stubApi({ listDeviceProfiles: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
     );
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
+    expect(inScreenOrRow(el, "[role=alert]")).toBeTruthy();
   });
 
   it("clears a failed refresh's message once the server answers again", async () => {
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
     const el = await mount(api);
-    const alert = () => el.shadowRoot!.querySelector("[role=alert]");
+    const alert = () => inScreenOrRow(el, "[role=alert]");
     vi.mocked(api.listDeviceProfiles).mockRejectedValue({ code: "connection.failed" });
     api.liveData.refresh();
     await vi.waitFor(() =>
@@ -244,7 +259,7 @@ describe("device-profiles-screen list mode", () => {
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
+    expect(inScreenOrRow(el, "[role=alert]")).toBeTruthy();
   });
 
   it("Duplicate creates a copy from the same capabilities under a '(copy)' name", async () => {
@@ -434,7 +449,7 @@ describe("device-profiles-screen editor form", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
     expect(api.createDeviceProfile).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
+    expect(inScreenOrRow(el, "[role=alert]")).toBeTruthy();
   });
 
   it("Edit loads the profile via getDeviceProfile; the capability switches reflect its flags", async () => {
@@ -573,7 +588,7 @@ describe("device-profiles-screen editor form", () => {
     const el = await mount(api);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
+    expect(inScreenOrRow(el, "[role=alert]")).toBeTruthy();
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
   });
@@ -601,7 +616,7 @@ describe("device-profiles-screen editor form", () => {
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
+    expect(inScreenOrRow(el, "[role=alert]")).toBeTruthy();
     // Still in the editor form so the operator can correct the name.
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeTruthy();
   });
@@ -641,7 +656,7 @@ it.each(["create", "edit-p1"])(
     expect(save).toHaveBeenCalledTimes(1);
     reject({ code: "device_profile.name_taken" });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    expect(inScreenOrRow(el, "[role=alert]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=profile-save]")!.hasAttribute("disabled")).toBe(
       false,
     );
@@ -822,7 +837,7 @@ it.each(["connection.failed", "server.internal"])(
       { liveData: new LiveData() },
     );
     const el = await mount(api);
-    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+    const alert = () => inScreenOrRow(el, "[role=alert]")?.textContent?.trim();
     vi.mocked(api.listDeviceProfiles).mockRejectedValue({ code: "connection.failed" });
     api.liveData.refresh();
     await vi.waitFor(() => expect(alert()).toBe(codeMessage("connection.failed")));
@@ -1303,7 +1318,7 @@ describe("device-profiles-screen kitchen screens", () => {
     await save(el);
     expect(el.shadowRoot!.querySelector("[data-test=profile-kitchen-screens-error]")).toBeNull();
     expect(el.shadowRoot!.querySelector(".field-error")).toBeNull();
-    expect(el.shadowRoot!.querySelector(".form-message")?.textContent?.trim()).toBe(
+    expect(inScreenOrRow(el, ".form-message")?.textContent?.trim()).toBe(
       codeMessage("management.request_invalid"),
     );
   });
@@ -1489,9 +1504,7 @@ describe("device-profiles-screen kitchen screens", () => {
       expect(text(el, `${group}-error`)).toBe(
         sentence === null ? codeMessage("device_profile.access_invalid") : t(sentence),
       );
-      expect(el.shadowRoot!.querySelector(".form-message")?.textContent?.trim()).toBe(
-        t("form.fix_fields"),
-      );
+      expect(inScreenOrRow(el, ".form-message")?.textContent?.trim()).toBe(t("form.fix_fields"));
     },
   );
 
@@ -1732,7 +1745,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
   const text = (el: DeviceProfilesScreen, testId: string) =>
     q(el, testId)?.textContent?.replace(/\s+/g, " ").trim() ?? null;
   const bottom = (el: DeviceProfilesScreen) =>
-    el.shadowRoot!.querySelector(".form-message")?.textContent?.trim() ?? null;
+    inScreenOrRow(el, ".form-message")?.textContent?.trim() ?? null;
   const saveButton = (el: DeviceProfilesScreen) => q(el, "profile-save")!;
   const options = (el: DeviceProfilesScreen, testId: string) =>
     (q(el, testId) as unknown as Combobox).options.map((o) => o.value);
@@ -2846,7 +2859,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     await save(el);
     expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
-    expect(el.shadowRoot!.textContent).toContain(codeMessage("reader.not_found"));
+    expect(shownText(el)).toContain(codeMessage("reader.not_found"));
   });
 
   /** The profile lists r1; Save adds r2 as its default, and r2 was deleted in another tab. */
@@ -3040,7 +3053,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       listReaders: vi.fn().mockRejectedValue(notPermitted),
     });
     expect(el.shadowRoot!.querySelector("[data-test=profile-readers]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(inScreenOrRow(el, "[role=alert]")).toBeNull();
     rename(el);
     await save(el);
     expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
@@ -3048,7 +3061,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
   });
 
   const bottom = (el: DeviceProfilesScreen) =>
-    el.shadowRoot!.querySelector(".form-message")?.textContent?.trim() ?? null;
+    inScreenOrRow(el, ".form-message")?.textContent?.trim() ?? null;
 
   function deferred<T>(): {
     promise: Promise<T>;
@@ -3087,7 +3100,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       listReaders: vi.fn().mockRejectedValue({ code: "connection.failed" }),
     });
     expect(el.shadowRoot!.querySelector("[data-test=profile-readers]")).toBeNull();
-    expect(el.shadowRoot!.textContent).toContain(codeMessage("connection.failed"));
+    expect(shownText(el)).toContain(codeMessage("connection.failed"));
     rename(el);
     await save(el);
     expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
@@ -3102,8 +3115,8 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
     readers.reject({ code: "connection.failed" });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain(codeMessage("connection.failed"));
+    expect(inScreenOrRow(el, "[role=alert]")).toBeNull();
+    expect(shownText(el)).not.toContain(codeMessage("connection.failed"));
   });
 
   it("switching off the default reader sets the default to None", async () => {
@@ -3164,7 +3177,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       answer.reject({ code: "reader.not_found" });
       await flush(el);
       await flush(el);
-      expect(el.shadowRoot!.textContent).not.toContain(codeMessage("reader.not_found"));
+      expect(shownText(el)).not.toContain(codeMessage("reader.not_found"));
     });
   });
 
@@ -3246,7 +3259,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
     expect(api.copyDeviceProfile).toHaveBeenCalledTimes(1);
     expect(api.deleteDeviceProfile).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+    expect(inScreenOrRow(el, "[role=alert]")?.textContent?.trim()).toBe(
       codeMessage("reader.not_found"),
     );
   });
@@ -3265,7 +3278,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
     expect(api.copyDeviceProfile).toHaveBeenCalledTimes(1);
     expect(api.setProfileReaders).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(inScreenOrRow(el, "[role=alert]")).toBeNull();
   });
 });
 
@@ -3350,7 +3363,7 @@ it("decimal input inactivity refuses ambiguous marks without clearing the timeou
 describe("the printer lists while the venue's printers are not read", () => {
   const loading = { en: "Loading printers…", es: "Cargando impresoras…" } as const;
   const bottom = (el: DeviceProfilesScreen) =>
-    el.shadowRoot!.querySelector(".form-message")?.textContent?.trim() ?? null;
+    inScreenOrRow(el, ".form-message")?.textContent?.trim() ?? null;
   const loadingLine = (el: DeviceProfilesScreen) =>
     el.shadowRoot!.querySelector("[data-test=printers-loading]");
   const noPrinters = (el: DeviceProfilesScreen) =>
@@ -3382,7 +3395,7 @@ describe("the printer lists while the venue's printers are not read", () => {
         stubApi({ listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       );
       await vi.waitFor(() =>
-        expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+        expect(inScreenOrRow(el, "[role=alert]")?.textContent?.trim()).toBe(
           codeMessage("connection.failed"),
         ),
       );
@@ -3422,7 +3435,7 @@ describe("the printer lists while the venue's printers are not read", () => {
     const el = await mount(stubApi({ listPrinters, liveData } as Partial<DashboardApi>));
     liveData.refresh();
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+      expect(inScreenOrRow(el, "[role=alert]")?.textContent?.trim()).toBe(
         codeMessage("connection.failed"),
       ),
     );
@@ -3446,7 +3459,7 @@ describe("the printer lists while the venue's printers are not read", () => {
         deleteDeviceProfile: vi.fn().mockRejectedValue({ code: "device_profile.not_found" }),
       } as Partial<DashboardApi>),
     );
-    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+    const alert = () => inScreenOrRow(el, "[role=alert]")?.textContent?.trim();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-p1]")!.click();
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
@@ -3495,7 +3508,7 @@ describe("the printer lists while the venue's printers are not read", () => {
     const el = await mount(
       stubApi({ listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
     );
-    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+    const alert = () => inScreenOrRow(el, "[role=alert]")?.textContent?.trim();
     await vi.waitFor(() => expect(alert()).toBe(codeMessage("connection.failed")));
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await flush(el);
@@ -3613,7 +3626,7 @@ it("service deletion empty zone bound survives native unrelated save and actual 
 });
 
 const scopeBottom = (el: DeviceProfilesScreen) =>
-  el.shadowRoot!.querySelector(".form-message")?.textContent?.trim() ?? null;
+  inScreenOrRow(el, ".form-message")?.textContent?.trim() ?? null;
 
 it("scope reader recovery clears its own refusal", async () => {
   const api = Object.assign(stubApi(), { liveData: new LiveData() });
@@ -3859,7 +3872,7 @@ describe("a device profile's address", () => {
       getDeviceProfile: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
     const el = await mount(api);
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy());
+    await vi.waitFor(() => expect(inScreenOrRow(el, "[role=alert]")).toBeTruthy());
     expect(api.getDeviceProfile).toHaveBeenCalledWith("p1");
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
@@ -3886,14 +3899,14 @@ it("clears a duplicate's direct reload failure when live profiles arrive", async
   vi.mocked(api.listDeviceProfiles).mockRejectedValueOnce({ code: "connection.failed" });
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+    expect(inScreenOrRow(el, "[role=alert]")?.textContent).toContain(
       codeMessage("connection.failed"),
     ),
   );
   api.liveData.refresh();
   await vi.waitFor(() => expect(api.listDeviceProfiles).toHaveBeenCalledTimes(3));
   await flush(el);
-  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  expect(inScreenOrRow(el, "[role=alert]")).toBeNull();
 });
 
 let receivedLocale: string;
@@ -3915,4 +3928,33 @@ it("keeps a card-reader load refusal through live profiles", async () => {
   await vi.waitFor(() => expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2));
   await flush(el);
   expect(scopeBottom(el)).toBe(codeMessage("connection.failed"));
+});
+
+describe("the editor's message in a short scroller", () => {
+  it("lies directly above the held Save row and in view after a refusal", async () => {
+    const el = await mount(stubApi());
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    change(el, "profile-name", "   ");
+    toggle(el, "cap-take-cash", true);
+    await el.updateComplete;
+    const scroller = el.parentElement!;
+    scroller.style.height = "300px";
+    scroller.style.overflow = "auto";
+    scroller.scrollTop = 0;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    const row = el.shadowRoot!.querySelector("wt-form-actions")!;
+    await row.updateComplete;
+    const alert = inScreenOrRow(el, "[role=alert]")!;
+    expect(alert.textContent!.trim()).toBe(t("form.fix_fields"));
+    expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+    const view = scroller.getBoundingClientRect();
+    const message = alert.getBoundingClientRect();
+    const save = el.shadowRoot!.querySelector("[data-test=profile-save]")!.getBoundingClientRect();
+    expect(save.bottom).toBeLessThanOrEqual(view.bottom + 0.5);
+    expect(message.top).toBeGreaterThanOrEqual(view.top);
+    expect(message.bottom).toBeLessThanOrEqual(save.top);
+    expect(save.top - message.bottom).toBeLessThan(save.height);
+  });
 });
