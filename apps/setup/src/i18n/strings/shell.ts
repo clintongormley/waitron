@@ -149,7 +149,7 @@ export const shellEn = {
     "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.",
   "shell.bucket.kit_old_version":
     "This bucket recovery code was made before this version of Waitron and cannot be used. Choose a newer recovery pack, or restore an archive backup.",
-  "shell.bucket.copy_unopenable":
+  "shell.bucket.unopenable":
     "The latest copy in the bucket could not be opened. It is damaged, or the recovery key in this kit does not open it. If the recovery key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
   "shell.bucket.other_version":
     "The copy in the bucket was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another copy.",
@@ -374,7 +374,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esto no es un kit de recuperación de Waitron. Elige tu paquete de recuperación o el archivo del kit, o pega el kit completo.",
   "shell.bucket.kit_old_version":
     "Este código de recuperación del bucket se hizo antes de esta versión de Waitron y no se puede usar. Elige un paquete de recuperación más reciente o restaura una copia de seguridad de archivo.",
-  "shell.bucket.copy_unopenable":
+  "shell.bucket.unopenable":
     "No se ha podido abrir la copia más reciente del bucket. Está dañada, o la clave de recuperación de este kit no la abre. Si se cambió la clave de recuperación, usa el último paquete de recuperación o el último kit. Si no, elige Volver y después Restaurar desde una copia de seguridad para restaurar desde un archivo de copia de seguridad.",
   "shell.bucket.other_version":
     "La copia del bucket se hizo con otra versión de Waitron. La versión de este servidor no puede restaurarla. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otra copia.",

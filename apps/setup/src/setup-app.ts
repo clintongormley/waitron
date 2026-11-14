@@ -513,10 +513,11 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
   "restore.stream_state_missing": "shell.bucket.state_missing",
   "restore.identity_unknown": "shell.bucket.identity_unknown",
   "restore.administrator_password_missing": "shell.restore.administrator_password_missing",
-  // One sentence for all three, or a stolen copy becomes a key oracle: `DECRYPT_PHASE_CODES`.
-  "recovery.passphrase_invalid": "shell.bucket.copy_unopenable",
-  "backup.artifact_invalid": "shell.bucket.copy_unopenable",
-  "backup.archive_invalid": "shell.bucket.copy_unopenable",
+  // One sentence for all three, as the command line gives (`DECRYPT_PHASE_CODES`,
+  // apps/server/src/restore-command.ts).
+  "recovery.passphrase_invalid": "shell.bucket.unopenable",
+  "backup.artifact_invalid": "shell.bucket.unopenable",
+  "backup.archive_invalid": "shell.bucket.unopenable",
   "backup.stream_restore_failed": "shell.bucket.restore_failed",
   "backup.stream_request_failed": "shell.bucket.request_failed",
   "restore.stream_disk_full": "shell.bucket.disk_full",
