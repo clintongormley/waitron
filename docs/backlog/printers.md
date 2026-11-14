@@ -683,6 +683,9 @@ Hardware and inbox checks to complete in the owner session.
 - **A printer that prints some documents and fails others loses its till notice.** The notice goes
   once any later document on the printer prints (slice 10 decision 18), while the bell keeps
   naming the printer until the failed ticket is reprinted or resent. Left open by A798-B slice 10.
+  Needs the owner (2026-11-14): making the two agree changes what staff see on the till, by
+  reversing decision 18, adding a second till notice, or narrowing the bell; the question is open
+  on the desk (C, printer gave-up notice).
 
 ## Bundle: Department receipt preview
 
