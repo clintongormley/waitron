@@ -801,6 +801,9 @@ server route cases exercise replacement of unreadable records, rejection of a mi
 and a successful write whose reload still fails. The latter remains a saved write with a load
 error; the message does not promise that every apply starts the worker.
 
+2026-11-14 (fix/backups-screen-small): a load error the dashboard has no words for now shows
+`backup.archive_settings_unusable`'s Backups-screen wording instead of the generic fallback.
+
 **Still open:** correction when a host/key refusal persists after replacement — explaining or
 reconciling key numbers, restoring an old credentials key, and rewriting the record. Do not replace
 recovery keys or discard backup files just because settings cannot be read.

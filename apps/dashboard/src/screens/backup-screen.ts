@@ -1605,11 +1605,7 @@ export class BackupScreen extends LitElement {
               data-test="toggle-archive-secret"
               aria-label=${toggleLabel}
               @click=${() => (this.secretVisible = !this.secretVisible)}
-              ><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
-                <circle cx="8" cy="8" r="2"></circle>
-                ${this.secretVisible ? svg`<path d="m2 2 12 12"></path>` : nothing}
-              </svg></wt-button
+              >${revealIcon(this.secretVisible)}</wt-button
             >`
           : nothing
       }</wt-input
