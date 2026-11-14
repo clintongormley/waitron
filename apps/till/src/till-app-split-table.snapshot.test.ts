@@ -978,7 +978,8 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
         innerHeight,
       );
       await flush(el);
-      expect(onScreen(splitButton(el)!)).toBe(false);
+      // Not Split: the held row keeps Split on screen wherever the panel is scrolled.
+      expect(onScreen(q(el, "[data-split-refusal]")!)).toBe(false);
     });
   });
 

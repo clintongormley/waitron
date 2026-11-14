@@ -242,6 +242,30 @@ test("stays at the bottom of whatever scrolls, message above its buttons, until 
   expect(el.getBoundingClientRect().top).toBe(block.bottom);
 });
 
+test("scrolled into view while held, brings its place at the form's end into view, with what is said just above it", async () => {
+  const scroller = (await mount(`<div style="height: 200px; overflow-y: auto">
+    <div style="height: 1000px">Fields</div>
+    <p data-said style="margin: 0; height: 30px">Refused</p>
+    <wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>
+  </div>`)) as HTMLElement;
+  const row = scroller.querySelector<WtFormActions>("wt-form-actions")!;
+  await row.updateComplete;
+  const said = scroller.querySelector<HTMLElement>("[data-said]")!;
+  expect(row.getBoundingClientRect().bottom, "held at the scroller's foot").toBe(
+    scroller.getBoundingClientRect().bottom,
+  );
+
+  row.scrollIntoView({ block: "nearest" });
+
+  const view = scroller.getBoundingClientRect();
+  const box = said.getBoundingClientRect();
+  expect(box.top).toBeGreaterThanOrEqual(view.top);
+  expect(box.bottom).toBe(row.getBoundingClientRect().top);
+  expect(row.getBoundingClientRect().bottom).toBe(view.bottom);
+  expect(getComputedStyle(row).position, "held again afterwards").toBe("sticky");
+  expect(row.style.position).toBe("");
+});
+
 test("draws a line along its top edge only while it is held at the bottom", async () => {
   const { scroller, el } = await mountTallForm();
   const height = el.getBoundingClientRect().height;

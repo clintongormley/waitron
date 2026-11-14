@@ -193,6 +193,18 @@ export class WtFormActions extends LitElement {
     });
   };
 
+  /** A held row is always on screen, so the browser would scroll nothing. This scrolls to where
+   * the row rests at the form's end instead, which brings what is said just above it into view. */
+  override scrollIntoView(arg?: boolean | ScrollIntoViewOptions): void {
+    const inline = this.style.position;
+    this.style.position = "static";
+    try {
+      super.scrollIntoView(arg);
+    } finally {
+      this.style.position = inline;
+    }
+  }
+
   /** What scrolls under the row: the nearest ancestor that can scroll, else the page. */
   private scroller(): Element {
     for (let at = flatParent(this); at; at = flatParent(at)) {
