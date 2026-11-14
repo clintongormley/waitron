@@ -6,11 +6,12 @@ import { DatabaseSync } from "node:sqlite";
 import { parseEnv, promisify } from "node:util";
 import { createServer, createConnection } from "node:net";
 import { once } from "node:events";
+import { createHash } from "node:crypto";
 
 const execute = promisify(execFile);
 const composeFor = (box) => ["compose", "--project-directory", box, "-f", join(box, "compose.yml")];
-const command = (file, args, input) => {
-  const result = execute(file, args, { maxBuffer: 4 * 1024 * 1024 });
+const command = (file, args, input, options = {}) => {
+  const result = execute(file, args, { maxBuffer: 4 * 1024 * 1024, ...options });
   if (input !== undefined) result.child.stdin.end(input);
   return result;
 };
@@ -143,6 +144,14 @@ export async function createUpgradeHost({
       },
       async prepareImages() {
         try {
+          const trial = `${boxDirectory}.upgrade-trial`;
+          try {
+            await fs.lstat(trial);
+            await fs.rm(trial, { recursive: true, force: true });
+            process.stderr.write("Removed leftover online migration trial copy\n");
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+          }
           pinnedCompose(await fs.readFile(join(boxDirectory, "compose.yml"), "utf8"), old);
           for (const [key, id] of Object.entries(old)) {
             const tag = `waitron-upgrade-old-${key}:${id.replace("sha256:", "")}`;
@@ -170,6 +179,24 @@ export async function createUpgradeHost({
           }
           await assertCopyRoom(paths, dirname(directory), { run });
           pinnedCompose(rawCandidate, next);
+          const app = (await run("docker", [...compose, "ps", "-q", "app"])).stdout.trim();
+          if (
+            app &&
+            (
+              await run("docker", ["inspect", app, "--format", "{{.State.Running}}"])
+            ).stdout.trim() === "true"
+          )
+            await runOnlineTrial({
+              work: trial,
+              state: paths[0],
+              image: next.app,
+              environment: candidateConfig.services.app.environment,
+              run,
+            });
+          else
+            process.stderr.write(
+              "App already stopped; using final stopped checks and mandatory sale\n",
+            );
           const ids = (
             await run("docker", [...compose, "--profile", "staff-tunnel", "ps", "-a", "-q"])
           ).stdout
@@ -598,4 +625,105 @@ export async function clockStatusRelay({ directory, socketPath = "/run/waitron-b
       );
     },
   };
+}
+
+export function upgradeEnvironment(environment = {}) {
+  return (
+    Object.entries(environment ?? {})
+      .filter(([, value]) => value !== null)
+      .map(([key, value]) => {
+        if (String(value).includes("\n"))
+          throw new Error("upgrade environment has a multiline value");
+        return `${key}=${value}`;
+      })
+      .join("\n") + "\n"
+  );
+}
+
+async function runOnlineTrial({ work, state, image, environment, run }) {
+  const prefix =
+    "waitron-upgrade-trial-" + createHash("sha256").update(work).digest("hex").slice(0, 16);
+  const started = [];
+  let operation = "capture";
+  let failure;
+  try {
+    await fs.mkdir(work, { mode: 0o755 });
+    const copy = join(work, "state");
+    await fs.mkdir(copy, { mode: 0o700 });
+    const owner = await fs.stat(state);
+    await fs.chown(copy, owner.uid, owner.gid);
+    const envFile = join(work, "app.env");
+    await writeFileDurable(envFile, upgradeEnvironment(environment));
+    for (operation of ["capture", "trial"]) {
+      const name = `${prefix}-${operation}`;
+      started.push(name);
+      const mounts =
+        operation === "capture"
+          ? [
+              `type=bind,src=${state},dst=/var/lib/waitron/state,readonly`,
+              `type=bind,src=${copy},dst=/upgrade-copy`,
+            ]
+          : [`type=bind,src=${copy},dst=/var/lib/waitron/state`];
+      const { stdout } = await run(
+        "docker",
+        [
+          "run",
+          "--init",
+          "--rm",
+          "--name",
+          name,
+          "--label",
+          `waitron.upgrade.directory=${work}`,
+          "--network",
+          "none",
+          "--env-file",
+          envFile,
+          ...mounts.flatMap((mount) => ["--mount", mount]),
+          "--entrypoint",
+          "node",
+          image,
+          "/app/upgrade-checks.js",
+          operation,
+          ...(operation === "capture" ? ["/upgrade-copy"] : []),
+        ],
+        undefined,
+        { timeout: 180_000 },
+      );
+      const report = JSON.parse(stdout.trim().split("\n").at(-1));
+      if (
+        !Array.isArray(report) ||
+        report.length !== 1 ||
+        report[0].name !== operation ||
+        report[0].ok !== true
+      )
+        throw new Error("missing or failed check report");
+    }
+  } catch (error) {
+    failure = error;
+  } finally {
+    for (const name of started.reverse()) {
+      try {
+        await run("docker", ["rm", "--force", name]);
+      } catch (error) {
+        if (!(error.code === 1 && /no such container/i.test(error.stderr))) failure ??= error;
+      }
+    }
+    try {
+      await fs.rm(work, { recursive: true, force: true });
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  if (failure) {
+    const detail =
+      failure.killed && failure.code !== "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+        ? "timed out after 180 seconds"
+        : failure.stderr?.trim() || failure.message;
+    throw new Error(
+      `Online migration ${operation} failed: ${detail}; the selling version and its data are unchanged`,
+    );
+  }
+  process.stderr.write(
+    "Online migration trial passed (advisory); final stopped checks and sale still required\n",
+  );
 }

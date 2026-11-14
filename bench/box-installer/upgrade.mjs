@@ -33,6 +33,26 @@ cmp /opt/waitron/before.json /opt/waitron/after.json
 docker inspect $(docker compose --project-directory /opt/waitron -f /opt/waitron/compose.yml ps -q) | jq -e 'all(.[]; .HostConfig.RestartPolicy.Name=="unless-stopped")'
 `;
 const apply = `flock -n /opt/waitron.upgrade.lock ${cli} apply /opt/waitron /bin/bash /opt/waitron-host/prepare-fixture.sh`;
+export const failedOnlineTrialProbe = `
+app=$(docker compose --project-directory /opt/waitron -f /opt/waitron/compose.yml ps -q app)
+docker inspect --format '{{.Id}} {{.State.StartedAt}}' "$app" >/opt/waitron/online-before
+if A950_PROBE=trial PATH=/opt/waitron-host/probe-bin:$PATH ${apply} >/opt/waitron/online-result 2>/opt/waitron/online-error; then exit 1; fi
+grep -q 'Online migration trial failed:.*injected trial refusal.*selling version and its data are unchanged' /opt/waitron/online-error || { cat /opt/waitron/online-error >&2; exit 1; }
+docker inspect --format '{{.Id}} {{.State.StartedAt}}' "$app" >/opt/waitron/online-after
+cmp /opt/waitron/online-before /opt/waitron/online-after
+${fingerprint} >/opt/waitron/after.json
+cmp /opt/waitron/before.json /opt/waitron/after.json
+test ! -e /opt/waitron.upgrade-trial
+test -z "$(find /opt/waitron.upgrades -mindepth 1 -maxdepth 1 -print -quit)"
+`;
+const dockerShim = `#!/bin/bash
+if [ "$A950_PROBE" = trial ] && [ "$1" = run ]; then
+ for arg in "$@"; do
+  if [ "$arg" = trial ]; then echo 'injected trial refusal' >&2; exit 1; fi
+ done
+fi
+exec /usr/bin/docker "$@"
+`;
 const shim = String.raw`#!/bin/bash
 set -e
 /bin/cp "$@"
@@ -73,12 +93,14 @@ chown -R 10001:10001 "$state"
 cp /run/a950-inputs/fixture-env.json /opt/waitron/fixture-env.json
 umount /run/a950-inputs
 cd /opt/waitron
-COMPOSE_PROFILES=staff-tunnel docker compose config --format json >/run/a950-compose.json
+COMPOSE_PROFILES=staff-tunnel,practice-inbox docker compose config --format json >/run/a950-compose.json
 ${run(`import fs from 'node:fs'; import {execFileSync} from 'node:child_process'; const c=JSON.parse(fs.readFileSync('/run/a950-compose.json','utf8')); Object.assign(c.services.app.environment,JSON.parse(fs.readFileSync('/opt/waitron/fixture-env.json','utf8'))); for(const [name,s] of Object.entries(c.services)){if(name!=='tunnel')s.image=execFileSync('docker',['image','inspect',s.image,'--format','{{.Id}}'],{encoding:'utf8'}).trim();} fs.writeFileSync('/opt/waitron/compose.yml',JSON.stringify(c));`)}
 printf '%s\\n' ${quote(`#!/bin/bash\n${prepare}\n`)} >/opt/waitron-host/prepare-fixture.sh
 mkdir /opt/waitron-host/probe-bin
 printf '%s' ${quote(shim)} >/opt/waitron-host/probe-bin/cp
 chmod 700 /opt/waitron-host/probe-bin/cp
+printf '%s' ${quote(dockerShim)} >/opt/waitron-host/probe-bin/docker
+chmod 700 /opt/waitron-host/probe-bin/docker
 timedatectl set-ntp true
 sync
 echo A950_STAGED
@@ -90,7 +112,10 @@ export function upgradePayload(mode) {
   if (mode === "manual")
     return `set -euxo pipefail
 ${start}
-${apply} >/opt/waitron/success.json
+${failedOnlineTrialProbe}
+${apply} >/opt/waitron/success.json 2>/opt/waitron/success.log || { upgrade_exit=$?; cat /opt/waitron/success.log >&2; exit "$upgrade_exit"; }
+cat /opt/waitron/success.log >&2
+grep -q "Online migration trial passed" /opt/waitron/success.log
 jq -e '.phase=="committed" and .target=="candidate" and ([.checks[]|select(.name=="sale" and .ok==true and .details.total=="1.00" and .details.fiscalRecords==2)]|length)==1' /opt/waitron/success.json
 ${compare}
 ${failed}
@@ -143,5 +168,5 @@ echo A950_RESTORED_OK
 }
 
 export function upgradeUnit(payload) {
-  return `[Unit]\nRequires=docker.service\nAfter=docker.service NetworkManager.service\nFailureAction=poweroff-force\n[Service]\nType=oneshot\nStandardOutput=tty\nStandardError=tty\nTTYPath=/dev/console\nExecStart=/bin/bash -ec 'printf %%s ${Buffer.from(payload).toString("base64")} | base64 -d | bash -e'\nTimeoutStartSec=900\n`;
+  return `[Unit]\nRequires=docker.service\nAfter=docker.service NetworkManager.service\nFailureAction=poweroff-force\n[Service]\nType=oneshot\nStandardOutput=tty\nStandardError=tty\nTTYPath=/dev/console\nExecStart=/bin/bash -ec 'printf %%s ${Buffer.from(payload).toString("base64")} | base64 -d | bash -e'\nTimeoutStartSec=1200\n`;
 }

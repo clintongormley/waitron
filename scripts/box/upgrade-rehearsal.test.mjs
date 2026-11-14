@@ -10,6 +10,7 @@ import {
 import { spawn, spawnSync } from "node:child_process";
 import { setTimeout, clearTimeout } from "node:timers";
 import { tmpdir } from "node:os";
+import { URL } from "node:url";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { copyStoppedTree } from "./upgrades/copy.mjs";
@@ -213,3 +214,97 @@ it("makes the copy cut observable when the controller captures subprocess stdout
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it.each([0, 1])("reports unexpected online failure-probe outcomes (%s)", async (exitCode) => {
+  const { failedOnlineTrialProbe } = await import("../../bench/box-installer/upgrade.mjs");
+  const root = mkdtempSync(join(tmpdir(), "upgrade-online-probe-"));
+  try {
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "docker"), "#!/bin/sh\necho app-id\n", { mode: 0o700 });
+    writeFileSync(
+      join(bin, "flock"),
+      `#!/bin/sh\necho "capture refused in fixture" >&2\nexit ${exitCode}\n`,
+      { mode: 0o700 },
+    );
+    const commands = failedOnlineTrialProbe.replaceAll("/opt/waitron", join(root, "box"));
+    mkdirSync(join(root, "box"));
+    const result = spawnSync("bash", ["-ec", commands], {
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(result.status, result.stderr).toBe(1);
+    if (exitCode === 1) expect(result.stderr).toContain("capture refused in fixture");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it.each([false, true, "refused"])(
+  "requires the successful Linux attempt to report an online pass (%s)",
+  (pass) => {
+    const root = mkdtempSync(join(tmpdir(), "upgrade-pass-check-"));
+    try {
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      mkdirSync(join(root, "box"));
+      writeFileSync(
+        join(bin, "flock"),
+        "#!/bin/sh\n" +
+          (pass === "refused"
+            ? 'echo "actual upgrade refusal" >&2\nexit 7\n'
+            : (pass ? 'echo "Online migration trial passed" >&2\n' : "") + "exit 0\n"),
+        { mode: 0o700 },
+      );
+      const lines = upgradePayload("manual").split("\n");
+      const start = lines.findIndex((line) => line.includes(">/opt/waitron/success.json"));
+      const commands = lines
+        .slice(
+          start,
+          lines.findIndex((line, index) => index > start && line.startsWith("jq ")),
+        )
+        .join("\n")
+        .replaceAll("/opt/waitron", join(root, "box"));
+      const result = spawnSync("bash", ["-ec", commands], {
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+        encoding: "utf8",
+        timeout: 5000,
+      });
+      expect(result.status, result.stderr).toBe(pass === "refused" ? 7 : pass ? 0 : 1);
+      if (pass === "refused") expect(result.stderr).toContain("actual upgrade refusal");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it("keeps the optional inbox service and volume in the staged Compose configuration", () => {
+  const root = mkdtempSync(join(tmpdir(), "upgrade-stage-profiles-"));
+  try {
+    writeFileSync(
+      join(root, "compose.yml"),
+      readFileSync(new URL("../../deploy/compose.yml", import.meta.url)),
+    );
+    const configPath = join(root, "config.json");
+    const command = upgradeStage()
+      .split("\n")
+      .find((line) => line.startsWith("COMPOSE_PROFILES="));
+    const result = spawnSync(
+      "bash",
+      ["-ec", command.replace("/run/a950-compose.json", '"$A950_CONFIG"')],
+      {
+        cwd: root,
+        env: { ...process.env, A950_CONFIG: configPath },
+        encoding: "utf8",
+        timeout: 10000,
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    expect(config.services.mailpit).toBeDefined();
+    expect(config.volumes.mailpit).toBeDefined();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 15_000);

@@ -101,6 +101,7 @@ async function imageFixture({
   serviceChange = false,
   prepareCandidate,
   writers = false,
+  onlineTrial,
 } = {}) {
   const fs = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
@@ -111,6 +112,7 @@ async function imageFixture({
   onTestFinished(async () => {
     await fs.rm(root, { recursive: true, force: true });
     await fs.rm(`${root}.upgrades`, { recursive: true, force: true });
+    await fs.rm(`${root}.upgrade-trial`, { recursive: true, force: true });
   });
   const directory = join(`${root}.upgrades`, "attempt");
   await fs.mkdir(prepare ? directory : `${root}.upgrades`, { recursive: true });
@@ -139,8 +141,35 @@ async function imageFixture({
   const created = new Set();
   const resolved = new Map();
   let opened = false;
-  const run = async (file, args, input) => {
+  const run = async (file, args, input, options) => {
     calls.push([file, ...args]);
+    if (args[0] === "run" && ["capture", "trial"].some((mode) => args.includes(mode))) {
+      expect(options.timeout).toBe(180_000);
+      const mode = args.includes("capture") ? "capture" : "trial";
+      if (onlineTrial === "maxbuffer")
+        throw Object.assign(new Error("output limit"), {
+          killed: true,
+          code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+          stderr: "too much output",
+        });
+      if (onlineTrial === "timeout")
+        throw Object.assign(new Error("Command failed"), {
+          killed: true,
+          stderr: "partial diagnostic",
+        });
+      if (mode === "trial" && onlineTrial === "failed")
+        throw new Error("append_only.triggers_changed");
+      return {
+        stdout:
+          onlineTrial === "malformed"
+            ? "not-json"
+            : JSON.stringify([{ name: mode, ok: onlineTrial !== "refused" }]),
+      };
+    }
+    if (args[0] === "rm") {
+      if (onlineTrial === "cleanup") throw new Error("container cleanup refused");
+      return { stdout: "" };
+    }
     if (args.includes("up")) opened = true;
     if (pullFailure && args[0] === "pull" && resolved.get(args[1]) === "agent:old")
       throw new Error("registry offline");
@@ -194,17 +223,19 @@ async function imageFixture({
     if (args.includes("ps"))
       return {
         stdout:
-          activeInbox && args.at(-1) === "mailpit"
-            ? "inbox-id\n"
-            : (activeTunnel || stoppedTunnel) && args.at(-1) === "tunnel"
-              ? "tunnel-id\n"
-              : writers && args.at(-1) === "-q"
-                ? "app-id\nagent-id\n"
-                : writers && opened && ["app", "print-agent"].includes(args.at(-1))
-                  ? args.at(-1) === "app"
-                    ? "app-id\n"
-                    : "agent-id\n"
-                  : "",
+          onlineTrial !== undefined && args.at(-1) === "app"
+            ? "app-id\n"
+            : activeInbox && args.at(-1) === "mailpit"
+              ? "inbox-id\n"
+              : (activeTunnel || stoppedTunnel) && args.at(-1) === "tunnel"
+                ? "tunnel-id\n"
+                : writers && args.at(-1) === "-q"
+                  ? "app-id\nagent-id\n"
+                  : writers && opened && ["app", "print-agent"].includes(args.at(-1))
+                    ? args.at(-1) === "app"
+                      ? "app-id\n"
+                      : "agent-id\n"
+                    : "",
       };
     if (args[0] === "inspect")
       return {
@@ -859,3 +890,86 @@ it.each([true, false])(
     );
   },
 );
+
+it("runs a networkless read-only online capture and copy-only trial before disabling restart", async () => {
+  const t = await imageFixture({ prepare: false, onlineTrial: "pass", writers: true });
+  const leftover = `${t.root}.upgrade-trial`;
+  await t.fs.mkdir(leftover);
+  await t.fs.writeFile(t.join(leftover, "leftover"), "old copy");
+  const images = await t.f.host.prepareImages();
+  const capture = t.calls.find((args) => args.includes("capture"));
+  const trial = t.calls.find((args) => args.includes("trial"));
+  expect(capture).toContain(
+    `type=bind,src=${t.join(t.root, "state")},dst=/var/lib/waitron/state,readonly`,
+  );
+  expect(capture).toContain(images.candidate.app);
+  expect(capture).toContain("--init");
+  expect(trial).toContain("--init");
+  expect(capture.slice(capture.indexOf("--network"), capture.indexOf("--network") + 2)).toEqual([
+    "--network",
+    "none",
+  ]);
+  expect(trial).toContain(`type=bind,src=${t.join(leftover, "state")},dst=/var/lib/waitron/state`);
+  expect(trial.some((arg) => arg.includes(`src=${t.join(t.root, "state")},`))).toBe(false);
+  expect(trial).toContain(images.candidate.app);
+  expect(t.calls.indexOf(trial)).toBeLessThan(
+    t.calls.findIndex((args) => args.includes("--restart=no")),
+  );
+  expect(t.calls.some((args) => args.includes("sale"))).toBe(false);
+  expect(t.calls.filter((args) => args[1] === "rm")).toHaveLength(2);
+  await expect(t.fs.access(leftover)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it.each(["failed", "malformed"])(
+  "aborts %s online advice before any writer stops or installed file changes",
+  async (onlineTrial) => {
+    const t = await imageFixture({ prepare: false, onlineTrial, writers: true });
+    const before = await t.fs.readFile(t.join(t.root, "compose.yml"), "utf8");
+    await expect(t.f.host.prepareImages()).rejects.toThrow(
+      /online.*(append_only.triggers_changed|capture).*selling version and its data are unchanged/i,
+    );
+    expect(t.calls.some((args) => args.includes("--restart=no") || args[1] === "stop")).toBe(false);
+    expect(await t.fs.readFile(t.join(t.root, "compose.yml"), "utf8")).toBe(before);
+    await expect(t.fs.access(`${t.root}.upgrade-trial`)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(t.calls.some((args) => args[1] === "rm")).toBe(true);
+  },
+);
+
+it("names a timed-out capture rather than presenting its partial log as the failed check", async () => {
+  const t = await imageFixture({ prepare: false, onlineTrial: "timeout" });
+  await expect(t.f.host.prepareImages()).rejects.toThrow(
+    "Online migration capture failed: timed out after 180 seconds; the selling version and its data are unchanged",
+  );
+});
+
+it.each([undefined, null])("accepts an absent Compose environment (%s)", async (environment) => {
+  const { upgradeEnvironment } = await import("./host.mjs");
+  expect(upgradeEnvironment(environment)).toBe("\n");
+});
+
+it("reports an output limit as output failure rather than a timeout", async () => {
+  const t = await imageFixture({ prepare: false, onlineTrial: "maxbuffer" });
+  await expect(t.f.host.prepareImages()).rejects.toThrow(
+    "Online migration capture failed: too much output; the selling version and its data are unchanged",
+  );
+});
+
+it.each([
+  ["refused", "missing or failed check report"],
+  ["cleanup", "container cleanup refused"],
+])(
+  "keeps the source running when %s invalidates online preparation",
+  async (onlineTrial, detail) => {
+    const t = await imageFixture({ prepare: false, onlineTrial, writers: true });
+    const before = await t.fs.readFile(t.join(t.root, "compose.yml"), "utf8");
+    await expect(t.f.host.prepareImages()).rejects.toThrow(detail);
+    expect(t.calls.some((args) => args.includes("--restart=no") || args[1] === "stop")).toBe(false);
+    expect(await t.fs.readFile(t.join(t.root, "compose.yml"), "utf8")).toBe(before);
+    await expect(t.fs.access(`${t.root}.upgrade-trial`)).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
+
+it("rejects a multiline environment value before it can introduce another variable", async () => {
+  const { upgradeEnvironment } = await import("./host.mjs");
+  expect(() => upgradeEnvironment({ VALUE: "first\nOTHER=value" })).toThrow("multiline");
+});

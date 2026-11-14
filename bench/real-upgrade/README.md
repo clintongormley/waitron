@@ -335,12 +335,25 @@ runner or Docker credential audit has happened. The later trusted job must
 perform that audit. On success, the handoff carries only per-cell state/evidence
 handles, trusted revision/index hash and `credentialScopeClosed: true`.
 
-## Dormant host foundations
+## Host upgrade checks
 
 A950's host adapter is `scripts/box/upgrades/host.mjs`. Its caller holds `${box_dir}.upgrade.lock` and supplies a fresh attempt directory to the controller. After the initial marker, stopping first saves the raw candidate Compose durably, before any writer stops. Recovery before Docker runs retains copies and image pins until online reopening finishes.
 
-Run its focused checks with `pnpm exec vitest run scripts/box/upgrades/{host,bootstrap,transaction}.test.mjs`. The bootstrap tests use executable stand-ins; full venue readiness, copy-sale and power-loss qualification belong to the later runtime slices. No installed command or service uses these foundations yet.
+Run its focused checks with `pnpm exec vitest run scripts/box/upgrades/{host,bootstrap,transaction}.test.mjs`. The bootstrap tests use executable stand-ins. Use the box-installer rig for Linux readiness, copy-sale and power-loss checks; unit results do not qualify those operations.
 
 The adapter accepts the shipped single-file Compose layout; it refuses a running project launched with additional override files. Construction leaves the installed file unchanged. Installation pins image IDs while retaining other `.env` interpolation: choosing images belongs to the upgrade command, rather than later edits to `WAITRON_IMAGE`. Online reopening waits for Compose health checks before copies are deleted; Docker may require the selected image’s last temporary tag to stay while its container uses it.
 
-Image preparation resolves the candidate’s Linux host-platform manifest and pulls by digest, leaving installed mutable tags alone. It checks the old image-line layout before stopping and allows the installer’s180-second startup interval on reopen. PR8 must carry the B3 recipe’s shell-only AppArmor export into its supervisor environment.
+Image preparation resolves the candidate’s Linux host-platform manifest and pulls by digest, leaving installed mutable tags alone. It checks the old image-line layout before stopping and allows the installer’s180-second startup interval on reopen.
+
+## Online trial before a manual upgrade
+
+A running box captures each live database through SQLite with the state volume mounted read-only,
+then runs the candidate’s data checks on the disposable copy with networking disabled. A failure
+ends the attempt before the writers stop. A pass still proceeds through every final stopped check
+and the mandatory copy sale, because the live captures are separate snapshots. An already-stopped
+app skips this trial and keeps that final repair path. The host discards the trial copy; after an
+interrupted attempt it removes its named leftover trial folder on the next attempt.
+
+Use `bench/box-installer/run.mjs --case upgrade-manual` with the inputs described in that rig’s
+README to check the Linux mounts and pre-stop failure path. Current-build synthetic rehearsal
+does not qualify historical releases or add an index entry.

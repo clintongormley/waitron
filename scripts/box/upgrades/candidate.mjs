@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { copyStoppedTree } from "./copy.mjs";
-import { clockStatusRelay } from "./host.mjs";
+import { clockStatusRelay, upgradeEnvironment } from "./host.mjs";
 import { upgradeStatus, writeFileDurable } from "./transaction.mjs";
 
 const execute = promisify(execFile);
@@ -70,15 +70,7 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
       await fs.chown(path, owner.uid, owner.gid);
     }
     relay = await clockStatusRelay({ directory: join(work, "clock") });
-    const environment =
-      Object.entries(config.services.app.environment ?? {})
-        .filter(([, value]) => value !== null)
-        .map(([key, value]) => {
-          if (String(value).includes("\n"))
-            throw new Error("upgrade environment has a multiline value");
-          return `${key}=${value}`;
-        })
-        .join("\n") + "\n";
+    const environment = upgradeEnvironment(config.services.app.environment);
     const envFile = join(work, "app.env");
     await writeFileDurable(envFile, environment);
     const mounts = [

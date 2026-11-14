@@ -817,7 +817,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
               ["restored", "A950_RESTORED_OK"],
             ];
       for (const [mode, marker] of modes) {
-        const guest = await boot(`upgrade-${mode}`, false, marker, 900000, undefined, {
+        const guest = await boot(`upgrade-${mode}`, false, marker, 1260000, undefined, {
           payload: upgradePayload(mode),
         });
         if (["copy", "restore"].includes(mode)) await guest.cut();
