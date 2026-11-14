@@ -213,9 +213,11 @@ it("refuses an oversized PDF before reading its bytes", async () => {
     "Choose a valid recovery PDF",
   );
   expect(reading).not.toHaveBeenCalled();
-  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain(
-    "Choose a valid recovery PDF, or enter the key below.",
-  );
+  const status = el.shadowRoot!.querySelector('[role="status"]')!;
+  expect(status.textContent).toContain("Choose a valid recovery PDF, or enter the key below.");
+  const announced = status.querySelector(".visually-hidden")!.getBoundingClientRect();
+  expect(announced.width).toBeLessThanOrEqual(1);
+  expect(announced.height).toBeLessThanOrEqual(1);
 });
 it("clears the PDF picker when its backup selection changes", async () => {
   const el = await mount();
