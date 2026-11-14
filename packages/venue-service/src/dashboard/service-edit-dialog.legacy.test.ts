@@ -1,12 +1,14 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
-import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import {
+  departmentSave,
+  departmentActions,
   cleanupDepartmentEditors,
   mountDepartmentEditor,
   editDepartmentField,
-  departmentSave,
 } from "../testing/department-edit-fixture.js";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+
 import {
   cleanupZoneEditors,
   mountZoneEditor,
@@ -213,7 +215,7 @@ it.each(
     await field.updateComplete;
     expect(input.getAttribute("aria-invalid")).toBe("true");
     await expect.poll(() => field.shadowRoot!.activeElement).toBe(input);
-    expect(owner.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+    expect(departmentActions(owner).error).toBe(
       locale === "es"
         ? "Corrige los campos marcados para continuar."
         : "Correct the highlighted fields to continue.",
@@ -223,7 +225,7 @@ it.each(
     await field.updateComplete;
     expect(field.error).toBe("");
     expect(input.getAttribute("aria-invalid")).toBe("false");
-    expect(owner.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(departmentActions(owner).error).toBe("");
     expect(save().disabled).toBe(false);
     await change("");
     await field.updateComplete;
@@ -314,7 +316,7 @@ it.each(
       );
     await name.updateComplete;
     expect(name.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
-    expect(owner.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+    expect(departmentActions(owner).error).toBe(
       locale === "es"
         ? "Corrige los campos marcados para continuar."
         : "Correct the highlighted fields to continue.",
@@ -326,7 +328,7 @@ it.each(
     await name.updateComplete;
     expect(name.error).toBe("");
     expect(name.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("false");
-    expect(owner.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(departmentActions(owner).error).toBe("");
     expect(writes).toHaveLength(1);
   },
 );
@@ -446,11 +448,8 @@ it.each(["department", "zone"] as const)(
     const name = owner.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
     expect(name.value).toBe(kind === "department" ? "Deli" : "Bar");
     expect(name.error).toBe("");
-    expect(owner.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
-    const button =
-      owner.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-        "[data-test=save-editor]",
-      )!;
+    expect(departmentActions(owner).error).toBe("");
+    const button = departmentSave(owner);
     expect({ variant: button.variant, disabled: button.disabled }).toEqual({
       variant: "secondary",
       disabled: true,
@@ -490,9 +489,7 @@ it("a missing zone retains its Spanish edited name and exact attempted request",
   }) as DashboardRequest);
   await editZoneName(el, "Jardín");
   zoneSave(el).click();
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
-    .toBe("No se pudo guardar el cambio.");
+  await expect.poll(() => departmentActions(el).error).toBe("No se pudo guardar el cambio.");
   expect(writes).toEqual([
     [
       "/management-api/venue-service/zones/z1/settings",

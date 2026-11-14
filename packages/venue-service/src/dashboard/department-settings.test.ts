@@ -173,9 +173,7 @@ function field(el: DepartmentSettings, name: string) {
   return control!;
 }
 function save(el: DepartmentSettings) {
-  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    "[data-test=save-editor]",
-  )!;
+  return el.saveButton!;
 }
 async function change(el: DepartmentSettings, name: string, value: string) {
   field(el, name).dispatchEvent(
@@ -300,6 +298,7 @@ it("a receipt refusal belongs to its department and reveals its Save control", a
   el.receiptEditor = html`${editor}`;
   await el.updateComplete;
   const control = editor.shadowRoot!.querySelector("wt-button")!;
+  Object.assign(editor, { saveButton: control });
   await control.updateComplete;
   const native = control.shadowRoot!.querySelector("button")!;
   const changed: string[] = [];

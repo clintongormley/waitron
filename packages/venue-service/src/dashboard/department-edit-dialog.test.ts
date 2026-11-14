@@ -1,20 +1,43 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
-import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import {
+  departmentSave,
+  departmentCancel,
+  departmentActions,
   cleanupDepartmentEditors,
   mountDepartmentEditor as mount,
   editDepartmentField,
-  departmentSave,
   selectDepartmentTab,
   supplyReceiptEditor,
   editReceipt,
   receiptInput,
 } from "../testing/department-edit-fixture.js";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+
 beforeEach(() => setLocale("en"));
 afterEach(() => {
   cleanupDepartmentEditors();
   setLocale("en");
+});
+
+it("puts the selected tab's sole action row in the modal footer", async () => {
+  const { el, form, modal } = await mount();
+  await supplyReceiptEditor(el, form);
+  for (const tab of ["details", "service", "receipt", "transfers"] as const) {
+    await selectDepartmentTab(form, tab);
+    await expect.poll(() => modal.querySelector("wt-form-actions[slot=footer]")).toBeTruthy();
+    const actions = modal.querySelector("wt-form-actions[slot=footer]")!;
+    const slot = modal.shadowRoot!.querySelector<HTMLSlotElement>("slot[name=footer]")!;
+    expect(slot.assignedElements()).toEqual([actions]);
+    expect(actions.querySelectorAll("wt-button")).toHaveLength(2);
+    for (const button of actions.querySelectorAll("wt-button")) {
+      await button.updateComplete;
+      expect(
+        button.shadowRoot!.querySelector("button")!.getBoundingClientRect().height,
+      ).toBeGreaterThan(0);
+    }
+    expect(form.shadowRoot!.querySelector("wt-form-actions")).toBeNull();
+  }
 });
 it("opens a protected department dialog with the narrowed fields in order", async () => {
   const { el, writes } = await mount();
@@ -29,9 +52,7 @@ it("opens a protected department dialog with the narrowed fields in order", asyn
     "name",
     "tradingName",
   ]);
-  expect(form.shadowRoot!.querySelector("[data-test=save-editor]")!.getAttribute("variant")).toBe(
-    "secondary",
-  );
+  expect(departmentSave(form).getAttribute("variant")).toBe("secondary");
   expect(writes).toEqual([]);
 });
 
@@ -69,9 +90,7 @@ it("a blank name keeps its dialog open, explains the field and disables Save unt
   await form.updateComplete;
   const field = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
   expect(field.error).toBe("This field is required.");
-  expect(form.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
-    "Correct the highlighted fields to continue.",
-  );
+  expect(departmentActions(form).error).toBe("Correct the highlighted fields to continue.");
   expect(departmentSave(form).disabled).toBe(true);
   expect(modal.open).toBe(true);
   expect(writes).toEqual([]);
@@ -188,7 +207,7 @@ it.each(["en", "es"])(
     await name.updateComplete;
     expect(name.error).toBe("");
     expect(name.shadowRoot!.querySelector("input")!.value).toBe("Available now");
-    expect(form.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(departmentActions(form).error).toBe("");
     expect(form.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
     expect(modal.open).toBe(true);
     expect(departmentSave(form).variant).toBe("primary");
@@ -228,10 +247,10 @@ it("offers Receipts between Service and Transfers when an editor is supplied, an
     ["transfers", "Transfers"],
   ]);
   expect(form.shadowRoot!.querySelector("[slot=receipt]")!.contains(editor)).toBe(true);
-  expect(form.shadowRoot!.querySelector("wt-form-actions")).not.toBeNull();
+  expect(departmentSave(form)).not.toBeNull();
   await selectDepartmentTab(form, "receipt");
   expect(form.tab).toBe("receipt");
-  expect(form.shadowRoot!.querySelector("wt-form-actions")).toBeNull();
+  expect(form.saveButton).toBeNull();
   expect(modal.size).toBe("wide");
 });
 it("no editor, no Receipts tab, standard width", async () => {
@@ -255,7 +274,7 @@ it("a receipt Save closes the dialog when the department form is clean", async (
   el.addEventListener("written", written);
   await selectDepartmentTab(form, "receipt");
   await editReceipt(editor, "Thanks");
-  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-receipt]")!.click();
+  editor.saveButton!.click();
   await expect.poll(() => modal.open).toBe(false);
   await expect.poll(() => saved.mock.calls.length).toBe(1);
   expect(saved.mock.calls[0]![0].detail).toEqual({ departmentId: "d1" });
@@ -272,7 +291,7 @@ it("a receipt Save keeps the dialog open on Receipts when Details is dirty, and 
   await editDepartmentField(form, "name", "Restaurant draft");
   await selectDepartmentTab(form, "receipt");
   await editReceipt(editor, "Thanks");
-  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-receipt]")!.click();
+  editor.saveButton!.click();
   await expect.poll(() => written.mock.calls.length).toBe(1);
   expect(written.mock.calls[0]![0].detail).toEqual({ departmentId: "d1" });
   await form.updateComplete;
@@ -341,7 +360,7 @@ it("the receipt editor's Cancel asks the dialog to close", async () => {
   const closed = vi.fn();
   el.addEventListener("closed", closed);
   await selectDepartmentTab(form, "receipt");
-  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-receipt]")!.click();
+  departmentCancel(editor).click();
   await expect.poll(() => modal.open).toBe(false);
   await expect.poll(() => closed.mock.calls.length).toBe(1);
   expect(closed.mock.calls[0]![0].detail).toEqual({ departmentId: "d1" });

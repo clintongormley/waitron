@@ -2200,6 +2200,12 @@ native list, a tick box; a `wt-combobox` choice, a `wt-number-stepper` −/+ but
 
 Save opens quiet and disabled; bind it with `saveActionState` as shown under Forms.
 
+Opt into `fixed-heading` on `wt-dialog` or `wt-modal` to keep the heading, description and help
+above the scrolling body. Opt into `sticky` on `wt-tabs` to keep its strip at the top of that
+scroller; the strip uses the dialog surface and leaves scroll margin for focused controls.
+Both options default off. An editor rendered through another shadow root can supply its own
+action template to the modal footer, keeping handlers and draft state with that editor.
+
 A section's Add products (`apps/dashboard/src/widgets/section-add-products.ts`) draws its own count
 and buttons, so they cannot go in the window's footer slot; it keeps them in a block stuck to the
 bottom of the scrolling body (`position: sticky`) instead.
@@ -6634,9 +6640,10 @@ with Delete, and Add step). Receipts, between Service and Transfers, holds the d
 editor, and is offered only to someone with `venue.configure`. Transfers holds the allowed
 destinations and the receiving desk profile, and is offered only while two or more departments are
 active. The dialog is wide whenever it offers Receipts, and standard otherwise, so changing tab
-never changes its width. Details, Service and Transfers share one draft and one Save, in a row below
-the strip; Receipts has its own draft and its own Cancel and Save, and the shared row is hidden
-while it shows. Changing tab keeps both drafts. A Save closes the dialog only when the other draft
+never changes its width. Its fixed heading and sticky tabs stay above the scrolling content.
+Details, Service and Transfers share one draft and one Save; Receipts has its own draft.
+The selected editor renders its Cancel/Save row directly into the modal footer, with its message
+above the buttons. Changing tab keeps both drafts. A Save closes the dialog only when the other draft
 is clean, and closing asks one question covering both. Changing tab never asks about unsaved
 changes, because the screen's `navigationScopes` (`venue-departments-shell.ts`) lets an address
 change between the open department's offered tabs through. The address keeps the open tab (`view` is

@@ -33,6 +33,11 @@ export const baseStyles = css`
     outline: var(--wt-focus-ring);
     outline-offset: var(--wt-focus-offset);
   }
+
+  :host,
+  :where(input, textarea, select, button, [tabindex]) {
+    scroll-margin-block-start: var(--wt-tabs-sticky-height, 0px);
+  }
 `;
 
 /**

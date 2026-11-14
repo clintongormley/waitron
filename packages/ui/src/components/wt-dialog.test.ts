@@ -32,6 +32,32 @@ async function closeReportsDelivered(): Promise<void> {
 
 afterEach(cleanup);
 
+test.each([false, true])(
+  "fixed-heading=%s keeps only the opted-in heading outside body scrolling",
+  async (fixed) => {
+    const el =
+      (await mount(`<wt-dialog ${fixed ? "fixed-heading" : ""} heading="Edit department" description="Department settings">
+    <div style="height: 1800px">Scrollable content</div>
+    <button slot="footer">Save</button>
+  </wt-dialog>`)) as WtDialog;
+    el.open = true;
+    await el.updateComplete;
+    const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const heading = el.shadowRoot!.querySelector("h2")!;
+    const description = el.shadowRoot!.querySelector(".description")!;
+    const before = heading.getBoundingClientRect().top;
+    const descriptionBefore = description.getBoundingClientRect().top;
+    body.scrollTop = 400;
+    expect(body.scrollTop).toBe(400);
+    if (fixed) {
+      expect(heading.getBoundingClientRect().top).toBe(before);
+      expect(description.getBoundingClientRect().top).toBe(descriptionBefore);
+      el.style.setProperty("--wt-space-5", "31px");
+      expect(getComputedStyle(heading.parentElement!.parentElement!).paddingTop).toBe("31px");
+    } else expect(heading.getBoundingClientRect().top).toBe(before - 400);
+  },
+);
+
 type Openable = HTMLElement & { open: boolean; updateComplete: Promise<unknown> };
 
 /** The focused element, looked for through every shadow root on the way down. */

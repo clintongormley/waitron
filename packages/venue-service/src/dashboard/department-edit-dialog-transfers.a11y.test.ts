@@ -1,9 +1,14 @@
+import {
+  departmentSave,
+  departmentActions,
+  selectDepartmentTab,
+} from "../testing/department-edit-fixture.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
-import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
+
 import "./department-edit-dialog.js";
 const model: VenueServiceView = {
   departments: [
@@ -167,13 +172,9 @@ describe.each(["light", "dark"] as const)("department-edit-dialog %s", (theme) =
         }),
       );
       await settings.updateComplete;
-      settings.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+      departmentSave(settings).click();
       await expect
-        .poll(
-          async () =>
-            (await formMessageOf(settings.shadowRoot!.querySelector("wt-form-actions")!))
-              ?.textContent,
-        )
+        .poll(async () => (await formMessageOf(departmentActions(settings)))?.textContent)
         .toContain("Correct the highlighted fields");
     }
     if (state === "transfers" || state === "refusal")
