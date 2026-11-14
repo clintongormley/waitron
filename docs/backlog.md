@@ -1154,12 +1154,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   table.** Left open by slice 8b (its plan's D3): copy the delivery table on a split.
   [Detail](backlog/till.md#a1140-splitting-a-counter-order-delivered-to-a-table-leaves-the-new-bill-with-no-delivery-table)
 
-- **Does "made here" belong to the device or to its profile? (A270, owner 2026-10-04) — OPEN.** It
-  is a per-device setting by the 2026-10-01 decision
-  ([routing design §5.11](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)); under
-  the 2026-10-04 profile model a "Bar till" profile could carry it instead. Needs an owner decision.
-  [Detail](backlog/till.md#does-made-here-belong-to-the-device-or-to-its-profile-a270-owner-2026-10-04--open)
-
 - **Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268.**
   Only dev mode lets a tab act as a separate device, and it names the device by id alone
   (`x-waitron-dev-device`, `apps/server/src/device-session.ts`); the sign-in cookie is shared by the
@@ -1428,6 +1422,80 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
     roles, handover intervals and modules. Content languages and servers stay short. A table
     whose data lives on the server takes "Shared database-backed table paging, search and
     sorting" below instead.
+
+- **A1534. The device editor and the devices table made plain, and one profile per kitchen
+  screen (owner, 2026-11-14).** Follows A1529, whose profile editor tabs this changes, and A1535's
+  renames. Changes the venue-service and core schemas: rebuild their starting migrations, no data
+  migration (pre-live). Not started.
+  - **One profile per kitchen screen.** A profile's kitchen screen tab chooses ONE screen (Station,
+    Pass or Pass display) and its stations and zones, instead of several screens for its devices to
+    pick from. A device picks only its profile: the device editor loses Screen, its Stations and
+    Zones toggles and "Show other stations' dishes", and no device narrows what its profile
+    allows, tills and handhelds included (`device_kitchen_screens` and its station, zone and
+    removal tables go; `packages/db/src/schema/venue-service/kitchen-screens.ts`). The owner's
+    reason: the device dialog repeated the profile's toggles, and nobody could tell which won.
+    Revises the 2026-10-07 stations design §9.4 ("a device picks its profile, then its kitchen
+    screen"): give it a dated note.
+  - **A kitchen profile and its devices offer no receipt printer, payment slip printer, cash
+    drawer or invoice printer.** On the Devices table those cells are empty for kitchen devices.
+  - **An inherited value shows as the value itself in grey italics**, the house style for an
+    inherited default (the shared combobox's empty value, the product editor's inherited
+    nutrition): "Demo printer" in grey italics, never "Use profile default: Demo printer" or "Use
+    the profile's setting". A value set on the device shows in normal text. Same on the Devices
+    table: no "(default)" after an inherited printer or drawer.
+  - **The device editor is split into headed sections, not tabs**: name and profile, then
+    Printers, Card reader and Made here. It is at most eight fields once the kitchen fields go.
+  - **"Made here, no ticket" becomes one choice, "This device stands at"**: Nowhere (the default)
+    or one station, with the hint "Items for that station are made here: no ticket, not on
+    kitchen screens." It stays on the device, not the profile: two counter tills on one profile can
+    stand at different bars. That settles A270. A handheld does not show it. Today's
+    `device_made_here_stations` allows several stations per device; it becomes one.
+  - **The Devices table drops its Shows column**, which only repeats the profile once the profile
+    fixes the screen.
+  - **After a dialog opened with the mouse closes, the row it came from keeps focus but draws no
+    ring or highlight.** Focus going back to the opener is right; the ring appears because
+    Chrome counts typing in the dialog as keyboard use, so the returned focus matches
+    `:focus-visible`. Fix it once in `wt-data-table` and `wt-modal`, so every list screen gets
+    it. The owner's screenshot showed two rows highlighted after one edit: reproduce that first,
+    since the second may be a separate fault.
+
+- **A1535. The Prep stations screen made plain, and "station", not "kitchen", in the words staff
+  read (owner, 2026-11-14).** No migration: the default station's flag stays where it is. Not
+  started.
+  - **Shown on** lists the device names only (no "— pass monitor" after each), each a link that
+    opens that device's editor on Devices. The row's separate Devices link goes; today it opens
+    the plain Devices page (`packages/venue-service/src/dashboard/prep-stations-screen.ts`). If
+    Devices cannot open one device's editor from a link, add that.
+  - **"Waits for the pass" becomes "Held at the pass"** (Yes or No), with a help bubble: "Its
+    dishes wait at the pass until the pass sends them out."
+  - **"Printed on" becomes "Tickets printed on".**
+  - **Clicking a row opens the station's editor**, as on the other tables, and the row-menu
+    buttons are centred in their cells as elsewhere.
+  - **The default station moves to the Routes tab** as one line: "Dishes with no route go to:
+    [Kitchen]". The "Default" badge and the row menu's Make default go. It is still needed: a dish
+    no route places goes there, and without one sending it fails
+    (`apps/server/src/working-order.ts`, `noDefaultStation`). It is not "When closed, send to",
+    which only picks the station offered first when someone closes this one for the day.
+  - **"When closed, send to"** becomes "When closed for the day, send its dishes to", empty value
+    "Ask each time" in normal text, with the help bubble: "When someone closes this station for
+    the day, Waitron asks which station makes its dishes instead. The station chosen here is
+    offered first." Today's hint ("Close for today starts with this station chosen.") is shown in
+    grey italics, which now means an inherited value (A1534).
+  - **The station editor gets headed sections**: Station (name, colour, ticket printers), When it
+    is closed, The pass, and Station screen (late flags, Done on the screen, and Also list the
+    order's dishes from other stations).
+  - **Add becomes the primary button "Add a station"**, like Devices' "Add a device".
+  - **"Pass screen" and "Pass monitor" become "Pass" and "Pass display (view only)"** everywhere
+    staff read them, profiles included.
+  - **Staff read "station" or "prep station", not "kitchen", where the words mean stations in
+    general**: a bar is not a kitchen. "Kitchen" stays where it really means the kitchen (the owner,
+    2026-11-14: "there may be particular places where kitchen makes more sense"); the PR lists each
+    place kept, with why, for the owner to check. Covers the dashboard, till and venue-service screen text in English and
+    Spanish, the guides and help bubbles: for example "Kitchen display" (a device kind), "Kitchen
+    screen shows", "kitchen routing rules", "kitchen tickets" and "kitchen screens". A station
+    a venue names Kitchen keeps its name. **Open for the owner:** a product's "Kitchen name" is one
+    of its three names (`docs/developers/products.md`); whether it is renamed too is the owner's
+    call. Code identifiers may keep `kitchen`; only the words people read change.
 
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
   The passkey refusal offers retry, password entry and an emailed password reset. These do not

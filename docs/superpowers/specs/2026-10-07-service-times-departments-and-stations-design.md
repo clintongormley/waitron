@@ -387,6 +387,9 @@ Station and Pass screens, and the person signed in acts. Done marks belong to th
 person when someone is signed in. A kitchen display may later allow a sign-in that lapses only
 after a long idle time (owner, 2026-10-08; backlog A436).
 
+_2026-11-14 (owner, A1534 in `docs/backlog.md`): to be replaced by one profile per kitchen screen; a device
+will pick only its profile, and no device will narrow it._
+
 A **device** picks its profile, then its kitchen screen, then its stations and zones within what
 the profile allows. Narrowing a profile is allowed: each device using it loses what was removed
 and remembers what it lost, the dashboard says which devices changed, and the device shows "This

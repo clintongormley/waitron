@@ -741,14 +741,6 @@ address has not been looked at. (4) a device's knock is refused if the window sh
 arriving, but open periods are told apart only by their start time, to the millisecond
 (`apps/server/src/device-api.ts`), so a shut and reopen within one millisecond would pass.
 
-## Does "made here" belong to the device or to its profile? (A270, owner 2026-10-04) — OPEN
-
-It
-is a per-device setting by the 2026-10-01 decision
-([routing design §5.11](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)); under
-the 2026-10-04 profile model a "Bar till" profile could carry it instead. A268 keeps it on the
-device. Needs an owner decision.
-
 ## Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268
 
 Only dev mode lets a tab act as a separate device, and it names the device by id alone
