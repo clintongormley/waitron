@@ -2,7 +2,9 @@
 
 Keep the previous recovery pack when you change the recovery key. Until the new bucket copy is ready, the previous pack still matches the copy offered for recovery. If the page says the pack does not match the copy or the bucket login cannot read it, try the matching pack, or correct the bucket access and try again.
 
-Scheduled backups in a bucket use the folder you choose, with no extra venue folder. Choose separate folders for scheduled backups and the bucket copy. Neither folder can be inside the other.
+Scheduled backups and the bucket copy each use the folder you choose, with no extra venue folder. Choose separate folders for scheduled backups and the bucket copy. Neither folder can be inside the other.
+
+Use a bucket-copy folder that holds no other stream's copy. When Waitron says “this bucket folder holds another copy”, choose **Change bucket** and enter a different prefix.
 
 You can share an archive folder between boxes: each box removes only its own backups. After a restore, choose a new folder if you want to keep all previous copies, because the restored box can still remove them. Waitron leaves other boxes’ archives and files it does not recognise alone; manage those files yourself when you need more room.
 

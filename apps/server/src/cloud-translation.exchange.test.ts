@@ -200,7 +200,8 @@ it("an unreachable Cloud is cloud.unavailable and a never-connected box is cloud
     const none = createCloudConnection({
       stateDir: empty,
       origin: "https://cloud.example",
-      localVenueId: crypto.randomUUID(),
+      readVenueId: async () => null,
+      recordVenueId: async () => {},
       environment: "test",
     });
     await expect(none.translation.status(crypto.randomUUID())).rejects.toMatchObject({

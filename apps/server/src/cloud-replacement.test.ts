@@ -9,8 +9,7 @@ import { createCloudReplacement } from "./cloud-replacement.js";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 
 const origin = "https://cloud.example";
-const localVenueId = randomUUID(),
-  nodeId = randomUUID(),
+const nodeId = randomUUID(),
   pointId = randomUUID();
 const registration = {
   venueId: randomUUID(),
@@ -86,11 +85,10 @@ async function fixture(
       pointId,
       venueId: registration.venueId,
       oldInstallationId,
-      localVenueId: mode === "wrong" ? randomUUID() : localVenueId,
-      nodeId,
+      nodeId: mode === "wrong" ? randomUUID() : nodeId,
       environment: "test",
-      publicKey: payload[7],
-      peerPublicKey: payload[8],
+      publicKey: payload[6],
+      peerPublicKey: payload[7],
       state: mode === "complete" ? "complete" : "awaiting_owner",
       expiresAt: new Date(Date.now() + 600000).toISOString(),
       organisationName: "Test Org",
@@ -101,14 +99,14 @@ async function fixture(
   const options = {
     stateDir,
     origin: cloudOrigin,
-    localVenueId,
     nodeId,
     fetch: fetchImpl as typeof fetch,
   };
   const connection = createCloudConnection({
     stateDir,
     origin: cloudOrigin,
-    localVenueId,
+    readVenueId: async () => registration.venueId,
+    recordVenueId: async () => {},
     environment: "test",
   });
   return {
@@ -144,11 +142,10 @@ it("persists new keys before sending dual signatures and reuses them after a los
   expect(view.requestId).toBe(f.requestId);
   const sent = f.requests.at(-1)!;
   expect(sent.payload).toEqual([
-    "waitron-cloud-replacement-v1",
+    "waitron-cloud-replacement-v2",
     origin,
     f.requestId,
     "prepare",
-    localVenueId,
     nodeId,
     "test",
     saved.publicKey,
@@ -168,6 +165,28 @@ it("persists new keys before sending dual signatures and reuses them after a los
         Buffer.from(signature!, "base64url"),
       ),
     ).toBe(true);
+});
+
+it("refuses a replacement for another Cloud venue without changing the held venue or connection", async () => {
+  const f = await fixture();
+  const heldId = randomUUID();
+  let stored: string = heldId;
+  const connection = createCloudConnection({
+    ...f.options,
+    environment: "test",
+    readVenueId: async () => stored,
+    recordVenueId: async (id) => {
+      stored = id;
+    },
+  });
+  const client = createCloudReplacement({ ...f.options, connection });
+  await client.prepare();
+  f.setMode("complete");
+  await expect(client.check()).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+  expect(stored).toBe(heldId);
+  await expect(stat(join(f.stateDir, "cloud/connection.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
 });
 
 it("refuses a saved replacement file made group-readable after creation", async () => {
@@ -229,9 +248,9 @@ it("does not propose replacement over an unrelated saved Cloud connection", asyn
   await writeFile(
     join(f.stateDir, "cloud/connection.json"),
     JSON.stringify({
-      version: 1,
+      version: 2,
+      venueId: registration.venueId,
       origin,
-      localVenueId,
       environment: "test",
       requestId: randomUUID(),
       code: "12345678",
@@ -344,7 +363,8 @@ async function connectedReplacement() {
     const connection = createCloudConnection({
       stateDir: f.stateDir,
       origin: f.origin,
-      localVenueId,
+      readVenueId: async () => registration.venueId,
+      recordVenueId: async () => {},
       environment: "test",
     });
     return { connection, replacement: createCloudReplacement({ ...f.options, connection }) };
@@ -505,9 +525,9 @@ it("records a stop only for the Cloud connection this replacement imported", asy
   await writeFile(
     join(f.stateDir, "cloud/connection.json"),
     JSON.stringify({
-      version: 1,
+      version: 2,
+      venueId: registration.venueId,
       origin,
-      localVenueId,
       environment: "test",
       requestId: randomUUID(),
       code: "12345678",
@@ -581,11 +601,10 @@ it("sets an unreadable request aside and asks Cloud again with fresh keys saved 
   const sent = f.requests.at(-1)!;
   expect(sent.action).toBe("reissue");
   expect(sent.payload).toEqual([
-    "waitron-cloud-replacement-v1",
+    "waitron-cloud-replacement-v2",
     origin,
     f.requestId,
     "reissue",
-    localVenueId,
     nodeId,
     "test",
     saved.publicKey,
@@ -618,8 +637,8 @@ it("resends the same fresh keys after a lost reissue reply without setting anyth
   f.setMode("awaiting_owner");
   await createCloudReplacement({ ...f.options, connection: f.connection }).reissue();
   const [first, second] = f.requests.filter((request) => request.action === "reissue");
+  expect(second!.payload[6]).toBe(first!.payload[6]);
   expect(second!.payload[7]).toBe(first!.payload[7]);
-  expect(second!.payload[8]).toBe(first!.payload[8]);
   expect(await setAside(f.stateDir)).toHaveLength(1);
 });
 
@@ -631,7 +650,7 @@ it("does not move a readable request when asked again", async () => {
   const before = JSON.parse(await readFile(path, "utf8"));
   await client.reissue();
   expect(await setAside(f.stateDir)).toEqual([]);
-  expect(f.requests.at(-1)!.payload[7]).toBe(before.publicKey);
+  expect(f.requests.at(-1)!.payload[6]).toBe(before.publicKey);
   expect(JSON.parse(await readFile(path, "utf8")).privateKey).toBe(before.privateKey);
 });
 
@@ -643,9 +662,9 @@ it("leaves an unreadable request in place while the box holds another Cloud conn
   await writeFile(
     join(f.stateDir, "cloud/connection.json"),
     JSON.stringify({
-      version: 1,
+      version: 2,
       origin,
-      localVenueId,
+      venueId: registration.venueId,
       environment: "test",
       requestId: randomUUID(),
       code: "12345678",
@@ -674,7 +693,7 @@ it("Check reconnection resends a reissue whose reply was lost, then checks statu
   await client.check();
   await client.check();
   expect(f.requests.map((request) => request.action)).toEqual(["reissue", "reissue", "status"]);
-  expect(new Set(f.requests.map((request) => request.payload[7])).size).toBe(1);
+  expect(new Set(f.requests.map((request) => request.payload[6])).size).toBe(1);
 });
 
 it("keeps the unreadable request in place when the fresh save fails, so pressing again still reissues", async () => {
@@ -704,7 +723,7 @@ it("keeps the unreadable request in place when the fresh save fails, so pressing
   expect(f.requests.map((request) => request.action)).toEqual(["reissue"]);
   const saved = JSON.parse(await readFile(path, "utf8"));
   expect(saved.reissued).toBe(true);
-  expect(f.requests[0]!.payload[7]).toBe(saved.publicKey);
+  expect(f.requests[0]!.payload[6]).toBe(saved.publicKey);
   const after = await setAside(f.stateDir);
   expect(after).toEqual(expect.arrayContaining(earlier));
   expect(after.length).toBeGreaterThan(0);
@@ -745,4 +764,18 @@ it("sets nothing aside and asks Cloud nothing when the person may not make the c
   expect(await setAside(f.stateDir)).toEqual([]);
   expect(f.requests).toEqual([]);
   expect(await readFile(path, "utf8")).toBe("corrupt");
+});
+
+it("reads a version-one replacement file as absent and starts with new keys", async () => {
+  const f = await fixture();
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  await client.prepare();
+  const path = join(f.stateDir, "cloud/replacement.json");
+  const saved = JSON.parse(await readFile(path, "utf8"));
+  expect(saved.version).toBe(2);
+  await writeFile(path, JSON.stringify({ ...saved, version: 1 }));
+  expect(await client.status()).toBeNull();
+  expect(await client.hasProposal()).toBe(false);
+  await client.prepare();
+  expect(JSON.parse(await readFile(path, "utf8")).publicKey).not.toBe(saved.publicKey);
 });

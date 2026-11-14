@@ -423,8 +423,8 @@ export async function bucketCommand() {
   const signer = generateNodeKeyPair();
   const generation = `gen-0-${node.nodeId}-20261016T124000Z`;
   const kit = {
-    version: 1 as const,
-    venueId: node.locationId,
+    version: 2 as const,
+    streamId: node.locationId,
     bucket: {
       endpoint: "",
       region: "eu-west-1",
@@ -447,7 +447,7 @@ export async function bucketCommand() {
     } else if (
       req.headers.range === "bytes=0-0" &&
       req.headers["x-amz-server-side-encryption-customer-key"] ===
-        deriveStreamKey(kit.recoveryKey, kit.venueId)
+        deriveStreamKey(kit.recoveryKey, kit.streamId)
     ) {
       res.writeHead(206);
       res.end(Buffer.from([0]));
@@ -473,10 +473,10 @@ export async function bucketCommand() {
   const store = createMemoryObjectStore({ now: () => new Date() });
   await writePointer(
     store,
-    kit.venueId,
+    kit.streamId,
     signPointer(
       {
-        venueId: kit.venueId,
+        streamId: kit.streamId,
         nodeId: node.nodeId,
         generation,
         term: 0,

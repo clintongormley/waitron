@@ -3,8 +3,8 @@ import { isAppError } from "@waitron/shared";
 import { KIT_PREFIX, encodeRecoveryKit, parseRecoveryKit, type RecoveryKit } from "./kit.js";
 
 const KIT: RecoveryKit = {
-  version: 1,
-  venueId: "c0000000-0000-4000-8000-000000000002",
+  version: 2,
+  streamId: "c0000000-0000-4000-8000-000000000002",
   bucket: {
     endpoint: "https://s3.example.net",
     region: "eu-west-1",
@@ -140,7 +140,7 @@ describe("the recovery kit", () => {
   });
 
   it("refuses an unknown version", () => {
-    const text = `${KIT_PREFIX}${Buffer.from(JSON.stringify({ ...KIT, version: 2 })).toString("base64url")}`;
+    const text = `${KIT_PREFIX}${Buffer.from(JSON.stringify({ ...KIT, version: 3 })).toString("base64url")}`;
     expect(refusal(text)).toEqual({
       code: "backup.stream_kit_invalid",
       params: { reason: "shape" },
@@ -162,7 +162,7 @@ describe("the recovery kit", () => {
   });
 
   it.each([
-    ["the venue id", { venueId: "c0000000\t0000" }],
+    ["the venue id", { streamId: "c0000000\t0000" }],
     ["the signer's key", { pointerSignerPublicKey: "MCowBQYDK2Vw\x7fAyEA" }],
   ])("still refuses a control character in %s", (_label, change) => {
     expect(refusal(encodeRecoveryKit({ ...KIT, ...change }))).toEqual({
@@ -170,4 +170,13 @@ describe("the recovery kit", () => {
       params: { reason: "shape" },
     });
   });
+});
+
+it("refuses a version-one kit by its prefix", () => {
+  expect(
+    refusal(
+      "WAITRON-RECOVERY-KIT-1:" +
+        Buffer.from(JSON.stringify({ ...KIT, version: 1 })).toString("base64url"),
+    ),
+  ).toEqual({ code: "backup.stream_kit_invalid", params: { reason: "version" } });
 });

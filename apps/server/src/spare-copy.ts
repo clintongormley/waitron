@@ -89,7 +89,8 @@ class NotYet extends Error {
 export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
   const intervalMs = deps.intervalMs ?? INTERVAL_MS;
   const { link } = deps;
-  const { venueId } = link;
+  // Both boxes derive the stream key from this pair's copy identifier.
+  const { venueId: streamId } = link;
   const pin = await readPinnedPrimaryKey(deps.node, deps.nodeId);
   // Adopt pins the main box's key in the transaction that writes the link.
   if (pin === null) throw new Error("a joining spare holds no pinned main-box key");
@@ -138,7 +139,7 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
   async function attempt(): Promise<{ bytes: number; ms: number }> {
     const { held, key } = await readHeldKey(deps.readRecoveryKey);
     if (key === undefined) throw new NotYet(held ? "key_too_short" : "no_key");
-    const read = await readPointer(objectStore, venueId);
+    const read = await readPointer(objectStore, streamId);
     if (read === null) throw new NotYet("no_pointer");
     if (!verifyPointer(read.pointer, pinnedKey)) throw new NotYet("pointer_unverified");
     const { generation } = read.pointer.body;
@@ -149,8 +150,8 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
     await (deps.restoreGeneration ?? restoreGeneration)({
       litestreamBin: deps.litestreamBin,
       bucket,
-      streamKey: deriveStreamKey(key, venueId),
-      venueId,
+      streamKey: deriveStreamKey(key, streamId),
+      streamId,
       generation,
       outPath: copyPath,
     });

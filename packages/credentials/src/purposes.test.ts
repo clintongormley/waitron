@@ -49,7 +49,17 @@ describe("PURPOSES", () => {
 });
 
 describe("backup.stream purpose", () => {
-  it("names the venue, the bucket and its key", () => {
+  it("accepts the bucket and its key without a venue id", () => {
+    expect(() =>
+      validatePayload("backup.stream", {
+        endpoint: "-",
+        region: "eu-west-1",
+        bucket: "copies",
+        prefix: "-",
+        accessKeyId: "A",
+        secretAccessKey: "S",
+      }),
+    ).not.toThrow();
     expect([...PURPOSES["backup.stream"]].sort()).toEqual([
       "accessKeyId",
       "bucket",
@@ -57,7 +67,6 @@ describe("backup.stream purpose", () => {
       "prefix",
       "region",
       "secretAccessKey",
-      "venueId",
     ]);
   });
 });

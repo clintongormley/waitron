@@ -6,7 +6,6 @@ import {
   generationName,
   normalisePrefix,
   parseGenerationName,
-  venuePrefix,
 } from "./names.js";
 
 const NODE = "3f1c2b9e-8d7a-4e21-9b0c-5a6d7e8f9012";
@@ -20,23 +19,6 @@ function thrown(fn: () => unknown): { code: string; params: unknown } {
   }
   throw new Error("expected a throw");
 }
-
-describe("venuePrefix", () => {
-  it("puts a venue's objects under venues/<id>/", () => {
-    expect(venuePrefix("loc-1")).toBe("venues/loc-1/");
-    expect(venuePrefix(NODE)).toBe(`venues/${NODE}/`);
-  });
-
-  it.each(["", "a/b", "../x", "-leading", "a b", "a.b"])(
-    "refuses %j, which is not one safe key segment",
-    (bad) => {
-      expect(thrown(() => venuePrefix(bad))).toEqual({
-        code: "backup.stream_name_invalid",
-        params: { field: "venueId", value: bad },
-      });
-    },
-  );
-});
 
 describe("generationName", () => {
   it("names a generation by term, node and the UTC second it was opened", () => {
@@ -138,7 +120,7 @@ describe("the configured prefix", () => {
   });
 
   it("joins the normalised prefix and a key into the key the bucket holds", () => {
-    expect(bucketKey({ prefix: "/waitron" }, "venues/v1/gen-1")).toBe("waitron/venues/v1/gen-1");
-    expect(bucketKey({ prefix: "" }, "venues/v1/gen-1")).toBe("venues/v1/gen-1");
+    expect(bucketKey({ prefix: "/waitron" }, "gen-1")).toBe("waitron/gen-1");
+    expect(bucketKey({ prefix: "" }, "gen-1")).toBe("gen-1");
   });
 });

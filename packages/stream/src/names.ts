@@ -23,11 +23,6 @@ export function strayListedKey(): AppError {
   return invalid("listedKey", "other");
 }
 
-export function venuePrefix(venueId: string): string {
-  if (!isKeySegment(venueId)) throw invalid("venueId", venueId);
-  return `venues/${venueId}/`;
-}
-
 /**
  * A generation is one primary's unbroken stream. The name carries the time it was opened because a
  * rebuilt box reuses the dead box's node id and can sign the same next term; the

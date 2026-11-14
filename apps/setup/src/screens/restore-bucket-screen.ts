@@ -90,6 +90,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private fieldRefusalDismissed = false;
 
   @state() private previewField?: "kit" | "environment";
+  @state() private previewOldKit = false;
   @state() private previewLiveSince?: string;
   @state() private previewLiveUnknown = false;
   @state() private packRefusal?: PackFileRefusal;
@@ -326,7 +327,7 @@ export class SetupRestoreBucketScreen extends LitElement {
       this.attempted && this.#kitMissing
         ? t("restore_bucket.kit_missing")
         : this.previewField === "kit"
-          ? t("restore.preview_kit_error")
+          ? t(this.previewOldKit ? "shell.bucket.kit_old_version" : "restore.preview_kit_error")
           : refused === "kit"
             ? this.errorMessage
             : undefined;
@@ -473,6 +474,8 @@ export class SetupRestoreBucketScreen extends LitElement {
         @preview-refusal=${(event: CustomEvent<{ cause?: ApiError; field?: string }>) => {
           event.stopPropagation();
           const error = event.detail.cause;
+          this.previewOldKit =
+            error?.code === "backup.stream_kit_invalid" && error.params?.reason === "version";
           this.previewField =
             event.detail.field === "kit" || event.detail.field === "environment"
               ? event.detail.field

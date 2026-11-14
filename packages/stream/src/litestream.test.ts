@@ -43,7 +43,7 @@ describe("the Litestream configuration", () => {
   it("names the credentials by variable and holds no secret", () => {
     const text = litestreamConfig({
       dbPath: "/var/lib/waitron/state/venue/venue.db",
-      replicaUrl: "s3://venue-copies/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2",
+      replicaUrl: "s3://venue-copies/gen-0-a-20260923T120000Z?region=eu-south-2",
     });
     expect(text).toBe(
       [
@@ -59,7 +59,7 @@ describe("the Litestream configuration", () => {
         "dbs:",
         '  - path: "/var/lib/waitron/state/venue/venue.db"',
         "    replica:",
-        '      url: "s3://venue-copies/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2"',
+        '      url: "s3://venue-copies/gen-0-a-20260923T120000Z?region=eu-south-2"',
         "      sse-customer-key: '${WAITRON_STREAM_ENCRYPTION_KEY}'",
         "",
       ].join("\n"),
@@ -133,17 +133,13 @@ describe("the Litestream configuration", () => {
   );
 
   it("puts the endpoint and region in the replica address only when there is one", () => {
-    expect(replicaUrl(BUCKET, "v1", "gen-0-a-20260923T120000Z")).toBe(
-      "s3://venue-copies/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2",
+    expect(replicaUrl(BUCKET, "gen-0-a-20260923T120000Z")).toBe(
+      "s3://venue-copies/gen-0-a-20260923T120000Z?region=eu-south-2",
     );
     expect(
-      replicaUrl(
-        { ...BUCKET, endpoint: "https://s3.example.net" },
-        "v1",
-        "gen-0-a-20260923T120000Z",
-      ),
+      replicaUrl({ ...BUCKET, endpoint: "https://s3.example.net" }, "gen-0-a-20260923T120000Z"),
     ).toBe(
-      "s3://venue-copies/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2&endpoint=https%3A%2F%2Fs3.example.net",
+      "s3://venue-copies/gen-0-a-20260923T120000Z?region=eu-south-2&endpoint=https%3A%2F%2Fs3.example.net",
     );
   });
 
@@ -152,8 +148,8 @@ describe("the Litestream configuration", () => {
   // same way, or the two would write to different folders.
   it("puts the generation under the owner's prefix, normalised as the object store normalises it", () => {
     for (const prefix of ["waitron/", "waitron", "/waitron/"]) {
-      expect(replicaUrl({ ...BUCKET, prefix }, "v1", "gen-0-a-20260923T120000Z")).toBe(
-        "s3://venue-copies/waitron/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2",
+      expect(replicaUrl({ ...BUCKET, prefix }, "gen-0-a-20260923T120000Z")).toBe(
+        "s3://venue-copies/waitron/gen-0-a-20260923T120000Z?region=eu-south-2",
       );
     }
   });
@@ -162,31 +158,29 @@ describe("the Litestream configuration", () => {
   // both unchanged: a raw "#" or "?" would end the path there, and an empty, "." or ".." segment
   // would be cleaned into a different folder than the object store writes to.
   it("encodes each path segment, so a # or ? in the prefix stays in the path", () => {
-    expect(replicaUrl({ ...BUCKET, prefix: "a#b" }, "v1", "gen-0-a-20260923T120000Z")).toBe(
-      "s3://venue-copies/a%23b/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2",
+    expect(replicaUrl({ ...BUCKET, prefix: "a#b" }, "gen-0-a-20260923T120000Z")).toBe(
+      "s3://venue-copies/a%23b/gen-0-a-20260923T120000Z?region=eu-south-2",
     );
-    expect(replicaUrl({ ...BUCKET, prefix: "a?b/c%d" }, "v1", "gen-0-a-20260923T120000Z")).toBe(
-      "s3://venue-copies/a%3Fb/c%25d/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2",
+    expect(replicaUrl({ ...BUCKET, prefix: "a?b/c%d" }, "gen-0-a-20260923T120000Z")).toBe(
+      "s3://venue-copies/a%3Fb/c%25d/gen-0-a-20260923T120000Z?region=eu-south-2",
     );
   });
 
   // encodeURIComponent throws a bare URIError on half a surrogate pair; a whole pair encodes.
   it("refuses a prefix holding half a surrogate pair, and encodes a whole one", () => {
     expect(
-      refusalOf(() =>
-        replicaUrl({ ...BUCKET, prefix: "a\uD800b" }, "v1", "gen-0-a-20260923T120000Z"),
-      ),
+      refusalOf(() => replicaUrl({ ...BUCKET, prefix: "a\uD800b" }, "gen-0-a-20260923T120000Z")),
     ).toEqual({ code: "backup.stream_config_unsafe", params: { field: "prefix" } });
-    expect(
-      replicaUrl({ ...BUCKET, prefix: "a\uD83D\uDE00b" }, "v1", "gen-0-a-20260923T120000Z"),
-    ).toBe("s3://venue-copies/a%F0%9F%98%80b/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2");
+    expect(replicaUrl({ ...BUCKET, prefix: "a\uD83D\uDE00b" }, "gen-0-a-20260923T120000Z")).toBe(
+      "s3://venue-copies/a%F0%9F%98%80b/gen-0-a-20260923T120000Z?region=eu-south-2",
+    );
   });
 
   it.each(["a//b", "a/../b", "..", "./a", "a/."])(
     "refuses a prefix path cleaning would change: %j",
     (prefix) => {
       expect(
-        refusalOf(() => replicaUrl({ ...BUCKET, prefix }, "v1", "gen-0-a-20260923T120000Z")),
+        refusalOf(() => replicaUrl({ ...BUCKET, prefix }, "gen-0-a-20260923T120000Z")),
       ).toEqual({
         code: "backup.stream_config_unsafe",
         params: { field: "prefix" },
@@ -200,15 +194,15 @@ describe("the Litestream configuration", () => {
     "refuses a bucket name holding more than S3's bucket-name characters: %j",
     (bucket) => {
       expect(
-        refusalOf(() => replicaUrl({ ...BUCKET, bucket }, "v1", "gen-0-a-20260923T120000Z")),
+        refusalOf(() => replicaUrl({ ...BUCKET, bucket }, "gen-0-a-20260923T120000Z")),
       ).toEqual({ code: "backup.stream_config_unsafe", params: { field: "bucket" } });
     },
   );
 
   it("accepts a bucket name of lowercase letters, digits, dots and hyphens", () => {
-    expect(
-      replicaUrl({ ...BUCKET, bucket: "venue.copies-2" }, "v1", "gen-0-a-20260923T120000Z"),
-    ).toBe("s3://venue.copies-2/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2");
+    expect(replicaUrl({ ...BUCKET, bucket: "venue.copies-2" }, "gen-0-a-20260923T120000Z")).toBe(
+      "s3://venue.copies-2/gen-0-a-20260923T120000Z?region=eu-south-2",
+    );
   });
 
   // The settings routes run this before probing, so a bucket Litestream would refuse is refused at

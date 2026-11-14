@@ -300,6 +300,8 @@ export async function applyVenue(
           await createVenueSettings(
             tx,
             {
+              cloudVenueId: null,
+              streamId: null,
               name: action.name,
               fiscalTerritory: action.fiscalTerritory,
               operationDescription: action.operationDescription,

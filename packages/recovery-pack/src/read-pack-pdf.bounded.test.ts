@@ -38,7 +38,7 @@ const file: RecoveryPackFile = {
   version: 1,
   number: 2,
   madeAt: "2026-10-29T17:00:00.000Z",
-  bucketCode: "WAITRON-RECOVERY-KIT-1:" + "b".repeat(600),
+  bucketCode: "WAITRON-RECOVERY-KIT-2:" + "b".repeat(600),
   archiveCode: null,
   backupKey: null,
   serverKey: null,

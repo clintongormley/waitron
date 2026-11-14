@@ -539,7 +539,8 @@ export const en = {
   "folders.close_named": "Close {name}",
 
   "nav.cloud": "Cloud services",
-  "cloud.intro": "Connect this venue to your Waitron Cloud account.",
+  "cloud.intro":
+    "Connect this venue to your Waitron Cloud account. If you restored a backup made before connecting, connect again.",
   "cloud.replacement_intro": "Reconnect this restored test server to its existing Cloud venue.",
   "cloud.replacement_request": "Request reconnection",
   "cloud.replacement_reissue": "Get a fresh reconnection request",
@@ -2326,6 +2327,8 @@ export const en = {
   "stream.state.paused": "Paused — the bucket cannot be reached",
   "stream.state.another_server": "Stopped — another server is writing to this bucket",
   "stream.state.unusable": "Stopped — the bucket settings cannot be used",
+  "stream.state.folder_in_use":
+    "Stopped — this bucket folder holds another copy. Choose a different prefix in Change bucket.",
   "stream.state.not_running": "Not running",
   "stream.status.lag": "Changes not yet in the bucket",
   "stream.status.lag_none": "None",
@@ -4703,7 +4706,8 @@ export const es: Record<StringKey, string> = {
   "folders.close_named": "Cerrar {name}",
 
   "nav.cloud": "Servicios Cloud",
-  "cloud.intro": "Conecta este local con tu cuenta de Waitron Cloud.",
+  "cloud.intro":
+    "Conecta este local con tu cuenta de Waitron Cloud. Si has restaurado una copia hecha antes de conectarlo, vuelve a conectarlo.",
   "cloud.replacement_intro":
     "Vuelve a conectar este servidor de prueba restaurado con su local existente en Cloud.",
   "cloud.replacement_request": "Solicitar reconexión",
@@ -6530,6 +6534,8 @@ export const es: Record<StringKey, string> = {
   "stream.state.paused": "En pausa: no se puede acceder al bucket",
   "stream.state.another_server": "Detenida: otro servidor está escribiendo en este bucket",
   "stream.state.unusable": "Detenida: los ajustes del bucket no se pueden usar",
+  "stream.state.folder_in_use":
+    "Detenida: esta carpeta del bucket contiene otra copia. Elige otro prefijo en Cambiar de bucket.",
   "stream.state.not_running": "No está en marcha",
   "stream.status.lag": "Cambios que aún no están en el bucket",
   "stream.status.lag_none": "Ninguno",

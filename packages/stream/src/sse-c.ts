@@ -21,12 +21,11 @@ import {
 
 export async function verifyStreamKey(
   bucket: BucketConfig,
-  venueId: string,
   generation: string,
   streamKey: string,
 ): Promise<void> {
   const client = createBucketClient(bucket);
-  const prefix = bucketKey(bucket, generationPrefix(venueId, generation));
+  const prefix = bucketKey(bucket, generationPrefix(generation));
   try {
     let token: string | undefined;
     do {

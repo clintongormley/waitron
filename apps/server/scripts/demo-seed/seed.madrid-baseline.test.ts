@@ -460,7 +460,13 @@ for (const locale of ["en", "es"] as const) {
         },
         {
           ...venueMetadata,
-          defaults: { contentLanguages: null, defaultContentLanguage: null, holidayArea: null },
+          defaults: {
+            cloudVenueId: null,
+            streamId: null,
+            contentLanguages: null,
+            defaultContentLanguage: null,
+            holidayArea: null,
+          },
         },
       );
       for (const [table, fields, targetField] of [

@@ -1,4 +1,5 @@
 import { seedModuleSettings } from "../test/module-settings.js";
+import { ensureStreamId } from "@waitron/db";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -470,11 +471,11 @@ describe("stream encryption checks at the real trading boot", () => {
           venue.cfg.nodeId,
           "https://localhost",
         );
+        await withTransaction(suite.db, ensureStreamId);
         await withTransaction(suite.db, (tx) =>
           putCredential(tx, ring, {
             purpose: STREAM_PURPOSE,
             value: streamSettingsPayload({
-              venueId: venue.cfg.locationId,
               bucket: {
                 region: "eu-west-1",
                 bucket: "copies",

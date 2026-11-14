@@ -26,7 +26,7 @@ function body(overrides: Partial<StreamPointer> = {}): StreamPointer {
   const term = overrides.term ?? 2;
   const nodeId = overrides.nodeId ?? NODE;
   return {
-    venueId: VENUE,
+    streamId: VENUE,
     term,
     nodeId,
     generation: generationName(term, nodeId, new Date("2026-09-23T10:00:00Z")),
@@ -101,7 +101,7 @@ describe("readPointer", () => {
     ["shape", JSON.stringify({ body: { ...body(), extra: 1 }, signature: "s" })],
     ["shape", JSON.stringify({ body: { ...body(), term: "2" }, signature: "s" })],
     ["shape", JSON.stringify([])],
-    ["venue_id", JSON.stringify({ body: { ...body(), venueId: "a/b" }, signature: "s" })],
+    ["venue_id", JSON.stringify({ body: { ...body(), streamId: "a/b" }, signature: "s" })],
     ["term", JSON.stringify({ body: { ...body(), term: 1.5 }, signature: "s" })],
     [
       "generation",
@@ -110,11 +110,11 @@ describe("readPointer", () => {
     ["generation", JSON.stringify({ body: { ...body(), nodeId: OTHER_NODE }, signature: "s" })],
     ["generation", JSON.stringify({ body: { ...body(), term: 3 }, signature: "s" })],
     ["written_at", JSON.stringify({ body: { ...body(), writtenAt: "yesterday" }, signature: "s" })],
-    ["other_venue", JSON.stringify({ body: { ...body(), venueId: "loc-2" }, signature: "s" })],
+    ["other_venue", JSON.stringify({ body: { ...body(), streamId: "loc-2" }, signature: "s" })],
   ])("refuses a stored pointer as %s", async (reason, stored) => {
     const store = createMemoryObjectStore();
     const raw = stored === "ÿ" ? new Uint8Array([0xff]) : new TextEncoder().encode(stored);
-    await store.put(pointerKey(VENUE), raw);
+    await store.put(pointerKey(), raw);
     expect(await rejection(readPointer(store, VENUE))).toEqual({
       code: "backup.stream_pointer_invalid",
       params: { reason },
@@ -129,12 +129,12 @@ describe("writePointer", () => {
     await writePointer(store, VENUE, pointer, null);
     expect(store.calls.at(-1)).toEqual({
       operation: "put",
-      key: pointerKey(VENUE),
+      key: pointerKey(),
       condition: { ifNoneMatch: "*" },
     });
     const read = await readPointer(store, VENUE);
     expect(read?.pointer).toEqual(pointer);
-    expect(read?.etag).toBe(store.snapshot().get(pointerKey(VENUE))?.etag);
+    expect(read?.etag).toBe(store.snapshot().get(pointerKey())?.etag);
   });
 
   it("a first write loses when another box wrote first", async () => {
@@ -149,7 +149,7 @@ describe("writePointer", () => {
       await rejection(writePointer(store, VENUE, signPointer(body(), KEYS.privateKey), null)),
     ).toEqual({
       code: "backup.stream_precondition_failed",
-      params: { key: pointerKey(VENUE) },
+      params: { key: pointerKey() },
     });
   });
 
@@ -172,7 +172,7 @@ describe("writePointer", () => {
     const ours = signPointer(body({ term: 3 }), KEYS.privateKey);
     expect(await rejection(writePointer(store, VENUE, ours, read!.etag))).toEqual({
       code: "backup.stream_precondition_failed",
-      params: { key: pointerKey(VENUE) },
+      params: { key: pointerKey() },
     });
     expect((await readPointer(store, VENUE))?.pointer).toEqual(theirs);
   });
@@ -182,7 +182,7 @@ describe("writePointer", () => {
     const pointer = signPointer(body(), KEYS.privateKey);
     store.failNext({
       operation: "put",
-      error: new AppError("backup.stream_precondition_failed", { key: pointerKey(VENUE) }),
+      error: new AppError("backup.stream_precondition_failed", { key: pointerKey() }),
       landed: true,
     });
     await expect(writePointer(store, VENUE, pointer, null)).resolves.toBeUndefined();
@@ -200,7 +200,7 @@ describe("writePointer", () => {
     sent.add(next);
     const calls = store.calls.length;
     const version = await writePointer(store, VENUE, next, null, sent);
-    expect(version).toBe(store.snapshot().get(pointerKey(VENUE))?.etag);
+    expect(version).toBe(store.snapshot().get(pointerKey())?.etag);
     expect(store.calls.slice(calls).map((call) => call.operation)).toEqual(["put", "get"]);
     expect((await readPointer(store, VENUE))?.pointer).toEqual(earlier);
   });
@@ -218,7 +218,7 @@ describe("writePointer", () => {
     sent.add(ours);
     expect(await rejection(writePointer(store, VENUE, ours, null, sent))).toEqual({
       code: "backup.stream_precondition_failed",
-      params: { key: pointerKey(VENUE) },
+      params: { key: pointerKey() },
     });
   });
 
@@ -228,7 +228,7 @@ describe("writePointer", () => {
       operation: "put",
       error: new AppError("backup.stream_request_failed", {
         operation: "put",
-        key: pointerKey(VENUE),
+        key: pointerKey(),
         status: 403,
         name: "AccessDenied",
       }),
@@ -270,10 +270,10 @@ describe("SentPointers", () => {
     const sent = new SentPointers();
     sent.add(mine);
     await writePointer(store, VENUE, mine, null);
-    expect(sent.includes((await store.get(pointerKey(VENUE)))!.body)).toBe(true);
+    expect(sent.includes((await store.get(pointerKey()))!.body)).toBe(true);
     const twin = signPointer(body(), OTHER_KEYS.privateKey);
     await writePointer(store, VENUE, twin, (await readPointer(store, VENUE))!.etag);
-    expect(sent.includes((await store.get(pointerKey(VENUE)))!.body)).toBe(false);
+    expect(sent.includes((await store.get(pointerKey()))!.body)).toBe(false);
   });
 
   it("forgets the oldest pointer once it holds more than it keeps", () => {

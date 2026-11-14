@@ -105,7 +105,8 @@ it.each([false, true])(
       await withDeadline(fixture.closed, 2_000, "fixture output").catch(() => {});
       throw new Error(`fixture exited before ready.json:\n${fixture.output()}`);
     }
-    const ready = JSON.parse(text) as { origin: string; port: number; localVenueId: string };
+    const ready = JSON.parse(text) as { origin: string; port: number; venueId: string | null };
+    expect(ready.venueId).toBeNull();
     expect(ready.origin).toBe(`http://127.0.0.1:${ready.port}`);
     const health = await fetch(`${ready.origin}/health`, {
       signal: AbortSignal.timeout(HEALTH_DEADLINE_MS),

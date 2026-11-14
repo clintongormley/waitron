@@ -77,7 +77,7 @@ export async function cloudFixture(machine?: MachineHandler) {
         Buffer.from(signature, "base64url"),
       ),
     ).toBe(true);
-    expect(values[0]).toBe("waitron-cloud-pair-v1");
+    expect(values[0]).toBe("waitron-cloud-pair-v2");
     expect(req.url).toBe(`/api/pairing/${values[2]}`);
     const saved = JSON.parse(await readFile(join(stateDir, "cloud/connection.json"), "utf8"));
     expect(saved.requestId).toBe(values[3]);
@@ -116,7 +116,7 @@ export async function cloudFixture(machine?: MachineHandler) {
     res.end(
       JSON.stringify({
         requestId: bad ? randomUUID() : values[3],
-        localVenueId: values[5],
+        venueId: values[5],
         environment: values[6],
         expiresAt: new Date(Date.now() + 600000).toISOString(),
         state: complete ? "complete" : approved ? "awaiting_local" : "awaiting_cloud",
@@ -139,7 +139,16 @@ export async function cloudFixture(machine?: MachineHandler) {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("address");
   const origin = `http://127.0.0.1:${address.port}`;
-  const options = { stateDir, origin, localVenueId: randomUUID(), environment: "test" as const };
+  let storedVenueId: string | null = venueId;
+  const options = {
+    stateDir,
+    origin,
+    environment: "test" as const,
+    readVenueId: async () => storedVenueId,
+    recordVenueId: async (id: string) => {
+      storedVenueId = id;
+    },
+  };
   return {
     stateDir,
     patchReply: (patch: Record<string, unknown>) => {
@@ -150,6 +159,7 @@ export async function cloudFixture(machine?: MachineHandler) {
     organisationId,
     legalBusinessId,
     installationId,
+    venueId,
     loseCompletion: () => {
       lose = true;
     },

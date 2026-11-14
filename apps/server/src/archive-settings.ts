@@ -395,7 +395,10 @@ export function archivePlace(bucket: BucketConfig): ArchivePlace {
   };
 }
 
-export function refuseStreamOverlap(archive: ArchivePlace, stream: StreamSettings | null): void {
+export function refuseStreamOverlap(
+  archive: ArchivePlace,
+  stream: Pick<StreamSettings, "bucket"> | null,
+): void {
   if (stream === null) return;
   const s = stream.bucket;
   if (

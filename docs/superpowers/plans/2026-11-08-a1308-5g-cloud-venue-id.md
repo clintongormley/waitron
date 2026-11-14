@@ -13,7 +13,7 @@ chain under a new installation name (CLAUDE.md §5) ([design](../specs/2026-11-0
 go-live there is no compatibility period").
 
 **Pull request's first line:** "No venue reset; every box paired with Waitron Cloud pairs again, and
-bucket copies and printed recovery packs from before this cannot be used." (venue-id design, "A test
+bucket copies and printed bucket recovery codes from before this cannot be used." (venue-id design, "A test
 box paired today", question 5.)
 
 **Needs before it:** 5f; **the Cloud lane's plan for pairing v2, written and agreed before this slice
@@ -238,3 +238,32 @@ None: `EQUAL`.
   lane's pull request.
 
 2026-11-12, watcher clearance 08:53: 5f adapts the archive-only callers in `backup-recovery-pack-parts.ts` and `stream-api.ts`, plus dashboard status/display types; stream and kit ids, signed bytes, prefixes and Cloud calls stay for 5g.
+
+2026-11-12, watcher clearance 18:33: pairing bytes now live in `packages/contract/src/signing/pairing-proof.ts` after A1438-1. Adapt its encoder, verifier, tests, installed consumer and README to v2 only; use the existing contract tarball preparation for Cloud's pre-merge proof, then pin the published version after the owner lands 5g. The agreed Cloud plan c17b5782e preserves the id a request began with across retries and repairs an interrupted database-before-file save from the venue document. Watcher 19:15 permits one cutover PR up to 2,200 changed lines, stopping if production exceeds about 450 added lines; its run-it review checks that test growth ports existing checks.
+
+2026-11-12, watcher clearances 19:29 and 19:33: at the chosen root, another stream's kit finds the existing pointer and answers `restore.stream_pointer_unverified` / `venue_mismatch`, preserving the no-download and untouched-state checks. Both languages name the mismatched bucket copy and ask for its matching pack or kit. The first-line wording above is narrowed to bucket recovery codes: archive-only recovery packs remain usable where their archive layout matches (lane H `pack-compatibility-probe.log`: archive-only v1 accepted, v1 bucket token refused, v2 bucket token accepted).
+
+### Review corrections cleared by the watcher, 2026-11-12 19:56
+
+The two run-it reviews reproduced an occupied folder retrying without a refusal, an old kit called
+unrecognised, and a completed pairing file filling a database with no Cloud id. The watcher cleared
+one gathered fix pass: stop opening with `folder_in_use`, explain choosing another prefix in both
+languages, refuse the old kit with reason `version`, and refuse a nonempty file id absent from the
+database. The empty-file/database-committed interrupted save still recovers. Test/Save keep their
+existing probes.
+Changed test checks: the old-kit case now expects `version` instead of `not_found`, under this clearance.
+
+Other accepted review corrections, implemented by the driver within the existing plan: replacement
+refuses an already-held different Cloud id; status projects the effective id while signing the
+original request binding. Added deletion controls cover reply/view binding, interrupted recovery,
+first stream save and the configured prefix. These are not additional claims about the 19:56 clearance.
+
+Watcher 2026-11-12 20:16 supersedes the null-id refusal above: a valid bound box file whose id the
+restored database lacks reads as not connected. Explicit Connect starts a fresh empty-id request;
+a real pre-pairing archive restore beside a completed file tests the full pairing-again sequence.
+
+2026-11-14, watcher clearance 01:02: A947 3b-6a added the spare-store caller after the original
+5g review. Port `spare-copy.ts` and its fixtures to the stream API's `streamId` and prefix-root
+pointer, preserving the pair link's existing copy identifier and key derivation; keep the new
+host's pipe and target lifecycle. This does not change the joining protocol. The corresponding
+replacement reissue fixtures keep their refusal and retry assertions under the v2 byte positions.

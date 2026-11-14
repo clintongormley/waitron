@@ -20,7 +20,7 @@ import { ensureBoxSecrets } from "../src/box-secrets.js";
 import { isUnset } from "../src/env-value.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { writeTradingEnv } from "../src/trading-config.js";
-import { openVenueDatabase, venueLocationId } from "@waitron/db";
+import { openVenueDatabase, readCloudVenueId } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, hashPassword } from "@waitron/identity";
 import { provisionVenue, venueModuleConfig } from "../src/provision.js";
@@ -139,13 +139,13 @@ if (savedEnv !== undefined) {
   await writeFile(envPath, JSON.stringify(env), { mode: 0o600 });
 }
 const identityStore = await openVenueDatabase(env.WAITRON_VENUE_DIR!);
-let localVenueId: string;
+let venueId: string | null;
 try {
   const result = await identityStore.venue.execute<{ id: string }>(
     sql`select id from nodes where id = ${env.WAITRON_NODE_ID}`,
   );
   if (result.rows[0] === undefined) throw new Error("Fixture node missing");
-  localVenueId = await venueLocationId(identityStore.venue);
+  venueId = await readCloudVenueId(identityStore.venue);
 } finally {
   await identityStore.close();
 }
@@ -159,7 +159,7 @@ await writeFile(
   JSON.stringify({
     origin: env.WAITRON_MANAGEMENT_ORIGIN,
     port: Number(env.WAITRON_HTTP_PORT),
-    localVenueId,
+    venueId,
   }),
   { mode: 0o600 },
 );
@@ -168,7 +168,17 @@ await rename(`${readyPath}.tmp`, readyPath);
 const cloud = createCloudConnection({
   stateDir: root,
   origin: env.WAITRON_CLOUD_ORIGIN!,
-  localVenueId,
+  readVenueId: async () => {
+    const store = await openVenueDatabase(env.WAITRON_VENUE_DIR!, { exclusive: false });
+    try {
+      return await readCloudVenueId(store.venue);
+    } finally {
+      await store.close();
+    }
+  },
+  recordVenueId: async () => {
+    throw new Error("Pair through the running server's management API");
+  },
   environment: "test",
 });
 process.on("message", (message: unknown) => {

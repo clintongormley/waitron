@@ -4,7 +4,14 @@ import { createCipheriv, randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, vi, type Mock } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { nodes, setNodePublicKey, withNodeTransaction, withTransaction } from "@waitron/db";
+import {
+  saveVenueFields,
+  readStreamId,
+  nodes,
+  setNodePublicKey,
+  withNodeTransaction,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   deleteCredential,
@@ -164,6 +171,7 @@ let publicKey: string;
 
 beforeAll(async () => {
   await setupTenant();
+  await withTransaction(suite.db, (tx) => saveVenueFields(tx, { streamId: VENUE_ID }, null));
   const [node] = await withTransaction(suite.db, (tx) =>
     tx.select({ id: nodes.id }).from(nodes).limit(1),
   );
@@ -204,7 +212,6 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
     nodeId,
     ring: RING,
     stream,
-    venueId: VENUE_ID,
     isPrimary: () => true,
 
     readRecoveryKey: async () => key.value,
@@ -590,7 +597,7 @@ describe("stream settings routes", () => {
     // that generation finds no row to unlock.
     expect(order).toEqual(["write-key", "refresh", "put-credential", "reload"]);
     // The reload found the new settings committed.
-    expect(seenByReload).toEqual([{ venueId: VENUE_ID, bucket: BUCKET }]);
+    expect(seenByReload).toEqual([{ streamId: await readStreamId(suite.db), bucket: BUCKET }]);
     const view = await res.json();
     expect(view).toEqual({
       isPrimary: true,
@@ -608,12 +615,39 @@ describe("stream settings routes", () => {
       revision: expect.stringMatching(/^[0-9a-f]{16}$/),
     });
     expect(JSON.stringify(view)).not.toContain(BODY.secretAccessKey);
-    // Stored with this node's location id as the venue, and the absent prefix as "-".
+    // The chosen prefix is stored as "-" when absent.
     expect(await storedBucket()).toMatchObject({
-      venueId: VENUE_ID,
       secretAccessKey: BODY.secretAccessKey,
       endpoint: "https://s3.example.net",
       prefix: "-",
+    });
+  });
+
+  it("keeps the document's stream id when settings are removed and saved at a different prefix", async () => {
+    await clearBucket();
+    await withTransaction(suite.db, (tx) => saveVenueFields(tx, { streamId: null }, null));
+    const { app } = harness();
+    const cookie = await login(app);
+    const saved = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    expect(saved.status).toBe(200);
+    const id = await readStreamId(suite.db);
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(await storedBucket()).not.toHaveProperty("venueId");
+    expect(await storedBucket()).not.toHaveProperty("streamId");
+    const removed = await app.request("/api/backup/stream", {
+      method: "DELETE",
+      ...json(cookie, {}),
+    });
+    expect(removed.status).toBe(200);
+    expect(await readStreamId(suite.db)).toBe(id);
+    const readded = await app.request("/api/backup/stream", {
+      method: "PUT",
+      ...json(cookie, { ...BODY, prefix: "other/" }),
+    });
+    expect(readded.status).toBe(200);
+    expect(await readStreamSettings(suite.db, RING)).toEqual({
+      streamId: id,
+      bucket: { ...BUCKET, prefix: "other/" },
     });
   });
 
@@ -630,7 +664,7 @@ describe("stream settings routes", () => {
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING, {
         purpose: STREAM_PURPOSE,
-        value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
+        value: streamSettingsPayload({ bucket: BUCKET }),
       }),
     );
     await omitStoredStreamField(suite.db, RING, "endpoint");
@@ -739,7 +773,7 @@ describe("stream settings routes", () => {
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING, {
         purpose: "backup.stream",
-        value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
+        value: streamSettingsPayload({ bucket: BUCKET }),
       }),
     );
     const queue = heldTurns();
@@ -986,7 +1020,6 @@ describe("stream settings routes", () => {
         putCredential(tx, RING, {
           purpose: STREAM_PURPOSE,
           value: streamSettingsPayload({
-            venueId: VENUE_ID,
             bucket: { ...BUCKET, bucket: "moved-copy" },
           }),
         }),
@@ -1177,7 +1210,7 @@ describe("stream settings routes", () => {
       await withTransaction(suite.db, (tx) =>
         putCredential(tx, RING, {
           purpose: STREAM_PURPOSE,
-          value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
+          value: streamSettingsPayload({ bucket: BUCKET }),
         }),
       );
       await withTransaction(suite.db, (tx) =>
@@ -1209,7 +1242,7 @@ describe("stream settings routes", () => {
       await withTransaction(suite.db, (tx) =>
         putCredential(tx, RING, {
           purpose: STREAM_PURPOSE,
-          value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
+          value: streamSettingsPayload({ bucket: BUCKET }),
         }),
       );
     }

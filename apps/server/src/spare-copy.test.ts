@@ -120,10 +120,9 @@ describe("takeFirstCopy", () => {
   const generation = (seconds: number) =>
     generationName(1, MAIN, new Date(Date.UTC(2026, 10, 13, 9, 0, seconds)));
 
-  /** A store whose pointer names `gen`, for `venueId`, signed by `privateKey`, at `atVenue`'s key. */
   async function storeWithPointer(
     gen: string,
-    opts: { privateKey?: string; venueId?: string; atVenue?: string } = {},
+    opts: { privateKey?: string; streamId?: string } = {},
   ): Promise<MemoryObjectStore> {
     const store = createMemoryObjectStore();
     await setPointer(store, gen, opts);
@@ -133,19 +132,18 @@ describe("takeFirstCopy", () => {
   async function setPointer(
     store: MemoryObjectStore,
     gen: string,
-    opts: { privateKey?: string; venueId?: string; atVenue?: string } = {},
+    opts: { privateKey?: string; streamId?: string } = {},
   ) {
-    const venueId = opts.venueId ?? VENUE;
+    const streamId = opts.streamId ?? VENUE;
     const signed = signPointer(
-      { venueId, term: 1, nodeId: MAIN, generation: gen, writtenAt: "2026-11-13T09:01:00.000Z" },
+      { streamId, term: 1, nodeId: MAIN, generation: gen, writtenAt: "2026-11-13T09:01:00.000Z" },
       opts.privateKey ?? mainKeys.privateKey,
     );
-    const atVenue = opts.atVenue ?? venueId;
-    if (atVenue === venueId) {
-      const existing = await store.get(pointerKey(venueId));
-      await writePointer(store, venueId, signed, existing?.etag ?? null);
+    if (streamId === VENUE) {
+      const existing = await store.get(pointerKey());
+      await writePointer(store, streamId, signed, existing?.etag ?? null);
     } else {
-      await store.put(pointerKey(atVenue), new TextEncoder().encode(JSON.stringify(signed)));
+      await store.put(pointerKey(), new TextEncoder().encode(JSON.stringify(signed)));
     }
   }
 
@@ -203,7 +201,7 @@ describe("takeFirstCopy", () => {
     expect(restore).toHaveBeenCalledOnce();
     const args = restore.mock.calls[0]![0];
     expect(args.generation).toBe(generation(30));
-    expect(args.venueId).toBe(VENUE);
+    expect(args.streamId).toBe(VENUE);
     expect(args.litestreamBin).toBe("/unused/litestream");
     expect(args.streamKey).toBe(deriveStreamKey(RECOVERY_KEY, VENUE));
     expect(args.outPath).toBe(join(stateDir, "pair-copy", "venue.db"));
@@ -273,12 +271,11 @@ describe("takeFirstCopy", () => {
     expect(r.restart).toHaveBeenCalledOnce();
   });
 
-  it("ignores a pointer naming another venue id", async () => {
+  it("ignores a pointer naming another stream id", async () => {
     await writeKey();
     const good = await fixture("good-venue", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
     const objectStore = await storeWithPointer(generation(1), {
-      venueId: OTHER_VENUE,
-      atVenue: VENUE,
+      streamId: OTHER_VENUE,
     });
     const restore = copyOf(good);
     const r = run({ objectStore, restoreGeneration: restore });
@@ -290,8 +287,8 @@ describe("takeFirstCopy", () => {
     );
     expect(restore).not.toHaveBeenCalled();
 
-    // Control: a pointer naming this venue is restored.
-    await objectStore.delete(pointerKey(VENUE));
+    // Control: a pointer naming this stream is restored.
+    await objectStore.delete(pointerKey());
     await setPointer(objectStore, generation(2));
     await expect(r.done).resolves.toBe("ready");
     expect(restore).toHaveBeenCalledOnce();

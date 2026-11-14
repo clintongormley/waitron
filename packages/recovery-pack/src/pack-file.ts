@@ -2,7 +2,7 @@ import { canonicalJson } from "./canonical-json.js";
 
 export const PACK_ATTACHMENT = "waitron-recovery-pack-v1.json";
 export const MAX_PACK_FILE = 16 * 1024;
-export const BUCKET_CODE_PREFIX = "WAITRON-RECOVERY-KIT-1:";
+export const BUCKET_CODE_PREFIX = "WAITRON-RECOVERY-KIT-2:";
 export const ARCHIVE_CODE_PREFIX = "WAITRON-ARCHIVE-PACK-1:";
 
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d];

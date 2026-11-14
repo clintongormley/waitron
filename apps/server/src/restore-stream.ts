@@ -126,7 +126,7 @@ export async function measureBucketSkew(
  */
 export async function refuseIfSourceLive(args: {
   store: ObjectStore;
-  venueId: string;
+  streamId: string;
   generation: string;
   now: () => Date;
   oldBoxGone: boolean;
@@ -135,7 +135,7 @@ export async function refuseIfSourceLive(args: {
   // Every level, not only the two the supervisor reads: compaction to higher levels and the daily
   // full copy run on their own schedules, and nothing here has established that a live
   // generation's newest file is always at level 0 or 1.
-  const newest = await newestUpload(args.store, args.venueId, args.generation);
+  const newest = await newestUpload(args.store, args.generation);
   if (newest === null) return;
   const skewMs = await measureBucketSkew(args.store, args.now);
   if (skewMs === null) throw new AppError("restore.stream_source_unchecked", { reason: "clock" });
@@ -175,14 +175,14 @@ export async function refuseIfArchiveSourceLive(args: {
     await copy.close();
   }
   if (settings === null) return;
-  const { bucket, venueId } = settings;
+  const { bucket, streamId } = settings;
   try {
     const store = (args.openStore ?? createS3ObjectStore)(bucket);
-    const read = await readPointer(store, venueId);
+    const read = await readPointer(store, streamId);
     if (read === null) return;
     await refuseIfSourceLive({
       store,
-      venueId,
+      streamId,
       generation: read.pointer.body.generation,
       now: args.now,
       oldBoxGone: false,
@@ -266,7 +266,7 @@ async function readRestoredCopy(args: {
 async function readVerifiedPointer(store: ObjectStore, kit: RecoveryKit) {
   let read;
   try {
-    read = await readPointer(store, kit.venueId);
+    read = await readPointer(store, kit.streamId);
   } catch (error) {
     if (
       isAppError(error) &&
@@ -297,7 +297,7 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
   const { generation, nodeId } = await readVerifiedPointer(store, kit);
   await refuseIfSourceLive({
     store,
-    venueId: kit.venueId,
+    streamId: kit.streamId,
     generation,
     now: deps.now,
     oldBoxGone: deps.oldBoxGone,
@@ -311,8 +311,8 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
       await (deps.restoreGeneration ?? restoreGeneration)({
         litestreamBin: deps.litestreamBin,
         bucket: kit.bucket,
-        streamKey: deriveStreamKey(kit.recoveryKey, kit.venueId),
-        venueId: kit.venueId,
+        streamKey: deriveStreamKey(kit.recoveryKey, kit.streamId),
+        streamId: kit.streamId,
         generation,
         outPath: databasePath,
         configDir: join(scratch, "litestream"),
@@ -406,7 +406,7 @@ export async function restoreFromStream(
       prepareModuleOperations === undefined
         ? undefined
         : (copy) =>
-            prepareModuleOperations(copy, `stream:${deps.kit.venueId}:${prepared.generation}`),
+            prepareModuleOperations(copy, `stream:${deps.kit.streamId}:${prepared.generation}`),
     );
   } finally {
     await prepared.discard();

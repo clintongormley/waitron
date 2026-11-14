@@ -48,7 +48,7 @@ export async function plainPdf(): Promise<File> {
 }
 
 /** The real bucket code shape, accepted by the pack file's own check. */
-export const BUCKET_CODE = "WAITRON-RECOVERY-KIT-1:" + "Ab9_-".repeat(40);
+export const BUCKET_CODE = "WAITRON-RECOVERY-KIT-2:" + "Ab9_-".repeat(40);
 
 /** The same pack claiming another digest for its attached file; every byte offset stays true. */
 export async function damaged(pack: File): Promise<File> {

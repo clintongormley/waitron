@@ -1,7 +1,7 @@
 import { VENUE_FILE, LITESTREAM_META_SUFFIX } from "@waitron/store";
 import { basename, dirname, join } from "node:path";
 import { AppError } from "@waitron/shared";
-import { bucketKey, normalisePrefix, venuePrefix } from "./names.js";
+import { bucketKey, normalisePrefix } from "./names.js";
 import type { BucketConfig } from "./s3-store.js";
 import "./errors.js";
 
@@ -114,7 +114,7 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
  * too: `encodeURIComponent` throws on it. The bucket is the host, which is not encoded, so only
  * S3's bucket-name characters are let through there.
  */
-export function replicaUrl(bucket: BucketConfig, venueId: string, generation: string): string {
+export function replicaUrl(bucket: BucketConfig, generation: string): string {
   if (!BUCKET_NAME.test(bucket.bucket)) {
     throw new AppError("backup.stream_config_unsafe", { field: "bucket" });
   }
@@ -127,10 +127,7 @@ export function replicaUrl(bucket: BucketConfig, venueId: string, generation: st
   ) {
     throw new AppError("backup.stream_config_unsafe", { field: "prefix" });
   }
-  const path = bucketKey(bucket, `${venuePrefix(venueId)}${generation}`)
-    .split("/")
-    .map(encodeURIComponent)
-    .join("/");
+  const path = bucketKey(bucket, generation).split("/").map(encodeURIComponent).join("/");
   const query = new URLSearchParams({ region: bucket.region });
   if (bucket.endpoint !== undefined) query.set("endpoint", bucket.endpoint);
   return `s3://${bucket.bucket}/${path}?${query.toString()}`;
@@ -140,7 +137,7 @@ export function replicaUrl(bucket: BucketConfig, venueId: string, generation: st
 export function checkLitestreamSettings(bucket: BucketConfig): void {
   litestreamConfig({
     dbPath: VENUE_FILE,
-    replicaUrl: replicaUrl(bucket, "venue", "gen-0-node-20260101T000000Z"),
+    replicaUrl: replicaUrl(bucket, "gen-0-node-20260101T000000Z"),
   });
   litestreamEnv(bucket, Buffer.alloc(32).toString("base64"));
 }

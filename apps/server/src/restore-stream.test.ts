@@ -1,3 +1,4 @@
+import { saveVenueFields } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { hashPassword } from "@waitron/identity";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -146,6 +147,7 @@ beforeAll(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
+  await withTransaction(db, (tx) => saveVenueFields(tx, { streamId: T.locationId }, null));
   await seedBusinessDay(db, {});
   await db.insert(nodes).values({ id: T.nodeId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
@@ -176,8 +178,8 @@ afterAll(async () => {
 });
 
 const KIT: RecoveryKit = {
-  version: 1,
-  venueId: T.locationId,
+  version: 2 as const,
+  streamId: T.locationId,
   bucket: {
     region: "eu-west-1",
     bucket: "venue-copy",
@@ -190,7 +192,7 @@ const KIT: RecoveryKit = {
 };
 
 const POINTER: StreamPointer = {
-  venueId: T.locationId,
+  streamId: T.locationId,
   term: 0,
   nodeId: T.nodeId,
   generation: GENERATION,
@@ -202,19 +204,19 @@ const POINTER: StreamPointer = {
  * at `lastChangeAt` on the bucket's clock. The bucket's clock then reads NOW.
  */
 async function bucket(
-  opts: { lastChangeAt?: Date; signWith?: string; venueId?: string } = {},
+  opts: { lastChangeAt?: Date; signWith?: string; streamId?: string } = {},
 ): Promise<MemoryObjectStore> {
   let clock = opts.lastChangeAt ?? new Date(NOW.getTime() - 60 * 60_000);
   const store = createMemoryObjectStore({ now: () => clock });
-  const venueId = opts.venueId ?? T.locationId;
+  const streamId = opts.streamId ?? T.locationId;
   await writePointer(
     store,
-    venueId,
-    signPointer({ ...POINTER, venueId }, opts.signWith ?? signer.privateKey),
+    streamId,
+    signPointer({ ...POINTER, streamId }, opts.signWith ?? signer.privateKey),
     null,
   );
   await store.put(
-    `${generationPrefix(venueId, GENERATION)}ltx/0/0000000000000001.ltx`,
+    `${generationPrefix(GENERATION)}ltx/0/0000000000000001.ltx`,
     Uint8Array.from([1]),
   );
   clock = NOW;
@@ -261,7 +263,7 @@ describe("prepareStreamRestore", () => {
     expect(copyFixture).toHaveBeenLastCalledWith(
       expect.objectContaining({
         generation: GENERATION,
-        venueId: T.locationId,
+        streamId: T.locationId,
         bucket: KIT.bucket,
         streamKey: "ORDJdLj2BbyzMwSmlgQMW4J4JTtlToWe1oIRIEd9D/M=",
       }),
@@ -300,10 +302,10 @@ describe("prepareStreamRestore", () => {
   it("refuses a pointer naming another venue, before downloading anything", async () => {
     const store = await bucket();
     const other = signPointer(
-      { ...POINTER, venueId: "c0000000-0000-4000-8000-0000000000ff" },
+      { ...POINTER, streamId: "c0000000-0000-4000-8000-0000000000ff" },
       signer.privateKey,
     );
-    await store.put(pointerKey(T.locationId), Buffer.from(JSON.stringify(other)));
+    await store.put(pointerKey(), Buffer.from(JSON.stringify(other)));
     const restore = vi.fn();
     const deps = await prepareDeps(store, { restoreGeneration: restore });
     await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
@@ -316,7 +318,7 @@ describe("prepareStreamRestore", () => {
 
   it("passes a malformed pointer's refusal through as it came", async () => {
     const store = await bucket();
-    await store.put(pointerKey(T.locationId), Buffer.from("not json"));
+    await store.put(pointerKey(), Buffer.from("not json"));
     const deps = await prepareDeps(store);
     await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
       code: "backup.stream_pointer_invalid",
@@ -329,7 +331,7 @@ describe("prepareStreamRestore", () => {
     const recent = new Date(NOW.getTime() - LIVE_WINDOW_MS + 60_000);
     const store = await bucket({ lastChangeAt: recent });
     await store.put(
-      `${generationPrefix(T.locationId, GENERATION)}ltx/0/0000000000000002.ltx`,
+      `${generationPrefix(GENERATION)}ltx/0/0000000000000002.ltx`,
       Uint8Array.from([2]),
     );
     const restore = vi.fn();
@@ -419,14 +421,15 @@ describe("prepareStreamRestore", () => {
 
   // Review Focus 2: the owner supplies the wrong kit. Each is refused before anything on the box
   // changes, naming what is wrong.
-  it("refuses another venue's kit — no copy of that venue in this bucket — before downloading anything", async () => {
+  it("refuses another stream's kit before downloading anything", async () => {
     const restore = vi.fn();
     const deps = await prepareDeps(await bucket(), {
-      kit: { ...KIT, venueId: "c0000000-0000-4000-8000-0000000000ff" },
+      kit: { ...KIT, streamId: "c0000000-0000-4000-8000-0000000000ff" },
       restoreGeneration: restore,
     });
     await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
-      code: "restore.stream_pointer_missing",
+      code: "restore.stream_pointer_unverified",
+      params: { reason: "venue_mismatch" },
     });
     expect(restore).not.toHaveBeenCalled();
     await expectStateUntouched(deps.stateDir);
@@ -560,7 +563,7 @@ describe("prepareStreamRestore", () => {
   });
 
   it("reports a Litestream that cannot be started as a failed download, leaving nothing behind", async () => {
-    const key = `${generationPrefix(KIT.venueId, GENERATION)}0000/0000000000000001-0000000000000001.ltx`;
+    const key = `${generationPrefix(GENERATION)}0000/0000000000000001-0000000000000001.ltx`;
     const server = createServer((req, res) => {
       if (new URL(req.url!, "http://local").searchParams.has("list-type")) {
         res.setHeader("content-type", "application/xml");
@@ -668,8 +671,8 @@ describe("prepareStreamRestore", () => {
   });
 
   it("confirms the restored copy's venue whatever venue id the backup settings name", async () => {
-    const venueId = "c0000000-0000-4000-8000-0000000000ff";
-    const deps = await prepareDeps(await bucket({ venueId }), { kit: { ...KIT, venueId } });
+    const streamId = "c0000000-0000-4000-8000-0000000000ff";
+    const deps = await prepareDeps(await bucket({ streamId }), { kit: { ...KIT, streamId } });
     const prepared = await prepareStreamRestore(deps);
     expect(prepared.venue.venueName).toBe(VENUE.venueName);
     await prepared.discard();
@@ -730,7 +733,7 @@ describe("refuseIfSourceLive", () => {
   it("names the newest change, not the last one listed", async () => {
     let clock = NOW;
     const store = createMemoryObjectStore({ now: () => clock });
-    const folder = generationPrefix(T.locationId, GENERATION);
+    const folder = generationPrefix(GENERATION);
     await store.put(`${folder}ltx/0/0000000000000001.ltx`, Uint8Array.from([1]));
     clock = new Date(NOW.getTime() - 30 * 60_000);
     await store.put(`${folder}ltx/0/0000000000000002.ltx`, Uint8Array.from([2]));
@@ -738,7 +741,7 @@ describe("refuseIfSourceLive", () => {
     await expect(
       refuseIfSourceLive({
         store,
-        venueId: T.locationId,
+        streamId: T.locationId,
         generation: GENERATION,
         now: () => NOW,
         oldBoxGone: false,
@@ -753,7 +756,7 @@ describe("refuseIfSourceLive", () => {
     const store = createMemoryObjectStore({ now: () => NOW });
     await refuseIfSourceLive({
       store,
-      venueId: T.locationId,
+      streamId: T.locationId,
       generation: GENERATION,
       now: () => NOW,
       oldBoxGone: false,
@@ -787,7 +790,7 @@ describe("refuseIfArchiveSourceLive", () => {
         await withTransaction(store.venue, (tx) =>
           putCredential(tx, ring, {
             purpose: STREAM_PURPOSE,
-            value: streamSettingsPayload({ venueId: T.locationId, bucket: settingsBucket }),
+            value: streamSettingsPayload({ bucket: settingsBucket }),
           }),
         );
         if (missingField !== undefined) {
@@ -913,7 +916,7 @@ describe("refuseIfArchiveSourceLive", () => {
       operation: "get",
       error: new AppError("backup.stream_request_failed", {
         operation: "get",
-        key: pointerKey(T.locationId),
+        key: pointerKey(),
         status: null,
         name: "TimeoutError",
       }),
@@ -932,7 +935,7 @@ describe("refuseIfArchiveSourceLive", () => {
       operation: "list",
       error: new AppError("backup.stream_request_failed", {
         operation: "list",
-        key: generationPrefix(T.locationId, GENERATION),
+        key: generationPrefix(GENERATION),
         status: 503,
         name: "ServiceUnavailable",
       }),

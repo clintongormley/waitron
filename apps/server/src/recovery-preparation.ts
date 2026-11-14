@@ -530,7 +530,7 @@ export function createSetupRecoveryPreparation(
       });
       return await interactive.prepare(
         copy,
-        `stream:${kit.venueId}:${prepared.generation}`,
+        `stream:${kit.streamId}:${prepared.generation}`,
         request,
         hold,
         client,

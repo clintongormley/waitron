@@ -91,7 +91,7 @@ function streamAlerts(stream: HostStreamView, now: Date): OngoingAlert[] {
       params: spare,
       since: stream.stateSince,
     });
-  } else if (refused && stream.reason === "config_unsafe") {
+  } else if (refused && (stream.reason === "config_unsafe" || stream.reason === "folder_in_use")) {
     explained = streamAlert({
       code: "backup.stream_settings_unusable",
       params: spare,

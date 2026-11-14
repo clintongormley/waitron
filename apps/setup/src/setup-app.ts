@@ -554,6 +554,8 @@ function describeBucketRefusal(
   if (typeof code !== "string") return say("shell.bucket.no_answer");
   const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
   if (finishKey !== undefined) return say(finishKey);
+  if (code === "backup.stream_kit_invalid" && params?.reason === "version")
+    return say("shell.bucket.kit_old_version");
   if (
     code === "backup.stream_kit_invalid" &&
     (params?.reason === "encoding" || params?.reason === "shape")

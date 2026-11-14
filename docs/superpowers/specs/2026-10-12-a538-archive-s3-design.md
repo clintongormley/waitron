@@ -1,5 +1,10 @@
 # A538: Off-box archives and an Amazon S3 rehearsal
 
+> **2026-11-12:** The current pairing and bucket formats are specified in
+> [A1308 slice 5g](../plans/2026-11-08-a1308-5g-cloud-venue-id.md): Cloud assigns the
+> venue id, bucket paths use the chosen prefix, and v2 recovery kits carry a stream id.
+> Earlier path and format descriptions below record the design at its original date.
+
 **Status: needs-owner-review.** Draft dated 2026-10-12. Every new choice below is **proposed**, not owner-approved. Please review before **17 October 2026**. This document authorizes neither a build nor a live run. The [implementation plan](../plans/2026-10-12-a538-archive-s3.md) uses native inline execution after approval.
 
 _2026-10-13: the owner approved the four proposed defaults as written on 2026-10-12, and plan Task 1 is built as A538-1._

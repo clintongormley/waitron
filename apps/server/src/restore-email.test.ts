@@ -218,8 +218,8 @@ describe.each(paths)("invoice email after %s", (path) => {
         const signer = generateNodeKeyPair();
         const store = createMemoryObjectStore({ now: () => NOW });
         const kit: RecoveryKit = {
-          version: 1,
-          venueId: T.locationId,
+          version: 2 as const,
+          streamId: T.locationId,
           bucket: {
             region: "eu-west-1",
             bucket: "synthetic",
@@ -235,7 +235,7 @@ describe.each(paths)("invoice email after %s", (path) => {
           T.locationId,
           signPointer(
             {
-              venueId: T.locationId,
+              streamId: T.locationId,
               term: 0,
               nodeId: T.nodeId,
               generation: `gen-0-${T.nodeId}-20261008T120000Z`,

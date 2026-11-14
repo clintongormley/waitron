@@ -1682,7 +1682,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         putCredential(tx, RING, {
           purpose: "backup.stream",
           value: streamSettingsPayload({
-            venueId: "venue",
             bucket: {
               endpoint: "https://s3.example.test",
               region: "eu-west-1",
@@ -1718,7 +1717,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
           putCredential(tx, RING, {
             purpose: "backup.stream",
             value: streamSettingsPayload({
-              venueId: "venue",
               bucket: {
                 endpoint: "https://s3.example.test",
                 region: "eu-west-1",
@@ -1765,7 +1763,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
           putCredential(tx, RING, {
             purpose: "backup.stream",
             value: streamSettingsPayload({
-              venueId: "venue",
               bucket: {
                 endpoint: "https://s3.example.test",
                 region: "eu-west-1",
@@ -1814,7 +1811,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         putCredential(tx, otherRing, {
           purpose: "backup.stream",
           value: streamSettingsPayload({
-            venueId: "venue",
             bucket: {
               endpoint: "https://s3.example.test",
               region: "eu-west-1",

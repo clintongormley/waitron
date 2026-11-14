@@ -2,7 +2,7 @@ import { builtInRoleForTest, seedPersons } from "@waitron/identity/test/person-r
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { withTransaction } from "@waitron/db";
+import { saveVenueFields, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -70,6 +70,24 @@ it("exports the current business-day cutover without retaining an obsolete setti
   expect(bundle.venue.dayCutover).toBe("04:30:00");
   expect(bundle.venue.invoiceLocales).toEqual(["es-ES"]);
   expect(bundle.sourceOperatorId).toBe("");
+});
+
+it("keeps Cloud and stream identities out of configuration exports", async () => {
+  const target = await seed();
+  await withTransaction(suite.db, (tx) =>
+    saveVenueFields(
+      tx,
+      {
+        cloudVenueId: "44444444-4444-4444-8444-444444444444",
+        streamId: "55555555-5555-4555-8555-555555555555",
+      },
+      null,
+    ),
+  );
+  const bundle = await buildConfigurationBundle(suite.db, target, modules, now, {});
+  expect(bundle.venue).not.toHaveProperty("cloudVenueId");
+  expect(bundle.venue).not.toHaveProperty("streamId");
+  expect(bundle.settings).not.toHaveProperty("venue");
 });
 
 it("refuses export while a future cutover change would be lost", async () => {

@@ -525,7 +525,7 @@ it("refuses a FIFO public-key file without waiting for a writer", async () => {
     await rm(path);
     execFileSync("mkfifo", [path]);
     const script = `import { createCloudConnection } from ${JSON.stringify(new URL("./cloud-client.ts", import.meta.url).href)};
-      try { await createCloudConnection(${JSON.stringify(f.options)}).refresh(); console.log("resolved"); }
+      try { await createCloudConnection({ ...${JSON.stringify(f.options)}, readVenueId: async () => ${JSON.stringify(await f.options.readVenueId())}, recordVenueId: async () => {} }).refresh(); console.log("resolved"); }
       catch(error) { console.log(error.code); }`;
     const result = await promisify(execFile)(
       process.execPath,

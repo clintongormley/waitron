@@ -759,7 +759,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     // M gets its key and its bucket copy while it is down: a real Save is refused against
     // versitygw (`encryption_ignored`), and the join checks for a bucket copy before a key.
     await boxM.stopForRestart();
-    await switchOnStreaming(dirsM, m.locationId, { bucket, recoveryKey: RECOVERY_KEY });
+    await switchOnStreaming(dirsM, { bucket, recoveryKey: RECOVERY_KEY });
     await boundedStart(boxM.start(), "M's start with its bucket copy");
     await fetchHealthOk(`${urlM}/health`, viaM);
 
@@ -768,7 +768,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     const pointer = await wait(
       "M's pointer in the bucket",
       POINTER_WAIT_MS,
-      async () => (await readPointer(bucketStore, m.locationId)) ?? undefined,
+      async () => (await readPointer(bucketStore, m.streamId)) ?? undefined,
     );
     expect(pointer.pointer.body.generation).toEqual(expect.any(String));
     const before = await joinState(dirsM.venue, m.nodeId);

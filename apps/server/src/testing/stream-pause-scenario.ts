@@ -34,6 +34,7 @@ import {
   stampDeployment,
   withTransaction,
   venueLocationId,
+  ensureStreamId,
 } from "@waitron/db";
 import { hashDeviceToken, persons } from "@waitron/identity";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -196,10 +197,9 @@ export interface StreamPauseFixture {
 /** The key prefix the supervisor's pause check lists for `generation`, as the bucket holds it. */
 export function pauseListingPrefix(
   bucket: { readonly prefix: string },
-  venueId: string,
   generation: string,
 ): string {
-  return bucketKey(bucket, `${generationPrefix(venueId, generation)}${levelFolder(0)}`);
+  return bucketKey(bucket, `${generationPrefix(generation)}${levelFolder(0)}`);
 }
 
 async function fileBytes(path: string): Promise<number> {
@@ -290,7 +290,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
       nodeId: string;
       seriesId: string;
       locationId: string;
-      venueId: string;
+      streamId: string;
       adminId: string;
       deviceId: string;
       offer: string;
@@ -329,7 +329,8 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         ),
         { db: seeding.venue, modules: ALL_MODULES },
       );
-      const venueId = await venueLocationId(seeding.venue);
+      const locationId = await venueLocationId(seeding.venue);
+      const streamId = await withTransaction(seeding.venue, ensureStreamId);
       await establishNodeIdentity(
         { ownerDb: seeding.venue, node: seeding.node, ring },
         venue.nodeId,
@@ -342,7 +343,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
       await withTransaction(seeding.venue, (tx) =>
         putCredential(tx, ring, {
           purpose: "backup.stream",
-          value: streamSettingsPayload({ venueId, bucket }),
+          value: streamSettingsPayload({ bucket }),
         }),
       );
       const [admin] = await seeding.venue
@@ -362,7 +363,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         .set({ tokenHash: hashDeviceToken(DEVICE_TOKEN) })
         .where(eq(devices.id, deviceId));
       const offer = await withTransaction(seeding.venue, async (tx) => {
-        const catalogue = await createCatalogue(tx, { name: `Stream menu ${venueId}` });
+        const catalogue = await createCatalogue(tx, { name: `Stream menu ${streamId}` });
         const drinks = await createCategory(tx, { name: "Bebidas" });
         const water = await createProduct(tx, {
           catalogueId: catalogue.id,
@@ -374,15 +375,15 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         });
         await assignCatalogueToVenue(tx, catalogue.id);
         const offers = await offerProducts(tx, {
-          locationId: venueId,
+          locationId,
         });
         return offers.offerFor(water.id);
       });
       box = {
         nodeId: venue.nodeId,
         seriesId: venue.seriesIds[0]!,
-        locationId: venueId,
-        venueId,
+        locationId,
+        streamId,
         adminId: admin!.id,
         deviceId,
         offer,
@@ -418,7 +419,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
       "the pointer to name the box's generation",
       POINTER_WAIT_MS,
       async () => {
-        const read = await readPointer(store, box.venueId);
+        const read = await readPointer(store, box.streamId);
         return read !== null && read.pointer.body.nodeId === box.nodeId ? read : undefined;
       },
     );
@@ -748,7 +749,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
       clock.end("skipped");
     } else {
       await fixture.whilePaused({
-        pauseListingPrefix: pauseListingPrefix(bucket, box.venueId, generation),
+        pauseListingPrefix: pauseListingPrefix(bucket, generation),
         streamEvents: () => streamEvents(logDir),
       });
     }
@@ -767,7 +768,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
       `stream pause: streaming again ${(performance.now() - resumedAt).toFixed(0)} ms after the bucket was let run`,
     );
     expect(stream()).toMatchObject({ state: "streaming", reason: null, generation });
-    expect((await readPointer(store, box.venueId))?.pointer.body.generation).toBe(generation);
+    expect((await readPointer(store, box.streamId))?.pointer.body.generation).toBe(generation);
 
     clock.begin("restore-sale");
     await waitFor(
@@ -779,8 +780,8 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
           await restoreGeneration({
             litestreamBin,
             bucket,
-            streamKey: deriveStreamKey("stream-pause-e2e-recovery-key", box.venueId),
-            venueId: box.venueId,
+            streamKey: deriveStreamKey("stream-pause-e2e-recovery-key", box.streamId),
+            streamId: box.streamId,
             generation,
             outPath: out,
             ceilingMs: RESTORE_MS,

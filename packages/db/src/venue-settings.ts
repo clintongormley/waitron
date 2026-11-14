@@ -1,7 +1,10 @@
+import { isUuid } from "@waitron/shared";
 import { DEFAULT_TIME_ZONE } from "./schema/tenants.js";
 import { defineSettingsDocument, type SettingsParse } from "./settings.js";
 
 export interface VenueSettings {
+  cloudVenueId: string | null;
+  streamId: string | null;
   name: string;
   fiscalTerritory: string;
   /** vb6 removes the interim venue description. */
@@ -27,6 +30,8 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
   version: 1,
   transfers: false,
   defaults: () => ({
+    cloudVenueId: null,
+    streamId: null,
     name: "",
     fiscalTerritory: "ES-common",
     operationDescription: "Restaurant",
@@ -53,6 +58,8 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
     ] as const;
     for (const field of Object.keys(value))
       if (
+        field !== "cloudVenueId" &&
+        field !== "streamId" &&
         field !== "name" &&
         field !== "fiscalTerritory" &&
         field !== "operationDescription" &&
@@ -60,6 +67,13 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
           field,
         ) &&
         !addressFields.includes(field as (typeof addressFields)[number])
+      )
+        return { ok: false, field };
+    for (const field of ["cloudVenueId", "streamId"])
+      if (
+        value[field] !== undefined &&
+        value[field] !== null &&
+        (typeof value[field] !== "string" || !isUuid(value[field]))
       )
         return { ok: false, field };
     if (typeof value.name !== "string" || value.name.trim() === "")
@@ -111,6 +125,8 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
     return {
       ok: true,
       doc: {
+        cloudVenueId: (value.cloudVenueId as string | null | undefined) ?? null,
+        streamId: (value.streamId as string | null | undefined) ?? null,
         name: value.name.trim(),
         fiscalTerritory: value.fiscalTerritory,
         operationDescription: value.operationDescription,

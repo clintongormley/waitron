@@ -143,7 +143,7 @@ it("derives the bucket selection from the sealed point rather than the replaceme
     store,
     LOCATION,
     signPointer(
-      { venueId: LOCATION, term: 0, nodeId: NODE, generation, writtenAt: createdAt },
+      { streamId: LOCATION, term: 0, nodeId: NODE, generation, writtenAt: createdAt },
       signer.privateKey,
     ),
     null,
@@ -151,8 +151,8 @@ it("derives the bucket selection from the sealed point rather than the replaceme
   const preview = await previewRecoveryStream({
     ...deps(f.artifact),
     kit: {
-      version: 1,
-      venueId: LOCATION,
+      version: 2 as const,
+      streamId: LOCATION,
       bucket: {
         region: "local",
         bucket: "copy",
@@ -387,7 +387,7 @@ it("reads public hour evidence from the exact sealed bucket point", async () => 
     store,
     LOCATION,
     signPointer(
-      { venueId: LOCATION, term: 0, nodeId: NODE, generation, writtenAt: createdAt },
+      { streamId: LOCATION, term: 0, nodeId: NODE, generation, writtenAt: createdAt },
       signer.privateKey,
     ),
     null,
@@ -395,8 +395,8 @@ it("reads public hour evidence from the exact sealed bucket point", async () => 
   const preview = await previewRecoveryStream({
     ...deps(f.artifact),
     kit: {
-      version: 1,
-      venueId: LOCATION,
+      version: 2 as const,
+      streamId: LOCATION,
       bucket: {
         region: "local",
         bucket: "copy",

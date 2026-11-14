@@ -204,6 +204,8 @@ deletes this box's venue data even if the return has stopped or is unfinished.
 Turning remote access on asks for the [shared sign-in confirmation](staff.md#account-access).
 Turning it off needs no new sign-in confirmation.
 
+If you restore a backup made before connecting to Cloud, open **Cloud services** in **Settings** and choose **Connect to Cloud** again.
+
 To stop staff reaching your dashboard from outside the venue, open **Cloud services** in **Settings**
 on the main box and choose **Turn off remote access**. If you are using the staff address,
 confirm **Turn off remote access** to disconnect yourself too, or choose **Stop** to keep it on. Keep the box's local address available. Your Cloud pairing and other

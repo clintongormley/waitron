@@ -1,3 +1,5 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { publishRestoreFlow } from "./restore-flow.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -1507,8 +1509,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             error: { code: "backup.stream_kit_invalid", params: { reason: "not_found" } },
           });
           const kit = encodeRecoveryKit({
-            version: 1,
-            venueId: "c0000000-0000-4000-8000-000000000002",
+            version: 2 as const,
+            streamId: "c0000000-0000-4000-8000-000000000002",
             bucket: { ...SILENT_BUCKET, endpoint },
             recoveryKey: "recovery-key-one-strong",
             pointerSignerPublicKey: "unused",
@@ -1551,8 +1553,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     await new Promise<void>((resolve) => bucket.listen(0, "127.0.0.1", resolve));
     const endpoint = `http://127.0.0.1:${(bucket.address() as AddressInfo).port}`;
     const kit = encodeRecoveryKit({
-      version: 1,
-      venueId: "c0000000-0000-4000-8000-000000000002",
+      version: 2 as const,
+      streamId: "c0000000-0000-4000-8000-000000000002",
       bucket: { ...SILENT_BUCKET, endpoint },
       recoveryKey: "recovery-key-one-strong",
       pointerSignerPublicKey: "unused",
@@ -1627,13 +1629,13 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     beforeServerStarts();
     const venue = await freshVenue();
     const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-bucket-key-logs-"));
-    const venueId = "c0000000-0000-4000-8000-000000000002";
+    const streamId = "c0000000-0000-4000-8000-000000000002";
     const nodeId = "d0000000-0000-4000-8000-000000000003";
     const signer = generateNodeKeyPair();
     const pointer = JSON.stringify(
       signPointer(
         {
-          venueId,
+          streamId,
           term: 0,
           nodeId,
           generation: `gen-0-${nodeId}-20260923T090000Z`,
@@ -1663,8 +1665,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     await new Promise<void>((resolve) => bucket.listen(0, "127.0.0.1", resolve));
     const endpoint = `http://127.0.0.1:${(bucket.address() as AddressInfo).port}`;
     const kit = encodeRecoveryKit({
-      version: 1,
-      venueId,
+      version: 2 as const,
+      streamId,
       bucket: { ...SILENT_BUCKET, endpoint },
       recoveryKey: "recovery-key-one-strong",
       pointerSignerPublicKey: signer.publicKey,
@@ -1739,6 +1741,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     const vaultKey = Buffer.alloc(32, 5).toString("base64");
     try {
       await withSilentBucket(async (endpoint) => {
+        await seedVenueSettings(source.store.venue, {
+          name: "Archive source",
+          invoiceLocales: ["es"],
+          operationDescription: "Restaurant",
+        });
+        await withTransaction(source.store.venue, ensureStreamId);
         await withTransaction(source.store.venue, (tx) =>
           putCredential(
             tx,
@@ -1749,7 +1757,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             {
               purpose: STREAM_PURPOSE,
               value: streamSettingsPayload({
-                venueId: "c0000000-0000-4000-8000-000000000002",
                 bucket: { ...SILENT_BUCKET, endpoint },
               }),
             },

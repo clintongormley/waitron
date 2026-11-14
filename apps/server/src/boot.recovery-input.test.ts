@@ -140,8 +140,8 @@ it.each(["archive", "bucket"])(
       form.set("recoveryOperation", JSON.stringify(operation));
       form.set("nodeRecoverySecret", "paper-node-key");
       const kit = encodeRecoveryKit({
-        version: 1,
-        venueId: LOCATION,
+        version: 2 as const,
+        streamId: LOCATION,
         recoveryKey: "archive-key",
         pointerSignerPublicKey: "MCowBQYDK2VwAyEA0000000000000000000000000000000000000000000=",
         bucket: {

@@ -26,7 +26,7 @@ const keyDocument: RecoveryDocument = {
   createdAt: "2026-10-17T12:30:00.000Z",
   nodeKey: { nodeId: "node-1", name: "Caja principal", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
 };
-const bucketCode = "WAITRON-RECOVERY-KIT-1:" + "Ab9_-".repeat(40);
+const bucketCode = "WAITRON-RECOVERY-KIT-2:" + "Ab9_-".repeat(40);
 const archiveCode = "WAITRON-ARCHIVE-PACK-1:" + "Zx7-_".repeat(30);
 
 function packFile(overrides: Partial<RecoveryPackFile> = {}): RecoveryPackFile {

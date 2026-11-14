@@ -61,7 +61,6 @@ export interface BackupRecoveryPackMakeDeps {
   /** This box's node.db, which holds the recovery-key check. */
   nodeDb: NodeDatabase;
   node: ProvisionedNode;
-  venueId: string;
   modules: readonly WaitronModule[];
   /** The backup API's own turns, so a Save or a key change waits for a pack being made. */
   turns: Turns;
@@ -236,7 +235,6 @@ async function makePack(
     timeZone: venue.timeZone,
     madeAt,
     nodeId,
-    venueId: deps.venueId,
     ring: deps.ring,
     env: input.env,
   };

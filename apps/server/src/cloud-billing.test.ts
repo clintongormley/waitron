@@ -379,17 +379,17 @@ describe("the exchange with Cloud", () => {
     const key = generateKeyPairSync("ed25519");
     const lease = { payload: "bGVhc2U", signature: "c2ln" };
     const state = {
-      version: 1,
+      version: 2,
       origin,
       privateKey: key.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url"),
       publicKey: key.publicKey.export({ format: "der", type: "spki" }).toString("base64url"),
-      localVenueId: "local",
+      venueId: VENUE,
       environment: "test",
       requestId: "r",
       code: "",
       view: {
         requestId: "r",
-        localVenueId: "local",
+        venueId: VENUE,
         environment: "test",
         expiresAt: "2026-11-10T12:00:00.000Z",
         state: "complete",

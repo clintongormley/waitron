@@ -53,7 +53,7 @@ export interface CloudRegistration {
 }
 export interface CloudPairingView {
   requestId: string;
-  localVenueId: string;
+  venueId: string;
   environment: "test" | "production";
   expiresAt: string;
   state: "awaiting_cloud" | "awaiting_local" | "complete";
@@ -81,17 +81,18 @@ export interface CloudConnectionOptions {
   stateDir: string;
   tunnelDir?: string;
   origin: string;
-  localVenueId: string;
+  readVenueId(): Promise<string | null>;
+  recordVenueId(venueId: string): Promise<void>;
   environment: "test" | "production";
 }
 export interface SavedCloudState {
   remoteAccessEnabled?: boolean;
   lifecycle?: CloudInstallationState;
-  version: 1;
+  version: 2;
   origin: string;
   privateKey: string;
   publicKey: string;
-  localVenueId: string;
+  venueId: string;
   environment: "test" | "production";
   requestId: string;
   code: string;
@@ -132,7 +133,8 @@ function readView(value: unknown, state: SavedCloudState): CloudPairingView {
   if (
     !record(value) ||
     value.requestId !== state.requestId ||
-    value.localVenueId !== state.localVenueId ||
+    (value.venueId !== "" && value.venueId !== state.venueId) ||
+    value.venueId !== (state.view?.venueId ?? state.venueId) ||
     value.environment !== state.environment ||
     typeof value.expiresAt !== "string" ||
     !Number.isFinite(Date.parse(value.expiresAt)) ||
@@ -141,7 +143,7 @@ function readView(value: unknown, state: SavedCloudState): CloudPairingView {
     throw new AppError("cloud.unavailable", {});
   const view: CloudPairingView = {
     requestId: state.requestId,
-    localVenueId: state.localVenueId,
+    venueId: value.venueId as string,
     environment: state.environment,
     expiresAt: value.expiresAt,
     state: value.state as CloudPairingView["state"],
@@ -166,6 +168,7 @@ function readView(value: unknown, state: SavedCloudState): CloudPairingView {
     if (
       !record(r) ||
       !uuid(r.venueId) ||
+      (state.venueId !== "" && r.venueId !== state.venueId) ||
       !uuid(r.installationId) ||
       r.organisationId !== view.organisationId ||
       r.legalBusinessId !== view.legalBusinessId
@@ -200,11 +203,14 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       const info = await lstat(path);
       if (!info.isFile() || info.size > 65536 || (info.mode & 0o077) !== 0) throw new Error();
       const value: unknown = JSON.parse(await readFile(path, "utf8"));
+      if (record(value) && value.version === 1) return undefined;
+      const venueId = await options.readVenueId();
       if (
         !record(value) ||
-        value.version !== 1 ||
+        value.version !== 2 ||
         value.origin !== options.origin ||
-        value.localVenueId !== options.localVenueId ||
+        (value.venueId !== "" && !uuid(value.venueId)) ||
+        (venueId !== null && value.venueId !== "" && value.venueId !== venueId) ||
         value.environment !== options.environment ||
         (value.remoteAccessEnabled !== undefined &&
           typeof value.remoteAccessEnabled !== "boolean") ||
@@ -228,8 +234,10 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         throw new Error();
       const state = value as unknown as SavedCloudState;
       if (state.view !== undefined) state.view = readView(state.view, state);
+      if (state.venueId === "" && venueId !== null) state.venueId = venueId;
       if (state.lifecycle !== undefined)
         state.lifecycle = readCloudInstallation(state.lifecycle, state);
+      if (venueId === null && state.venueId !== "") return undefined;
       return state;
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
@@ -237,6 +245,13 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     }
   }
   async function save(state: SavedCloudState) {
+    const venueId = state.view?.registration?.venueId;
+    if (venueId) {
+      const heldId = await options.readVenueId();
+      if (heldId !== null && heldId !== venueId) throw new AppError("cloud.binding_conflict", {});
+      if (heldId === null) await options.recordVenueId(venueId);
+      state.venueId = venueId;
+    }
     await mkdirDurable(join(options.stateDir, CLOUD_DIR), 0o700);
     await writeFileDurable(path, JSON.stringify(state), 0o600);
   }
@@ -245,9 +260,9 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     return {
       state: "awaiting_cloud",
       requestId: state.requestId,
-      localVenueId: state.localVenueId,
       environment: state.environment,
       ...state.view,
+      venueId: state.venueId,
       code: state.view?.state === "complete" ? "" : state.code,
       openCloudUrl: `${options.origin}/connect#request=${state.requestId}`,
       ...(state.view?.registration
@@ -269,7 +284,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       action,
       requestId: state.requestId,
       publicKey: state.publicKey,
-      localVenueId: state.localVenueId,
+      venueId: state.view?.venueId ?? state.venueId,
       environment: state.environment,
       code: action === "start" ? state.code : "",
       organisationId: choice?.organisationId ?? "",
@@ -572,9 +587,9 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           return project(existing);
         }
         const state: SavedCloudState = {
-          version: 1,
+          version: 2,
           origin: options.origin,
-          localVenueId: options.localVenueId,
+          venueId: (await options.readVenueId()) ?? "",
           environment: options.environment,
           requestId: input.requestId,
           code: "00000000",
@@ -582,7 +597,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           publicKey: input.publicKey,
           view: {
             requestId: input.requestId,
-            localVenueId: options.localVenueId,
+            venueId: (await options.readVenueId()) ?? "",
             environment: options.environment,
             expiresAt: input.expiresAt,
             state: "complete",
@@ -707,6 +722,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           }
           state = {
             ...state,
+            venueId: (await options.readVenueId()) ?? "",
             requestId: randomUUID(),
             code: randomInt(0, 100000000).toString().padStart(8, "0"),
           };
@@ -716,9 +732,9 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         if (!state) {
           const key = generateKeyPairSync("ed25519");
           state = {
-            version: 1,
+            version: 2,
             origin: options.origin,
-            localVenueId: options.localVenueId,
+            venueId: (await options.readVenueId()) ?? "",
             environment: options.environment,
             requestId: randomUUID(),
             code: randomInt(0, 100000000).toString().padStart(8, "0"),

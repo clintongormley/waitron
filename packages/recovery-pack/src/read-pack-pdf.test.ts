@@ -14,7 +14,7 @@ const file: RecoveryPackFile = {
   version: 1,
   number: 2,
   madeAt: "2026-10-29T17:00:00.000Z",
-  bucketCode: "WAITRON-RECOVERY-KIT-1:" + "b".repeat(600),
+  bucketCode: "WAITRON-RECOVERY-KIT-2:" + "b".repeat(600),
   archiveCode: null,
   backupKey: "k".repeat(43),
   serverKey: null,
@@ -93,7 +93,7 @@ describe("reading the pack file out of a pack PDF", () => {
   });
 
   it("refuses bytes that are not a PDF at all", async () => {
-    expect(await reason(new TextEncoder().encode("WAITRON-RECOVERY-KIT-1:abc"))).toBe("not_a_pack");
+    expect(await reason(new TextEncoder().encode("WAITRON-RECOVERY-KIT-2:abc"))).toBe("not_a_pack");
     expect(await reason(new TextEncoder().encode("%PDF-1.7 broken"))).toBe("carrier");
   });
 

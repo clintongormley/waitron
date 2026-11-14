@@ -39,7 +39,6 @@ const networkDenied = await new Promise<boolean>((done) => {
     done((error as NodeJS.ErrnoException).code === "ERR_ACCESS_DENIED");
   }
 });
-assert(networkDenied, "Run this fixture with Node network permission denied");
 let input = "";
 for await (const chunk of process.stdin) {
   input += String(chunk);
@@ -74,6 +73,7 @@ const exists = async (name: string, directory = root) => {
   }
 };
 if (request.command === "capture") {
+  assert(networkDenied, "Run this fixture with Node network permission denied");
   // No lock: Cloud's runner captures while the fixture server on this folder is still running.
   const store = await openVenueDatabase(join(root, VENUE_DIR_NAME), { exclusive: false });
   try {

@@ -5,7 +5,7 @@ export interface PairingClaims {
   action: PairingAction;
   requestId: string;
   publicKey: string;
-  localVenueId: string;
+  venueId: string;
   environment: "test" | "production";
   code: string;
   organisationId: string;
@@ -30,12 +30,12 @@ export const isPairingUuid = (value: unknown): value is string =>
 export function pairingPayload(c: PairingClaims): Buffer {
   return Buffer.from(
     JSON.stringify([
-      "waitron-cloud-pair-v1",
+      "waitron-cloud-pair-v2",
       c.origin,
       c.action,
       c.requestId,
       c.publicKey,
-      c.localVenueId,
+      c.venueId,
       c.environment,
       c.code,
       c.organisationId,
@@ -69,7 +69,7 @@ export function verifyPairingProof(
     if (
       !Array.isArray(values) ||
       values.length !== 11 ||
-      values[0] !== "waitron-cloud-pair-v1" ||
+      values[0] !== "waitron-cloud-pair-v2" ||
       values.slice(0, 10).some((v) => typeof v !== "string")
     )
       throw new Error();
@@ -79,7 +79,7 @@ export function verifyPairingProof(
       operation,
       requestId,
       publicKey,
-      localVenueId,
+      venueId,
       environment,
       code,
       organisationId,
@@ -91,7 +91,7 @@ export function verifyPairingProof(
       operation !== action ||
       !["start", "status", "complete"].includes(operation) ||
       !isPairingUuid(requestId) ||
-      !isPairingUuid(localVenueId) ||
+      (venueId !== "" && !isPairingUuid(venueId)) ||
       !["test", "production"].includes(environment) ||
       !Number.isSafeInteger(issuedAt) ||
       Math.abs(now - issuedAt) > 60000
@@ -117,7 +117,7 @@ export function verifyPairingProof(
       action: operation,
       requestId,
       publicKey,
-      localVenueId,
+      venueId,
       environment,
       code,
       organisationId,

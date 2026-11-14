@@ -515,7 +515,10 @@ async function runBucketRestore(
       hasCode(err as AppError, "backup.stream_kit_invalid") &&
         (err as AppError<"backup.stream_kit_invalid">).params.reason === "not_found"
         ? "restore failed: backup.stream_kit_invalid — the file holds no recovery kit; give the recovery kit file saved for this venue"
-        : "restore failed: backup.stream_kit_invalid — the recovery kit in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole kit file as it was saved",
+        : hasCode(err as AppError, "backup.stream_kit_invalid") &&
+            (err as AppError<"backup.stream_kit_invalid">).params.reason === "version"
+          ? "restore failed: backup.stream_kit_invalid — this bucket recovery code was made before this version of Waitron and cannot be used; choose a newer recovery pack, or restore an archive backup"
+          : "restore failed: backup.stream_kit_invalid — the recovery kit in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole kit file as it was saved",
     );
     return 1;
   }

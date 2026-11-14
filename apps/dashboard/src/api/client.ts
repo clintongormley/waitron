@@ -1704,7 +1704,6 @@ export interface CloudConnectionStatus {
     pointId: string;
     venueId: string;
     oldInstallationId: string;
-    localVenueId: string;
     nodeId: string;
     environment: "test";
     publicKey: string;
@@ -1735,7 +1734,7 @@ export interface CloudConnectionStatus {
   openCloudUrl?: string;
   requestId?: string;
   expiresAt?: string;
-  localVenueId?: string;
+  venueId?: string;
   environment?: "test" | "production";
   organisationId?: string;
   legalBusinessId?: string;

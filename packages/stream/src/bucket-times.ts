@@ -17,12 +17,11 @@ export const newestOf = (objects: readonly ListedObject[], floor: Date | null): 
  */
 export async function newestUpload(
   store: ObjectStore,
-  venueId: string,
   generation: string,
   options: { level?: number; floor?: Date | null } = {},
   call?: StoreCall,
 ): Promise<Date | null> {
-  const prefix = generationPrefix(venueId, generation);
+  const prefix = generationPrefix(generation);
   const folder = options.level === undefined ? prefix : `${prefix}${levelFolder(options.level)}`;
   return newestOf(await store.list(folder, call), options.floor ?? null);
 }

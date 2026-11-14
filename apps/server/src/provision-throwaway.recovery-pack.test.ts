@@ -29,7 +29,6 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 const KEY = "recovery-key-recognisable-SECRET";
-const VENUE = "c0000000-0000-4000-8000-000000000002";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const ES_CONFIG = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "ES-common");
@@ -98,7 +97,6 @@ async function makePack(options: { beforeMaking?: () => Promise<void> } = {}) {
       nodeDb: suite.node,
       ring: RING,
       node: { nodeId: nodeId as NodeId },
-      venueId: VENUE,
       modules: ALL_MODULES,
       turns: createTurns(),
       readBoxEnv: async () => ({

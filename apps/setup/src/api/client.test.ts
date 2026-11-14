@@ -334,7 +334,7 @@ describe("SetupApi", () => {
       .mockResolvedValueOnce(jsonResponse(staged, true, 202))
       .mockResolvedValueOnce(jsonResponse(staged, true, 202));
     const api = new SetupApi("", fetchImpl);
-    const kit = "WAITRON-RECOVERY-KIT-1:abc";
+    const kit = "WAITRON-RECOVERY-KIT-2:abc";
     expect(
       await api.restoreFromBucket({
         kit,

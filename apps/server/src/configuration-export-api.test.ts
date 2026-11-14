@@ -211,7 +211,6 @@ describe("configuration export API", () => {
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     });
-    const venueId = "c0000000-0000-4000-8000-000000000003";
     const originalStreamSecret = "stream-secret-for-export-0123456789";
     const archiveSecret = "archive-secret-for-export-0123456789";
     const bucket = { region: "eu-west-1", bucket: "venue-copy", prefix: "", accessKeyId: "AKIAX" };
@@ -219,7 +218,6 @@ describe("configuration export API", () => {
       await putCredential(tx, ring, {
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({
-          venueId,
           bucket: { ...bucket, secretAccessKey: originalStreamSecret },
         }),
       });

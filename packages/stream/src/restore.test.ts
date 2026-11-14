@@ -93,7 +93,7 @@ async function run(
     litestreamBin: bin,
     bucket,
     streamKey: STREAM_KEY,
-    venueId: "v1",
+    streamId: "v1",
     generation: GENERATION,
     outPath,
     configDir: join(out, "litestream"),
@@ -106,7 +106,7 @@ describe("restoreGeneration", () => {
   it.each(["ok", "refused", "paged", "empty"])(
     "checks a real database object with a ranged keyed read before starting restore: %s",
     async (mode) => {
-      const objectKey = `waitron/${generationPrefix("v1", GENERATION)}0000/0000000000000001-0000000000000001.ltx`;
+      const objectKey = `waitron/${generationPrefix(GENERATION)}0000/0000000000000001-0000000000000001.ltx`;
       const requests: { key: string | undefined; range: string | undefined; path: string }[] = [];
       const tokens: (string | null)[] = [];
       const server = createServer((req, res) => {
@@ -190,7 +190,7 @@ describe("restoreGeneration", () => {
       `${BUCKET.accessKeyId} ${BUCKET.secretAccessKey}`,
     );
     const config = await readFile(join(out, "litestream", "restore.yml"), "utf8");
-    expect(config).toContain(JSON.stringify(replicaUrl(BUCKET, "v1", GENERATION)));
+    expect(config).toContain(JSON.stringify(replicaUrl(BUCKET, GENERATION)));
     expect(config).not.toContain(BUCKET.secretAccessKey);
     expect(config).not.toContain(STREAM_KEY);
     expect(config).toContain("sse-customer-key: '${WAITRON_STREAM_ENCRYPTION_KEY}'");
@@ -297,7 +297,7 @@ describe("restoreGeneration", () => {
         litestreamBin: join(dir, "missing"),
         bucket: BUCKET,
         streamKey: STREAM_KEY,
-        venueId: "v1",
+        streamId: "v1",
         generation: GENERATION,
         outPath: join(out, "venue.db"),
       }),
@@ -315,7 +315,7 @@ describe("restoreGeneration", () => {
       litestreamBin: bin,
       bucket: BUCKET,
       streamKey: STREAM_KEY,
-      venueId: "v1",
+      streamId: "v1",
       generation: GENERATION,
       outPath,
     });
@@ -406,7 +406,7 @@ describe("restoreGeneration", () => {
       litestreamBin: bin,
       bucket: BUCKET,
       streamKey: STREAM_KEY,
-      venueId: "v1",
+      streamId: "v1",
       generation: GENERATION,
       outPath: join(out, "venue.db"),
       configDir: join(out, "litestream"),

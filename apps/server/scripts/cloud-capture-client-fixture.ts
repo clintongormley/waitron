@@ -4,7 +4,7 @@ import { readFile, realpath } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { createCloudConnection } from "../src/cloud-client.js";
-import { openVenueDatabase } from "@waitron/db";
+import { openVenueDatabase, readCloudVenueId } from "@waitron/db";
 import { createCloudSnapshotWorker } from "../src/cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "../src/cloud-snapshot-archive.js";
 import { ALL_MODULES } from "../src/modules.js";
@@ -35,7 +35,17 @@ const saved = JSON.parse(await readFile(join(stateDir, CLOUD_CONNECTION_FILE), "
 const client = createCloudConnection({
   stateDir,
   origin: saved.origin,
-  localVenueId: saved.localVenueId,
+  readVenueId: async () => {
+    const store = await openVenueDatabase(join(root, "venue"), { exclusive: false });
+    try {
+      return await readCloudVenueId(store.venue);
+    } finally {
+      await store.close();
+    }
+  },
+  recordVenueId: async () => {
+    throw new Error("The capture fixture does not pair");
+  },
   environment: saved.environment,
 });
 let result;
