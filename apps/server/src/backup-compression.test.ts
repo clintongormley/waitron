@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { createReadStream } from "node:fs";
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -35,11 +36,7 @@ it("compresses chunked input without changing bytes and propagates source failur
     yield Buffer.from("first");
     throw failure;
   }
-  await expect(async () => {
-    for await (const _ of compressArchive(broken())) {
-      /* drain */
-    }
-  }).rejects.toBe(failure);
+  await expect(Readable.from(compressArchive(broken())).toArray()).rejects.toBe(failure);
 });
 it("decodes gzip in a protected file, removes compressed scratch and leaves raw input alone", async () => {
   const bytes = Buffer.from("WBA1".repeat(30_000));
@@ -96,11 +93,9 @@ it("honours cancellation during decoding and compression", async () => {
     }),
   ).rejects.toMatchObject({ name: "AbortError" });
   expect(await readdir(f.root)).toEqual(["input"]);
-  await expect(async () => {
-    for await (const _ of compressArchive(createReadStream(f.input), controller.signal)) {
-      /* drain */
-    }
-  }).rejects.toMatchObject({ name: "AbortError" });
+  await expect(
+    Readable.from(compressArchive(createReadStream(f.input), controller.signal)).toArray(),
+  ).rejects.toMatchObject({ name: "AbortError" });
 });
 
 it("keeps half of the free space for extracting the decoded database", async () => {
