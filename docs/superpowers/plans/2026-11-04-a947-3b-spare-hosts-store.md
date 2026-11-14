@@ -3486,6 +3486,12 @@ joined spare, and then 3b-F rewords the setup wizard's "cannot take over yet" (`
 "A mirror cannot take over yet" (`apps/server/src/guide/en/backup-recovery.md` and its Spanish
 twin) to match what it shows.
 
+_2026-11-14 (watcher, questions.md 02:12):_ the same two-box test also runs, after the controlled
+handover, a reset of the formerly serving box, its rejoin under a fresh id, and its takeover by
+emergency activation. Lane J found that only the Veri*Factu join gate Task F.2 removes blocks it
+today (`~/waitron-campaign-j/receipts/a1018-emergency-readoption-20261114/`); passing it closes
+A1018 R40's emergency note, and 3b-F's PR says so.
+
 ### Task F.0: The trace so far, and what remains
 
 **Run now (2026-11-04):**
