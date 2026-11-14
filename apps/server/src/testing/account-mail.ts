@@ -43,6 +43,7 @@ export async function flushAccountMail(
         ...prepared.issued,
         locale: prepared.issued.locale ?? "en-GB",
         actionUrl: message.text.split("\n").find((line) => /^https?:/.test(line)) ?? "/",
+        roles: prepared.roles,
       };
       return message;
     };

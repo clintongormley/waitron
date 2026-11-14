@@ -25,7 +25,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
-import { roles, withTransaction, type Transaction } from "@waitron/db";
+import { outgoingMail, roles, withTransaction, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -602,6 +602,29 @@ describe("Management API staff + session routes", () => {
     expect(new URLSearchParams(new URL(sent[0]!.actionUrl).hash.slice(1)).get("email")).toBe(
       "invited@x.com",
     );
+  });
+
+  it("sends only the invitation to a person invited with two roles", async () => {
+    const sent: Parameters<MailSink>[0][] = [];
+    await setupTenant();
+    const app = mountApp(async (message) => {
+      sent.push(message);
+      return "sent";
+    });
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    const res = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(
+        invitationBody("Ana", "ana@x.com", { roleIds: [builtIns.staff, builtIns.supervisor] }),
+      ),
+    });
+    expect(res.status).toBe(201);
+    expect((await suite.db.select().from(outgoingMail)).map((mail) => mail.kind)).toEqual([
+      "account_action",
+    ]);
+    await app.flushMail();
+    expect(sent).toHaveLength(1);
   });
 
   it("requests and completes a password reset without revealing unknown emails", async () => {

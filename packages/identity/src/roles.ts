@@ -18,6 +18,17 @@ import { queueRoleMembershipMail } from "./role-mail.js";
 
 export const BUILT_IN_ROLE_KEYS = ["staff", "supervisor", "manager", "admin"] as const;
 
+function byAccessRoleOrder(locale: string) {
+  return (
+    a: { builtInKey: BuiltInRoleKey | null; name: string | null },
+    b: { builtInKey: BuiltInRoleKey | null; name: string | null },
+  ) =>
+    a.builtInKey !== null || b.builtInKey !== null
+      ? (a.builtInKey === null ? 4 : BUILT_IN_ROLE_KEYS.indexOf(a.builtInKey)) -
+        (b.builtInKey === null ? 4 : BUILT_IN_ROLE_KEYS.indexOf(b.builtInKey))
+      : a.name!.localeCompare(b.name!, locale);
+}
+
 export async function listAccessRoles(tx: Transaction, managementSessionId: string) {
   const session = await resolveManagementSession(tx, managementSessionId, { touch: false });
   if (!holds(session.authority, "person.manage") && !holds(session.authority, "person.admin"))
@@ -33,22 +44,26 @@ export async function listAccessRoles(tx: Transaction, managementSessionId: stri
     .from(roles)
     .leftJoin(personRoles, eq(personRoles.roleId, roles.id))
     .groupBy(roles.id);
-  return rows
-    .sort((a, b) => {
-      if (a.builtInKey !== null || b.builtInKey !== null)
-        return (
-          (a.builtInKey === null ? 4 : BUILT_IN_ROLE_KEYS.indexOf(a.builtInKey)) -
-          (b.builtInKey === null ? 4 : BUILT_IN_ROLE_KEYS.indexOf(b.builtInKey))
-        );
-      return a.name!.localeCompare(b.name!, session.locale ?? "en");
-    })
-    .map((role) => ({
-      ...role,
-      permissions:
-        role.builtInKey === "admin"
-          ? declaredPermissions()
-          : role.permissions.filter(isDeclaredPermission),
-    }));
+  return rows.sort(byAccessRoleOrder(session.locale ?? "en")).map((role) => ({
+    ...role,
+    permissions:
+      role.builtInKey === "admin"
+        ? declaredPermissions()
+        : role.permissions.filter(isDeclaredPermission),
+  }));
+}
+
+export async function readPersonAccessRoles(
+  tx: Transaction,
+  personId: string,
+  locale: string,
+): Promise<{ builtInKey: BuiltInRoleKey | null; name: string | null }[]> {
+  const rows = await tx
+    .select({ builtInKey: roles.builtInKey, name: roles.name })
+    .from(personRoles)
+    .innerJoin(roles, eq(roles.id, personRoles.roleId))
+    .where(eq(personRoles.personId, personId));
+  return rows.sort(byAccessRoleOrder(locale));
 }
 
 export async function setPersonAccessRoles(

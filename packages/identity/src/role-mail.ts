@@ -16,10 +16,10 @@ export async function queueRoleMembershipMail(
   },
 ): Promise<void> {
   const [person] = await tx
-    .select({ email: persons.email })
+    .select({ email: persons.email, status: persons.status })
     .from(persons)
     .where(eq(persons.id, input.personId));
-  if (person?.email == null) return;
+  if (person?.email == null || person.status === "pending") return;
   await enqueueMail(tx, {
     kind: "role_membership_changed",
     dedupeKey: `role-membership:${input.activityId}`,

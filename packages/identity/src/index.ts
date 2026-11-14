@@ -9,6 +9,7 @@ export {
   importAccessRoleMembership,
   ensureBuiltInRoles,
   listAccessRoles,
+  readPersonAccessRoles,
   setPersonAccessRoles,
 } from "./roles.js";
 export {

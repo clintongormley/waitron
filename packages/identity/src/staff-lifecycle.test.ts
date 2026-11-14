@@ -4,6 +4,8 @@ import { builtInRoleForTest } from "../test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
+  activityLog,
+  outgoingMail,
   roles,
   captureError,
   checkFailed,
@@ -84,6 +86,28 @@ describe("invited person lifecycle", () => {
         pin_hash: null,
       },
     ]);
+  });
+
+  it("records each role an invitation gives without emailing the invited person about them", async () => {
+    const { token } = await openManagementSession(suite.db, "admin");
+    const builtIns = await run(ensureBuiltInRoles);
+    await run(async (tx) =>
+      invitePerson(tx, {
+        managementSessionId: token,
+        displayName: "Ana",
+        firstNames: "Ana",
+        lastNames: "Garcia",
+        telephone: null,
+        roleIds: [builtIns.staff, builtIns.supervisor],
+        email: "ana@example.com",
+      }),
+    );
+    expect(
+      (await suite.db.select().from(activityLog)).filter(
+        (entry) => entry.kind === "access_role.member_added",
+      ),
+    ).toHaveLength(2);
+    expect(await suite.db.select().from(outgoingMail)).toEqual([]);
   });
 
   it("allows duplicate legal names but rejects duplicate active-or-pending display names", async () => {

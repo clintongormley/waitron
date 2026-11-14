@@ -279,3 +279,40 @@ it("still records a membership when the recipient has no email", async () => {
   expect(await suite.db.select().from(activityLog)).toHaveLength(1);
   expect(await suite.db.select().from(outgoingMail)).toEqual([]);
 });
+
+it("records a pending person's role change without emailing them", async () => {
+  const { target, input } = await fixture();
+  await suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, target.id));
+  await withTransaction(suite.db, (tx) => identity.setPersonAccessRoles(tx, input));
+  expect(await suite.db.select().from(activityLog)).toHaveLength(1);
+  expect(await suite.db.select().from(outgoingMail)).toEqual([]);
+});
+
+it("reads one person's access roles, built-ins in their order and then custom roles by name", async () => {
+  const { target, builtIns } = await fixture();
+  await suite.db.insert(roles).values([
+    { id: "bar", name: "Zest bar", nameFolded: "zest bar", permissions: [] },
+    { id: "cellar", name: "Bottle keeper", nameFolded: "bottle keeper", permissions: [] },
+  ]);
+  await suite.db.insert(personRoles).values([
+    { personId: target.id, roleId: "service" },
+    { personId: target.id, roleId: builtIns.admin },
+    { personId: target.id, roleId: "bar" },
+    { personId: target.id, roleId: builtIns.supervisor },
+    { personId: target.id, roleId: "cellar" },
+    { personId: target.id, roleId: builtIns.manager },
+  ]);
+  const held = await withTransaction(suite.db, (tx) =>
+    identity.readPersonAccessRoles(tx, target.id, "en"),
+  );
+  expect(held).toEqual([
+    { builtInKey: "staff", name: null },
+    { builtInKey: "supervisor", name: null },
+    { builtInKey: "manager", name: null },
+    { builtInKey: "admin", name: null },
+    { builtInKey: null, name: "Accountant" },
+    { builtInKey: null, name: "Bottle keeper" },
+    { builtInKey: null, name: "Service lead" },
+    { builtInKey: null, name: "Zest bar" },
+  ]);
+});
