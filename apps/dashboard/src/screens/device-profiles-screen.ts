@@ -854,9 +854,7 @@ export class DeviceProfilesScreen extends LitElement {
       .slice(0, compact ? 2 : undefined)
       .map((flag) => t(`device_profiles.capability.${flag}` as StringKey));
     if (compact && known.length > 2)
-      labels.push(
-        fill(t("device_profiles.more_capabilities"), { count: String(known.length - 2) }),
-      );
+      labels.push(fill("device_profiles.more_capabilities", { count: String(known.length - 2) }));
     return labels.join(", ");
   }
 
