@@ -14,7 +14,7 @@ import type { Decimal, SaleId } from "@waitron/shared";
  * reads. `${sales}.id` (not `${sales.id}`) renders the column table-qualified so the `sales c` subquery
  * cannot capture a bare `"id"`.
  */
-export const correctionsCents = sql`coalesce((select sum(c.total) from sales c where c.id in (${correctivesOf(sql`${sales}.id`)})), 0)`;
+export const correctionsCents = sql`coalesce((select sum(c.total) from sales c where ${correctivesOf(sql`c`, sql`${sales}.id`)}), 0)`;
 
 /**
  * The sale each named working order has already issued, with what it owes: `total + corrections`,

@@ -48,7 +48,7 @@ async function seller() {
 
 async function correctives(saleId: string): Promise<string[]> {
   const result = await suite.db.execute<{ id: string }>(
-    sql`select k.id from sales k where k.id in (${correctivesOf(sql`${saleId}`)}) order by k.invoice_number`,
+    sql`select k.id from sales k where ${correctivesOf(sql`k`, sql`${saleId}`)} order by k.invoice_number`,
   );
   return result.rows.map((row) => row.id);
 }
@@ -74,12 +74,12 @@ describe("correctivesOf", () => {
 
     const owed = await suite.db.execute<{ owed: number }>(
       sql`select coalesce((select sum(c.total) from sales c
-            where c.id in (${correctivesOf(sql`r.id`)})), 0) as owed
+            where ${correctivesOf(sql`c`, sql`r.id`)}), 0) as owed
           from sales r where r.id = ${original}`,
     );
     const owedK = await suite.db.execute<{ owed: number }>(
       sql`select coalesce((select sum(c.total) from sales c
-            where c.id in (${correctivesOf(sql`k.id`)})), 0) as owed
+            where ${correctivesOf(sql`c`, sql`k.id`)}), 0) as owed
           from sales k where k.id = ${original}`,
     );
 

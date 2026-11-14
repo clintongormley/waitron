@@ -134,8 +134,8 @@ const BILL_STATUS = sql`case
   when wo.status = 'settled' or ss.id is not null then 'paid'
   else 'cancelled' end`;
 
-const CORRECTIONS = sql`cast(coalesce((select sum(c.total) from sales c where c.id in (${correctivesOf(sql`s.id`)})), 0) as text)`;
-const CREDITED = sql`exists (${correctivesOf(sql`r.sale_id`)})`;
+const CORRECTIONS = sql`cast(coalesce((select sum(c.total) from sales c where ${correctivesOf(sql`c`, sql`s.id`)}), 0) as text)`;
+const CREDITED = sql`exists (select 1 from sales c where ${correctivesOf(sql`c`, sql`r.sale_id`)})`;
 
 /** The statuses that only an `open` or `placed` bill can have (BILL_STATUS above). */
 const LIVE_FILTERS: readonly OrderStatusFilter[] = [
@@ -502,7 +502,7 @@ export async function readCreditNotes(
   const { rows } = await tx.execute<{ of: string; code: string; number: number }>(sql`
     select s.id as of, sr.code as code, c.invoice_number as number
     from sales s
-    join sales c on c.id in (${correctivesOf(sql`s.id`)})
+    join sales c on ${correctivesOf(sql`c`, sql`s.id`)}
     join invoice_series sr on sr.id = c.series_id
     where s.id in (${sql.join(
       saleIds.map((id) => sql`${id}`),
@@ -977,7 +977,7 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
     .leftJoin(persons, eq(persons.id, sales.operatorId))
     .where(
       or(
-        sql`${sales.id} in (${correctivesOf(sql`${saleId}`)})`,
+        correctivesOf(sql`${sales}`, sql`${saleId}`),
         and(eq(sales.correctsSaleId, saleId), eq(sales.replacesOriginal, true)),
       ),
     )

@@ -1171,8 +1171,8 @@ A corrective by replacement repeats its original's full total, and the original 
 its payments and settlement stay on it, and a later refund corrects the replacement (Q37-FIX plan,
 `docs/superpowers/plans/2026-11-13-q37-fix-put-right.md`, "How the sale is counted once"). So what
 a sale owes is its total plus its own correctives except the replacement, plus the replacement's
-correctives. `correctivesOf(saleId)` in `packages/db/src/correctives-of.ts` is that set, as an
-id subquery. Money readers and "has it been credited" tests use it. The lines the guard below
+correctives. `correctivesOf(corrective, saleId)` in `packages/db/src/correctives-of.ts` is that
+set, as a condition on the caller's own `sales` row named `corrective`. Money readers and "has it been credited" tests use it. The lines the guard below
 allows instead, each with its reason there: the correction target's own sums and history in
 `packages/core/src/record-correction.ts` and `correction-history.ts`, the order list's number
 search, the lines that find a replacement itself, the first-corrective check in

@@ -84,7 +84,7 @@ export async function listDeferredPaymentInvoices(
     .innerJoin(
       correction,
       or(
-        sql`${correction.id} in (${correctivesOf(sql`${deferredClosures.saleId}`)})`,
+        correctivesOf(sql`${correction}`, sql`${deferredClosures.saleId}`),
         and(
           eq(correction.correctsSaleId, deferredClosures.saleId),
           eq(correction.replacesOriginal, true),

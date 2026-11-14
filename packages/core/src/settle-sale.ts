@@ -49,7 +49,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
       source: sales.source,
       deviceId: sales.deviceId,
       total: sales.total,
-      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.id in (${correctivesOf(sql`${sales}.id`)})), 0) as text)`,
+      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where ${correctivesOf(sql`c`, sql`${sales}.id`)}), 0) as text)`,
     })
     .from(sales)
     .where(eq(sales.id, input.saleId));

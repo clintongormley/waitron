@@ -274,7 +274,7 @@ function touchedSaleQuery(tx: Transaction, saleId: string) {
         tx
           .select({ id: corrections.id })
           .from(corrections)
-          .where(sql`${corrections.id} in (${correctivesOf(sql`${saleId}`)})`),
+          .where(correctivesOf(sql`${corrections}`, sql`${saleId}`)),
       ),
       tendered: any(tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, saleId))),
       settled: any(

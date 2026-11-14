@@ -46,7 +46,7 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
       s.source         as source,
       s.device_id      as device_id,
       cast(s.total as text) as total,
-      cast(coalesce((select sum(c.total) from sales c where c.id in (${correctivesOf(sql`s.id`)})), 0) as text)
+      cast(coalesce((select sum(c.total) from sales c where ${correctivesOf(sql`c`, sql`s.id`)}), 0) as text)
         as correction_total
     from sales s
     where s.corrects_sale_id is null
