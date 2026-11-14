@@ -355,7 +355,7 @@ export const ALERT_MESSAGES: Readonly<
   },
   "fiscal.reconcile_no_trace": {
     en: "Invoice {numSerieFactura} was sent, but the tax agency (AEAT) has no record of it. Waitron has already queued it to be sent once more, so it will not send it again by itself; it asks AEAT about it again every day. Keep the box running and note when this appeared.",
-    es: "La factura {numSerieFactura} se envió, pero la AEAT no tiene constancia de ella. Waitron ya la ha vuelto a poner en cola para enviarla una vez más, así que no la volverá a enviar por su cuenta; cada día vuelve a consultarla a la AEAT. Mantén el equipo encendido y anota cuándo ha aparecido esto.",
+    es: "La factura {numSerieFactura} se envió, pero la AEAT no tiene constancia de ella. Waitron ya la ha vuelto a poner en cola para enviarla una vez más, así que no la volverá a enviar por su cuenta; cada día vuelve a consultarla a la AEAT. Mantén el servidor encendido y anota cuándo ha aparecido esto.",
   },
   "fiscal.reconcile_drift_errores": {
     en: "The tax agency (AEAT) now lists invoice {numSerieFactura} as accepted with errors, though it was recorded here as accepted. Waitron has updated its own record to match.",
@@ -363,7 +363,7 @@ export const ALERT_MESSAGES: Readonly<
   },
   "fiscal.reconcile_drift_anulada": {
     en: "The tax agency (AEAT) lists invoice {numSerieFactura} as cancelled, but it was not voided here. Waitron leaves its own record of the invoice as it is and asks AEAT about it again every day. Keep the box running and note when this appeared.",
-    es: "La AEAT indica que la factura {numSerieFactura} está anulada, pero aquí no se anuló. Waitron deja su propio registro de la factura tal como está y cada día vuelve a consultarla a la AEAT. Mantén el equipo encendido y anota cuándo ha aparecido esto.",
+    es: "La AEAT indica que la factura {numSerieFactura} está anulada, pero aquí no se anuló. Waitron deja su propio registro de la factura tal como está y cada día vuelve a consultarla a la AEAT. Mantén el servidor encendido y anota cuándo ha aparecido esto.",
   },
   "fiscal.submission_delayed": {
     en: "{count} fiscal record(s) have been waiting {hours}h to reach the tax agency. If this persists, check that the fiscal certificate is valid.",

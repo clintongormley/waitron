@@ -1076,9 +1076,9 @@ describe("refusals that name a way out the product already has", () => {
           "Se envía a la AEAT como cualquier otro; la factura y los campos afectados están en Remisión a la AEAT.",
         "fiscal.record_totals_disagree": "La AEAT la acepta, pero revisa los precios de esa venta.",
         "fiscal.environment_mismatch":
-          "pero este equipo envía a preproduction. Ese registro y los posteriores de su cadena se guardan en este equipo y no se envían; las ventas continúan.",
+          "pero este servidor envía a preproduction. Ese registro y los posteriores de su cadena se guardan en este servidor y no se envían; las ventas continúan.",
         "fiscal.environment_unknown":
-          "Ese registro y los posteriores de su cadena se guardan en este equipo y no se envían; las ventas continúan.",
+          "Ese registro y los posteriores de su cadena se guardan en este servidor y no se envían; las ventas continúan.",
         "fiscal.reconcile_no_trace":
           "Waitron ya la ha vuelto a poner en cola para enviarla una vez más, así que no la volverá a enviar por su cuenta; cada día vuelve a consultarla a la AEAT.",
         "fiscal.reconcile_drift_anulada":
