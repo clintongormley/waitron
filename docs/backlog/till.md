@@ -598,10 +598,7 @@ Open:
 - **Task 8 (#869, move guests, join and split tables) and C77/C86.** Open: a party with no table
   whose chain of merges never ends (an unknown id, or two parties recorded as merged into each
   other, which the database accepts) is named by the bill's own label; whether any till action
-  can make such a loop was not checked. `partyFamilies`, the reverse lookup of `partySurvivors`,
-  stayed in `apps/server/src/parties.ts`, while `partySurvivors` is in
-  `packages/db/src/party-table-labels.ts`. Left by
-  #906's review: no case pins what a correction slip prints for a counter order delivered
+  can make such a loop was not checked. Left by #906's review: no case pins what a correction slip prints for a counter order delivered
   to a table.
 - **Task 9 (#874, dishes arriving in a party get a kitchen group).** P16 is kept (owner,
   2026-10-17; recorded in kitchen.md's Decisions). Left by C78's review: the earliest fire
