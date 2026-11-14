@@ -1373,7 +1373,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Remove code nothing reaches (replaced or dead, never merely unused)
 
-16 entries, size M.
+11 entries, size M.
 
 - **The products' made-at read has no screen since A655**
   [Detail](catalogue.md#the-products-made-at-read-has-no-screen-since-a655)
@@ -1401,18 +1401,23 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
   moved a station's printers into the station save; `parseStationPrinterIds`
   (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.
-- **`fiscal-none` left-behinds:** remove the inert `resolveClient`/`skipRetryMs`; regime-agnostic
-  provisioning tests.
-- **Loose ends left by the tenant-column removal (#378, 2026-09-16).**
-  [Detail](architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16).
-- An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
-  `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
-  constant (the theme colour is literal in three places).
 - **Unread configuration parameters remain in `apps/server/src`.** Test helpers still use
   `void cfg;` (`git grep -n 'void cfg;' apps/server/src`); `setLineCourse` and
   `readTransactionReceipt` retain `_cfg` in their signatures, among others
   (`git grep -n '_cfg:' apps/server/src`). Left open by SQLite slice 1
-  (#490 and the preparation tasks) and A1308 5f-ii's five-function scope.
+  (#490 and the preparation tasks) and A1308 5f-ii's five-function scope. Size on 2026-11-14:
+  eight functions carry an unread `_cfg` and are called from about 690 places, mostly tests
+  (`offerProducts` 285, `createTable` 202, `defaultLayout` 69, `readDrafts` 49, `setLineCourse`
+  48), plus 11 `void cfg;` lines; dropping the parameter touches every one of those calls.
+
+## Bundle: Small refactors
+
+3 entries, size S. These are refactors, not dead code: each moves or reshapes code that is still
+used. Moved out of "Remove code nothing reaches" on 2026-11-14.
+
+- An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
+  `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
+  constant (the theme colour is literal in three places).
 - `partyFamilies`, the reverse lookup of `partySurvivors`, stayed in `apps/server/src/parties.ts`,
   while `partySurvivors` is in `packages/db/src/party-table-labels.ts`. Left open by the table
   actions plan's Task 8 (#869, move guests, join and split tables) and C77/C86.

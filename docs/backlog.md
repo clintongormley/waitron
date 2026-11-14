@@ -158,6 +158,18 @@ that bundle's heading in the area's file: take a bundle as one pull request.
 
 ### Fiscal records, invoices and the asesor
 
+- **The Verifactu backend accepts a `resolveClient` and a `skipRetryMs` it never reads** (fiscal;
+  the owner lands it). `VerifactuBackend`'s deps (`packages/fiscal-verifactu/src/backend.ts`) and
+  `rejectResolveClient` (`slot.ts`): the fields' own comments say the backend does not read them;
+  about 175 files name `resolveClient`, some of them to the real drain and reconcile, which do
+  read it. Remove the backend's two fields, telling those callers apart. Also open from the same
+  entry: regime-agnostic provisioning tests.
+
+- **Index names that still read `tenant`, and `server.credential_unusable`'s prefix** (fiscal: one
+  index is on `registros_facturacion`; its own slice, not a tidy-up, because three `persons_*`
+  names are matched by name in error translation).
+  [Detail](backlog/architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16)
+
 - **Retire the historical allocation formats from `fiscal-verifactu`.** Historical code still
   reads signed paper, Cloud receipts and emergency names, and three Cloud settings whose only
   guide was deleted. Removing it changes activation, so it is its own fiscal change for the owner
@@ -2107,7 +2119,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   hyphenated segment (`/management-api/venue-details`, `/venue-defaults`). Pick one shape before
   go-live.
 
-- **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 16, size M). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
+- **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 11, size M). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
+
+- **Small refactors** (bundle of 3, size S). [Detail](backlog/architecture.md#bundle-small-refactors)
 
 - **Go-live day steps.**
   [Detail](backlog/architecture.md#go-live-day-steps).
