@@ -91,3 +91,19 @@ it.each<[MadridColumnRenames, string]>([
     `unused or invalid Madrid column rename: ${cell}`,
   );
 });
+
+it("renames incoming foreign-key target columns", () => {
+  const capture = structuredClone(original);
+  capture.tables.sale_receipt_guests!.foreignKeys.push({
+    ...foreignKey,
+    table: "tables_with_id",
+    to: "guests",
+  });
+  const result = madridWithRenamedColumns(capture, { tables_with_id: { guests: "guest_count" } });
+  expect(result.tables.sale_receipt_guests!.foreignKeys[1]).toEqual({
+    ...foreignKey,
+    table: "tables_with_id",
+    to: "guest_count",
+  });
+  expect(capture.tables.sale_receipt_guests!.foreignKeys[1]!.to).toBe("guests");
+});
