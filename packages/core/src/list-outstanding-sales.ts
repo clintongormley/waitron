@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { correctivesOf } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { addDecimal, rawCentsToDecimal, readOrigin, saleId as brandSaleId } from "@waitron/shared";
 import type { Decimal, Origin, SaleId } from "@waitron/shared";
@@ -44,7 +45,7 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
       s.source         as source,
       s.device_id      as device_id,
       cast(s.total as text) as total,
-      cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0) as text)
+      cast(coalesce((select sum(c.total) from sales c where c.id in (${correctivesOf(sql`s.id`)})), 0) as text)
         as correction_total
     from sales s
     where s.corrects_sale_id is null
