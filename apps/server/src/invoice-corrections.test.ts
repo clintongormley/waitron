@@ -313,10 +313,9 @@ const STEAK_HALF = [{ rate: "21.00", base: "5.00", tax: "1.05" }];
 const MINUTE = 60_000;
 
 function behindLatestRecord(): TrustedClock {
-  const [latest] = venue.db.all<{ at: string }>(sql`
-    select fecha_hora_huso_gen_registro as at from registros_facturacion
-    order by fecha_hora_huso_gen_registro desc, id desc limit 1
-  `);
+  const [latest] = venue.db.all<{ at: string }>(
+    sql`select max(fecha_hora_huso_gen_registro) as at from registros_facturacion`,
+  );
   const base = systemClock();
   const reading = { ...base.now(), instant: new Date(new Date(latest!.at).getTime() - 2 * MINUTE) };
   return { ...base, now: () => reading };
