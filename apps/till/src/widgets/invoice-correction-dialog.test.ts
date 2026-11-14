@@ -1323,6 +1323,25 @@ describe("the correction window's other paths", () => {
     expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce();
   });
 
+  it("keeps the sign-in open when it is cancelled while its PIN is being checked", async () => {
+    const api = sendingApi();
+    let answer!: (error: unknown) => void;
+    api.giveInvoiceCorrectionCash
+      .mockRejectedValueOnce(refused("authorization.not_permitted", { permission: "sale.refund" }))
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => (answer = reject)));
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+    const pin = await pinDialog(el);
+    signIn(pin);
+    await vi.waitFor(() => expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledTimes(2));
+    pin.dispatchEvent(new CustomEvent("override-cancel"));
+    answer({ code: "pin.invalid", status: 401 });
+
+    await vi.waitFor(() => expect(pin.error).toBe("pin.invalid"));
+    expect(root(el).querySelector("till-supervisor-override-dialog")).toBe(pin);
+  });
+
   it("reads the correction again on Check again, showing what is back now", async () => {
     const api = sendingApi();
     const { el } = await mountSending(api, "correction-1");
