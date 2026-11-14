@@ -93,6 +93,7 @@ import {
 import { placeFirstCopy } from "./spare-copy-placement.js";
 import { startStoreListener } from "./spare-pipe.js";
 import { startSpareJoin } from "./spare-join.js";
+import { runSpareSettings } from "./spare-settings.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import {
   recordSupersededAtStart,
@@ -1067,6 +1068,7 @@ export interface StartServerSeams {
   restart?: (kind: "restart" | "signal") => void;
   /** Awaited by the joining spare's first-copy job before each attempt. */
   spareCopy?: { hold?: Promise<void> };
+  spareSettings?: { checkMs?: number; retryMs?: number };
 }
 
 /**
@@ -3457,6 +3459,25 @@ async function bootServer(
       })
     : undefined;
   undoOnFailure.push(async () => spareJoin?.stop());
+  // The settings carry the recovery key, so every send is checked under the venue authority.
+  const spareAuthority = acceptingSales ? await readVenueAuthority(config.stateDir) : undefined;
+  const spareSettings = acceptingSales
+    ? runSpareSettings({
+        db,
+        node: store.node,
+        ring,
+        nodeId: tradingContext.nodeId,
+        stateDir: config.stateDir,
+        exchange: {
+          timeoutMs: 5_000,
+          authorityOf: () => spareAuthority,
+          lookup: seams.boxLookup,
+        },
+        ...seams.spareSettings,
+        log,
+      })
+    : undefined;
+  undoOnFailure.push(async () => spareSettings?.stop());
 
   // Dashboard alerts, mounted after the backup supervisor exists because the backups source reads
   // it. The claims come from every module; the checks run only for the enabled set, whose tables are
@@ -4452,6 +4473,7 @@ async function bootServer(
     chartPost,
     spareStore,
     spareJoin,
+    spareSettings,
   });
   const started = makeStartedServer(
     server,

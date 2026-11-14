@@ -54,7 +54,7 @@ export interface SpareJoin {
 }
 
 /** On `setTimeout`, not `abortableSleep`: Vitest's fake timers do not reach `node:timers/promises`. */
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
+export function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve();
     const done = () => {
