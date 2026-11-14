@@ -878,6 +878,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       return tx.select().from(registrosFacturacion);
     });
     expect(stillOne).toHaveLength(1);
+    expect(stillOne.map((row) => row.huella)).toEqual(after.fiscalRecords.map((row) => row.huella));
   });
 });
 
@@ -2826,6 +2827,15 @@ it("files an extras pick and an options answer through cash checkout and reprint
   await withTransaction(suite.db, async (tx) => {
     await updateProduct(tx, cheeseId, { name: "Manchego" });
   });
+  const catalogueNames = (
+    await suite.db.execute<{ id: string; name: string }>(
+      sql`select id, name from products where id in (${product.id}, ${cheeseId})`,
+    )
+  ).rows;
+  expect(Object.fromEntries(catalogueNames.map((row) => [row.id, row.name]))).toEqual({
+    [product.id]: "Agua mineral",
+    [cheeseId]: "Manchego",
+  });
   const replay = await app.request("/api/sales", {
     method: "POST",
     headers,
@@ -2860,6 +2870,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
     return tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion);
   });
   expect(recordCount).toHaveLength(1);
+  expect(recordCount.map((row) => row.id)).toEqual(stored.records.map((row) => row.id));
 });
 
 describe("card readers the till cannot drive, and readers named by id", () => {
@@ -3604,6 +3615,9 @@ describe("a sale cannot hand over settled extras or options", () => {
         },
       ],
     };
+    expect(lists.extras.items.map((item) => item.productId)).toEqual([
+      settled.frozenExtras[0]!.productId,
+    ]);
     const app = new Hono();
     mountTillApi(
       app,

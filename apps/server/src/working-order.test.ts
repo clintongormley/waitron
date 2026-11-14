@@ -99,6 +99,7 @@ import {
   departments,
   readHolidayFacts,
   replaceMenuWeek,
+  routingCells,
   setStationToday,
 } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
@@ -9681,6 +9682,17 @@ async function fireProductLine(
   );
 }
 
+async function categoryStations(
+  tx: Transaction,
+  categoryIds: readonly string[],
+): Promise<Record<string, string | null>> {
+  const rows = await tx
+    .select({ categoryId: routingCells.categoryId, stationId: routingCells.stationId })
+    .from(routingCells)
+    .where(inArray(routingCells.categoryId, [...categoryIds]));
+  return Object.fromEntries(rows.map((row) => [row.categoryId!, row.stationId]));
+}
+
 async function insertRoute(
   tx: Transaction,
   route: { zoneId?: string; productId?: string; categoryId?: string; stationId: string },
@@ -9922,6 +9934,10 @@ describe("a variant is sold as the product it is", () => {
       const glassStation = await createStation(tx, { name: "Glasses" });
       await routeCategoryTo(tx, wine.wineCategoryId, barStation.id);
       await routeCategoryTo(tx, wine.glassesCategoryId, glassStation.id);
+      expect(await categoryStations(tx, [wine.wineCategoryId, wine.glassesCategoryId])).toEqual({
+        [wine.wineCategoryId]: barStation.id,
+        [wine.glassesCategoryId]: glassStation.id,
+      });
       // Both lines name variants; each takes its product's category cell, so Glasses's cell takes neither.
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
@@ -9951,6 +9967,10 @@ describe("a variant is sold as the product it is", () => {
       const terraceStation = await createStation(tx, { name: "Terrace" });
       await routeCategoryTo(tx, wine.wineCategoryId, cellarStation.id);
       await routeCategoryTo(tx, wine.glassesCategoryId, terraceStation.id);
+      expect(await categoryStations(tx, [wine.wineCategoryId, wine.glassesCategoryId])).toEqual({
+        [wine.wineCategoryId]: cellarStation.id,
+        [wine.glassesCategoryId]: terraceStation.id,
+      });
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
@@ -10018,6 +10038,10 @@ describe("a variant is sold as the product it is", () => {
         zoneId,
         categoryId: wine.glassesCategoryId,
         stationId: terraceStation.id,
+      });
+      expect(await categoryStations(tx, [wine.wineCategoryId, wine.glassesCategoryId])).toEqual({
+        [wine.wineCategoryId]: cellarStation.id,
+        [wine.glassesCategoryId]: terraceStation.id,
       });
       await createOpenOrder(
         tx,
