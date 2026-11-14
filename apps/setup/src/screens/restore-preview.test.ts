@@ -1,4 +1,5 @@
 import { LitElement } from "lit";
+import type { WtFileInput } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { SetupApi } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -114,8 +115,7 @@ it.each(["file", "key", "environment"])(
       await fill(
         el,
         changed === "key"
-          ? el.shadowRoot!.querySelector<HTMLElement & { files: File[] }>("[data-test=artifact]")!
-              .files[0]!
+          ? el.shadowRoot!.querySelector<WtFileInput>("[data-test=artifact]")!.files[0]!
           : new File(["other-copy"], "other.backup"),
         changed === "key" ? "different-key" : "archive-secret",
       );

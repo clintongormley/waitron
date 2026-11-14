@@ -5,8 +5,9 @@ import { SetupApp, type Screen } from "./setup-app.js";
 import type { SetupApi } from "./api/client.js";
 import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.js";
 import type { WtTextarea } from "@waitron/ui/src/components/wt-textarea.js";
+import type { WtFileInput } from "@waitron/ui/src/components/wt-file-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { chooseFiles, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { chooseFiles, cleanupWidgets, drawnFileName, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 
 afterEach(() => {
@@ -290,9 +291,11 @@ describe("setup bucket restore unsaved changes", () => {
   );
   it("loading a kit file protects its resulting text", async () => {
     const { el, form } = await mount();
-    const input = q<HTMLElement & { files: File[] }>(form, "[data-test=kit-file]");
+    const input = q<WtFileInput>(form, "[data-test=kit-file]");
     chooseFiles(input, new File([" kit from file \n"], "recovery.txt"));
     await expect.poll(() => kit(form).value).toBe(" kit from file \n");
+    await input.updateComplete;
+    expect(drawnFileName(input)).toBe("recovery.txt");
     expect(unload()).toBe(true);
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);
@@ -300,6 +303,9 @@ describe("setup bucket restore unsaved changes", () => {
     await expect.poll(() => screen(el)).toBe("role");
     expect(kit(form).value).toBe("");
     expect(input.files).toHaveLength(0);
+    await form.updateComplete;
+    await input.updateComplete;
+    expect(drawnFileName(input)).toBeNull();
   });
   it.each(["edit", "discard", "disconnect"])(
     "a late kit file read cannot undo %s",

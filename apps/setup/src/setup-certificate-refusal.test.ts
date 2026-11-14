@@ -13,11 +13,10 @@ import {
   cleanupWidgets,
   expectNoA11yViolations,
   fileControl,
+  fileError,
 } from "./widgets/test-helpers.js";
 
-/** The message `wt-file-input` shows under the certificate file, or null when there is none. */
-const pfxError = (root: ShadowRoot) =>
-  root.querySelector("[data-test=pfx]")!.shadowRoot!.querySelector("[data-error]");
+const pfxError = (root: ShadowRoot) => fileError(root.querySelector("[data-test=pfx]")!);
 
 const mounted: HTMLElement[] = [];
 it.each(["en-GB", "es-ES"])(

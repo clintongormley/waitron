@@ -1,4 +1,4 @@
-import type { FileInputCopy } from "@waitron/ui/src/components/wt-file-input.js";
+import type { FileInputCopy } from "@waitron/ui";
 import { t } from "./i18n/t.js";
 
 /** Called at render time so a language change redraws the picker's words. */

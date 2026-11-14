@@ -2,7 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { SetupApi } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { chooseFiles, cleanupWidgets, fileControl, mountWidget } from "../widgets/test-helpers.js";
+import type { WtFileInput } from "@waitron/ui";
+import {
+  chooseFiles,
+  cleanupWidgets,
+  drawnFileName,
+  fileControl,
+  fileError,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import type { BucketRestoreRequestDetail } from "../events.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import {
@@ -16,11 +24,9 @@ import {
 afterEach(cleanupWidgets);
 const q = <T extends HTMLElement>(el: SetupRestoreBucketScreen, selector: string): T | null =>
   el.shadowRoot!.querySelector<T>(selector);
-const kitPicker = (el: SetupRestoreBucketScreen) =>
-  q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "[data-test=kit-file]")!;
+const kitPicker = (el: SetupRestoreBucketScreen) => q<WtFileInput>(el, "[data-test=kit-file]")!;
 /** The message `wt-file-input` shows under the kit file, or null when there is none. */
-const kitFileError = (el: SetupRestoreBucketScreen) =>
-  kitPicker(el).shadowRoot!.querySelector<HTMLElement>("[data-error]");
+const kitFileError = (el: SetupRestoreBucketScreen) => fileError(kitPicker(el));
 
 function paste(el: SetupRestoreBucketScreen, text: string): void {
   const area = q(el, "[data-test=kit]")!.shadowRoot!.querySelector("textarea")!;
@@ -356,8 +362,10 @@ describe("SetupRestoreBucketScreen", () => {
     async (_, pdf, said) => {
       const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
       paste(el, "WAITRON-RECOVERY-KIT-2:kept");
-      chooseFiles(kitPicker(el), await pdf());
+      const refused = await pdf();
+      chooseFiles(kitPicker(el), refused);
       await vi.waitFor(() => expect(kitFileError(el)?.textContent).toBe(said));
+      expect(drawnFileName(kitPicker(el))).toBe(refused.name);
       expect(fileControl(kitPicker(el)).getAttribute("aria-describedby")).toBe(
         kitFileError(el)!.id,
       );
@@ -368,6 +376,7 @@ describe("SetupRestoreBucketScreen", () => {
       await el.updateComplete;
       await kitPicker(el).updateComplete;
       expect(kitFileError(el)).toBeNull();
+      expect(drawnFileName(kitPicker(el))).toBe(refused.name);
     },
   );
 
@@ -443,7 +452,7 @@ describe("SetupRestoreBucketScreen", () => {
     expect(time.textContent).toContain("2026");
   });
 
-  it("keeps the kit already entered when the file choice is cancelled", async () => {
+  it("keeps the kit already entered when a file choice carries no file", async () => {
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
     paste(el, "WAITRON-RECOVERY-KIT-2:pasted");
     chooseFiles(kitPicker(el));
@@ -452,6 +461,17 @@ describe("SetupRestoreBucketScreen", () => {
     expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(
       "WAITRON-RECOVERY-KIT-2:pasted",
     );
+  });
+
+  it("draws no file after an empty choice, through later edits", async () => {
+    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
+    chooseFiles(kitPicker(el), new File(["WAITRON-RECOVERY-KIT-2:file"], "kit.txt"));
+    await vi.waitFor(() => expect(drawnFileName(kitPicker(el))).toBe("kit.txt"));
+    chooseFiles(kitPicker(el));
+    paste(el, "WAITRON-RECOVERY-KIT-2:typed");
+    await el.updateComplete;
+    await kitPicker(el).updateComplete;
+    expect(drawnFileName(kitPicker(el))).toBeNull();
   });
 
   // A refusal the owner answers (the old-server question, whose copy it is) is sent again with the

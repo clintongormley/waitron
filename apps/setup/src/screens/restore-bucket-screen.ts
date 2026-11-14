@@ -91,6 +91,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private previewLiveSince?: string;
   @state() private previewLiveUnknown = false;
   @state() private packRefusal?: PackFileRefusal;
+  @state() private kitFile?: File;
   #baseline?: BucketForm;
   #scope?: DraftScope<BucketForm>;
   #fileRead = 0;
@@ -127,7 +128,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         this.oldBoxGone = false;
         this.venueConfirmed = false;
         this.attempted = false;
-        this.shadowRoot!.querySelector("wt-file-input")!.files = [];
+        this.kitFile = undefined;
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -279,6 +280,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   async #readFile(event: CustomEvent<{ files: File[] }>): Promise<void> {
     event.stopPropagation();
     const file = event.detail.files[0];
+    this.kitFile = file;
     const read = ++this.#fileRead;
     if (file === undefined) return;
     const chosen = await bucketCodeFromFile(file);
@@ -360,6 +362,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         name="recovery-kit-file"
         label=${t("restore_bucket.kit_file")}
         data-test="kit-file"
+        .files=${this.kitFile ? [this.kitFile] : []}
         .copy=${fileInputCopy()}
         .locale=${currentLocale()}
         .error=${packError ?? ""}

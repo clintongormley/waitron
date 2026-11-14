@@ -1,5 +1,6 @@
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { WtFileInput } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import { chooseFiles, cleanupWidgets, fileControl, mountWidget } from "../widgets/test-helpers.js";
 import { SetupLiveSourceScreen } from "./live-source-screen.js";
@@ -9,9 +10,10 @@ afterEach(cleanupWidgets);
 const q = (el: SetupLiveSourceScreen, sel: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-const exportControl = (el: SetupLiveSourceScreen) => fileControl(q(el, "wt-file-input")!);
-const chooseExport = (el: SetupLiveSourceScreen, file: File) =>
-  chooseFiles(q(el, "wt-file-input")!, file);
+const exportPicker = (el: SetupLiveSourceScreen) =>
+  el.shadowRoot!.querySelector<WtFileInput>("wt-file-input")!;
+const exportControl = (el: SetupLiveSourceScreen) => fileControl(exportPicker(el));
+const chooseExport = (el: SetupLiveSourceScreen, file: File) => chooseFiles(exportPicker(el), file);
 
 async function typePassphrase(el: SetupLiveSourceScreen, value: string): Promise<void> {
   q(el, "wt-input")!.dispatchEvent(
@@ -23,7 +25,7 @@ async function typePassphrase(el: SetupLiveSourceScreen, value: string): Promise
 /** The export's message, which `wt-file-input` shows under itself, then the passphrase's, which
  * `wt-input` shows under itself. */
 function fieldErrors(el: SetupLiveSourceScreen): string[] {
-  const exportError = (q(el, "wt-file-input") as HTMLElement & { error: string }).error;
+  const exportError = exportPicker(el).error;
   const exportErrors = exportError === "" ? [] : [exportError];
   const passphrase = (q(el, "wt-input") as HTMLElement & { error: string }).error;
   return [...exportErrors, ...(passphrase === "" ? [] : [passphrase])];
@@ -112,8 +114,7 @@ describe("SetupLiveSourceScreen", () => {
     chooseExport(el, EXPORT);
     await el.updateComplete;
     expect(fieldErrors(el)).toEqual(["Enter a passphrase of at least 12 characters."]);
-    await (q(el, "wt-file-input") as HTMLElement & { updateComplete: Promise<unknown> })
-      .updateComplete;
+    await exportPicker(el).updateComplete;
     expect(exportControl(el).getAttribute("aria-invalid")).toBe("false");
   });
 
@@ -122,11 +123,7 @@ describe("SetupLiveSourceScreen", () => {
     host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
     q(el, "[data-test=import]")!.click();
     await el.updateComplete;
-    const picker = q(el, "wt-file-input") as HTMLElement & {
-      invalid: boolean;
-      updateComplete: Promise<unknown>;
-    };
-    expect(picker).not.toBeNull();
+    const picker = exportPicker(el);
     await picker.updateComplete;
     expect(picker.invalid).toBe(true);
     const field = picker.shadowRoot!.querySelector("[part=field]")!;

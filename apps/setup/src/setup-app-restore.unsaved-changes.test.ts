@@ -5,8 +5,9 @@ import { SetupApp, type Screen } from "./setup-app.js";
 import type { SetupApi } from "./api/client.js";
 import type { SetupRestoreScreen } from "./screens/restore-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
+import type { WtFileInput } from "@waitron/ui/src/components/wt-file-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { chooseFiles, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { chooseFiles, cleanupWidgets, drawnFileName, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale, t } from "./i18n/t.js";
 
 afterEach(() => {
@@ -19,8 +20,12 @@ const screen = (el: SetupApp) => (el as unknown as { screen: Screen }).screen;
 const q = <T extends HTMLElement>(form: SetupRestoreScreen, selector: string) =>
   form.shadowRoot!.querySelector<T>(selector)!;
 const key = (form: SetupRestoreScreen) => q<WtInput>(form, "[data-test=recovery-key]");
-const artifact = (form: SetupRestoreScreen) =>
-  q<HTMLElement & { files: File[] }>(form, "[data-test=artifact]");
+const artifact = (form: SetupRestoreScreen) => q<WtFileInput>(form, "[data-test=artifact]");
+async function drawn(form: SetupRestoreScreen): Promise<string | null> {
+  await form.updateComplete;
+  await artifact(form).updateComplete;
+  return drawnFileName(artifact(form));
+}
 const backup = new File(["encrypted"], "waitron.backup");
 async function mount() {
   const api = {
@@ -93,8 +98,10 @@ describe("setup archive restore unsaved changes", () => {
       await expect.poll(() => warning(el).open).toBe(true);
       expect(screen(el)).toBe("restore");
       await choose(el, "keep");
-      if (field === "artifact") expect(artifact(form).files?.[0]).toBe(backup);
-      else
+      if (field === "artifact") {
+        expect(artifact(form).files[0]).toBe(backup);
+        expect(await drawn(form)).toBe("waitron.backup");
+      } else
         expect((q(form, `[data-test=${field}]`) as WtInput).value).toBe(
           field === "environment" ? "preproduction" : " secret ",
         );
@@ -103,6 +110,7 @@ describe("setup archive restore unsaved changes", () => {
       await choose(el, "discard");
       await expect.poll(() => screen(el)).toBe("role");
       expect(artifact(form).files).toHaveLength(0);
+      expect(await drawn(form)).toBeNull();
       expect(key(form).value).toBe("");
       expect((q(form, "[data-test=environment]") as WtInput).value).toBe("production");
       expect(leaveCoordinatorFor(el)!.isDirty([el])).toBe(true);
@@ -116,7 +124,8 @@ describe("setup archive restore unsaved changes", () => {
     await choose(el, "keep");
     expect(screen(el)).toBe("restore");
     expect(key(form).value).toBe(" secret ");
-    expect(artifact(form).files?.[0]).toBe(backup);
+    expect(artifact(form).files[0]).toBe(backup);
+    expect(await drawn(form)).toBe("waitron.backup");
     back(form, "cloud-restore");
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "discard");
@@ -228,7 +237,8 @@ describe("setup archive restore unsaved changes", () => {
     await returned.updateComplete;
     expect(unload()).toBe(true);
     expect(key(returned).value).toBe(" secret ");
-    expect(artifact(returned).files?.[0]).toBe(backup);
+    expect(artifact(returned).files[0]).toBe(backup);
+    expect(await drawn(returned)).toBe("waitron.backup");
     back(returned);
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");

@@ -11,7 +11,7 @@ import { passwordIcon } from "../password-icon.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
-import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, fieldStyles } from "../form-styles.js";
 import {
   dispatchConfigurationRequested,
   dispatchSetupGoto,
@@ -24,7 +24,6 @@ export class SetupLiveSourceScreen extends LitElement {
   static override styles = [
     baseStyles,
     fieldStyles,
-    errorStyles,
     actionsStyles,
     css`
       :host {

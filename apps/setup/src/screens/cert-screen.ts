@@ -19,7 +19,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { certificateExportHelp } from "../certificate-export-help.js";
-import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { AeatCertDraft, ProvisionBody } from "../api/client.js";
@@ -74,7 +74,6 @@ export class SetupCertScreen extends LitElement {
   static override styles = [
     baseStyles,
     fieldStyles,
-    errorStyles,
     actionsStyles,
     css`
       a {

@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import type { WtFileInput } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
-import { chooseFiles, cleanupWidgets, fileControl, mountWidget } from "../widgets/test-helpers.js";
+import {
+  chooseFiles,
+  cleanupWidgets,
+  drawnFileName,
+  fileControl,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import type { RestoreRequestDetail } from "../events.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 
@@ -16,13 +23,13 @@ const BACKUP = new File(["encrypted"], "waitron.backup");
 const keyControl = (el: SetupRestoreScreen): HTMLInputElement =>
   q(el, "[data-test=recovery-key]")!.shadowRoot!.querySelector("input")!;
 
-const artifactPicker = (el: SetupRestoreScreen) => q(el, "[data-test=artifact]")!;
+const artifactPicker = (el: SetupRestoreScreen) => q<WtFileInput>(el, "[data-test=artifact]")!;
 const chooseBackup = (el: SetupRestoreScreen, backup: File) =>
   chooseFiles(artifactPicker(el), backup);
 
 /** The box `wt-file-input` draws its rings on. */
 const fileField = (el: SetupRestoreScreen): Element =>
-  q(el, "[data-test=artifact]")!.shadowRoot!.querySelector("[part=field]")!;
+  artifactPicker(el).shadowRoot!.querySelector("[part=field]")!;
 
 function typeKey(el: SetupRestoreScreen, value: string): void {
   const key = keyControl(el);
@@ -287,7 +294,9 @@ describe("SetupRestoreScreen", () => {
       request,
       liveUnknown: true,
     });
-    expect(q<HTMLInputElement>(el, "[data-test=artifact]")!.files?.[0]).toBe(BACKUP);
+    expect(artifactPicker(el).files[0]).toBe(BACKUP);
+    await artifactPicker(el).updateComplete;
+    expect(drawnFileName(artifactPicker(el))).toBe("waitron.backup");
     expect(q<HTMLInputElement>(el, "[data-test=recovery-key]")!.value).toBe("recovery-key");
     expect(q<HTMLSelectElement>(el, "[data-test=environment]")!.value).toBe("preproduction");
     expect(q<HTMLInputElement>(el, "[data-test=acknowledge]")!.checked).toBe(true);
@@ -393,10 +402,7 @@ describe("SetupRestoreScreen", () => {
     it("rings a missing backup file only after Restore is pressed, and not once one is chosen", async () => {
       const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
-      const picker = q<HTMLElement & { updateComplete: Promise<unknown> }>(
-        el,
-        "[data-test=artifact]",
-      )!;
+      const picker = artifactPicker(el);
       expect(getComputedStyle(fileField(el)).boxShadow).not.toContain("rgb(4, 5, 6)");
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
@@ -414,8 +420,7 @@ describe("SetupRestoreScreen", () => {
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
-      await (q(el, "[data-test=artifact]") as HTMLElement & { updateComplete: Promise<unknown> })
-        .updateComplete;
+      await artifactPicker(el).updateComplete;
       const file = fileControl(artifactPicker(el));
       await userEvent.keyboard("{Shift}");
       file.focus();
@@ -497,8 +502,7 @@ describe("SetupRestoreScreen", () => {
         invalidField: "artifact",
       });
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
-      await (q(el, "[data-test=artifact]") as HTMLElement & { updateComplete: Promise<unknown> })
-        .updateComplete;
+      await artifactPicker(el).updateComplete;
       expectDangerRing(fileField(el));
     });
 
@@ -556,10 +560,7 @@ describe("SetupRestoreScreen in Spanish", () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     expect(q(el, "h1")!.textContent).toBe("Restaurar desde una copia de seguridad");
-    const picker = q<HTMLElement & { updateComplete: Promise<unknown> }>(
-      el,
-      "[data-test=artifact]",
-    )!;
+    const picker = artifactPicker(el);
     await picker.updateComplete;
     expect(picker.shadowRoot!.textContent).toContain("Archivo de copia de seguridad");
     expect(q(el, "[data-test=restore]")!.textContent).toBe("Restaurar la copia");

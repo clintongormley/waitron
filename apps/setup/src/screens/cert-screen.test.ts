@@ -1,9 +1,16 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { chooseFiles, cleanupWidgets, fileControl, mountWidget } from "../widgets/test-helpers.js";
+import {
+  chooseFiles,
+  cleanupWidgets,
+  fileControl,
+  fileError,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./cert-screen.js";
+import type { WtFileInput } from "@waitron/ui";
 import type { SetupCertScreen } from "./cert-screen.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
@@ -23,9 +30,7 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupCertScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/** The message `wt-file-input` shows under the certificate file, or null when there is none. */
-const pfxError = (el: SetupCertScreen) =>
-  q(el, "[data-test=pfx]")!.shadowRoot!.querySelector<HTMLElement>("[data-error]");
+const pfxError = (el: SetupCertScreen) => fileError(q(el, "[data-test=pfx]")!);
 const pfxControl = (el: SetupCertScreen) => fileControl(q(el, "[data-test=pfx]")!);
 
 /** The form's one message above Next, shown by `wt-form-actions`. */
@@ -205,7 +210,7 @@ describe("setup-cert-screen", () => {
     expect(status.textContent).not.toContain(EXPECTED_BASE64);
   });
 
-  it("clears the loaded file when the picker is emptied", async () => {
+  it("clears the loaded file when an empty file choice arrives", async () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     await chooseFile(el, PFX_SOURCE);
     expect(q(el, "[data-test=file-status]")).not.toBeNull();
@@ -225,8 +230,7 @@ describe("setup-cert-screen", () => {
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     const actions = q(el, "wt-form-actions")!;
     expect(actions.shadowRoot!.querySelector("[data-error][role=alert]")).not.toBeNull();
-    await (q(el, "[data-test=pfx]") as HTMLElement & { updateComplete: Promise<unknown> })
-      .updateComplete;
+    await el.shadowRoot!.querySelector<WtFileInput>("[data-test=pfx]")!.updateComplete;
     expect(q(el, "[data-test=pfx]")!.hasAttribute("invalid")).toBe(true);
     expect(pfxError(el)).not.toBeNull();
     expect(pfxControl(el).getAttribute("aria-invalid")).toBe("true");

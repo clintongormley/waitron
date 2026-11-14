@@ -1,8 +1,14 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
+import type { WtFileInput } from "@waitron/ui";
 import { SetupApi } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { chooseFiles, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  chooseFiles,
+  cleanupWidgets,
+  drawnFileName,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { SetupHandoverScreen } from "./handover-screen.js";
 
 const signIn = { email: "owner@example.com", password: "correct horse", totp: "123456" };
@@ -265,7 +271,7 @@ it("draws the backup picker's words in the chooser's language, not the browser's
   await authenticate(el);
   setLocale("es-ES");
   await el.updateComplete;
-  const picker = q<LitElement>(el, 'wt-file-input[name="handover-backup"]');
+  const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
   expect(picker).not.toBeNull();
   await picker.updateComplete;
   const words = picker.shadowRoot!.textContent!;
@@ -278,7 +284,7 @@ it("writes the chosen backup's size in the chooser's language", async () => {
   setLocale("es-ES");
   const { el } = await mount({ backup: true });
   await authenticate(el);
-  const picker = q<LitElement>(el, 'wt-file-input[name="handover-backup"]');
+  const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
   chooseFiles(picker, new File([new Uint8Array(48_200)], "venue.enc"));
   await el.updateComplete;
   await picker.updateComplete;
@@ -370,9 +376,10 @@ it.each([
     await vi.waitFor(() =>
       expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(t(key)),
     );
-    expect(
-      q<HTMLElement & { files: File[] }>(el, 'wt-file-input[name="handover-backup"]').files[0]?.name,
-    ).toBe("venue.enc");
+    const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
+    expect(picker.files[0]?.name).toBe("venue.enc");
+    await picker.updateComplete;
+    expect(drawnFileName(picker)).toBe("venue.enc");
     expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
   },
 );
