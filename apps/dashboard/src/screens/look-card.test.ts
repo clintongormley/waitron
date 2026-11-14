@@ -1690,8 +1690,14 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
         setLocale("es-ES");
         const { el } = await mountEditing(inUse(lucia));
         await resize(el, cardWidth);
-        const gap = rect(q(el, "wt-form-actions")!).top - rect(preview(el)).bottom;
-        expect(gap).toBeGreaterThanOrEqual(16);
+        // Scrolled to the end, so the held row rests where the form lays it out.
+        scrollTo(0, document.documentElement.scrollHeight);
+        try {
+          const gap = rect(q(el, "wt-form-actions")!).top - rect(preview(el)).bottom;
+          expect(gap).toBeGreaterThanOrEqual(16);
+        } finally {
+          scrollTo(0, 0);
+        }
       });
     });
   }
@@ -2196,5 +2202,22 @@ describe("the Text size slider", () => {
       );
       await page.viewport(before.width, before.height);
     }
+  });
+});
+
+describe("the editor's Save row in a short scroller", () => {
+  it("stays in view at the bottom while the form's first fields are in view", async () => {
+    const { el } = await mountEditing(inUse(lucia));
+    const scroller = el.parentElement!;
+    scroller.style.height = "300px";
+    scroller.style.overflow = "auto";
+    scroller.scrollTop = 0;
+    const view = scroller.getBoundingClientRect();
+    const firstField = q(el, "dashboard-theme-logo-field")!.getBoundingClientRect();
+    expect(firstField.top).toBeLessThan(view.bottom);
+    expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+    const row = q(el, "wt-form-actions")!.getBoundingClientRect();
+    expect(row.top).toBeGreaterThanOrEqual(view.top);
+    expect(row.bottom).toBeLessThanOrEqual(view.bottom + 0.5);
   });
 });
