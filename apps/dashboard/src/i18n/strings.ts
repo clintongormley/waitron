@@ -2841,6 +2841,24 @@ export const en = {
   "device_profiles.err_starting_screen":
     "Choose a screen this profile shows, or the layout's first tab.",
   "payments.title": "Card payments",
+  "payments.backup.title": "Backup-machine comparison",
+  "payments.backup.day": "Venue calendar day",
+  "payments.backup.incomplete":
+    "Comparison incomplete. One or both daily checks are not available yet. The complete day is available after the following UTC midnight’s check.",
+  "payments.backup.matched": "Matched payments",
+  "payments.backup.recorded_unmatched": "No matching SumUp charge — check in SumUp",
+  "payments.backup.exceptions": "Payments to check",
+  "payments.backup.ambiguous": "Several possible matches — check in SumUp",
+  "payments.backup.unmatched": "No matching entry — check in SumUp",
+  "payments.backup.empty": "No payments in this comparison.",
+  "payments.backup.retry": "Refresh comparison",
+  "payments.backup.recorded": "Recorded payment",
+  "payments.backup.order": "Order",
+  "payments.backup.machine": "Machine",
+  "payments.backup.operation": "Operation number",
+  "payments.backup.note":
+    "Matches use the same amount, including tips, within five minutes. This comparison does not change payments or send refunds.",
+
   "payments.providers_heading": "Providers",
   "payments.readers_heading": "Card readers",
   "payments.state.connected": "Connected",
@@ -6950,6 +6968,24 @@ export const es: Record<StringKey, string> = {
   "device_profiles.err_starting_screen":
     "Elige una pantalla que muestre este perfil, o la primera pestaña del diseño.",
   "payments.title": "Pagos con tarjeta",
+  "payments.backup.title": "Comparación del datáfono de reserva",
+  "payments.backup.day": "Día natural del local",
+  "payments.backup.incomplete":
+    "Comparación incompleta. Falta una o ambas comprobaciones diarias. El día completo estará disponible tras la comprobación de la siguiente medianoche UTC.",
+  "payments.backup.matched": "Pagos vinculados",
+  "payments.backup.recorded_unmatched": "Sin cargo coincidente de SumUp — compruébalo en SumUp",
+  "payments.backup.exceptions": "Pagos por comprobar",
+  "payments.backup.ambiguous": "Varias coincidencias posibles — compruébalo en SumUp",
+  "payments.backup.unmatched": "Sin anotación coincidente — compruébalo en SumUp",
+  "payments.backup.empty": "No hay pagos en esta comparación.",
+  "payments.backup.retry": "Actualizar comparación",
+  "payments.backup.recorded": "Pago anotado",
+  "payments.backup.order": "Pedido",
+  "payments.backup.machine": "Datáfono",
+  "payments.backup.operation": "Número de operación",
+  "payments.backup.note":
+    "Las coincidencias usan el mismo importe, incluida la propina, con un margen de cinco minutos. Esta comparación no cambia pagos ni envía devoluciones.",
+
   "payments.providers_heading": "Proveedores",
   "payments.readers_heading": "Lectores de tarjetas",
   "payments.state.connected": "Conectado",

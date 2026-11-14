@@ -1247,10 +1247,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
   and unpaid cancellation. The first recovery slice supplies Waitron's partner key and records
   identified refunds. Retained-money allocation after a partial refund, bank-payout audit, orphan self-heal,
-  durable reversals and backup-machine matching remain to build.
+  durable reversals remain to build.
   Backup payment entry now records optional source, machine and operation details, including
   Other card machine on a counter with a configured reader. The day report and accountant workbook
-  carry those details, current payment state and successful-refund totals; matching remains open.
+  carry those details, current payment state and successful-refund totals. Physical second-Solo,
+  other-provider and cash-only qualification remains open.
   [Detail](backlog/payments.md#the-sumup-reconciler)
 
 - **A payment on another card machine cannot carry a tip in the counter’s direct collection form.** The bill-payment window already accepts a manual-card tip.

@@ -56,6 +56,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { formatAlertTime, sourceLabel } from "../widgets/alert-format.js";
 import "../widgets/equipment-label.js";
+import "../widgets/backup-audit.js";
 import { holderText } from "../i18n/equipment.js";
 import { readerDeleteCopy } from "../widgets/reader-delete-copy.js";
 
@@ -2566,6 +2567,8 @@ export class PaymentsScreen extends LitElement {
     </wt-dialog>`;
   }
 
+  @state() private backupOpen = false;
+
   override render(): TemplateResult {
     return html`
       <h1 tabindex="-1">${t("payments.title")}</h1>
@@ -2582,6 +2585,15 @@ export class PaymentsScreen extends LitElement {
           : nothing
       }
       ${this.#renderStuck()} ${this.#renderBillRecovery()}
+      <wt-button
+        variant="secondary"
+        @click=${() => {
+          this.backupOpen = !this.backupOpen;
+        }}
+        aria-expanded=${this.backupOpen}
+        >${t("payments.backup.title")}</wt-button
+      >
+      ${this.backupOpen ? html`<dashboard-backup-audit .api=${this.api}></dashboard-backup-audit>` : nothing}
       <p>
         <a data-test="configure-providers" href=${CARD_PROVIDERS_PATH}
           >${tRaw("modules.configure_providers")}</a

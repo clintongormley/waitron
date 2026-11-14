@@ -148,9 +148,7 @@ barcode scanner only if the deli sells barcoded goods; nothing in the till reads
 The first backup-machine entry slice lets a counter use Other card machine while its normal reader
 is configured. It records optional same-SumUp-account/other source, machine and operation number,
 keeping those details on saved payment displays. The day report and accountant detail sheet carry
-source, machine and operation number, current payment state and successful refunds. Automatic
-amount/time matching remains to build. No second-Solo or other-provider hardware qualification is
-claimed.
+source, machine and operation number, current payment state and successful refunds. No second-Solo or other-provider hardware qualification is claimed.
 
 ## The SumUp reconciler
 
@@ -177,7 +175,7 @@ Recovery records the gross capture and identified completed refunds together. Un
 evidence stays attempting for another check; a failed refund alone leaves the charge. A partly
 refunded unfiled charge keeps the order held. Retaining and allocating the remaining charge after
 a partial refund is still unavailable. Bank-payout audit, refund reconciliation, orphan self-heal, durable reversal attempts
-and backup-machine matching and hardware qualification remain open, along with signature handling.
+and backup-machine hardware qualification remain open, along with signature handling.
 
 The daily gross-charge audit is implemented; it does not establish bank arrival or reconcile refunds.
 Bank-payout audit, refund reconciliation and orphan self-heal remain to build. The original transaction can stay

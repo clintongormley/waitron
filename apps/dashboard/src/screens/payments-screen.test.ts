@@ -2401,3 +2401,25 @@ it("keeps readers unknown while pending, then shows a successful empty list", as
 
 const receivedLocale = currentLocale();
 afterEach(() => setLocale(receivedLocale));
+
+it("opens the backup comparison from Card payments", async () => {
+  const api = stubApi({
+    getBackupAudit: vi.fn().mockResolvedValue({
+      day: "2026-07-01",
+      timeZone: "Europe/Madrid",
+      complete: false,
+      backupMatches: [],
+      backupUnmatched: [],
+    }),
+  });
+  const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+    api,
+    panels: [],
+  });
+  const button = [...el.shadowRoot!.querySelectorAll("wt-button")].find(
+    (node) => node.textContent?.trim() === t("payments.backup.title"),
+  )!;
+  expect(el.shadowRoot!.querySelector("dashboard-backup-audit")).toBeNull();
+  button.click();
+  await expect.poll(() => el.shadowRoot!.querySelector("dashboard-backup-audit")).toBeTruthy();
+});
