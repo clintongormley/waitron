@@ -117,3 +117,83 @@ it("paints an unavailable page with the shared guest-page typography", async () 
   await p.setContent(renderGuestMenuUnavailable("en", "en"));
   expect(await p.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain("system-ui");
 });
+
+it.each(["bistro", "lunch-wine"] as const)(
+  "prints %s with paper-only order, breaks and written declarations",
+  async (preset) => {
+    const p = await browser!.newPage();
+    onTestFinished(() => p.close());
+    await p.emulateMedia({ media: "print" });
+    const dishes: PublicGuestMenu = {
+      ...menu,
+      members: [...menu.members, { kind: "section", name: "Desserts", members: menu.members }],
+    };
+    await p.setContent(
+      renderGuestMenuPage(dishes, "The Restaurant", "en", false, {
+        preset,
+        font: "serif",
+        spacing: "compact",
+        ink: "#123456",
+        accent: "#654321",
+        key: "end",
+        order: [1, 0],
+        breaks: [0],
+      }),
+    );
+    expect(await p.locator("main > section > h2").allTextContents()).toEqual([
+      "Desserts",
+      "Starters",
+    ]);
+    expect(
+      await p
+        .locator("main > section")
+        .last()
+        .evaluate((el) => getComputedStyle(el).breakBefore),
+    ).toBe("page");
+    expect(
+      await p
+        .locator("main > section > h2")
+        .first()
+        .evaluate((el) => getComputedStyle(el).color),
+    ).toBe("rgb(101, 67, 33)");
+    expect(await p.locator("body").evaluate((el) => getComputedStyle(el).fontFamily)).toContain(
+      "Georgia",
+    );
+    expect(await p.locator("button, [popover], nav").count()).toBe(0);
+    expect(await p.locator("article").first().textContent()).toContain("€3.00–€6.00");
+    expect(await p.locator("article .declarations").first().textContent()).toContain("Wheat");
+    expect(await p.locator("footer").textContent()).toContain("Cereals containing gluten");
+    expect(
+      await p
+        .locator("article")
+        .first()
+        .evaluate((el) => getComputedStyle(el).breakInside),
+    ).toBe("avoid");
+    await p.setContent(renderGuestMenuPage(dishes, "The Restaurant", "en"));
+    expect(await p.locator("main > section > h2").allTextContents()).toEqual([
+      "Starters",
+      "Desserts",
+    ]);
+  },
+);
+
+it("prints full declaration words when inline words are selected", async () => {
+  const p = await browser!.newPage();
+  onTestFinished(() => p.close());
+  await p.setContent(
+    renderGuestMenuPage(menu, "The Restaurant", "en", false, {
+      preset: "lunch-wine",
+      font: "sans",
+      spacing: "comfortable",
+      ink: "#123456",
+      accent: "#654321",
+      key: "inline",
+    }),
+  );
+  const declarations = await p.locator("article .declarations").first().textContent();
+  expect(declarations).toContain("Vegan");
+  expect(declarations).toContain("Vegetarian");
+  expect(await p.locator("body").evaluate((el) => getComputedStyle(el).fontFamily)).toContain(
+    "system-ui",
+  );
+});

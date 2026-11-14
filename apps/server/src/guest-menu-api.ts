@@ -73,8 +73,15 @@ export function mountGuestMenuApi(
           managementSessionId: sessionId,
           permission: "catalogue.manage",
         });
+        const current = await readSettings(tx, GUEST_MENU_SETTINGS);
+        const parsed = GUEST_MENU_SETTINGS.parse({
+          ...current.doc,
+          enabled: body.enabled,
+          ...(Object.hasOwn(body, "paper") ? { paper: body.paper } : {}),
+        });
+        if (!parsed.ok) throw new AppError("management.request_invalid", { field: parsed.field });
         await saveSettings(tx, GUEST_MENU_SETTINGS, {
-          doc: { enabled: body.enabled as boolean },
+          doc: parsed.doc,
           expectedRevision: body.expectedRevision as number,
           personId: authorizedBy,
         });

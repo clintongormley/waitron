@@ -229,3 +229,32 @@ it("gives guests a page rather than an internal settings failure", async () => {
   expect(failure.headers.get("content-type")).toContain("text/html");
   expect(await failure.text()).toContain("Menu unavailable");
 });
+
+it("saves paper appearance without sharing and preserves it when sharing changes", async () => {
+  const f = await fixture();
+  const paper = {
+    preset: "bistro",
+    font: "serif",
+    spacing: "compact",
+    ink: "#123456",
+    accent: "#654321",
+    key: "end",
+  };
+  const save = (body: object) =>
+    f.app.request("/management-api/guest-menu", {
+      method: "PUT",
+      headers: { cookie: f.cookies.manager, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const saved = await save({ enabled: false, paper, expectedRevision: 0 });
+  expect(saved.status).toBe(200);
+  expect(await saved.json()).toEqual({ enabled: false, paper, revision: 1, available: false });
+  const shared = await save({ enabled: true, expectedRevision: 1 });
+  expect(shared.status).toBe(200);
+  expect(await shared.json()).toEqual({ enabled: true, paper, revision: 2, available: false });
+  const invalid = await save({ enabled: true, paper: null, expectedRevision: 2 });
+  expect(invalid.status).toBe(400);
+  expect(await invalid.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "paper" } },
+  });
+});

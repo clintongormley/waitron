@@ -4,6 +4,15 @@ import { DIETARY_LABELS, type DietaryLabel } from "./dietary-declarations.js";
 import { menuPriceRange, resolveMenuText } from "./customer-menu-presentation.js";
 import type { DocumentMember, MenuDocument } from "./menu-document-types.js";
 
+export interface GuestMenuPaperAppearance {
+  preset: "bistro" | "lunch-wine";
+  font: "serif" | "sans";
+  spacing: "compact" | "comfortable";
+  ink: string;
+  accent: string;
+  key: "end" | "inline";
+}
+
 export interface GuestDeclarations {
   allergens: ProductAllergens | null;
   dietary: DietaryLabel[];
