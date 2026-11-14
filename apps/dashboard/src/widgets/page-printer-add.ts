@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -57,7 +57,7 @@ export class PagePrinterAdd extends LitElement {
   @property({ attribute: false }) suggestedName = "";
   @property({ attribute: false }) draftParent?: object;
   @state() private name = "";
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private sending = false;
   @state() private refusedCode: string | null = null;
   #scope?: DraftScope<string>;
@@ -87,7 +87,7 @@ export class PagePrinterAdd extends LitElement {
       this.#scope = undefined;
       this.#baseline = this.suggestedName;
       this.name = this.suggestedName;
-      this.attempted = false;
+      this.#feedback.reset();
       this.refusedCode = null;
     }
     if (this.entry === null) {
@@ -130,18 +130,17 @@ export class PagePrinterAdd extends LitElement {
   }
 
   #nameError(): string {
-    return this.attempted && this.name.trim() === "" ? t("form.name_required") : "";
+    return this.#feedback.attempted && this.name.trim() === "" ? t("form.name_required") : "";
   }
 
   async #add(): Promise<void> {
     const entry = this.entry;
     if (entry === null || this.sending || this.#action().unchanged) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusedCode = null;
     const name = this.name.trim();
     if (name === "") {
-      await this.updateComplete;
-      void focusFirstInvalid(this.shadowRoot!);
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.sending = true;
