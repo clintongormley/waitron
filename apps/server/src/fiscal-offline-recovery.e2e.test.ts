@@ -1,7 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
-import { sql } from "drizzle-orm";
 import {
   invoiceSeries,
   openVenueDatabase,
@@ -16,12 +15,16 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
-import {
-  fiscalAllocations,
-  registrosFacturacion,
-  VerifactuBackend,
-} from "@waitron/fiscal-verifactu";
+import { fiscalAllocations, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
+import {
+  aeatInvoiceNumber,
+  heldInvoice,
+  invoiceRecords,
+  recordInvoiceNumber,
+  registrationInstallationName,
+  storedInvoiceNumbers,
+} from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import {
   saleInput,
   staticResolver,
@@ -68,8 +71,8 @@ it.each(["archive", "stream"] as const)(
   async (kind) => {
     const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
     const f = (fixture = await stagedHourCrash(suite, kind, `offline-recovery-${kind}`));
-    const originalRecords = await suite.db.select().from(registrosFacturacion);
-    expect(originalRecords.map((row) => row.numSerieFactura)).toEqual(["A-0CNNW/1"]);
+    const originalRecords = await suite.db.select().from(invoiceRecords);
+    expect(originalRecords.map(recordInvoiceNumber)).toEqual(["A-0CNNW/1"]);
 
     await expect(f.run()).resolves.toBe(true);
     const restored = await f.snapshot();
@@ -77,7 +80,7 @@ it.each(["archive", "stream"] as const)(
     expect(
       restored.registrations
         .filter((row) => row.revocadoEn === null)
-        .map((row) => row.numeroInstalacion),
+        .map(registrationInstallationName),
     ).toEqual(["0CNQR"]);
     expect(restored.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNQR"]);
 
@@ -138,7 +141,7 @@ it.each(["archive", "stream"] as const)(
           {
             installationName: "0CNQR",
             earlierInstallationName: "0CNNW",
-            lastHeldInvoice: { numSerieFactura: "A-0CNNW/1", fechaExpedicionFactura: "2026-03-01" },
+            lastHeldInvoice: heldInvoice("A-0CNNW/1", "2026-03-01"),
             activatedAt: expect.any(String),
           },
         ],
@@ -163,10 +166,7 @@ it.each(["archive", "stream"] as const)(
             saleInput({ nodeId: f.node.nodeId, seriesId: seriesId(id), clock }),
           ),
         );
-      const numbers = () =>
-        store.venue
-          .all<{ n: string }>(sql`select num_serie_factura as n from registros_facturacion`)
-          .map((row) => row.n);
+      const numbers = () => storedInvoiceNumbers(store.venue);
       await sell(standard("live").id);
       await expect(sell(standard("retired").id)).rejects.toMatchObject({
         code: "sale.series_retired",
@@ -196,9 +196,9 @@ it.each(["archive", "stream"] as const)(
       const onlineFiling = await readFiling();
       expect(
         onlineFiling.missingHistory.notIssuedHere.map(
-          (row: { seriesCode: string; invoice: { NumSerieFactura: string } }) => [
+          (row: { seriesCode: string; invoice: Parameters<typeof aeatInvoiceNumber>[0] }) => [
             row.seriesCode,
-            row.invoice.NumSerieFactura,
+            aeatInvoiceNumber(row.invoice),
           ],
         ),
       ).toEqual([["A-0CNNW", "A-0CNNW/123"]]);
