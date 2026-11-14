@@ -2377,6 +2377,19 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   export from a box running other modules now has its own code, `setup.configuration_parts_differ`
   (A1384). Left open by A261-2e's review (#1277); whether a shipped build can reach it is unverified.
 
+- **A1544. Measure whether a year or two of history slows the sale on a box with little memory
+  to spare.** A1531's probe (one synthetic table, Docker on a Mac) found that a year of rows makes a
+  10-row write about 10% slower while the table fits in memory, but about twice as slow, and a read
+  by key about twenty times slower, with memory capped at about an eighth of the table. At the bench's
+  250 bills a day, a year of data is about 6.1 GB and the box floor is 8 GB of memory
+  (`docs/superpowers/plans/2026-10-26-b3-usb-installer.md:60`), so the database outgrows memory in
+  its second year; whether the sale's requests then slow down is not measured. Run a bench build of
+  more than a year and `measure` it twice, once with the box's memory and once limited to what a
+  box leaves the database, on `node:26-slim`'s SQLite (CLAUDE.md §4); about a day of machine time.
+  Also find how much of a box's memory the database's cache really gets. This is the one figure
+  that could change A1531's advice not to archive fiscal records now.
+  [A1531 design](superpowers/specs/2026-11-14-a1531-archive-closed-records-design.md#does-a-year-of-history-slow-the-sale-down-aim-2)
+
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat.
 
@@ -2397,6 +2410,21 @@ _Formerly entries spread across the old sections._
   build and verification remain open.
   Stays in the backlog until the advisers answer; question 48 is the owner's to send (owner, 2026-11-09).
   [Detail and audit](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
+
+- **A1543. Trim finished working rows, the way A1532 trimmed print payloads — waits for the
+  owner's call.** After A1532, tables that are neither append-only nor print jobs hold 56% of a
+  30-day database: attendance and service bookkeeping (`attendance_source_state`,
+  `attendance_operation_facts`, `service_commands`) 38%, and order, kitchen-ticket and
+  attendance-question working rows 18%; fiscal records are 1.3%. Steps: trace every reader of and
+  every link into each table (a foreign key from an append-only row, such as `order_amendments` to
+  `working_orders` or `receipt_reprints` to `print_jobs`, keeps the row it points at); separate
+  machinery, such as where a scan got to, from evidence of who did what and when or what a guest
+  was served, which is not trimmed; bring the owner a period for the machinery rows, with figures;
+  measure the 30-day sample again. It changes no append-only protection, so A664's G5 is not
+  needed, but A664's adopted approach puts approved operational cleanup after the advisers'
+  agreement and G4 (A664 design line 191): whether it goes first is the owner's call, as A1532's
+  "a week is fine" was. Nothing is built before that call.
+  [A1531 design](superpowers/specs/2026-11-14-a1531-archive-closed-records-design.md#the-recommended-next-item-trim-finished-working-rows)
 
 - **Third party licence notices** (bundle of 2, 2 important, size S, needs the adviser). [Detail](backlog/data-protection.md#bundle-third-party-licence-notices)
 
