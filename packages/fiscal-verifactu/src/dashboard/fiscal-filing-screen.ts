@@ -29,7 +29,7 @@ import {
   subscribeLocale,
   type DashboardPermissionContinuation,
 } from "@waitron/dashboard-kit";
-import { formatMoney, localToday } from "@waitron/shared";
+import { formatMoney, localCalendarDate } from "@waitron/shared";
 import type { EnvioState } from "../filing-states.js";
 import type {
   ActiveConflictView,
@@ -75,7 +75,7 @@ const count = (value: number): string => value.toLocaleString(currentLocale());
 const when = (iso: string | null): string =>
   iso === null ? t("fiscal_filing.none") : formatIsoMinute(iso);
 
-/** The month a `YYYY-MM-DD` day falls in, as "October 2026": the VAT return the sale counts in. */
+/** The month a `YYYY-MM-DD` day falls in, as "October 2026". */
 function vatPeriod(day: string): string {
   return dateTimeFormat(currentLocale(), {
     timeZone: "UTC",
@@ -785,12 +785,18 @@ export class FiscalFilingScreen extends LitElement {
 
   /** The box's own day, as the server dates a replacement; null when it could not say. */
   #serverDay(): string | null {
-    return this.overview?.today ?? null;
+    return this.overview?.today?.day ?? null;
+  }
+
+  /** The venue's day by this device's clock; null when the box could not say the venue's offset. */
+  #deviceDay(): string | null {
+    const today = this.overview?.today;
+    return today ? localCalendarDate(new Date(), today.offsetMinutes) : null;
   }
 
   #daysDiffer(): boolean {
     const today = this.#serverDay();
-    return today !== null && today !== localToday();
+    return today !== null && today !== this.#deviceDay();
   }
 
   /** What is wrong with the chosen day by the server's upper bounds; empty while none is chosen. */
@@ -810,10 +816,10 @@ export class FiscalFilingScreen extends LitElement {
     return this.refusal === DAY_REFUSED ? t(REFUSAL_WORDS[DAY_REFUSED]) : "";
   }
 
-  /** What holds Send: the day's own check once Send was chosen, or this device's day differing
-   * from the box's. */
+  /** What holds Send: the day's own check once Send was chosen, the box not saying its day, or
+   * the venue's day by this device's clock differing from the box's. */
   #replacementBlocked(problem: string): boolean {
-    return (this.attempted && problem !== "") || this.#daysDiffer();
+    return (this.attempted && problem !== "") || this.#serverDay() === null || this.#daysDiffer();
   }
 
   #bottom(problem: string): string {
@@ -825,11 +831,12 @@ export class FiscalFilingScreen extends LitElement {
     const marked = replaces ? this.#dayError(problem) : this.#descriptionError();
     const fix = marked === "" ? "" : t("fiscal_filing.put_right.fix_fields");
     const today = this.#serverDay();
+    const device = this.#deviceDay();
     const differs =
-      replaces && today !== null && this.#daysDiffer()
+      replaces && today !== null && device !== null && today !== device
         ? t("fiscal_filing.put_right.replace.day_differs", {
             server: calendarDay(today),
-            device: calendarDay(localToday()),
+            device: calendarDay(device),
           })
         : "";
     return [said, fix, differs].filter((part) => part !== "").join(" ");
@@ -951,26 +958,28 @@ export class FiscalFilingScreen extends LitElement {
           this.#scope?.changed();
         }}
       ></wt-input>
-      <div class="confirmation" data-test="replacement-confirmation">
-        <p>
-          ${
-            today === null
-              ? t("fiscal_filing.put_right.replace.confirm_undated", invoice)
-              : t("fiscal_filing.put_right.replace.confirm", {
+      ${
+        today === null
+          ? html`<p data-test="replacement-undated">
+              ${t("fiscal_filing.put_right.replace.undated")}
+            </p>`
+          : html`<div class="confirmation" data-test="replacement-confirmation">
+              <p>
+                ${t("fiscal_filing.put_right.replace.confirm", {
                   ...invoice,
                   today: calendarDay(today),
-                })
-          }
-          ${
-            chosen
-              ? t("fiscal_filing.put_right.replace.period", {
-                  period: vatPeriod(this.operationDate),
-                })
-              : nothing
-          }
-        </p>
-        <p>${t("fiscal_filing.put_right.replace.order")}</p>
-      </div>
+                })}
+                ${
+                  chosen
+                    ? t("fiscal_filing.put_right.replace.period", {
+                        period: vatPeriod(this.operationDate),
+                      })
+                    : nothing
+                }
+              </p>
+              <p>${t("fiscal_filing.put_right.replace.order")}</p>
+            </div>`
+      }
     </section>`;
   }
 

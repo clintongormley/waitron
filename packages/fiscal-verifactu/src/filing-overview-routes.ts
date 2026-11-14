@@ -6,32 +6,31 @@ import { authorizeManager } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { createErrorBoundary, requireManagementSession, type Logger } from "@waitron/server-kit";
 import { AppError, localCalendarDate } from "@waitron/shared";
+import type { BoxToday } from "./filing-overview-types.js";
 import { readFilingOverview } from "./filing-overview.js";
 import { readFilingWarnings } from "./filing-warnings.js";
 
 const CASE_LIMIT = 200;
 
-const ZONE_UNREADABLE: ReadonlySet<string> = new Set([
-  "venue.time_zone_invalid",
-  "venue.time_zone_target_invalid",
-]);
-
 /**
- * The day a replacement corrective issued now would carry: the same clock and venue zone the
- * remedy route dates it with. Null where that route would refuse anyway, so the page still answers.
+ * The day a replacement corrective issued now would carry, and the venue's offset that gives it:
+ * the same clock and venue zone the remedy route dates it with. Null where that route would refuse
+ * anyway, so the page still answers.
  */
 async function boxToday(
   tx: Transaction,
   generation: ModuleRouteContext["recordGeneration"],
-): Promise<string | null> {
+  log: Logger,
+): Promise<BoxToday | null> {
   if (generation === undefined) return null;
   try {
     const clock = await prepareIssueClock(tx, { nodeId: generation.nodeId }, generation.clock);
-    const now = clock.now();
-    return localCalendarDate(now.instant, now.offsetMinutes);
+    const { instant, offsetMinutes } = clock.now();
+    return { day: localCalendarDate(instant, offsetMinutes), offsetMinutes };
   } catch (error) {
-    if (error instanceof AppError && ZONE_UNREADABLE.has(error.code)) return null;
-    throw error;
+    if (!(error instanceof AppError)) throw error;
+    log("warn", "fiscal.filing_day_unread", { code: error.code });
+    return null;
   }
 }
 
@@ -62,7 +61,7 @@ export function mountFilingOverview(
           limit,
         });
         const warnings = await readFilingWarnings(tx, { limit });
-        return { ...read, warnings, today: await boxToday(tx, ctx.recordGeneration) };
+        return { ...read, warnings, today: await boxToday(tx, ctx.recordGeneration, log) };
       });
       return c.json(
         {

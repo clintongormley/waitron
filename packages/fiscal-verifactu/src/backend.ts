@@ -8,7 +8,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { readTaxpayer, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recipientIdentifierResult } from "@waitron/country-packs";
-import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared";
+import { AppError, decimal, isCalendarDate, readSaleOrigin, sumDecimals } from "@waitron/shared";
 import type { NodeId, SaleId } from "@waitron/shared";
 import type {
   ClockStep,
@@ -128,13 +128,6 @@ type OriginalAltaForCorrection = Pick<
   | "tipo_factura"
   | "tipo_rectificativa"
 >;
-
-/** A `YYYY-MM-DD` day that exists in the calendar (`Date.parse` rolls 2026-02-30 into March). */
-function isCalendarDay(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
 
 /**
  * One filed VAT line. "S1" is sujeta y no exenta, sin inversión del sujeto pasivo, the ordinary
@@ -513,7 +506,7 @@ export class VerifactuBackend implements FiscalBackend {
     correction: { correctsSaleId: SaleId; replaces?: true; operationDate?: string },
   ): Promise<FiscalRecordRef> {
     const { operationDate } = correction;
-    if (operationDate !== undefined && !isCalendarDay(operationDate)) {
+    if (operationDate !== undefined && !isCalendarDate(operationDate)) {
       throw new AppError("fiscal.record_invalid", {
         fields: ["FechaOperacion"],
         codes: ["FECHA_FORMAT"],

@@ -1,7 +1,8 @@
 import "./errors.js";
-import { AppError } from "@waitron/shared";
+import { isCalendarDate } from "@waitron/shared";
 import type { AltaInput, IDFacturaARInput } from "@waitron/verifactu";
 import { formatAmountExact } from "@waitron/verifactu";
+import { invalid, object, text } from "./record-remedy-request.js";
 
 type InvoiceReference = Omit<IDFacturaARInput, "FechaExpedicionFactura"> & {
   FechaExpedicionFactura: string;
@@ -19,20 +20,6 @@ export interface CorrectedRecordFacts {
   breakdown?: AltaInput["Desglose"];
   taxTotal?: string;
   total?: string;
-}
-
-function invalid(): never {
-  throw new AppError("fiscal.remedy_request_invalid", {});
-}
-
-function object(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return invalid();
-  return value as Record<string, unknown>;
-}
-
-function text(value: unknown): string {
-  if (typeof value !== "string" || value.trim() === "") return invalid();
-  return value;
 }
 
 function amount(value: unknown) {
@@ -59,10 +46,7 @@ function list(value: unknown, check: (item: unknown) => void) {
 
 function reference(value: unknown) {
   const row = strings(value, ["IDEmisorFactura", "NumSerieFactura", "FechaExpedicionFactura"]);
-  const date = text(row.FechaExpedicionFactura);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) invalid();
-  const instant = new Date(`${date}T00:00:00Z`);
-  if (!Number.isFinite(instant.getTime()) || instant.toISOString().slice(0, 10) !== date) invalid();
+  if (!isCalendarDate(text(row.FechaExpedicionFactura))) invalid();
 }
 
 function recipient(value: unknown) {

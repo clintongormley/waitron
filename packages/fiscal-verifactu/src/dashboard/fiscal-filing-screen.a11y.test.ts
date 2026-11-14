@@ -9,11 +9,10 @@ import {
 } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed, type Theme } from "@waitron/ui/src/a11y-helpers.js";
-import { localCalendarDate, localToday } from "@waitron/shared";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { FiscalFilingScreen } from "./fiscal-filing-screen.js";
 import type { FilingOverviewAnswer } from "../filing-overview-types.js";
-import { conflictCase, overview } from "../../test/fiscal-filing-browser-fixture.js";
+import { conflictCase, deviceToday, overview } from "../../test/fiscal-filing-browser-fixture.js";
 
 const size = { width: window.innerWidth, height: window.innerHeight };
 const locale = currentLocale();
@@ -49,10 +48,10 @@ const DESCRIPTION = overview({
   totalCases: 1,
 });
 
-/** A simplified invoice AEAT refused for a future date, read today, which the dialog replaces. */
+/** A simplified invoice AEAT refused for a future date, on a box whose day is this device's,
+ * which the dialog replaces. */
 const FUTURE_DATE = overview({
-  readAt: new Date().toISOString(),
-  today: localToday(),
+  today: deviceToday(),
   cases: [
     {
       ...base,
@@ -70,11 +69,7 @@ const FUTURE_DATE = overview({
 });
 
 /** The same case on a box whose day is two days behind this device's, so the dates differ. */
-const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-const DAYS_DIFFER: FilingOverviewAnswer = {
-  ...FUTURE_DATE,
-  today: localCalendarDate(twoDaysAgo, -twoDaysAgo.getTimezoneOffset()),
-};
+const DAYS_DIFFER: FilingOverviewAnswer = { ...FUTURE_DATE, today: deviceToday(-2) };
 
 /** Opens the case and chooses a valid day, so the confirmation names the VAT period. */
 async function confirmReplacement(screen: FiscalFilingScreen): Promise<HTMLElement> {
@@ -214,6 +209,14 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
     const details = await confirmReplacement(screen);
     const actions = details.querySelector("wt-form-actions") as HTMLElement & { error: string };
     expect(actions.error).toContain("differ");
+    await expectNoA11yViolations(host);
+  });
+
+  it("draws the replacement saying the server cannot date it now", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show({ ...FUTURE_DATE, today: null }, theme);
+    const details = await openDetails(screen);
+    expect(details.querySelector("[data-test=replacement-undated]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

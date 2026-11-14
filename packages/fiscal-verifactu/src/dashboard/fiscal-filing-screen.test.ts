@@ -11,7 +11,7 @@ import {
 } from "@waitron/dashboard-kit";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { FiscalFilingScreen } from "./fiscal-filing-screen.js";
-import type { FilingCaseView, FilingOverviewAnswer } from "../filing-overview-types.js";
+import type { BoxToday, FilingCaseView, FilingOverviewAnswer } from "../filing-overview-types.js";
 import { REMEDY_REFUSALS, type RemedyRefusal } from "../remedy-refusals.js";
 import { REFUSAL_WORDS } from "./put-right-words.js";
 import { t } from "./strings.js";
@@ -27,6 +27,7 @@ import {
   THEIRS,
   TOTALS_WARNING,
   conflictCase,
+  deviceToday,
   overview,
 } from "../../test/fiscal-filing-browser-fixture.js";
 
@@ -1260,18 +1261,20 @@ function futureCase(stamped = "2026-11-03"): FilingCaseView {
   return { ...found, record: { ...found.record, fechaExpedicionFactura: stamped } };
 }
 
-/** As `server`, with the box's own day `today` (by default, this device's). */
+/** As `server`, with the box's own day `today` (by default, a box whose day is this device's). */
 function replacementServer(
   found: FilingCaseView,
   remedy: () => Promise<unknown> = async () => ({}),
-  today: string | null = deviceDay(),
+  today: BoxToday | null = deviceToday(),
 ) {
   return vi.fn(async (path: string) =>
-    path === REMEDY
-      ? remedy()
-      : overview({ cases: [found], totalCases: 1, readAt: new Date().toISOString(), today }),
+    path === REMEDY ? remedy() : overview({ cases: [found], totalCases: 1, today }),
   );
 }
+
+/** The bottom message when the box's day and the venue's day by this device's clock differ. */
+const differs = (server: string, device: string) =>
+  `The server's date, ${calendar(server)}, and the venue's date by this device's clock, ${calendar(device)}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`;
 
 /** The element focus is on, looking through shadow roots. */
 function focused(): Element | null {
@@ -1393,7 +1396,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
 
   it("keeps Send disabled, saying so under the actions, when the server's date and this device's differ", async () => {
     const { screen, request } = await mount(
-      replacementServer(futureCase("2026-11-03"), async () => ({}), deviceDay(-2)),
+      replacementServer(futureCase("2026-11-03"), async () => ({}), deviceToday(-2)),
       continuation(["fiscal.remedy"]).value,
     );
     const details = await openDetails(screen);
@@ -1401,9 +1404,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(dateField(details).error).toBe("");
     expect(action(details).disabled).toBe(true);
     expect(details.querySelector("[data-test=day-differs]")).toBeNull();
-    expect(bottomMessage(details)).toBe(
-      `The server's date, ${calendar(deviceDay(-2))}, and this device's, ${calendar(deviceDay())}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`,
-    );
+    expect(bottomMessage(details)).toBe(differs(deviceDay(-2), deviceDay()));
     action(details).click();
     await screen.updateComplete;
     expect(remedyCalls(request)).toHaveLength(0);
@@ -1424,9 +1425,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
       await screen.updateComplete;
       expect(remedyCalls(request)).toHaveLength(0);
       expect(action(details).disabled).toBe(true);
-      expect(bottomMessage(details)).toBe(
-        `The server's date, ${calendar(server)}, and this device's, ${calendar(deviceDay())}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`,
-      );
+      expect(bottomMessage(details)).toBe(differs(server, deviceDay()));
     } finally {
       vi.useRealTimers();
     }
@@ -1494,41 +1493,62 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     ["2026-02-28T23:30:00.000Z", "2026-03-01", "2026-02-28"],
     ["2026-11-15T00:30:00.000Z", "2026-11-15", "2026-11-14"],
   ])(
-    "dates the replacement with the box's own day, not this device's, at %s",
+    "lets a device in another zone send when the clocks agree, dated the box's day, at %s",
     async (instant, boxDay, browserDay) => {
       vi.useFakeTimers({ toFake: ["Date"], now: new Date(instant) });
       try {
-        const request = replacementServer(futureCase("2026-11-20"), async () => ({}), boxDay);
+        const madrid = { day: boxDay, offsetMinutes: 60 };
+        const request = replacementServer(futureCase("2026-11-20"), async () => ({}), madrid);
         const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
         const details = await openDetails(screen);
         await pick(screen, details, browserDay);
         expect(flat(details.querySelector("[data-test=replacement-confirmation]"))).toContain(
           `, dated ${calendar(boxDay)}.`,
         );
-        expect(bottomMessage(details)).toBe(
-          `The server's date, ${calendar(boxDay)}, and this device's, ${calendar(browserDay)}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`,
-        );
-        expect(action(details).disabled).toBe(true);
+        expect(bottomMessage(details)).toBe("");
+        expect(action(details).disabled).toBe(false);
         action(details).click();
-        await screen.updateComplete;
-        expect(remedyCalls(request)).toHaveLength(0);
+        await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+        expect(remedyCalls(request)[0]![2]).toMatchObject({ operationDate: browserDay });
       } finally {
         vi.useRealTimers();
       }
     },
   );
 
-  it("leaves the replacement's date to the server when the page could not read the box's day", async () => {
+  it("stops a device in another zone when the box's clock is a day ahead of the venue's", async () => {
+    // 22:30 in UTC is 23:30 on 28 February in Madrid, but the box's clock says 1 March there.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-02-28T22:30:00.000Z") });
+    try {
+      const ahead = { day: "2026-03-01", offsetMinutes: 60 };
+      const request = replacementServer(futureCase("2026-11-20"), async () => ({}), ahead);
+      const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+      const details = await openDetails(screen);
+      await pick(screen, details, "2026-02-27");
+      expect(bottomMessage(details)).toBe(differs("2026-03-01", "2026-02-28"));
+      expect(action(details).disabled).toBe(true);
+      action(details).click();
+      await screen.updateComplete;
+      expect(remedyCalls(request)).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says the server cannot date a replacement now, keeping Send disabled, when the page could not read the box's day", async () => {
     const request = replacementServer(futureCase("2026-11-03"), async () => ({}), null);
     const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
     const details = await openDetails(screen);
     await pick(screen, details, "2026-11-02");
-    expect(flat(details.querySelector("[data-test=replacement-confirmation]"))).toContain(
-      `Waitron will issue a replacement corrective invoice for invoice T1/41 of ${calendar("2026-11-03")}, total ${formatMoney("12.10", "en")}, dated the server's day when it is sent.`,
+    expect(details.querySelector("[data-test=replacement-confirmation]")).toBeNull();
+    expect(flat(details.querySelector("[data-test=replacement-undated]"))).toBe(
+      "The server cannot date a replacement now because the venue's time zone or this server's setup is not ready, so nothing can be sent. Check Venue settings, then open this case again.",
     );
     expect(bottomMessage(details)).toBe("");
+    expect(action(details).disabled).toBe(true);
     action(details).click();
-    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    await screen.updateComplete;
+    expect(remedyCalls(request)).toHaveLength(0);
   });
 
   it.each([

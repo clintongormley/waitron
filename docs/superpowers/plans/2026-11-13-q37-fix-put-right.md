@@ -602,7 +602,7 @@ Behaviour:
   | `node.read_only`, `fiscal.chain_handed_over` | This server is not the one that files invoices now; open this page on the main server. |
   | `filing_case.already_resolved`, `fiscal.record_already_corrected`, `filing_case.action_mismatch`, `fiscal.remedy_invalid` | The case changed since the page read it; the page reads again (and does). |
   | `fiscal.remedy_disabled` | Waitron cannot put this one right yet; the case stays open. |
-  | `fiscal.remedy_issuer_changed`, `fiscal.remedy_request_invalid` | Waitron could not send this correction; nothing was sent (not reachable from this dialog; a guard against a future one). |
+  | `fiscal.remedy_issuer_changed`, `fiscal.remedy_request_invalid` | Waitron could not accept this request; nothing was sent (not reachable from this dialog; a guard against a future one). |
   | `storage.disk_full` | The server's disk is full; nothing was sent (the alert's own guidance applies). |
   | `sale.replacement_not_first` (3c) | This invoice already has a corrective invoice, so Waitron cannot replace it; the case stays open and is in the export for your tax adviser. |
 
@@ -1023,12 +1023,15 @@ above, inline error when after today, shown and holding Send as the Forms contra
 first Send on). The confirmation names the
 refused invoice's number, date and total, the VAT period the sale will count in, and the
 replacement's date — the box's own day, which the overview answers as `today`
-(`filing-overview-routes.ts`, `boxToday`): the remedy route's clock read through
-`prepareIssueClock` in the venue's zone, as the replacement is dated; null, with the confirmation
-saying the server dates it when sent, on a box that issues no records or whose venue zone cannot be
-read. When that day differs from this device's day, Send stays disabled with
-one sentence in the form's bottom message saying the server's date and this device's date differ and that the time can be
-checked and confirmed on Box status (a server whose clock is still ahead would file a replacement
+(`filing-overview-routes.ts`, `boxToday`) with the venue's offset beside it: the remedy route's
+clock read through `prepareIssueClock` in the venue's zone, as the replacement is dated. It is null
+on a box that issues no records, that the venue does not list, or whose venue zone or settings
+cannot be read — states in which the route refuses anyway — and the dialog then says, in place of
+the confirmation, that the server cannot date a replacement now and to check Venue settings and
+open the case again, with Send disabled. When that day differs from the venue's day by this
+device's clock (this device's time at the venue's offset, so a device in another zone is not
+stopped), Send stays disabled with one sentence in the form's bottom message saying the two dates
+differ and that the time can be checked and confirmed on Box status (a server whose clock is still ahead would file a replacement
 AEAT refuses again for the same reason, using a corrective number). It says the replacement goes to
 AEAT after any earlier invoices Waitron is holding back, not "at once" (`drain.ts:845-855`,
 `:1014-1028`). The browser sends `operationDate` and never an amount. Every code Task 3c-1 lists

@@ -5,8 +5,7 @@ import { LeaveController, applyTokens } from "@waitron/ui";
 import { currentLocale, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { FiscalFilingScreen } from "./fiscal-filing-screen.js";
-import { localToday } from "@waitron/shared";
-import { conflictCase, overview } from "../../test/fiscal-filing-browser-fixture.js";
+import { conflictCase, deviceToday, overview } from "../../test/fiscal-filing-browser-fixture.js";
 
 const MESSAGE = "Valor o tipo incorrecto del campo: DescripcionOperacion";
 const base = conflictCase("rec-1", "2026-11-03T11:02:00.000Z");
@@ -25,7 +24,9 @@ const future = {
   submission: { ...base.submission!, codigoError: "1112", mensajeError: FUTURE },
 };
 let shown = found;
-const request = vi.fn(async () => overview({ cases: [shown], totalCases: 1, today: localToday() }));
+const request = vi.fn(async () =>
+  overview({ cases: [shown], totalCases: 1, today: deviceToday() }),
+);
 
 class FilingLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
