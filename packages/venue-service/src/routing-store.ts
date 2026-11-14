@@ -673,8 +673,8 @@ async function readExtraOffers(
     for (const zoneId of zoneIds) inZones.add(zoneId);
   };
   const everyZone = zones.map((zone) => zone.id);
-  // A variant's own attachments are never offered: a menu refuses a variant
-  // (`menu_item.variant_not_allowed`) and `listAvailableProducts` lists top-level products alone.
+  // A variant's own attachments are never offered: a menu section refuses a variant as a member
+  // (`menu_section.membership_invalid`) and `listAvailableProducts` lists top-level products alone.
   const live = await readOfferedExtraItemIds(
     tx,
     dishes.flatMap((dish) =>
