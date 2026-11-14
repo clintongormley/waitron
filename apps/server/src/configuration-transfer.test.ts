@@ -867,8 +867,20 @@ describe("configuration transfer database path", () => {
       await tx
         .insert(menus)
         .values({ id: "11111111-aaaa-aaaa-aaaa-111111111111", name: "Prepared menu" });
+      const [sourceUnit] = await tx
+        .insert(units)
+        .values({
+          staffName: "Source kilogram",
+          staffAbbreviation: "kg",
+          name: {},
+          abbreviation: {},
+          precision: 3,
+          hardwareUnit: "kg",
+        })
+        .returning({ id: units.id });
       await tx.insert(products).values({
         id: "22222222-aaaa-aaaa-aaaa-222222222222",
+        unitId: sourceUnit!.id,
         menuId: "11111111-aaaa-aaaa-aaaa-111111111111",
         name: "Coffee",
 
@@ -1045,6 +1057,13 @@ describe("configuration transfer database path", () => {
       expect(bytes?.bytes).toEqual(photo.bytes);
       const attached = await tx.execute<{ image: string }>(sql`select image from products `);
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
+      const [importedUnit] = await tx
+        .select({ id: units.id, staffName: units.staffName, hardwareUnit: units.hardwareUnit })
+        .from(products)
+        .innerJoin(units, eq(units.id, products.unitId))
+        .where(eq(products.name, "Coffee"));
+      expect(importedUnit).toMatchObject({ staffName: "Source kilogram", hardwareUnit: "kg" });
+      expect(importedUnit!.id).not.toBe(transferred.tables.products![0]!.unit_id);
       const named = await tx.select({ name: categories.name }).from(categories);
       expect(named).toEqual([{ name: "Bakery" }]);
       const category = await tx.execute<{ primary: number }>(sql`

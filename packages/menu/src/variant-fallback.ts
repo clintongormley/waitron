@@ -52,15 +52,6 @@ function parentsAlways<C extends AnyColumn>(
   column: C,
   parentColumn: AnyColumn,
 ): SQL<C["_"]["data"] | null> {
-  return parentsAlwaysOwned(column, parentColumn);
-}
-
-/** {@link parentsAlways} for a column `products_top_level_owns_ck` requires on every product with no
- * parent, typed non-null as {@link owned} is. */
-function parentsAlwaysOwned<C extends AnyColumn>(
-  column: C,
-  parentColumn: AnyColumn,
-): SQL<C["_"]["data"]> {
   return sql`case when ${products.parentId} is null then ${column} else ${parentColumn} end`.mapWith(
     column,
   );

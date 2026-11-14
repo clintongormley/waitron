@@ -318,15 +318,13 @@ it("reassigning to null returns the products to each-priced and leaves products 
     .from(products)
     .where(inArray(products.id, [onSource, onOther]));
   const pricingById = Object.fromEntries(pricing.map((row) => [row.id, row.unitId]));
-  // The reassigned top-level product loses its unit row AND returns to each-priced.
   expect(await app((tx) => storedUnitId(tx, onSource))).toBeNull();
   expect(pricingById[onSource]).toBeNull();
-  // The product on another unit keeps both its unit row and its weight pricing.
   expect(await app((tx) => storedUnitId(tx, onOther))).toBe(otherUnit.id);
   expect(pricingById[onOther]).toBe(otherUnit.id);
 });
 
-/** A variant of `parent`, with no unit row of its own. */
+/** A variant of `parent`, with no unit of its own. */
 async function variantOf(parent: string): Promise<string> {
   const [parentRow] = await suite.db
     .select({ menuId: products.menuId })
@@ -354,7 +352,7 @@ const kg = () =>
     ),
   );
 
-it("reassigning to null skips a variant's stored unit row, as it skips an id not on the unit", async () => {
+it("reassigning to null skips a variant's stored unit, as it skips an id not on the unit", async () => {
   await seedTaxpayer(suite.db);
   const parent = await product();
   const variant = await variantOf(parent);
@@ -376,7 +374,7 @@ it("reassigning to null skips a variant's stored unit row, as it skips an id not
   expect(await app((tx) => storedUnitId(tx, variant))).toBe(sourceUnit.id);
 });
 
-describe("a variant's stored unit row, from before a variant always took its product's", () => {
+describe("a variant's stored unit, from before a variant always took its product's", () => {
   it("refuses to give a variant a unit, as it refuses an id that names no product", async () => {
     await seedTaxpayer(suite.db);
     const variant = await variantOf(await product());
@@ -400,7 +398,7 @@ describe("a variant's stored unit row, from before a variant always took its pro
     ]);
   });
 
-  it("does not stop the unit being deleted, and is deleted with it", async () => {
+  it("does not stop the unit being deleted, and is cleared with it", async () => {
     await seedTaxpayer(suite.db);
     const parent = await product();
     const variant = await variantOf(parent);

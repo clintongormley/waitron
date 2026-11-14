@@ -141,9 +141,6 @@ beforeEach(async () => {
         dietaryDeclarations: null,
       })
       .returning({ id: products.id });
-    // Its own value for every inherited field, and its own names. Its category, unit row and
-    // pricing unit are ones a variant still holds from before it always took its parent's, and its
-    // colour one no save writes; every read ignores all four.
     const [wine175] = await tx
       .insert(products)
       .values({
@@ -413,7 +410,7 @@ describe("a variant's main category is always its parent's", () => {
 });
 
 describe("a variant's unit is always its product's", () => {
-  it("reads Each for a variant whose product has no unit, whatever unit row the variant stores", async () => {
+  it("reads Each for a variant whose product has no unit, whatever unit the variant stores", async () => {
     const { parentId, variantId } = await run(async (tx) => {
       const parent = await createProduct(tx, {
         menuId: f.menuId,
@@ -563,7 +560,7 @@ describe("effectiveProductColumns, entry by entry", () => {
   // Every entry read straight, for the parent and both variants: 125 ml has every field blank and
   // 175 ml every field set, each different from the parent's. An entry with its two sides swapped
   // fails one of the two.
-  it("reads the parent's value for a blank field and the variant's own for a set one, except the category, pricing unit and colour, always the parent's", async () => {
+  it("reads the parent's value for a blank field and the variant's own for a set one, except the category and colour, always the parent's", async () => {
     const raw = await run((tx) =>
       tx
         .select({ id: products.id, ...pickRaw() })
@@ -585,8 +582,6 @@ describe("effectiveProductColumns, entry by entry", () => {
       expect(parentRaw[key], key).not.toBeNull();
       expect(wine175Raw[key], key).not.toEqual(parentRaw[key]);
       expect(byId.get(f.wine125)![key], key).toEqual(parentRaw[key]);
-      // The category, the pricing unit and the colour are the entries a variant cannot set: its
-      // stored ones are ignored.
       const parentsAlways = key === "categoryId" || key === "color";
       const own = parentsAlways ? parentRaw[key] : wine175Raw[key];
       expect(byId.get(f.wine175)![key], key).toEqual(own);
@@ -679,8 +674,7 @@ describe("what the products table refuses", () => {
     });
   });
 
-  // Also pins that `products_vat_class_ck` let a NULL through.
-  it("accepts a variant with no VAT class, price or pricing unit", async () => {
+  it("accepts a variant with no VAT class or price", async () => {
     await expect(
       fx.db.insert(products).values({
         menuId: f.menuId,

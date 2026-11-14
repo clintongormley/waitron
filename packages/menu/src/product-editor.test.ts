@@ -796,7 +796,6 @@ describe("a variant's own page", () => {
   });
 
   describe("holding a unit of its own, stored before a variant always took its parent's", () => {
-    // The parent sells by kg; the planted row names the Each-like unit and pricing unit instead.
     beforeEach(() => plantStoredUnit(fx.db, variantId, input.unitId!));
     const storedUnit = (id: string) => withTransaction(fx.db, (tx) => storedUnitId(tx, id));
 

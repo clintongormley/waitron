@@ -5,7 +5,7 @@ import { listProductVariants, setMenuVariants, setProductVariants } from "./vari
 import { applyLiveFields } from "./menu-document.js";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { menusFixture } from "../test/menus-fixture.js";
-import { menuItems, products, units, withTransaction } from "@waitron/db";
+import { menuItems, products, withTransaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
@@ -37,7 +37,7 @@ import {
   updateProduct,
 } from "./operations.js";
 import type { AvailableProduct } from "./operations.js";
-import { createUnit, EACH_UNIT } from "./units.js";
+import { createUnit, EACH_UNIT, reassignProductsToUnit } from "./units.js";
 import {
   seedMenuFixture,
   seedLegacySellingUnits,
@@ -1408,13 +1408,13 @@ describe("menu operations", () => {
         unitPrice: "2.00",
         vatClass: "general",
       });
-      await tx.update(units).set({ hardwareUnit: "kg" }).where(eq(units.id, eachUnitId));
+      await reassignProductsToUnit(tx, eachUnitId, [product.id], kgUnitId);
       expect((await listProducts(tx, menu.id))[0]!.pricingUnit).toBe("weight");
       expect(
         (await listAvailableProducts(tx)).products.find((row) => row.id === product.id)!
           .pricingUnit,
       ).toBe("weight");
-      await tx.update(units).set({ hardwareUnit: null }).where(eq(units.id, eachUnitId));
+      await reassignProductsToUnit(tx, kgUnitId, [product.id], null);
       expect((await listProducts(tx, menu.id))[0]!.pricingUnit).toBe("each");
     });
   });

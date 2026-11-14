@@ -2394,7 +2394,6 @@ describe("mountMenuApi — products", () => {
   });
 
   describe("a variant holding a unit of its own, stored before a variant always took its parent's", () => {
-    // The parent sells by the seeded each; the planted row names kg, with a weight pricing unit.
     async function withStoredUnit(app: Hono) {
       const seeded = await parentWithVariant(app);
       const kgUnitId = (
