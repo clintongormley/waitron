@@ -1,4 +1,11 @@
-import { catalogues, readTenant, readVenue, readSettings, saveSettings, units } from "@waitron/db";
+import {
+  catalogues,
+  readTaxpayer,
+  readVenue,
+  readSettings,
+  saveSettings,
+  units,
+} from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import {
   getCountryPack,
@@ -53,7 +60,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
     summary: "Create the venue's initial menu and content languages",
     async run(tx, _node, _operation, options) {
       const venue = await readVenue(tx);
-      const country = (await readTenant(tx))?.country;
+      const country = (await readTaxpayer(tx))?.country;
       const area = venue.province;
       const defaultProductVatClass =
         (country === undefined ? undefined : getCountryPack(country)?.defaultProductVatClass) ??

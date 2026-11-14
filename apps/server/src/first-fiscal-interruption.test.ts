@@ -6,7 +6,7 @@ import { seedTermZeroMembership } from "./membership-seed.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { invoiceSeries, tenants, nodes } from "@waitron/db";
+import { invoiceSeries, taxpayer, nodes } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import { parseModuleConfig, type ModuleConfig } from "@waitron/module";
 import { loadKeyRing } from "@waitron/credentials";
@@ -237,7 +237,7 @@ it("retains a consumed uncertain assignment after rollback and refuses blind act
   const f = await fixture("rollback");
   await f.confirm();
   expect((await f.activate()).status).toBe(500);
-  expect(await f.db.select().from(tenants)).toEqual([]);
+  expect(await f.db.select().from(taxpayer)).toEqual([]);
   expect(await f.db.select().from(nodes)).toEqual([]);
   expect(await f.db.select().from(fiscalAllocations)).toEqual([]);
   const state = (await f.host.store.read())!;

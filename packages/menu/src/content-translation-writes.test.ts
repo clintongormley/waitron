@@ -16,7 +16,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import { setProductVariants } from "./variants.js";
@@ -204,7 +204,7 @@ describe("shared translation writes", () => {
   it.each(kinds)(
     "%s existing writer retains its current translation rules and exact saved maps",
     async (kind) => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       const ids = await withTransaction(suite.db, (tx) => fixture(tx));
       if (kind === "unit") {
         expect(
@@ -254,7 +254,7 @@ describe("shared translation writes", () => {
   );
 
   it.each(kinds)("%s refuses a disappeared target instead of recreating it", async (kind) => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const before = await withTransaction(suite.db, (tx) => snapshot(tx));
     await expect(
       withTransaction(suite.db, async (tx) => {
@@ -267,7 +267,7 @@ describe("shared translation writes", () => {
   });
 
   it("refuses a resolved variant passed to the top-level product writer", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await expect(
       withTransaction(suite.db, async (tx) => {
         const ids = await fixture(tx);
@@ -278,7 +278,7 @@ describe("shared translation writes", () => {
   });
 
   it("refuses a mismatched owner kind even when every cell still names the correct product", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const ids = await withTransaction(suite.db, fixture);
     const before = await withTransaction(suite.db, snapshot);
     await expect(
@@ -295,7 +295,7 @@ describe("shared translation writes", () => {
   });
 
   it("option_label refuses an inactive owner", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await expect(
       withTransaction(suite.db, async (tx) => {
         const ids = await fixture(tx);
@@ -313,7 +313,7 @@ describe("shared translation writes", () => {
   it.each(["product", "variant", "variant parent"] as const)(
     "%s accepts only a customer-name translation after archiving",
     async (archived) => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const ids = await fixture(tx);
         const kind = archived === "product" ? "product" : "variant";
@@ -339,7 +339,7 @@ describe("shared translation writes", () => {
   );
 
   it("shared named cells preserve aggregates and other language cells without another configuration read", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       const before = await snapshot(tx);
@@ -398,7 +398,7 @@ describe("shared translation writes", () => {
   it.each(kinds)(
     "%s saves without a default companion and changes only the final name map",
     async (kind) => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const ids = await fixture(tx);
         const before = await snapshot(tx);
@@ -435,7 +435,7 @@ describe("shared translation writes", () => {
   it.each(kinds)(
     "%s replaces all submitted language keys and permits clearing the final translation",
     async (kind) => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const ids = await fixture(tx);
         await writeTranslationMaps(tx, await resolveItem(tx, kind, ids[kind]), {
@@ -465,7 +465,7 @@ describe("menu translation writes", () => {
   it.each(["menu", "section", "included_menu"] as const)(
     "%s saves optional final names and preserves non-name columns",
     async (kind) => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       const ids = await withTransaction(suite.db, async (tx) => {
         const shared = await fixture(tx);
         const child = await createCatalogue(tx, { name: "STAFF Drinks" });
@@ -531,7 +531,7 @@ describe("final translation map identity", () => {
   it.each(["kind", "id", "field"] as const)(
     "refuses a group whose resolved cell has a different %s without writing",
     async (changed) => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       const ids = await withTransaction(suite.db, (tx) => fixture(tx));
       const before = await withTransaction(suite.db, (tx) => snapshot(tx));
       await expect(

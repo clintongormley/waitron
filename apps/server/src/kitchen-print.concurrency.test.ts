@@ -5,7 +5,7 @@ import { printJobs, printers, ticketItems, withTransaction, workingOrderLines } 
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDeviceProfiles, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/menu";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
@@ -89,7 +89,7 @@ const AT_CLOCK = "13:00";
 describe("print-on-fire concurrency — the write queue around the mapping read", () => {
   it("a concurrent updatePrinter runs only after the fire commits, and never aborts it", async () => {
     // ---- Setup, committed before the two contending transactions are staged ----
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await seedLegacySellingUnits(suite.db);
     await seedVenue(suite.db, {
       name: "Bar",

@@ -27,7 +27,7 @@ export function throwawayApplyInput(
       candidates: offering.map((module) => module.name),
     });
   const [seat] = offering as [WaitronModule];
-  const taxpayer = plan.find((action) => action.kind === "ensure-tenant");
+  const taxpayer = plan.find((action) => action.kind === "ensure-taxpayer");
   if (taxpayer === undefined) throw new AppError("setup.request_invalid", { field: "taxId" });
   const bases = plan.flatMap((action) =>
     action.kind === "create-series" ? [{ code: action.code, purpose: action.purpose }] : [],

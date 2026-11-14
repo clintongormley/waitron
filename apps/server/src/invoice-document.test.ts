@@ -13,7 +13,7 @@ import {
   parties,
   sales,
   saleLines,
-  tenants,
+  taxpayer,
   workingOrders,
   withTransaction,
 } from "@waitron/db";
@@ -46,7 +46,7 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
     venue = await provisionAdjustmentVenue(db);
-    await db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+    await db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   },
 });
 const clock: TrustedClock = {
@@ -70,7 +70,7 @@ function none() {
 }
 async function issue(backend: FiscalBackend, full = true, locale = "es-ES") {
   return withTransaction(suite.db, async (tx) => {
-    await tx.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+    await tx.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
     const [series] = await tx
       .select()
       .from(invoiceSeries)
@@ -223,9 +223,9 @@ describe("stored invoice document projection", () => {
   it("keeps the filed issuer, customer and issue-day facts after taxpayer and trim changes", async () => {
     const sale = await issue(venue.backend);
     const before = await read(venue.backend, sale.saleId);
-    const [taxpayer] = await suite.db.select().from(tenants);
+    const [taxpayerRow] = await suite.db.select().from(taxpayer);
     try {
-      await suite.db.update(tenants).set({
+      await suite.db.update(taxpayer).set({
         legalName: "Changed issuer",
         taxId: "B87654321",
         taxpayerDomicile: "Changed domicile",
@@ -249,10 +249,10 @@ describe("stored invoice document projection", () => {
         indent: 0,
       });
     } finally {
-      await suite.db.update(tenants).set({
-        legalName: taxpayer!.legalName,
-        taxId: taxpayer!.taxId,
-        taxpayerDomicile: taxpayer!.taxpayerDomicile,
+      await suite.db.update(taxpayer).set({
+        legalName: taxpayerRow!.legalName,
+        taxId: taxpayerRow!.taxId,
+        taxpayerDomicile: taxpayerRow!.taxpayerDomicile,
       });
     }
   });

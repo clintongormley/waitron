@@ -205,7 +205,7 @@ describe("required languages before configuration replacement", () => {
       ),
       { db: suite.db, modules },
     );
-    await withTransaction(suite.db, (tx) => tx.execute(sql`update tenants set country = 'ES'`));
+    await withTransaction(suite.db, (tx) => tx.execute(sql`update taxpayer set country = 'ES'`));
     const before = (await suite.db.execute(sql`select doc from settings where module = 'venue'`))
       .rows;
     const bundle = bundleFor("ES", "Madrid", ["en", "es"]);

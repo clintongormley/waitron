@@ -65,10 +65,10 @@ export {
   ts,
   tsString,
 } from "./schema/columns.js";
-export * from "./schema/tenants.js";
-export { readTenant } from "./read-tenant.js";
+export * from "./schema/taxpayer.js";
+export { readTaxpayer } from "./read-taxpayer.js";
 export { withoutId, removeIdFromJson } from "./json-id-lists.js";
-export type { Tenant } from "./read-tenant.js";
+export type { Taxpayer } from "./read-taxpayer.js";
 export {
   readVenue,
   readVenueSettings,
@@ -363,7 +363,7 @@ export { nextStationColour } from "./station-colour.js";
 
 // Tables of the modules hosted in core's set, listed by hand so each module package re-exports the
 // same objects and its importers do not change.
-export { tenantCredentials } from "./schema/index.js";
+export { venueCredentials } from "./schema/index.js";
 export { mediaImageBlobs, mediaImageData, mediaImageEdits, mediaImages } from "./schema/index.js";
 export { handoverActivations, handoverScenario, handoverReturnBatches } from "./schema/index.js";
 export {

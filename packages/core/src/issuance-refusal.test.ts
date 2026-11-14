@@ -4,15 +4,15 @@ import { CORE_MIGRATIONS, incidents, invoiceSeries, withTransaction } from "@wai
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
-import { seedTenant } from "../test/fixtures.js";
+import { seedTaxpayer } from "../test/fixtures.js";
 import { IssuanceRefusal, withIssuanceTransaction } from "./index.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const detectedAt = new Date("2026-10-20T12:34:56Z");
-let seed: Awaited<ReturnType<typeof seedTenant>>;
+let seed: Awaited<ReturnType<typeof seedTaxpayer>>;
 
 beforeEach(async () => {
-  seed = await seedTenant(suite.db);
+  seed = await seedTaxpayer(suite.db);
 });
 
 function refusal(origin: Origin = deviceOrigin(seed.deviceId), time = detectedAt) {

@@ -171,9 +171,9 @@ it.each([
   },
 );
 
-it("a damaged tenants page beside an invoice refuses kept-records, and deletes nothing", async () => {
+it("a damaged taxpayer page beside an invoice refuses kept-records, and deletes nothing", async () => {
   const f = await heldSetup({ invoices: 1 });
-  damagePages(venueDb(f), "tenants");
+  damagePages(venueDb(f), "taxpayer");
   expect(await labelOf(f)).toBe("corrupt");
   await expectHeldRefused(f, keptRecords);
 });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, nodes, tenants, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, nodes, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   withOperationAuthority,
@@ -499,8 +499,8 @@ it.each(["expired", "substituted", "node"])("refuses a %s dormant token", async 
 it.each(["taxpayer", "country", "environment", "primary-sif", "sif-nif"])(
   "refuses unusable primary %s facts",
   async (fault) => {
-    if (fault === "taxpayer") await suite.db.delete(tenants);
-    if (fault === "country") await suite.db.update(tenants).set({ country: "FR" });
+    if (fault === "taxpayer") await suite.db.delete(taxpayer);
+    if (fault === "country") await suite.db.update(taxpayer).set({ country: "FR" });
     if (fault === "environment") await suite.db.delete(deployment);
     if (fault === "primary-sif") await suite.db.update(registroSif).set({ revocadoEn: new Date() });
     if (fault === "sif-nif") await suite.db.update(registroSif).set({ nif: "50000000R" });

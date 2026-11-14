@@ -365,7 +365,7 @@ describe("fiscal readiness submission runner", () => {
       );
       try {
         expect(connection.prepare("select count(*) as n from sales").get()?.n).toBe(1);
-        expect(connection.prepare("select count(*) as n from tenants").get()?.n).toBe(1);
+        expect(connection.prepare("select count(*) as n from taxpayer").get()?.n).toBe(1);
       } finally {
         connection.close();
       }

@@ -15,7 +15,7 @@ import {
   readStandardSeriesId,
   openVenueDatabase,
   stampDeployment,
-  tenants,
+  taxpayer,
   withTransaction,
   writeNodeMembership,
   type Database,
@@ -126,7 +126,7 @@ async function seedIdentity(db: Database, node: NodeDatabase): Promise<void> {
   await seedModuleSettings(db, { "fiscal-none": false });
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Venue SL" })
     .onConflictDoNothing();
   await seedVenueSettings(db, {
@@ -354,12 +354,12 @@ async function seedMirrorIdentity(
 ): Promise<{ nodeId: string; fixture: ReturnType<typeof allocationFixture> }> {
   await seedModuleSettings(db, { "fiscal-none": false });
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Cloud SL" })
     .onConflictDoNothing();
   await seedVenueSettings(db, { name: "Barra", operationDescription: "Hospitality" });
   await seedBusinessDay(db, {});
-  const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
+  const t = await db.execute<{ tax_id: string }>(sql`select tax_id from taxpayer where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
   const standby = generateStandbyIdentity();

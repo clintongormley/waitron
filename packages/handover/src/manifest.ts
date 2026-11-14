@@ -118,17 +118,17 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     where: "venue.db",
     class: "transferred",
     treatment:
-      "inside the copy; keyed by M1's node id, and M2 reads them through its takeover history; the certificate itself is in tenant_credentials",
+      "inside the copy; keyed by M1's node id, and M2 reads them through its takeover history; the certificate itself is in venue_credentials",
   },
   {
     item: "fiscal_certificate_reminders",
     where: "venue.db",
     class: "transferred",
     treatment:
-      "inside the copy; keyed by M1's node id, and M2 reads them through its takeover history; the certificate itself is in tenant_credentials",
+      "inside the copy; keyed by M1's node id, and M2 reads them through its takeover history; the certificate itself is in venue_credentials",
   },
   {
-    item: "tenant_credentials",
+    item: "venue_credentials",
     where: "venue.db",
     class: "transferred",
     treatment:

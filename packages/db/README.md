@@ -6,8 +6,8 @@ own built-in `node:sqlite`, driven by Drizzle's SQLite dialect through a small a
 files, opened by path; there is no connection string, no server and no role. The switch to SQLite
 landed in #489.
 
-Each database holds one taxpayer, as the single row of `tenants` (`id` pinned to 1). No table
-carries a tenant column and no query filters by one: a read that wants "this tenant's rows" reads
+Each database holds one taxpayer, as the single row of `taxpayer` (`id` pinned to 1). No table
+carries a taxpayer column and no query filters by one: a read that wants "this taxpayer's rows" reads
 the table. `withTransaction(db, fn)` runs your work in one transaction and sets no session
 variable, and a write path takes the `tx` it opens rather than opening its own. It does one thing of
 its own: after your callback returns it empties the `change_log` table inside the same transaction,

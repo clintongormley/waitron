@@ -36,10 +36,10 @@ import {
   printerHolders,
   printers,
   printJobs,
-  readTenant,
+  readTaxpayer,
   saleReceiptGuests,
   sales,
-  tenants,
+  taxpayer,
   withTransaction,
   floorZones,
 } from "@waitron/db";
@@ -2212,7 +2212,7 @@ describe("receipt issuer", () => {
       tender: { method: "card", amount: "1.50" },
     });
     const saleId = await onlySaleId();
-    await withTransaction(suite.db, (tx) => tx.delete(tenants));
+    await withTransaction(suite.db, (tx) => tx.delete(taxpayer));
 
     await expect(
       withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, filed, saleId)),
@@ -2229,7 +2229,7 @@ describe("receipt issuer", () => {
       tender: { method: "card", amount: "1.50" },
     });
     const withoutIssuer = { ...filed, issuer: undefined };
-    const taxpayer = (await withTransaction(suite.db, (tx) => readTenant(tx)))!;
+    const taxpayer = (await withTransaction(suite.db, (tx) => readTaxpayer(tx)))!;
     const saleId = await onlySaleId();
 
     await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, withoutIssuer, saleId));
@@ -2633,7 +2633,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     const [payload] = await receiptPayloads(cfg);
     // The QR first, then the 80 mm logo.
     expect(pictures(payload!).slice(1)).toEqual([[16, 2, LOGO_BITS]]);
-    const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
+    const taxId = (await withTransaction(suite.db, (tx) => readTaxpayer(tx)))!.taxId;
     expect(topBlock(payload!)).toEqual([
       "Receipt Deli Ltd",
       `NIF: ${taxId}`,
@@ -2734,7 +2734,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
 
     await sellOne(cfg, each, zoneId);
     const [payload] = await receiptPayloads(cfg);
-    const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
+    const taxId = (await withTransaction(suite.db, (tx) => readTaxpayer(tx)))!.taxId;
     expect(topBlock(payload!)).toEqual(["Receipt Deli Ltd", `NIF: ${taxId}`]);
   });
 
@@ -2774,7 +2774,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     expect(result.total).toBe("1.50");
     expect(await fiscalRecordCount(cfg)).toBe(1);
     const [payload] = await receiptPayloads(cfg);
-    const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
+    const taxId = (await withTransaction(suite.db, (tx) => readTaxpayer(tx)))!.taxId;
     expect(topBlock(payload!)).toEqual(["Receipt Deli Ltd", `NIF: ${taxId}`]);
     // The footer prints after the tender line.
     const lines = printedLines(payload!).map((line) => line.trim());
@@ -2820,7 +2820,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     return withTransaction(suite.db, async (tx) => {
-      await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+      await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
       const [operator] = await tx.select({ id: persons.id }).from(persons);
       const [series] = await tx
         .select()
@@ -3023,7 +3023,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       try {
         expect(await reserveStagedInvoiceDelivery(tx, value.saleId)).toBeUndefined();
         await enqueueSaleReceipt(tx, value.cfg, value.ticket, value.saleId);
-        await tx.update(tenants).set({ legalName: "Staged refusal did not abort invoice" });
+        await tx.update(taxpayer).set({ legalName: "Staged refusal did not abort invoice" });
       } finally {
         await tx.execute(sql`drop trigger test_staged_delivery_refusal`);
       }
@@ -3032,7 +3032,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     expect(await suite.db.select().from(sales)).toHaveLength(1);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
     expect(await suite.db.select().from(printJobs)).toEqual([]);
-    expect((await readTenant(suite.db))!.legalName).toBe("Staged refusal did not abort invoice");
+    expect((await readTaxpayer(suite.db))!.legalName).toBe("Staged refusal did not abort invoice");
   });
 
   it("rolls back a partial explicit original on a delivery refusal without changing the issued invoice", async () => {

@@ -1,6 +1,6 @@
 // No `import "./errors.js"`: this file throws no AppError code.
 import {
-  readTenant,
+  readTaxpayer,
   readVenue,
   withTransaction,
   type Database,
@@ -24,7 +24,7 @@ import {
 import type { Logger } from "./logger.js";
 
 async function countryIn(tx: Transaction): Promise<string | null> {
-  return (await readTenant(tx))?.country ?? null;
+  return (await readTaxpayer(tx))?.country ?? null;
 }
 
 async function geographyIn(

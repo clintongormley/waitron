@@ -11,7 +11,7 @@ import {
   nodes,
   openVenueDatabase,
   stampDeployment,
-  tenants,
+  taxpayer,
   type Database,
   type NodeDatabase,
   type VenueDatabase,
@@ -83,7 +83,7 @@ beforeAll(async () => {
   node = store.node;
 
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Producer Change SL" });
   await seedVenueSettings(db, {
     name: "Barra",

@@ -14,7 +14,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { addMember } from "./sections.js";
@@ -68,7 +68,7 @@ const cell = (
 
 describe("bounded translation field reads", () => {
   it("returns distinct unit staff fields without manufacturing entered text", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       const result = await resolveTranslationCells(
@@ -175,7 +175,7 @@ describe("bounded translation field reads", () => {
   });
 
   it("projects selected and default text in SQL, retains input order and returns disabled cells for review", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       const counting = countingSettingsReads(tx);
@@ -239,7 +239,7 @@ describe("bounded translation field reads", () => {
   });
 
   it("keeps archived direct products editable while role changes remain explicit", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       await tx.update(products).set({ active: false }).where(eq(products.id, ids.product));
@@ -256,7 +256,7 @@ describe("bounded translation field reads", () => {
   });
 
   it("shares all nine kinds and include inheritance between pages and retained cells", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       const [variant] = await setProductVariants(

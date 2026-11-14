@@ -13,7 +13,7 @@ import {
   devices,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTaxpayer, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { hashDeviceToken } from "@waitron/identity";
 import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { mountDeviceLiveApi } from "./device-live-api.js";
@@ -23,7 +23,7 @@ import { createHandoverGate } from "./handover-gate.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const path = '/api/live/events?resources=[{"type":"printers"}]';
 async function fixture(resourceTypes: readonly string[] = ["printers"]) {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedVenue(suite.db);
   const { deviceId } = await seedDevice(suite.db);
   const cookie = await deviceCookieForTest(suite.db, deviceId);

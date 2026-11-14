@@ -16,7 +16,7 @@ import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db"
 import type { FiledReceipt, FiscalBackend } from "@waitron/fiscal";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
@@ -360,7 +360,7 @@ describe("invoice SMTP transport", () => {
   });
 
   it("reports a live invoice with no SMTP configuration as a certain failure", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const send = createRoutedInvoiceEmailSender({
       db: suite.db,
       ring,
@@ -707,7 +707,7 @@ describe("readInvoiceEmailPrivacy reads the privacy facts", () => {
     },
   ])("reads $name", async ({ taxpayer, receipt, expected }) => {
     if (taxpayer) {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         await savePrivacyContact(tx, {
           privacyNoticeUrl: "https://example.com/privacy",

@@ -58,7 +58,7 @@ script that already drives `venue` non-interactively is not stopped by those que
 
 ### `keyring`
 
-Generates the credential key ring `@waitron/credentials` seals every tenant credential under, prints
+Generates the credential key ring `@waitron/credentials` seals every taxpayer credential under, prints
 `WAITRON_CREDENTIALS_KEY` and `WAITRON_CREDENTIALS_KEY_VERSION` **once**, waits for an
 acknowledgement, then clears the screen and the scrollback.
 
@@ -71,7 +71,7 @@ tmux's own buffer under some configurations, still has it.
 
 ### `venue`
 
-Stands a sellable venue up in one transaction: the taxpayer row (`tenants` holds exactly one), an
+Stands a sellable venue up in one transaction: the taxpayer row (`taxpayer` holds exactly one), an
 **admin person**, the venue, a node, and standard, full and rectificative invoice series, and
 then every composed module's provisioning seed — the fiscal module's registers the node as a
 Veri\*Factu SIF and starts its chain. It replaced the retired
@@ -159,7 +159,7 @@ Run against the built bundle on 2026-09-22, each case against its own directory:
 SIF, and read back `"preproduction"`; the same with `WAITRON_ENV=production` read back
 `"production"`; one stamped `production` under an unset `WAITRON_ENV` gave
 `deployment.already_stamped {"stamped":"production","requested":"preproduction"}`, left the stamp at
-`production` and left `tenants` empty; `WAITRON_ENV=prod` gave
+`production` and left `taxpayer` empty; `WAITRON_ENV=prod` gave
 `provisioning.invalid_environment {"variable":"WAITRON_ENV","value":"prod"}` without opening
 anything; and declining the prompt left the stamp `null`.
 
@@ -197,12 +197,12 @@ refuses a legal name or operation description carrying a character XML forbids, 
 description over 500 characters, and any series code outside AEAT's character set or longer than
 the 21-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
 races a conflicting row is caught as `provisioning.venue_conflict`. A run against a database whose
-taxpayer row names a different country or tax id is refused with `provisioning.foreign_tenant`, and
+taxpayer row names a different country or tax id is refused with `provisioning.foreign_taxpayer`, and
 refused BEFORE the plan is applied: `venue` reads the stored identity and calls the shared
-`assertNoForeignTenant` first (`cli.test.ts` pins that the apply is never reached). `planVenue`
+`assertNoForeignTaxpayer` first (`cli.test.ts` pins that the apply is never reached). `planVenue`
 trims and upper-cases both values before that comparison, so a difference of letter case or
 surrounding space is the SAME taxpayer and the re-run is the no-op a re-provision should be.
-`provisioning.tenant_identity_mismatch` is a second, narrower refusal INSIDE `applyVenue`'s own
+`provisioning.taxpayer_identity_mismatch` is a second, narrower refusal INSIDE `applyVenue`'s own
 transaction, for the case that pre-read cannot see: another run committing a different taxpayer
 between this run's read and its write.
 
@@ -265,7 +265,7 @@ Every refusal is a structured code and its params on stderr — never a raw driv
 | `provisioning.invalid_environment`   | `WAITRON_ENV` is not `production`, `preproduction` or `dev`                                                     | Type one of those, or leave it unset for `preproduction`. `Production` and a space-padded ` production` are refused, never rounded.                                                                                                  |
 | `deployment.already_stamped`         | The venue directory is stamped for the OTHER environment (`@waitron/db`'s code, not this package's)             | Stop. One database per environment is a fiscal invariant; a pre-production database that took production numbering leaves a permanent hole in the series. Point at the right directory, or fix `WAITRON_ENV`.                        |
 | `provisioning.state_unreadable`      | The venue directory could not be opened, or its stamp could not be read. `reason` is the error's own code       | `ENOTDIR`: the path runs through a regular file. `ERR_SQLITE_ERROR`: the file is there and is not a database — a truncated or corrupt one; restore it from a backup. Both were run against the built bundle.                         |
-| `provisioning.foreign_tenant`        | The venue already holds a DIFFERENT taxpayer                                                                    | Stop. One tenant per database is the isolation boundary — see the fiscal invariants below.                                                                                                                                           |
+| `provisioning.foreign_taxpayer`      | The venue already holds a DIFFERENT taxpayer                                                                    | Stop. One taxpayer per database is the isolation boundary — see the fiscal invariants below.                                                                                                                                         |
 | `provisioning.venue_conflict`        | A concurrent run committed a conflicting row between this run's plan and its apply                              | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                                              |
 | `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Today only `ES-common` is implemented.                                                                                                                                                                                               |
 | `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one.                                                                                                                                                                                                                            |
@@ -304,7 +304,7 @@ that DO carry one were measured against the real opener and are in the table abo
   and refuses one stamped for the other environment — the refusal is `stampDeployment`'s own, not a
   second copy of the rule written here.
 - **One taxpayer per database.** `venue` reads the stored `(country, tax_id)` before it applies and
-  refuses a second, different one (`provisioning.foreign_tenant`), with a narrower refusal inside
+  refuses a second, different one (`provisioning.foreign_taxpayer`), with a narrower refusal inside
   the transaction for a taxpayer committed between that read and the write.
 
 ## Testing

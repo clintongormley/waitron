@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { expect, it } from "vitest";
-import { withTransaction, nodes, tenants } from "@waitron/db";
+import { withTransaction, nodes, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -99,7 +99,7 @@ it("refuses a prepared authority issued to another administrator before creating
   expect(seeded).toBe(false);
   expect(await suite.db.select().from(persons)).toEqual([]);
   expect(await suite.db.select().from(nodes)).toEqual([]);
-  expect(await suite.db.select().from(tenants)).toEqual([]);
+  expect(await suite.db.select().from(taxpayer)).toEqual([]);
 });
 
 it("prepares the initial signed input before the venue transaction, then binds the created account", async () => {
@@ -117,7 +117,7 @@ it("prepares the initial signed input before the venue transaction, then binds t
     expect(await suite.db.select().from(persons)).toEqual([]);
     await withTransaction(suite.db, (tx) =>
       tx
-        .insert(tenants)
+        .insert(taxpayer)
         .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "outside-writer" }),
     );
     return run({ ...operation, input: "current-outside-input" });
@@ -127,7 +127,7 @@ it("prepares the initial signed input before the venue transaction, then binds t
   expect(result.seeded).toEqual([
     { module: "test-regime", report: "initial allocation qualified" },
   ]);
-  expect((await suite.db.select().from(tenants))[0]?.legalName).toBe("outside-writer");
+  expect((await suite.db.select().from(taxpayer))[0]?.legalName).toBe("outside-writer");
 });
 
 it("does not create the initial account or venue after the outside source refuses", async () => {
@@ -137,7 +137,7 @@ it("does not create the initial account or venue after the outside source refuse
   await expect(apply(owner)).rejects.toThrow("current-source-refused");
   expect(await suite.db.select().from(persons)).toEqual([]);
   expect(await suite.db.select().from(nodes)).toEqual([]);
-  expect(await suite.db.select().from(tenants)).toEqual([]);
+  expect(await suite.db.select().from(taxpayer)).toEqual([]);
 });
 
 it("does not attribute initial collection to an already-existing administrator", async () => {
@@ -180,7 +180,7 @@ it("rolls back the initial account and node when the last host write refuses", a
   ).rejects.toThrow("last-host-write-refused");
   expect(await suite.db.select().from(persons)).toEqual([]);
   expect(await suite.db.select().from(nodes)).toEqual([]);
-  expect(await suite.db.select().from(tenants)).toEqual([]);
+  expect(await suite.db.select().from(taxpayer)).toEqual([]);
 });
 
 it("refuses a competing administrator created during outside collection", async () => {
@@ -197,7 +197,7 @@ it("refuses a competing administrator created during outside collection", async 
     "Concurrent owner",
   ]);
   expect(await suite.db.select().from(nodes)).toEqual([]);
-  expect(await suite.db.select().from(tenants)).toEqual([]);
+  expect(await suite.db.select().from(taxpayer)).toEqual([]);
 });
 
 it("keeps the planned account fields when the source mutates the caller's action list", async () => {

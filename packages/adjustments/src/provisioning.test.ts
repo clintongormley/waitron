@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
-import { settings, CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
+import { settings, CORE_MIGRATIONS, taxpayer, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
 import { ADJUSTMENTS_PROVISIONING } from "./provisioning.js";
 import { STARTER_REASON_NAMES } from "./starter-content.js";
@@ -26,8 +26,8 @@ async function provisionedNode({
   province: string | null;
   invoiceLocales: string[];
 }) {
-  await seedTenant(db);
-  await db.update(tenants).set({ country }).where(eq(tenants.id, 1));
+  await seedTaxpayer(db);
+  await db.update(taxpayer).set({ country }).where(eq(taxpayer.id, 1));
   await seedVenue(db, {
     name: "Venue",
     province,

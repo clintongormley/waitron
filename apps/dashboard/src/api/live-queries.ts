@@ -146,7 +146,7 @@ export const QUERY_DEPENDENCIES = {
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
   listReaders: ["card_readers", "device_card_readers", "device_profile_card_readers", "devices"],
-  // Its provider check also reads `tenant_credentials`, which no module declares as a live resource.
+  // Its provider check also reads `venue_credentials`, which no module declares as a live resource.
   getReaderDeleteImpact: [
     "card_readers",
     "payments",
@@ -158,7 +158,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   listReaderHolders: ["card_reader_holders", "payments"],
   getProfileReaders: ["device_profile_card_readers", "card_readers"],
-  // The route reads `tenant_credentials`, which no module declares as a live resource.
+  // The route reads `venue_credentials`, which no module declares as a live resource.
   listPaymentProviders: [],
   // Scheduled runs have no live resource; the query polls passively.
   getBackupAudit: [],
@@ -519,7 +519,7 @@ export const QUERY_DEPENDENCIES = {
   getVenueDetails: [
     "settings.business_day",
     "settings.venue",
-    "tenants",
+    "taxpayer",
     "sales",
     "working_orders",
     "daily_closes",
@@ -528,12 +528,12 @@ export const QUERY_DEPENDENCIES = {
   ],
   getReceiptLanguage: ["settings.business_day", "settings.venue"],
   getVenueDefaults: ["settings.business_day", "settings.venue", "settings.menu"],
-  getVenuePrivacy: ["tenants"],
+  getVenuePrivacy: ["taxpayer"],
   getProfile: ["persons", "webauthn_credentials"],
   // The venue's name; the language list itself is fixed.
-  getLocales: ["tenants"],
-  // `tenants` holds the venue's privacy page, which this answer carries.
-  getGoogleConfig: ["google_config", "tenants"],
+  getLocales: ["taxpayer"],
+  // `taxpayer` holds the venue's privacy page, which this answer carries.
+  getGoogleConfig: ["google_config", "taxpayer"],
   getEmailInbox: ["email_inbox"],
   // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.
   listServers: ["node_membership", "nodes"],

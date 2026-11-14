@@ -34,7 +34,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   assignProductUnit,
@@ -118,7 +118,7 @@ interface Venue {
 }
 
 async function setupVenue(): Promise<Venue> {
-  await seedTenant(db);
+  await seedTaxpayer(db);
   await seedLegacySellingUnits(db);
   await seedVenue(db, {
     name: "Main room",

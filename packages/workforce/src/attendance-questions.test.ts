@@ -10,7 +10,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
 import { seedFixtureVenue } from "../test/fixtures.js";
@@ -46,7 +46,7 @@ const question = () => ({
   evidenceKeys: ["order:1"],
 });
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [

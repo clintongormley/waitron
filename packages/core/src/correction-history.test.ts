@@ -33,7 +33,7 @@ import { recordCorrection, type RecordCorrectionInput } from "./record-correctio
 import { recordReplacement } from "./record-replacement.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
-import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import { seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -125,7 +125,7 @@ let rectSeriesId: SeriesId;
 let sessionId: string;
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   const till = (await seedDevice(suite.db, {})).deviceId;
   const [person] = await seedPersons(suite.db, {
@@ -446,7 +446,7 @@ it("refuses an invoice with a named customer, as the writer does", async () => {
     .values({ nodeId, code: "F", purpose: "full" })
     .returning({ id: invoiceSeries.id });
   suite.db.run(
-    sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+    sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
   );
   const { saleId } = await sell([{ ...invoiceLines()[1]!, lineNo: 1 }], "12.10", {
     seriesId: brandSeriesId(full!.id),

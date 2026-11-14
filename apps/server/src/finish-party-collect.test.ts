@@ -17,7 +17,7 @@ import {
   serviceCommands,
   sales,
   saleLines,
-  tenants,
+  taxpayer,
   tenders,
   ticketItems,
   workingOrderLines,
@@ -886,7 +886,7 @@ describe("sending a paid bill to the counter changes nothing filed", () => {
 /** Pays `billId` as a full invoice, as the receipt guest tests file one. */
 async function payAsFullInvoice(billId: string, cents: number) {
   await inTx(venue, async (tx) => {
-    await tx.update(tenants).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" });
+    await tx.update(taxpayer).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" });
     await tx
       .update(workingOrders)
       .set({

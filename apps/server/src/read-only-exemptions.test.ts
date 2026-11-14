@@ -11,7 +11,7 @@ import {
   openVenueDatabase,
   withTransaction,
   readNodeMembership,
-  readTenant,
+  readTaxpayer,
   stampDeployment,
   writeNodeMembership,
   type Database,
@@ -326,7 +326,7 @@ beforeAll(async () => {
     endorsements: [endorseKey(MAIN_BOX.nodeId, MAIN_BOX.publicKey, sId, spareKey)],
   };
   await writeNodeMembership(sDb, chart);
-  const tenant = await readTenant(sDb);
+  const taxpayer = await readTaxpayer(sDb);
   spare = {
     dir: sDir,
     nodeId: sId,
@@ -337,7 +337,11 @@ beforeAll(async () => {
         binding: {
           operationId: MIRROR_OPERATION_ID,
           scenario: "controlled",
-          venue: { country: tenant!.country, taxId: tenant!.taxId, environment: "preproduction" },
+          venue: {
+            country: taxpayer!.country,
+            taxId: taxpayer!.taxId,
+            environment: "preproduction",
+          },
           sourceNodeId: MAIN_BOX.nodeId,
           destinationNodeId: sId,
           membership: {

@@ -9,7 +9,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, updateMenuDetails } from "./operations.js";
@@ -181,7 +181,7 @@ async function makeTarget(tx: Transaction, kind: string, names: Names): Promise<
 }
 
 beforeEach(async () => {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   await run((tx) => writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] }));
 });
 

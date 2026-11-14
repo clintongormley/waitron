@@ -150,7 +150,7 @@ describe("atomic unusable-zone confirmation", () => {
     ).toBe("Europe/Madrid");
   });
   it("canonicalizes a country-allowed alias", async () => {
-    await suite.db.execute(sql`update tenants set country = 'GB'`);
+    await suite.db.execute(sql`update taxpayer set country = 'GB'`);
     await confirm({ ...body, timeZone: "GB" });
     expect(
       suite.db.all<{ timeZone: string }>(
@@ -343,7 +343,7 @@ describe("atomic unusable-zone confirmation", () => {
     ).toBe(RAW);
   });
   it("does not invent choices or a suggestion for an unknown stored country", async () => {
-    await suite.db.execute(sql`update tenants set country = 'ZZ'`);
+    await suite.db.execute(sql`update taxpayer set country = 'ZZ'`);
     const before = snapshot();
     expect(await read()).toMatchObject({
       country: "ZZ",
@@ -359,7 +359,7 @@ describe("atomic unusable-zone confirmation", () => {
     expect(snapshot()).toEqual(before);
   });
   it("offers the pack's default when no province was saved without silently saving it", async () => {
-    await suite.db.execute(sql`update tenants set country = 'GB'`);
+    await suite.db.execute(sql`update taxpayer set country = 'GB'`);
     await seedVenueSettings(suite.db, { province: null });
     const before = snapshot();
     expect(await read()).toMatchObject({

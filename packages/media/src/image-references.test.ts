@@ -28,7 +28,7 @@ import {
   updateProduct,
   updateSection,
 } from "@waitron/menu";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 /**
@@ -385,7 +385,7 @@ describe("an image an include's folder names", () => {
 
 /** A menu whose one product shows the image, published, and then the product letting it go. */
 async function publishedOnly(): Promise<{ menuId: string; productId: string }> {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   return withTransaction(suite.db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Lunch Menu" });
     const product = await createProduct(tx, {

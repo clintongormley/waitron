@@ -2,7 +2,7 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { tenants } from "@waitron/db";
+import { taxpayer } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
@@ -31,8 +31,8 @@ function save(body: unknown, cookie: string | null = venue.managerCookie) {
     body: JSON.stringify(body),
   });
 }
-async function taxpayer() {
-  const [row] = await suite.db.select().from(tenants).where(eq(tenants.id, 1));
+async function taxpayerRow() {
+  const [row] = await suite.db.select().from(taxpayer).where(eq(taxpayer.id, 1));
   return row!;
 }
 const unset = { privacyNoticeUrl: null, privacyEmail: null };
@@ -53,7 +53,7 @@ describe("the venue's privacy contact", () => {
   });
 
   it("saves both fields trimmed, answers them and changes nothing else in the taxpayer row", async () => {
-    const before = await taxpayer();
+    const before = await taxpayerRow();
     const response = await save({
       privacyNoticeUrl: "  https://example.com/privacy  ",
       privacyEmail: "  privacy@example.com  ",
@@ -61,36 +61,36 @@ describe("the venue's privacy contact", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(stored);
     expect(await (await read()).json()).toEqual(stored);
-    expect(await taxpayer()).toEqual({ ...before, ...stored });
+    expect(await taxpayerRow()).toEqual({ ...before, ...stored });
   });
 
   it("leaves the stored web page when only the email is sent", async () => {
     await save(stored);
-    const before = await taxpayer();
+    const before = await taxpayerRow();
     const response = await save({ privacyEmail: "data@example.com" });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ...stored, privacyEmail: "data@example.com" });
-    expect(await taxpayer()).toEqual({ ...before, privacyEmail: "data@example.com" });
+    expect(await taxpayerRow()).toEqual({ ...before, privacyEmail: "data@example.com" });
   });
 
   it("clears a field sent empty or blank as NULL, never an empty string", async () => {
     await save(stored);
-    const before = await taxpayer();
+    const before = await taxpayerRow();
     const response = await save({ privacyNoticeUrl: "", privacyEmail: "   " });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(unset);
-    expect(await taxpayer()).toEqual({ ...before, ...unset });
+    expect(await taxpayerRow()).toEqual({ ...before, ...unset });
     const { rows } = await suite.db.execute<{ url: string | null; email: string | null }>(
-      sql`select privacy_notice_url as url, privacy_email as email from tenants where id = 1`,
+      sql`select privacy_notice_url as url, privacy_email as email from taxpayer where id = 1`,
     );
     expect(rows).toEqual([{ url: null, email: null }]);
   });
 
   it("stores the composed spelling of a decomposed email", async () => {
-    const before = await taxpayer();
+    const before = await taxpayerRow();
     const response = await save({ privacyEmail: "jose\u0301@example.com" });
     expect(response.status).toBe(200);
-    expect(await taxpayer()).toEqual({ ...before, privacyEmail: "jos\u00e9@example.com" });
+    expect(await taxpayerRow()).toEqual({ ...before, privacyEmail: "jos\u00e9@example.com" });
   });
 
   it.each([
@@ -131,26 +131,26 @@ describe("the venue's privacy contact", () => {
       { field: "privacyNoticeUrl", reason: "web_address" },
     ],
   ])("refuses %s and writes nothing", async (_label, body, params) => {
-    const before = await taxpayer();
+    const before = await taxpayerRow();
     const response = await save(body);
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: { code: "venue.detail_invalid", params } });
-    expect(await taxpayer()).toEqual(before);
+    expect(await taxpayerRow()).toEqual(before);
   });
 
   it("requires a session for both routes", async () => {
-    const before = await taxpayer();
+    const before = await taxpayerRow();
     for (const response of [await read(null), await save(stored, null)]) {
       expect(response.status).toBe(401);
       expect(await response.json()).toEqual({
         error: { code: "management_session.required", params: {} },
       });
     }
-    expect(await taxpayer()).toEqual(before);
+    expect(await taxpayerRow()).toEqual(before);
   });
 
   it("lets staff do neither and a supervisor read but not save", async () => {
-    const before = await taxpayer();
+    const before = await taxpayerRow();
     const staffRead = await read(venue.staffCookie);
     expect(staffRead.status).toBe(403);
     expect(await staffRead.json()).toEqual({
@@ -178,11 +178,11 @@ describe("the venue's privacy contact", () => {
     expect(await supervisorSave.json()).toEqual({
       error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
     });
-    expect(await taxpayer()).toEqual(before);
+    expect(await taxpayerRow()).toEqual(before);
   });
 
   it("refuses an invalid save from staff and a supervisor on permission, before the body check", async () => {
-    const before = await taxpayer();
+    const before = await taxpayerRow();
     const refusal = {
       error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
     };
@@ -201,11 +201,11 @@ describe("the venue's privacy contact", () => {
     const supervisor = await save({ privacyEmail: "privacy" });
     expect(supervisor.status).toBe(403);
     expect(await supervisor.json()).toEqual(refusal);
-    expect(await taxpayer()).toEqual(before);
+    expect(await taxpayerRow()).toEqual(before);
   });
 
   it("answers both routes with the venue refusal when there is no taxpayer row", async () => {
-    await suite.db.execute(sql`delete from tenants`);
+    await suite.db.execute(sql`delete from taxpayer`);
     for (const response of [await read(), await save(stored)]) {
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({

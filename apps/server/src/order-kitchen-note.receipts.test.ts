@@ -19,7 +19,7 @@ import { buildReceiptDocument } from "./receipt-document.js";
 import { layoutInvoicePages } from "./invoice-page.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 
-import { billPayments, tenants, workingOrders } from "@waitron/db";
+import { billPayments, taxpayer, workingOrders } from "@waitron/db";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
@@ -106,7 +106,7 @@ describe("whole-order instructions and issued customer documents", () => {
   it("keeps instructions outside the stored full invoice, its A4/email layout and transaction JSON", async () => {
     const v = await setupPartyVenue(suite.db);
     await inTx(v, (tx) =>
-      tx.update(tenants).set({ taxpayerDomicile: "High Street 1, 28013 Madrid, Madrid, España" }),
+      tx.update(taxpayer).set({ taxpayerDomicile: "High Street 1, 28013 Madrid, Madrid, España" }),
     );
     const party = await seat(v, await v.table("Invoice party"));
     await order(v, party.tabId, "Burger");

@@ -13,7 +13,7 @@ import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js"
  * test seeds its OWN working order and scopes its reads to that order's id.
  *
  * A second LOCATION is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps
- * in. There is one taxpayer row: a second `tenants` row cannot be inserted.
+ * in. There is one taxpayer row: a second `taxpayer` row cannot be inserted.
  */
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -90,7 +90,7 @@ describe("order_amendments append helper", () => {
     return withTransaction(suite.db, fn);
   }
 
-  /** Tenant A's genesis `order_placed` input for an order. Reason null (a placement has no contest). */
+  /** Taxpayer A's genesis `order_placed` input for an order. Reason null (a placement has no contest). */
   function genesisA(order: string): AppendAmendmentInput {
     return {
       workingOrderId: order,

@@ -14,7 +14,7 @@ import {
   printers,
   receiptReprints,
   sales,
-  tenants,
+  taxpayer,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import type { FiscalBackend } from "@waitron/fiscal";
@@ -93,8 +93,8 @@ describe("dashboard receipt reprint", () => {
   it("does not queue a job or audit row when a copy cannot be built", async () => {
     const billId = await placedIssuedBill(venue, "Caña");
     const before = await counts();
-    const [taxpayer] = await inTx(venue, (tx) => tx.select().from(tenants));
-    await inTx(venue, (tx) => tx.delete(tenants));
+    const [taxpayerRow] = await inTx(venue, (tx) => tx.select().from(taxpayer));
+    await inTx(venue, (tx) => tx.delete(taxpayer));
     try {
       expect(await post(venue.adminDashboard, billId, venue.printerId)).toMatchObject({
         status: 500,
@@ -102,7 +102,7 @@ describe("dashboard receipt reprint", () => {
       });
       expect(await counts()).toEqual(before);
     } finally {
-      await inTx(venue, (tx) => tx.insert(tenants).values(taxpayer!));
+      await inTx(venue, (tx) => tx.insert(taxpayer).values(taxpayerRow!));
     }
   });
 

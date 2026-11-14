@@ -11,9 +11,9 @@ import {
   recoverProvisionedVenue as recoverSharedVenue,
   parseInitialVenueInput,
   initialVenueApplyInput,
-  assertNoForeignTenant,
+  assertNoForeignTaxpayer,
   planVenue,
-  readTenantIdentities,
+  readTaxpayerIdentities,
   throwawayApplyInput,
   venueFiscalSelection,
   type VenueRequest,
@@ -65,7 +65,7 @@ export interface ProvisionDeps {
   ownerDb: Database;
   /** The fiscal slot ALREADY resolved to exactly one member by the caller's `venueModuleConfig`. */
   readonly moduleConfig: ModuleConfig;
-  /** Echoed by `provisioning.foreign_tenant`, so it must never carry a secret. */
+  /** Echoed by `provisioning.foreign_taxpayer`, so it must never carry a secret. */
   readonly database: string;
   readonly stateDir: string;
   readonly beforeTransaction?: () => Promise<void>;
@@ -81,7 +81,7 @@ export function recoverProvisionedVenue(
 }
 
 /**
- * Callers must serialize provisioning: the tenant-exists read is not atomic with `applyVenue`. The
+ * Callers must serialize provisioning: the taxpayer-exists read is not atomic with `applyVenue`. The
  * setup route supplies a process-local latch; the checks below reject sequential retries.
  *
  * Not one transaction: `stampDeployment` writes before `applyVenue`'s transaction opens, so a
@@ -122,12 +122,16 @@ export async function provisionVenue(
 
   const plan = planVenue(req.venue, modules);
 
-  // A FOREIGN identity is refused first (`provisioning.foreign_tenant`); only then is any present row
-  // a re-provision. `tenants_singleton_ck` pins the id to 1, so a non-empty read IS the taxpayer.
-  const ensure = plan.find((a) => a.kind === "ensure-tenant");
-  const present = await readTenantIdentities(deps.ownerDb);
-  if (ensure !== undefined && ensure.kind === "ensure-tenant") {
-    assertNoForeignTenant(present, { country: ensure.country, taxId: ensure.taxId }, deps.database);
+  // A FOREIGN identity is refused first (`provisioning.foreign_taxpayer`); only then is any present row
+  // a re-provision. `taxpayer_singleton_ck` pins the id to 1, so a non-empty read IS the taxpayer.
+  const ensure = plan.find((a) => a.kind === "ensure-taxpayer");
+  const present = await readTaxpayerIdentities(deps.ownerDb);
+  if (ensure !== undefined && ensure.kind === "ensure-taxpayer") {
+    assertNoForeignTaxpayer(
+      present,
+      { country: ensure.country, taxId: ensure.taxId },
+      deps.database,
+    );
   }
   if (present.length > 0) {
     throw new AppError("setup.already_provisioned", {});

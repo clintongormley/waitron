@@ -6,7 +6,7 @@ import {
   homeDisplayProblem,
 } from "@waitron/shared";
 import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
-import { readTenant, readVenue, type Transaction } from "@waitron/db";
+import { readTaxpayer, readVenue, type Transaction } from "@waitron/db";
 import { checkedContentLanguages } from "./content-languages.js";
 import { checkIncludeFolderRows } from "./include-folder.js";
 import { firstNewClash } from "./name-uniqueness.js";
@@ -222,7 +222,7 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     _tables: Readonly<Record<string, Rows>>,
     bundle?: { readonly contentLanguages: unknown },
   ): Promise<void> {
-    const country = (await readTenant(tx))?.country;
+    const country = (await readTaxpayer(tx))?.country;
     if (country === undefined) throw new AppError("setup.request_invalid", { field: "venue" });
     checkContentLanguages(bundle?.contentLanguages ?? null, {
       country,

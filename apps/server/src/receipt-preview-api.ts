@@ -5,7 +5,7 @@ import {
   devices,
   printPaperWidth,
   printers,
-  readTenant,
+  readTaxpayer,
   withTransaction,
   type Database,
   type Transaction,
@@ -336,7 +336,7 @@ export function mountReceiptPreviewApi(
                 ...DEFAULT_PRINTER,
                 paperWidth: askedWidth,
               });
-        const taxpayer = (await readTenant(tx))!;
+        const taxpayer = (await readTaxpayer(tx))!;
         let savedLogo: MonoRaster | null = null;
         let venueLogo: MonoRaster | null = null;
         const diagnostic = (event: { operation: string; code: string; departmentId?: string }) =>

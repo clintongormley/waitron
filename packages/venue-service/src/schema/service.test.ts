@@ -14,7 +14,7 @@ import {
   workingLineContexts,
   floorZones,
 } from "@waitron/db";
-import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
@@ -246,7 +246,7 @@ describe("department name storage", () => {
     });
   }
   it("reuses a deleted department name with a new id", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await seedNamedVenue("Venue");
     const old = await insert("Deli");
     await suite.db.update(departments).set({ active: false }).where(eq(departments.id, old.id));
@@ -257,7 +257,7 @@ describe("department name storage", () => {
     ]);
   });
   it("still refuses two live names in one venue", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await seedNamedVenue("Venue");
     await insert("Deli");
     await expect(insert("Deli")).rejects.toThrow("UNIQUE constraint failed:");

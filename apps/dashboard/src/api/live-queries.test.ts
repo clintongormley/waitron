@@ -234,8 +234,8 @@ it.each([
   ["getReceiptLanguage", [], "settings.business_day"],
   ["getVenueDefaults", [], "settings.business_day"],
   ["getVenueDefaults", [], "settings.menu"],
-  ["getVenuePrivacy", [], "tenants"],
-  ["getGoogleConfig", [], "tenants"],
+  ["getVenuePrivacy", [], "taxpayer"],
+  ["getGoogleConfig", [], "taxpayer"],
   ["getFloorPlan", ["s1", "z1"], "floor_plans"],
   ["getFloorPlan", ["s1", "z1"], "floor_plan_tables"],
   ["getFloorPlan", ["s1", "z1"], "dining_tables"],
@@ -375,7 +375,7 @@ it.each([
   ],
   // `cardReaderDeleteRules` (apps/server/src/card-reader-delete.ts): the reader, its payments in
   // progress, and the devices, profiles and holders it would be taken from, each named. The
-  // provider check reads `tenant_credentials`, which no module declares as a live resource.
+  // provider check reads `venue_credentials`, which no module declares as a live resource.
   [
     "getReaderDeleteImpact",
     ["r1"],
@@ -652,7 +652,7 @@ it("leaves the category report at time of sale alone when the catalogue is edite
   }
 });
 
-it.each(["settings.business_day", "tenants", "sales", "working_orders", "daily_closes"])(
+it.each(["settings.business_day", "taxpayer", "sales", "working_orders", "daily_closes"])(
   "refreshes venue details passively after %s changes, retaining active PATCH activity",
   async (type) => {
     const model = venueDetailsFixture();
@@ -678,7 +678,7 @@ it.each(["settings.business_day", "tenants", "sales", "working_orders", "daily_c
     expect(query.dependencies).toEqual([
       { type: "settings.business_day" },
       { type: "settings.venue" },
-      { type: "tenants" },
+      { type: "taxpayer" },
       { type: "sales" },
       { type: "working_orders" },
       { type: "daily_closes" },
@@ -808,7 +808,7 @@ it("subscribes the venue defaults to the clock document, venue document and cata
 
 it("subscribes the venue's privacy contact to the taxpayer row alone", () => {
   const api = new DashboardApi("", async () => new Response("{}"));
-  expect(dashboardQuery(api, "getVenuePrivacy", []).dependencies).toEqual([{ type: "tenants" }]);
+  expect(dashboardQuery(api, "getVenuePrivacy", []).dependencies).toEqual([{ type: "taxpayer" }]);
 });
 
 it.each([

@@ -10,7 +10,7 @@ import {
   openVenueDatabase,
   readDeploymentEnvironment,
   stampDeployment,
-  tenants,
+  taxpayer,
 } from "@waitron/db";
 import { readMirrorLink, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -84,7 +84,7 @@ const BUNDLE: MirrorBundle = {
   designated: {
     nodeId: PRIMARY_NODE_ID,
   },
-  tenant: { country: "ES", taxId: "80000001K" },
+  taxpayer: { country: "ES", taxId: "80000001K" },
   primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
   environment: "preproduction",
   boxHostname: "waitron.local",
@@ -524,13 +524,13 @@ describe("runStagedReset", () => {
       },
     ],
     [
-      "the database holds a tenant",
+      "the database holds a taxpayer",
       "venue_present",
       async (box: { stateDir: string; venueDir: string; operationId: string }) => {
         const store = await openVenueDatabase(box.venueDir);
         try {
           await store.venue
-            .insert(tenants)
+            .insert(taxpayer)
             .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Waitron SL" });
         } finally {
           await store.close();

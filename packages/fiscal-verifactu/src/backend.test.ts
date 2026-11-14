@@ -176,17 +176,17 @@ describe("registerNode", () => {
 });
 
 describe("the taxpayer every record is filed as", () => {
-  it("refuses to file when the tenants table is empty, loudly and without a domain code", async () => {
+  it("refuses to file when the taxpayer table is empty, loudly and without a domain code", async () => {
     // Filing under a blank or guessed issuer name is unrepairable, so it must fail — as a plain
     // `Error`, since nothing an operator does at a till can fix it.
-    await suite.db.execute(sql`delete from tenants`);
+    await suite.db.execute(sql`delete from taxpayer`);
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
         return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
       }),
     );
     expect(error).not.toBeInstanceOf(AppError);
-    expect((error as Error).message).toContain("tenants is empty");
+    expect((error as Error).message).toContain("taxpayer is empty");
   });
 });
 
@@ -1377,16 +1377,16 @@ describe("filedReceiptFor", () => {
     // The assertion concerns persisted values: the issuer as FILED, not the taxpayer's current one.
     const { saleId } = await sell();
     const original = await suite.db.execute<{ legal_name: string; tax_id: string }>(
-      sql`select legal_name, tax_id from tenants limit 1`,
+      sql`select legal_name, tax_id from taxpayer limit 1`,
     );
     const issuer = { legalName: original.rows[0]!.legal_name, taxId: original.rows[0]!.tax_id };
     await suite.db.execute(
-      sql`update tenants set legal_name = 'New venue identity', tax_id = 'changed-tax-id'`,
+      sql`update taxpayer set legal_name = 'New venue identity', tax_id = 'changed-tax-id'`,
     );
     const filed = await withTransaction(suite.db, (tx) => backend.filedReceiptFor(tx, saleId));
     expect(filed).toHaveProperty("issuer", issuer);
     const current = await suite.db.execute<{ legal_name: string; tax_id: string }>(
-      sql`select legal_name, tax_id from tenants limit 1`,
+      sql`select legal_name, tax_id from taxpayer limit 1`,
     );
     expect(current.rows[0]).toEqual({
       legal_name: "New venue identity",

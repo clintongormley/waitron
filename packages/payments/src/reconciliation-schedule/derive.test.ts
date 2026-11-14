@@ -32,7 +32,7 @@ describe("dayPeriod", () => {
   });
 
   // A UTC day is always 86_400_000ms; a local day is not a fixed width, which is why the cadence
-  // is UTC-tiled rather than tenant-local.
+  // is UTC-tiled rather than taxpayer-local.
   it("spans a constant width across a European DST boundary", () => {
     const period = dayPeriod(new Date("2026-10-25T00:00:00Z"));
     expect(period.to.getTime() - period.from.getTime()).toBe(DAY_MS);

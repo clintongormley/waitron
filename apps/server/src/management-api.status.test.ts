@@ -15,7 +15,7 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 /**
  * The dashboard no longer serves venue-made table statuses: every `/management-api/service-statuses`
- * method answers the router's 404. `setupTenant` is shared with other suites.
+ * method answers the router's 404. `setupVenue` is shared with other suites.
  */
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
@@ -36,7 +36,7 @@ function nextNif(): string {
   return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-export async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
+export async function setupVenue(): Promise<{ managerId: string; staffId: string }> {
   await applyVenue(
     planVenue(
       {
@@ -121,7 +121,7 @@ let managerCookie: string;
 const json = { "content-type": "application/json" };
 
 beforeAll(async () => {
-  await setupTenant();
+  await setupVenue();
   app = mountApp();
   managerCookie = await login(app, MANAGER_EMAIL);
 });

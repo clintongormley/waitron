@@ -3,7 +3,7 @@ import { attendanceMailRows } from "./fixtures.js";
 import { beforeEach } from "vitest";
 import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
 import * as api from "../src/index.js";
@@ -17,7 +17,7 @@ export function attendanceFixture() {
   const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
   let personId: string, other: string, manager: string, nodeId: string;
   beforeEach(async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await seedFixtureVenue(suite.db);
     nodeId = await seedNode(suite.db);
     const rows = await seedPersons(suite.db, [

@@ -42,7 +42,7 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
   ]);
   expect(QUERY_DEPENDENCIES.operations).toEqual([
     "department_receipts",
-    "tenants",
+    "taxpayer",
     "settings.business_day",
     "settings.venue",
     "day_cutover_changes",

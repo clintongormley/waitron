@@ -10,7 +10,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
   assignProductUnit,
   createUnit,
@@ -202,8 +202,8 @@ describe("unit operations", () => {
     });
   });
 
-  it("creates, reads, updates, assigns and deletes within a tenant", async () => {
-    await seedTenant(suite.db);
+  it("creates, reads, updates, assigns and deletes within a taxpayer", async () => {
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
@@ -243,7 +243,7 @@ describe("unit operations", () => {
   });
 
   it("lists the products using a unit, with each product's Active flag", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
@@ -277,7 +277,7 @@ describe("unit operations", () => {
   });
 
   it("reassigns products from one unit to another", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
@@ -314,7 +314,7 @@ describe("unit operations", () => {
   });
 
   it("skips an unknown product id instead of failing the reassignment", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
@@ -352,7 +352,7 @@ describe("unit operations", () => {
   });
 
   it("refuses to reassign to a unit that does not exist", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
@@ -465,7 +465,7 @@ describe("what a unit operation refuses for an id that names nothing", () => {
   });
 
   it("refuses to assign a unit to a product no row holds", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const unit = await run((tx) =>
       createUnit(
         tx,

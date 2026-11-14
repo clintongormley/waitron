@@ -53,7 +53,7 @@ async function migratedNodeDump(parent: string) {
 it("previews a backup with an older venue schema by migrating only its private scratch copy", async () => {
   const nodeId = "d0000000-0000-4000-8000-000000000001";
   await stampDeployment(suite.db, "preproduction");
-  await suite.db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
+  await suite.db.run(sql`insert into taxpayer (id, country, tax_id, legal_name, created_at)
     values (1, 'ES', '89890001K', 'Earlier venue', ${nowIso()})`);
   await seedVenueSettings(suite.db, {
     name: "Earlier venue",
@@ -133,7 +133,7 @@ it("binds a bucket copy with an older venue schema before private preview migrat
   const nodeId = "d0000000-0000-4000-8000-000000000001";
   const streamId = "d0000000-0000-4000-8000-000000000002";
   await stampDeployment(suite.db, "preproduction");
-  await suite.db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
+  await suite.db.run(sql`insert into taxpayer (id, country, tax_id, legal_name, created_at)
     values (1, 'ES', '89890001K', 'Earlier venue', ${nowIso()})`);
   await seedVenueSettings(suite.db, {
     name: "Earlier venue",

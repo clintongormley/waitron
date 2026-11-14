@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { deployment, readVenue, readTenant, type Transaction } from "@waitron/db";
+import { deployment, readVenue, readTaxpayer, type Transaction } from "@waitron/db";
 import type { ModuleBackupContribution, ProvisionedNode } from "@waitron/module";
 import { AppError, classifySavedTimeZone } from "@waitron/shared";
 import { currentSif } from "./registro-sif.js";
@@ -24,7 +24,7 @@ async function recoveryScope(
   const refuse = (): never => {
     throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });
   };
-  const tenant = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   const [stamp] = await tx
     .select({ environment: deployment.environment })
     .from(deployment)
@@ -33,13 +33,13 @@ async function recoveryScope(
   const sif = await currentSif(tx, node.nodeId);
   const venue = await readVenue(tx);
   if (
-    tenant === null ||
+    taxpayer === null ||
     (environment !== "production" && environment !== "preproduction") ||
-    sif.nif !== tenant.taxId ||
+    sif.nif !== taxpayer.taxId ||
     keyNodeId !== node.nodeId
   )
     return refuse();
-  const scope: HourScope = { taxpayerNif: tenant.taxId, environment };
+  const scope: HourScope = { taxpayerNif: taxpayer.taxId, environment };
   const sources = [
     await readHourHistory(tx, environment),
     ...(Object.values(evidence) as HourHistorySource[]),
@@ -51,7 +51,7 @@ async function recoveryScope(
       kind: "waitron-recovery-document",
       version: 1,
       scope: { ...scope, softwareId: sif.idSistemaInformatico },
-      taxpayerName: tenant.legalName,
+      taxpayerName: taxpayer.legalName,
       venueName: venue.name,
       createdAt,
     },

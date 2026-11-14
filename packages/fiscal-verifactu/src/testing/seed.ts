@@ -1,7 +1,7 @@
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedFixtureSif as registerSif } from "../../test/sif-fixture.js";
 import { eq } from "drizzle-orm";
-import { invoiceSeries, nodes, sales, tenants } from "@waitron/db";
+import { invoiceSeries, nodes, sales, taxpayer } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { deviceOrigin } from "@waitron/shared";
@@ -62,9 +62,9 @@ function freshNif(): string {
  */
 async function ensureTaxpayer(tx: Transaction, nif: string): Promise<void> {
   // Through the builder: `created_at` is a `$defaultFn` only the insert builder runs. An untargeted
-  // conflict clause is exact here because `tenants_singleton_ck` pins the id to 1.
+  // conflict clause is exact here because `taxpayer_singleton_ck` pins the id to 1.
   await tx
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: nif, legalName: "Waitron SL" })
     .onConflictDoNothing();
 }

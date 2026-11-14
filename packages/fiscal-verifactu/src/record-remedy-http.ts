@@ -1,6 +1,6 @@
 import "./errors.js";
 import { sql } from "drizzle-orm";
-import { readHistoryNodes, readTenant, type Transaction } from "@waitron/db";
+import { readHistoryNodes, readTaxpayer, type Transaction } from "@waitron/db";
 import { prepareIssueClock } from "@waitron/fiscal";
 import type { ModuleRouteContext } from "@waitron/module";
 import { canonicalJson } from "@waitron/recovery-pack";
@@ -173,8 +173,8 @@ export async function applyCorrectedRecordFacts(
   const clock = await prepareIssueClock(tx, { nodeId: generation.nodeId }, generation.clock);
   const reading = clock.now();
   const sif = await currentSif(tx, generation.nodeId);
-  const tenant = await readTenant(tx);
-  if (tenant === null) throw new AppError("fiscal.remedy_invalid", { registroId });
+  const taxpayer = await readTaxpayer(tx);
+  if (taxpayer === null) throw new AppError("fiscal.remedy_invalid", { registroId });
   // Dates retain their stored calendar day even when the generation offset changes.
   const day = (value: string) => {
     const [d, m, y] = value.split("-");
@@ -227,7 +227,7 @@ export async function applyCorrectedRecordFacts(
     RechazoPrevio: priorOutcome === "rejected" ? "X" : "N",
     SistemaInformatico: {
       ...producerFields(runningIdentity(generation.environment), {
-        legalName: tenant.legalName,
+        legalName: taxpayer.legalName,
         nif: sif.nif,
       }),
       NombreSistemaInformatico: SOFTWARE_IDENTITY.name,

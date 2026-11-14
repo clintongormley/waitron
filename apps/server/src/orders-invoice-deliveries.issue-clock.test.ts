@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { invoiceDeliveries, invoiceSeries, pagePrinters, printAgents, tenants } from "@waitron/db";
+import { invoiceDeliveries, invoiceSeries, pagePrinters, printAgents, taxpayer } from "@waitron/db";
 import { recordSale } from "@waitron/core";
 import { seriesId as brandSeriesId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { inTx, send } from "./testing/bill-venue.js";
@@ -25,7 +25,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionOrderVenue(db);
     await inTx(venue, async (tx) => {
-      await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+      await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
       const [series] = await tx
         .select({ id: invoiceSeries.id })
         .from(invoiceSeries)

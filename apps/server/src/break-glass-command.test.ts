@@ -28,7 +28,7 @@ const suite = useVenueDb({
 });
 
 /** Provisioning seeds exactly one admin with the given password. */
-async function setupTenant(adminPassword: string = OLD_PASSWORD): Promise<{ adminId: string }> {
+async function setupVenue(adminPassword: string = OLD_PASSWORD): Promise<{ adminId: string }> {
   await applyVenue(
     planVenue(
       {
@@ -118,7 +118,7 @@ function baseEnv(password: string | null = NEW_PASSWORD) {
 
 describe("runBreakGlassReset (SQLite venue directory)", () => {
   it("resets the admin's password: the new one verifies, the old one fails (login restored)", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
 
     const { code, out, closes } = await run(baseEnv());
 
@@ -133,14 +133,14 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("opens the directory WAITRON_VENUE_DIR names, and an EMPTY value takes <stateDir>/venue", async () => {
-    await setupTenant();
+    await setupVenue();
 
     const named = await run({ ...baseEnv(), WAITRON_VENUE_DIR: "/tmp/break-glass-named-venue" });
     expect(named.code).toBe(0);
     expect(named.directories).toEqual(["/tmp/break-glass-named-venue"]);
 
     // Never `resolve("")`, which is the working directory (CLAUDE.md §3).
-    await setupTenant();
+    await setupVenue();
     const empty = await run({
       ...baseEnv(),
       WAITRON_STATE_DIR: "/tmp/break-glass-state",
@@ -151,7 +151,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("optionally resets the PIN when WAITRON_BREAKGLASS_PIN is set", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     const before = await readPerson(adminId);
 
     const { code } = await run({ ...baseEnv(), WAITRON_BREAKGLASS_PIN: "9999" });
@@ -168,7 +168,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("reactivates a suspended admin (status → active)", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${adminId}`);
     expect((await readPerson(adminId))!.status).toBe("suspended");
 
@@ -178,7 +178,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("clears second factors and linked login methods so the replacement password restores access", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     await suite.db.execute(
       sql`update persons set totp_secret = 'sealed', google_subject = 'subject' where id = ${adminId}`,
     );
@@ -213,7 +213,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("missing new-password env → returns 2 (usage), opens nothing and does NOT touch the row", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     const before = await readPerson(adminId);
 
     const { code, directories } = await run(baseEnv(null));
@@ -226,7 +226,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("too-short new password → returns 2, row untouched", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     const before = await readPerson(adminId);
 
     const { code } = await run(baseEnv("short"));
@@ -237,7 +237,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("too-short PIN → returns 2, row untouched (same floor as the gated resetPin)", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     const before = await readPerson(adminId);
 
     // A valid password rides along, so only the PIN floor can be what refuses.
@@ -255,7 +255,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("two admins, no --person → returns 1 and lists both ids; --person resets exactly one", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     // Through the table definition, for the `$defaultFn` reason above (`persons.id`).
     const [inserted] = await seedPersons(suite.db, {
       displayName: "Second Admin",
@@ -288,7 +288,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("--person as the last token (no following id) → returns 2 (usage), nothing reset", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     const before = await readPerson(adminId);
     const { code, out } = await run(baseEnv(), ["--person"]);
     expect(code).toBe(2);
@@ -298,7 +298,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("refuses --person naming a real suspended manager without changing their credentials", async () => {
-    await setupTenant();
+    await setupVenue();
     const [manager] = await seedPersons(suite.db, {
       displayName: "Locked manager",
       role: "manager",
@@ -313,7 +313,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("--person naming a non-admin/absent id → returns 1, nothing reset", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     const { code } = await run(baseEnv(), ["--person", "33333333-3333-4333-8333-333333333333"]);
     expect(code).toBe(1);
     expect(await verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(
@@ -322,7 +322,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   });
 
   it("the new credential is read from env, never argv: a password in argv is ignored", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     const before = await readPerson(adminId);
     const { code } = await run(baseEnv(null), ["--person", adminId, NEW_PASSWORD]);
     expect(code).toBe(2);
@@ -333,7 +333,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
 
 describe("runBreakGlassReset — refusals inside the reset", () => {
   it("returns 1 and leaves the admin suspended when reactivating them would duplicate a live display name", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${adminId}`);
     // The suspended admin's name is outside the live-name index, so another person may take it.
     await seedPersons(suite.db, {
@@ -353,7 +353,7 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
   });
 
   it("returns 1 and removes no login factor when the update touches no row", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     await suite.db
       .insert(webauthnCredentials)
       .values({ personId: adminId, credentialId: "credential", publicKey: "key" });
@@ -380,7 +380,7 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
   });
 
   it("rethrows a refusal that is not a duplicate name, and still closes the venue", async () => {
-    const { adminId } = await setupTenant();
+    const { adminId } = await setupVenue();
     await suite.db.execute(
       sql`create trigger break_glass_refuse_update before update on persons begin select raise(abort, 'refused by test trigger'); end`,
     );

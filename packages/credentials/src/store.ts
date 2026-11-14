@@ -2,13 +2,13 @@ import { createHash } from "node:crypto";
 import { eq, exists } from "drizzle-orm";
 import {
   nowIso,
-  tenants,
+  taxpayer,
   withNodeTransaction,
   withTransaction,
   type Database,
   type NodeDatabase,
   type Transaction,
-  tenantCredentials,
+  venueCredentials,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { aadFor, openSealedRow, seal } from "./cipher.js";
@@ -56,8 +56,8 @@ export async function tryGetCredential(
 ): Promise<Record<string, string> | null> {
   const [row] = await tx
     .select()
-    .from(tenantCredentials)
-    .where(eq(tenantCredentials.purpose, ref.purpose));
+    .from(venueCredentials)
+    .where(eq(venueCredentials.purpose, ref.purpose));
   if (row === undefined) return null;
 
   const plaintext = openSealedRow(ring, ref.purpose, aadFor(ref.purpose), row);
@@ -92,7 +92,7 @@ export async function putCredential(
   validatePayload(params.purpose, params.value);
   const sealed = seal(ring.current.key, aadFor(params.purpose), JSON.stringify(params.value));
   await tx
-    .insert(tenantCredentials)
+    .insert(venueCredentials)
     .values({
       purpose: params.purpose,
       ciphertext: sealed.ciphertext,
@@ -102,7 +102,7 @@ export async function putCredential(
     })
     // Re-provisioning is the normal case — a rotated Stripe key, a renewed certificate.
     .onConflictDoUpdate({
-      target: tenantCredentials.purpose,
+      target: venueCredentials.purpose,
       set: {
         ciphertext: sealed.ciphertext,
         iv: sealed.iv,
@@ -125,13 +125,13 @@ export async function credentialRevision(
 ): Promise<string | null> {
   const [row] = await tx
     .select({
-      keyVersion: tenantCredentials.keyVersion,
-      iv: tenantCredentials.iv,
-      ciphertext: tenantCredentials.ciphertext,
-      authTag: tenantCredentials.authTag,
+      keyVersion: venueCredentials.keyVersion,
+      iv: venueCredentials.iv,
+      ciphertext: venueCredentials.ciphertext,
+      authTag: venueCredentials.authTag,
     })
-    .from(tenantCredentials)
-    .where(eq(tenantCredentials.purpose, ref.purpose));
+    .from(venueCredentials)
+    .where(eq(venueCredentials.purpose, ref.purpose));
   if (row === undefined) return null;
   return rowDigest(row);
 }
@@ -163,14 +163,14 @@ export async function readCredentialMeta(
 ): Promise<CredentialRowMeta | null> {
   const [row] = await tx
     .select({
-      keyVersion: tenantCredentials.keyVersion,
-      updatedAt: tenantCredentials.updatedAt,
-      iv: tenantCredentials.iv,
-      ciphertext: tenantCredentials.ciphertext,
-      authTag: tenantCredentials.authTag,
+      keyVersion: venueCredentials.keyVersion,
+      updatedAt: venueCredentials.updatedAt,
+      iv: venueCredentials.iv,
+      ciphertext: venueCredentials.ciphertext,
+      authTag: venueCredentials.authTag,
     })
-    .from(tenantCredentials)
-    .where(eq(tenantCredentials.purpose, ref.purpose));
+    .from(venueCredentials)
+    .where(eq(venueCredentials.purpose, ref.purpose));
   if (row === undefined) return null;
   return { keyVersion: row.keyVersion, updatedAt: row.updatedAt, digest: rowDigest(row) };
 }
@@ -178,9 +178,9 @@ export async function readCredentialMeta(
 /** True when a row was removed, false when there was none. */
 export async function deleteCredential(tx: Transaction, ref: CredentialRef): Promise<boolean> {
   const removed = await tx
-    .delete(tenantCredentials)
-    .where(eq(tenantCredentials.purpose, ref.purpose))
-    .returning({ purpose: tenantCredentials.purpose });
+    .delete(venueCredentials)
+    .where(eq(venueCredentials.purpose, ref.purpose))
+    .returning({ purpose: venueCredentials.purpose });
   return removed.length > 0;
 }
 
@@ -188,29 +188,29 @@ export async function deleteCredential(tx: Transaction, ref: CredentialRef): Pro
 export async function listCredentials(tx: Transaction): Promise<CredentialMeta[]> {
   const rows = await tx
     .select({
-      purpose: tenantCredentials.purpose,
-      keyVersion: tenantCredentials.keyVersion,
-      updatedAt: tenantCredentials.updatedAt,
+      purpose: venueCredentials.purpose,
+      keyVersion: venueCredentials.keyVersion,
+      updatedAt: venueCredentials.updatedAt,
     })
-    .from(tenantCredentials);
+    .from(venueCredentials);
   return rows;
 }
 
 /**
- * Whether this database's taxpayer has a credential provisioned for `purpose`: the `tenants` row
+ * Whether this database's taxpayer has a credential provisioned for `purpose`: the `taxpayer` row
  * and the vault row must both exist. The vault is the enrolment list for the duty the purpose
  * serves; the host keeps no separate "is Stripe configured" flag.
  */
 export async function credentialProvisioned(db: Database, purpose: string): Promise<boolean> {
   const rows = await db
-    .select({ taxpayer: tenants.id })
-    .from(tenants)
+    .select({ taxpayer: taxpayer.id })
+    .from(taxpayer)
     .where(
       exists(
         db
-          .select({ purpose: tenantCredentials.purpose })
-          .from(tenantCredentials)
-          .where(eq(tenantCredentials.purpose, purpose)),
+          .select({ purpose: venueCredentials.purpose })
+          .from(venueCredentials)
+          .where(eq(venueCredentials.purpose, purpose)),
       ),
     )
     .limit(1);

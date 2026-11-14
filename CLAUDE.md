@@ -312,7 +312,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **A module adds a Calendar view through `calendarViews` on its `DashboardContribution`, never by
   venue-service importing it, and never names its address words in `apps/dashboard/src/navigation.ts`**.
   Nothing guards the second half. See [conventions-ui.md](docs/developers/conventions-ui.md).
-- **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
+- **The dashboard banner is persistent identity chrome** — top of the page, full width, the taxpayer's
   legal name. The account menu sits at the trailing edge only when a session exists.
   [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
 - **The dashboard matches the browser's `Accept-Language` when no language is saved.** Guard against
@@ -561,10 +561,10 @@ called weaker than its name, the topic file lists what it does not see.
 - **A duty `bootServer` starts registers its stop on `undoOnFailure` before the next throwing step.**
   The landing listener, started last, is the exception. Guard: `apps/server/src/boot.failed-start.test.ts`,
   weaker than its name: covers only named duties.
-- **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
-  query that wants "this tenant's rows" reads the table.** Guard:
-  `scripts/no-tenant-column.test.ts`, weaker than its name — it matches the column's spellings and
-  skips test files.
+- **Nothing is scoped by a taxpayer column: the taxpayer is the one row of `taxpayer` (id = 1,
+  `taxpayer_singleton_ck`), and a query that wants it reads that row.** Guard:
+  `scripts/no-tenant-column.test.ts`, weaker than its name — it matches the retired `tenant_id`
+  column's spellings and skips test files.
 - **Declare table/column types through `packages/db/src/schema/columns.ts`, never direct engine
   builders.** Exception: `text` in `packages/fiscal-verifactu/src/schema/registros.ts`. Guard:
   `scripts/column-vocabulary.test.ts`, weaker than its name: reads imports and forbids only listed builders.

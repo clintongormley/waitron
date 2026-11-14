@@ -57,7 +57,7 @@ describe("planVenue", () => {
       { ...request(), taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid" },
       MODULES,
     );
-    expect(actions.find((action) => action.kind === "ensure-tenant")).toMatchObject({
+    expect(actions.find((action) => action.kind === "ensure-taxpayer")).toMatchObject({
       taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
     });
     expect(actions.find((action) => action.kind === "create-venue")).toMatchObject({
@@ -65,10 +65,10 @@ describe("planVenue", () => {
     });
   });
 
-  it("emits ensure-tenant → seed-admin → seed-device-profiles → venueStep → node → three series → module seeds, in order, and no till", () => {
+  it("emits ensure-taxpayer → seed-admin → seed-device-profiles → venueStep → node → three series → module seeds, in order, and no till", () => {
     const actions = planVenue(request(), MODULES);
     expect(actions.map((a) => a.kind)).toEqual([
-      "ensure-tenant",
+      "ensure-taxpayer",
       "seed-admin",
       "seed-device-profiles",
       "create-venue",
@@ -209,9 +209,9 @@ describe("planVenue", () => {
     },
   );
 
-  it("seeds the admin immediately after ensure-tenant, carrying the display name and pin hash", () => {
+  it("seeds the admin immediately after ensure-taxpayer, carrying the display name and pin hash", () => {
     const actions = planVenue(request(), MODULES);
-    expect(actions[0]?.kind).toBe("ensure-tenant");
+    expect(actions[0]?.kind).toBe("ensure-taxpayer");
     expect(actions[1]).toEqual({
       kind: "seed-admin",
       jobRoleName: STARTER_JOB_ROLE_NAMES.Team.es,
@@ -295,9 +295,9 @@ describe("planVenue", () => {
 
   it("carries the canonical fiscal identity and stamps the resolved modules on the node", () => {
     const actions = planVenue(request(), MODULES);
-    const tenant = actions.find((a) => a.kind === "ensure-tenant");
+    const taxpayer = actions.find((a) => a.kind === "ensure-taxpayer");
     const node = actions.find((a) => a.kind === "create-node");
-    expect(tenant).toMatchObject({ country: "ES", taxId: "B12345678" });
+    expect(taxpayer).toMatchObject({ country: "ES", taxId: "B12345678" });
     expect(node).toMatchObject({ filingModule: "verifactu", taxModule: "vat" });
   });
 
@@ -383,7 +383,7 @@ describe("planVenue", () => {
     }
   });
 
-  it("REFUSES a fiscal_territory that does not belong to the tenant's country", () => {
+  it("REFUSES a fiscal_territory that does not belong to the taxpayer's country", () => {
     try {
       planVenue(request({ country: "PT" }), MODULES);
       expect.unreachable("should have refused an ES territory under a PT country");
@@ -413,20 +413,25 @@ describe("planVenue", () => {
   });
 
   it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES reads as the SAME taxpayer", () => {
-    const canonicalTenant = planVenue(request({ country: "ES", taxId: "B12345678" }), MODULES).find(
-      (a) => a.kind === "ensure-tenant",
+    const canonicalTaxpayer = planVenue(
+      request({ country: "ES", taxId: "B12345678" }),
+      MODULES,
+    ).find((a) => a.kind === "ensure-taxpayer");
+    const messyTaxpayer = planVenue(request({ country: "es", taxId: " b12345678 " }), MODULES).find(
+      (a) => a.kind === "ensure-taxpayer",
     );
-    const messyTenant = planVenue(request({ country: "es", taxId: " b12345678 " }), MODULES).find(
-      (a) => a.kind === "ensure-tenant",
-    );
-    expect(messyTenant).toMatchObject({ kind: "ensure-tenant", country: "ES", taxId: "B12345678" });
-    expect(messyTenant).toEqual(canonicalTenant);
+    expect(messyTaxpayer).toMatchObject({
+      kind: "ensure-taxpayer",
+      country: "ES",
+      taxId: "B12345678",
+    });
+    expect(messyTaxpayer).toEqual(canonicalTaxpayer);
   });
 
   it("accepts a country in a different case than the territory prefix (ES matches es-common)", () => {
     const actions = planVenue(request({ country: "es", fiscalTerritory: "ES-common" }), MODULES);
     expect(actions.map((a) => a.kind)).toEqual([
-      "ensure-tenant",
+      "ensure-taxpayer",
       "seed-admin",
       "seed-device-profiles",
       "create-venue",
@@ -471,7 +476,7 @@ describe("describeVenueAction", () => {
   it("renders each planned action as a line an operator can check", () => {
     const lines = planVenue(request(), MODULES).map((action) => describeVenueAction(action));
     expect(lines).toEqual([
-      "ensure tenant ES/B12345678 (Deli SL)",
+      "ensure taxpayer ES/B12345678 (Deli SL)",
       "seed admin Owner",
       `seed device profiles ${STARTER_PROFILE_NAMES.Counter.es}, ${STARTER_PROFILE_NAMES.Kitchen.es}, ${STARTER_PROFILE_NAMES.Handheld.es}`,
       "create venue Mostrador in ES-common (es-ES)",

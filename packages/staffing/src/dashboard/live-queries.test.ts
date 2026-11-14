@@ -27,7 +27,7 @@ describe("QUERY_DEPENDENCIES", () => {
       "staff_roles",
       "departments",
       "kitchen_stations",
-      "tenants",
+      "taxpayer",
       "settings.business_day",
       "settings.venue",
       "day_cutover_changes",

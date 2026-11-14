@@ -1,7 +1,13 @@
 import { generateKeyPairSync } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
-import { deployment, invoiceSeries, tenants, withTransaction, type Transaction } from "@waitron/db";
+import {
+  deployment,
+  invoiceSeries,
+  taxpayer,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   withOperationAuthority,
@@ -283,13 +289,13 @@ it("a raw uncollected setup approval cannot mint a local identity", async () => 
 });
 
 it("keeps an absent taxpayer as a corrupt-database failure rather than an operator refusal", async () => {
-  await suite.db.delete(tenants);
+  await suite.db.delete(taxpayer);
   const error = await attempt("setup", (tx, operation) => seed.run(tx, node, operation)).catch(
     (error: unknown) => error,
   );
   expect(error).toBeInstanceOf(Error);
   expect(error).not.toBeInstanceOf(AppError);
-  expect((error as Error).message).toContain("tenants is empty");
+  expect((error as Error).message).toContain("taxpayer is empty");
   expect(await suite.db.select().from(registroSif)).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);

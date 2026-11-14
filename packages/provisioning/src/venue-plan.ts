@@ -68,7 +68,7 @@ export const VENUE_FIELDS = [
 
 export type VenueAction =
   | {
-      kind: "ensure-tenant";
+      kind: "ensure-taxpayer";
       country: string;
       taxId: string;
       legalName: string;
@@ -132,8 +132,8 @@ export function normalizeDayCutover(value: string): string {
  * No ids are in the actions: they are generated at apply time and threaded by order.
  */
 export function planVenue(request: VenueRequest, modules: readonly WaitronModule[]): VenueAction[] {
-  // Canonicalized here, for every caller, because `assertNoForeignTenant` compares the stored
-  // `tenants (country, tax_id)` byte-for-byte: a raw `es`/`ES` or stray surrounding space would
+  // Canonicalized here, for every caller, because `assertNoForeignTaxpayer` compares the stored
+  // `taxpayer (country, tax_id)` byte-for-byte: a raw `es`/`ES` or stray surrounding space would
   // refuse a same-venue retry as a foreign taxpayer. Internal whitespace is deliberately left
   // alone: a tax id's inner content is not ours to alter.
   const country = request.country.trim().toUpperCase();
@@ -156,7 +156,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     throw new AppError("provisioning.duplicate_series_code", repeated);
   }
   const fiscal = resolveFiscalModules(request.fiscalTerritory); // throws for unimplemented
-  // The territory must belong to the tenant's country: applyVenue writes tax_id into
+  // The territory must belong to the taxpayer's country: applyVenue writes tax_id into
   // `registro_sif.nif` (a Spanish-NIF field), so `country=PT` + `ES-common` would file under a
   // non-NIF identity, a mis-filing that a hash-chained record cannot take back. Checked after
   // resolveFiscalModules so an unimplemented territory fails first with the more specific code.
@@ -181,7 +181,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
 
   return [
     {
-      kind: "ensure-tenant",
+      kind: "ensure-taxpayer",
       country,
       taxId,
       legalName: request.legalName,
@@ -252,8 +252,8 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
 /** One action as a line an operator can check in the plan summary. */
 export function describeVenueAction(action: VenueAction): string {
   switch (action.kind) {
-    case "ensure-tenant":
-      return `ensure tenant ${action.country}/${action.taxId} (${action.legalName})`;
+    case "ensure-taxpayer":
+      return `ensure taxpayer ${action.country}/${action.taxId} (${action.legalName})`;
     case "seed-admin": {
       // Never a hash: this line is shown to the operator.
       const realName = [action.firstNames, action.lastNames].filter(Boolean).join(" ");

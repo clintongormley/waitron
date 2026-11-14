@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "09c5b136-ede6-430f-8ec5-ae3d51dacf72",
+  "id": "712b367a-bace-47fe-8ceb-775da60bdae6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -245,8 +245,8 @@
         }
       }
     },
-    "tenants": {
-      "name": "tenants",
+    "taxpayer": {
+      "name": "taxpayer",
       "columns": {
         "id": {
           "name": "id",
@@ -305,23 +305,14 @@
           "autoincrement": false
         }
       },
-      "indexes": {
-        "tenants_country_tax_id_key": {
-          "name": "tenants_country_tax_id_key",
-          "columns": [
-            "country",
-            "tax_id"
-          ],
-          "isUnique": true
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "tenants_singleton_ck": {
-          "name": "tenants_singleton_ck",
-          "value": "\"tenants\".\"id\" = 1"
+        "taxpayer_singleton_ck": {
+          "name": "taxpayer_singleton_ck",
+          "value": "\"taxpayer\".\"id\" = 1"
         }
       }
     },
@@ -10747,8 +10738,8 @@
         }
       }
     },
-    "tenant_credentials": {
-      "name": "tenant_credentials",
+    "venue_credentials": {
+      "name": "venue_credentials",
       "columns": {
         "purpose": {
           "name": "purpose",
@@ -10798,21 +10789,21 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "tenant_credentials_key_version_ck": {
-          "name": "tenant_credentials_key_version_ck",
-          "value": "\"tenant_credentials\".\"key_version\" >= 1"
+        "venue_credentials_key_version_ck": {
+          "name": "venue_credentials_key_version_ck",
+          "value": "\"venue_credentials\".\"key_version\" >= 1"
         },
-        "tenant_credentials_iv_len_ck": {
-          "name": "tenant_credentials_iv_len_ck",
-          "value": "octet_length(\"tenant_credentials\".\"iv\") = 12"
+        "venue_credentials_iv_len_ck": {
+          "name": "venue_credentials_iv_len_ck",
+          "value": "octet_length(\"venue_credentials\".\"iv\") = 12"
         },
-        "tenant_credentials_auth_tag_len_ck": {
-          "name": "tenant_credentials_auth_tag_len_ck",
-          "value": "octet_length(\"tenant_credentials\".\"auth_tag\") = 16"
+        "venue_credentials_auth_tag_len_ck": {
+          "name": "venue_credentials_auth_tag_len_ck",
+          "value": "octet_length(\"venue_credentials\".\"auth_tag\") = 16"
         },
-        "tenant_credentials_purpose_ck": {
-          "name": "tenant_credentials_purpose_ck",
-          "value": "length(\"tenant_credentials\".\"purpose\") > 0"
+        "venue_credentials_purpose_ck": {
+          "name": "venue_credentials_purpose_ck",
+          "value": "length(\"venue_credentials\".\"purpose\") > 0"
         }
       }
     },

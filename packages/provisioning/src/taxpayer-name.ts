@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { tenants, type Transaction } from "@waitron/db";
+import { taxpayer, type Transaction } from "@waitron/db";
 
 /**
  * Change the taxpayer's legal name, only while the stored name is still `expected`. The country,
@@ -11,9 +11,9 @@ export async function renameTaxpayer(
   input: { readonly expected: string; readonly legalName: string },
 ): Promise<{ renamed: boolean }> {
   const updated = await tx
-    .update(tenants)
+    .update(taxpayer)
     .set({ legalName: input.legalName })
-    .where(and(eq(tenants.id, 1), eq(tenants.legalName, input.expected)))
-    .returning({ id: tenants.id });
+    .where(and(eq(taxpayer.id, 1), eq(taxpayer.legalName, input.expected)))
+    .returning({ id: taxpayer.id });
   return { renamed: updated.length > 0 };
 }

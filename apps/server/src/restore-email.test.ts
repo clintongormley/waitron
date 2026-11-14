@@ -9,7 +9,7 @@ import { hashPassword, hashPin, startManagementSession } from "@waitron/identity
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
-import { invoiceSeries, nodes, openVenueDatabase, tenants, withTransaction } from "@waitron/db";
+import { invoiceSeries, nodes, openVenueDatabase, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -59,7 +59,7 @@ const suite = useVenueDb({
       passwordHash: hashPassword("fixture-restore-password"),
     });
     await db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Restore venue" });
     await seedVenueSettings(db, {
       name: "Restaurant",

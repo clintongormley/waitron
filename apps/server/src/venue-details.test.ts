@@ -751,7 +751,7 @@ describe("existing clock-change cutover mapping", () => {
 
 describe("unavailable country and own expected values", () => {
   it("offers no geography edit when the stored country has no installed pack", async () => {
-    await suite.db.execute(sql`update tenants set country = 'ZZ' where id = 1`);
+    await suite.db.execute(sql`update taxpayer set country = 'ZZ' where id = 1`);
     const initial = await read();
     expect(initial.provinces).toEqual([]);
     for (const field of ["city", "postalCode"] as const) {
@@ -809,7 +809,7 @@ describe("unavailable country and own expected values", () => {
 describe("venue details preserve committed history", () => {
   beforeEach(async () => {
     await stampDeployment(suite.db, "preproduction");
-    const taxId = suite.db.all<{ tax_id: string }>(sql`select tax_id from tenants`)[0]!.tax_id;
+    const taxId = suite.db.all<{ tax_id: string }>(sql`select tax_id from taxpayer`)[0]!.tax_id;
     const bases = suite.db.all<{ code: string; purpose: string }>(
       sql`select code, purpose from invoice_series where retired_at is null`,
     );
@@ -828,7 +828,7 @@ describe("venue details preserve committed history", () => {
     ).toEqual([]);
   });
   const retainedTables = [
-    "tenants",
+    "taxpayer",
     "nodes",
     "invoice_series",
     "sales",

@@ -2,14 +2,14 @@ import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, installChangeFeed, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import type { ChangeSource } from "@waitron/shared";
 import * as api from "./index.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
   },
 });
 it("announces inserted, changed and removed labour rules through the module's real feed triggers", async () => {

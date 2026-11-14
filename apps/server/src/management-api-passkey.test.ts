@@ -90,7 +90,7 @@ function nextNif(): string {
   return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-async function setupTenant(): Promise<{ managerId: string }> {
+async function setupVenue(): Promise<{ managerId: string }> {
   await applyVenue(
     planVenue(
       {
@@ -233,7 +233,7 @@ beforeEach(() => {
 
 describe("Management API passkey routes (mocked ceremony)", () => {
   it("register/options is gated: 401 without a cookie, 200 with the manager's", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     const anon = await app.request("/management-api/passkey/register/options", { method: "POST" });
@@ -255,7 +255,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
   });
 
   it("register/verify (gated) persists a credential row", async () => {
-    const { managerId } = await setupTenant();
+    const { managerId } = await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -286,7 +286,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
   });
 
   it("register/verify surfaces a duplicate credential as 409, not an opaque 500", async () => {
-    const { managerId } = await setupTenant();
+    const { managerId } = await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -318,7 +318,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
   });
 
   it("auth/options is ungated: 200 with a challenge handle and no cookie", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     const res = await app.request("/management-api/passkey/auth/options", { method: "POST" });
@@ -330,7 +330,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
   });
 
   it("auth/verify (ungated) logs the credential's owner in and sets the session cookie", async () => {
-    const { managerId } = await setupTenant();
+    const { managerId } = await setupVenue();
     const app = mountApp();
 
     const cookie = await login(app, MANAGER_EMAIL);
@@ -359,7 +359,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
   });
 
   it("auth/verify screens a malformed challengeHandle as 400 before passkey verification", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     // Pins the 400 naming the field and the never-called verifier.
@@ -390,7 +390,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
   });
 
   it("register/verify screens a malformed challengeHandle as 400 (gated route, same guard)", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -418,7 +418,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
   });
 
   it("auth/verify screens a missing / non-object response as 400 before passkey verification", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     const validHandle = "00000000-0000-4000-8000-000000000000";
@@ -448,7 +448,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
   });
 
   it("register/verify screens a missing response as 400 (gated route, same guard)", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -471,7 +471,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
 
 describe("the profile's passkey list", () => {
   it("says which password manager holds each passkey and when it last signed someone in", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountAppWithMe();
     const cookie = await login(app, MANAGER_EMAIL);
     await registerPasskey(app, cookie, "cred-abc", {
@@ -513,7 +513,7 @@ describe("the profile's passkey list", () => {
  */
 describe("the sign-in passkey offer", () => {
   it("tells a first-time signer-in to offer a passkey", async () => {
-    await setupTenant();
+    await setupVenue();
     const response = await signIn(mountApp());
     expect(response.status).toBe(200);
     expect((await response.json()) as { offerPasskey: boolean }).toMatchObject({
@@ -522,7 +522,7 @@ describe("the sign-in passkey offer", () => {
   });
 
   it("does not offer a passkey to someone who already holds one", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     await registerPasskey(app, await login(app, MANAGER_EMAIL), "cred-already-held");
     expect(await readCredentials()).toHaveLength(1);
@@ -535,7 +535,7 @@ describe("the sign-in passkey offer", () => {
   });
 
   it("does not offer again once the offer was resolved", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountAppWithMe();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -575,7 +575,7 @@ describe("passkey registration's own-credential check", () => {
   }
 
   it("requires the shared confirmation before issuing registration options", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL, PASSWORD, false);
     const res = await app.request("/management-api/passkey/register/options", {
@@ -591,7 +591,7 @@ describe("passkey registration's own-credential check", () => {
   });
 
   it("passes the authenticator code through for a person with two-factor sign-in", async () => {
-    const { managerId } = await setupTenant();
+    const { managerId } = await setupVenue();
     const app = mountWithKeyRing();
     const cookie = await login(app, MANAGER_EMAIL);
     await suite.db
@@ -617,7 +617,7 @@ describe("passkey registration's own-credential check", () => {
 
 describe("what the browser's password manager is told", () => {
   it("hands a signed-in person the relying party, their user handle, their accepted passkeys and their names", async () => {
-    const { managerId } = await setupTenant();
+    const { managerId } = await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     await registerPasskey(app, cookie, "cred-one");
@@ -636,7 +636,7 @@ describe("what the browser's password manager is told", () => {
   });
 
   it("hands nothing to a request without a session", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const res = await app.request("/management-api/passkey/signals");
     expect(res.status).toBe(401);
@@ -644,7 +644,7 @@ describe("what the browser's password manager is told", () => {
   });
 
   it("answers a sign-in with a passkey nobody holds as not registered, and opens no session", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const options = await app.request("/management-api/passkey/auth/options", { method: "POST" });
     const { challengeHandle } = (await options.json()) as { challengeHandle: string };
@@ -661,7 +661,7 @@ describe("what the browser's password manager is told", () => {
   });
 
   it("answers a suspended person's own passkey with the generic refusal, not as unknown", async () => {
-    const { managerId } = await setupTenant();
+    const { managerId } = await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     await registerPasskey(app, cookie, "cred-abc");
@@ -683,7 +683,7 @@ describe("what the browser's password manager is told", () => {
 });
 
 it("offers staff-host passkey registration and authentication separately from the LAN hostname", async () => {
-  await setupTenant();
+  await setupVenue();
   const local = mountApp(),
     staff = createStaffApp(local, "https://staff.example.test");
   const signed = await staff.request("https://staff.example.test/management-api/session", {

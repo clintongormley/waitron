@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, tenantCredentials } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, venueCredentials } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { seal } from "./cipher.js";
@@ -24,7 +24,7 @@ const email = { url: "smtp://private-sentinel@example.test", from: "owner@exampl
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 beforeEach(() => {
-  suite.db.run(sql`delete from tenant_credentials`);
+  suite.db.run(sql`delete from venue_credentials`);
 });
 async function query<T>(body: (q: BackupQuery) => Promise<T>): Promise<T> {
   const file = suite.db
@@ -43,7 +43,7 @@ async function row(
   options: { key?: Buffer; version?: number; aad?: string } = {},
 ) {
   const sealed = seal(options.key ?? key2, Buffer.from(options.aad ?? purpose), plaintext);
-  await suite.db.insert(tenantCredentials).values({
+  await suite.db.insert(venueCredentials).values({
     purpose,
     ...sealed,
     keyVersion: options.version ?? 2,
@@ -78,13 +78,13 @@ describe("read-only backup vault authentication", () => {
       putCredential(tx, loadKeyRing(inputs), { purpose: "email.smtp", value: email }),
     );
     await row("sync.mirror_token", '{"token":"old-private-sentinel"}', { key: key1, version: 1 });
-    const before = suite.db.all(sql`select * from tenant_credentials order by purpose`);
+    const before = suite.db.all(sql`select * from venue_credentials order by purpose`);
     expect(await verify()).toBe("passed");
     expect(await query((q) => readBackupCredential(q, inputs, "email.smtp"))).toEqual(email);
     expect(await query((q) => readBackupCredential(q, inputs, "sync.mirror_token"))).toEqual({
       token: "old-private-sentinel",
     });
-    expect(suite.db.all(sql`select * from tenant_credentials order by purpose`)).toEqual(before);
+    expect(suite.db.all(sql`select * from venue_credentials order by purpose`)).toEqual(before);
   });
 
   it("key shape alone cannot pass", async () => {
@@ -114,7 +114,7 @@ describe("read-only backup vault authentication", () => {
     expect(await verify()).toBe("passed");
     expect(await verify(current)).toBe("unavailable");
     suite.db.run(
-      sql`update tenant_credentials set auth_tag = zeroblob(16) where purpose = 'sync.mirror_token'`,
+      sql`update venue_credentials set auth_tag = zeroblob(16) where purpose = 'sync.mirror_token'`,
     );
     expect(await verify()).toBe("unavailable");
   });
@@ -152,7 +152,7 @@ describe("read-only backup vault authentication", () => {
   it("deprecated purposes remain covered", async () => {
     await row("sync.mirror_token", '{"token":"kept"}');
     expect(await verify()).toBe("passed");
-    suite.db.run(sql`update tenant_credentials set ciphertext = x'00'`);
+    suite.db.run(sql`update venue_credentials set ciphertext = x'00'`);
     expect(await verify()).toBe("unavailable");
   });
 
@@ -194,7 +194,7 @@ describe("read-only backup vault authentication", () => {
     await row();
     suite.db.run(sql`pragma ignore_check_constraints = on`);
     try {
-      suite.db.run(sql.raw(`update tenant_credentials set ${assignment}`));
+      suite.db.run(sql.raw(`update venue_credentials set ${assignment}`));
       expect(await verify()).toBe("invalid");
     } finally {
       suite.db.run(sql`pragma ignore_check_constraints = off`);

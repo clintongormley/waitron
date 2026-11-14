@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import {
   addDecimal,
@@ -135,8 +135,8 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    // seedTenant supplies the tax_id + legal_name the route reads back as the obligado identity.
-    await seedTenant(db);
+    // seedTaxpayer supplies the tax_id + legal_name the route reads back as the obligado identity.
+    await seedTaxpayer(db);
     await seedVenue(db, {
       name: "Main dining room",
       invoiceLocales: ["es-ES"],

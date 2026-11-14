@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, tenantCredentials } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, venueCredentials } from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
@@ -35,7 +35,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Listing reads the whole vault, so each case starts with an empty credential table.
 beforeEach(async () => {
-  await suite.db.execute(sql`delete from tenant_credentials`);
+  await suite.db.execute(sql`delete from venue_credentials`);
 });
 
 describe("the seal binds each credential to its purpose", () => {
@@ -58,7 +58,7 @@ describe("the seal binds each credential to its purpose", () => {
       JSON.stringify(STRIPE),
     );
     await withTransaction(suite.db, (tx) =>
-      tx.insert(tenantCredentials).values({
+      tx.insert(venueCredentials).values({
         purpose: "payments.stripe",
         ciphertext: sealed.ciphertext,
         iv: sealed.iv,
@@ -81,7 +81,7 @@ describe("the seal binds each credential to its purpose", () => {
     await withTransaction(suite.db, async (tx) => {
       await putCredential(tx, RING_V1, { purpose: "payments.sumup", value: sumup });
       await tx.execute(sql`
-        update tenant_credentials set purpose = 'payments.stripe' where purpose = 'payments.sumup'`);
+        update venue_credentials set purpose = 'payments.stripe' where purpose = 'payments.sumup'`);
     });
     const error = await captured(() =>
       withTransaction(suite.db, async (tx) => {
@@ -111,7 +111,7 @@ describe("putCredential and getCredential", () => {
     // `latin1` maps every byte to one character, so any ASCII run present in the ciphertext
     // appears verbatim in the string being searched.
     const rows = await suite.db.execute<{ blob: Uint8Array }>(sql`
-      select ciphertext as blob from tenant_credentials`);
+      select ciphertext as blob from venue_credentials`);
     expect(Buffer.from(rows.rows[0]!.blob).toString("latin1")).not.toContain("sk_test_x");
   });
 
@@ -134,7 +134,7 @@ describe("putCredential and getCredential", () => {
       putCredential(tx, RING_V2_ONLY, { purpose: "payments.stripe", value: STRIPE }),
     );
     const rows = await suite.db.execute<{ key_version: number }>(sql`
-      select key_version from tenant_credentials`);
+      select key_version from venue_credentials`);
     expect(rows.rows[0]!.key_version).toBe(2);
   });
 
@@ -151,10 +151,10 @@ describe("putCredential and getCredential", () => {
     );
     const BACKDATED = "2020-01-01T00:00:00Z";
     await suite.db.execute(sql`
-      update tenant_credentials set updated_at = ${BACKDATED}
+      update venue_credentials set updated_at = ${BACKDATED}
       where purpose = 'payments.stripe'`);
     const before = await suite.db.execute<{ updated_at: string }>(sql`
-      select updated_at from tenant_credentials`);
+      select updated_at from venue_credentials`);
     const rotated = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: K2,
       WAITRON_CREDENTIALS_KEY_VERSION: "2",
@@ -166,7 +166,7 @@ describe("putCredential and getCredential", () => {
       putCredential(tx, rotated, { purpose: "payments.stripe", value: updated }),
     );
     const after = await suite.db.execute<{ key_version: number; updated_at: string }>(sql`
-      select key_version, updated_at from tenant_credentials`);
+      select key_version, updated_at from venue_credentials`);
     expect(after.rows[0]!.key_version).toBe(2);
     expect(after.rows[0]!.updated_at).not.toBe(before.rows[0]!.updated_at);
     const actual = await withTransaction(suite.db, (tx) =>
@@ -188,7 +188,7 @@ describe("putCredential and getCredential", () => {
       );
       expect(hasCode(error, "credentials.invalid_payload")).toBe(true);
       const rows = await tx.execute<{ n: number }>(sql`
-        select count(*) as n from tenant_credentials`);
+        select count(*) as n from venue_credentials`);
       return rows.rows[0]!.n;
     });
     expect(n).toBe(0);
@@ -269,7 +269,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
   ): Promise<void> {
     const sealed = seal(RING_V1.current.key, aadFor(purpose), plaintext);
     await withTransaction(suite.db, (tx) =>
-      tx.insert(tenantCredentials).values({
+      tx.insert(venueCredentials).values({
         purpose,
         ciphertext: sealed.ciphertext,
         iv: sealed.iv,
@@ -397,7 +397,7 @@ describe("credentialRevision", () => {
       putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     const rows = await suite.db.execute<{ blob: Uint8Array; iv: Uint8Array; tag: Uint8Array }>(
-      sql`select ciphertext as blob, iv, auth_tag as tag from tenant_credentials`,
+      sql`select ciphertext as blob, iv, auth_tag as tag from venue_credentials`,
     );
     const row = rows.rows[0]!;
     const rev = (await revision())!;
@@ -434,7 +434,7 @@ describe("readCredentialMeta", () => {
     );
     // Backdated, so the rewrite's time is strictly later whatever the clock's precision.
     await suite.db.execute(
-      sql`update tenant_credentials set updated_at = '2020-01-01T00:00:00.000Z'`,
+      sql`update venue_credentials set updated_at = '2020-01-01T00:00:00.000Z'`,
     );
     const backdated = (await meta())!;
     expect(backdated.updatedAt).toBe("2020-01-01T00:00:00.000Z");

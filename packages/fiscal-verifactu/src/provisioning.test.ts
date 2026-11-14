@@ -1,7 +1,7 @@
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { loadKeyRing, putCredential, tenantCredentials } from "@waitron/credentials";
+import { loadKeyRing, putCredential, venueCredentials } from "@waitron/credentials";
 import {
   captureError,
   deployment,
@@ -78,10 +78,10 @@ describe("FISCAL_PROVISIONING.seed", () => {
 
   it("refuses to seed a database with no taxpayer row, loudly and without a domain code", async () => {
     // Minting a SIF under a guessed NIF is unrepairable; no operator action fixes an empty table.
-    await db.execute(sql`delete from tenants`);
+    await db.execute(sql`delete from taxpayer`);
     const error = await captureError(() => withTransaction(db, (tx) => seed.run(tx, NODE)));
     expect(isAppError(error)).toBe(false);
-    expect((error as Error).message).toContain("tenants is empty");
+    expect((error as Error).message).toContain("taxpayer is empty");
   });
 
   it("restoring an existing node mints a fresh installation number and a new chain", async () => {
@@ -251,7 +251,7 @@ describe("allocated fiscal standby contract", () => {
         value: { privateKey: "held-primary-test-key" },
       }),
     );
-    const keysBefore = await db.select().from(tenantCredentials);
+    const keysBefore = await db.select().from(venueCredentials);
     expect(keysBefore).toHaveLength(1);
     const reservationsBefore = await db.select().from(fiscalReservations);
     const allocationsBefore = await db.select().from(fiscalAllocations);
@@ -262,7 +262,7 @@ describe("allocated fiscal standby contract", () => {
     );
     expect(isAppError(err) && err.code).toBe("sif.allocation_invalid");
     expect(isAppError(err) && err.params).toEqual({ reason: "reservation_mismatch" });
-    expect(await db.select().from(tenantCredentials)).toEqual(keysBefore);
+    expect(await db.select().from(venueCredentials)).toEqual(keysBefore);
     expect(await db.select().from(fiscalReservations)).toEqual(reservationsBefore);
     expect(await db.select().from(fiscalAllocations)).toEqual(allocationsBefore);
     expect(await activeSeries()).toEqual([]);

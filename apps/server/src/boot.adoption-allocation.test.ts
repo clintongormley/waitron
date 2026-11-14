@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { invoiceSeries, nodes, stampDeployment, tenants } from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, taxpayer } from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import {
   loadKeyRing,
@@ -23,7 +23,7 @@ import {
   seedBusinessDay,
 } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { tenantCredentials } from "@waitron/credentials";
+import { venueCredentials } from "@waitron/credentials";
 import { managementSessions } from "@waitron/identity";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -52,7 +52,7 @@ const PRIMARY = "a8000000-0000-4000-8000-000000000002";
 const STANDBY = "a8000000-0000-4000-8000-000000000003";
 it("boot keeps an adoption whose copy has not arrived pending, with no ambient session or selling identity", async () => {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
   await seedVenueSettings(suite.db, {
     name: "Venue",
@@ -121,7 +121,7 @@ it("boot keeps an adoption whose copy has not arrived pending, with no ambient s
     expect((await suite.db.select().from(nodes)).map((node) => node.id)).toEqual([PRIMARY]);
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
     expect(await suite.db.select().from(managementSessions)).toEqual([]);
-    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+    expect(await suite.db.select().from(venueCredentials)).toEqual([]);
   } finally {
     await server?.close();
     await rm(scratch, { recursive: true, force: true });
@@ -130,7 +130,7 @@ it("boot keeps an adoption whose copy has not arrived pending, with no ambient s
 
 it("the pending-adoption start answers the main box's signed query", async () => {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
   await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
   await seedBusinessDay(suite.db, {});
@@ -256,7 +256,7 @@ it("the pending-adoption start is handed a chart through its own route", async (
 /** A joining spare whose pair link serves its main box a store, as production shapes it. */
 async function seedJoiningSpare() {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
   await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
   await seedBusinessDay(suite.db, {});

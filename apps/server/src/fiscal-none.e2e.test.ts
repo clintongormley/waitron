@@ -214,7 +214,7 @@ async function countRows(table: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-/** The `fiscal_backend` values stamped on this tenant's sales. */
+/** The `fiscal_backend` values stamped on this taxpayer's sales. */
 async function saleBackends(): Promise<string[]> {
   const { rows } = await suite.db.execute<{ fiscal_backend: string }>(
     sql`select fiscal_backend from sales  order by issued_at`,

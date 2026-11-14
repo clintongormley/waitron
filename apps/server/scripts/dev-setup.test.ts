@@ -9,7 +9,7 @@ import {
   deviceProfiles,
   openVenueDatabase,
   runMigrations,
-  tenants,
+  taxpayer,
 } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
@@ -184,8 +184,8 @@ describe("devSetup against a real venue directory", () => {
 
   it("builds the venue as the Spain pack's demo business, and its seeded sales are filed under that tax ID", async () => {
     const read = await readVenue(async (db) => {
-      const { rows: tenant } = await db.execute<{ legal_name: string; tax_id: string }>(
-        sql`select legal_name, tax_id from tenants`,
+      const { rows: taxpayer } = await db.execute<{ legal_name: string; tax_id: string }>(
+        sql`select legal_name, tax_id from taxpayer`,
       );
       const { rows: venueDoc } = await db.execute<{ name: string }>(
         sql`select json_extract(settings.doc, '$.name') as name from settings where settings.module = 'venue'`,
@@ -197,9 +197,9 @@ describe("devSetup against a real venue directory", () => {
       const { rows: records } = await db.execute<{ issuer: string; n: number }>(
         sql`select id_emisor_factura as issuer, count(*) as n from registros_facturacion group by id_emisor_factura`,
       );
-      return { tenant, venueDoc, departments, sales: sales[0]!.n, records };
+      return { taxpayer, venueDoc, departments, sales: sales[0]!.n, records };
     });
-    expect(read.tenant).toEqual([{ legal_name: "Waitron Demo S.L.", tax_id: "B00000000" }]);
+    expect(read.taxpayer).toEqual([{ legal_name: "Waitron Demo S.L.", tax_id: "B00000000" }]);
     expect(read.venueDoc).toEqual([{ name: "Casa Delgado" }]);
     expect(read.departments.map((d) => d.trading_name)).toEqual([
       "Bar Casa Delgado",
@@ -235,7 +235,7 @@ describe("devSetup against a real venue directory", () => {
     const store = await openVenueDatabase(first.env.WAITRON_VENUE_DIR);
     try {
       const { rows } = await store.venue.execute<{ n: number }>(
-        sql`select count(*) as n from tenants`,
+        sql`select count(*) as n from taxpayer`,
       );
       expect(rows[0]!.n).toBe(1);
     } finally {
@@ -579,7 +579,7 @@ describe("inspectVenues reads a migrated venue directory", () => {
     try {
       await runMigrations(store.venue, CORE_MIGRATIONS);
       await store.venue
-        .insert(tenants)
+        .insert(taxpayer)
         .values({ id: 1, country: "ES", taxId: "00000000T", legalName: "Inspection SL" });
       await seedVenue(store.venue, {
         name: "Inspection",
@@ -624,7 +624,7 @@ describe("inspectVenues reads a migrated venue directory", () => {
       const file = new DatabaseSync(join(broken, "venue.db"));
       try {
         file.exec(
-          "create table settings (module text); create table tenants (id integer); insert into tenants values (1)",
+          "create table settings (module text); create table taxpayer (id integer); insert into taxpayer values (1)",
         );
       } finally {
         file.close();
@@ -642,7 +642,7 @@ describe("inspectVenues reads a migrated venue directory", () => {
     try {
       const file = new DatabaseSync(join(broken, "venue.db"));
       file.exec("create table settings (module text)");
-      file.exec("create table tenants (id integer)");
+      file.exec("create table taxpayer (id integer)");
       file.exec("create table nodes (not_id text)");
       file.close();
       await expect(inspectVenues(broken, null)).rejects.toThrow(/no such column/i);
@@ -756,7 +756,7 @@ describe("developer demo regions", () => {
                 (p) => p.name === (staff === "en" ? "Catalan sausage" : "Butifarra con judías"),
               ),
             ).toBe(region !== "madrid");
-            expect(store.venue.all(sql`select country from tenants`)).toEqual([{ country: "ES" }]);
+            expect(store.venue.all(sql`select country from taxpayer`)).toEqual([{ country: "ES" }]);
           } finally {
             await store.close();
           }

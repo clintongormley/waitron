@@ -341,13 +341,13 @@ describe("applyVenue: the one taxpayer row", () => {
       { db: suite.db, modules: ALL_MODULES },
     );
 
-    const tenant = await suite.db.execute<{ taxpayer_domicile: string }>(
-      sql`select taxpayer_domicile from tenants where id = 1`,
+    const taxpayer = await suite.db.execute<{ taxpayer_domicile: string }>(
+      sql`select taxpayer_domicile from taxpayer where id = 1`,
     );
     const venueDoc = await suite.db.execute<{ address_line1: string }>(
       sql`select json_extract(doc, '$.addressLine1') as address_line1 from settings where module = 'venue'`,
     );
-    expect(tenant.rows).toEqual([{ taxpayer_domicile: "Calle Fiscal 8, 28013 Madrid" }]);
+    expect(taxpayer.rows).toEqual([{ taxpayer_domicile: "Calle Fiscal 8, 28013 Madrid" }]);
     expect(venueDoc.rows).toEqual([{ address_line1: "Calle Mayor 1" }]);
   });
 
@@ -358,7 +358,7 @@ describe("applyVenue: the one taxpayer row", () => {
     });
 
     const rows = await suite.db.execute<{ id: number; country: string; tax_id: string }>(
-      sql`select id, country, tax_id from tenants`,
+      sql`select id, country, tax_id from taxpayer`,
     );
     expect(rows.rows).toEqual([{ id: 1, country: "ES", tax_id: "B10000001" }]);
   });
@@ -369,7 +369,7 @@ describe("applyVenue: the one taxpayer row", () => {
     await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
 
     const rows = await suite.db.execute<{ id: number; country: string; tax_id: string }>(
-      sql`select id, country, tax_id from tenants`,
+      sql`select id, country, tax_id from taxpayer`,
     );
     expect(rows.rows).toEqual([{ id: 1, country: "ES", tax_id: "B10000002" }]);
   });
@@ -431,22 +431,22 @@ describe("applyVenue: the one taxpayer row", () => {
         db: suite.db,
         modules: ALL_MODULES,
       }),
-    ).rejects.toMatchObject({ code: "provisioning.tenant_identity_mismatch" });
+    ).rejects.toMatchObject({ code: "provisioning.taxpayer_identity_mismatch" });
 
-    const rows = await suite.db.execute<{ tax_id: string }>(sql`select tax_id from tenants`);
+    const rows = await suite.db.execute<{ tax_id: string }>(sql`select tax_id from taxpayer`);
     expect(rows.rows).toEqual([{ tax_id: "B10000003" }]);
   });
 });
 
 describe("applyVenue", () => {
-  it("provisions a sellable venue: tenant, venue, node, live SIF, three series, and no till", async () => {
+  it("provisions a sellable venue: taxpayer, venue, node, live SIF, three series, and no till", async () => {
     const result = await applyVenue(planVenue(request(), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
 
     const counts = await suite.db.execute<{
-      tenants: number;
+      taxpayer: number;
       nodes: number;
       series: number;
       sif: number;
@@ -457,7 +457,7 @@ describe("applyVenue", () => {
     }>(sql`
       select
         (select count(*) from devices) as devices,
-        (select count(*) from tenants where id = 1) as tenants,
+        (select count(*) from taxpayer where id = 1) as taxpayer,
         (select count(*) from nodes where id = ${result.nodeId}) as nodes,
         (select count(*) from invoice_series where node_id = ${result.nodeId}) as series,
         (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null) as sif,
@@ -468,7 +468,7 @@ describe("applyVenue", () => {
         (select count(*) from floor_zones
            where is_counter_default) as counter_zones`);
     expect(counts.rows[0]).toEqual({
-      tenants: 1,
+      taxpayer: 1,
       nodes: 1,
       series: 3,
       sif: 1,
@@ -487,7 +487,7 @@ describe("applyVenue", () => {
       select filing_module, tax_module from nodes where id = ${result.nodeId}`);
     expect(node.rows[0]).toEqual({ filing_module: "verifactu", tax_module: "vat" });
 
-    // registro_sif.nif came from the tenant's tax_id, never an argument.
+    // registro_sif.nif came from the taxpayer's tax_id, never an argument.
     const sif = await suite.db.execute<{ nif: string; numero_instalacion: string }>(sql`
       select nif, numero_instalacion from registro_sif where node_id = ${result.nodeId} and revocado_en is null`);
     expect(sif.rows[0]?.nif).toBe("B12345678");
@@ -749,9 +749,9 @@ describe("applyVenue", () => {
       modules: ALL_MODULES,
     });
 
-    const tenants = await suite.db.execute<{ n: number }>(sql`
-      select count(*) as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
-    expect(tenants.rows[0]?.n).toBe(1);
+    const taxpayer = await suite.db.execute<{ n: number }>(sql`
+      select count(*) as n from taxpayer where country = 'ES' and tax_id = 'B99999999'`);
+    expect(taxpayer.rows[0]?.n).toBe(1);
     expect(second.nodeId).toBe(first.nodeId);
     const venueRows = await suite.db.execute<{
       venues: number;
@@ -765,7 +765,7 @@ describe("applyVenue", () => {
     expect(venueRows.rows[0]).toEqual({ venues: 1, devices: 0, nodes: 1 });
   });
 
-  it("refuses a different operational venue for the same tenant", async () => {
+  it("refuses a different operational venue for the same taxpayer", async () => {
     const firstRequest = request("B12121212");
     await applyVenue(planVenue(firstRequest, ALL_MODULES), {
       db: suite.db,
@@ -787,7 +787,7 @@ describe("applyVenue", () => {
     expect(venues.rows[0]?.n).toBe(1);
   });
 
-  describe("refuses a same-tenant re-run whose venue differs from the stored one", () => {
+  describe("refuses a same-taxpayer re-run whose venue differs from the stored one", () => {
     async function provisionThenReapply(plan: VenueAction[]): Promise<void> {
       await applyVenue(planVenue(request("B13131313"), ALL_MODULES), {
         db: suite.db,
@@ -836,8 +836,8 @@ describe("applyVenue", () => {
     });
   });
 
-  it("collapses country/taxId case + surrounding-whitespace variants to ONE tenant on re-run (no duplicate, no PK error)", async () => {
-    // The count cannot exceed 1 (`tenants.id` is pinned to 1): what this catches is ensure-tenant's
+  it("collapses country/taxId case + surrounding-whitespace variants to ONE taxpayer on re-run (no duplicate, no PK error)", async () => {
+    // The count cannot exceed 1 (`taxpayer.id` is pinned to 1): what this catches is ensure-taxpayer's
     // identity comparison refusing the re-run.
     await applyVenue(planVenue(request("B88888888"), ALL_MODULES), {
       db: suite.db,
@@ -848,10 +848,10 @@ describe("applyVenue", () => {
       modules: ALL_MODULES,
     });
 
-    const tenants = await suite.db.execute<{ n: number }>(sql`
-      select count(*) as n from tenants
+    const taxpayer = await suite.db.execute<{ n: number }>(sql`
+      select count(*) as n from taxpayer
       where upper(country) = 'ES' and upper(tax_id) = 'B88888888'`);
-    expect(tenants.rows[0]?.n).toBe(1);
+    expect(taxpayer.rows[0]?.n).toBe(1);
   });
 
   it("seeds the admin only once across same-venue re-runs", async () => {
@@ -888,13 +888,13 @@ describe("applyVenue", () => {
     expect(installs.rows).toHaveLength(1);
   });
 
-  it("refuses a plan with no ensure-tenant — the scope it adopts must be present", async () => {
-    const withoutTenant = planVenue(request(), ALL_MODULES).filter(
-      (a) => a.kind !== "ensure-tenant",
+  it("refuses a plan with no ensure-taxpayer — the scope it adopts must be present", async () => {
+    const withoutTaxpayer = planVenue(request(), ALL_MODULES).filter(
+      (a) => a.kind !== "ensure-taxpayer",
     );
-    await expect(applyVenue(withoutTenant, { db: suite.db, modules: ALL_MODULES })).rejects.toThrow(
-      "applyVenue: plan is missing ensure-tenant",
-    );
+    await expect(
+      applyVenue(withoutTaxpayer, { db: suite.db, modules: ALL_MODULES }),
+    ).rejects.toThrow("applyVenue: plan is missing ensure-taxpayer");
   });
 
   it("refuses a plan with no create-node — a venue that files nothing is not complete", async () => {
@@ -911,7 +911,7 @@ describe("applyVenue", () => {
     // Hand-built, because planVenue rejects equal codes.
     const taxId = "B22222222";
     const collidingPlan: VenueAction[] = [
-      { kind: "ensure-tenant", country: "ES", taxId, legalName: "Deli SL" },
+      { kind: "ensure-taxpayer", country: "ES", taxId, legalName: "Deli SL" },
       {
         kind: "create-venue",
         name: "Mostrador",
@@ -960,7 +960,7 @@ describe("applyVenue", () => {
     // Unreachable from planVenue, so each plan is hand-built.
     const taxId = "B33333333";
     const ensure: VenueAction = {
-      kind: "ensure-tenant",
+      kind: "ensure-taxpayer",
       country: "ES",
       taxId,
       legalName: "Deli SL",
@@ -1079,7 +1079,7 @@ describe("applyVenue", () => {
       expect(result.seeded[4]).toEqual({ module: "probe", report: `recorded ${result.nodeId}` });
     });
 
-    it("a throwing seed rolls the whole venue back — no tenant row survives", async () => {
+    it("a throwing seed rolls the whole venue back — no taxpayer row survives", async () => {
       // The reason the seed runs INSIDE the venue transaction: a module that cannot establish its
       // state must leave no half-built venue behind, least of all a fiscal chain.
       const modules = [...ALL_MODULES, exploding];
@@ -1087,10 +1087,10 @@ describe("applyVenue", () => {
       await expect(
         applyVenue(planVenue(request(taxId), modules), { db: suite.db, modules }),
       ).rejects.toThrow("seed failed");
-      const tenant = await suite.db.execute(
-        sql`select 1 from tenants where country = 'ES' and tax_id = ${taxId}`,
+      const taxpayer = await suite.db.execute(
+        sql`select 1 from taxpayer where country = 'ES' and tax_id = ${taxId}`,
       );
-      expect(tenant.rows).toEqual([]);
+      expect(taxpayer.rows).toEqual([]);
     });
 
     it("refuses a plan naming a module the deps do not hold, or one without a seed", async () => {
@@ -1127,7 +1127,7 @@ it.each([
       modules: ALL_MODULES,
     });
     const before = Object.fromEntries(
-      ["tenants", "settings", "nodes", "invoice_series", "registro_sif", "fiscal_allocations"].map(
+      ["taxpayer", "settings", "nodes", "invoice_series", "registro_sif", "fiscal_allocations"].map(
         (table) => [
           table,
           suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),

@@ -48,7 +48,7 @@ describe("imageMigrationHashes", () => {
 describe("journalHashes", () => {
   it("refuses a table name that is not a drizzle journal table", async () => {
     const db = { execute: () => Promise.reject(new Error("must not be reached")) };
-    const bad = { name: "x", table: 'evil"; drop table tenants; --', from: "../db/drizzle" };
+    const bad = { name: "x", table: 'evil"; drop table taxpayer; --', from: "../db/drizzle" };
     await expect(journalHashes({ venue: db, node: db } as never, bad)).rejects.toMatchObject({
       code: "migrations.invalid_table",
     });

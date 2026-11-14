@@ -16,7 +16,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { deviceOrigin, jobOrigin, type Origin } from "@waitron/shared";
 import { seedFixtureVenue } from "../test/fixtures.js";
@@ -47,7 +47,7 @@ const origin = jobOrigin("dashboard");
 const now = new Date("2026-01-07T08:00:00.000Z");
 let personId: string, manager: string, other: string, nodeId: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [

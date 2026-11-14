@@ -4,7 +4,7 @@ import {
   starterNames,
 } from "@waitron/country-packs";
 import { decimal } from "@waitron/shared";
-import { readTenant, readVenue } from "@waitron/db";
+import { readTaxpayer, readVenue } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
 import type { AdjustmentReasonInput } from "./operations.js";
@@ -71,10 +71,10 @@ export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {
       if ((await listAdjustmentReasons(tx)).length > 0) {
         return "reasons already present";
       }
-      const tenant = await readTenant(tx);
+      const taxpayer = await readTaxpayer(tx);
       const venue = await readVenue(tx);
       const { languages, staffLanguage } = resolveInstalledStarterLanguages({
-        country: tenant?.country,
+        country: taxpayer?.country,
         area: venue.province,
         receiptLocale: venue.invoiceLocales[0],
         staffLanguage: options?.staffLanguage,

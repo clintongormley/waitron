@@ -266,7 +266,7 @@ describe("readCertificateCard", () => {
   it("refuses to match a certificate when there is no taxpayer", async () => {
     await sealSetup(TENANT_A.nodeId);
     await expect(readCertificateCard(depsFor(TENANT_A.nodeId), NOW)).rejects.toThrow(
-      "tenants is empty",
+      "taxpayer is empty",
     );
   });
 

@@ -472,7 +472,7 @@ describe("allocation activation checks inside the venue transaction", () => {
   });
 
   it("refuses a missing stored taxpayer", async () => {
-    await suite.db.execute(sql`delete from tenants`);
+    await suite.db.execute(sql`delete from taxpayer`);
     expect(await validate()).toEqual({ ok: false, reason: "taxpayer_mismatch" });
   });
 
@@ -803,7 +803,7 @@ describe("replay scope and history", () => {
 
   it("checks the current taxpayer on replay", async () => {
     await activate();
-    await suite.db.execute(sql`update tenants set tax_id = ${"B12345678"}`);
+    await suite.db.execute(sql`update taxpayer set tax_id = ${"B12345678"}`);
     await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "taxpayer_mismatch" },

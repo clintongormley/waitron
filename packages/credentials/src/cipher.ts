@@ -4,7 +4,7 @@ import { keyForVersion, type KeyRing } from "./keyring.js";
 import "./errors.js";
 
 const ALGORITHM = "aes-256-gcm";
-/** GCM's standard nonce length, and the value `tenant_credentials_iv_len_ck` enforces. */
+/** GCM's standard nonce length, and the value `venue_credentials_iv_len_ck` enforces. */
 const IV_BYTES = 12;
 
 /** What one write produces: node's crypto output, as `Buffer`s. */

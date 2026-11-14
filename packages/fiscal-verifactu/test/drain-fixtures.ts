@@ -253,10 +253,10 @@ export async function seedPendingEnvios(
   const firstSequence = opts.identity === undefined ? 1 : reusedIdentitySequence;
   if (opts.identity !== undefined) reusedIdentitySequence += opts.count;
 
-  const tenantRow = await db.execute<{ legal_name: string }>(sql`
-    select legal_name from tenants limit 1
+  const taxpayerRow = await db.execute<{ legal_name: string }>(sql`
+    select legal_name from taxpayer limit 1
   `);
-  const legalName = tenantRow.rows[0]?.legal_name ?? "Waitron SL";
+  const legalName = taxpayerRow.rows[0]?.legal_name ?? "Waitron SL";
 
   const fecha = PAST_FECHA;
   const generadoEn = opts.futureDated === true ? FUTURE_GENERATED_AT : undefined;

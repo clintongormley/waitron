@@ -436,7 +436,7 @@ at core's tables. That is the database those keys resolve in, not something the 
 the suite also passed with an empty list (measured 2026-09-23, when the list was core and the old
 identity set) — which is why each call site writes the reason
 down rather than just the list. A package's suites can apply MORE than its set's tables need,
-though: `packages/workforce/src/migrations.test.ts` applies core also for the `tenants` row its
+though: `packages/workforce/src/migrations.test.ts` applies core also for the `taxpayer` row its
 setup seeds and the `locations` and `nodes` rows its cases seed (`seedLocation`, `seedNode`).
 
 _2026-11-14 (A1308 5h):_ the venue fixtures now write settings documents; the old table and helper are removed.

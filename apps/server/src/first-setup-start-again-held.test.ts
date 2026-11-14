@@ -98,7 +98,7 @@ it("the summary's kept-records refusal logs the counts, not the answer", async (
 
 it("a kept-records refusal after a damaged read logs the damage's code after the counts", async () => {
   const f = await heldSetup({ invoices: 1 });
-  damagePages(venueDb(f), "tenants");
+  damagePages(venueDb(f), "taxpayer");
   expect(await keptRecordsLogReason(f)).toMatch(
     /^rows=\d+ kept=[1-9]\d* records=\d+ accepted=\d+ damaged=errcode 11$/,
   );

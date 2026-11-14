@@ -212,12 +212,12 @@ environment with `deployment.already_stamped` — one database per environment i
 box's own setting is what stands its venue up), else a prompt — and writes through `venue.db`. There
 is no connection string, no role and no grant to widen: `applyVenue` writes in one transaction. A database
 already holds one taxpayer, so a run naming a different country or tax id is refused with
-**`provisioning.foreign_tenant`** — that is the code an operator who mistyped a NIF on a re-run
+**`provisioning.foreign_taxpayer`** — that is the code an operator who mistyped a NIF on a re-run
 sees, and the refusal happens before anything is applied. The country and tax id are trimmed and
 upper-cased before that check, so a difference of letter case or surrounding space is the same
-taxpayer and the re-run is a no-op. (`provisioning.tenant_identity_mismatch` is a different,
+taxpayer and the re-run is a no-op. (`provisioning.taxpayer_identity_mismatch` is a different,
 narrower refusal, raised inside the apply transaction only when another run commits a different
-taxpayer between this one's read and its write. A mistyped NIF is `foreign_tenant`, not this.)
+taxpayer between this one's read and its write. A mistyped NIF is `foreign_taxpayer`, not this.)
 
 ```bash
 pnpm --filter @waitron/provisioning build   # once — produces dist/bin.js, and that is the whole build
@@ -780,7 +780,7 @@ The ones worth grepping for:
   that field joined the purpose registry — is missing or unusable) or a credential-store code from
   `getCredential` (`credentials.missing` — no row for that purpose at all,
   `credentials.decrypt_failed`, `credentials.key_version_unknown`, `credentials.malformed_payload`).
-  The event NAME still reads `tenant`, and stays that way: a log event is a name operators grep
+  The event NAME still reads `taxpayer`, and stays that way: a log event is a name operators grep
   for, so it is renamed deliberately or not at all.
 - **`drain.restart_reset_failed`** (`error`) — `{ errorCode }`. Before this process's first drain,
   the reset that returns a previous run's in-flight submissions to the queue failed

@@ -25,7 +25,7 @@ export interface WorkTimeRuleset {
   nightWindowEndMinute: number;
   /** A percentage (25.00 = 25%); null when none is set. */
   nightPremiumPct: number | null;
-  /** A per-day amount in tenant currency. */
+  /** A per-day amount in taxpayer currency. */
   splitShiftPremium: number | null;
   breaksCountAsWorked: boolean;
   splitMinSegmentMinutes?: number | null;

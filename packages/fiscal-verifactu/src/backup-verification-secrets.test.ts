@@ -134,12 +134,12 @@ async function replace(value: Record<string, string>) {
     putCredential(tx, ring, { purpose: "fiscal.aeat", value }),
   );
   const row = suite.db.all<Record<string, string | number | Uint8Array>>(
-    sql`select ciphertext,iv,auth_tag,key_version from tenant_credentials where purpose='fiscal.aeat'`,
+    sql`select ciphertext,iv,auth_tag,key_version from venue_credentials where purpose='fiscal.aeat'`,
   )[0]!;
   both((db) =>
     db
       .prepare(
-        "update tenant_credentials set ciphertext=?,iv=?,auth_tag=?,key_version=? where purpose='fiscal.aeat'",
+        "update venue_credentials set ciphertext=?,iv=?,auth_tag=?,key_version=? where purpose='fiscal.aeat'",
       )
       .run(row.ciphertext!, row.iv!, row.auth_tag!, row.key_version!),
   );
@@ -366,7 +366,7 @@ it("refuses a credential with no corresponding source install", async () => {
 });
 it("requires the source-node secret despite retained install history", async () => {
   await capture();
-  both((db) => db.exec("delete from tenant_credentials where purpose='fiscal.aeat'"));
+  both((db) => db.exec("delete from venue_credentials where purpose='fiscal.aeat'"));
   await expect(verify()).rejects.toEqual(new BackupCheckUnavailable("secret_unavailable"));
 });
 it.each(["secrets/secrets.env", "secrets/trading.env"])(
@@ -420,7 +420,7 @@ it("keeps a supported vault with unsupported PFX encryption unsupported", async 
 it("checks the migrated credential instead of only the original", async () => {
   await capture();
   edit("after", (db) =>
-    db.exec("update tenant_credentials set auth_tag=zeroblob(16) where purpose='fiscal.aeat'"),
+    db.exec("update venue_credentials set auth_tag=zeroblob(16) where purpose='fiscal.aeat'"),
   );
   await expect(verify()).rejects.toEqual(new BackupCheckUnavailable("decryption_unavailable"));
 });
@@ -429,7 +429,7 @@ it("does not turn failed reads into certificate corruption", async () => {
   both((db) => db.exec("drop table nodes"));
   await expect(verify()).rejects.toThrow();
 });
-it("binds the opened taxpayer certificate to the captured tenant", async () => {
+it("binds the opened taxpayer certificate to the captured taxpayer", async () => {
   await capture(foreign);
   expect(await verify()).toEqual(result("invalid"));
 });
@@ -448,7 +448,7 @@ it("permits an explicitly absent fiscal predecessor only without certificate evi
 });
 it("cannot use a zero-schema claim to bypass retained certificate evidence", async () => {
   await capture();
-  both((db) => db.exec("delete from tenant_credentials where purpose='fiscal.aeat'"));
+  both((db) => db.exec("delete from venue_credentials where purpose='fiscal.aeat'"));
   await expect(verify({ sourceSchema: 0 })).rejects.toEqual(
     new BackupCheckUnavailable("secret_unavailable"),
   );
@@ -466,7 +466,7 @@ it("returns a fixed invalid result for an authenticated malformed vault payload"
   both((db) =>
     db
       .prepare(
-        "update tenant_credentials set ciphertext=?,iv=?,auth_tag=? where purpose='fiscal.aeat'",
+        "update venue_credentials set ciphertext=?,iv=?,auth_tag=? where purpose='fiscal.aeat'",
       )
       .run(ciphertext, iv, tag),
   );
@@ -480,14 +480,14 @@ it("cannot certify a zero predecessor when migration invents certificate evidenc
   await capture();
   edit("before", (db) => {
     db.exec(
-      "delete from tenant_credentials; delete from fiscal_certificate_reminders; delete from fiscal_certificate_installs",
+      "delete from venue_credentials; delete from fiscal_certificate_reminders; delete from fiscal_certificate_installs",
     );
   });
   expect(await verify({ sourceSchema: null })).toEqual(result("invalid"));
 });
 it("keeps absent vault schema unavailable for a positive fiscal source", async () => {
   await capture();
-  both((db) => db.exec("drop table tenant_credentials"));
+  both((db) => db.exec("drop table venue_credentials"));
   await expect(verify()).rejects.toEqual(new BackupCheckUnavailable("secret_unavailable"));
 });
 it("refuses a usable credential with no installation-history schema", async () => {
@@ -495,8 +495,8 @@ it("refuses a usable credential with no installation-history schema", async () =
   both((db) => db.exec("drop table fiscal_certificate_installs"));
   expect(await verify()).toEqual(result("invalid"));
 });
-it("cannot bind material when the captured tenant is absent", async () => {
+it("cannot bind material when the captured taxpayer is absent", async () => {
   await capture();
-  both((db) => db.exec("delete from tenants"));
+  both((db) => db.exec("delete from taxpayer"));
   expect(await verify()).toEqual(result("invalid"));
 });

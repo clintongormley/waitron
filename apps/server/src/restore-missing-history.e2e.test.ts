@@ -5,7 +5,7 @@ import {
   invoiceSeries,
   openVenueDatabase,
   readStandardSeriesId,
-  readTenant,
+  readTaxpayer,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -174,7 +174,7 @@ it.each(["archive", "stream"] as const)(
       expect(numbers()).toEqual(["A-0CNNW/1", "A-0CNQR/1"]);
 
       const allocationsBefore = await store.venue.select().from(fiscalAllocations);
-      const tenant = await withTransaction(store.venue, readTenant);
+      const taxpayer = await withTransaction(store.venue, readTaxpayer);
       const sweep = createReconciliationSweep({
         db: store.venue,
         clock,
@@ -183,7 +183,7 @@ it.each(["archive", "stream"] as const)(
         scope: {
           nodeId: f.node.nodeId,
           historyNodeIds: [f.node.nodeId],
-          taxpayerId: tenant!.taxId,
+          taxpayerId: taxpayer!.taxId,
           environment: "preproduction",
         },
       });

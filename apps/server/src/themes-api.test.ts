@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
@@ -20,7 +20,7 @@ const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     [managerCookie, supervisorCookie, staffCookie] = await withTransaction(db, async (tx) => {
       const cookieFor = async (role: "manager" | "supervisor" | "staff") => {
         const [person] = await seedPersons(tx, { displayName: role, role });

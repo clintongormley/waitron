@@ -9,12 +9,12 @@ import {
   readSettings,
   menuDetails,
   sections,
-  tenants,
+  taxpayer,
   units,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
 import { CATALOGUE_PROVISIONING, FIRST_MENU_NAME } from "./provisioning.js";
 import {
@@ -38,8 +38,8 @@ const expected: StarterTranslations<StarterContentLanguage> = STARTER_UNIT_NAMES
  * these assertions are written against.
  */
 async function venue(country: string, province: string, receipt: string | string[]) {
-  await seedTenant(suite.db);
-  await suite.db.update(tenants).set({ country }).where(eq(tenants.id, 1));
+  await seedTaxpayer(suite.db);
+  await suite.db.update(taxpayer).set({ country }).where(eq(taxpayer.id, 1));
   await seedVenue(suite.db, {
     name: "Venue",
     province,

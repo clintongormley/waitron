@@ -6,7 +6,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
-import { nodes, tenants, withTransaction } from "@waitron/db";
+import { nodes, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById, type TotpKeyRing } from "@waitron/identity";
@@ -270,7 +270,7 @@ describe("direct action country zone preflight", () => {
     }).catch((error: unknown) => error);
     expect(await suite.db.select().from(settings).where(eq(settings.module, "venue"))).toEqual([]);
     expect((await readSettings(suite.db, BUSINESS_DAY_SETTINGS)).revision).toBe(0);
-    expect(await suite.db.select().from(tenants)).toEqual([]);
+    expect(await suite.db.select().from(taxpayer)).toEqual([]);
     expect(await suite.db.select().from(nodes)).toEqual([]);
     expect({ preparations, seeds }).toEqual({ preparations: 0, seeds: 0 });
     expect(refusal).toMatchObject({ code: "venue.time_zone_invalid", params: { reason } });

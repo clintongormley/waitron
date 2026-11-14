@@ -746,7 +746,7 @@ describe("routing cells in a staged import", () => {
           beforeCommit: (tx) => importConfigurationTables(tx, candidate, ALL_MODULES, versions),
         }),
       ).rejects.toMatchObject(refusal);
-      expect((await target.db.execute(sql`select count(*) count from tenants`)).rows).toEqual([
+      expect((await target.db.execute(sql`select count(*) count from taxpayer`)).rows).toEqual([
         { count: 0 },
       ]);
     },
@@ -783,10 +783,10 @@ describe("routing cells in a staged import", () => {
         beforeCommit: (tx) => importConfigurationTables(tx, refused, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
-    const tenants = await target.db.execute<{ count: number }>(
-      sql`select count(*) as count from tenants where tax_id = ${request.taxId}`,
+    const taxpayer = await target.db.execute<{ count: number }>(
+      sql`select count(*) as count from taxpayer where tax_id = ${request.taxId}`,
     );
-    expect(tenants.rows[0]!.count).toBe(0);
+    expect(taxpayer.rows[0]!.count).toBe(0);
     const cells = await target.db.execute<{ count: number }>(
       sql`select count(*) as count from routing_cells`,
     );
@@ -819,10 +819,10 @@ describe("routing cells in a staged import", () => {
         beforeCommit: (tx) => importConfigurationTables(tx, switchedOff, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
-    const tenants = await target.db.execute<{ count: number }>(
-      sql`select count(*) as count from tenants where tax_id = ${request.taxId}`,
+    const taxpayer = await target.db.execute<{ count: number }>(
+      sql`select count(*) as count from taxpayer where tax_id = ${request.taxId}`,
     );
-    expect(tenants.rows[0]!.count).toBe(0);
+    expect(taxpayer.rows[0]!.count).toBe(0);
     const cells = await target.db.execute<{ count: number }>(
       sql`select count(*) as count from routing_cells`,
     );
@@ -862,10 +862,10 @@ describe("routing cells in a staged import", () => {
         beforeCommit: (tx) => importConfigurationTables(tx, withoutCell, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
-    const tenants = await target.db.execute<{ count: number }>(
-      sql`select count(*) as count from tenants where tax_id = ${request.taxId}`,
+    const taxpayer = await target.db.execute<{ count: number }>(
+      sql`select count(*) as count from taxpayer where tax_id = ${request.taxId}`,
     );
-    expect(tenants.rows[0]!.count).toBe(0);
+    expect(taxpayer.rows[0]!.count).toBe(0);
 
     const diningRoomZones = new Set(
       withoutCell.tables

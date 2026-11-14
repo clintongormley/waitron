@@ -1420,8 +1420,8 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   // A trigger refuses a filename `media_images` does not hold.
   "menu_version_images.filename": [`${"0".repeat(63)}1.jpg`, `${"0".repeat(63)}2.jpg`],
   // CHECKs on the byte length of an encryption's nonce and tag.
-  "tenant_credentials.iv": [new Uint8Array(12)],
-  "tenant_credentials.auth_tag": [new Uint8Array(16)],
+  "venue_credentials.iv": [new Uint8Array(12)],
+  "venue_credentials.auth_tag": [new Uint8Array(16)],
   // A trigger wants an object keyed by exactly the venue's invoice locales, `["es"]` here.
   "working_order_lines.descriptions": ['{"es":"a"}'],
   // A settlement's trigger wants the sale's tenders to sum to its total; a sale of nothing settles

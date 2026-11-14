@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { credentialRevision, tryGetCredential } from "@waitron/credentials";
-import { readTenant } from "@waitron/db";
+import { readTaxpayer } from "@waitron/db";
 import type {
   FiscalCertificateDiagnosisDeps,
   FiscalCertificateDiagnosisChildResult,
@@ -89,8 +89,8 @@ async function diagnoseBoundCertificate(
     const authorization = await deps.authorize(deps.db);
     const revision = await credentialRevision(deps.db, { purpose: "fiscal.aeat" });
     if (revision !== request.expectedRevision) throw new AppError("fiscal.certificate_changed", {});
-    const tenant = await readTenant(deps.db);
-    if (tenant === null)
+    const taxpayer = await readTaxpayer(deps.db);
+    if (taxpayer === null)
       throw new AppError("fiscal.certificate_request_invalid", { field: "body" });
     const timeZone = await venueTimeZone(deps.db);
     const latest = await latestInstall(deps.db, deps.nodeId);
@@ -109,7 +109,7 @@ async function diagnoseBoundCertificate(
         finding = "unusable";
       }
     }
-    return { authorization, revision, tenant, timeZone, latest, material, finding };
+    return { authorization, revision, taxpayer, timeZone, latest, material, finding };
   });
   const selectedKind = read.material?.certKind ?? null;
 
@@ -127,7 +127,7 @@ async function diagnoseBoundCertificate(
         let input: FiscalCertificateJson = {
           operation: request.operation,
           material: read.material,
-          taxpayer: { legalName: read.tenant.legalName, taxId: read.tenant.taxId },
+          taxpayer: { legalName: read.taxpayer.legalName, taxId: read.taxpayer.taxId },
           timeZone: read.timeZone,
           environment: deps.environment,
           startedAt: now.toISOString(),

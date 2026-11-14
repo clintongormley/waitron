@@ -1,7 +1,7 @@
 import { credentialRevision, putCredential, type KeyRing } from "@waitron/credentials";
 import {
   readVenue,
-  readTenant,
+  readTaxpayer,
   withTransaction,
   type Database,
   type DeploymentEnvironment,
@@ -181,19 +181,19 @@ export async function installCertificate(
   // vault changed after the card was read, or if the certificate has expired since the local check.
   const read = await withTransaction(deps.db, async (tx) => {
     await deps.authorize(tx);
-    const tenant = await readTenant(tx);
-    if (tenant === null) {
-      throw new Error("tenants is empty: there is no taxpayer to check a certificate against");
+    const taxpayer = await readTaxpayer(tx);
+    if (taxpayer === null) {
+      throw new Error("taxpayer is empty: there is no taxpayer to check a certificate against");
     }
     const timeZone = await venueTimeZone(tx);
     const latest = await latestInstall(tx, deps.nodeId);
-    return { tenant, timeZone, installedFingerprint: latest?.fingerprint ?? null };
+    return { taxpayer, timeZone, installedFingerprint: latest?.fingerprint ?? null };
   });
 
   const local = checkLocally(
     body,
     {
-      taxId: read.tenant.taxId,
+      taxId: read.taxpayer.taxId,
       timeZone: read.timeZone,
       installedFingerprint: read.installedFingerprint,
     },
@@ -208,7 +208,7 @@ export async function installCertificate(
       passphrase: body.passphrase,
       certKind: body.certKind,
     },
-    taxpayer: { legalName: read.tenant.legalName, taxId: read.tenant.taxId },
+    taxpayer: { legalName: read.taxpayer.legalName, taxId: read.taxpayer.taxId },
     timeZone: read.timeZone,
     now,
     transport: deps.transport ?? {

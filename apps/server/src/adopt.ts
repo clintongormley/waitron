@@ -27,9 +27,9 @@ import {
 } from "@waitron/credentials";
 import { verifyEndorsement } from "@waitron/membership";
 import {
-  assertNoForeignTenant,
+  assertNoForeignTaxpayer,
   assertNoOperationalVenue,
-  readTenantIdentities,
+  readTaxpayerIdentities,
   hasOperationalVenue,
 } from "@waitron/provisioning";
 import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
@@ -136,7 +136,7 @@ export interface AdoptDeps {
   persistBackupSettings: (settings: Record<string, string> | null) => Promise<void>;
   /** Where the adoption latch, the joined marker and the venue's TLS authority are written. */
   stateDir: string;
-  /** The mirror's database NAME, echoed by `provisioning.foreign_tenant`. */
+  /** The mirror's database NAME, echoed by `provisioning.foreign_taxpayer`. */
   database: string;
   /** The addresses this box's leaf names beyond 127.0.0.1, as at a setup start. */
   listIpv4: () => string[];
@@ -187,9 +187,9 @@ export async function adoptFromPrimary(
     });
   }
 
-  assertNoForeignTenant(
-    await readTenantIdentities(deps.ownerDb),
-    { country: bundle.tenant.country, taxId: bundle.tenant.taxId },
+  assertNoForeignTaxpayer(
+    await readTaxpayerIdentities(deps.ownerDb),
+    { country: bundle.taxpayer.country, taxId: bundle.taxpayer.taxId },
     deps.database,
   );
   assertNoOperationalVenue(await hasOperationalVenue(deps.ownerDb));

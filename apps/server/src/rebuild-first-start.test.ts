@@ -13,7 +13,7 @@ import {
   nodes,
   readMembershipTrustSet,
   readNodeMembership,
-  tenants,
+  taxpayer,
   withTransaction,
   writeNodeMembership,
   type Database,
@@ -77,7 +77,7 @@ const NOW = new Date("2026-09-23T10:00:00Z");
 
 beforeAll(async () => {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
   await seedVenueSettings(suite.db, {
     name: "Local",

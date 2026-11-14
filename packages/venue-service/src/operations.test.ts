@@ -1,4 +1,4 @@
-import { tenants } from "@waitron/db";
+import { taxpayer } from "@waitron/db";
 import { deleteDepartment } from "./service-delete.js";
 import * as settingsOperations from "./operations.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -525,7 +525,7 @@ async function liveInEarlierFormat(tx: Transaction, menuId: string, versionId: s
   );
 }
 
-async function seedUnitTenant(): Promise<{
+async function seedUnitTaxpayer(): Promise<{
   eachUnitId: string;
   kgUnitId: string;
 }> {
@@ -559,7 +559,7 @@ describe("venue service routing", () => {
   });
 
   it("counts a menu reaching a product only through nested sections as not empty", async () => {
-    await seedUnitTenant();
+    await seedUnitTaxpayer();
     await seedFixtureVenue("Venue");
     await scoped(async (tx) => {
       const department = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
@@ -596,7 +596,7 @@ describe("venue service routing", () => {
   });
 
   it("counts a department painted in one season alone as placed, and one painted nowhere as not", async () => {
-    await seedUnitTenant();
+    await seedUnitTaxpayer();
     await seedFixtureVenue("Venue");
     await scoped(async (tx) => {
       const restaurant = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
@@ -630,7 +630,7 @@ describe("venue service routing", () => {
   });
 
   it("reports incomplete active zones and cascades department removal", async () => {
-    await seedUnitTenant();
+    await seedUnitTaxpayer();
     await seedFixtureVenue("Venue");
 
     await scoped(async (tx) => {
@@ -707,7 +707,7 @@ describe("venue service routing", () => {
   });
 
   it("routes one cocktail to the bar serving its service zone", async () => {
-    await seedUnitTenant();
+    await seedUnitTaxpayer();
     await seedFixtureVenue("Venue");
     const upstairsZone = await seedZone("Upstairs");
     const downstairsZone = await seedZone("Downstairs");
@@ -783,7 +783,7 @@ describe("venue service routing", () => {
   });
 
   it("inherits service mode, lists zone offers, and freezes the order context", async () => {
-    const { kgUnitId } = await seedUnitTenant();
+    const { kgUnitId } = await seedUnitTaxpayer();
     await seedFixtureVenue("Venue");
     const zone = await seedZone("Deli counter");
     const nodeId = await seedNode(db);
@@ -975,7 +975,7 @@ describe("venue service routing", () => {
   });
 
   it("records a working line context for a product with no unit (Each)", async () => {
-    await seedUnitTenant();
+    await seedUnitTaxpayer();
     await seedFixtureVenue("Venue");
     const zone = await seedZone("Deli counter");
     const nodeId = await seedNode(db);
@@ -1044,7 +1044,7 @@ describe("venue service routing", () => {
   });
 
   it("refuses missing configuration and supports explicit no-preparation", async () => {
-    await seedUnitTenant();
+    await seedUnitTaxpayer();
     await seedFixtureVenue("Venue");
     const zone = await seedZone("Terrace");
 
@@ -1111,7 +1111,7 @@ describe("venue service routing", () => {
 });
 
 async function seedRoutingVenue() {
-  await seedUnitTenant();
+  await seedUnitTaxpayer();
   await seedFixtureVenue("Venue");
   let zone: string;
   let otherZone: string;
@@ -1790,7 +1790,7 @@ describe("departments", () => {
 
 /** A venue selling one product from one menu in two zones, each zone under its own department. */
 async function seedSellingVenue() {
-  await seedUnitTenant();
+  await seedUnitTaxpayer();
   await seedFixtureVenue("Venue");
   const cfg = {};
   const nodeId = await seedNode(db);
@@ -3051,7 +3051,7 @@ describe("each served menu's structure and Device Home Page", () => {
   });
 
   it("names the period that ended earlier today on both reads", async () => {
-    await seedUnitTenant();
+    await seedUnitTaxpayer();
     await seedFixtureVenue("Venue");
     const zoneId = await seedZone("Dining room");
     const { lunchMenu, dinnerMenu } = await scoped(async (tx) => {
@@ -3120,7 +3120,7 @@ describe("each served menu's structure and Device Home Page", () => {
   });
 
   it("names no ended period for a menu the running period also offers", async () => {
-    await seedUnitTenant();
+    await seedUnitTaxpayer();
     await seedFixtureVenue("Venue");
     const zoneId = await seedZone("Dining room");
     const { lunchMenu, drinksMenu } = await scoped(async (tx) => {
@@ -3286,7 +3286,7 @@ describe("orderZoneIdSql", () => {
       expect((await query).sort((a, b) => a.id.localeCompare(b.id))).toEqual(expected);
       const joined = await tx
         .select({ id: workingOrders.id, zoneId: expression })
-        .from(tenants)
+        .from(taxpayer)
         .innerJoin(workingOrders, sql`true`)
         .where(inArray(workingOrders.id, ids));
       expect(joined.sort((a, b) => a.id.localeCompare(b.id))).toEqual(expected);

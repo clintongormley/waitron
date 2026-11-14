@@ -18,7 +18,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  seedTenant,
+  seedTaxpayer,
   seedVenueSettings,
   seedBusinessDay,
   seedZone,
@@ -59,7 +59,7 @@ async function fixture(
   operationDescriptionRequired?: boolean,
   operationDescriptionDefault?: string,
 ): Promise<Fixture> {
-  await seedTenant(db);
+  await seedTaxpayer(db);
   await seedVenueSettings(db, {
     name: "Venue",
     invoiceLocales: ["en-GB"],

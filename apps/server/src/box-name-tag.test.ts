@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { BoxHostRequests } from "./box-host-client.js";
 import { createLogger, type Logger } from "./logger.js";
 import { boxNameTagJob } from "./box-name-tag.js";
@@ -20,9 +20,9 @@ function duty(
   };
 }
 it("writes the composed legal name and actual boot intent", async () => {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   await withTransaction(fx.db, (tx) =>
-    tx.update(tenants).set({ legalName: "Cafe\u0301 Harbour Ltd" }).where(eq(tenants.id, 1)),
+    tx.update(taxpayer).set({ legalName: "Cafe\u0301 Harbour Ltd" }).where(eq(taxpayer.id, 1)),
   );
   const { job, tagWrite } = duty(undefined, true);
   try {
@@ -37,13 +37,13 @@ it("clears the tag for no taxpayer or an unusable name", async () => {
   try {
     await job.pass(context);
     expect(tagWrite).toHaveBeenLastCalledWith(null);
-    await seedTenant(fx.db);
+    await seedTaxpayer(fx.db);
     await job.pass(context);
     await withTransaction(fx.db, (tx) =>
       tx
-        .update(tenants)
+        .update(taxpayer)
         .set({ legalName: "x".repeat(257) })
-        .where(eq(tenants.id, 1)),
+        .where(eq(taxpayer.id, 1)),
     );
     await job.pass(context);
     expect(tagWrite.mock.calls).toEqual([[null], [{ name: "Test SL", live: false }], [null]]);
@@ -52,7 +52,7 @@ it("clears the tag for no taxpayer or an unusable name", async () => {
   }
 });
 it("listens to committed writes, never a rollback, and unregisters at close", async () => {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   const wake = vi.fn();
   const job = boxNameTagJob({
     db: fx.db,
@@ -65,19 +65,19 @@ it("listens to committed writes, never a rollback, and unregisters at close", as
     wake.mockClear();
     await expect(
       withTransaction(fx.db, async (tx) => {
-        await tx.update(tenants).set({ legalName: "Rolled back" }).where(eq(tenants.id, 1));
+        await tx.update(taxpayer).set({ legalName: "Rolled back" }).where(eq(taxpayer.id, 1));
         throw new Error("rollback");
       }),
     ).rejects.toThrow("rollback");
     expect(wake).not.toHaveBeenCalled();
     await withTransaction(fx.db, (tx) =>
-      tx.update(tenants).set({ legalName: "Harbour Ltd" }).where(eq(tenants.id, 1)),
+      tx.update(taxpayer).set({ legalName: "Harbour Ltd" }).where(eq(taxpayer.id, 1)),
     );
     expect(wake).toHaveBeenCalledTimes(1);
     await job.onStop?.();
     wake.mockClear();
     await withTransaction(fx.db, (tx) =>
-      tx.update(tenants).set({ legalName: "After close" }).where(eq(tenants.id, 1)),
+      tx.update(taxpayer).set({ legalName: "After close" }).where(eq(taxpayer.id, 1)),
     );
     expect(wake).not.toHaveBeenCalled();
   } finally {
@@ -85,7 +85,7 @@ it("listens to committed writes, never a rollback, and unregisters at close", as
   }
 });
 it("allows another venue write to finish while the host is pending", async () => {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   let reply: (answer: Awaited<ReturnType<BoxHostRequests["tagWrite"]>>) => void = () => {};
   const tagWrite = vi.fn<BoxHostRequests["tagWrite"]>(
     () =>
@@ -100,7 +100,7 @@ it("allows another venue write to finish while the host is pending", async () =>
     await vi.waitFor(() => expect(tagWrite).toHaveBeenCalledTimes(1));
     let committed = false;
     write = withTransaction(fx.db, (tx) =>
-      tx.update(tenants).set({ legalName: "Changed while pending" }).where(eq(tenants.id, 1)),
+      tx.update(taxpayer).set({ legalName: "Changed while pending" }).where(eq(taxpayer.id, 1)),
     ).then(() => {
       committed = true;
     });
@@ -126,7 +126,7 @@ it.each(["missing", "unsupported"] as const)("ends %s-host attempts", async (rea
   }
 });
 it("hands transient failures to the runner's bounded retry instead of caching them", async () => {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   const tagWrite = vi
     .fn<BoxHostRequests["tagWrite"]>()
     .mockResolvedValueOnce({ available: false, reason: "refused", refusal: "busy" })
@@ -144,7 +144,7 @@ it("hands transient failures to the runner's bounded retry instead of caching th
   }
 });
 it("skips the host after an unrelated commit or an unchanged timer pass", async () => {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   const { job, tagWrite } = duty();
   try {
     await job.pass(context);
@@ -153,7 +153,7 @@ it("skips the host after an unrelated commit or an unchanged timer pass", async 
     await job.pass(context);
     expect(tagWrite).toHaveBeenCalledTimes(1);
     await withTransaction(fx.db, (tx) =>
-      tx.update(tenants).set({ legalName: "New Harbour Ltd" }).where(eq(tenants.id, 1)),
+      tx.update(taxpayer).set({ legalName: "New Harbour Ltd" }).where(eq(taxpayer.id, 1)),
     );
     await job.pass(context);
     expect(tagWrite.mock.calls).toEqual([
@@ -165,7 +165,7 @@ it("skips the host after an unrelated commit or an unchanged timer pass", async 
   }
 });
 it("retries when a lost write may have replaced an earlier accepted tag", async () => {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   const tagWrite = vi
     .fn<BoxHostRequests["tagWrite"]>()
     .mockResolvedValueOnce({ available: true, tag: "written" })
@@ -175,11 +175,11 @@ it("retries when a lost write may have replaced an earlier accepted tag", async 
   try {
     await job.pass(context);
     await withTransaction(fx.db, (tx) =>
-      tx.update(tenants).set({ legalName: "New Harbour Ltd" }).where(eq(tenants.id, 1)),
+      tx.update(taxpayer).set({ legalName: "New Harbour Ltd" }).where(eq(taxpayer.id, 1)),
     );
     await expect(job.pass(context)).rejects.toMatchObject({ code: "box_host.failed" });
     await withTransaction(fx.db, (tx) =>
-      tx.update(tenants).set({ legalName: "Test SL" }).where(eq(tenants.id, 1)),
+      tx.update(taxpayer).set({ legalName: "Test SL" }).where(eq(taxpayer.id, 1)),
     );
     await job.pass(context);
     expect(tagWrite.mock.calls).toEqual([

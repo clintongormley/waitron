@@ -2,7 +2,7 @@ import type { KeyRing } from "@waitron/credentials";
 import {
   readDeploymentEnvironment,
   readNodeMembership,
-  readTenant,
+  readTaxpayer,
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
@@ -54,16 +54,16 @@ export async function currentBinding(
   destinationNodeId: string,
   operationId: string,
 ): Promise<HandoverBinding> {
-  const tenant = await readTenant(deps.db);
+  const taxpayer = await readTaxpayer(deps.db);
   const environment = await readDeploymentEnvironment(deps.db);
   if (environment === null) throw new AppError("deployment.not_stamped", {});
   const held = await readNodeMembership(deps.db);
   // A fault in Waitron: a handover is started only on a set-up box that holds a chart.
-  if (tenant === null || held === null) throw new Error("no taxpayer or held chart to bind");
+  if (taxpayer === null || held === null) throw new Error("no taxpayer or held chart to bind");
   return {
     operationId,
     scenario,
-    venue: { country: tenant.country, taxId: tenant.taxId, environment },
+    venue: { country: taxpayer.country, taxId: taxpayer.taxId, environment },
     sourceNodeId,
     destinationNodeId,
     membership: {

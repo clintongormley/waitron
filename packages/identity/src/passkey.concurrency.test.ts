@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
 vi.mock("@simplewebauthn/server", async (orig) => ({
@@ -54,7 +54,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 beforeEach(async () => {
   mockVerifyAuth.mockReset();
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
 });
 
 async function seedFixture(db: Database): Promise<{ personId: string; handle: string }> {

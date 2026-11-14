@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { hashPin, deactivatePerson } from "@waitron/identity";
-import { invoiceSeries, printJobs, sales, tenants, withTransaction } from "@waitron/db";
+import { invoiceSeries, printJobs, sales, taxpayer, withTransaction } from "@waitron/db";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
 import { and, eq } from "drizzle-orm";
@@ -270,9 +270,11 @@ describe("Orders routes", () => {
 
   it("identifies filed full and simplified invoices in order details", async () => {
     const simplified = await billlessSale(venue);
-    const [tenant] = await venue.db.select({ domicile: tenants.taxpayerDomicile }).from(tenants);
+    const [taxpayerRow] = await venue.db
+      .select({ domicile: taxpayer.taxpayerDomicile })
+      .from(taxpayer);
     await withTransaction(venue.db, (tx) =>
-      tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 1, Madrid" }),
+      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 1, Madrid" }),
     );
     let full: string;
     try {
@@ -316,7 +318,7 @@ describe("Orders routes", () => {
       });
     } finally {
       await withTransaction(venue.db, (tx) =>
-        tx.update(tenants).set({ taxpayerDomicile: tenant!.domicile }),
+        tx.update(taxpayer).set({ taxpayerDomicile: taxpayerRow!.domicile }),
       );
     }
 

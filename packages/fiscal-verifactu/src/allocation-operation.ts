@@ -1,7 +1,7 @@
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, nodes, readTenant, type Transaction } from "@waitron/db";
+import { deployment, invoiceSeries, nodes, readTaxpayer, type Transaction } from "@waitron/db";
 import {
   readOperationAuthority,
   type ModuleOperationInput,
@@ -51,11 +51,11 @@ export async function readModuleAllocationSeries(
     .select()
     .from(fiscalAllocations)
     .where(and(eq(fiscalAllocations.nodeId, node.nodeId), eq(fiscalAllocations.sifId, sif.id)));
-  const tenant = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   const [stamp] = await tx.select().from(deployment).where(eq(deployment.id, 1));
   if (
     retained === undefined ||
-    retained.taxpayerNif !== tenant?.taxId ||
+    retained.taxpayerNif !== taxpayer?.taxId ||
     retained.taxpayerNif !== sif.taxpayerNif ||
     retained.softwareId !== sif.softwareId ||
     retained.installationIdentity !== sif.identity ||
@@ -236,10 +236,10 @@ export async function activateModuleAllocation(
     (typeof input.reservationEventId !== "string" || input.reservationEventId.length === 0)
   )
     return refuse("reservation_missing");
-  const tenant = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   const [stamp] = await tx.select().from(deployment).where(eq(deployment.id, 1));
   const context: AllocationContext = {
-    taxpayerNif: tenant?.taxId ?? "",
+    taxpayerNif: taxpayer?.taxId ?? "",
     softwareId: WAITRON_ID_SISTEMA,
     environment: stamp?.environment === "production" ? "production" : "preproduction",
     mode: binding.action === "setup" ? "initial-setup" : "recovery",

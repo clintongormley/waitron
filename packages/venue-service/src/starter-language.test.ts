@@ -18,55 +18,55 @@ beforeAll(() => {
 describe("readStarterStaffLanguage", () => {
   it.each([
     {
-      title: "no tenant row, es-ES receipts",
-      tenant: false,
+      title: "no taxpayer row, es-ES receipts",
+      taxpayer: false,
       province: null,
       locale: "es-ES",
       expected: "es",
     },
     {
-      title: "no tenant row, fr receipts",
-      tenant: false,
+      title: "no taxpayer row, fr receipts",
+      taxpayer: false,
       province: null,
       locale: "fr",
       expected: "en",
     },
     {
-      title: "Spanish tenant, no province, fr receipts",
-      tenant: true,
+      title: "Spanish taxpayer, no province, fr receipts",
+      taxpayer: true,
       province: null,
       locale: "fr",
       expected: "es",
     },
     {
-      title: "Spanish tenant, Madrid, en-GB receipts",
-      tenant: true,
+      title: "Spanish taxpayer, Madrid, en-GB receipts",
+      taxpayer: true,
       province: "Madrid",
       locale: "en-GB",
       expected: "en",
     },
     {
-      title: "Spanish tenant, Barcelona, ca-ES receipts",
-      tenant: true,
+      title: "Spanish taxpayer, Barcelona, ca-ES receipts",
+      taxpayer: true,
       province: "Barcelona",
       locale: "ca-ES",
       expected: "es",
     },
     {
-      title: "Spanish tenant, no province, en-US receipts",
-      tenant: true,
+      title: "Spanish taxpayer, no province, en-US receipts",
+      taxpayer: true,
       province: null,
       locale: "en-US",
       expected: "es",
     },
-  ] as const)("$title answers $expected", async ({ tenant, province, locale, expected }) => {
+  ] as const)("$title answers $expected", async ({ taxpayer, province, locale, expected }) => {
     const venue = {
       name: "Starter venue",
       province,
       invoiceLocales: [locale],
       operationDescription: "Hospitality",
     };
-    if (tenant) await seedVenue(db, venue);
+    if (taxpayer) await seedVenue(db, venue);
     else {
       const { name, province, invoiceLocales, operationDescription } = venue;
       await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });

@@ -6,8 +6,8 @@ import {
   deployment,
   invoiceSeries,
   nodes,
-  readTenant,
-  tenants,
+  readTaxpayer,
+  taxpayer,
   type Database,
 } from "@waitron/db";
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu";
@@ -23,13 +23,13 @@ export async function standbyContract(
   bases: readonly { code: string; purpose: string }[],
   operatorId?: string,
 ) {
-  const tenant = (await readTenant(db))!;
+  const taxpayer = (await readTaxpayer(db))!;
   return allocationFixture({
     node: { ...primary, nodeId: nodeId(targetNodeId) },
     primary,
     bases,
     identity: "P000042",
-    taxpayerNif: tenant.taxId,
+    taxpayerNif: taxpayer.taxId,
     operatorId,
   });
 }
@@ -74,7 +74,7 @@ export async function prepareStandbyDatabase(
   target: Database,
   primary: ProvisionedNode,
 ) {
-  const tenant = (await source.select().from(tenants))[0]!;
+  const taxpayerRow = (await source.select().from(taxpayer))[0]!;
   const node = (await source.select().from(nodes).where(eq(nodes.id, primary.nodeId)))[0]!;
   const sif = await source
     .select()
@@ -84,7 +84,7 @@ export async function prepareStandbyDatabase(
     .select()
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.nodeId, primary.nodeId), isNull(invoiceSeries.retiredAt)));
-  await target.insert(tenants).values(tenant);
+  await target.insert(taxpayer).values(taxpayerRow);
   const catalogue = await source.select().from(catalogues).where(eq(catalogues.isDefault, true));
   if (catalogue.length > 0) await target.insert(catalogues).values(catalogue);
 

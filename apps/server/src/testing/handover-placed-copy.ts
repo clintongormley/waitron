@@ -14,7 +14,7 @@ import {
   nodes,
   openVenueDatabase,
   stampDeployment,
-  tenants,
+  taxpayer,
   withNodeTransaction,
   withTransaction,
   writeNodeMembership,
@@ -154,7 +154,7 @@ export function placedSpareFixture(boxes: {
     const { mainState, spareState, spareVenue } = dirs();
     for (const dir of [mainState, spareState, spareVenue]) await mkdir(dir);
     await mainBox.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
     await seedVenueSettings(mainBox.db, {
       name: "Restaurant",
@@ -181,7 +181,7 @@ export function placedSpareFixture(boxes: {
 
     // M2's own database knows nothing of the venue's people or filing; only its own row and key.
     await spareBefore.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
     await seedVenueSettings(spareBefore.db, { name: "Restaurant" });
     await seedBusinessDay(spareBefore.db, { timeZone: "Europe/Madrid" });

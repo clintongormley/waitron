@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { invoiceSeries, tenants, withTransaction } from "@waitron/db";
+import { invoiceSeries, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
@@ -21,7 +21,7 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
     venue = await provisionAdjustmentVenue(db);
-    await db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+    await db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   },
 });
 const clock: TrustedClock = {
@@ -45,7 +45,7 @@ function none() {
 }
 async function issue(backend: FiscalBackend, full = true, locale = "es-ES") {
   return withTransaction(suite.db, async (tx) => {
-    await tx.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+    await tx.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
     const [series] = await tx
       .select()
       .from(invoiceSeries)
@@ -109,9 +109,9 @@ describe("stored invoice document projection", () => {
     const backend = none();
     const noRecord = await issue(backend);
     const filed = await issue(venue.backend);
-    const [taxpayer] = await suite.db.select().from(tenants);
+    const [taxpayerRow] = await suite.db.select().from(taxpayer);
     try {
-      await suite.db.delete(tenants);
+      await suite.db.delete(taxpayer);
       await expect(read(backend, noRecord.saleId)).rejects.toThrow("Invoice has no taxpayer");
       const document = await read(venue.backend, filed.saleId);
       expect(document.issuer).toEqual({
@@ -120,7 +120,7 @@ describe("stored invoice document projection", () => {
         domicile: "Saved domicile",
       });
     } finally {
-      await suite.db.insert(tenants).values(taxpayer!);
+      await suite.db.insert(taxpayer).values(taxpayerRow!);
     }
   });
 });

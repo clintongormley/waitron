@@ -1,6 +1,6 @@
 import { inArray } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
-import { listHandledIncidents, listOpenIncidents, type TenantIncident } from "@waitron/core";
+import { listHandledIncidents, listOpenIncidents, type VenueIncident } from "@waitron/core";
 import { persons } from "@waitron/identity";
 import type { Alert, AlertEventClaim, AlertSeverity, AlertSource } from "@waitron/module";
 import { codeOf, type Logger } from "@waitron/server-kit";
@@ -60,7 +60,7 @@ export interface AlertReadDeps {
   log: Logger;
 }
 
-function eventAlert(incident: TenantIncident, claim: AlertEventClaim): Alert {
+function eventAlert(incident: VenueIncident, claim: AlertEventClaim): Alert {
   return {
     key: incidentKey(incident.id),
     kind: "event",

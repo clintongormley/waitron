@@ -84,7 +84,7 @@ describe("throwawayApplyInput", () => {
     expect(fiscal().operations).toBe(operations);
   });
 
-  it("takes the taxpayer from ensure-tenant and the bases from create-series", () => {
+  it("takes the taxpayer from ensure-taxpayer and the bases from create-series", () => {
     const result = throwawayApplyInput(planVenue(request(real), ALL_MODULES), ALL_MODULES, [
       "preproduction",
     ])!;
@@ -120,7 +120,7 @@ describe("throwawayApplyInput", () => {
         { code: "FF-0CNNW", purpose: "full" },
         { code: "R-0CNNW", purpose: "rectificative" },
       ]);
-      expect(suite.db.all(sql`select tax_id, legal_name from tenants`)).toEqual([
+      expect(suite.db.all(sql`select tax_id, legal_name from taxpayer`)).toEqual([
         { tax_id: identity.taxId, legal_name: identity.legalName },
       ]);
     },
@@ -167,7 +167,7 @@ describe("throwawayApplyInput", () => {
 
   it("refuses a plan with no taxpayer as an invalid request", () => {
     const plan = planVenue(request(real), ALL_MODULES).filter(
-      (action) => action.kind !== "ensure-tenant",
+      (action) => action.kind !== "ensure-taxpayer",
     );
     expect(() => throwawayApplyInput(plan, ALL_MODULES, ["preproduction"])).toThrow(
       expect.objectContaining({ code: "setup.request_invalid", params: { field: "taxId" } }),

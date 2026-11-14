@@ -32,7 +32,7 @@ import {
   settings,
   stampDeployment,
   openVenueDatabase,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -106,7 +106,7 @@ beforeAll(async () => {
   // not get (`packages/db/src/schema/columns.ts`).
   const db = suite.db;
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
   await seedVenueSettings(db, {
     name: "Local",

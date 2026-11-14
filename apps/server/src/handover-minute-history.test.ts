@@ -10,7 +10,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { invoiceSeries, nodes, stampDeployment, tenants, withTransaction } from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
 import { setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -159,7 +159,7 @@ beforeEach(async () => {
     monotonicFinishedMs: performance.now(),
   }));
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
   await seedVenueSettings(suite.db, {
     name: "Restaurant",

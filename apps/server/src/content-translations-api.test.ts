@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenueSettings, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
   startManagementSession,
   managementSessions,
@@ -43,7 +43,7 @@ let managerId: string;
 let staffCookie: string;
 let http: Hono;
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedVenueSettings(suite.db);
   await app(async (tx) => {
     for (const role of ["manager", "staff"] as const) {
@@ -153,7 +153,7 @@ const kinds = [
   "unit",
 ] as const;
 async function fixture() {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   return app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
     const menu = await createCatalogue(tx, {

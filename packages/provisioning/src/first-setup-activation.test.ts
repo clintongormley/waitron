@@ -192,7 +192,7 @@ it("refuses activation without fresh kept authority before readiness, writes or 
   expect(f.deps.assertReady).not.toHaveBeenCalled();
   expect(f.deps.provision).not.toHaveBeenCalled();
   expect(f.deps.publish).not.toHaveBeenCalled();
-  expect(await venue.db.execute("select count(*) as count from tenants")).toMatchObject({
+  expect(await venue.db.execute("select count(*) as count from taxpayer")).toMatchObject({
     rows: [{ count: 0 }],
   });
 });
@@ -444,7 +444,7 @@ it("an adapter cannot publish without reporting its transaction boundary", async
   expect(await f.runtime.store.read()).toEqual(before);
   expect(f.deps.check).not.toHaveBeenCalled();
   expect(f.deps.publish).not.toHaveBeenCalled();
-  expect(await venue.db.execute("select count(*) as count from tenants")).toMatchObject({
+  expect(await venue.db.execute("select count(*) as count from taxpayer")).toMatchObject({
     rows: [{ count: 0 }],
   });
 });

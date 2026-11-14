@@ -10,7 +10,7 @@ export async function applyDeveloperDemoVenue(
   environment: NodeJS.ProcessEnv = process.env,
 ) {
   demoSeedEnvironment(environment);
-  const taxpayer = actions.find((action) => action.kind === "ensure-tenant");
+  const taxpayer = actions.find((action) => action.kind === "ensure-taxpayer");
   const demo = getCountryPack("ES")!.demo!;
   if (
     taxpayer?.country !== "ES" ||

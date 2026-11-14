@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { seedFixtureVenue } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -23,7 +23,7 @@ const day = () => ({
   endAt: "2026-01-06T04:00:00.000Z",
 });
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedFixtureVenue(suite.db);
 });
 

@@ -18,21 +18,21 @@ describe("useVenueDb", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("yields a migrated database", async () => {
-    const result = await suite.db.execute(sql`select cast(count(*) as int) as n from tenants`);
+    const result = await suite.db.execute(sql`select cast(count(*) as int) as n from taxpayer`);
     expect(result.rows[0]).toEqual({ n: 0 });
   });
 
   it("accepts a write", async () => {
     await suite.db.execute(
-      sql`insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'ES', 'B00000000', 'Probe', '2026-09-21T00:00:00.000Z')`,
+      sql`insert into taxpayer (id, country, tax_id, legal_name, created_at) values (1, 'ES', 'B00000000', 'Probe', '2026-09-21T00:00:00.000Z')`,
     );
-    const result = await suite.db.execute(sql`select cast(count(*) as int) as n from tenants`);
+    const result = await suite.db.execute(sql`select cast(count(*) as int) as n from taxpayer`);
     expect(result.rows[0]).toEqual({ n: 1 });
   });
 
   // The case that matters: a helper that silently stopped resetting would pass the two above.
   it("emptied the previous test's row", async () => {
-    const result = await suite.db.execute(sql`select cast(count(*) as int) as n from tenants`);
+    const result = await suite.db.execute(sql`select cast(count(*) as int) as n from taxpayer`);
     expect(result.rows[0]).toEqual({ n: 0 });
   });
 
@@ -118,13 +118,13 @@ describe("resetPerTest: false", () => {
 
   it("takes a row", async () => {
     await suite.db.execute(
-      sql`insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'ES', 'B00000000', 'Probe', '2026-09-21T00:00:00.000Z')`,
+      sql`insert into taxpayer (id, country, tax_id, legal_name, created_at) values (1, 'ES', 'B00000000', 'Probe', '2026-09-21T00:00:00.000Z')`,
     );
-    expect(count(suite.db, "tenants")).toBe(1);
+    expect(count(suite.db, "taxpayer")).toBe(1);
   });
 
   it("still has it in the next test", () => {
-    expect(count(suite.db, "tenants")).toBe(1);
+    expect(count(suite.db, "taxpayer")).toBe(1);
   });
 });
 

@@ -12,7 +12,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import type { AlertSource } from "@waitron/module";
 import type { StreamStatus, StreamView } from "@waitron/stream";
 import {
@@ -1302,7 +1302,7 @@ async function readBattery(source: AlertSource, now = NOW) {
 
 describe("batteryAlertSource", () => {
   it("fails the source when a reader names an unregistered provider", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     await seedReader({ providerRef: "unregistered", name: "Terrace" });
     const source = batteryAlertSource({
       providers: [],
@@ -1314,7 +1314,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("clears its deadline when a cache seat throws before status reads start", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     await seedReader({ providerRef: "reader", name: "Terrace" });
     const source = batteryAlertSource({
       providers: [stubProvider({ battery: () => 5, calls: { n: 0 } })],
@@ -1335,7 +1335,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("keeps a prompt low-battery warning beside a held reader and names the unavailable reader", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     const lowId = await seedReader({ providerRef: "low", name: "Counter" });
     const heldId = await seedReader({ providerRef: "held", name: "Terrace" });
     let started!: () => void;
@@ -1383,7 +1383,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("keeps a prompt low-battery warning when another reader throws", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     const lowId = await seedReader({ providerRef: "low", name: "Counter" });
     const failedId = await seedReader({ providerRef: "failed", name: "Terrace" });
     const provider = stubProvider({ battery: () => 5, calls: { n: 0 } });
@@ -1410,7 +1410,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("keeps the area-level alert when every reader is unavailable", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     await seedReader({ providerRef: "failed", name: "Terrace" });
     const provider = stubProvider({ battery: () => 5, calls: { n: 0 } });
     provider.readers.status = async () => {
@@ -1439,7 +1439,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("warns at the warning floor, errors at the error floor, and is silent above or absent", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     const at25 = await seedReader({ providerRef: "p25", name: "R25" });
     const at20 = await seedReader({ providerRef: "p20", name: "R20" });
     const at10 = await seedReader({ providerRef: "p10", name: "R10" });
@@ -1479,7 +1479,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("reuses one provider status read for five minutes, then reads again", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     await seedReader({ providerRef: "p1", name: "R1" });
 
     let clock = NOW;
@@ -1501,7 +1501,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("raises nothing for a deleted low reader while an active one still alerts", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     const keptId = await seedReader({ providerRef: "pKept", name: "Counter" });
     const deletedId = await seedReader({ providerRef: "pDeleted", name: "Deleted" });
     const calls = { n: 0 };
@@ -1520,7 +1520,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("ignores a deactivated low reader", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     await seedReader({ providerRef: "pOff", name: "Retired", active: false });
     const calls = { n: 0 };
     const source = batteryAlertSource({
@@ -1533,7 +1533,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("raises reader.offline for a reader its provider reports offline, beside its battery alert", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     const terraceId = await seedReader({ providerRef: "terrace", name: "Terrace" });
     const counterId = await seedReader({ providerRef: "counter", name: "Counter" });
     const provider = stubProvider({ battery: () => undefined, calls: { n: 0 } });
@@ -1563,7 +1563,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("treats a status the provider could not read as an unavailable reader", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     const terraceId = await seedReader({ providerRef: "terrace", name: "Terrace" });
     const provider = stubProvider({ battery: () => undefined, calls: { n: 0 } });
     provider.readers.status = async () => ({ online: false, unreachable: true, batteryPercent: 5 });
@@ -1593,7 +1593,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("raises no area alert while another reader's status could be read", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     const terraceId = await seedReader({ providerRef: "terrace", name: "Terrace" });
     await seedReader({ providerRef: "counter", name: "Counter" });
     const provider = stubProvider({ battery: () => undefined, calls: { n: 0 } });
@@ -1613,7 +1613,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("asks the provider again on the next read after an unreachable answer", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     const terraceId = await seedReader({ providerRef: "terrace", name: "Terrace" });
     let clock = NOW;
     const answers: ReaderStatus[] = [
@@ -1639,7 +1639,7 @@ describe("batteryAlertSource", () => {
   });
 
   it("reads the status once for both checks within five minutes", async () => {
-    await seedTenant(batterySuite.db);
+    await seedTaxpayer(batterySuite.db);
     await seedReader({ providerRef: "counter", name: "Counter" });
     let clock = NOW;
     const calls = { n: 0 };

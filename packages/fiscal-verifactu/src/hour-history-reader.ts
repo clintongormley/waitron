@@ -1,6 +1,6 @@
 import {
   invoiceSeries,
-  readTenant,
+  readTaxpayer,
   type Transaction,
   type DeploymentEnvironment,
 } from "@waitron/db";
@@ -43,7 +43,7 @@ type Moment = Date | string | null;
 
 /** The rows `hourHistorySource` judges. */
 export interface HourHistoryRows {
-  readonly tenant: boolean;
+  readonly taxpayer: boolean;
   readonly series: readonly {
     id: string;
     nodeId: string;
@@ -91,12 +91,12 @@ export interface HourHistoryRows {
 }
 
 export function hourHistorySource(
-  { tenant, series, sifs, allocations, reservations }: HourHistoryRows,
+  { taxpayer, series, sifs, allocations, reservations }: HourHistoryRows,
   environment: DeploymentEnvironment | null,
 ): HourHistorySource {
   let complete =
     series.length + sifs.length + allocations.length + reservations.length === 0 ||
-    (tenant && environment !== null);
+    (taxpayer && environment !== null);
   const records: unknown[] = [];
   for (const row of sifs)
     records.push({
@@ -201,7 +201,7 @@ export async function readHourHistory(
   tx: Transaction,
   environment: DeploymentEnvironment | null,
 ): Promise<HourHistorySource> {
-  const tenant = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   // No node, software or retirement predicate may hide an already spent invoice name.
   const series = await tx
     .select({
@@ -256,7 +256,7 @@ export async function readHourHistory(
     })
     .from(fiscalReservations);
   return hourHistorySource(
-    { tenant: tenant !== null, series, sifs, allocations, reservations },
+    { taxpayer: taxpayer !== null, series, sifs, allocations, reservations },
     environment,
   );
 }

@@ -1,7 +1,7 @@
 import { randomUUID, scrypt } from "node:crypto";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { quoteLiteral } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -40,7 +40,7 @@ vi.mock("node:crypto", async (original) => {
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 async function fixture() {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const email = `${randomUUID()}@example.com`;
   const personId = await seedManager(suite.db, { email });
   const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));

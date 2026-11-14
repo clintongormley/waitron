@@ -16,7 +16,7 @@ import { claimGap, readSnapshot, reclaimStale } from "./store.js";
 import * as store from "./store.js";
 import { runDue, type SchedulerDeps } from "./run.js";
 import { FakeDuty, throwingDuty } from "./testing/fake-duty.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 const NOW = new Date("2026-07-25T04:00:00Z");
 const HORIZON_START = new Date("2026-06-01T00:00:00Z");
@@ -36,7 +36,7 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
-  await seedTenant(db);
+  await seedTaxpayer(db);
 });
 
 afterEach(() => {
@@ -375,7 +375,7 @@ describe("runDue", () => {
     expect((await runDue(deps([duty]), NOW)).nextDueAt).not.toBeNull();
   });
 
-  it("runs every duty for the tenant", async () => {
+  it("runs every duty for the taxpayer", async () => {
     const one = new FakeDuty("duty.one");
     const two = new FakeDuty("duty.two");
     const result = await runDue(deps([one, two]), NOW);

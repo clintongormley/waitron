@@ -11,7 +11,7 @@ import {
   nowIso,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { convenioConfig } from "./schema/convenio-config.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 
@@ -23,7 +23,7 @@ const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
   },
 });
 
@@ -90,7 +90,7 @@ describe("the workforce-es (convenio_config) migration set", () => {
   });
 });
 
-describe("convenio_config carries no tenant column", () => {
+describe("convenio_config carries no taxpayer column", () => {
   it("has no tenant_id column", async () => {
     const rows = await suite.db.execute<{ name: string }>(
       sql`select name from pragma_table_info('convenio_config')`,
@@ -98,11 +98,11 @@ describe("convenio_config carries no tenant column", () => {
     expect(rows.rows.map((r) => r.name).filter((name) => name === "tenant_id")).toEqual([]);
   });
 
-  it("carries no tenant index", async () => {
+  it("carries no taxpayer index", async () => {
     const indexes = await suite.db.execute<{ name: string }>(
       sql`select name from pragma_index_list('convenio_config')`,
     );
-    expect(indexes.rows.map((row) => row.name).filter((name) => name.includes("tenant"))).toEqual(
+    expect(indexes.rows.map((row) => row.name).filter((name) => name.includes("taxpayer"))).toEqual(
       [],
     );
   });
@@ -111,7 +111,7 @@ describe("convenio_config carries no tenant column", () => {
 describe("one venue's agreement", () => {
   const single = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS] });
   it("keeps one convenio row", async () => {
-    await seedTenant(single.db);
+    await seedTaxpayer(single.db);
     const refused = await captureError(() => single.db.insert(convenioConfig).values({ id: 2 }));
     expect(checkFailed(refused, "convenio_config_singleton_ck")).toBe(true);
     await single.db.insert(convenioConfig).values({ id: 1 });

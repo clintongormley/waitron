@@ -1,5 +1,5 @@
 import type { TranslationTarget } from "./content-translation-targets.js";
-import { categories, contentSuggestions, products, tenants, type Transaction } from "@waitron/db";
+import { categories, contentSuggestions, products, taxpayer, type Transaction } from "@waitron/db";
 import type { ContentLanguages, TranslationGapKind } from "@waitron/shared";
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
@@ -350,14 +350,14 @@ export async function buildSuggestionJob(
   const items = await collectSuggestionItems(tx, context, exclude, gaps);
   if (items.length === 0) return null;
   const { config } = gaps.settings;
-  const [tenant] = await tx
-    .select({ country: tenants.country })
-    .from(tenants)
-    .where(eq(tenants.id, 1));
+  const [taxpayerRow] = await tx
+    .select({ country: taxpayer.country })
+    .from(taxpayer)
+    .where(eq(taxpayer.id, 1));
   const heads = await readContextHeads(tx, gaps, items);
   const job = {
     version: 1,
-    country: tenant!.country,
+    country: taxpayerRow!.country,
     languages: { default: config.defaultLanguage, enabled: config.languages },
     items: [] as SuggestionItem[],
     houseStyle: fitHouseStyle(await readHouseStyle(tx, config.languages)),

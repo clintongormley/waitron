@@ -1,18 +1,18 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { readTenant } from "./read-tenant.js";
+import { readTaxpayer } from "./read-taxpayer.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 
-// One SELECT against the singleton row. That `tenants` holds exactly one row, keyed 1, is pinned
-// separately by `schema/tenants.singleton.test.ts`.
+// One SELECT against the singleton row. That `taxpayer` holds exactly one row, keyed 1, is pinned
+// separately by `schema/taxpayer.singleton.test.ts`.
 
-describe("readTenant", () => {
+describe("readTaxpayer", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("returns null on a database with no taxpayer row yet", async () => {
-    expect(await withTransaction(suite.db, readTenant)).toBeNull();
+    expect(await withTransaction(suite.db, readTaxpayer)).toBeNull();
   });
 
   it("returns the taxpayer's country, tax id and legal name", async () => {
@@ -20,12 +20,12 @@ describe("readTenant", () => {
     // drizzle evaluates in JavaScript, which a statement that does not go through drizzle's insert
     // builder never reaches.
     await suite.db.execute(sql`
-      insert into tenants (id, country, tax_id, legal_name, created_at)
+      insert into taxpayer (id, country, tax_id, legal_name, created_at)
       values (1, 'ES', 'B12345678', 'Deli SL', ${new Date().toISOString()})`);
 
     // toEqual, not toMatchObject: a key left out of a matcher is never checked at all, and the
     // point of this helper is that every caller gets exactly these three fields.
-    expect(await withTransaction(suite.db, readTenant)).toEqual({
+    expect(await withTransaction(suite.db, readTaxpayer)).toEqual({
       country: "ES",
       taxId: "B12345678",
       legalName: "Deli SL",

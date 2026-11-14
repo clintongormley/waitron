@@ -11,7 +11,7 @@ import {
   kitchenNotices,
   kitchenStations,
   subscribeToChanges,
-  tenants,
+  taxpayer,
   withTransaction,
   type Database,
   type Transaction,
@@ -142,18 +142,18 @@ it("refreshes Calendar and routing from special days, clock and daily station st
 });
 
 it("refreshes Calendar, holiday coverage and the operations readiness after every special day, area, address and country change", async () => {
-  const before = await db.select().from(tenants);
+  const before = await db.select().from(taxpayer);
   onTestFinished(() =>
     withTransaction(db, async (tx) => {
-      await tx.delete(tenants);
-      if (before.length > 0) await tx.insert(tenants).values(before);
+      await tx.delete(taxpayer);
+      if (before.length > 0) await tx.insert(taxpayer).values(before);
     }),
   );
   await withTransaction(db, async (tx) => {
     await tx
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Invented SL" })
-      .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
+      .onConflictDoUpdate({ target: taxpayer.id, set: { country: "ES" } });
     await seedVenue(tx, {
       name: `Venue ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
@@ -186,9 +186,9 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
   const moved = await announced((tx) => seedVenueSettings(tx, { city: "Lleida" }));
   expect(both(moved)).toEqual([["settings.venue"], ["settings.venue"]]);
   expect(reaches(moved, operations)).toEqual(["settings.venue"]);
-  const country = await announced((tx) => tx.update(tenants).set({ country: "PT" }));
-  expect(both(country)).toEqual([["tenants"], ["tenants"]]);
-  expect(reaches(country, operations)).toEqual(["tenants"]);
+  const country = await announced((tx) => tx.update(taxpayer).set({ country: "PT" }));
+  expect(both(country)).toEqual([["taxpayer"], ["taxpayer"]]);
+  expect(reaches(country, operations)).toEqual(["taxpayer"]);
 });
 
 it("daily station status refreshes routing and special days refresh Opening hours", async () => {

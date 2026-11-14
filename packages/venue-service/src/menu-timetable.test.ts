@@ -34,7 +34,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { occurrenceKey } from "./floor-layout-due.js";
 import { addDays } from "./hours-rules.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
@@ -2965,7 +2965,7 @@ describe("a service period occurrence", () => {
 
 describe("placeOpenPeriod", () => {
   it("names the period in the venue's staff language when no language is passed", async () => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     const v = await venue({ timetable: false });
     await scoped((tx) => placeOpenPeriod(tx, v.restaurant, v.menus.Almuerzo));
     expect(

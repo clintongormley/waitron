@@ -4,7 +4,7 @@ import { nodeId } from "@waitron/shared";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
   connectedCardProviderSweep,
   sweepOwners,
@@ -444,8 +444,8 @@ function recordingPool(): {
 }
 
 describe("connectedCardProviderSweep", () => {
-  it("sweeps a pooled provider only when the tenant has its sealed credential (negative control: none → not swept)", async () => {
-    await seedTenant(suite.db);
+  it("sweeps a pooled provider only when the taxpayer has its sealed credential (negative control: none → not swept)", async () => {
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "payments.stripe",
@@ -471,7 +471,7 @@ describe("connectedCardProviderSweep", () => {
   });
 
   it("includes the demo/prepare simulator, and yields ONLY it when no credential is sealed", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const { pool, gets } = recordingPool();
     const simulator = fakeProvider("simulator", async () => ({
       nextDueAt: null,

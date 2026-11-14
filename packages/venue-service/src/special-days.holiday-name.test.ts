@@ -6,7 +6,7 @@ import {
   CORE_MIGRATIONS,
   specialDayDates,
   specialDays,
-  tenants,
+  taxpayer,
   withTransaction,
   type Database,
   type Transaction,
@@ -101,7 +101,7 @@ const AT = new Date("2026-01-10T10:00:00Z");
 
 async function venue() {
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ZZ", taxId: "X0000000", legalName: "Invented SL" })
     .onConflictDoNothing();
   await seedVenue(db, {

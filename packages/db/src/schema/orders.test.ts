@@ -47,7 +47,7 @@ afterEach(async () => {
     await tx.execute(sql`delete from nodes`);
     await tx.execute(sql`delete from ${devices}`);
     await tx.execute(sql`delete from ${deviceProfiles}`);
-    await tx.execute(sql`delete from tenants`);
+    await tx.execute(sql`delete from taxpayer`);
     await tx.execute(sql.raw(guard.sql));
   });
 });

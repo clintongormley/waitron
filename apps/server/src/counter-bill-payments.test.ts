@@ -7,7 +7,7 @@ import {
   invoiceDeliveries,
   invoiceSeries,
   sales,
-  tenants,
+  taxpayer,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -172,7 +172,7 @@ describe("Counter full invoice through the bill window", () => {
     "issues one %s sale on the last part, with the emailed original an F1 chose before payment",
     async (invoiceType) => {
       const venue = await provisionBillVenue(suite.db);
-      await suite.db.update(tenants).set({ taxpayerDomicile: "8 Fiscal Street, Madrid" });
+      await suite.db.update(taxpayer).set({ taxpayerDomicile: "8 Fiscal Street, Madrid" });
       await suite.db.update(departmentReceipts).set({
         receipt: { operationDescription: "Restaurant", email: "dining@example.test" },
       });

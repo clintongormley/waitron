@@ -12,7 +12,7 @@ import {
   kitchenStations,
   specialDayDates,
   specialDays,
-  tenants,
+  taxpayer,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -405,14 +405,14 @@ describe("Hours with the holiday store", () => {
   const store = createHolidayStore((country) => (country === "ZZ" ? pack() : undefined));
 
   // The file shares one taxpayer row; put back whatever it held before each case moved it.
-  let tenantBefore: (typeof tenants.$inferSelect)[] = [];
+  let taxpayerBefore: (typeof taxpayer.$inferSelect)[] = [];
   beforeAll(async () => {
-    tenantBefore = await withTransaction(db, (tx) => tx.select().from(tenants));
+    taxpayerBefore = await withTransaction(db, (tx) => tx.select().from(taxpayer));
   });
   afterEach(async () => {
     await withTransaction(db, async (tx) => {
-      await tx.delete(tenants);
-      if (tenantBefore.length > 0) await tx.insert(tenants).values(tenantBefore);
+      await tx.delete(taxpayer);
+      if (taxpayerBefore.length > 0) await tx.insert(taxpayer).values(taxpayerBefore);
     });
   });
 
@@ -420,9 +420,9 @@ describe("Hours with the holiday store", () => {
     const f = await fixture();
     await withTransaction(db, async (tx) => {
       await tx
-        .insert(tenants)
+        .insert(taxpayer)
         .values({ id: 1, country: "ZZ", taxId: "X0000000", legalName: "Invented SL" })
-        .onConflictDoUpdate({ target: tenants.id, set: { country: "ZZ" } });
+        .onConflictDoUpdate({ target: taxpayer.id, set: { country: "ZZ" } });
       await seedVenueSettings(tx, { province: "Northshire", city: "Villa Real" });
     });
     return f;
@@ -510,14 +510,14 @@ describe("Hours on a real Spanish public holiday", () => {
   const HOLIDAY = "2026-10-12";
   const ORDINARY = "2026-10-05";
 
-  let tenantBefore: (typeof tenants.$inferSelect)[] = [];
+  let taxpayerBefore: (typeof taxpayer.$inferSelect)[] = [];
   beforeAll(async () => {
-    tenantBefore = await withTransaction(db, (tx) => tx.select().from(tenants));
+    taxpayerBefore = await withTransaction(db, (tx) => tx.select().from(taxpayer));
   });
   afterEach(async () => {
     await withTransaction(db, async (tx) => {
-      await tx.delete(tenants);
-      if (tenantBefore.length > 0) await tx.insert(tenants).values(tenantBefore);
+      await tx.delete(taxpayer);
+      if (taxpayerBefore.length > 0) await tx.insert(taxpayer).values(taxpayerBefore);
     });
   });
 
@@ -525,9 +525,9 @@ describe("Hours on a real Spanish public holiday", () => {
     const f = await fixture();
     await withTransaction(db, async (tx) => {
       await tx
-        .insert(tenants)
+        .insert(taxpayer)
         .values({ id: 1, country: "ES", taxId: "X0000000", legalName: "Invented SL" })
-        .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
+        .onConflictDoUpdate({ target: taxpayer.id, set: { country: "ES" } });
       await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
     });
     return f;

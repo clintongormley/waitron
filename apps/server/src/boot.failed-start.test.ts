@@ -17,7 +17,7 @@ import {
   readVenueHolder,
   stampDeployment,
   subscribeToChanges,
-  tenants,
+  taxpayer,
 } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { appendOnlyTriggerFaults } from "@waitron/store";
@@ -319,7 +319,7 @@ async function seedVenueWithNode(directory: string): Promise<void> {
     const db = store.venue;
     await seedModuleSettings(db, { "fiscal-none": false });
     await db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "90444444J", legalName: "Failed Start SL" });
     await seedVenueSettings(db, {
       name: "Barra",

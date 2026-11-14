@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { scheduledRuns } from "../schema/scheduled-runs.js";
 import { dayPeriod } from "./derive.js";
@@ -23,7 +23,7 @@ const NOW = new Date("2026-07-25T04:00:00Z");
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   resetPerTest: false,
-  setup: (db) => seedTenant(db),
+  setup: (db) => seedTaxpayer(db),
 });
 
 describe("two runners starting together on one gap", () => {

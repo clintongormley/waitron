@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, type Database, mediaImageData, mediaImages } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, managementSessions, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { MEDIA_ROUTES } from "./routes.js";
@@ -81,7 +81,7 @@ function mount(db: Database): Hono {
 }
 
 async function fixture() {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const headers = await session("manager");
   const app = mount(suite.db);
   const created = await app.request("/management-api/images", {
@@ -160,7 +160,7 @@ function watchWriteLock(beforeLock: () => Promise<void> = async () => {}) {
 }
 
 it("refuses an upload without catalogue.manage without taking the write lock", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const headers = await session("staff");
   const { db, watched } = watchWriteLock();
   const response = await mount(db).request("/management-api/images", {
@@ -174,7 +174,7 @@ it("refuses an upload without catalogue.manage without taking the write lock", a
 });
 
 it("refuses an upload whose permission is withdrawn while its photo is prepared", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const headers = await session("manager");
   const [manager] = await suite.db.select({ id: persons.id }).from(persons);
   // The first time the upload asks for the write lock, its photo is already prepared: demote the
@@ -197,7 +197,7 @@ it("refuses an upload whose permission is withdrawn while its photo is prepared"
 });
 
 it("leaves the session's last activity where it was when an upload is refused as damaged", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const headers = await session("manager");
   const earlier = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   await suite.db.update(managementSessions).set({ lastSeenAt: earlier });

@@ -188,14 +188,14 @@ export async function openIncidents(tx: Transaction, origin: IncidentOrigin): Pr
 }
 
 /** An incident as the dashboard alerts read it: who handled it and when, if anyone has. */
-export interface TenantIncident extends Incident {
+export interface VenueIncident extends Incident {
   /** The device's name, kept while the device is switched off; null for a job source. */
   deviceName: string | null;
   acknowledgedAt: Date | null;
   acknowledgedBy: string | null;
 }
 
-const tenantIncidentColumns = {
+const venueIncidentColumns = {
   id: incidents.id,
   source: incidents.source,
   deviceId: incidents.deviceId,
@@ -209,7 +209,7 @@ const tenantIncidentColumns = {
   acknowledgedBy: incidents.acknowledgedBy,
 };
 
-type TenantIncidentRow = {
+type VenueIncidentRow = {
   id: string;
   source: string;
   deviceId: string | null;
@@ -223,7 +223,7 @@ type TenantIncidentRow = {
   acknowledgedBy: string | null;
 };
 
-function toTenantIncident(row: TenantIncidentRow): TenantIncident {
+function toVenueIncident(row: VenueIncidentRow): VenueIncident {
   return {
     id: row.id,
     ...readIncidentOrigin(row.source, row.deviceId),
@@ -239,44 +239,44 @@ function toTenantIncident(row: TenantIncidentRow): TenantIncident {
 }
 
 /** Every open incident, newest first; ties break on id so the order is stable. */
-export async function listOpenIncidents(tx: Transaction): Promise<TenantIncident[]> {
+export async function listOpenIncidents(tx: Transaction): Promise<VenueIncident[]> {
   const rows = await tx
-    .select(tenantIncidentColumns)
+    .select(venueIncidentColumns)
     .from(incidents)
     .leftJoin(devices, eq(devices.id, incidents.deviceId))
     .where(isNull(incidents.acknowledgedAt))
     .orderBy(desc(incidents.detectedAt), desc(incidents.id));
-  return rows.map(toTenantIncident);
+  return rows.map(toVenueIncident);
 }
 
 /** Incidents handled at or after `handledSince`, most recently handled first, ties by id. */
 export async function listHandledIncidents(
   tx: Transaction,
   handledSince: Date,
-): Promise<TenantIncident[]> {
+): Promise<VenueIncident[]> {
   const rows = await tx
-    .select(tenantIncidentColumns)
+    .select(venueIncidentColumns)
     .from(incidents)
     .leftJoin(devices, eq(devices.id, incidents.deviceId))
     .where(gte(incidents.acknowledgedAt, handledSince.toISOString()))
     .orderBy(desc(incidents.acknowledgedAt), desc(incidents.id));
-  return rows.map(toTenantIncident);
+  return rows.map(toVenueIncident);
 }
 
 /** One incident by id, or `null` when no incident has that id. */
-export async function findIncident(tx: Transaction, id: string): Promise<TenantIncident | null> {
+export async function findIncident(tx: Transaction, id: string): Promise<VenueIncident | null> {
   const [row] = await tx
-    .select(tenantIncidentColumns)
+    .select(venueIncidentColumns)
     .from(incidents)
     .leftJoin(devices, eq(devices.id, incidents.deviceId))
     .where(eq(incidents.id, id));
-  return row === undefined ? null : toTenantIncident(row);
+  return row === undefined ? null : toVenueIncident(row);
 }
 
 export async function currentIncidentsOf(
   tx: Transaction,
   input: { origin: IncidentOrigin; code: string },
-): Promise<{ open: TenantIncident | null; lastHandled: TenantIncident | null }> {
+): Promise<{ open: VenueIncident | null; lastHandled: VenueIncident | null }> {
   const ofCode = and(
     eq(incidents.source, input.origin.source),
     input.origin.deviceId === null
@@ -285,14 +285,14 @@ export async function currentIncidentsOf(
     eq(incidents.code, input.code),
   );
   const [open] = await tx
-    .select(tenantIncidentColumns)
+    .select(venueIncidentColumns)
     .from(incidents)
     .leftJoin(devices, eq(devices.id, incidents.deviceId))
     .where(and(ofCode, isNull(incidents.acknowledgedAt)))
     .orderBy(desc(incidents.detectedAt), desc(incidents.id))
     .limit(1);
   const [lastHandled] = await tx
-    .select(tenantIncidentColumns)
+    .select(venueIncidentColumns)
     .from(incidents)
     .leftJoin(devices, eq(devices.id, incidents.deviceId))
     .where(and(ofCode, isNotNull(incidents.acknowledgedAt)))
@@ -301,8 +301,8 @@ export async function currentIncidentsOf(
     .orderBy(desc(incidents.acknowledgedAt), desc(incidents.detectedAt), desc(incidents.id))
     .limit(1);
   return {
-    open: open === undefined ? null : toTenantIncident(open),
-    lastHandled: lastHandled === undefined ? null : toTenantIncident(lastHandled),
+    open: open === undefined ? null : toVenueIncident(open),
+    lastHandled: lastHandled === undefined ? null : toVenueIncident(lastHandled),
   };
 }
 

@@ -80,7 +80,7 @@ import {
 import {
   deleteCredential,
   putCredential,
-  tenantCredentials,
+  venueCredentials,
   validatePayload,
   type KeyRing,
 } from "@waitron/credentials";
@@ -523,9 +523,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     seat: CardProviderContribution,
   ): Promise<void> => {
     const [credential] = await tx
-      .select({ purpose: tenantCredentials.purpose })
-      .from(tenantCredentials)
-      .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
+      .select({ purpose: venueCredentials.purpose })
+      .from(venueCredentials)
+      .where(eq(venueCredentials.purpose, seat.credentialPurpose));
     if (credential === undefined)
       throw new AppError("reader.provider_disconnected", { providerId: seat.providerId });
   };
@@ -906,7 +906,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // "Connected" = a sealed credential exists for the seat's purpose; only purposes are read,
       // never a secret.
       const rows = await gated(sessionId, (tx) =>
-        tx.select({ purpose: tenantCredentials.purpose }).from(tenantCredentials),
+        tx.select({ purpose: venueCredentials.purpose }).from(venueCredentials),
       );
       const connected = new Set(rows.map((r) => r.purpose));
       // `merchantName` is omitted: it is not stored, and recovering it would need decrypting the
@@ -1093,9 +1093,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // opaque `credentials.missing`. Pre-check gives the actionable `reader.provider_disconnected`.
       await gated(sessionId, async (tx) => {
         const [cred] = await tx
-          .select({ purpose: tenantCredentials.purpose })
-          .from(tenantCredentials)
-          .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
+          .select({ purpose: venueCredentials.purpose })
+          .from(venueCredentials)
+          .where(eq(venueCredentials.purpose, seat.credentialPurpose));
         if (cred === undefined) throw new AppError("reader.provider_disconnected", { providerId });
       });
       const result = await seat.readers.add(runtimeDeps(), {
@@ -1107,9 +1107,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // without a shared lock, a disconnect between this read and commit remains an accepted window.
       const inserted = await gated(sessionId, async (tx) => {
         const [cred] = await tx
-          .select({ purpose: tenantCredentials.purpose })
-          .from(tenantCredentials)
-          .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
+          .select({ purpose: venueCredentials.purpose })
+          .from(venueCredentials)
+          .where(eq(venueCredentials.purpose, seat.credentialPurpose));
         if (
           cred === undefined ||
           (await readSettings(tx, PAYMENTS_SETTINGS)).doc.providers[providerId] === false

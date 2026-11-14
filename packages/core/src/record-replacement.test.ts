@@ -23,7 +23,7 @@ import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordSubstitution } from "./record-substitution.js";
 import { recordVoid } from "./record-void.js";
-import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import { seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;
@@ -41,7 +41,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   supervisorId = await seedPerson("supervisor");
   supervisorSessionId = await openSession(supervisorId);
@@ -343,7 +343,7 @@ describe("recordReplacement — refusals use no number", () => {
   it("refuses another node's rectificative series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    const other = await seedTenant(suite.db);
+    const other = await seedTaxpayer(suite.db);
     const otherRect = await seedRectificativeSeries(suite.db, other.nodeId, "R2");
     await expect(replace(backend, saleId, { seriesId: otherRect })).rejects.toMatchObject({
       code: "sale.series_wrong_node",
@@ -389,7 +389,7 @@ describe("recordReplacement — refusals use no number", () => {
       .values({ nodeId, code: "F", purpose: "full" })
       .returning({ id: invoiceSeries.id });
     suite.db.run(
-      sql`update tenants set taxpayer_domicile = '8 Tax Street, 28001 Madrid' where id = 1`,
+      sql`update taxpayer set taxpayer_domicile = '8 Tax Street, 28001 Madrid' where id = 1`,
     );
     const { saleId } = await sell(backend, {
       seriesId: brandSeriesId(fullSeries!.id),

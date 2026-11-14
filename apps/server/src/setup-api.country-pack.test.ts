@@ -325,7 +325,7 @@ describe("persisted Demo name ownership", () => {
           sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.province') as province from settings where settings.module = 'venue'`,
         ),
       ).toEqual([{ name: want, province: "Barcelona" }]);
-      expect(suite.db.all(sql`select legal_name,tax_id from tenants`)).toEqual([
+      expect(suite.db.all(sql`select legal_name,tax_id from taxpayer`)).toEqual([
         { legal_name: "Waitron Demo S.L.", tax_id: "B00000000" },
       ]);
     },

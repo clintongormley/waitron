@@ -15,7 +15,7 @@ import {
   printJobs,
   printers,
   receiptReprints,
-  tenants,
+  taxpayer,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
@@ -52,7 +52,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionOrderVenue(db);
     await inTx(venue, async (tx) => {
-      await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+      await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
       const [series] = await tx
         .select({ id: invoiceSeries.id })
         .from(invoiceSeries)

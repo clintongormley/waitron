@@ -2,7 +2,7 @@ import type { WaitronModule } from "@waitron/module";
 import type { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { readTenant, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { readTaxpayer, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   acceptSwap,
   createAbsence,
@@ -345,8 +345,8 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   );
 
   const readVenueName = async (tx: Transaction): Promise<string> => {
-    const venue = await readTenant(tx);
-    if (venue === null) throw new Error("Configured tenant does not exist");
+    const venue = await readTaxpayer(tx);
+    if (venue === null) throw new Error("Configured taxpayer does not exist");
     return venue.legalName;
   };
 

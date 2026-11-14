@@ -15,7 +15,7 @@ import {
   CORE_MIGRATIONS,
   insertReservedNodeTx,
   nodes,
-  readTenant,
+  readTaxpayer,
   stampDeployment,
   withNodeTransaction,
   withTransaction,
@@ -198,8 +198,8 @@ beforeEach(async () => {
   closers.push(() => rm(spareState, { recursive: true, force: true }));
   await seedVenue(mainBox.db);
   await seedVenue(spareBox.db);
-  const tenant = await readTenant(mainBox.db);
-  await spareBox.db.run(sql`update tenants set tax_id = ${tenant!.taxId}`);
+  const taxpayer = await readTaxpayer(mainBox.db);
+  await spareBox.db.run(sql`update taxpayer set tax_id = ${taxpayer!.taxId}`);
   self = await seedNode(mainBox.db);
   spare = await seedNode(spareBox.db);
   await stampDeployment(mainBox.db, "preproduction");
@@ -1219,7 +1219,7 @@ describe("a `prepared` one whose chart has changed since", () => {
 
   it("the taxpayer changed under the same chart: abandoned, sending nothing", async () => {
     await startedThenForgotten();
-    await mainBox.db.run(sql`update tenants set tax_id = 'B87654321'`);
+    await mainBox.db.run(sql`update taxpayer set tax_id = 'B87654321'`);
 
     await expectRefusedUnsent(await start(), "handover.membership_changed");
   });

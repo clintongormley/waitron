@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
-import { readTenant, type Transaction } from "@waitron/db";
+import { readTaxpayer, type Transaction } from "@waitron/db";
 import { prepareIssueClock } from "@waitron/fiscal";
 import type { ModuleRouteContext } from "@waitron/module";
 import { canonicalJson } from "@waitron/recovery-pack";
@@ -124,8 +124,8 @@ export async function applyAbsentOriginalCancellation(
   const clock = await prepareIssueClock(tx, { nodeId: generation.nodeId }, generation.clock);
   const reading = clock.now();
   const sif = await currentSif(tx, generation.nodeId);
-  const tenant = await readTenant(tx);
-  if (tenant === null) throw new AppError("fiscal.remedy_invalid", { registroId });
+  const taxpayer = await readTaxpayer(tx);
+  if (taxpayer === null) throw new AppError("fiscal.remedy_invalid", { registroId });
   const appended = await appendToChain(
     tx,
     generation.nodeId,
@@ -144,7 +144,7 @@ export async function applyAbsentOriginalCancellation(
         SinRegistroPrevio: "S",
         SistemaInformatico: {
           ...producerFields(runningIdentity(generation.environment), {
-            legalName: tenant.legalName,
+            legalName: taxpayer.legalName,
             nif: sif.nif,
           }),
           NombreSistemaInformatico: SOFTWARE_IDENTITY.name,

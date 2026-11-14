@@ -67,7 +67,7 @@ beforeEach(async () => {
 
 const SETTLED = new Date("2026-07-22T10:00:00Z");
 
-async function seedTenant() {
+async function seedTaxpayer() {
   return seedWorkingOrder(suite.db, freshNif());
 }
 
@@ -100,7 +100,7 @@ async function seedSecondSale(seeded: Seeded): Promise<string> {
 
 describe("insertCapturedPayment", () => {
   it("stores the source and device the payment was started on", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p-origin");
     const rows = await suite.db.execute<{ source: string | null; device_id: string | null }>(
       sql`select source, device_id from payments where payment_ref = ${key.paymentRef}`,
@@ -109,7 +109,7 @@ describe("insertCapturedPayment", () => {
   });
 
   it("inserts state=captured with a non-null settledAt", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p1");
     const row = await getRow(key);
     expect(row?.state).toBe("captured");
@@ -121,7 +121,7 @@ describe("insertCapturedPayment", () => {
 
 describe("insertFailedPayment", () => {
   it("inserts state=failed with a null settledAt", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = { provider: "fake", paymentRef: "p2" };
     await suite.db.transaction((tx) =>
       insertFailedPayment(tx, {
@@ -141,7 +141,7 @@ describe("insertFailedPayment", () => {
 
 describe("recordVoid", () => {
   it("reverses a captured payment to voided", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p3");
     const result = await suite.db.transaction((tx) => recordVoid(tx, key));
     expect(result.state).toBe("voided");
@@ -150,7 +150,7 @@ describe("recordVoid", () => {
   });
 
   it("throws payment.not_voidable for a payment not in the captured state", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p4");
     // Fully refund first so the payment is no longer `captured`.
     await suite.db.transaction((tx) => recordRefund(tx, { ...key, amount: decimal("10.00") }));
@@ -169,7 +169,7 @@ describe("recordVoid", () => {
 
 describe("recordRefund", () => {
   it("refunds the full amount, setting state=refunded and inserting a payment_refunds row", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p5", "20.00");
     const result = await suite.db.transaction((tx) =>
       recordRefund(tx, { ...key, amount: decimal("20.00") }),
@@ -186,7 +186,7 @@ describe("recordRefund", () => {
   });
 
   it("writes authorized_by when supplied, and NULL when omitted", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const authorizer = "11111111-1111-1111-1111-111111111111";
     const withKey = await capture(seeded, "auth-with", "20.00");
     await suite.db.transaction((tx) =>
@@ -206,7 +206,7 @@ describe("recordRefund", () => {
   });
 
   it("a partial refund sets partially_refunded, then a second refund reaching the total sets refunded", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p6", "20.00");
     const first = await suite.db.transaction((tx) =>
       recordRefund(tx, { ...key, amount: decimal("12.00") }),
@@ -222,7 +222,7 @@ describe("recordRefund", () => {
   });
 
   it("throws payment.refund_exceeds_capture when the running total would exceed the capture", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p7", "10.00");
     const error = await suite.db
       .transaction((tx) => recordRefund(tx, { ...key, amount: decimal("10.01") }))
@@ -232,7 +232,7 @@ describe("recordRefund", () => {
   });
 
   it("throws payment.refund_exceeds_capture when a second refund would push the running total over", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p8", "10.00");
     await suite.db.transaction((tx) => recordRefund(tx, { ...key, amount: decimal("6.00") }));
     const error = await suite.db
@@ -243,7 +243,7 @@ describe("recordRefund", () => {
   });
 
   it("throws payment.not_refundable for a voided payment", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p9");
     await suite.db.transaction((tx) => recordVoid(tx, key));
     const error = await suite.db
@@ -254,7 +254,7 @@ describe("recordRefund", () => {
   });
 
   it("throws payment.not_refundable for a failed payment", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = { provider: "fake", paymentRef: "p10" };
     await suite.db.transaction((tx) =>
       insertFailedPayment(tx, {
@@ -285,7 +285,7 @@ describe("recordRefund", () => {
 
 describe("assertReversible", () => {
   it("does not throw for a captured payment, for either kind", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "r1");
     await expect(
       suite.db.transaction((tx) => assertReversible(tx, { ...key, kind: "void" })),
@@ -296,7 +296,7 @@ describe("assertReversible", () => {
   });
 
   it("void throws payment.not_voidable when the payment is not captured (e.g. already fully refunded)", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "r2");
     await suite.db.transaction((tx) => recordRefund(tx, { ...key, amount: decimal("10.00") }));
     const error = await suite.db
@@ -307,7 +307,7 @@ describe("assertReversible", () => {
   });
 
   it("refund throws payment.not_refundable for a voided payment", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "r3");
     await suite.db.transaction((tx) => recordVoid(tx, key));
     const error = await suite.db
@@ -318,7 +318,7 @@ describe("assertReversible", () => {
   });
 
   it("refund throws payment.refund_exceeds_capture when the running succeeded total + requested would exceed the capture", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "r4", "20.00");
     await suite.db.transaction((tx) => recordRefund(tx, { ...key, amount: decimal("12.00") }));
     // A full-amount pre-check against the original capture, with 12.00 already succeeded-refunded.
@@ -343,7 +343,7 @@ describe("assertReversible", () => {
 
 describe("associatePaymentWithSale", () => {
   it("sets sale_id, observable via getPaymentByRef", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p11");
     const saleId = await seedSale(suite.db, seeded);
     await suite.db.transaction((tx) => associatePaymentWithSale(tx, { ...key, saleId }));
@@ -352,7 +352,7 @@ describe("associatePaymentWithSale", () => {
   });
 
   it("stamps reader_id when supplied, in the same write-once UPDATE as sale_id", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p12r");
     const saleId = await seedSale(suite.db, seeded);
     const [reader] = await suite.db
@@ -370,7 +370,7 @@ describe("associatePaymentWithSale", () => {
   });
 
   it("throws payment.not_found for an unknown ref", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const saleId = await seedSale(suite.db, seeded);
     const key = { provider: "fake", paymentRef: "unknown" };
     const error = await suite.db
@@ -381,7 +381,7 @@ describe("associatePaymentWithSale", () => {
   });
 
   it("throws payment.already_associated when the payment is already linked to a sale, and does not re-point it", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "p13");
     const firstSaleId = await seedSale(suite.db, seeded);
     const secondSaleId = await seedSecondSale(seeded);
@@ -414,7 +414,7 @@ describe("getPaymentByRef", () => {
 
 describe("findPaymentByRef", () => {
   it("returns the row for a known ref", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await capture(seeded, "p12");
     const row = await suite.db.transaction((tx) => findPaymentByRef(tx, "fake", "p12"));
     expect(row?.state).toBe("captured");
@@ -422,7 +422,7 @@ describe("findPaymentByRef", () => {
   });
 
   it("returns undefined for an unknown ref", async () => {
-    await seedTenant();
+    await seedTaxpayer();
     const row = await suite.db.transaction((tx) => findPaymentByRef(tx, "fake", "unknown"));
     expect(row).toBeUndefined();
   });
@@ -547,7 +547,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
 
 describe("insertCapturedPayment external_ref", () => {
   it("persists external_ref when provided", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await suite.db.transaction((tx) =>
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
@@ -567,7 +567,7 @@ describe("insertCapturedPayment external_ref", () => {
   });
 
   it("leaves external_ref null when omitted", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await capture(seeded, "ext2");
     const rows = await suite.db.execute<{ external_ref: string | null }>(
       sql`select external_ref from payments where payment_ref = ${"ext2"}`,
@@ -578,7 +578,7 @@ describe("insertCapturedPayment external_ref", () => {
 
 describe("attempting lifecycle", () => {
   it("insertAttempting writes state=attempting, settledAt null", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await suite.db.transaction((tx) =>
       insertAttempting(tx, {
         origin: deviceOrigin(seeded.deviceId),
@@ -595,7 +595,7 @@ describe("attempting lifecycle", () => {
   });
 
   it("captureAttempting advances attempting -> captured with settledAt + external_ref", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = { provider: "fake", paymentRef: "a2" };
     await suite.db.transaction((tx) =>
       insertAttempting(tx, {
@@ -621,7 +621,7 @@ describe("attempting lifecycle", () => {
   });
 
   it("failAttempting advances attempting -> failed", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = { provider: "fake", paymentRef: "a3" };
     await suite.db.transaction((tx) =>
       insertAttempting(tx, {
@@ -672,7 +672,7 @@ describe("insertAttempting under the device profile the request was checked agai
   }
 
   it("writes the attempting row while the device is still on that profile", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await attempt(seeded, "same-profile", await profileOf(seeded.deviceId));
     expect((await getRow({ provider: "fake", paymentRef: "same-profile" }))?.state).toBe(
       "attempting",
@@ -680,7 +680,7 @@ describe("insertAttempting under the device profile the request was checked agai
   });
 
   it("refuses device.profile_changed and writes nothing once the device has moved to another profile", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const checkedUnder = await profileOf(seeded.deviceId);
     const [other] = await seedDeviceProfiles(suite.db, {
       name: "Moved to",
@@ -700,7 +700,7 @@ describe("insertAttempting under the device profile the request was checked agai
   });
 
   it("checks nothing when no profile is given", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const [other] = await seedDeviceProfiles(suite.db, {
       name: "Moved to",
       formFactor: "till",
@@ -719,7 +719,7 @@ describe("insertAttempting under the device profile the request was checked agai
 
 describe("externalRef on read-back + failed refunds", () => {
   it("getPaymentByRef returns externalRef", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = { provider: "fake", paymentRef: "e1" };
     await suite.db.transaction((tx) =>
       insertCapturedPayment(tx, {
@@ -737,7 +737,7 @@ describe("externalRef on read-back + failed refunds", () => {
   });
 
   it("recordFailedRefund inserts a failed refund row and leaves the payment captured", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "e2", "20.00");
     await suite.db.transaction((tx) => recordFailedRefund(tx, { ...key, amount: decimal("5.00") }));
     expect((await getRow(key))?.state).toBe("captured");
@@ -748,7 +748,7 @@ describe("externalRef on read-back + failed refunds", () => {
   });
 
   it("recordFailedRefund writes authorized_by when supplied, and NULL when omitted", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const authorizer = "22222222-2222-2222-2222-222222222222";
     const withKey = await capture(seeded, "fauth-with", "20.00");
     await suite.db.transaction((tx) =>
@@ -769,7 +769,7 @@ describe("externalRef on read-back + failed refunds", () => {
   });
 
   it("recordRefund ignores a prior FAILED refund when summing (a failed refund does not consume the balance)", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "e3", "20.00");
     await suite.db.transaction((tx) =>
       recordFailedRefund(tx, { ...key, amount: decimal("20.00") }),
@@ -811,7 +811,7 @@ describe("Mode 3 initiated lifecycle", () => {
   }
 
   it("insertInitiated writes state=initiated, settledAt null, external_ref set", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await initiate(seeded);
     const row = await getRow(key);
     expect(row?.state).toBe("initiated");
@@ -820,7 +820,7 @@ describe("Mode 3 initiated lifecycle", () => {
   });
 
   it("settleInitiated advances initiated -> captured, sets settledAt, and returns the row", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await initiate(seeded);
     const settled = await suite.db.transaction((tx) =>
       settleInitiated(tx, { provider: "fake", externalRef: HOSTED, settledAt: SETTLED_AT }),
@@ -835,7 +835,7 @@ describe("Mode 3 initiated lifecycle", () => {
   });
 
   it("settleInitiated is idempotent: a second call returns null and does not re-settle", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await initiate(seeded);
     await suite.db.transaction((tx) =>
       settleInitiated(tx, { provider: "fake", externalRef: HOSTED, settledAt: SETTLED_AT }),
@@ -856,7 +856,7 @@ describe("Mode 3 initiated lifecycle", () => {
   });
 
   it("expireInitiated advances initiated -> failed and is idempotent", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await initiate(seeded);
     await suite.db.transaction((tx) =>
       expireInitiated(tx, { provider: "fake", externalRef: HOSTED }),
@@ -872,7 +872,7 @@ describe("Mode 3 initiated lifecycle", () => {
   });
 
   it("the partial unique index rejects a second initiated row with the same (provider, external_ref)", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await initiate(seeded, HOSTED, "pay-1");
     // This engine names the index's COLUMNS, not the index; the pair is what tells this refusal from
     // `payments_provider_ref_key`'s (provider, payment_ref), hence `toBe` on the whole string.
@@ -883,7 +883,7 @@ describe("Mode 3 initiated lifecycle", () => {
   });
 
   it("the partial unique index does NOT constrain manual/null external_ref rows", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     // Two manual rows sharing a hand-keyed external_ref: allowed (provider = 'manual' is excluded).
     await suite.db.transaction((tx) =>
       insertCapturedPayment(tx, {
@@ -930,7 +930,7 @@ async function setOrderStatus(
 
 describe("listReconcilable", () => {
   it("returns captured rows settled inside the period, joined to their working order", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await capture(seeded, "in-period");
     const rows = await suite.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
     expect(rows).toHaveLength(1);
@@ -949,7 +949,7 @@ describe("listReconcilable", () => {
   it("merges its two state arms back into one created_at ordering", async () => {
     // The `initiated` row is created FIRST but comes back from the SECOND query, so a plain
     // concatenation would report it last.
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await suite.db.transaction((tx) =>
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
@@ -978,20 +978,20 @@ describe("listReconcilable", () => {
   });
 
   it("excludes rows settled outside the period", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await capture(seeded, "outside");
     const later = { from: new Date("2026-07-23T00:00:00Z"), to: new Date("2026-07-24T00:00:00Z") };
     expect(await suite.db.transaction((tx) => listReconcilable(tx, "fake", later))).toEqual([]);
   });
 
   it("excludes another provider's rows", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await capture(seeded, "ours");
     expect(await suite.db.transaction((tx) => listReconcilable(tx, "other", PERIOD))).toEqual([]);
   });
 
   it("includes initiated rows by created_at and reports auditedAt from it", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await suite.db.transaction((tx) =>
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
@@ -1012,7 +1012,7 @@ describe("listReconcilable", () => {
   });
 
   it("excludes failed rows", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await suite.db.transaction(async (tx) => {
       await insertFailedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
@@ -1027,7 +1027,7 @@ describe("listReconcilable", () => {
   });
 
   it("reports the working order status the orphan rule reads", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await capture(seeded, "abandoned-one");
     await setOrderStatus(seeded, "abandoned");
     const rows = await suite.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
@@ -1035,7 +1035,7 @@ describe("listReconcilable", () => {
   });
 
   it("reports the payment's id, and holdResolved false with no hold", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "never-held");
     const id = (await getRow(key))!.id;
     const rows = await suite.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
@@ -1044,7 +1044,7 @@ describe("listReconcilable", () => {
   });
 
   it("reports held for a payment with a hold, with or without an outcome", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const heldKey = await capture(seeded, "held");
     await capture(seeded, "neighbour");
     const heldId = (await getRow(heldKey))!.id;
@@ -1078,7 +1078,7 @@ describe("listReconcilable", () => {
   });
 
   it("reports holdResolved false for a hold with no outcome and true once one is recorded", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const heldKey = await capture(seeded, "held");
     await capture(seeded, "neighbour");
     const heldId = (await getRow(heldKey))!.id;
@@ -1130,7 +1130,7 @@ describe("existingReferences", () => {
   }
 
   it("returns the subset of references that match, across multiple local rows", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await seedReference(seeded, "r-init", "ext-1");
     await seedReference(seeded, "r-init2", "ext-2");
     const found = await suite.db.transaction((tx) =>
@@ -1142,7 +1142,7 @@ describe("existingReferences", () => {
   it("matches a record whose reference is not first in the query list", async () => {
     // A batched implementation keyed on `references[0]` alone (rather than every reference in the
     // list) would miss this — the query list here deliberately puts the matching reference last.
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await seedReference(seeded, "r-init3", "ext-3");
     const found = await suite.db.transaction((tx) =>
       existingReferences(tx, "fake", ["ghost-a", "ghost-b", "ext-3"]),
@@ -1151,7 +1151,7 @@ describe("existingReferences", () => {
   });
 
   it("is empty for unknown references, an empty list, and another provider", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await seedReference(seeded, "r-init4", "ext-4");
     expect(await suite.db.transaction((tx) => existingReferences(tx, "fake", ["ghost"]))).toEqual(
       new Set(),
@@ -1165,7 +1165,7 @@ describe("existingReferences", () => {
   });
 
   it("chunks the IN list — a match past the first chunk boundary is still found", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await seedReference(seeded, "r-init5", "ext-5");
     // 1000 non-matching references fill the first chunk exactly (CHUNK_SIZE); "ext-5" lands in the
     // second chunk, so this only passes if every chunk is actually queried.
@@ -1177,7 +1177,7 @@ describe("existingReferences", () => {
 
 describe("markReconcileRemediated", () => {
   it("stamps the marker once and refuses a second stamp", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const key = await capture(seeded, "orphan-1");
     const at = new Date("2026-07-25T08:00:00Z");
     expect(await suite.db.transaction((tx) => markReconcileRemediated(tx, { ...key, at }))).toBe(
@@ -1208,7 +1208,7 @@ describe("markReconcileRemediated", () => {
 
 describe("hasPaymentWithExternalRef", () => {
   it("is true for a (provider, external_ref) a payment row carries, in any state", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await suite.db.transaction((tx) =>
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
@@ -1229,7 +1229,7 @@ describe("hasPaymentWithExternalRef", () => {
   });
 
   it("is false for a reference no local row carries, or one held under another provider", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await suite.db.transaction((tx) =>
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
@@ -1369,7 +1369,7 @@ describe("the link from a provider payment to its bill payment", () => {
     ["insertCapturedPayment", insertCapturedPayment],
     ["insertFailedPayment", insertFailedPayment],
   ] as const)("%s writes the bill payment it was given", async (name, insert) => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const billPaymentId = await billPayment(seeded);
     await suite.db.transaction((tx) =>
       insert(tx, {
@@ -1387,13 +1387,13 @@ describe("the link from a provider payment to its bill payment", () => {
   });
 
   it("leaves the link null for a payment of a whole order", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await capture(seeded, "whole-order");
     expect(await storedLink("whole-order")).toBeNull();
   });
 
   it("findPaymentByBillPayment returns the provider's row for that bill payment, and nothing for another", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const billPaymentId = await billPayment(seeded);
     const other = await billPayment(seeded);
     await capture(seeded, "unlinked");
@@ -1420,7 +1420,7 @@ describe("the link from a provider payment to its bill payment", () => {
   });
 
   it("findPaymentsByBillPayments returns each named bill payment's provider row, by its id", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const first = await billPayment(seeded);
     const second = await billPayment(seeded);
     const none = await billPayment(seeded);
@@ -1459,7 +1459,7 @@ describe("the link from a provider payment to its bill payment", () => {
   });
 
   it("refuses a second provider payment for the same bill payment", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const billPaymentId = await billPayment(seeded);
     const attempt = (paymentRef: string) =>
       suite.db.transaction((tx) =>
@@ -1481,7 +1481,7 @@ describe("the link from a provider payment to its bill payment", () => {
   });
 
   it("names an existing bill payment", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const error = await captureError(() =>
       suite.db.transaction((tx) =>
         insertAttempting(tx, {
@@ -1499,7 +1499,7 @@ describe("the link from a provider payment to its bill payment", () => {
   });
 
   it("recordedRefundRefs lists the refund ids recorded against that bill payment's row, oldest first", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const billPaymentId = await billPayment(seeded);
     const other = await billPayment(seeded);
     const linked = async (paymentRef: string, link: string | undefined) => {
@@ -1548,7 +1548,7 @@ describe("the link from a provider payment to its bill payment", () => {
 
 describe("recordRefund: the provider's refund id", () => {
   it("is written when given, and null when not", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const withRef = await capture(seeded, "ref-with", "20.00");
     await suite.db.transaction((tx) =>
       recordRefund(tx, { ...withRef, amount: decimal("5.00"), providerRefundRef: "re_123" }),
@@ -1610,7 +1610,7 @@ describe("rows written within one millisecond", () => {
   }
 
   it("findCapturedPaymentForWorkingOrder keeps the payment written last when they settled together", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const refs = await writePayments(seeded, "captured", () => AT);
 
     const found = await suite.db.transaction((tx) =>
@@ -1624,7 +1624,7 @@ describe("rows written within one millisecond", () => {
   });
 
   it("findCapturedPaymentForWorkingOrderAnyProvider keeps the payment written last when they settled together", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const refs = await writePayments(seeded, "captured", () => AT);
 
     const found = await suite.db.transaction((tx) =>
@@ -1635,7 +1635,7 @@ describe("rows written within one millisecond", () => {
   });
 
   it("listAttempting lists the payments in the order they were written", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const refs = await writePayments(seeded, "attempting", () => null);
 
     const listed = await suite.db.transaction((tx) =>
@@ -1646,7 +1646,7 @@ describe("rows written within one millisecond", () => {
   });
 
   it("recordedRefundRefs lists the refunds in the order they were written", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const [bill] = await suite.db
       .insert(billPayments)
       .values({
@@ -1751,7 +1751,7 @@ describe("audit candidates", () => {
 });
 
 it("reads exact gross amounts for same-account backup entries, including later refunds", async () => {
-  const seeded = await seedTenant();
+  const seeded = await seedTaxpayer();
   await withTransaction(suite.db, async (tx) => {
     for (const [paymentRef, provider, externalProvider, settledAt] of [
       ["backup", "manual", "connected_account", SETTLED],
@@ -1792,7 +1792,7 @@ it("reads exact gross amounts for same-account backup entries, including later r
 
 describe("refund audit facts", () => {
   it("reads successful refunds across dates for selected parents, including manual entries, without failed attempts", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     await capture(seeded, "refund-parent");
     await capture(seeded, "ignored-parent");
     await withTransaction(suite.db, async (tx) => {
@@ -1881,7 +1881,7 @@ it("reads only the latest successful payment audit generation for each requested
 
 describe("listAbandonedRefundOutcomes", () => {
   it("keeps marked outcomes visible until the whole refund is recorded, excluding other providers and unclaimed payments", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const confirmed = await capture(seeded, "refund-confirmed");
     const unconfirmed = await capture(seeded, "refund-unconfirmed");
     await capture(seeded, "not-claimed");
@@ -1942,7 +1942,7 @@ it.each([
   "wrong amount",
   "bill",
 ])("claims only an eligible abandoned capture: %s", async (state) => {
-  const seeded = await seedTenant();
+  const seeded = await seedTaxpayer();
   await withTransaction(suite.db, async (tx) => {
     await insertFailedPayment(tx, {
       provider: "sumup",

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { registerModulePermissions } from "./permissions.js";
 import type { BuiltInRoleKey } from "./permissions.js";
 import { hashPin } from "./verify-pin.js";
@@ -27,7 +27,7 @@ async function seedPerson(
 
 describe("listActivePersonsWithPermission", () => {
   it("returns active persons whose role holds the permission — supervisor/manager/admin in, staff and inactive out, name-sorted", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     // Insert out of alphabetical order so a sorted result proves the orderBy, not insertion order.
     const mgr = await seedPerson(suite.db, "Carla", "manager");
     const sup = await seedPerson(suite.db, "Bea", "supervisor");
@@ -54,7 +54,7 @@ describe("listActivePersonsWithPermission", () => {
 
 it("lists active managers for a registered module permission, excluding staff and suspended managers", async () => {
   registerModulePermissions([{ permission: "test.active_manager", defaultHolders: ["manager"] }]);
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const managerId = await seedPerson(suite.db, "Manager", "manager");
   await seedPerson(suite.db, "Staff", "staff");
   await seedPerson(suite.db, "Suspended", "manager", "suspended");

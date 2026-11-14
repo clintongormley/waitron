@@ -41,7 +41,7 @@ import { applyVenue, type VenueApplyDeps } from "./venue-apply.js";
 import { initialVenueApplyInput } from "./initial-venue-input.js";
 import { readInitialVenueFile } from "./initial-venue-file.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
-import { assertNoForeignTenant, readTenantIdentities } from "./tenant-guard.js";
+import { assertNoForeignTaxpayer, readTaxpayerIdentities } from "./taxpayer-guard.js";
 import "./errors.js";
 
 export interface CliDeps {
@@ -69,7 +69,7 @@ export interface CliDeps {
   /** The same primitive the setup wizard's handler stamps with (`provisionVenue`,
    * `apps/server/src/provision.ts`). */
   stampEnvironment: typeof stampDeployment;
-  readTenants: typeof readTenantIdentities;
+  readTaxpayers: typeof readTaxpayerIdentities;
   /** Absent, a real timer. */
   sleep?: (ms: number) => Promise<void>;
 }
@@ -340,10 +340,10 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         });
 
       // `provisionVenue` and `adoptFromPrimary` run the same guard.
-      const ensure = actions.find((a) => a.kind === "ensure-tenant");
-      if (ensure !== undefined && ensure.kind === "ensure-tenant") {
-        assertNoForeignTenant(
-          await deps.readTenants(target),
+      const ensure = actions.find((a) => a.kind === "ensure-taxpayer");
+      if (ensure !== undefined && ensure.kind === "ensure-taxpayer") {
+        assertNoForeignTaxpayer(
+          await deps.readTaxpayers(target),
           { country: ensure.country, taxId: ensure.taxId },
           venueDir,
         );

@@ -14,7 +14,7 @@ import {
   openVenueDatabase,
   stampDeployment,
   withTransaction,
-  tenants,
+  taxpayer,
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
@@ -83,7 +83,7 @@ async function seedIdentity(db: Database): Promise<void> {
   await seedModuleSettings(db, { "fiscal-none": false });
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90333333P", legalName: "Secondary SL" })
     .onConflictDoNothing();
   await withTransaction(db, (tx) =>

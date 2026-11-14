@@ -40,7 +40,7 @@ describe("classifyBootFailure on the engine the box runs", () => {
   it("names a missing table as a schema mismatch", () => {
     const error = realSqliteError((dir) => {
       const db = new DatabaseSync(join(dir, "venue.db"));
-      db.exec("select * from tenants");
+      db.exec("select * from taxpayer");
     });
     expect(classifyBootFailure(error)).toBe("provisioning.schema_mismatch");
   });
@@ -48,8 +48,8 @@ describe("classifyBootFailure on the engine the box runs", () => {
   it("names a missing column as a schema mismatch", () => {
     const error = realSqliteError((dir) => {
       const db = new DatabaseSync(join(dir, "venue.db"));
-      db.exec("create table tenants (id integer primary key)");
-      db.exec("select legal_name from tenants");
+      db.exec("create table taxpayer (id integer primary key)");
+      db.exec("select legal_name from taxpayer");
     });
     expect(classifyBootFailure(error)).toBe("provisioning.schema_mismatch");
   });
@@ -58,7 +58,7 @@ describe("classifyBootFailure on the engine the box runs", () => {
     const error = realSqliteError((dir) => {
       const file = join(dir, "venue.db");
       writeFileSync(file, "these bytes are not a database");
-      new DatabaseSync(file).exec("select * from tenants");
+      new DatabaseSync(file).exec("select * from taxpayer");
     });
     expect(sqliteFailureOf(error)?.errcode).toBe(26);
     expect(classifyBootFailure(error)).toBe("unknown");
@@ -87,7 +87,7 @@ describe("classifyBootFailure on the engine the box runs", () => {
   it("reads the engine's failure through a wrapper", () => {
     const inner = realSqliteError((dir) => {
       const db = new DatabaseSync(join(dir, "venue.db"));
-      db.exec("select * from tenants");
+      db.exec("select * from taxpayer");
     });
     expect(classifyBootFailure(new Error("Failed query", { cause: inner }))).toBe(
       "provisioning.schema_mismatch",
@@ -159,9 +159,9 @@ describe("classifyBootFailure", () => {
   it("leaves a real constraint refusal unknown — it is not evidence of a schema mismatch", () => {
     const refusal = realSqliteError((dir) => {
       const db = new DatabaseSync(join(dir, "venue.db"));
-      db.exec("create table tenants (id integer primary key)");
-      db.exec("insert into tenants values (1)");
-      db.exec("insert into tenants values (1)");
+      db.exec("create table taxpayer (id integer primary key)");
+      db.exec("insert into taxpayer values (1)");
+      db.exec("insert into taxpayer values (1)");
     });
     expect(classifyBootFailure(refusal)).toBe("unknown");
   });
@@ -260,7 +260,7 @@ describe("classifyStartFailure", () => {
   it("leaves every other failure as it was", () => {
     const noTable = realSqliteError((dir) => {
       const db = new DatabaseSync(join(dir, "venue.db"));
-      db.exec("select * from tenants");
+      db.exec("select * from taxpayer");
     });
     expect(classifyStartFailure(noTable, 0)).toBe("provisioning.schema_mismatch");
     const migration = Object.assign(

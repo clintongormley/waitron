@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { Agent } from "undici";
-import { nodes, openVenueDatabase, tenants, type Database, type VenueDatabase } from "@waitron/db";
+import { nodes, openVenueDatabase, taxpayer, type Database, type VenueDatabase } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 /**
@@ -36,7 +36,7 @@ export async function seedSharedVenue(db: Database): Promise<void> {
   await writeModuleConfig(db, { overrides: new Map([["fiscal-none", false]]) }, null);
   // A distinctive NIF (90M base) stays clear of every other seed generator.
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90000000K", legalName: "Boot Venue SL" });
   await seedVenueSettings(db, {
     name: "Barra",
@@ -311,7 +311,7 @@ export async function startFakeSmtp(onMessage?: () => void): Promise<{
 export async function seedTradingVenue(db: Database): Promise<void> {
   await writeModuleConfig(db, { overrides: new Map([["fiscal-none", false]]) }, null);
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90000001R", legalName: "Route Wiring SL" });
   await seedVenueSettings(db, { name: "Barra", operationDescription: "Venta en establecimiento" });
   await seedBusinessDay(db, {});

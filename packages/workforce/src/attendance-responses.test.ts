@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
 import { seedFixtureVenue } from "../test/fixtures.js";
@@ -21,7 +21,7 @@ const origin = jobOrigin("dashboard");
 let personId: string, managerId: string, nodeId: string;
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [

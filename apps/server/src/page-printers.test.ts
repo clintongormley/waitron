@@ -9,7 +9,7 @@ import {
   invoiceSeries,
   pagePrinters,
   printAgents,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,7 +17,7 @@ import {
   seedDevice,
   seedDeviceProfiles,
   seedNode,
-  seedTenant,
+  seedTaxpayer,
   seedVenue,
 } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
@@ -77,8 +77,8 @@ const urfReport: OfficePrinterReport = {
 };
 
 async function venue() {
-  await seedTenant(suite.db);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+  await seedTaxpayer(suite.db);
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],

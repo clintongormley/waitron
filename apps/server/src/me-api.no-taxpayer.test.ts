@@ -6,14 +6,14 @@ import type { Logger } from "./logger.js";
 import { mountMeApi } from "./me-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
-// A database with no `tenants` row: the boot configuration named no taxpayer.
+// A database with no `taxpayer` row: the boot configuration named no taxpayer.
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 
-describe("mountMeApi — a database holding no tenant", () => {
+describe("mountMeApi — a database holding no taxpayer", () => {
   it("answers the public locales request with an opaque 500 and logs it as a me failure", async () => {
     const lines: Array<[string, string, Record<string, unknown> | undefined]> = [];
     const log: Logger = (level, message, fields) => void lines.push([level, message, fields]);

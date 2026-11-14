@@ -1540,7 +1540,7 @@ describe("mountPrintApi — management: agents", () => {
     }
   });
 
-  it("lists this tenant's agents (newest first) without the token hash", async () => {
+  it("lists this taxpayer's agents (newest first) without the token hash", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app, "Listed agent");
     const res = await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie });

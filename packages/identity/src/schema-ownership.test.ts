@@ -25,7 +25,7 @@ const OWNED = [
 ];
 
 /** Core tables the core set, which now holds this package's tables, must create exactly once. */
-const CORE = ["tenants", "devices", "device_profiles"];
+const CORE = ["taxpayer", "devices", "device_profiles"];
 
 const drizzleDir = fileURLToPath(new URL("../../db/drizzle", import.meta.url));
 

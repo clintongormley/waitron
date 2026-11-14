@@ -323,8 +323,8 @@ it("describes absent roots without creating a workspace", async () => {
   expect(await readdir(root)).toEqual([]);
 });
 it("reports a database carrying a taxpayer as occupied and leaves the marker unchanged", async () => {
-  const { seedTenant } = await import("@waitron/db/testing/seed.js");
-  await seedTenant(suite.db);
+  const { seedTaxpayer } = await import("@waitron/db/testing/seed.js");
+  await seedTaxpayer(suite.db);
   const f = await fixture();
   const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
   const result = await f.service.inspectFirstSetupResolution();

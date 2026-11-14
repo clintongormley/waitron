@@ -32,13 +32,13 @@ export type { FiscalModules } from "./fiscal-modules.js";
 export { venueFiscalSelection } from "./venue-fiscal.js";
 export type { VenueFiscalSelection } from "./venue-fiscal.js";
 export {
-  assertNoForeignTenant,
+  assertNoForeignTaxpayer,
   assertNoOperationalVenue,
   assertOperationalVenue,
   hasOperationalVenue,
-  readTenantIdentities,
-} from "./tenant-guard.js";
-export type { TenantIdentity } from "./tenant-guard.js";
+  readTaxpayerIdentities,
+} from "./taxpayer-guard.js";
+export type { TaxpayerIdentity } from "./taxpayer-guard.js";
 // `findAheadSets` stays internal. `unknownHashes` is for a journal read from a file no store opens.
 export { assertNotAhead, unknownHashes } from "./schema-ahead.js";
 export type { AheadSet } from "./schema-ahead.js";

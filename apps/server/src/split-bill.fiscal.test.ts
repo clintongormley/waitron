@@ -253,7 +253,7 @@ describe("split-bill: pay each check files its own registro", () => {
       admission: testTradingAdmission(),
     });
 
-    // (1) EXACTLY THREE registros_facturacion for this tenant — one per check, none from the origin.
+    // (1) EXACTLY THREE registros_facturacion for this taxpayer — one per check, none from the origin.
     const rows = await asApp((tx) => tx.select().from(registrosFacturacion));
     expect(rows.length).toBe(3);
 

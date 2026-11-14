@@ -1687,10 +1687,10 @@ describe("startServer, against a migrated venue directory", () => {
           expect(trading.WAITRON_ENV).toBe("preproduction");
 
           expect(await readDeploymentEnvironment(check)).toBe("preproduction");
-          const tenants = await check.execute<{ n: number }>(
-            sql`select cast(count(*) as int) as n from tenants`,
+          const taxpayer = await check.execute<{ n: number }>(
+            sql`select cast(count(*) as int) as n from taxpayer`,
           );
-          expect(tenants.rows[0]!.n).toBe(1);
+          expect(taxpayer.rows[0]!.n).toBe(1);
           const nodes = await check.execute<{ n: number }>(
             sql`select cast(count(*) as int) as n from nodes`,
           );
@@ -1770,12 +1770,12 @@ describe("startServer, against a migrated venue directory", () => {
           expect(json.error.code).toBe("setup.request_invalid");
           expect(json.error.params.field).toBe("aeatCert");
 
-          const tenants = await check.execute<{ n: number }>(
-            sql`select cast(count(*) as int) as n from tenants`,
+          const taxpayer = await check.execute<{ n: number }>(
+            sql`select cast(count(*) as int) as n from taxpayer`,
           );
-          expect(tenants.rows[0]!.n).toBe(0);
+          expect(taxpayer.rows[0]!.n).toBe(0);
           const sealed = await check.execute<{ n: number }>(
-            sql`select cast(count(*) as int) as n from tenant_credentials where purpose = 'fiscal.aeat'`,
+            sql`select cast(count(*) as int) as n from venue_credentials where purpose = 'fiscal.aeat'`,
           );
           expect(sealed.rows[0]!.n).toBe(0);
 
@@ -1896,15 +1896,15 @@ describe("startServer, against a migrated venue directory", () => {
           expect(await readDeploymentEnvironment(check)).toBe("production");
 
           const sealed = await check.execute<{ n: number }>(
-            sql`select cast(count(*) as int) as n from tenant_credentials where purpose = 'fiscal.aeat'`,
+            sql`select cast(count(*) as int) as n from venue_credentials where purpose = 'fiscal.aeat'`,
           );
           expect(sealed.rows[0]!.n).toBe(1);
           const smtp = await check.execute<{ n: number }>(
-            sql`select cast(count(*) as int) as n from tenant_credentials where purpose = 'email.smtp'`,
+            sql`select cast(count(*) as int) as n from venue_credentials where purpose = 'email.smtp'`,
           );
           expect(smtp.rows[0]!.n).toBe(1);
           const provisioned = await check.execute<{ id: string }>(
-            sql`select cast(id as text) as id from tenants`,
+            sql`select cast(id as text) as id from taxpayer`,
           );
           expect(provisioned.rows).toEqual([{ id: "1" }]);
 
@@ -2652,7 +2652,7 @@ describe("startServer, against a migrated venue directory", () => {
   // the typecheck and every unit test. A due `envios` row is seeded with no `fiscal.aeat` credential,
   // and the loop's logged sleep is read back. That row would stay due forever in the shared directory,
   // where other tests assert `consecutiveFailures === 0`, so the `finally` deletes it.
-  it("sleeps on the skip retry, not the minimum tick, for a tenant with due fiscal work and no fiscal.aeat credential", async () => {
+  it("sleeps on the skip retry, not the minimum tick, for a taxpayer with due fiscal work and no fiscal.aeat credential", async () => {
     const port = await freePort();
     // `seedPendingEnvios`'s fixed `proximo_intento_en` is in the past, so the row is due at once.
     const seeded = await seedPendingEnvios(sharedDb, {
@@ -2942,7 +2942,7 @@ describe("startServer, against a migrated venue directory", () => {
   // The Veri*Factu drain builds an AEAT client resolver each pass and releases it in `finally`
   // (`packages/fiscal-verifactu/src/slot.ts`). Only this test seeds both due work and a usable
   // `fiscal.aeat` credential, so only here is a real `Agent` built for that release to close.
-  it("closes the mTLS transport it built for a tenant with due fiscal work and a usable fiscal.aeat credential", async () => {
+  it("closes the mTLS transport it built for a taxpayer with due fiscal work and a usable fiscal.aeat credential", async () => {
     const port = await freePort();
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,

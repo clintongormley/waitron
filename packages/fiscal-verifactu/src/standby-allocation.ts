@@ -2,7 +2,7 @@ import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, nodes, readTenant, type Transaction } from "@waitron/db";
+import { deployment, invoiceSeries, nodes, readTaxpayer, type Transaction } from "@waitron/db";
 import type { ProvisionedNode } from "@waitron/module";
 import {
   verifyPaperReservation,
@@ -46,8 +46,8 @@ export async function validateStandbyAllocation(
     .from(nodes)
     .where(eq(nodes.id, primary.nodeId));
   if (source === undefined) return { ok: false, reason: "node_mismatch" };
-  const tenant = await readTenant(tx);
-  if (tenant === null) return { ok: false, reason: "taxpayer_missing" };
+  const taxpayer = await readTaxpayer(tx);
+  if (taxpayer === null) return { ok: false, reason: "taxpayer_missing" };
   const [stamp] = await tx
     .select({ environment: deployment.environment })
     .from(deployment)
@@ -59,11 +59,11 @@ export async function validateStandbyAllocation(
     .from(registroSif)
     .where(and(eq(registroSif.nodeId, primary.nodeId), isNull(registroSif.revocadoEn)));
   if (sif === undefined) return { ok: false, reason: "primary_not_registered" };
-  if (sif.nif !== tenant.taxId) return { ok: false, reason: "scope_mismatch" };
+  if (sif.nif !== taxpayer.taxId) return { ok: false, reason: "scope_mismatch" };
   const bases = await liveSeriesBases(tx, primary);
   const filled = {
     ...context,
-    taxpayerNif: tenant.taxId,
+    taxpayerNif: taxpayer.taxId,
     softwareId: sif.softwareId,
     environment: stamp.environment,
     sourceId: primary.nodeId,

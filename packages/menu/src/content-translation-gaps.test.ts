@@ -15,7 +15,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { contentLanguageChoices, type ContentLanguages } from "@waitron/shared";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
@@ -128,7 +128,7 @@ describe("complete translation gap predicates", () => {
   ] as const)(
     "reports %s text in the default too, without treating fallback as entered text",
     async (_name, input) => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const f = await fixture(tx, input);
         const expected = [
@@ -166,7 +166,7 @@ describe("complete translation gap predicates", () => {
   );
 
   it("matches JavaScript trim for stored Unicode whitespace while keeping other invisible text", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, config);
       const menu = await createCatalogue(tx, {
@@ -240,7 +240,7 @@ describe("complete translation gap predicates", () => {
     [{}, { es: "kg", en: "kg" }],
     [{}, {}],
   ] as const)("counts a unit once per language with %s / %s", async (name, abbreviation) => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, config);
       const [unit] = await tx
@@ -271,7 +271,7 @@ describe("complete translation gap predicates", () => {
   });
 
   it("uses inherited text for an overriding inclusion, and leaves a cleared override represented by its root", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const f = await fixture(tx, { es: "CLIENT Completo", en: "CLIENT Complete" });
       await tx
@@ -312,7 +312,7 @@ describe("complete translation gap predicates", () => {
   });
 
   it("shares discovery's activity, ownership and role exclusions while direct archived reads stay eligible", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const f = await fixture(tx, null);
       await tx.update(products).set({ active: false }).where(eq(products.id, f.product.id));
@@ -349,7 +349,7 @@ describe("complete translation gap predicates", () => {
   });
 
   it("returns only count rows in one database read for 200 languages, including zeros", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const languages = [
         "es",

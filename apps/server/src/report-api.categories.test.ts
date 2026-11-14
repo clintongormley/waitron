@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/menu";
 import {
   hashPin,
@@ -129,7 +129,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     await seedLegacySellingUnits(db);
     await seedVenue(db, {
       name: "Main dining room",

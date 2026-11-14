@@ -79,7 +79,7 @@ let venueCfg: TradingContext;
  * name a department to be saved. */
 let ordering: { departmentId: string; startingZoneId: string };
 
-async function setupTenant(): Promise<void> {
+async function setupVenue(): Promise<void> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -139,11 +139,11 @@ async function setupTenant(): Promise<void> {
   });
 }
 
-let tenant: Promise<void> | undefined;
+let taxpayer: Promise<void> | undefined;
 
 /** Each describe that needs the venue waits for the one setup, so it also runs on its own. */
-function setupTenantOnce(): Promise<void> {
-  return (tenant ??= setupTenant());
+function setupVenueOnce(): Promise<void> {
+  return (taxpayer ??= setupVenue());
 }
 
 function mountApp(): Hono {
@@ -196,7 +196,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   let managerCookie: string;
 
   beforeAll(async () => {
-    await setupTenantOnce();
+    await setupVenueOnce();
     managerCookie = await login(mountApp(), MANAGER_EMAIL);
   });
 
@@ -2125,7 +2125,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
   let place: { terrace: string; deli: string; deliCounter: string };
 
   beforeAll(async () => {
-    await setupTenantOnce();
+    await setupVenueOnce();
     cookie = await login(mountApp(), MANAGER_EMAIL);
     place = await withTransaction(suite.db, async (tx) => {
       const terrace = await createServiceZone(tx, {

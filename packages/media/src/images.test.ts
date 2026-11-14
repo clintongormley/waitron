@@ -30,7 +30,7 @@ import {
 } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  seedTenant,
+  seedTaxpayer,
   seedBusinessDay,
   seedVenueSettings,
   seedWorkingOrder,
@@ -185,7 +185,7 @@ describe("metadata and references", () => {
   });
 
   it("shows active and inactive product uses and blocks deletion until every use is cleared", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
@@ -229,7 +229,7 @@ describe("metadata and references", () => {
   });
 
   it("blocks deletion of a photo a product VARIANT uses, and releases it when cleared", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
@@ -284,7 +284,7 @@ describe("metadata and references", () => {
   });
 
   it("counts no use for a variant that shows its parent's photo", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
@@ -319,7 +319,7 @@ describe("metadata and references", () => {
   });
 
   it("reports a variant inactive when it is removed or its product is Inactive", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
@@ -736,7 +736,7 @@ it("sorts by the default when the requested language was disabled while retainin
 
 it("protects an image used by sections, a menu's own list among them, and counts each use", async () => {
   const { createSectionIn, updateSection, sections } = await import("@waitron/menu");
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Drinks" } }, {});
     const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
@@ -777,7 +777,7 @@ it("protects an image used by sections, a menu's own list among them, and counts
 
 it("protects the photo an include's folder names, even switched off, and counts the use", async () => {
   const { sectionMembers, sections } = await import("@waitron/menu");
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Folder photo" } }, {});
     const [lunch] = await tx.insert(catalogues).values({ name: "Lunch Menu" }).returning({
@@ -841,7 +841,7 @@ it("protects the photo an include's folder names, even switched off, and counts 
 
 it("lists a folder photo held by a member that includes no section, under its missing name, as the count and the delete trigger see it", async () => {
   const { sectionMembers, sections } = await import("@waitron/menu");
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Folder photo" } }, {});
     const [lunch] = await tx.insert(catalogues).values({ name: "Lunch Menu" }).returning({
@@ -876,7 +876,7 @@ it("lists a folder photo held by a member that includes no section, under its mi
 });
 
 it("ignores a retired venue logo for usage counts and deletion", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Logo" } }, {});
     const { image: other } = await uploadImage(
@@ -912,7 +912,7 @@ it("protects an image only a live menu version names, and releases it once anoth
     readMenuStructure,
     updateProduct,
   } = await import("@waitron/menu");
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const publish = async (tx: Transaction, menuId: string) =>
     publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1");
   await withTransaction(suite.db, async (tx) => {
@@ -964,7 +964,7 @@ it("protects an image only a queued menu edition names, counts it as a use, and 
     readMenuStructure,
     updateProduct,
   } = await import("@waitron/menu");
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
     const menu = await createCatalogue(tx, { name: "Lunch Menu" });
@@ -1024,7 +1024,7 @@ it("lists a live version and a queued edition of one menu in number order, then 
     readMenuStructure,
     updateProduct,
   } = await import("@waitron/menu");
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
     const menu = await createCatalogue(tx, { name: "Lunch Menu" });
@@ -1089,7 +1089,7 @@ it("protects the photo of a product a live menu version offers only as an extra"
     updateProduct,
     writeProductModifiers,
   } = await import("@waitron/menu");
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const publish = async (tx: Transaction, menuId: string) =>
     publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1");
   await withTransaction(suite.db, async (tx) => {
@@ -1209,7 +1209,7 @@ describe("relevance scores and tie-breaks", () => {
 
 describe("free default choice with incomplete catalogue and image text", () => {
   it("switches with all nine catalogue kinds and a real image gap without rewriting their rows", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
       const menu = await createCatalogue(tx, {

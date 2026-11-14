@@ -788,9 +788,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // The one-shot setup latch, one per mount and so one per booted process. Every setup POST except
   // cloud recovery's start and start-again checks it, so a start of one latches out a concurrent
   // start of another. `applyVenue` mints a FRESH SIF/hash chain on every run and `provisionVenue`'s
-  // tenant-exists check is not atomic with it, so two concurrent provisions could each start a
+  // taxpayer-exists check is not atomic with it, so two concurrent provisions could each start a
   // second, unrecoverable chain (CLAUDE.md §5); the latch prevents the concurrent case, the
-  // tenant-exists check backstops a sequential re-POST.
+  // taxpayer-exists check backstops a sequential re-POST.
   let provisioning = false;
   let fiscalTesting = false;
   let configurationStaging = false;

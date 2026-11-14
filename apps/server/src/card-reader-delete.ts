@@ -21,7 +21,7 @@ import {
   payments,
   type CardProviderContribution,
 } from "@waitron/payments";
-import { tenantCredentials } from "@waitron/credentials";
+import { venueCredentials } from "@waitron/credentials";
 import { distinctTargets, named } from "./delete-impact.js";
 
 export type CardReaderDeletePlan = {
@@ -86,9 +86,9 @@ async function cardReaderDeleteRules(
     canUnpair &&
     (
       await tx
-        .select({ purpose: tenantCredentials.purpose })
-        .from(tenantCredentials)
-        .where(eq(tenantCredentials.purpose, seat.credentialPurpose))
+        .select({ purpose: venueCredentials.purpose })
+        .from(venueCredentials)
+        .where(eq(venueCredentials.purpose, seat.credentialPurpose))
     ).length > 0;
   const unpairAtProvider = canUnpair && connected;
   const registrationKept = canUnpair && !connected;

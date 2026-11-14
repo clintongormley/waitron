@@ -19,20 +19,20 @@ const SETTLED = new Date("2026-07-22T10:00:00Z");
 
 describe("findCapturedPaymentForWorkingOrder", () => {
   it("returns saleId once associated — the replay branch, not just the resume (saleId null) one", async () => {
-    const tenant = await seedWorkingOrder(suite.db, "B77777777");
-    const saleId = await seedSale(suite.db, tenant);
+    const taxpayer = await seedWorkingOrder(suite.db, "B77777777");
+    const saleId = await seedSale(suite.db, taxpayer);
 
     const orderKey = {
       provider: "stripe",
-      workingOrderId: tenant.workingOrderId,
+      workingOrderId: taxpayer.workingOrderId,
     };
     const paymentKey = { provider: "stripe", paymentRef: "replay-1" };
 
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
-        origin: deviceOrigin(tenant.deviceId),
-        workingOrderId: tenant.workingOrderId,
-        nodeId: tenant.nodeId,
+        origin: deviceOrigin(taxpayer.deviceId),
+        workingOrderId: taxpayer.workingOrderId,
+        nodeId: taxpayer.nodeId,
         provider: "stripe",
         paymentRef: "replay-1",
         amount: decimal("10.00"),
@@ -62,12 +62,12 @@ describe("findCapturedPaymentForWorkingOrder", () => {
 
 describe("payments card columns", () => {
   it("persists and reads back a captured payment's card facts", async () => {
-    const tenant = await seedWorkingOrder(suite.db, freshNif());
+    const taxpayer = await seedWorkingOrder(suite.db, freshNif());
     const row = await withTransaction(suite.db, async (tx) => {
       await insertAttempting(tx, {
-        origin: deviceOrigin(tenant.deviceId),
-        workingOrderId: tenant.workingOrderId,
-        nodeId: tenant.nodeId,
+        origin: deviceOrigin(taxpayer.deviceId),
+        workingOrderId: taxpayer.workingOrderId,
+        nodeId: taxpayer.nodeId,
         provider: "sumup_cloud",
         paymentRef: "card-ref-1",
         amount: decimal("1.00"),
@@ -87,13 +87,13 @@ describe("payments card columns", () => {
   });
 
   it("rejects a card_last4 that is not four characters", async () => {
-    const tenant = await seedWorkingOrder(suite.db, freshNif());
+    const taxpayer = await seedWorkingOrder(suite.db, freshNif());
     await expect(
       withTransaction(suite.db, async (tx) => {
         await insertAttempting(tx, {
-          origin: deviceOrigin(tenant.deviceId),
-          workingOrderId: tenant.workingOrderId,
-          nodeId: tenant.nodeId,
+          origin: deviceOrigin(taxpayer.deviceId),
+          workingOrderId: taxpayer.workingOrderId,
+          nodeId: taxpayer.nodeId,
           provider: "sumup_cloud",
           paymentRef: "card-ref-2",
           amount: decimal("1.00"),
@@ -110,13 +110,13 @@ describe("payments card columns", () => {
   });
 
   it("rejects an out-of-range card_entry_mode", async () => {
-    const tenant = await seedWorkingOrder(suite.db, freshNif());
+    const taxpayer = await seedWorkingOrder(suite.db, freshNif());
     await expect(
       withTransaction(suite.db, async (tx) => {
         await insertAttempting(tx, {
-          origin: deviceOrigin(tenant.deviceId),
-          workingOrderId: tenant.workingOrderId,
-          nodeId: tenant.nodeId,
+          origin: deviceOrigin(taxpayer.deviceId),
+          workingOrderId: taxpayer.workingOrderId,
+          nodeId: taxpayer.nodeId,
           provider: "sumup_cloud",
           paymentRef: "card-ref-3",
           amount: decimal("1.00"),
@@ -135,12 +135,12 @@ describe("payments card columns", () => {
 
 describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
   it("returns the captured row with provider and card columns, regardless of provider", async () => {
-    const tenant = await seedWorkingOrder(suite.db, freshNif());
+    const taxpayer = await seedWorkingOrder(suite.db, freshNif());
     await withTransaction(suite.db, async (tx) => {
       await insertAttempting(tx, {
-        origin: deviceOrigin(tenant.deviceId),
-        workingOrderId: tenant.workingOrderId,
-        nodeId: tenant.nodeId,
+        origin: deviceOrigin(taxpayer.deviceId),
+        workingOrderId: taxpayer.workingOrderId,
+        nodeId: taxpayer.nodeId,
         provider: "sumup_cloud",
         paymentRef: "any-ref-1",
         amount: decimal("1.00"),
@@ -156,7 +156,7 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
 
     const row = await withTransaction(suite.db, (tx) =>
       findCapturedPaymentForWorkingOrderAnyProvider(tx, {
-        workingOrderId: tenant.workingOrderId,
+        workingOrderId: taxpayer.workingOrderId,
       }),
     );
     expect(row?.provider).toBe("sumup_cloud");
@@ -168,10 +168,10 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
   });
 
   it("returns null for a working order with no payment row (a cash sale)", async () => {
-    const tenant = await seedWorkingOrder(suite.db, freshNif());
+    const taxpayer = await seedWorkingOrder(suite.db, freshNif());
     const row = await withTransaction(suite.db, (tx) =>
       findCapturedPaymentForWorkingOrderAnyProvider(tx, {
-        workingOrderId: tenant.workingOrderId,
+        workingOrderId: taxpayer.workingOrderId,
       }),
     );
     expect(row).toBeNull();

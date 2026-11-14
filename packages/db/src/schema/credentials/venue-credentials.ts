@@ -8,8 +8,8 @@ import { binary, count, label, nowIso, table, tsString } from "../columns.js";
  * provisioned, when, on which key version, and each payload's length — GCM ciphertext is as long as
  * its plaintext, so `fiscal.aeat`'s row reveals the certificate's approximate size.
  */
-export const tenantCredentials = table(
-  "tenant_credentials",
+export const venueCredentials = table(
+  "venue_credentials",
   {
     /** A stable identifier, not a description: renaming a purpose orphans every row under the old
      * name. `PURPOSES` in packages/credentials/src/purposes.ts is the authority on which values are
@@ -28,15 +28,15 @@ export const tenantCredentials = table(
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    primaryKey({ columns: [t.purpose], name: "tenant_credentials_pk" }),
-    check("tenant_credentials_key_version_ck", sql`${t.keyVersion} >= 1`),
+    primaryKey({ columns: [t.purpose], name: "venue_credentials_pk" }),
+    check("venue_credentials_key_version_ck", sql`${t.keyVersion} >= 1`),
     // 12 bytes is the GCM standard nonce length, and the only length
     // `packages/credentials/src/cipher.ts` ever writes. A row with a different length did not come
     // from this code path.
-    check("tenant_credentials_iv_len_ck", sql`octet_length(${t.iv}) = 12`),
+    check("venue_credentials_iv_len_ck", sql`octet_length(${t.iv}) = 12`),
     // 16 bytes is the full GCM tag. A truncated tag weakens forgery resistance, so the column
     // refuses one rather than trusting every future writer to pass the right option.
-    check("tenant_credentials_auth_tag_len_ck", sql`octet_length(${t.authTag}) = 16`),
-    check("tenant_credentials_purpose_ck", sql`length(${t.purpose}) > 0`),
+    check("venue_credentials_auth_tag_len_ck", sql`octet_length(${t.authTag}) = 16`),
+    check("venue_credentials_purpose_ck", sql`length(${t.purpose}) > 0`),
   ],
 );

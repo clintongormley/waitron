@@ -354,7 +354,7 @@ describe("configuration export API", () => {
       });
     });
     const sealed = await suite.db.execute<{ blob: Uint8Array }>(sql`
-      select ciphertext as blob from tenant_credentials
+      select ciphertext as blob from venue_credentials
       where purpose in ('backup.stream', 'backup.archive')
     `);
     expect(sealed.rows).toHaveLength(2);
@@ -370,7 +370,7 @@ describe("configuration export API", () => {
       "a strong passphrase",
     );
     // The secrets are sealed in the vault, so the vault table travelling would hide them too.
-    expect(decoded.tables).not.toHaveProperty("tenant_credentials");
+    expect(decoded.tables).not.toHaveProperty("venue_credentials");
     const exportedText = JSON.stringify(decoded);
     expect(exportedText).not.toContain(originalStreamSecret);
     expect(exportedText).not.toContain(archiveSecret);

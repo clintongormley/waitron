@@ -24,7 +24,7 @@ import type { AuthzInput } from "@waitron/identity";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
-import { seedTenant } from "../test/fixtures.js";
+import { seedTaxpayer } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 let deviceId: DeviceId;
@@ -46,7 +46,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
   managerId = await seedPerson("manager");
   supervisorId = await seedPerson("supervisor");
   const staffId = await seedPerson("staff");
@@ -64,7 +64,7 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
   return row!.id;
 }
 
-/** Opens a shift session for `personId` at this tenant's till and returns its id. */
+/** Opens a shift session for `personId` at this taxpayer's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
   const deviceId = (await seedDevice(suite.db, {})).deviceId;
   const session = await withTransaction(suite.db, (tx) =>

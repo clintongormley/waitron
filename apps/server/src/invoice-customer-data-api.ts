@@ -3,7 +3,7 @@ import type { RecipientIdentifier } from "@waitron/country-packs";
 import "./errors.js";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import type { Context, Hono } from "hono";
-import { readTenant, type Database } from "@waitron/db";
+import { readTaxpayer, type Database } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import { readPrivacyContact } from "@waitron/provisioning";
@@ -112,10 +112,10 @@ export function mountInvoiceCustomerDataApi(
         const { authorizedBy } = await authorize(token);
         const identity = queriedIdentifier(c);
         const place = await venuePlace(tx);
-        const tenant = await readTenant(tx);
+        const taxpayer = await readTaxpayer(tx);
         const privacyNoticeUrl = (await readPrivacyContact(tx))?.privacyNoticeUrl ?? null;
         const sales = await findInvoiceCustomerSales(tx, identity.taxId, identity);
-        return { authorizedBy, taxId: identity.taxId, place, tenant, privacyNoticeUrl, sales };
+        return { authorizedBy, taxId: identity.taxId, place, taxpayer, privacyNoticeUrl, sales };
       });
       const newest = first.sales.at(-1);
       if (newest === undefined) throw new AppError("invoice_customer.not_found", {});
@@ -135,7 +135,7 @@ export function mountInvoiceCustomerDataApi(
       const readme = invoiceCustomerReadme({
         // A customer has no saved language, so the venue's (decision 10).
         language: toLanguage(resolveActiveLocale(null, deps.venueLocale)),
-        venue: first.tenant?.legalName ?? null,
+        venue: first.taxpayer?.legalName ?? null,
         customer: newest.name,
         date: civilDateOf(at, first.place.timeZone),
         ...(first.privacyNoticeUrl === null ? {} : { privacyNoticeUrl: first.privacyNoticeUrl }),

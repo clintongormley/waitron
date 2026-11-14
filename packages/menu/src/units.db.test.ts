@@ -9,7 +9,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
   assignProductUnit,
   createUnit,
@@ -56,7 +56,7 @@ async function product(id: string | null = null): Promise<string> {
 }
 
 it("rolls back unit creation and editing with the caller's transaction", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await expect(
     app(async (tx) => {
       await createUnit(
@@ -98,7 +98,7 @@ it("rolls back unit creation and editing with the caller's transaction", async (
 });
 
 it("serializes assignment against deletion so the committed product reference wins", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const productId = await product();
   const unit = await app((tx) =>
     createUnit(
@@ -128,7 +128,7 @@ it("serializes assignment against deletion so the committed product reference wi
 });
 
 it("reports unit.not_found when deletion commits before a concurrent assignment", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const productId = await product();
   const unit = await app((tx) =>
     createUnit(
@@ -160,7 +160,7 @@ it("reports unit.not_found when deletion commits before a concurrent assignment"
 // The contract: a bulk reassignment moves only the products STILL on the source unit when it
 // writes, so a selection made stale by another manager's move is skipped, never overwritten.
 it("skips a product another manager moved off the source unit while the selection was stale", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const productId = await product();
   const [source, other, target] = await app(async (tx) => [
     await createUnit(
@@ -209,7 +209,7 @@ it("skips a product another manager moved off the source unit while the selectio
 });
 
 it("two bulk reassignments listing the same products in opposite orders both complete", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   // Fixed ids, inserted in this order, so the row reached first is the same under a table scan
   // (insertion order) and under an index scan (id order).
   const first = await product("11111111-1111-4111-8111-111111111111");
@@ -257,7 +257,7 @@ it("two bulk reassignments listing the same products in opposite orders both com
 });
 
 it("reassigning to null clears the products' unit (they become Each)", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const p1 = await product();
   const p2 = await product();
   const sourceUnit = await app((tx) =>
@@ -285,7 +285,7 @@ it("reassigning to null clears the products' unit (they become Each)", async () 
 });
 
 it("reassigning to null returns the products to each-priced and leaves products on other units alone", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const onSource = await product();
   const onOther = await product();
   const sourceUnit = await app((tx) =>
@@ -370,7 +370,7 @@ const kg = () =>
   );
 
 it("reassigning to null skips a variant's stored unit row, as it skips an id not on the unit", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const parent = await product();
   const variant = await variantOf(parent);
   const sourceUnit = await kg();
@@ -397,7 +397,7 @@ it("reassigning to null skips a variant's stored unit row, as it skips an id not
 
 describe("a variant's stored unit row, from before a variant always took its product's", () => {
   it("refuses to give a variant a unit, as it refuses an id that names no product", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const variant = await variantOf(await product());
     const unit = await kg();
     await expect(app((tx) => assignProductUnit(tx, variant, unit.id))).rejects.toMatchObject({
@@ -408,7 +408,7 @@ describe("a variant's stored unit row, from before a variant always took its pro
   });
 
   it("is not listed among the products using the unit", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const parent = await product();
     const variant = await variantOf(parent);
     const unit = await kg();
@@ -420,7 +420,7 @@ describe("a variant's stored unit row, from before a variant always took its pro
   });
 
   it("does not stop the unit being deleted, and is deleted with it", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const parent = await product();
     const variant = await variantOf(parent);
     const unit = await kg();
@@ -433,7 +433,7 @@ describe("a variant's stored unit row, from before a variant always took its pro
   });
 
   it("is left where it is when the unit's products move to another unit", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const parent = await product();
     const variant = await variantOf(parent);
     const source = await kg();
@@ -461,7 +461,7 @@ describe("a variant's stored unit row, from before a variant always took its pro
 it.each(["target", "each"])(
   "refuses a mixed active/archived reassignment to %s without changing either product",
   async (destination) => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const active = await product();
     const archived = await product();
     const source = await kg();
@@ -498,7 +498,7 @@ it.each(["target", "each"])(
 );
 
 it("skips an archived selection already moved off the source while moving an active product", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const active = await product();
   const archived = await product();
   const source = await kg();
@@ -518,7 +518,7 @@ it("skips an archived selection already moved off the source while moving an act
 });
 
 it("retains an archived product's unit and refuses deletion or reassignment without any write", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const archivedId = await product();
   const source = await app((tx) =>
     createUnit(

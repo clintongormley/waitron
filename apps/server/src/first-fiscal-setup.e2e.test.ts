@@ -424,7 +424,7 @@ it.each([
         server = undefined;
         const untouched = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
         try {
-          expect(untouched.prepare("select count(*) as n from tenants").get()?.n).toBe(0);
+          expect(untouched.prepare("select count(*) as n from taxpayer").get()?.n).toBe(0);
           expect(untouched.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(
             0,
           );
@@ -441,13 +441,13 @@ it.each([
         expect(db.prepare("select name from products").all()).toEqual([
           { name: "Prepared gazpacho" },
         ]);
-        expect(db.prepare("select tax_id as taxId from tenants").all()).toEqual([
+        expect(db.prepare("select tax_id as taxId from taxpayer").all()).toEqual([
           { taxId: venue.taxId },
         ]);
         expect(
           db
             .prepare(
-              "select privacy_notice_url as privacyNoticeUrl, privacy_email as privacyEmail from tenants",
+              "select privacy_notice_url as privacyNoticeUrl, privacy_email as privacyEmail from taxpayer",
             )
             .all(),
         ).toEqual([

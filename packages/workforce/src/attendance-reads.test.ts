@@ -6,7 +6,7 @@ import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, newId, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
 import { seedFixtureVenue } from "../test/fixtures.js";
@@ -28,7 +28,7 @@ const origin = jobOrigin("dashboard");
 const now = new Date("2026-02-07T08:00:00.000Z");
 let personId: string, other: string, manager: string, nodeId: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [

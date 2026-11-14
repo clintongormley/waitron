@@ -110,7 +110,7 @@ export async function buildConfigurationBundle(
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
       max(s.code) filter (where s.purpose = 'full') as "fullSeriesCode",
       max(s.code) filter (where s.purpose = 'rectificative') as "rectificativeSeriesCode"
-    from tenants t
+    from taxpayer t
     join nodes n on n.id = ${source.nodeId}
     join invoice_series s on s.node_id = n.id and s.retired_at is null
     group by t.id
@@ -318,7 +318,7 @@ function rewriteJsonReferences(
   }
 }
 
-/** Read the explicitly declared configuration tables (one tenant per database), less the rows a
+/** Read the explicitly declared configuration tables (one taxpayer per database), less the rows a
  * table's leave-behind selector excludes and every row whose foreign key names one of them. */
 export async function exportConfigurationTables(
   db: Database | Transaction,

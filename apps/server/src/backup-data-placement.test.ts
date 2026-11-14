@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { tenants, nodes, invoiceSeries, catalogues } from "@waitron/db";
+import { taxpayer, nodes, invoiceSeries, catalogues } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
@@ -71,7 +71,7 @@ const suite = useVenueDb({
   resetPerTest: false,
   setup: async (db) => {
     await db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "GB", taxId: "TEST-ONLY", legalName: "Placement fixture" });
     await seedVenueSettings(db, {
       name: "Placement venue",

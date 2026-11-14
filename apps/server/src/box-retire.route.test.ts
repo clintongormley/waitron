@@ -47,7 +47,7 @@ const suite = useVenueDb({
 const NIF = "72000001K";
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ nodeId: string }> {
+async function setupVenue(): Promise<{ nodeId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -153,7 +153,7 @@ describe("POST /api/box/retire", () => {
   let managerCookie: string;
 
   beforeAll(async () => {
-    ({ nodeId } = await setupTenant());
+    ({ nodeId } = await setupVenue());
     // Establish the node identity so the mint on the happy path has a key to sign with; harmless to
     // the refusal paths, which return before any mint.
     await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, nodeId);

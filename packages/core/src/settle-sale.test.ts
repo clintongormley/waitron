@@ -21,7 +21,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { AppError, saleId as brandSaleId, stringToCents } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
-import { seedTenant } from "../test/fixtures.js";
+import { seedTaxpayer } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
 import type { SettleSaleInput } from "./settle-sale.js";
 
@@ -79,7 +79,7 @@ function settle(db: Database, input: SettleSaleInput): Promise<void> {
 
 describe("settleSale — the happy path", () => {
   it("writes tenders + a settlement row when tenders cover total + tips", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
 
     // total 65.00 → 70.00 = 65.00 + 5.00 covers.
@@ -122,7 +122,7 @@ describe("settleSale — the happy path", () => {
     { method: "cash", cashTendered: "64.99" },
     { method: "card", cashTendered: "100.00" },
   ])("rejects invalid cash handed over for $method and rolls settlement back", async (cash) => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed);
     const error = await captureError(() =>
       settle(suite.db, {
@@ -142,7 +142,7 @@ describe("settleSale — the happy path", () => {
     // A comped sale has no tender (`tenders_amount_ck` refuses a zero one), so `settleSale` must
     // record the settlement with none, stamped at its own instant rather than the sale's
     // `issued_at`.
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "0.00" });
 
     // `before`/`after` bracket the `new Date()` inside settleSale; the seed's issued_at is 11:00Z.
@@ -171,7 +171,7 @@ describe("settleSale — the happy path", () => {
 
   it("stamps the settlement at the LATEST tender's settledAt, across a split payment", async () => {
     // The last tender to land sets settled_at: the maximum by value, not by position.
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
     const earlier = new Date("2026-08-01T12:00:00Z");
     const later = new Date("2026-08-01T18:30:00Z");
@@ -196,7 +196,7 @@ describe("settleSale — the happy path", () => {
 
 describe("settleSale — a bill paid in parts", () => {
   it("writes each tender's bill payment, and leaves it null where none is named", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
     const order = await seedWorkingOrder(suite.db, {
       source: "device",
@@ -253,7 +253,7 @@ describe("settleSale — a bill paid in parts", () => {
 
 describe("settleSale — guards", () => {
   it("throws sale.tender_unsettled for a null settledAt", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
 
     await expect(
@@ -275,7 +275,7 @@ describe("settleSale — guards", () => {
   });
 
   it("names the device the sale was rung on in a refusal", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
     await expect(
       settle(suite.db, {
@@ -289,7 +289,7 @@ describe("settleSale — guards", () => {
   });
 
   it("throws sale.tender_shortfall when sum(amount) != total + sum(tip)", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
 
     // 60.00 charged against a 65.00 due — under-coverage.
@@ -317,7 +317,7 @@ describe("settleSale — guards", () => {
   });
 
   it("throws sale.voided when the sale carries a sale_voids row", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
     await suite.db.insert(saleVoids).values({
       saleId,
@@ -334,7 +334,7 @@ describe("settleSale — guards", () => {
   });
 
   it("throws sale.already_settled on a second (sequential) settle", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
     const input: SettleSaleInput = {
       saleId,
@@ -362,7 +362,7 @@ describe("settleSale — two settlements started together", () => {
     // `sale.already_settled` rather than a raw driver error. Weaker than its name: the write queue
     // runs the two in turn, so the loser is refused by the read before writing, never by the
     // `sale_settlements` unique key.
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
     const input: SettleSaleInput = {
       saleId,
@@ -524,7 +524,7 @@ async function settleDirect(db: Database, saleId: SaleId, amount: string): Promi
 
 describe("coverage trigger nets corrections", () => {
   it("accepts the net: 65 covers a 70 sale corrected by -5", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const originalId = await seedSale(suite.db, seed, { total: "70.00", invoiceNumber: 1 });
     await seedSale(suite.db, seed, {
       total: "-5.00",
@@ -542,7 +542,7 @@ describe("coverage trigger nets corrections", () => {
   });
 
   it("rejects the pre-correction total: 70 against a 70 sale corrected by -5 (net 65)", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const originalId = await seedSale(suite.db, seed, { total: "70.00", invoiceNumber: 1 });
     await seedSale(suite.db, seed, {
       total: "-5.00",
@@ -561,7 +561,7 @@ describe("coverage trigger nets corrections", () => {
   });
 
   it("negative control: an uncorrected sale still needs its exact total (65 rejected on a 70 sale)", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const originalId = await seedSale(suite.db, seed, { total: "70.00", invoiceNumber: 1 });
 
     const error = await captureError(() => settleDirect(suite.db, originalId, "65.00"));
@@ -577,7 +577,7 @@ describe("coverage trigger nets corrections", () => {
 
 describe("settleSale nets corrections into the due", () => {
   it("settles a corrected sale at the net (70 corrected by -5, pay 65)", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const originalId = await seedSale(suite.db, seed, { total: "70.00", invoiceNumber: 1 });
     await seedSale(suite.db, seed, {
       total: "-5.00",
@@ -598,7 +598,7 @@ describe("settleSale nets corrections into the due", () => {
   });
 
   it("shortfall's due is the net: paying the pre-correction 70 on a -5-corrected sale is rejected", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const originalId = await seedSale(suite.db, seed, { total: "70.00", invoiceNumber: 1 });
     await seedSale(suite.db, seed, {
       total: "-5.00",
@@ -618,7 +618,7 @@ describe("settleSale nets corrections into the due", () => {
   });
 
   it("nets a correcting-up corrective (70 corrected by +5, pay 75)", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const originalId = await seedSale(suite.db, seed, { total: "70.00", invoiceNumber: 1 });
     await seedSale(suite.db, seed, {
       total: "5.00",
@@ -641,7 +641,7 @@ describe("settleSale nets corrections into the due", () => {
 
 describe("settleSale on a replaced sale", () => {
   it("is due what the original owed, and 3.00 less after a 3.00 refund of the replacement", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     const replaced = await seedSale(suite.db, seed, { total: "70.00", invoiceNumber: 1 });
     await seedSale(suite.db, seed, {
       total: "70.00",

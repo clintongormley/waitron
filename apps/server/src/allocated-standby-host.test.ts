@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from "vitest";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { loadKeyRing, readNodeSigningKey } from "@waitron/credentials";
-import { deployment, invoiceSeries, nodes, tenants, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, nodes, taxpayer, withTransaction } from "@waitron/db";
 import { readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -126,7 +126,7 @@ beforeEach(async () => {
     JSON.stringify({ custodianId: "standby-host-custodian", publicKey, fingerprint }),
   );
   for (const db of [primary.db, spare.db]) {
-    await db.insert(tenants).values({
+    await db.insert(taxpayer).values({
       id: 1,
       country: "ES",
       taxId: allocation.taxpayerNif,

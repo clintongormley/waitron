@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
   plantStoredProduct,
   racePair,
@@ -21,7 +21,7 @@ const taken = (field: string, name: string) => ({
 
 let lunch: string, dinner: string, food: string, drinks: string, cola: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedLegacySellingUnits(suite.db);
   await app(async (tx) => {
     lunch = (await createCatalogue(tx, { name: "Lunch" })).id;

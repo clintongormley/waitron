@@ -8,7 +8,7 @@ import type { Logger } from "./logger.js";
  *
  * `null` means no work exists anywhere, which sleeps the ceiling rather than forever: the ledger can
  * gain work from outside this process at any moment (a till writing a sale, an operator provisioning
- * a tenant), so "nothing is due" is a fact with a shelf life.
+ * a taxpayer), so "nothing is due" is a fact with a shelf life.
  */
 export function sleepMsFor(
   nextDueAt: Date | null,

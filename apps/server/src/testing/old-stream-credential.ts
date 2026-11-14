@@ -1,6 +1,6 @@
 import { createCipheriv, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { getCredential, tenantCredentials, type KeyRing } from "@waitron/credentials";
+import { getCredential, venueCredentials, type KeyRing } from "@waitron/credentials";
 import { withTransaction, type Database } from "@waitron/db";
 
 export async function omitStoredStreamField(
@@ -16,8 +16,8 @@ export async function omitStoredStreamField(
     cipher.setAAD(Buffer.from("backup.stream"));
     const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value)), cipher.final()]);
     await tx
-      .update(tenantCredentials)
+      .update(venueCredentials)
       .set({ ciphertext, iv, authTag: cipher.getAuthTag(), keyVersion: ring.current.version })
-      .where(eq(tenantCredentials.purpose, "backup.stream"));
+      .where(eq(venueCredentials.purpose, "backup.stream"));
   });
 }

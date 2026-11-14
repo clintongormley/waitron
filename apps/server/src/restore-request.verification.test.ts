@@ -6,7 +6,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { nodes, tenants } from "@waitron/db";
+import { nodes, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
@@ -419,7 +419,7 @@ describe("comparison immediately before real archive placement", () => {
   });
   async function realFixture() {
     await suite.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Test venue" });
     await seedVenueSettings(suite.db, {
       name: "Test room",

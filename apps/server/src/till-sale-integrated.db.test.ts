@@ -156,7 +156,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// `tenants_country_tax_id_key` is unique, so each venue gets its own NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -1833,7 +1832,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     async (state, quantity, amount) => {
       const { cfg, coffee } = await setupVenue();
       suite.db.run(
-        sql`update tenants set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid, Madrid, España'`,
+        sql`update taxpayer set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid, Madrid, España'`,
       );
       const id = randomUUID();
       await withTransaction(suite.db, async (tx) => {

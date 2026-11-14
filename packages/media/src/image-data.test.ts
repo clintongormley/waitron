@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, mediaImageData, mediaImages } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { uploadImage } from "./images.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 
@@ -21,7 +21,7 @@ const photo = await samplePreparedImage({ width: 8 });
 const options = { fallbackLanguage: "en" };
 
 it("refuses image bytes for an absent image and removes the bytes with their image", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const { image } = await withTransaction(suite.db, (tx) =>
     uploadImage(tx, { image: photo, names: { en: "Bread" } }, options),
   );

@@ -1,7 +1,7 @@
 import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, catalogues, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   readContentLanguages,
   validateContentTranslations,
@@ -12,8 +12,8 @@ import { racePair } from "../test/fixtures.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 beforeEach(() => seedVenueSettings(suite.db));
 
-async function configuredTenant() {
-  await seedTenant(suite.db);
+async function configuredTaxpayer() {
+  await seedTaxpayer(suite.db);
   await withTransaction(suite.db, (tx) =>
     writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }),
   );
@@ -25,7 +25,7 @@ async function configuredTenant() {
 }
 
 it("a default switch waits for an authoring transaction and keeps its incomplete customer map", async () => {
-  const { menuId } = await configuredTenant();
+  const { menuId } = await configuredTaxpayer();
 
   const [write, change] = await racePair(
     suite.db,
@@ -52,7 +52,7 @@ it("a default switch waits for an authoring transaction and keeps its incomplete
 });
 
 it("an authoring transaction waits for the default switch and validates against the committed new language", async () => {
-  await configuredTenant();
+  await configuredTaxpayer();
 
   const [change, write] = await racePair(
     suite.db,

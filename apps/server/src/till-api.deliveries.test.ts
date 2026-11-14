@@ -15,7 +15,7 @@ import {
   printAgents,
   printJobs,
   printers,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import {
@@ -169,7 +169,7 @@ async function venue(): Promise<Venue> {
   };
   const scriptCfg = { ...cfg, origin: jobOrigin("operator_script") };
   const fixtures = await withTransaction(suite.db, async (tx) => {
-    await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+    await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
     const catalogue = await createCatalogue(tx, { name: "Delicatessen" });
     const category = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {

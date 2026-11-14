@@ -44,7 +44,7 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 async function seedVenueCfg(
   name: string,
   invoiceLocales: string[] = ["en-GB"],
-  options: { tenant?: boolean; province?: string } = {},
+  options: { taxpayer?: boolean; province?: string } = {},
 ): Promise<void> {
   const venue = {
     name,
@@ -52,7 +52,7 @@ async function seedVenueCfg(
     province: options.province ?? null,
     operationDescription: "Hospitality",
   };
-  if (options.tenant === true) await seedVenue(db, venue);
+  if (options.taxpayer === true) await seedVenue(db, venue);
   else {
     const { name, province, invoiceLocales, operationDescription } = venue;
     await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
@@ -115,19 +115,19 @@ describe("a new department's starter steps", () => {
       title:
         "a Spanish venue whose first receipt language the screens lack starts with its staff language's names",
       locales: ["fr"],
-      venue: { tenant: true },
+      venue: { taxpayer: true },
       names: spanishSteps,
     },
     {
       title: "a Spanish venue with en-US receipts starts with its staff language's names",
       locales: ["en-US"],
-      venue: { tenant: true },
+      venue: { taxpayer: true },
       names: spanishSteps,
     },
     {
       title: "a Barcelona venue with ca-ES receipts starts with its staff language's names",
       locales: ["ca-ES"],
-      venue: { tenant: true, province: "Barcelona" },
+      venue: { taxpayer: true, province: "Barcelona" },
       names: spanishSteps,
     },
   ] as const)("$title", async ({ locales, names, ...row }) => {

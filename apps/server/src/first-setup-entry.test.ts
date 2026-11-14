@@ -1,5 +1,5 @@
 import { nodeDumpEntry } from "./testing/node-copy.js";
-import { CORE_MIGRATIONS, tenants, openVenueDatabase } from "@waitron/db";
+import { CORE_MIGRATIONS, taxpayer, openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -379,7 +379,7 @@ it.each(["pre-consumption-abandoned", "complete"])(
   async (kind) => {
     const f = await abandonedConsumedClaim(kind);
     await suite.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Restored Olivo" });
     const source = join(f.root, "archive-source.db");
     await suite.db.archiveTo(source);
@@ -416,7 +416,7 @@ it.each(["pre-consumption-abandoned", "complete"])(
     });
     const opened = await openVenueDatabase(f.venueDir);
     try {
-      expect(await opened.venue.select({ name: tenants.legalName }).from(tenants)).toEqual([
+      expect(await opened.venue.select({ name: taxpayer.legalName }).from(taxpayer)).toEqual([
         { name: "Restored Olivo" },
       ]);
     } finally {

@@ -80,7 +80,7 @@ it("heads the page and hands the card the list and the editing right", async () 
   expect(card(el)!.api).toBe(api);
 });
 
-it("hands the Look card the tenant's legal name, and a new one", async () => {
+it("hands the Look card the taxpayer's legal name, and a new one", async () => {
   const { api } = stubApi([json(listOf(GREEN))]);
   const { el } = await mountWidget<Screen>("dashboard-appearance-screen", {
     api,

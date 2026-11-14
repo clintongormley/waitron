@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { readTenant, readVenue, type Database, type Transaction } from "@waitron/db";
+import { readTaxpayer, readVenue, type Database, type Transaction } from "@waitron/db";
 import {
   authorizeManager,
   requireFreshManagementSignIn,
@@ -71,7 +71,7 @@ export async function sendPersonalData(
   const snapshot = await deps.db.withWriteLock(async () => {
     const who = await authorize(tx);
     const place = await venuePlace(tx);
-    const tenant = await readTenant(tx);
+    const taxpayer = await readTaxpayer(tx);
     const privacyNoticeUrl = (await readPrivacyContact(tx))?.privacyNoticeUrl ?? null;
     const build = await preparePersonalData(tx, parts, {
       personId: who.personId,
@@ -79,7 +79,7 @@ export async function sendPersonalData(
       at,
       ...place,
     });
-    return { who, place, tenant, privacyNoticeUrl, build };
+    return { who, place, taxpayer, privacyNoticeUrl, build };
   });
   // Building outlives the snapshot turn, so authority is checked again before any bytes go.
   const files = await snapshot.build();
@@ -90,7 +90,7 @@ export async function sendPersonalData(
   });
   const readme = personalDataReadme({
     language: snapshot.who.language,
-    venue: snapshot.tenant?.legalName ?? null,
+    venue: snapshot.taxpayer?.legalName ?? null,
     person: snapshot.who.label,
     date: civilDateOf(at, snapshot.place.timeZone),
     ...(snapshot.privacyNoticeUrl === null ? {} : { privacyNoticeUrl: snapshot.privacyNoticeUrl }),

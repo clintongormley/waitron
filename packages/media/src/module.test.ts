@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { CORE_CLASSIFICATION, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { uploadImage } from "./images.js";
@@ -80,7 +80,7 @@ describe("the media module descriptor", () => {
 
   it("lets a manager into the image library and keeps staff and supervisors out", async () => {
     registerModulePermissions(MEDIA_MODULE.permissions!);
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const app = new Hono();
     MEDIA_MODULE.routes!.mount(
       app,

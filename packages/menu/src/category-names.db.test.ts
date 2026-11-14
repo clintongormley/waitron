@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { categories, withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { plantStoredSiblingCategory, racePair, useCatalogueDb } from "../test/fixtures.js";
 import { createCategory, listCategories, readCategory, updateCategory } from "./categories.js";
 import { deleteCatalogueItems, deleteCategory, moveCatalogueItems } from "./product-items.js";
@@ -12,7 +12,7 @@ const taken = (name: string) => ({ code: "category.name_taken", params: { field:
 
 let drinks: string, food: string, beer: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await app(async (tx) => {
     drinks = (await createCategory(tx, { name: "Drinks" })).id;
     food = (await createCategory(tx, { name: "Food" })).id;

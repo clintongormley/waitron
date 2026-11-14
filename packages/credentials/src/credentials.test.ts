@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "./keyring.js";
 import { credentialProvisioned, getCredential, putCredential } from "./store.js";
 
@@ -33,7 +33,7 @@ describe("the vault through the venue store", () => {
 
 describe("credentialProvisioned", () => {
   it("reports the purpose provisioned only once THAT purpose has a credential", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     // A credential for a DIFFERENT purpose first: with an empty vault, `false` could not show that
     // the answer looks at the purpose rather than at whether any row exists.
     await withTransaction(suite.db, (tx) =>
@@ -51,14 +51,14 @@ describe("credentialProvisioned", () => {
   });
 
   it("reports false for a purpose nobody has provisioned, never a throw", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const found = await credentialProvisioned(suite.db, "credentials-vault-test.never-provisioned");
     expect(found).toBe(false);
   });
 
   it("reports false while there is no taxpayer row, even with the purpose provisioned", async () => {
-    // NO `seedTenant` — the one thing this case varies. `useVenueDb` empties every data table
-    // after each test (`packages/db/src/testing/venue-db.ts`'s `applyReset`), so `tenants` really
+    // NO `seedTaxpayer` — the one thing this case varies. `useVenueDb` empties every data table
+    // after each test (`packages/db/src/testing/venue-db.ts`'s `applyReset`), so `taxpayer` really
     // is empty here whatever the cases above seeded.
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING, { purpose: "payments.stripe", value: STRIPE }),

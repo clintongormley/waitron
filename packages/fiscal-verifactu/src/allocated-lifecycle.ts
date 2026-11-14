@@ -1,5 +1,5 @@
 import "./errors.js";
-import { readTenant, type Transaction } from "@waitron/db";
+import { readTaxpayer, type Transaction } from "@waitron/db";
 import type { ModuleOperationInput, NodeSeed, ProvisionedNode, RestoreHook } from "@waitron/module";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
@@ -24,8 +24,8 @@ async function activate(
 export const ALLOCATED_FISCAL_SEED: NodeSeed = {
   summary: "activate the supplied Veri*Factu SIF and invoice series",
   async run(tx, node, operation) {
-    if ((await readTenant(tx)) === null)
-      throw new Error("fiscal seed: tenants is empty, so there is no taxpayer to file under");
+    if ((await readTaxpayer(tx)) === null)
+      throw new Error("fiscal seed: taxpayer is empty, so there is no taxpayer to file under");
     return activate(tx, node, operation, ["setup"]);
   },
   series: {

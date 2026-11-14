@@ -11,7 +11,7 @@ import {
   insertReservedNodeTx,
   nodes,
   readNodeMembership,
-  readTenant,
+  readTaxpayer,
   openVenueDatabase,
   withTransaction,
   writeNodeMembership,
@@ -124,9 +124,9 @@ async function joined() {
   expect((await readNodeMode(spareBox.node, spareId)).mode).toBe("mirror");
 
   await seedVenue(spareBox.db);
-  const tenant = await readTenant(mainBox.db);
+  const taxpayer = await readTaxpayer(mainBox.db);
   await spareBox.db.run(
-    sql`update tenants set country = ${tenant!.country}, tax_id = ${tenant!.taxId}`,
+    sql`update taxpayer set country = ${taxpayer!.country}, tax_id = ${taxpayer!.taxId}`,
   );
   await writeNodeMembership(spareBox.db, (await readNodeMembership(mainBox.db))!);
 

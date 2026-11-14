@@ -111,7 +111,7 @@ interface Harness {
   readEnvironment: ReturnType<typeof vi.fn>;
   readDeploymentTable: ReturnType<typeof vi.fn>;
   stampEnvironment: ReturnType<typeof vi.fn>;
-  readTenants: ReturnType<typeof vi.fn>;
+  readTaxpayers: ReturnType<typeof vi.fn>;
   openVenue: ReturnType<typeof vi.fn>;
   closes: () => number;
 }
@@ -127,7 +127,7 @@ function harness(
     readEnvironment?: () => Promise<DeploymentEnvironment | null>;
     readDeploymentTable?: () => Promise<boolean>;
     stampEnvironment?: CliDeps["stampEnvironment"];
-    readTenants?: () => Promise<{ country: string; taxId: string }[]>;
+    readTaxpayers?: () => Promise<{ country: string; taxId: string }[]>;
     openVenue?: (directory: string) => Promise<VenueDatabase>;
   } = {},
 ): Harness {
@@ -154,7 +154,7 @@ function harness(
   const readDeploymentTable = vi.fn(options.readDeploymentTable ?? (async () => true));
   // A recorder: what the real primitive writes or refuses is `cli.stamp.test.ts`'s.
   const stampEnvironment = vi.fn(options.stampEnvironment ?? (async () => {}));
-  const readTenants = vi.fn(options.readTenants ?? (async () => []));
+  const readTaxpayers = vi.fn(options.readTaxpayers ?? (async () => []));
 
   return {
     lines,
@@ -167,7 +167,7 @@ function harness(
     readEnvironment,
     readDeploymentTable,
     stampEnvironment,
-    readTenants,
+    readTaxpayers,
     openVenue,
     deps: {
       io: {
@@ -191,7 +191,7 @@ function harness(
       readEnvironment: readEnvironment as unknown as CliDeps["readEnvironment"],
       readDeploymentTable: readDeploymentTable as unknown as CliDeps["readDeploymentTable"],
       stampEnvironment: stampEnvironment as unknown as CliDeps["stampEnvironment"],
-      readTenants: readTenants as unknown as CliDeps["readTenants"],
+      readTaxpayers: readTaxpayers as unknown as CliDeps["readTaxpayers"],
     },
   };
 }
@@ -281,7 +281,7 @@ describe("runCli venue", () => {
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
     const [actions, applyDeps] = h.applyVenue.mock.calls[0] as [VenueAction[], VenueApplyDeps];
     expect(actions.map((action) => action.kind)).toEqual([
-      "ensure-tenant",
+      "ensure-taxpayer",
       "seed-admin",
       "seed-device-profiles",
       "create-venue",
@@ -314,7 +314,7 @@ describe("runCli venue", () => {
 
     const printed = h.lines.join("\n");
     expect(printed).toContain(`Plan for a venue in ${VENUE_DIR} (preproduction):`);
-    expect(printed).toContain("ensure tenant ES/B12345678");
+    expect(printed).toContain("ensure taxpayer ES/B12345678");
     expect(printed).toContain("seed admin Owner");
     expect(printed).toContain("create venue Centro in ES-common");
     expect(printed).toContain(`node:     ${VENUE_RESULT.nodeId}`);
@@ -444,7 +444,7 @@ describe("runCli venue", () => {
 
     expect(code).toBe(0);
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
-    expect(actions.find((action) => action.kind === "ensure-tenant")).toMatchObject({
+    expect(actions.find((action) => action.kind === "ensure-taxpayer")).toMatchObject({
       taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
     });
     expect(actions.find((action) => action.kind === "create-venue")).toMatchObject({
@@ -732,12 +732,14 @@ describe("runCli venue", () => {
     // The database holds ES/B99999999; VENUE_ARGS asks for ES/B12345678.
     const h = harness({
       env: VENUE_ENV,
-      readTenants: async () => [{ country: "ES", taxId: "B99999999" }],
+      readTaxpayers: async () => [{ country: "ES", taxId: "B99999999" }],
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain(`provisioning.foreign_tenant {"database":"${VENUE_DIR}"}`);
-    expect(h.readTenants).toHaveBeenCalledTimes(1);
+    expect(h.lines.join("\n")).toContain(
+      `provisioning.foreign_taxpayer {"database":"${VENUE_DIR}"}`,
+    );
+    expect(h.readTaxpayers).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.closes()).toBe(1);
   });
@@ -745,11 +747,11 @@ describe("runCli venue", () => {
   it("passes the SAME fiscal identity to the single-venue apply guard", async () => {
     const h = harness({
       env: VENUE_ENV,
-      readTenants: async () => [{ country: "ES", taxId: "B12345678" }],
+      readTaxpayers: async () => [{ country: "ES", taxId: "B12345678" }],
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(0);
-    expect(h.readTenants).toHaveBeenCalledTimes(1);
+    expect(h.readTaxpayers).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
   });
 
@@ -770,9 +772,9 @@ describe("runCli venue", () => {
     expect(code).toBe(0);
 
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
-    const ensureTenant = actions.find((action) => action.kind === "ensure-tenant");
-    expect(ensureTenant).toMatchObject({
-      kind: "ensure-tenant",
+    const ensureTaxpayer = actions.find((action) => action.kind === "ensure-taxpayer");
+    expect(ensureTaxpayer).toMatchObject({
+      kind: "ensure-taxpayer",
       country: "ES",
       taxId: "B12345678",
     });
@@ -785,9 +787,9 @@ describe("runCli venue", () => {
     expect(code).toBe(0);
 
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
-    const ensureTenant = actions.find((action) => action.kind === "ensure-tenant");
-    expect(ensureTenant).toMatchObject({
-      kind: "ensure-tenant",
+    const ensureTaxpayer = actions.find((action) => action.kind === "ensure-taxpayer");
+    expect(ensureTaxpayer).toMatchObject({
+      kind: "ensure-taxpayer",
       country: "ES",
       taxId: "B12345678",
     });
@@ -800,8 +802,8 @@ describe("runCli venue", () => {
     expect(code).toBe(0);
     expect(h.asked).toContain("legal name: ");
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
-    const ensureTenant = actions.find((action) => action.kind === "ensure-tenant");
-    expect(ensureTenant).toMatchObject({ kind: "ensure-tenant", legalName: "Acme SL" });
+    const ensureTaxpayer = actions.find((action) => action.kind === "ensure-taxpayer");
+    expect(ensureTaxpayer).toMatchObject({ kind: "ensure-taxpayer", legalName: "Acme SL" });
   });
 
   it("trims a flag-provided --locale, matching the prompted path", async () => {

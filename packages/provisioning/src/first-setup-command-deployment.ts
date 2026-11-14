@@ -43,7 +43,7 @@ import { initialVenueApplyInput } from "./initial-venue-input.js";
 import { applyVenue } from "./venue-apply.js";
 import { planVenue } from "./venue-plan.js";
 import { recoverProvisionedVenue } from "./recover-provisioned-venue.js";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput } from "./fiscal-readiness-input.js";
@@ -259,7 +259,7 @@ export function createFirstSetupCommandDeployment(options: {
     async provision(request, beforeTransaction) {
       const state = await runtime.store.read();
       if (state === null || !isDeepStrictEqual(request.venue, state.frozen.request)) conflict();
-      if ((await readTenantIdentities(db)).length !== 0) conflict();
+      if ((await readTaxpayerIdentities(db)).length !== 0) conflict();
       if (publication === undefined) throw new AppError("setup.not_ready", {});
       const config = venueFiscalSelection(runtime.modules, request.venue.fiscalTerritory).config;
       let remaining = request.initialOperations.inputs.length;

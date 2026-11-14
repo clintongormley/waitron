@@ -54,7 +54,7 @@ describe("the full manifest carries the bookings module's table and every FK", (
     ]);
   });
 
-  it("carries no tenant_id column, no unique key, and indexes without the tenant", async () => {
+  it("carries no tenant_id column, no unique key, and indexes without the taxpayer", async () => {
     const columns = await suite.db.execute<{ name: string }>(
       sql`select name from pragma_table_info('bookings') where name = 'tenant_id'`,
     );

@@ -163,7 +163,7 @@ describe("which index a read starts from", () => {
           },
         },
       }),
-    ).toMatch(/working_orders_(tenant_status|opened_at)_idx/);
+    ).toMatch(/working_orders_(taxpayer_status|opened_at)_idx/);
   });
 
   it("a date range reads bills through the opened-at index", async () => {
@@ -183,7 +183,7 @@ describe("which index a read starts from", () => {
   // The control: if this one also names an index, the two above prove nothing.
   it("All at any date reads every bill, through neither index", async () => {
     expect(await plan({ status: "all" })).not.toMatch(
-      /working_orders_(tenant_status|opened_at)_idx/,
+      /working_orders_(taxpayer_status|opened_at)_idx/,
     );
   });
 });

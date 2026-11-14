@@ -296,7 +296,7 @@ describe("a counter sale", () => {
     "refuses zero-total F1 at %s with stored choice %s without filing or charging",
     async (path, stored) => {
       venue.db.run(
-        sql`update tenants set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid, Madrid, España'`,
+        sql`update taxpayer set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid, Madrid, España'`,
       );
       const id = stored ? await parked(venue.app, counter, { Gratis: 1 }) : randomUUID();
       const recipient = {

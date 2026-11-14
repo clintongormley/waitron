@@ -204,7 +204,7 @@ describe("readStaffingMonth", () => {
     expect(tables).toContain("staffing_days");
     expect(tables).toContain("day_cutover_changes");
     expect(tables.filter((table, i) => tables.indexOf(table) !== i)).toEqual([]);
-    for (const unshown of ["floor_zones", "holiday_geographies", "tenants"])
+    for (const unshown of ["floor_zones", "holiday_geographies", "taxpayer"])
       expect(tables).not.toContain(unshown);
   });
 
@@ -233,7 +233,7 @@ describe("readStaffingMonth", () => {
     });
     expect(month.days.find((d) => d.date === "2026-04-18")!.specialDay).toBeNull();
     expect(tables.filter((table, i) => tables.indexOf(table) !== i)).toEqual([]);
-    for (const holidayTable of ["tenants", "settings"])
+    for (const holidayTable of ["taxpayer", "settings"])
       expect(tables.filter((table) => table === holidayTable)).toHaveLength(1);
     const watched: readonly string[] = QUERY_DEPENDENCIES["staffing-month"];
     expect(

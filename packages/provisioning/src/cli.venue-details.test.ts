@@ -11,7 +11,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { runCli } from "./cli.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const fields = {
@@ -73,7 +73,7 @@ async function run(changes: Partial<typeof fields> = {}) {
       readEnvironment: readDeploymentEnvironment,
       readDeploymentTable: deploymentTableExists,
       stampEnvironment: stampDeployment,
-      readTenants: readTenantIdentities,
+      readTaxpayers: readTaxpayerIdentities,
     },
   );
   expect(closed).toBe(true);
@@ -82,7 +82,7 @@ async function run(changes: Partial<typeof fields> = {}) {
 function retained() {
   return Object.fromEntries(
     [
-      "tenants",
+      "taxpayer",
       "settings",
       "nodes",
       "invoice_series",

@@ -16,7 +16,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 afterEach(async () => {
   await suite.db.execute(sql`delete from invoice_series`);
   await suite.db.execute(sql`delete from nodes`);
-  await suite.db.execute(sql`delete from tenants`);
+  await suite.db.execute(sql`delete from taxpayer`);
 });
 
 // seed() creates two nodes so the per-node uniqueness tests have a second node to collide

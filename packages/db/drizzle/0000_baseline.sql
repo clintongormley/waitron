@@ -36,7 +36,7 @@ CREATE TABLE `settings` (
 	CONSTRAINT "settings_doc_ck" CHECK(case when json_valid("settings"."doc") then json_type("settings"."doc") = 'object' else 0 end)
 );
 --> statement-breakpoint
-CREATE TABLE `tenants` (
+CREATE TABLE `taxpayer` (
 	`id` integer PRIMARY KEY NOT NULL,
 	`country` text NOT NULL,
 	`tax_id` text NOT NULL,
@@ -45,10 +45,9 @@ CREATE TABLE `tenants` (
 	`privacy_notice_url` text,
 	`privacy_email` text,
 	`created_at` text NOT NULL,
-	CONSTRAINT "tenants_singleton_ck" CHECK("tenants"."id" = 1)
+	CONSTRAINT "taxpayer_singleton_ck" CHECK("taxpayer"."id" = 1)
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `tenants_country_tax_id_key` ON `tenants` (`country`,`tax_id`);--> statement-breakpoint
 CREATE TABLE `nodes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -1607,17 +1606,17 @@ CREATE TABLE `bill_edit_states` (
 	CONSTRAINT "bill_edit_states_version_ck" CHECK("bill_edit_states"."editor_version" >= 0)
 );
 --> statement-breakpoint
-CREATE TABLE `tenant_credentials` (
+CREATE TABLE `venue_credentials` (
 	`purpose` text PRIMARY KEY NOT NULL,
 	`ciphertext` blob NOT NULL,
 	`iv` blob NOT NULL,
 	`auth_tag` blob NOT NULL,
 	`key_version` integer NOT NULL,
 	`updated_at` text NOT NULL,
-	CONSTRAINT "tenant_credentials_key_version_ck" CHECK("tenant_credentials"."key_version" >= 1),
-	CONSTRAINT "tenant_credentials_iv_len_ck" CHECK(octet_length("tenant_credentials"."iv") = 12),
-	CONSTRAINT "tenant_credentials_auth_tag_len_ck" CHECK(octet_length("tenant_credentials"."auth_tag") = 16),
-	CONSTRAINT "tenant_credentials_purpose_ck" CHECK(length("tenant_credentials"."purpose") > 0)
+	CONSTRAINT "venue_credentials_key_version_ck" CHECK("venue_credentials"."key_version" >= 1),
+	CONSTRAINT "venue_credentials_iv_len_ck" CHECK(octet_length("venue_credentials"."iv") = 12),
+	CONSTRAINT "venue_credentials_auth_tag_len_ck" CHECK(octet_length("venue_credentials"."auth_tag") = 16),
+	CONSTRAINT "venue_credentials_purpose_ck" CHECK(length("venue_credentials"."purpose") > 0)
 );
 --> statement-breakpoint
 CREATE TABLE `media_image_blobs` (

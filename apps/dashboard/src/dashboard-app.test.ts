@@ -3940,7 +3940,7 @@ describe("dashboard-app", () => {
     expect(face!.canEdit).toBe(canEdit);
   });
 
-  it("hands the Appearance page the tenant's legal name, as the banner shows it", async () => {
+  it("hands the Appearance page the taxpayer's legal name, as the banner shows it", async () => {
     history.replaceState(null, "", "/manage/appearance");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({

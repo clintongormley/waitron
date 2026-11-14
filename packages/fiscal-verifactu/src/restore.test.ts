@@ -1,7 +1,13 @@
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { deployment, invoiceSeries, readTenant, withTransaction, type Database } from "@waitron/db";
+import {
+  deployment,
+  invoiceSeries,
+  readTaxpayer,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
@@ -224,13 +230,13 @@ describe("restoreFiscal", () => {
     );
 
     const bases = await liveSeriesBases(db, node);
-    const tenant = (await readTenant(db))!;
+    const taxpayer = (await readTaxpayer(db))!;
     const previous = await currentSif(db, node.nodeId);
     const fixture = allocationFixture({
       node,
       bases,
       identity: "P000042",
-      taxpayerNif: tenant.taxId,
+      taxpayerNif: taxpayer.taxId,
       softwareId: previous.idSistemaInformatico,
     });
     await fixture.transaction(db, "restore", (tx, operation) => restoreFiscal(tx, node, operation));

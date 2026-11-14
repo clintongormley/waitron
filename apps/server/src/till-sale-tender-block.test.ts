@@ -76,7 +76,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// The taxpayer id is unique, so each provisioned venue needs its own NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import * as layouts from "@waitron/layouts";
 import type { PrintedDepartmentReceipt } from "@waitron/module";
 import { WAITRON_CHOICES } from "@waitron/ui-core/theme";
@@ -16,7 +16,7 @@ import { THEME_LOGO, putThemeInUse, saveThemeThroughRoute } from "./testing/them
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
-  setup: seedTenant,
+  setup: seedTaxpayer,
 });
 
 const OWN = `${"a".repeat(64)}.png`;

@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   readNodeMembership,
-  readTenant,
+  readTaxpayer,
   stampDeployment,
   withNodeTransaction,
   writeNodeMembership,
@@ -221,11 +221,11 @@ async function boot(
   };
   await writeNodeMembership(suite.db, held);
   await stampDeployment(suite.db, "preproduction");
-  const tenant = (await readTenant(suite.db))!;
+  const taxpayer = (await readTaxpayer(suite.db))!;
   const binding = (operationId: string): HandoverBinding => ({
     operationId,
     scenario: "controlled",
-    venue: { country: tenant.country, taxId: tenant.taxId, environment: "preproduction" },
+    venue: { country: taxpayer.country, taxId: taxpayer.taxId, environment: "preproduction" },
     sourceNodeId: MAIN_BOX.nodeId,
     destinationNodeId: nodeId,
     membership: {

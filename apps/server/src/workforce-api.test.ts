@@ -539,7 +539,7 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
     });
   }
 
-  it("GET /management-api/swaps lists the tenant's accepted swaps", async () => {
+  it("GET /management-api/swaps lists the taxpayer's accepted swaps", async () => {
     const swapId = await seedAcceptedSwap();
     const res = await send(mountApp(), "GET", "/management-api/swaps");
     expect(res.status).toBe(200);
@@ -597,7 +597,7 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
     });
   });
 
-  it("GET /management-api/absences lists the tenant's requested absences", async () => {
+  it("GET /management-api/absences lists the taxpayer's requested absences", async () => {
     const absenceId = await seedRequestedAbsence();
     const res = await send(mountApp(), "GET", "/management-api/absences");
     expect(res.status).toBe(200);

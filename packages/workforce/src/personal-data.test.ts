@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   seedNode,
-  seedTenant,
+  seedTaxpayer,
   seedVenueSettings,
   seedBusinessDay,
 } from "@waitron/db/testing/seed.js";
@@ -439,7 +439,7 @@ async function clockInThenAutomaticOut(
  */
 async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof seedAll>>) {
   const { manager, marta, colleague } = people;
-  await seedTenant(db);
+  await seedTaxpayer(db);
   await seedFixtureVenue(db);
   const nodeId = await seedNode(db);
   const [openEntry, automaticEntry] = await clockInThenAutomaticOut(db, {

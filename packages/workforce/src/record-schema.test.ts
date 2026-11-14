@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, newId, captureError, engineErrorMessage } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -11,7 +11,7 @@ const suite = useVenueDb({
 });
 let personId: string, otherPersonId: string, nodeId: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   personId = await seedPerson(suite.db);
   otherPersonId = await seedPerson(suite.db, "Other");
   await seedFixtureVenue(suite.db);

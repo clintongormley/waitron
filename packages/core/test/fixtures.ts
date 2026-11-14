@@ -1,11 +1,11 @@
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { saleId as brandSaleId, seriesId as brandSeriesId, stringToCents } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
-import { invoiceSeries, sales, tenants } from "@waitron/db";
+import { invoiceSeries, sales, taxpayer } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 
-export interface SeededTenant {
+export interface SeededTaxpayer {
   deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -23,11 +23,11 @@ function freshNif(): string {
  * a node and that node's invoice series "A".
  * Each call mints its own node, so a second call gives a series owned by a different node.
  */
-export async function seedTenant(db: Database): Promise<SeededTenant> {
+export async function seedTaxpayer(db: Database): Promise<SeededTaxpayer> {
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: freshNif(), legalName: "Waitron SL" })
-    .onConflictDoNothing({ target: tenants.id });
+    .onConflictDoNothing({ target: taxpayer.id });
 
   const existing = await readSettings(db, VENUE_SETTINGS);
   if (existing.revision === 0) {

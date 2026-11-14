@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import {
   readDeploymentEnvironment,
   readNodeMembership,
-  readTenant,
+  readTaxpayer,
   type Transaction,
 } from "@waitron/db";
 import { sha256Hex, verifyEnvelope } from "@waitron/handover";
@@ -28,11 +28,11 @@ export type ReturnState =
 export const returnDigest = (value: CanonicalValue) => sha256Hex(canonicalize(value));
 
 export async function returnVenue(deps: Pick<ReturnRecordsDeps, "db">) {
-  const tenant = await readTenant(deps.db);
+  const taxpayer = await readTaxpayer(deps.db);
   const environment = await readDeploymentEnvironment(deps.db);
-  return tenant === null || environment === null
+  return taxpayer === null || environment === null
     ? null
-    : { country: tenant.country, taxId: tenant.taxId, environment };
+    : { country: taxpayer.country, taxId: taxpayer.taxId, environment };
 }
 
 export async function runReturnRecordsPass(

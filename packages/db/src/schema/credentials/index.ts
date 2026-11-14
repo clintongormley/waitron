@@ -2,4 +2,4 @@
 // never `export *`, and never a core table: a re-exported core table lands in this set's snapshot
 // as a duplicate CREATE TABLE that fails at apply time.
 // `packages/credentials/src/schema-ownership.test.ts` enforces this.
-export { tenantCredentials } from "./tenant-credentials.js";
+export { venueCredentials } from "./venue-credentials.js";

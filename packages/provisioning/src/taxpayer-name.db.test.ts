@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { tenants, withTransaction } from "@waitron/db";
+import { taxpayer, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { renameTaxpayer } from "./index.js";
@@ -10,13 +10,13 @@ const suite = useVenueDb({
 });
 
 async function stored() {
-  const [row] = await suite.db.select().from(tenants).where(eq(tenants.id, 1));
+  const [row] = await suite.db.select().from(taxpayer).where(eq(taxpayer.id, 1));
   return row;
 }
 
 describe("renameTaxpayer", () => {
   beforeEach(async () => {
-    await suite.db.insert(tenants).values({
+    await suite.db.insert(taxpayer).values({
       id: 1,
       country: "ES",
       taxId: "B12345678",

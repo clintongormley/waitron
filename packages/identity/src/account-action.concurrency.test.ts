@@ -13,7 +13,7 @@ import {
   outgoingMail,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { seedManager } from "../test/fixtures.js";
 import {
   queueAccountRecovery,
@@ -28,7 +28,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 let personId: string;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   personId = await seedManager(suite.db, { email: EMAIL });
 });
 

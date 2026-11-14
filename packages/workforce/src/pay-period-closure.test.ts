@@ -3,7 +3,7 @@ import { beforeEach, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
 import { seedFixtureVenue, seedEmployment } from "../test/fixtures.js";
@@ -23,7 +23,7 @@ const ruleset = {
 };
 let nodeId: string, worker: string, manager: string, other: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [

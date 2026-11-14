@@ -883,7 +883,7 @@ copying the tables.
 
 Put it at the very top of the page at full width, with the menu and content underneath. Show the
 venue's logo when one is set (Waitron's lockup while it cannot load), else the canonical Waitron
-lockup, and then the deployment tenant's legal name on login and every authenticated screen. Put the account menu (a person-icon `wt-row-actions` popover holding Account settings, Theme,
+lockup, and then the deployment taxpayer's legal name on login and every authenticated screen. Put the account menu (a person-icon `wt-row-actions` popover holding Account settings, Theme,
 Language, About Waitron and Log out) at the trailing edge only when a session exists.
 
 ## An open page notices a box update from one response header
@@ -2495,7 +2495,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### The dashboard banner
 
-- **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
+- **The dashboard banner is persistent identity chrome** — top of the page, full width, the taxpayer's
   legal name. The account menu (a person-icon `wt-row-actions` popover holding
   Account settings, Theme, Language, About Waitron and Log out) sits at the trailing edge only when a session exists.
 

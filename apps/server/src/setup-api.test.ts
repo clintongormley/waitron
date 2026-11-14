@@ -1069,7 +1069,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     ]);
   });
 
-  // A real AEAT signing cert must never be sealed into a preproduction tenant's vault.
+  // A real AEAT signing cert must never be sealed into a preproduction taxpayer's vault.
   it("refuses a demo provision carrying an AEAT cert (400 setup.request_invalid, field aeatCert), without provisioning or sealing", async () => {
     const app = new Hono();
     const { deps, provision, calls, requestRestart } = makeDeps();

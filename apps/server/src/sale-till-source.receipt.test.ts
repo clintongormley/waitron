@@ -76,9 +76,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// A fresh NIF per provisioned venue. `tenants_country_tax_id_key` is unique, and a case that
-// provisions twice inside one test keeps its own rows distinct — the per-test reset empties the
-// data between tests, so the counter is what keeps a repeated call inside one test apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -284,7 +281,7 @@ interface Registro {
   numSerieFactura: string;
 }
 
-/** Every fiscal record filed for the tenant, oldest first — one per sale, this tenant's alone. */
+/** Every fiscal record filed for the taxpayer, oldest first — one per sale, this taxpayer's alone. */
 async function registrosFor(): Promise<Registro[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
@@ -347,7 +344,7 @@ describe("H2 receipt: a sale's device resolves from the request, the chain does 
       product.menuItemId,
     );
 
-    // Sale 2 via device Y — same tenant, same node, same operator, same basket.
+    // Sale 2 via device Y — same taxpayer, same node, same operator, same basket.
     const deviceY = await enrolTillCookie(cfg, "Caja 2");
     await ringSale(
       app,

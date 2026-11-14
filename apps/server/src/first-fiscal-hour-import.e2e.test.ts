@@ -318,14 +318,14 @@ it.each([
       const disk = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
       try {
         if (change !== "none") {
-          expect(disk.prepare("select count(*) as n from tenants").get()?.n).toBe(0);
+          expect(disk.prepare("select count(*) as n from taxpayer").get()?.n).toBe(0);
           expect(disk.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(0);
           expect(disk.prepare("select count(*) as n from products").get()?.n).toBe(0);
         } else {
           expect(disk.prepare("select name from products").all()).toEqual([
             { name: "Imported gazpacho" },
           ]);
-          expect(disk.prepare("select tax_id as taxId from tenants").all()).toEqual([
+          expect(disk.prepare("select tax_id as taxId from taxpayer").all()).toEqual([
             { taxId: target.taxId },
           ]);
           expect(

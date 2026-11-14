@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, expect, it } from "vitest";
 import { isNull } from "drizzle-orm";
-import { deployment, invoiceSeries, nodes, tenants, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, nodes, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -248,7 +248,7 @@ it("rolls back the signed allocation and initial account on a final host refusal
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
   expect(await suite.db.select().from(nodes)).toEqual([]);
-  expect(await suite.db.select().from(tenants)).toEqual([]);
+  expect(await suite.db.select().from(taxpayer)).toEqual([]);
   expect(await suite.db.select().from(persons)).toEqual([]);
 });
 

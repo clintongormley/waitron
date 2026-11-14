@@ -2,7 +2,7 @@ import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { menuItems, sectionMembers, withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { racePair, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { and } from "drizzle-orm";
 import { readMenuHome } from "./menu-home.js";
@@ -27,7 +27,7 @@ const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 async function fixture() {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Lunch menu" });

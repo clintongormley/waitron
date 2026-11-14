@@ -10,7 +10,7 @@ import {
   mediaImages,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import type { ReceiptLogoRasters } from "@waitron/shared";
 import { DEFAULT_FRAMING } from "./framing.js";
@@ -410,7 +410,7 @@ async function attachLogo(filename: string, active: boolean) {
 }
 
 it("refreshes currently attached active and inactive logos atomically without overwriting receipt text", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const image = (await upload()).image;
   const active = await attachLogo(image.filename, true);
   const inactive = await attachLogo(image.filename, false);
@@ -461,7 +461,7 @@ it("refreshes currently attached active and inactive logos atomically without ov
 });
 
 it("rolls back picture, names, framing and every raster if a final logo update throws", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const image = (await upload()).image;
   await attachLogo(image.filename, true);
   const receipts = await suite.db.select().from(departmentReceipts);
@@ -489,7 +489,7 @@ it("rolls back picture, names, framing and every raster if a final logo update t
 });
 
 it("rolls back already refreshed rasters and names when the final override update fails", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const image = (await upload()).image;
   await attachLogo(image.filename, true);
   const before = await readImage(suite.db, image.id);

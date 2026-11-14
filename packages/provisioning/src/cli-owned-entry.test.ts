@@ -9,7 +9,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { openVenueDatabase, readDeploymentEnvironment, readSettings } from "@waitron/db";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 import { childEnvironment } from "../test/child-environment.js";
 
 const certificateMaterial = makeCertificateAuthority().issue({
@@ -185,7 +185,7 @@ syncBuiltinESMExports();\n`,
   });
   const stored = await openVenueDatabase(target);
   try {
-    expect(await readTenantIdentities(stored.venue)).toEqual([]);
+    expect(await readTaxpayerIdentities(stored.venue)).toEqual([]);
     expect(await readDeploymentEnvironment(stored.venue)).toBeNull();
   } finally {
     await stored.close();
@@ -686,7 +686,7 @@ it("the built production command runs a confirmed isolated test and refuses acti
   const stored = await openVenueDatabase(target);
   try {
     expect(await readDeploymentEnvironment(stored.venue)).toBeNull();
-    expect(await readTenantIdentities(stored.venue)).toEqual([]);
+    expect(await readTaxpayerIdentities(stored.venue)).toEqual([]);
     const { invoiceSeries, sales } = await import("@waitron/db");
     expect(await stored.venue.select().from(sales)).toEqual([]);
     expect(await stored.venue.select().from(invoiceSeries)).toEqual([]);

@@ -3,7 +3,7 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import {
   invoiceSeries,
-  readTenant,
+  readTaxpayer,
   sales,
   saleLines,
   workingOrderLines,
@@ -99,7 +99,7 @@ async function readDocument(
     saleId,
   );
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
-  const taxpayer = filed?.issuer === undefined ? await readTenant(tx) : null;
+  const taxpayer = filed?.issuer === undefined ? await readTaxpayer(tx) : null;
   if (filed?.issuer === undefined && taxpayer === null) throw new Error("Invoice has no taxpayer");
   const issuer = {
     venueName: filed?.issuer?.legalName ?? taxpayer!.legalName,

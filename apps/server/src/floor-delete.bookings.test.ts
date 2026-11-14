@@ -6,7 +6,7 @@ import { sql, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { diningTables, withTransaction, installChangeFeed, subscribeToChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { bookings } from "@waitron/bookings";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -30,7 +30,7 @@ for (const enabled of [true, false]) {
       ),
     });
     it("streams hierarchy interests without optional bookings and delivers installed booking table events", async () => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       const session = await withTransaction(suite.db, async (tx) => {
         const [person] = await seedPersons(tx, {
           displayName: "Hierarchy manager",

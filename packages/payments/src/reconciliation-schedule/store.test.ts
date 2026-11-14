@@ -12,7 +12,7 @@ import {
   reclaimStale,
 } from "./store.js";
 import { scheduledRuns } from "../schema/scheduled-runs.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 const DUTY = "test.duty";
 const DAY = 24 * 60 * 60 * 1000;
@@ -24,7 +24,7 @@ const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: async (db) => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
   },
 });
 

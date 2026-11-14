@@ -51,7 +51,7 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   designated: {
     nodeId: "44444444-4444-4444-4444-444444444444",
   },
-  tenant: { country: "ES", taxId: "B00000000" },
+  taxpayer: { country: "ES", taxId: "B00000000" },
   primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
   environment: "preproduction",
   boxHostname: "waitron.local",
@@ -380,7 +380,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     ["a number", 42],
     ["a string", "bundle"],
     ["an array", [SAMPLE_BUNDLE]],
-    ["a missing required field", { ...SAMPLE_BUNDLE, tenant: undefined }],
+    ["a missing required field", { ...SAMPLE_BUNDLE, taxpayer: undefined }],
     [
       "a wrong nested field type",
       { ...SAMPLE_BUNDLE, designated: { ...SAMPLE_BUNDLE.designated, nodeId: 42 } },
@@ -402,8 +402,8 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     ["a numeric optional WireGuard key", { ...SAMPLE_BUNDLE, wireguardPublicKey: 42 }],
     ["a null designated identity", { ...SAMPLE_BUNDLE, designated: null }],
     [
-      "a numeric tenant country",
-      { ...SAMPLE_BUNDLE, tenant: { ...SAMPLE_BUNDLE.tenant, country: 42 } },
+      "a numeric taxpayer country",
+      { ...SAMPLE_BUNDLE, taxpayer: { ...SAMPLE_BUNDLE.taxpayer, country: 42 } },
     ],
     ["a null primary node", { ...SAMPLE_BUNDLE, primaryNode: null }],
     [

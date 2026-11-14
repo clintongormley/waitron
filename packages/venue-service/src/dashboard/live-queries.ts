@@ -43,7 +43,7 @@ const HIERARCHY_DELETE_READS = [
 
 /** Every table `readCalendarMonthPlan` reads, the holiday tables and the special days' paint included. */
 export const CALENDAR_MONTH_PLAN_READS = [
-  "tenants",
+  "taxpayer",
   "settings.business_day",
   "settings.venue",
   "day_cutover_changes",
@@ -149,7 +149,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   "named-days": [
     "departments",
-    "tenants",
+    "taxpayer",
     "settings.business_day",
     "settings.venue",
     "day_cutover_changes",
@@ -163,7 +163,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   "opening-hours-month": [
     "departments",
-    "tenants",
+    "taxpayer",
     "settings.business_day",
     "settings.venue",
     "day_cutover_changes",
@@ -176,7 +176,7 @@ export const QUERY_DEPENDENCIES = {
     "special_day_dates",
     "floor_zones",
   ],
-  holidays: ["tenants", "settings.business_day", "settings.venue"],
+  holidays: ["taxpayer", "settings.business_day", "settings.venue"],
   "menu-periods-painted-in": [
     "menu_periods",
     "departments",
@@ -213,7 +213,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   operations: [
     "department_receipts",
-    "tenants",
+    "taxpayer",
     "settings.business_day",
     "settings.venue",
     "day_cutover_changes",

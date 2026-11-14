@@ -14,7 +14,7 @@ import {
   nodes,
   sales,
   stampDeployment,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
@@ -195,7 +195,7 @@ it.each([
 ] as const)(
   "a %s venue in %s answers its own display language with no locale variable",
   async (country, province, taxId, timeZone, invoiceLocales, expected) => {
-    await source.db.insert(tenants).values({ id: 1, country, taxId, legalName: "Test Ltd" });
+    await source.db.insert(taxpayer).values({ id: 1, country, taxId, legalName: "Test Ltd" });
     await seedVenueSettings(source.db, {
       name: "Counter",
       province,
@@ -241,7 +241,7 @@ it.each([
   "%s retains app preferences and practice mode",
   async (intent, practiceMode) => {
     await source.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
     await seedVenueSettings(source.db, {
       name: "Counter",
@@ -282,7 +282,7 @@ it.each(["mirror", "primary"] as const)(
   async (mode) => {
     const originNode = "77777777-7777-4777-8777-777777777777";
     await source.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
     await seedVenueSettings(source.db, {
       name: "Counter",

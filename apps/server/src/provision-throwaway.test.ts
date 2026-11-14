@@ -68,7 +68,7 @@ const santet = { taxId: getCountryPack("ES")!.demo!.taxId, legalName: "SANTET DE
 
 function facts() {
   return {
-    tenant: suite.db.all(sql`select * from tenants`),
+    taxpayer: suite.db.all(sql`select * from taxpayer`),
     deployment: suite.db.all(sql`select * from deployment`),
     allocations: suite.db.all(sql`select * from fiscal_allocations`),
     sif: suite.db.all(sql`select * from registro_sif`),
@@ -104,7 +104,7 @@ describe("provisionVenue with a throwaway allocation", () => {
         { code: "FF-0CNNW", purpose: "full" },
         { code: "R-0CNNW", purpose: "rectificative" },
       ]);
-      expect(suite.db.all(sql`select tax_id, legal_name from tenants`)).toEqual([
+      expect(suite.db.all(sql`select tax_id, legal_name from taxpayer`)).toEqual([
         { tax_id: identity.taxId, legal_name: identity.legalName },
       ]);
       expect(suite.db.all(sql`select environment from deployment`)).toEqual([
@@ -179,7 +179,7 @@ describe("provisionVenue with a throwaway allocation", () => {
     expect(result.seriesIds).toHaveLength(3);
     expect(suite.db.all(sql`select * from fiscal_allocations`)).toEqual([]);
     expect(suite.db.all(sql`select * from registro_sif`)).toEqual([]);
-    expect(suite.db.all(sql`select tax_id from tenants`)).toEqual([{ tax_id: real.taxId }]);
+    expect(suite.db.all(sql`select tax_id from taxpayer`)).toEqual([{ tax_id: real.taxId }]);
   });
 
   it("leaves the shipped module list's fiscal evidence source untouched", async () => {

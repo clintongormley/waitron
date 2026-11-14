@@ -19,7 +19,7 @@ import {
   readStandardSeriesId,
   sales,
   stampDeployment,
-  tenants,
+  taxpayer,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -76,7 +76,7 @@ const F = {
  */
 async function seedFiscalRegistro(db: Database): Promise<void> {
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
   await seedVenueSettings(db, {
     name: "Local principal",

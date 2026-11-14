@@ -169,7 +169,7 @@ describe("currentSif resolves per node", () => {
       // via registerSif, so the installation number is minted from the real (NIF, IdSIF) counter
       // rather than hand-picked, and the sibling's cadenas head is seeded the way production does it.
       const nifRow = await tx.execute<{ tax_id: string }>(sql`
-        select tax_id from tenants limit 1
+        select tax_id from taxpayer limit 1
       `);
       await registerSif(tx, {
         nodeId: sibling,

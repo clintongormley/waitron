@@ -339,7 +339,7 @@ it("requires each stored series to resolve exactly one historical registration",
 });
 it("does not skip missing application certificate material", async () => {
   await capture();
-  both((db) => db.exec("delete from tenant_credentials where purpose='fiscal.aeat'"));
+  both((db) => db.exec("delete from venue_credentials where purpose='fiscal.aeat'"));
   await expect(verify()).rejects.toEqual(new BackupCheckUnavailable("secret_unavailable"));
 });
 it("propagates an unresolved required data check without invoking authority", async () => {

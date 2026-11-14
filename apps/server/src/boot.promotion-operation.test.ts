@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { invoiceSeries, nodes, stampDeployment, tenants } from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, taxpayer } from "@waitron/db";
 import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword } from "@waitron/identity";
@@ -106,7 +106,7 @@ it.each(["account", "key"])(
     observed.action = undefined;
     observed.input = undefined;
     await suite.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Operation SL" });
     await seedVenueSettings(suite.db, {
       name: "Restaurant",

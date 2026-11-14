@@ -1,5 +1,5 @@
 import { credentialRevision } from "@waitron/credentials";
-import { readTenant, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { readTaxpayer, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { and, desc, gte, sql } from "drizzle-orm";
 import type { CertKind } from "./aeat-transport.js";
 import { calendarDaysLeft, certificateStage, type CertificateStage } from "./certificate-dates.js";
@@ -72,9 +72,9 @@ export async function readCertificateCard(
     const row = await latestInstall(tx, deps.nodeId);
     if (row === null) return { revision, timeZone, installed: null };
 
-    const tenant = await readTenant(tx);
-    if (tenant === null) {
-      throw new Error("tenants is empty: there is no taxpayer to match the certificate against");
+    const taxpayer = await readTaxpayer(tx);
+    if (taxpayer === null) {
+      throw new Error("taxpayer is empty: there is no taxpayer to match the certificate against");
     }
     const installedByName = row.personId === null ? null : await deps.nameOf(tx, row.personId);
     const lastAccepted = await lastAcceptedSince(tx, row.installedAt);
@@ -85,7 +85,7 @@ export async function readCertificateCard(
         kind: row.kind,
         organisation: row.organisation,
         taxId: row.taxId,
-        taxIdMatches: row.taxId === null ? null : row.taxId === normaliseTaxId(tenant.taxId),
+        taxIdMatches: row.taxId === null ? null : row.taxId === normaliseTaxId(taxpayer.taxId),
         issuer: row.issuer,
         validFrom: row.validFrom.toISOString(),
         validUntil: row.validUntil.toISOString(),

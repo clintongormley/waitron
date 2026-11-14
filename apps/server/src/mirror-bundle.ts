@@ -6,7 +6,7 @@ import {
   nodes,
   readDeploymentEnvironment,
   readNodeMembership,
-  readTenant,
+  readTaxpayer,
   withTransaction,
   type Database,
   type NodeDatabase,
@@ -62,8 +62,8 @@ export interface PairStoreKey {
  */
 export interface MirrorBundle {
   designated: AdoptResult;
-  /** The venue's tenant identity, for the mirror's foreign-tenant guard (one tenant per database). */
-  tenant: { country: string; taxId: string };
+  /** The venue's taxpayer identity, for the mirror's foreign-taxpayer guard (one taxpayer per database). */
+  taxpayer: { country: string; taxId: string };
   /** The designated node's descriptor, so the reserved standby node row mirrors the primary's. */
   primaryNode: { name: string; filingModule: string | null; taxModule: string | null };
   environment: "production" | "preproduction";
@@ -153,9 +153,9 @@ export function refuseFullChart(
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
   const operations = snapshotModuleOperations(deps.moduleOperations);
   const standby = { nodeId: brandNodeId(deps.standby.nodeId) };
-  const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
+  const { taxpayer, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
     // Safe: every provisioned database holds the taxpayer row and the designated node's row.
-    const t = (await readTenant(tx))!;
+    const t = (await readTaxpayer(tx))!;
     const n = (
       await tx
         .select({
@@ -166,7 +166,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
         .from(nodes)
         .where(eq(nodes.id, deps.designated.nodeId))
     )[0]!;
-    return { tenant: t, primaryNode: n };
+    return { taxpayer: t, primaryNode: n };
   });
 
   const environment = await readDeploymentEnvironment(deps.appDb);
@@ -236,7 +236,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
 
   return {
     designated: { nodeId: deps.designated.nodeId },
-    tenant: { country: tenant.country, taxId: tenant.taxId },
+    taxpayer: { country: taxpayer.country, taxId: taxpayer.taxId },
     primaryNode: {
       name: primaryNode.name,
       filingModule: primaryNode.filingModule,

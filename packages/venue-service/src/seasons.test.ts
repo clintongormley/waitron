@@ -100,14 +100,14 @@ describe("ensureDefaultSeasons", () => {
     expect(result).toEqual([{ id: own!.id, name: "All year", startsOn: "01-01", colour: "grey" }]);
     expect(await withTransaction(db, (tx) => readSeasons(tx))).toEqual(result);
   });
-  const staffVenue = async (tenant: boolean, province: string | null, locale: string) => {
+  const staffVenue = async (taxpayer: boolean, province: string | null, locale: string) => {
     const venue = {
       name: "Staff language",
       province,
       invoiceLocales: [locale],
       operationDescription: "Hospitality",
     };
-    if (tenant) await seedVenue(db, venue);
+    if (taxpayer) await seedVenue(db, venue);
     else {
       const { name, province, invoiceLocales, operationDescription } = venue;
       await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
@@ -123,30 +123,30 @@ describe("ensureDefaultSeasons", () => {
 
   it.each([
     {
-      title: "no tenant row, es-ES receipts",
-      tenant: false,
+      title: "no taxpayer row, es-ES receipts",
+      taxpayer: false,
       province: null,
       locale: "es-ES",
       language: "es",
     },
     {
-      title: "Spanish tenant, Valencia, es-ES receipts",
-      tenant: true,
+      title: "Spanish taxpayer, Valencia, es-ES receipts",
+      taxpayer: true,
       province: "Valencia",
       locale: "es-ES",
       language: "es",
     },
     {
-      title: "Spanish tenant, Madrid, en-GB receipts",
-      tenant: true,
+      title: "Spanish taxpayer, Madrid, en-GB receipts",
+      taxpayer: true,
       province: "Madrid",
       locale: "en-GB",
       language: "en",
     },
   ] as const)(
     "names the default seasons in the staff language: $title gives $language",
-    async ({ tenant, province, locale, language }) => {
-      await staffVenue(tenant, province, locale);
+    async ({ taxpayer, province, locale, language }) => {
+      await staffVenue(taxpayer, province, locale);
       const written = await withTransaction(db, (tx) => ensureDefaultSeasons(tx));
       const stripped = written.map(({ name, startsOn, colour }) => ({ name, startsOn, colour }));
       expect(stripped).toEqual(starterSeasons(language));

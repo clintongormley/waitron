@@ -420,7 +420,7 @@ describe("findSpanish", () => {
   });
 
   it("does not flag NIF", () => {
-    // tenants.nif is a legal identifier and an acronym, not vocabulary. On the ASSEMBLED set: the
+    // taxpayer.nif is a legal identifier and an acronym, not vocabulary. On the ASSEMBLED set: the
     // claim is that no module declares `nif`.
     expect(findSpanish('nif: text("nif").notNull(),', FORBIDDEN)).toEqual([]);
   });

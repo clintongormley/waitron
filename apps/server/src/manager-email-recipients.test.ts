@@ -1,7 +1,7 @@
 import { seedPersons, type PersonSeed } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readManagerEmailRecipients } from "./manager-email-recipients.js";
@@ -14,7 +14,7 @@ async function person(displayName: string, values: Partial<PersonSeed>): Promise
 }
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
 });
 
 describe("readManagerEmailRecipients", () => {

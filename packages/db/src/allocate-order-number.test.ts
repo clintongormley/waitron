@@ -93,7 +93,7 @@ const WRITERS = 20;
 describe("allocateOrderNumber under overlapping callers", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  async function freshTenantNode(db: Database): Promise<{ nodeId: string }> {
+  async function freshTaxpayerNode(db: Database): Promise<{ nodeId: string }> {
     await seedVenue(db, {
       name: "Fixture Venue",
       invoiceLocales: ["es"],
@@ -104,7 +104,7 @@ describe("allocateOrderNumber under overlapping callers", () => {
   }
 
   it("hands out distinct numbers to allocators started together", async () => {
-    const { nodeId } = await freshTenantNode(suite.db);
+    const { nodeId } = await freshTaxpayerNode(suite.db);
     const results = await Promise.all(
       Array.from({ length: WRITERS }, () =>
         withTransaction(suite.db, (tx) => allocateOrderNumber(tx, nodeId)),

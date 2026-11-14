@@ -28,7 +28,7 @@ import {
   invoiceDeliveries,
   pagePrinters,
   tenders,
-  tenants,
+  taxpayer,
   triggerRaised,
   withTransaction,
   workingOrderLines,
@@ -1375,9 +1375,9 @@ describe("the invoice at full payment", () => {
       ),
     );
     expect(completed.invoice).toMatchObject({ invoiceType: "F1", total: "3.00" });
-    const originalDomicile = (await inTx((tx) => tx.select().from(tenants)))[0]!.taxpayerDomicile;
+    const originalDomicile = (await inTx((tx) => tx.select().from(taxpayer)))[0]!.taxpayerDomicile;
     try {
-      await inTx((tx) => tx.update(tenants).set({ taxpayerDomicile: "Changed live domicile" }));
+      await inTx((tx) => tx.update(taxpayer).set({ taxpayerDomicile: "Changed live domicile" }));
       const session = await inTx(async (tx) => {
         const [admin] = await tx
           .select({ id: persons.id })
@@ -1439,7 +1439,7 @@ describe("the invoice at full payment", () => {
       }
       expect(await snapshot()).toEqual(before);
     } finally {
-      await inTx((tx) => tx.update(tenants).set({ taxpayerDomicile: originalDomicile }));
+      await inTx((tx) => tx.update(taxpayer).set({ taxpayerDomicile: originalDomicile }));
     }
   });
 
@@ -2173,13 +2173,13 @@ describe("the invoice at full payment", () => {
     const before = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
     );
-    const [taxpayer] = await inTx((tx) => tx.select().from(tenants).where(eq(tenants.id, 1)));
+    const [taxpayerRow] = await inTx((tx) => tx.select().from(taxpayer).where(eq(taxpayer.id, 1)));
     try {
       await inTx((tx) =>
         tx
-          .update(tenants)
+          .update(taxpayer)
           .set({ taxpayerDomicile: "Calle Nueva 20, 08001 Barcelona" })
-          .where(eq(tenants.id, 1)),
+          .where(eq(taxpayer.id, 1)),
       );
       const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
 
@@ -2206,9 +2206,9 @@ describe("the invoice at full payment", () => {
     } finally {
       await inTx((tx) =>
         tx
-          .update(tenants)
-          .set({ taxpayerDomicile: taxpayer!.taxpayerDomicile })
-          .where(eq(tenants.id, 1)),
+          .update(taxpayer)
+          .set({ taxpayerDomicile: taxpayerRow!.taxpayerDomicile })
+          .where(eq(taxpayer.id, 1)),
       );
     }
   });

@@ -154,7 +154,7 @@ it("prepares a real owned name after the terminal's wait, asking no question, wi
   expect(await venue.db.execute("select count(*) as count from registro_sif")).toMatchObject({
     rows: [{ count: 0 }],
   });
-  expect(await venue.db.execute("select count(*) as count from tenants")).toMatchObject({
+  expect(await venue.db.execute("select count(*) as count from taxpayer")).toMatchObject({
     rows: [{ count: 0 }],
   });
   expect(f.prompts.length).toBeGreaterThan(0);

@@ -52,7 +52,7 @@ describe("runMigrations on SQLite", () => {
     const { venue } = await open();
     await runMigrations(venue, CORE_MIGRATIONS);
     const names = tableNames(venue);
-    expect(names).toContain("tenants");
+    expect(names).toContain("taxpayer");
     expect(names).toContain("change_log");
     expect(names).toContain("sales");
   });

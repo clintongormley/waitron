@@ -36,9 +36,9 @@ beforeEach(async () => {
     iv: Uint8Array;
     auth_tag: Uint8Array;
     updated_at: string;
-  }>(sql`select * from tenant_credentials`)[0]!;
+  }>(sql`select * from venue_credentials`)[0]!;
   after.db.run(
-    sql`update tenant_credentials set ciphertext=${row.ciphertext},iv=${row.iv},auth_tag=${row.auth_tag},updated_at=${row.updated_at}`,
+    sql`update venue_credentials set ciphertext=${row.ciphertext},iv=${row.iv},auth_tag=${row.auth_tag},updated_at=${row.updated_at}`,
   );
 });
 async function run(
@@ -99,7 +99,7 @@ describe("credentials backup owner", () => {
     ]);
   });
   it("refuses same-count row changes even when the new ciphertext decrypts", async () => {
-    after.db.run(sql`update tenant_credentials set updated_at='2026-10-21T00:00:00.000Z'`);
+    after.db.run(sql`update venue_credentials set updated_at='2026-10-21T00:00:00.000Z'`);
     expect(await run()).toEqual({
       status: "invalid",
       checks: [
@@ -122,7 +122,7 @@ describe("credentials backup owner", () => {
   );
   it("does not turn an uncertain authenticated-decryption failure into archive corruption", async () => {
     for (const s of [before, after])
-      s.db.run(sql`update tenant_credentials set auth_tag=zeroblob(16)`);
+      s.db.run(sql`update venue_credentials set auth_tag=zeroblob(16)`);
     await expect(run()).rejects.toMatchObject({ reason: "decryption_unavailable" });
   });
   it("uses the optional later env file rather than ambient inputs", async () => {
@@ -147,7 +147,7 @@ describe("credentials backup owner", () => {
           ? [after]
           : [before, after]) {
         suite.db.run(
-          sql`update tenant_credentials set ciphertext=${ciphertext}, iv=${Buffer.alloc(12, 3)}, auth_tag=${tag}`,
+          sql`update venue_credentials set ciphertext=${ciphertext}, iv=${Buffer.alloc(12, 3)}, auth_tag=${tag}`,
         );
       }
       expect(await run()).toEqual({
@@ -162,7 +162,7 @@ describe("credentials backup owner", () => {
 
   it("does not claim a known owner policy for an unknown captured purpose", async () => {
     for (const s of [before, after])
-      s.db.run(sql`update tenant_credentials set purpose='future.purpose'`);
+      s.db.run(sql`update venue_credentials set purpose='future.purpose'`);
     expect(await run()).toEqual({
       status: "unsupported",
       checks: [

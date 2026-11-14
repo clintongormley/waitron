@@ -322,7 +322,7 @@ describe("computeVatSummary", () => {
     });
   });
 
-  it("excludes another node in the SAME tenant (the node predicate)", async () => {
+  it("excludes another node in the SAME taxpayer (the node predicate)", async () => {
     // A second node is excluded by the node predicate; dropping it would count 300.00, not 100.00.
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,

@@ -21,7 +21,7 @@ import { migrationSetsHolding, type WaitronModule } from "@waitron/module";
 import { executeTarget } from "./read-only-database.js";
 import { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-directories.js";
-import { hasOperationalVenue, readTenantIdentities } from "./tenant-guard.js";
+import { hasOperationalVenue, readTaxpayerIdentities } from "./taxpayer-guard.js";
 import { type FirstSetupStore } from "./first-setup-state.js";
 export interface FirstSetupRoots {
   stateDir: string;
@@ -97,9 +97,9 @@ async function inspectDatabase(
     connection = new DatabaseSync(join(roots.venueDir, VENUE_FILE), { readOnly: true });
     connection.exec("begin");
     const target = executeTarget(connection);
-    const tenants = await readTenantIdentities(target);
+    const taxpayer = await readTaxpayerIdentities(target);
     const venues = await hasOperationalVenue(target);
-    const database = tenants.length === 0 && !venues ? "no-venue-rows" : "occupied";
+    const database = taxpayer.length === 0 && !venues ? "no-venue-rows" : "occupied";
     return {
       database,
       emptyDatabase:

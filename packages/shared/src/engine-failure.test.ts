@@ -30,7 +30,7 @@ describe("sqliteFailureOf", () => {
   // beside the driver's number, and the callers that read the text — `classifyBootFailure` is
   // one — would then classify on the wrong sentence.
   it("takes the message from the layer that carried the code, not from the wrapper", () => {
-    const outer = new Error("Failed query: select legal_name from tenants", {
+    const outer = new Error("Failed query: select legal_name from taxpayer", {
       cause: driverError(1, "no such column: legal_name"),
     });
     expect(sqliteFailureOf(outer)?.message).toBe("no such column: legal_name");

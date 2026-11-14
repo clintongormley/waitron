@@ -11,7 +11,7 @@ import {
   nodes,
   openVenueDatabase,
   sales,
-  tenants,
+  taxpayer,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -37,7 +37,7 @@ const HUELLA = "F".repeat(64);
 /** Exactly the foreign-key closure `registros_facturacion` needs, plus the record itself. */
 async function seedFiscalRegistro(db: Database): Promise<void> {
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
   await seedVenueSettings(db, {
     name: "Local principal",

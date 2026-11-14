@@ -315,7 +315,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     }),
   );
 
-  // The tenant's accepted swaps awaiting a manager decision (approvals screen).
+  // The taxpayer's accepted swaps awaiting a manager decision (approvals screen).
   app.get("/management-api/swaps", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -347,7 +347,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     }),
   );
 
-  // The tenant's requested absences awaiting a manager decision.
+  // The taxpayer's requested absences awaiting a manager decision.
   app.get("/management-api/absences", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

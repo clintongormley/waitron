@@ -988,7 +988,7 @@ calendar.
 
 ## A write of a table `scripts/write-path-tables.json` lists lives only in the files it names
 
-`venue.db`'s `tenants`, `nodes`, `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and `node.db`'s `node_mode`, `node_mirror_link`,
+`venue.db`'s `taxpayer`, `nodes`, `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and `node.db`'s `node_mode`, `node_mirror_link`,
 `node_pair_link`, `node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_handover_operations`,
 `node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
@@ -1009,7 +1009,7 @@ TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `ap
 alone. Read its header for the full limits. The [2026-10-19 grants-record audit](grants-retirement-audit.md)
 records the removal of the old matrix and the restrictions still awaiting individual decisions.
 
-Real code does write them, legitimately: the setup-mode provision route reaches `tenants`,
+Real code does write them, legitimately: the setup-mode provision route reaches `taxpayer`,
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
 `node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`, `node_recovery_key` and
 `node_signing_key`, writing this box's rows and deleting any an abandoned earlier attempt left in
@@ -1017,7 +1017,7 @@ those six `node.db` tables under another node id; the main box's joining route
 (`apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
 `waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
-(`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
+(`PUT /management-api/venue-details/legal-name`, owner A494) reaches `taxpayer` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
 `packages/provisioning/src/privacy-contact.ts`, which updates `privacy_notice_url` and
@@ -1672,7 +1672,7 @@ _2026-11-14 (A1308 5h):_ `locations` and its interim id accessor are removed; ve
 which of three ties it uses: a `node_id` column every read and write names (`join_requests`,
 `node_sealed_state`, `recovery_packs`; every `node.db` table carries one too, though a key-ring
 rotation reads `node_signing_key` and `node_pair_link` whole), a seal only a box holding the key ring opens
-(`tenant_credentials`, whose ring a joining spare receives from the main box), or rows the
+(`venue_credentials`, whose ring a joining spare receives from the main box), or rows the
 transaction that wrote them deletes (`change_log`). `fiscal_certificate_installs` and
 `fiscal_certificate_reminders` use the first tie widened to a list: a `node_id` column every read
 and write names as one of `readHistoryNodes(tx, thisNode)`, this box and every box it took over from. Identity has no `local` table: slice-2
@@ -3835,13 +3835,12 @@ per-task review and four quality lenses all reasoned it "safe under one-tenant-p
 run-it seat, which RAN a two-tenant probe, caught it — reading missed it,
 running caught it (§1, §4).
 
-## There is no tenant column
+## Nothing is scoped by a taxpayer column
 
-**There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
-query that wants "this tenant's rows" reads the table.** (2026-09-14, #378.) Guard:
-`scripts/no-tenant-column.test.ts`, weaker than its name in ways its own header states, among
-them — it matches the column's SPELLINGS, so a column reintroduced under an unrelated name passes,
-and it does not read test files.
+**Nothing is scoped by a taxpayer column: the taxpayer is the one row of `taxpayer` (id = 1,
+`taxpayer_singleton_ck`), and a query that wants it reads that row.** Guard:
+`scripts/no-tenant-column.test.ts`, weaker than its name — it matches the retired `tenant_id`
+column's spellings and skips test files.
 
 ## No backwards-compatibility or data-migration code until Waitron is in production
 
@@ -6127,7 +6126,7 @@ _2026-11-04, A1131bc slice 4: the discarded recovery's emptying, the repair page
 ## First-setup admission reads SQLite facts without a database-sized snapshot
 
 Use `inspectFirstSetupDatabase` for admission. It checks the regular file through a no-follow,
-nonblocking open, then reads the tenant and venue rows through SQLite. The resumable record reader
+nonblocking open, then reads the taxpayer and venue rows through SQLite. The resumable record reader
 checks the matching ownership pair; the start repeats admission while holding the venue lock.
 Recovery inspection still fingerprints artifacts and captures exact originals under its separate
 128 MiB snapshot budget. That budget must not decide whether an existing database is readable.

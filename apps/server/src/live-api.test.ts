@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  seedTenant,
+  seedTaxpayer,
   seedVenueSettings,
   seedBusinessDay,
   seedZone,
@@ -37,7 +37,7 @@ import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function fixture() {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const session = await withTransaction(suite.db, async (tx) => {
     // Through the table definition: `persons.id` and `persons.created_at` are NOT NULL `$defaultFn`
     // generators a raw insert never reaches.

@@ -10,7 +10,7 @@ import {
   parties,
   saleReceiptGuests,
   sales,
-  tenants,
+  taxpayer,
   workingOrders,
 } from "@waitron/db";
 import { recordSale } from "@waitron/core";
@@ -312,7 +312,7 @@ async function fullInvoiceOfFour(label: string): Promise<{ billId: string; saleI
   const { partyId, tabId } = await seat(v, await v.table(label), 4);
   await orderForParty(v, partyId, ["Burger"], tabId);
   await inTx(v, async (tx) => {
-    await tx.update(tenants).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" });
+    await tx.update(taxpayer).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" });
     await tx
       .update(workingOrders)
       .set({

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
-import { readTenant, type Transaction } from "@waitron/db";
+import { readTaxpayer, type Transaction } from "@waitron/db";
 import { getDeviceProfile } from "@waitron/layouts";
 import type { CapabilityFlag, NavigationScreen } from "@waitron/layouts";
 import { cardReaders, resolveDeviceReaderId } from "@waitron/payments";
@@ -33,7 +33,7 @@ export async function readTillSetup(
 export type TillSetupRead = Awaited<ReturnType<typeof readTillSetup>>;
 
 async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: DeviceBinding | null) {
-  const taxpayer = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   const courses = (await listCourses(tx)).map((course) => ({
     id: course.id,
     name: course.name,

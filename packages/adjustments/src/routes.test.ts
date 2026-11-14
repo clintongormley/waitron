@@ -5,7 +5,11 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, workingOrderLines, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue, seedWorkingOrder as seedOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedTaxpayer,
+  seedVenue,
+  seedWorkingOrder as seedOrder,
+} from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   persons,
@@ -65,7 +69,7 @@ interface Fixture {
 }
 
 async function fixture(): Promise<Fixture> {
-  await seedTenant(db);
+  await seedTaxpayer(db);
   const cookie = {} as Record<BuiltInRoleKey, string>;
   const personIds = {} as Record<BuiltInRoleKey, string>;
   await db.transaction(async (tx) => {

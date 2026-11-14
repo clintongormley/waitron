@@ -18,7 +18,7 @@ import {
   printJobs,
   printers,
   sales,
-  tenants,
+  taxpayer,
   withTransaction,
   workingOrders,
   type Database,
@@ -1056,7 +1056,7 @@ describe("a sale prints its goods in the default content language its lines stor
     );
 
     const { invoice } = await withTransaction(suite.db, async (tx) => {
-      await tx.update(tenants).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" });
+      await tx.update(taxpayer).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" });
       await createOpenOrder(
         tx,
         v.cfg,
@@ -2067,7 +2067,7 @@ describe("a sale files in the receipt language saved on its order", () => {
           const venue = await barcelonaVenue();
           // A domicile, so a full invoice the request let through would be filed as one.
           await inTx(venue, (tx) =>
-            tx.update(tenants).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" }),
+            tx.update(taxpayer).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" }),
           );
           const id = await placedTarta(venue);
           await choose(venue, id, "es-ES");

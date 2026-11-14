@@ -6,7 +6,7 @@ import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
-import { invoiceSeries, nodes, stampDeployment, tenants, withTransaction } from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
 import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -109,7 +109,7 @@ beforeEach(async () => {
     monotonicFinishedMs: performance.now(),
   }));
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Promotion SL" });
   await seedVenueSettings(suite.db, {
     name: "Restaurant",
@@ -1077,7 +1077,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   );
   const primaryKeys = generateNodeKeyPair();
   await spare.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Promotion SL" });
   await seedVenueSettings(spare.db, { operationDescription: "Hospitality" });
   await seedBusinessDay(spare.db, {});

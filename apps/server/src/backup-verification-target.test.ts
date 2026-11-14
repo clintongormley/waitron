@@ -438,7 +438,7 @@ const steadyHash = (target: ReturnType<typeof buildBackupVerificationTarget>) =>
   createHash("sha256")
     .update(JSON.stringify(steadyTarget(target)))
     .digest("hex");
-const steadyPin = "aac141beb49f07a1fac868229b3b37ac17dd0bd937825838317e5ec613284410";
+const steadyPin = "205d4b5d33dff1091bfe56d5c981718c71612cc6bbca6265e51e1ec38ddeb3a5";
 
 it("pins today's composition, policy and hosting of the real modules", () => {
   expect([...new Set(ALL_MODULES.flatMap((m) => m.tablesIn ?? []))].sort()).toEqual([

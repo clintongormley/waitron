@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { PAYMENTS_MIGRATIONS, type IncidentSink } from "@waitron/payments";
 import { isAppError } from "@waitron/shared";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { SUMUP_CARD_PROVIDER, deferredClient, optionsFromSealed } from "./card-provider.js";
 
 const KEY_ENV = {
@@ -48,9 +48,9 @@ const json = (status: number, body: unknown): Response =>
 const memberships = (items: { resource_id: string; resource: { name: string } }[]) => () =>
   json(200, { items });
 
-/** Seeds the tenant row and a sealed `payments.sumup` credential. */
+/** Seeds the taxpayer row and a sealed `payments.sumup` credential. */
 async function seedSumUp(value: { apiKey: string; merchantCode: string }): Promise<void> {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, { purpose: "payments.sumup", value }),
   );

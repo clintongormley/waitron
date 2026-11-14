@@ -21,7 +21,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   nodes,
-  tenants,
+  taxpayer,
   stampDeployment,
   withTransaction,
   settings as businessDaySettingsTable,
@@ -159,7 +159,7 @@ beforeEach(async () => {
   listener.landing = undefined;
   fixture.beforeServerStarts();
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90000001R", legalName: "Zone Admission SL" });
   await seedVenueSettings(suite.db, {
     name: "Counter",

@@ -6,7 +6,7 @@ import {
   workingOrders,
   devices,
   deviceProfiles,
-  readTenant,
+  readTaxpayer,
   sales,
   tenders,
   withTransaction,
@@ -257,7 +257,7 @@ async function enqueueSlips(
 ): Promise<void> {
   const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
   if (printer === undefined) return;
-  const taxpayer = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   /* v8 ignore start -- the taxpayer row is the database's one row; presentation still degrades */
   if (taxpayer === null) return;
   /* v8 ignore stop */

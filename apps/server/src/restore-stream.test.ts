@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import { invoiceSeries, nodes, openVenueDatabase, tenants, withTransaction } from "@waitron/db";
+import { invoiceSeries, nodes, openVenueDatabase, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -130,7 +130,7 @@ beforeAll(async () => {
     passwordHash: hashPassword("fixture-restore-password"),
   });
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: VENUE.taxId, legalName: VENUE.legalName });
   await seedVenueSettings(db, {
     name: VENUE.venueName,
@@ -1099,7 +1099,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     });
     const placed = await openVenueDatabase(venueDir);
     try {
-      expect(await placed.venue.select({ taxId: tenants.taxId }).from(tenants)).toEqual([
+      expect(await placed.venue.select({ taxId: taxpayer.taxId }).from(taxpayer)).toEqual([
         { taxId: "89890001K" },
       ]);
     } finally {
@@ -1149,7 +1149,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     expect(out).toContain(`restored from the bucket named in ${kitPath}`);
     const placed = await openVenueDatabase(join(deps.stateDir, "venue"));
     try {
-      expect(await placed.venue.select({ taxId: tenants.taxId }).from(tenants)).toEqual([
+      expect(await placed.venue.select({ taxId: taxpayer.taxId }).from(taxpayer)).toEqual([
         { taxId: "89890001K" },
       ]);
     } finally {
@@ -1204,7 +1204,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     const placed = await openVenueDatabase(venueDir);
     try {
       const rows = await placed.venue.execute<{ taxId: string }>(
-        sql`select tax_id as "taxId" from tenants`,
+        sql`select tax_id as "taxId" from taxpayer`,
       );
       expect(rows.rows).toEqual([{ taxId: VENUE.taxId }]);
     } finally {
@@ -1377,7 +1377,9 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     await stageStreamRestore(deps);
     const staged = new DatabaseSync(join(deps.stateDir, "flows/restore/venue.db"));
     try {
-      expect(staged.prepare("select tax_id from tenants").all()).toEqual([{ tax_id: "89890001K" }]);
+      expect(staged.prepare("select tax_id from taxpayer").all()).toEqual([
+        { tax_id: "89890001K" },
+      ]);
     } finally {
       staged.close();
     }
@@ -1406,7 +1408,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     ).toBe(true);
     const placed = await openVenueDatabase(venueDir);
     try {
-      expect(await placed.venue.select({ taxId: tenants.taxId }).from(tenants)).toEqual([
+      expect(await placed.venue.select({ taxId: taxpayer.taxId }).from(taxpayer)).toEqual([
         { taxId: "89890001K" },
       ]);
     } finally {
@@ -1460,7 +1462,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     ).toBe(true);
     const placed = await openVenueDatabase(venueDir);
     try {
-      expect(await placed.venue.select({ taxId: tenants.taxId }).from(tenants)).toEqual([
+      expect(await placed.venue.select({ taxId: taxpayer.taxId }).from(taxpayer)).toEqual([
         { taxId: "89890001K" },
       ]);
     } finally {
@@ -1528,7 +1530,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
         await copyFile(fixtureDb, args.outPath);
         const copy = new DatabaseSync(args.outPath);
         try {
-          copy.exec("delete from tenants");
+          copy.exec("delete from taxpayer");
         } finally {
           copy.close();
         }
@@ -1548,7 +1550,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
         await copyFile(fixtureDb, args.outPath);
         const copy = new DatabaseSync(args.outPath);
         try {
-          copy.exec("update tenants set tax_id = ''");
+          copy.exec("update taxpayer set tax_id = ''");
         } finally {
           copy.close();
         }

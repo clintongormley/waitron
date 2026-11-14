@@ -13,7 +13,7 @@ import {
   workingOrders,
   devices,
   nowIso,
-  tenants,
+  taxpayer,
   withTransaction,
   saveSettings,
   type Database,
@@ -104,9 +104,9 @@ interface Venue {
 }
 
 async function seedVenueWithStaff(): Promise<Venue> {
-  // Through the table definition: `tenants.created_at` is a `$defaultFn` generator a raw insert never reaches.
+  // Through the table definition: `taxpayer.created_at` is a `$defaultFn` generator a raw insert never reaches.
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
   await seedVenue(suite.db, {
     name: "Barra",

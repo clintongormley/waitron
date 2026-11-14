@@ -43,7 +43,7 @@ describe("OpeningHoursApi.watchYear", () => {
     expect(liveData.interests).toEqual(QUERY_DEPENDENCIES["named-days"].map((type) => ({ type })));
     expect(QUERY_DEPENDENCIES["named-days"]).toEqual([
       "departments",
-      "tenants",
+      "taxpayer",
       "settings.business_day",
       "settings.venue",
       "day_cutover_changes",

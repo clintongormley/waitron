@@ -3,7 +3,7 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {} from "@waitron/menu";
@@ -23,9 +23,9 @@ const policy = { printTradingName: true } as const;
 
 async function fixture(role: "manager" | "staff" = "manager") {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Venue SL" })
-    .onConflictDoNothing({ target: tenants.id });
+    .onConflictDoNothing({ target: taxpayer.id });
   await seedVenue(suite.db, {
     name: randomUUID(),
     invoiceLocales: ["gl-ES"],

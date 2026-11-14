@@ -16,7 +16,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -65,7 +65,7 @@ const clock: TrustedClock = {
 };
 async function setup() {
   const db = suite.db;
-  await seedTenant(db);
+  await seedTaxpayer(db);
   await seedLegacySellingUnits(db);
   await seedVenue(db, {
     name: "Sala",

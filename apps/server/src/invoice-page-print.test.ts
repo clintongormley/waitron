@@ -9,11 +9,11 @@ import {
   pagePrinters,
   printAgents,
   printJobs,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter, enqueuePrintJob } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
@@ -52,8 +52,8 @@ const clock: TrustedClock = {
 };
 
 async function venue() {
-  await seedTenant(suite.db);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+  await seedTaxpayer(suite.db);
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   await seedNamedVenue("Bar");
   const nodeId = await seedNode(suite.db);
   const agentOne = await agent("Back office agent");

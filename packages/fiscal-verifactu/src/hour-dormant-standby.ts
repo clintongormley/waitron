@@ -2,7 +2,7 @@ import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
 import { isDeepStrictEqual as equal } from "node:util";
 import { and, eq, isNull } from "drizzle-orm";
-import { deployment, invoiceSeries, nodes, readTenant, type Transaction } from "@waitron/db";
+import { deployment, invoiceSeries, nodes, readTaxpayer, type Transaction } from "@waitron/db";
 import {
   readOperationAuthority,
   type ModuleOperationHost,
@@ -230,13 +230,13 @@ async function configuration(
     .limit(1);
   if (activeSif !== undefined || activeSeries !== undefined)
     return refuse("standby_already_active");
-  const tenant = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   const [stamp] = await tx
     .select({ environment: deployment.environment })
     .from(deployment)
     .where(eq(deployment.id, 1));
   const environment = stamp?.environment;
-  if (tenant === null || tenant.country !== "ES") return refuse("taxpayer_missing");
+  if (taxpayer === null || taxpayer.country !== "ES") return refuse("taxpayer_missing");
   if (environment !== "production" && environment !== "preproduction")
     return refuse("environment_unstamped");
   const [sif] = await tx
@@ -245,12 +245,12 @@ async function configuration(
     .where(and(eq(registroSif.nodeId, primary.nodeId), isNull(registroSif.revocadoEn)))
     .limit(1);
   if (sif === undefined) return refuse("primary_not_registered");
-  if (sif.nif !== tenant.taxId) return refuse("scope_mismatch");
+  if (sif.nif !== taxpayer.taxId) return refuse("scope_mismatch");
   return readDormant({
     kind: "hour-dormant",
     version: 1,
     binding: { ...binding, action: "reserve" },
-    scope: { taxpayerNif: tenant.taxId, environment },
+    scope: { taxpayerNif: taxpayer.taxId, environment },
     bases: await liveSeriesBases(tx, primary),
   });
 }

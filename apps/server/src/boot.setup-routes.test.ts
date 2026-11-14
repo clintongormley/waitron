@@ -109,7 +109,7 @@ function bundleFor(overrides: {
   const { endorsement, ...rest } = overrides;
   return {
     designated: { nodeId: MAIN_NODE_ID },
-    tenant: { country: "ES", taxId: "80000001K" },
+    taxpayer: { country: "ES", taxId: "80000001K" },
     primaryNode: { name: "Till 1", filingModule: "fiscal-verifactu", taxModule: null },
     environment: "preproduction",
     boxHostname: "waitron.local",
@@ -1234,7 +1234,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
       for (const table of [
         "deployment",
-        "tenants",
+        "taxpayer",
         "nodes",
         "registro_sif",
         "fiscal_allocations",
@@ -2159,7 +2159,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
       expect(imported).toEqual({ defaultLanguage: "es", languages: ["es", "fr"] });
       expect(
-        target.store.venue.all(sql`select privacy_notice_url, privacy_email from tenants`),
+        target.store.venue.all(sql`select privacy_notice_url, privacy_email from taxpayer`),
       ).toEqual([
         { privacy_notice_url: "https://example.com/privacy", privacy_email: "privacy@example.com" },
       ]);
@@ -2390,7 +2390,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
       expect(
         target.store.venue.all(
-          sql`select country, tax_id, legal_name, taxpayer_domicile from tenants`,
+          sql`select country, tax_id, legal_name, taxpayer_domicile from taxpayer`,
         ),
       ).toEqual([
         {
@@ -2401,7 +2401,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         },
       ]);
       expect(
-        target.store.venue.all(sql`select privacy_notice_url, privacy_email from tenants`),
+        target.store.venue.all(sql`select privacy_notice_url, privacy_email from taxpayer`),
       ).toEqual([
         { privacy_notice_url: "https://example.com/privacy", privacy_email: "privacy@example.com" },
       ]);

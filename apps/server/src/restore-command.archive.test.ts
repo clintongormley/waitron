@@ -14,7 +14,7 @@ import {
   nodes,
   openVenueDatabase,
   sales,
-  tenants,
+  taxpayer,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -117,7 +117,7 @@ beforeAll(async () => {
   scratch = await mkdtemp(join(tmpdir(), "restore-command-archive-"));
   await withTransaction(suite.db, async (tx) => {
     await tx
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Archive source" });
     await seedVenueSettings(tx, {
       name: "Archive venue",
@@ -327,7 +327,7 @@ async function liveVenue(f: Fixture): Promise<void> {
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
   const live = await openVenueDatabase(f.venueDir);
   try {
-    await live.venue.update(tenants).set({ legalName: "Live venue" });
+    await live.venue.update(taxpayer).set({ legalName: "Live venue" });
   } finally {
     await live.close();
   }
@@ -345,7 +345,7 @@ async function venueFiles(f: Fixture): Promise<Record<string, string>> {
 async function legalName(venueDir: string): Promise<string> {
   const opened = await openVenueDatabase(venueDir);
   try {
-    return (await opened.venue.select().from(tenants))[0]!.legalName;
+    return (await opened.venue.select().from(taxpayer))[0]!.legalName;
   } finally {
     await opened.close();
   }
@@ -432,7 +432,7 @@ describe("waitron-restore restore --from-archive", () => {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     });
     expect(await readStreamSettings(suite.db, ring)).toBeNull();
-    const expectedTenants = await suite.db.select().from(tenants);
+    const expectedTaxpayers = await suite.db.select().from(taxpayer);
     const expectedSettings = await suite.db.select().from(settings).orderBy(settings.module);
     const chainKey = { nodeId: ids.node };
     const expectedChain = await readChain(suite.db, chainKey);
@@ -462,7 +462,7 @@ describe("waitron-restore restore --from-archive", () => {
     const restored = await openVenueDatabase(f.venueDir);
     try {
       const db = restored.venue;
-      expect(await db.select().from(tenants)).toEqual(expectedTenants);
+      expect(await db.select().from(taxpayer)).toEqual(expectedTaxpayers);
       expect(await db.select().from(settings).orderBy(settings.module)).toEqual(expectedSettings);
       const sifs = await db
         .select({

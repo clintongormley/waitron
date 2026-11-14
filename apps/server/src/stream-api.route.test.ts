@@ -18,7 +18,7 @@ import {
   deletePairLinkTx,
   loadKeyRing,
   putCredential,
-  tenantCredentials,
+  venueCredentials,
   tryGetCredential,
   writePairLinkTx,
   type KeyRing,
@@ -112,7 +112,7 @@ function nextNif(): string {
   return `${String(77_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-async function setupTenant(): Promise<void> {
+async function setupVenue(): Promise<void> {
   await applyVenue(
     planVenue(
       {
@@ -170,7 +170,7 @@ let nodeId: string;
 let publicKey: string;
 
 beforeAll(async () => {
-  await setupTenant();
+  await setupVenue();
   await withTransaction(suite.db, (tx) => saveVenueFields(tx, { streamId: VENUE_ID }, null));
   const [node] = await withTransaction(suite.db, (tx) =>
     tx.select({ id: nodes.id }).from(nodes).limit(1),
@@ -988,7 +988,7 @@ describe("stream settings routes", () => {
     expect(view.revision).toMatch(/^[0-9a-f]{16}$/);
     expect(view.revision).not.toBe(first);
     const rows = await suite.db.execute<{ blob: Uint8Array }>(
-      sql`select ciphertext as blob from tenant_credentials where purpose = ${STREAM_PURPOSE}`,
+      sql`select ciphertext as blob from venue_credentials where purpose = ${STREAM_PURPOSE}`,
     );
     const ciphertext = Buffer.from(rows.rows[0]!.blob);
     const text = JSON.stringify(view);
@@ -1152,9 +1152,9 @@ describe("stream settings routes", () => {
       const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
       await withTransaction(suite.db, (tx) =>
         tx
-          .update(tenantCredentials)
+          .update(venueCredentials)
           .set({ ciphertext, iv, authTag: cipher.getAuthTag() })
-          .where(eq(tenantCredentials.purpose, ARCHIVE_PURPOSE)),
+          .where(eq(venueCredentials.purpose, ARCHIVE_PURPOSE)),
       );
     }
 
@@ -1219,9 +1219,9 @@ describe("stream settings routes", () => {
       );
       await withTransaction(suite.db, (tx) =>
         tx
-          .update(tenantCredentials)
+          .update(venueCredentials)
           .set({ authTag: randomBytes(16) })
-          .where(eq(tenantCredentials.purpose, STREAM_PURPOSE)),
+          .where(eq(venueCredentials.purpose, STREAM_PURPOSE)),
       );
       try {
         await expect(storedBucket()).rejects.toMatchObject({ code: "credentials.decrypt_failed" });

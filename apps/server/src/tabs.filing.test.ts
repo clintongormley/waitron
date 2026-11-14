@@ -314,7 +314,7 @@ function fixedClock(instant: Date): TrustedClock {
 
 async function nifOf(db: Database = suite.db): Promise<string> {
   const { rows } = await db.execute<{ tax_id: string }>(
-    sql`select tax_id from tenants where id = 1`,
+    sql`select tax_id from taxpayer where id = 1`,
   );
   return rows[0]!.tax_id;
 }

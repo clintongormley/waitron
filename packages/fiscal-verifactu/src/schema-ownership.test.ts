@@ -36,7 +36,7 @@ const CORE = [
   "settings",
   "sale_lines",
   "sales",
-  "tenants",
+  "taxpayer",
   "tenders",
   "devices",
   "working_order_lines",

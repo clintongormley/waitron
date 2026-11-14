@@ -29,7 +29,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   assignProductUnit,
@@ -143,7 +143,7 @@ interface Seeded {
 }
 
 async function setupVenue(): Promise<Seeded> {
-  await seedTenant(db);
+  await seedTaxpayer(db);
   // Through the table definition rather than raw SQL: `units.id` is a `$defaultFn` generator a raw insert never reaches.
   await db.insert(units).values([
     {

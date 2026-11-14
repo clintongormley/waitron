@@ -10,7 +10,7 @@ import {
   units,
   withTransaction,
 } from "@waitron/db";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
@@ -335,7 +335,7 @@ describe("translation peer baseline projection", () => {
   it.each([false, true])(
     "matches real root/include and unit rereads in either batch order (reversed=%s)",
     async (reverse) => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
         const parent = await createCatalogue(tx, {

@@ -1,7 +1,7 @@
 import { seedTenantWithSif } from "../../test/fixtures.js";
 import { currentSif } from "../registro-sif.js";
 import { sql } from "drizzle-orm";
-import { readTenant, withTransaction, type Database } from "@waitron/db";
+import { readTaxpayer, withTransaction, type Database } from "@waitron/db";
 import { appendToChain } from "../chain.js";
 import type { ReturnRow } from "../handover-return.js";
 import { altaFor, seedSale, type SeededNode } from "./seed.js";
@@ -49,7 +49,7 @@ export async function seedReturnNodeForVenue(
   source: Database,
   receiver: Database,
 ): Promise<SeededNode> {
-  const taxpayer = await readTenant(receiver);
+  const taxpayer = await readTaxpayer(receiver);
   const seeded = await seedTenantWithSif(source, { nif: taxpayer!.taxId });
   const identity = await withTransaction(source, (tx) => currentSif(tx, seeded.nodeId));
   return { ...seeded, sifId: identity.id };

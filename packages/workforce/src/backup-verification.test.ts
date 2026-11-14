@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, nodes, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import {
@@ -38,7 +38,7 @@ let requestId: string;
 
 beforeEach(async () => {
   for (const suite of [original, restored]) {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await seedPersons(suite.db, { id: person, displayName: "Worker" });
     await seedVenueSettings(suite.db, {
       name: "Main",

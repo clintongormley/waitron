@@ -31,7 +31,7 @@ import {
   saleReceiptGuests,
   saleSettlements,
   sales,
-  tenants,
+  taxpayer,
   tenders,
   ticketItems,
   unpaidDepartures,
@@ -385,7 +385,7 @@ describe("recording that a table left without paying", () => {
   it("issues a saved full invoice when the party leaves without paying", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     await inTx(venue, (tx) =>
-      tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
+      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
     );
     await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, party.tabId, {
       revision: await inTx(venue, (tx) => readOrderRevision(tx, party.tabId)),

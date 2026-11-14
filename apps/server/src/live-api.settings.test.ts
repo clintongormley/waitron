@@ -15,7 +15,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedZone } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedZone } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
@@ -39,7 +39,7 @@ const document = (module: string) =>
         : { ok: false as const, field: "note" },
   });
 async function fixture() {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const session = await withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, { displayName: "Manager", role: "manager" });
     return startManagementSession(tx, { personId: person!.id });

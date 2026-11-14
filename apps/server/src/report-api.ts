@@ -19,7 +19,7 @@ import {
   handoverActivations,
   printers,
   readHistoryNodes,
-  readTenant,
+  readTaxpayer,
   recordActivity,
   withTransaction,
   type Database,
@@ -179,8 +179,6 @@ async function countOpenTables(tx: Transaction): Promise<{ open: number; total: 
  * Mount reporting routes through the shared authorization gate. report.view
  * permits operational reports; report.export permits the modelo 303 export and the
  * deferred-payments file.
- * The overview aggregates all tenant nodes; per-node reports read cfg.nodeId and the boxes it took
- * over from.
  * The modelo 303 file remains a candidate requiring uploader validation and asesor
  * confirmation for prorrata handling.
  */
@@ -288,7 +286,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const declarationType = requireDeclarationType(c.req.query("declarationType"));
 
       const record = await gated(sessionId, REPORT_EXPORT_PERMISSION, async (tx) => {
-        const issuer = await readTenant(tx);
+        const issuer = await readTaxpayer(tx);
         /* v8 ignore start */
         if (issuer === null) {
           throw new Error("report-api: no taxpayer row");

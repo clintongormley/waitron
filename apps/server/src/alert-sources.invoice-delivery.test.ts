@@ -8,11 +8,11 @@ import {
   pagePrinters,
   printAgents,
   printJobs,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter, enqueuePrintJob, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import {
   claimInvoiceDelivery,
@@ -40,8 +40,8 @@ type Medium = "receipt" | "a4" | "email";
 type Status = "queued" | "sending" | "sent" | "failed" | "unknown";
 
 async function venue() {
-  await seedTenant(suite.db);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+  await seedTaxpayer(suite.db);
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],

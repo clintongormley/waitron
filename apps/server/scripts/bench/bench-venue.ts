@@ -228,7 +228,7 @@ export async function openBenchVenue(
 }
 
 async function isProvisioned(db: Database): Promise<boolean> {
-  return db.all<{ n: number }>(sql`select count(*) as n from tenants`)[0]!.n > 0;
+  return db.all<{ n: number }>(sql`select count(*) as n from taxpayer`)[0]!.n > 0;
 }
 
 async function provision(db: Database): Promise<void> {

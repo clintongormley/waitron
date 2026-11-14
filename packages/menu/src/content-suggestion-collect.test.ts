@@ -15,7 +15,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { createCategory } from "./categories.js";
 import {
@@ -81,7 +81,7 @@ async function inVenue<T>(
   config: ContentLanguages,
   body: (tx: Transaction, lunch: Lunch) => Promise<T>,
 ): Promise<T> {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   return withTransaction(suite.db, async (tx) => {
     await writeContentLanguages(tx, config);
     const menu = await createCatalogue(tx, {

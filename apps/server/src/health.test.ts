@@ -345,7 +345,7 @@ describe("healthApp", () => {
   });
 
   // The status CODE is what an uptime check reads, so these assert it, not only the body.
-  it("answers 503, not 200, when drain reports ok:true but skipped a tenant", async () => {
+  it("answers 503, not 200, when drain reports ok:true but skipped a taxpayer", async () => {
     const state = createHealthState(BOOT);
     const app = healthApp(state, () => AT);
     recordPass(
