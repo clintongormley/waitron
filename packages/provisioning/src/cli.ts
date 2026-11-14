@@ -90,7 +90,7 @@ const USAGE = [
   "  keyring                                            generate the credential key ring",
   "  venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]",
   "           [--taxpayer-domicile <address>]",
-  "           [--venue-name <name>] [--territory <t>] [--locale <l>]...",
+  "           [--venue-name <name>] [--territory <t>] [--locale <l>]",
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]",

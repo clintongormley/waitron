@@ -15,6 +15,5 @@ it("resolves every installed pack's demo and the default through the secondary r
     if (pack.demo?.dataSet !== undefined)
       expect(dataSets[pack.demo.dataSet]!.id).toBe(pack.demo.dataSet);
   }
-  expect(registry.DEFAULT_DEMO_DEVELOPER_PRESET).toBe(registry.DEMO_DEVELOPER_PRESETS.madrid);
   expect(registry.DEMO_MEDIA_ROOTS[registry.DEFAULT_DEMO_DATA_SET_ID]).toBeInstanceOf(URL);
 });

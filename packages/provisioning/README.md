@@ -188,11 +188,11 @@ not the venue.
 
 `--territory` currently accepts only `ES-common` (common-territory Spain, Veri\*Factu with IVA); any
 other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also refuses a
-missing `--locale` (`provisioning.invalid_locales`) and duplicate codes among the
+`--locale` count outside one-or-two (`provisioning.invalid_locales`) and duplicate codes among the
 standard, full and rectificative series (`provisioning.duplicate_series_code`) before the directory is opened.
 `--locale` is the language receipts print in by default. As in setup, the command takes exactly one,
-offered by the country's pack, and the region's own where it fixes one (Catalan in Catalonia); any
-other is refused with `setup.request_invalid` naming `invoiceLocales`. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
+offered by the country's pack, and the region's own where it fixes one (Catalan in Catalonia); two,
+or any other language, is refused with `setup.request_invalid` naming `invoiceLocales`. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
 refuses a legal name or operation description carrying a character XML forbids, an operation
 description over 500 characters, and any series code outside AEAT's character set or longer than
 the 21-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
