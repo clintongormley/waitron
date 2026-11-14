@@ -43,13 +43,14 @@ import {
   stationsWithWaitingDishes,
 } from "./station-outputs-down.js";
 import { FIRST_START_PENDING, type HostStreamView } from "./stream-host.js";
+import type { SpareFollowFacts } from "./spare-follow.js";
 import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
 
 /** The dashboard screen a backup alert links to. */
 export const BACKUP_SCREEN = "backup";
 
-/** How long a change may wait for the bucket before `backup.stream_behind`. */
+/** Ordinary buckets warn at fifteen minutes; paired spares warn above sixty seconds. */
 export const STREAM_BEHIND_AFTER_MS = 15 * 60_000;
 
 /** A supervisor that is off for one of these stopped by itself, not because it was told to. */
@@ -74,7 +75,11 @@ function spareParam(stream: HostStreamView): { toSpare?: true } {
   return "toSpare" in stream ? { toSpare: true } : {};
 }
 
-function streamAlerts(stream: HostStreamView, now: Date): OngoingAlert[] {
+function streamAlerts(
+  stream: HostStreamView,
+  now: Date,
+  follow: Pick<SpareFollowFacts, "lagMs" | "phase"> | null,
+): OngoingAlert[] {
   if (!("reason" in stream)) return [];
   const spare = spareParam(stream);
   // A failed first start raises its own alert ({@link firstStartAlertSource}); a deferred one raises
@@ -104,12 +109,21 @@ function streamAlerts(stream: HostStreamView, now: Date): OngoingAlert[] {
     explained = stopped;
   }
   const alerts: OngoingAlert[] = [];
-  if (explained === undefined && stream.lagMs >= STREAM_BEHIND_AFTER_MS) {
+  const toSpare = "toSpare" in stream;
+  const lag = Math.max(stream.lagMs, toSpare ? (follow?.lagMs ?? 0) : 0);
+  if (explained === undefined && (toSpare ? lag > 60_000 : lag >= STREAM_BEHIND_AFTER_MS)) {
     alerts.push(
       streamAlert({
         code: "backup.stream_behind",
-        params: { minutes: Math.floor(stream.lagMs / 60_000), ...spare },
-        since: new Date(now.getTime() - stream.lagMs).toISOString(),
+        params: toSpare
+          ? {
+              seconds: Math.ceil(lag / 1000),
+              phase:
+                follow !== null && (follow.lagMs ?? 0) >= stream.lagMs ? follow.phase : "upload",
+              ...spare,
+            }
+          : { minutes: Math.floor(lag / 60_000) },
+        since: new Date(now.getTime() - lag).toISOString(),
       }),
     );
   }
@@ -130,7 +144,10 @@ function streamAlerts(stream: HostStreamView, now: Date): OngoingAlert[] {
     );
   }
   if (explained !== undefined) alerts.push(explained);
-  if (stream.bucketProblem !== null) {
+  if (
+    stream.bucketProblem !== null &&
+    (!toSpare || now.getTime() - Date.parse(stream.bucketProblem.since) >= 120_000)
+  ) {
     alerts.push(
       streamAlert({
         code: "backup.stream_bucket_unusable",
@@ -178,6 +195,7 @@ export function backupAlertSource(deps: {
   outcomes: BackupOutcomeHolder;
   now: () => Date;
   readStream: () => HostStreamView;
+  readSpare?: () => Promise<Pick<SpareFollowFacts, "lagMs" | "phase"> | null>;
 }): AlertSource {
   return {
     area: "backup",
@@ -185,9 +203,14 @@ export function backupAlertSource(deps: {
     async read(): Promise<readonly OngoingAlert[]> {
       const status = await deps.listStatus();
       const stream = deps.readStream();
-      const alerts = streamAlerts(stream, deps.now());
+      const follow = "toSpare" in stream ? ((await deps.readSpare?.()) ?? null) : null;
+      const alerts = streamAlerts(stream, deps.now(), follow);
       const streamCurrent =
-        "lagMs" in stream && stream.state === "streaming" && stream.lagMs < STREAM_BEHIND_AFTER_MS;
+        "lagMs" in stream &&
+        stream.state === "streaming" &&
+        ("toSpare" in stream
+          ? Math.max(stream.lagMs, follow?.lagMs ?? 0) <= 60000
+          : stream.lagMs < STREAM_BEHIND_AFTER_MS);
       if (!status.configured) {
         if (status.loadErrorCode !== undefined) {
           alerts.push({

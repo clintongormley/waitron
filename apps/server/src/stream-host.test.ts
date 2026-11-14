@@ -36,6 +36,7 @@ import {
   type StreamStatus,
 } from "@waitron/stream";
 import * as stream from "@waitron/stream";
+import { ManualClock } from "@waitron/stream/testing/manual-clock.js";
 import { FakeLitestream, type FakeChild } from "@waitron/stream/testing/fake-litestream.js";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import {
@@ -60,6 +61,7 @@ import * as sparePipe from "./spare-pipe.js";
 import { startStoreListener, type StoreListener } from "./spare-pipe.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 import { pauseListingPrefix } from "./testing/stream-pause-scenario.js";
+import { backupAlertSource } from "./alert-sources.js";
 import { deriveStreamKey } from "./stream-key.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -1464,6 +1466,118 @@ describe("the live copy's wiring", () => {
       }
     });
 
+    it.each([false, true])(
+      "preserves native refusal time only for a paired target (%s)",
+      async (paired) => {
+        if (paired) await pair(await startSpare("spare.pem"));
+        else
+          await withTransaction(db, (tx) =>
+            putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: SETTINGS }),
+          );
+        const clock = new ManualClock("2026-11-14T12:00:00.000Z");
+        const opened = vi.spyOn(sparePipe, "startStorePipe");
+        const Supervisor = stream.StreamSupervisor;
+        let native!: InstanceType<typeof Supervisor>;
+        const started = vi.spyOn(stream, "StreamSupervisor").mockImplementation(function (deps) {
+          native = new Supervisor({ ...deps, sleep: clock.sleep, monotonic: clock.monotonic });
+          return native;
+        });
+        const store = new SwitchableStore(clock.now);
+        store.honoursConditions = false;
+        const rt = runtime({ now: clock.now, store, spawn: new FakeLitestream().spawn });
+        try {
+          await rt.start();
+          await clock.until(() => native.status().bucketProblem?.reason === "create_only_ignored");
+          const pipe = paired ? await opened.mock.results.at(-1)!.value : undefined;
+          if (paired) expect(pipe?.problem()).toBeNull();
+          const first = native.status().bucketProblem!.since;
+          store.denied = true;
+          await clock.until(() => native.status().bucketProblem?.reason === "access_denied");
+          if (paired) expect(pipe?.problem()).toBeNull();
+          const changed = (rt.status() as StreamStatus).bucketProblem!.since;
+          expect(changed).toBe(native.status().bucketProblem!.since);
+          if (paired) expect(changed).toBe(first);
+          else expect(changed).not.toBe(first);
+          store.denied = false;
+          store.honoursConditions = true;
+          await clock.until(() => (rt.status() as StreamStatus).bucketProblem === null);
+        } finally {
+          await rt.stop();
+          started.mockRestore();
+          opened.mockRestore();
+        }
+      },
+    );
+
+    it("keeps the earlier active pipe outage when a later native refusal appears", async () => {
+      await pair(await startSpare("spare.pem"));
+      const opened = vi.spyOn(sparePipe, "startStorePipe");
+      const rt = pairedRuntime(new FakeLitestream(), new SwitchableStore(() => new Date()));
+      let restoreNative: (() => void) | undefined, restoreTransport: (() => void) | undefined;
+      const first = "2026-11-14T12:00:00.000Z",
+        later = "2026-11-14T12:01:00.000Z";
+      try {
+        await rt.start();
+        const pipe = await opened.mock.results[0]!.value;
+        const transport = vi
+          .spyOn(pipe, "problem")
+          .mockReturnValue({ reason: "ECONNREFUSED", since: first });
+        const view: StreamStatus = {
+          state: "streaming",
+          reason: null,
+          generation: "gen-0-node-a-20261114T120000Z",
+          stateSince: first,
+          lagMs: 0,
+          lastConfirmedUploadAt: first,
+          bucketProblem: null,
+        };
+        const native = vi
+          .spyOn(stream.StreamSupervisor.prototype, "status")
+          .mockImplementation(() => view);
+        restoreNative = () => native.mockRestore();
+        restoreTransport = () => transport.mockRestore();
+        let observedAt = new Date("2026-11-14T12:02:00.000Z");
+        const source = backupAlertSource({
+          listStatus: async () => ({ configured: true, destinations: [] }),
+          outcomes: { failed: new Map() },
+          now: () => observedAt,
+          readStream: () => rt.status(),
+        });
+        const alertCodes = async () =>
+          (await source.read({ tx: {} as never, now: observedAt })).map((a) => a.code);
+        expect(rt.status()).toMatchObject({
+          bucketProblem: { reason: "ECONNREFUSED", since: first },
+        });
+        expect(await alertCodes()).toEqual(["backup.stream_bucket_unusable"]);
+        view.bucketProblem = { reason: "access_denied", since: later };
+        const merged = rt.status(),
+          after = await alertCodes();
+        expect((merged as StreamStatus).bucketProblem?.reason).toBe("access_denied");
+        expect(after).toEqual(["backup.stream_bucket_unusable"]);
+        expect(merged).toMatchObject({ bucketProblem: { reason: "access_denied", since: first } });
+        transport.mockReturnValue(null);
+        observedAt = new Date("2026-11-14T12:02:30.000Z");
+        expect(await alertCodes()).toEqual(["backup.stream_bucket_unusable"]);
+        expect(rt.status()).toMatchObject({
+          bucketProblem: { reason: "access_denied", since: first },
+        });
+        view.bucketProblem = null;
+        expect(rt.status()).toMatchObject({ bucketProblem: null });
+        expect(await alertCodes()).toEqual([]);
+        view.bucketProblem = { reason: "access_denied", since: observedAt.toISOString() };
+        expect(rt.status()).toMatchObject({ bucketProblem: { since: "2026-11-14T12:02:30.000Z" } });
+        expect(await alertCodes()).toEqual([]);
+        view.bucketProblem = { reason: "access_denied", since: "2026-11-14T12:03:00.000Z" };
+        await rt.reload();
+        expect(rt.status()).toMatchObject({ bucketProblem: { since: "2026-11-14T12:03:00.000Z" } });
+      } finally {
+        restoreNative?.();
+        restoreTransport?.();
+        opened.mockRestore();
+        await rt.stop();
+      }
+    });
+
     it("keeps the supervisor's own bucket problem over the pipe's", async () => {
       await pair(await startSpare("stranger.pem"));
       const opened = vi.spyOn(sparePipe, "startStorePipe");
@@ -1479,11 +1593,13 @@ describe("the live copy's wiring", () => {
         await vi.waitFor(() => expect((rt.status() as StreamStatus).bucketProblem).not.toBeNull(), {
           timeout: 10_000,
         });
+        const outageSince = (rt.status() as StreamStatus).bucketProblem!.since;
         const pipe = await opened.mock.results[0]!.value;
         expect(await getThrough(pipe.loopbackUrl)).not.toBe("200 stored");
         expect(pipe.problem()).toMatchObject({ reason: "CERT_SIGNATURE_FAILURE" });
 
         expect(rt.status()).toMatchObject({ bucketProblem: { reason: "access_denied" } });
+        expect((rt.status() as StreamStatus).bucketProblem!.since).toBe(outageSince);
       } finally {
         opened.mockRestore();
         await rt.stop();

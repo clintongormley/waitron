@@ -3580,6 +3580,7 @@ async function bootServer(
     outcomes: backupOutcomes,
     now,
     readStream: () => streamHost.status(),
+    readSpare: () => spareFollow?.facts() ?? Promise.resolve(null),
   });
   jobRunner.add(
     freeSpaceJob({
@@ -3709,7 +3710,10 @@ async function bootServer(
         startClockHolds() ||
         clockUnusableAt(nodeBackend, { instant: at, offsetMinutes: tillClock.now().offsetMinutes }),
     ),
-    clockDisagreesAlertSource(clockWitnesses),
+    clockDisagreesAlertSource(
+      clockWitnesses,
+      async () => (await spareFollow?.facts())?.clock ?? null,
+    ),
     clockUnconfirmedAlertSource(startClockWaits),
     printingAlertSource(),
     contentSuggestionsAlertSource(),
@@ -3860,6 +3864,7 @@ async function bootServer(
       ring,
       nodeId: tradingContext.nodeId,
       reloadStream: () => backupTurns(() => streamHost.reload()),
+      readSpare: () => spareFollow?.status() ?? Promise.resolve(null),
       // `/ca.crt` serves no authority when the operator supplies the certificate files.
       authorityFingerprint: () =>
         config.tls === undefined ? readBoxCaFingerprint(config.stateDir) : Promise.resolve(null),

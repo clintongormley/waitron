@@ -110,7 +110,23 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
   it("renders the list of servers accessibly", async () => {
     const { el, host } = await mountWidget<ServersScreen>(
       "dashboard-servers-screen",
-      { api: stubApi() },
+      {
+        api: stubApi({
+          listServers: vi.fn().mockResolvedValue({
+            ...listing,
+            spare: {
+              peerNodeId: STANDBY,
+              generation: "gen-1-main-20261114T120000Z",
+              state: "following",
+              appliedTXID: "0000000000000001",
+              uploadedTXID: "0000000000000002",
+              lagMs: 61000,
+              lastAppliedAt: "2026-11-14T12:00:00.000Z",
+              clockAt: null,
+            },
+          }),
+        }),
+      },
       theme,
     );
     await flush(el);

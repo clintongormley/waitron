@@ -3359,3 +3359,27 @@ it.each([
   });
   expect(active).not.toHaveBeenCalled();
 });
+
+it("validates Servers follow progress and reads refreshes passively", async () => {
+  const spare = {
+    peerNodeId: "spare",
+    generation: "gen-1-main-20261114T120000Z",
+    state: "following",
+    appliedTXID: "0000000000000001",
+    uploadedTXID: "0000000000000002",
+    lagMs: 3100,
+    lastAppliedAt: "2026-11-14T12:00:00.000Z",
+    clockAt: null,
+  };
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse({ term: 1, nodes: [], spare }))
+    .mockResolvedValueOnce(jsonResponse({ term: 1, nodes: [], spare: { ...spare, lagMs: -1 } }));
+  const api = new DashboardApi("", fetchImpl);
+  expect((await api.background.listServers()).spare).toEqual(spare);
+  expect((await api.background.listServers()).spare).toMatchObject({
+    state: "unknown",
+    lagMs: null,
+  });
+  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
+});

@@ -33,7 +33,10 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
-import { mountMembershipRemovalApi } from "./membership-removal-api.js";
+import {
+  mountMembershipRemovalApi,
+  type MembershipRemovalApiDeps,
+} from "./membership-removal-api.js";
 import { createTurns } from "./backup-turns.js";
 import { mountStreamApi } from "./stream-api.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -88,6 +91,7 @@ interface Primary {
 /** A provisioned venue whose node holds its sealed identity key, and an admin's dashboard session. */
 async function primary(
   authorityFingerprint: () => Promise<string | null> = async () => FINGERPRINT,
+  readSpare?: MembershipRemovalApiDeps["readSpare"],
 ): Promise<Primary> {
   const db = suite.db;
   const venue = await setupVenue(db);
@@ -109,7 +113,7 @@ async function primary(
   const reloadStream = vi.fn(async () => {});
   mountMembershipRemovalApi(
     app,
-    { db, node: suite.node, ring: RING, nodeId, authorityFingerprint, reloadStream },
+    { db, node: suite.node, ring: RING, nodeId, authorityFingerprint, reloadStream, readSpare },
     log,
   );
   return {
@@ -1267,6 +1271,29 @@ describe("POST /management-api/servers/:nodeId/clear", () => {
 });
 
 describe("GET /management-api/servers", () => {
+  it("serves cached spare progress only after permission, and recovers without changing rows", async () => {
+    let cached: import("./spare-follow.js").SpareFollowView | null = {
+      peerNodeId: "spare",
+      generation: null,
+      state: "unknown",
+      appliedTXID: null,
+      uploadedTXID: null,
+      lagMs: null,
+      lastAppliedAt: null,
+      clockAt: null,
+    };
+    const readSpare = vi.fn(async () => cached);
+    const p = await primary(undefined, readSpare);
+    expect((await list(p, p.managerCookie)).status).toBe(403);
+    expect(readSpare).not.toHaveBeenCalled();
+    const before = await (await list(p, p.adminCookie)).json();
+    expect(before.spare).toEqual(cached);
+    cached = null;
+    const after = await (await list(p, p.adminCookie)).json();
+    expect(after.spare).toBeNull();
+    expect(after.nodes).toEqual(before.nodes);
+  });
+
   it("lists the held chart with removable set by the same rule the removal applies", async () => {
     const p = await primary();
     const neverJoined = standby();

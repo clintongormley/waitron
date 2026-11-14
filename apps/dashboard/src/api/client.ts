@@ -1806,6 +1806,7 @@ export interface ServerRow {
 
 /** `term` is null, and `nodes` empty, when this server holds no chart. */
 export interface ServerListing {
+  spare?: SpareFollowView | null;
   term: number | null;
   /** This box's authority fingerprint, which a joining spare asks the person to compare; null
    * when the box serves no authority of its own. */
@@ -4854,8 +4855,11 @@ export class DashboardApi {
     return response.body;
   }
 
-  listServers(): Promise<ServerListing> {
-    return this.#request<ServerListing>("/management-api/servers", "GET");
+  async listServers(): Promise<ServerListing> {
+    const listing = await this.#request<ServerListing>("/management-api/servers", "GET");
+    return listing.spare === undefined
+      ? listing
+      : { ...listing, spare: spareFollowView(listing.spare) };
   }
 
   /** `removed` is false when the machine was already removed and nothing was written. */

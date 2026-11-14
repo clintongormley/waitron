@@ -122,8 +122,8 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       toSpare: {
         mode: "replace",
-        en: "The standby server is not receiving the restaurant's data: its copy is {minutes} minutes behind, so your most recent sales are not on it yet. Sales continue. Check that the standby server is switched on and connected to the restaurant's network.",
-        es: "El servidor en espera no está recibiendo los datos del restaurante: su copia lleva {minutes} minutos de retraso, así que tus ventas más recientes aún no están en ella. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
+        en: "The spare copy is {seconds} seconds behind while {phase:spare_copy_phase}. Sales continue. Check that the standby server is switched on and connected to the restaurant's network.",
+        es: "La copia de reserva lleva {seconds} segundos de retraso mientras {phase:spare_copy_phase}. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
       },
     },
   },
@@ -250,6 +250,17 @@ export const ALERT_MESSAGES: Readonly<
   "clock.unusable": {
     en: "The box's clock reads {clockAt:minute}, before 28 October 2024, so no sale can be recorded for the tax agency. With the internet the box puts it right by itself; otherwise an administrator can usually set it on the Box status page.",
     es: "El servidor marca {clockAt:minute}, antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda. Con internet, el servidor corrige la hora solo; si no, un administrador normalmente puede ponerla en hora en Estado del servidor.",
+  },
+  "clock.peer_disagrees": {
+    en: "A connected device's clock and this box's clock differ by {differenceMs:duration}. Check the date and time on this box and the connected devices.",
+    es: "El reloj de un dispositivo conectado y el reloj de este servidor difieren en {differenceMs:duration}. Comprueba la fecha y la hora de este servidor y de los dispositivos conectados.",
+    variants: {
+      peer: {
+        mode: "replace",
+        en: "The spare box's clock and this box's clock differ by {differenceMs:duration}. Check the date and time on both boxes.",
+        es: "El reloj del equipo de reserva y el reloj de este servidor difieren en {differenceMs:duration}. Comprueba la fecha y la hora de ambos servidores.",
+      },
+    },
   },
   "clock.disagrees": {
     en: "{count} devices agree that the time is {deviceAt:minute}, but the box's clock reads {boxAt:minute}. Check the box's date and time on the Box status page.",
@@ -515,6 +526,19 @@ export const ALERT_WORDS: Readonly<
     }
   >
 > = {
+  spare_copy_phase: {
+    words: {
+      upload: {
+        en: "changes wait to be sent to the spare",
+        es: "hay cambios pendientes de enviar al equipo de reserva",
+      },
+      apply: {
+        en: "received changes wait to be applied",
+        es: "hay cambios recibidos pendientes de aplicar",
+      },
+    },
+    otherwise: { en: "the copy is pending", es: "la copia está pendiente" },
+  },
   job_name: {
     words: {
       "fiscal.drain": {

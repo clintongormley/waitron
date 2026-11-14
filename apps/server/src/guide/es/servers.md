@@ -37,6 +37,13 @@ tenga la sesión iniciada en el panel del servidor principal, abre **Ajustes →
 servidor nuevo recibe su primera copia por la red del local y se reinicia solo como servidor de
 reserva.
 
+En el servidor principal, abre **Ajustes → Servidores** para comprobar el retraso del equipo de reserva en segundos y la **Última copia recibida**.
+Deja ambos equipos encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
+comprueba que el equipo de reserva esté conectado a la red del restaurante. **Reconstruyendo la copia** indica que debes dejar ambos equipos encendidos mientras se restaura la copia.
+
+El cambio sigue usando la copia tomada cuando este equipo de reserva se unió. Comprueba la copia que ofrece la página de traspaso antes de cambiar.
+La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicación de cambios, o si no se puede contactar con el equipo de reserva durante dos minutos.
+
 ## Retirar un servidor de reserva {#remove-a-spare}
 
 En el servidor principal, abre **Ajustes → Servidores**, abre el menú de la fila del servidor de

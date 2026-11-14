@@ -1625,10 +1625,14 @@ declare module "@waitron/shared" {
     /** The dashboard's stored archive settings could not be read or used, so archives are off.
      * Built as data by the backups alert source, never thrown. */
     "backup.archive_settings_unusable": Record<string, never>;
-    /** The live copy's oldest change not yet in its store has waited `STREAM_BEHIND_AFTER_MS`
-     * (`alert-sources.ts`) or more. `minutes` is that wait, whole. Built as data by the backups
-     * alert source, never thrown. */
-    "backup.stream_behind": { minutes: number; toSpare?: true };
+    /** Ordinary buckets use a fifteen-minute threshold and `minutes`; `toSpare` uses >60 seconds,
+     * `seconds` and `phase`. Ongoing alert built as data by the backups alert source, never thrown. */
+    "backup.stream_behind": {
+      minutes?: number;
+      seconds?: number;
+      phase?: "upload" | "apply";
+      toSpare?: true;
+    };
     /** The live copy stopped Litestream at the side-file limit. Built as data by the backups alert
      * source, never thrown. */
     "backup.stream_paused": { toSpare?: true };
@@ -1659,6 +1663,8 @@ declare module "@waitron/shared" {
      * since has reached `SPACE_OK_BYTES`. `freeBytes` is the latest reading. Built as data by the
      * box alert source, never thrown. */
     "storage.space_low": { freeBytes: number };
+    /** Ongoing alert built as data by the clock-disagrees alert source, never thrown. */
+    "clock.peer_disagrees": { peer: boolean; differenceMs: number };
     /** Two or more fresh devices agree with each other that the box's clock is more than a minute
      * off. `deviceAt` is the box's time moved by their mean difference. Built as data by the
      * clock-disagrees alert source, never thrown. */
