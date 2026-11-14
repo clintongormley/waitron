@@ -22,8 +22,10 @@ import {
   requireManagementSession,
   requireUuidParam,
   readJsonBody,
+  codeOf,
 } from "@waitron/server-kit";
-import { AppError, FALLBACK_LOCALE, publicGuestMenu } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, publicGuestMenu, classifySavedTimeZone } from "@waitron/shared";
+import type { GuestMenuDeliveryStatus } from "./cloud-guest-menu.js";
 import type { Logger } from "./logger.js";
 import { renderGuestMenuPage, renderGuestMenuUnavailable } from "./guest-menu-page.js";
 import "./errors.js";
@@ -44,11 +46,49 @@ async function sharingStatus(tx: Transaction, serving: () => boolean) {
   const { doc, revision } = await readSettings(tx, GUEST_MENU_SETTINGS);
   return { ...doc, revision, available: serving() && (await readGuestMenu(tx)) !== null };
 }
+export async function readGuestMenuPages(db: Database, venueLocale: string) {
+  const live = await readGuestMenu(db);
+  if (live === null) return null;
+  const languages = await readContentLanguages(db, venueLocale);
+  const venue = await readVenue(db);
+  const zone = classifySavedTimeZone(venue.timeZone);
+  return {
+    defaultLanguage: languages.defaultLanguage,
+    pages: Object.fromEntries(
+      languages.languages.map((language) => [
+        language,
+        renderGuestMenuPage(
+          publicGuestMenu(live.document, languages, language),
+          venue.name,
+          languages.defaultLanguage,
+          true,
+          undefined,
+          "lang",
+          live.since,
+          zone.kind === "valid" ? zone.timeZone : "UTC",
+        ),
+      ]),
+    ),
+  };
+}
 export function mountGuestMenuApi(
   app: Hono,
-  deps: { db: Database; venueLocale?: string; serving: () => boolean },
+  deps: {
+    db: Database;
+    venueLocale?: string;
+    serving: () => boolean;
+    delivery?: () => Promise<GuestMenuDeliveryStatus>;
+  },
   log: Logger,
 ): void {
+  async function deliveryStatus() {
+    try {
+      return deps.delivery ? { delivery: await deps.delivery() } : {};
+    } catch (error) {
+      log("warn", "cloud.guest_menu_status_failed", { errorCode: codeOf(error) });
+      return {};
+    }
+  }
   app.get("/management-api/guest-menu", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -60,7 +100,7 @@ export function mountGuestMenuApi(
         return sharingStatus(tx, deps.serving);
       });
       c.header("Cache-Control", "no-store");
-      return c.json(answer);
+      return c.json({ ...answer, ...(await deliveryStatus()) });
     }),
   );
   app.put("/management-api/guest-menu", (c) =>
@@ -90,7 +130,7 @@ export function mountGuestMenuApi(
         });
         return sharingStatus(tx, deps.serving);
       });
-      return c.json(answer);
+      return c.json({ ...answer, ...(await deliveryStatus()) });
     }),
   );
   app.get("/management-api/catalogues/:id/guest-preview", (c) =>

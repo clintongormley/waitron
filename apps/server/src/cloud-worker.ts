@@ -5,6 +5,8 @@ export function cloudConnectionJob(options: {
   connection: CloudConnection;
   isPrimary: () => boolean;
   onError?: (error: unknown) => void;
+  onGuestMenu?: (signal: AbortSignal) => unknown;
+  onGuestMenuError?: (error: unknown) => void;
   staffHostname?: string;
   onStaffCertificate?: (signal: AbortSignal) => unknown;
 }): JobDefinition {
@@ -18,6 +20,13 @@ export function cloudConnectionJob(options: {
       try {
         if (options.isPrimary()) {
           const status = await options.connection.refresh(signal);
+          if (status.installation?.state === "active" && !signal.aborted && options.isPrimary()) {
+            try {
+              await options.onGuestMenu?.(signal);
+            } catch (error) {
+              if (!signal.aborted) options.onGuestMenuError?.(error);
+            }
+          }
           if (
             options.staffHostname &&
             status.installation?.state === "active" &&

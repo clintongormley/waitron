@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, leaveCoordinatorFor, type LeaveReason } from "@waitron/ui";
+import { QueryController } from "@waitron/dashboard-kit";
 import { languageDisplayName } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -43,15 +44,42 @@ export class GuestMenuPreview extends LitElement {
   @state() private sharingBusy = false;
   @state() private sharingError = "";
 
+  @state() private sharingReadError = "";
+  readonly #queries = new QueryController(
+    this,
+    () => this.api?.liveData,
+    (error) => {
+      this.sharingReadError = codeMessage(codeOf(error));
+    },
+    () => {
+      this.sharingReadError = "";
+    },
+  );
   async #readSharing() {
     const generation = this.#sharingGeneration;
     this.sharing = null;
     this.sharingError = "";
+    this.sharingReadError = "";
     try {
-      const value = await this.api.getGuestMenuSharing();
-      if (generation === this.#sharingGeneration) this.sharing = value;
-    } catch (error) {
-      if (generation === this.#sharingGeneration) this.sharingError = codeMessage(codeOf(error));
+      await this.#queries.watch(
+        "sharing",
+        {
+          key: `guest-sharing:${generation}`,
+          dependencies: [],
+          refreshMs: 60_000,
+          read: () => this.api.getGuestMenuSharing(),
+        },
+        (value) => {
+          if (
+            generation === this.#sharingGeneration &&
+            !this.sharingBusy &&
+            (!this.sharing || value.revision >= this.sharing.revision)
+          )
+            this.sharing = value;
+        },
+      );
+    } catch {
+      /* The query controller owns read failures. */
     }
   }
   async #changeSharing() {
@@ -96,6 +124,7 @@ export class GuestMenuPreview extends LitElement {
   #close() {
     this.#generation++;
     this.#sharingGeneration++;
+    this.#queries.release("sharing");
     this.sharing = null;
     this.#clear();
     this.opened = false;
@@ -194,7 +223,8 @@ export class GuestMenuPreview extends LitElement {
         }
         ${this.sharing?.available ? html`<a href="/public/menu" target="_blank" rel="noopener">${t("menus.guest_local_link")}</a>` : nothing}
         ${this.sharing ? html`<p>${t(!this.sharing.enabled ? "menus.guest_sharing_off" : this.sharing.available ? "menus.guest_sharing_on" : "menus.guest_sharing_unavailable")}</p>` : nothing}
-        ${this.sharingError ? html`<p id="sharing-error" role="alert">${this.sharingError}</p>` : nothing}
+        ${this.sharing?.delivery ? html`<p id="cloud-delivery" role="status">${t(`menus.guest_cloud_${this.sharing.delivery.state}`)}</p>` : nothing}
+        ${this.sharingError || this.sharingReadError ? html`<p id="sharing-error" role="alert">${this.sharingError || this.sharingReadError}</p>` : nothing}
         <wt-button
           id="sharing-action"
           variant="secondary"
@@ -202,7 +232,7 @@ export class GuestMenuPreview extends LitElement {
           @click=${() => this.#changeSharing()}
           >${t(this.sharing?.enabled ? "menus.guest_turn_off" : "menus.guest_turn_on")}</wt-button
         >
-        ${!this.sharing && this.sharingError ? html`<wt-button variant="secondary" @click=${() => this.#readSharing()}>${t("content_languages.retry")}</wt-button>` : nothing}
+        ${!this.sharing && (this.sharingError || this.sharingReadError) ? html`<wt-button variant="secondary" @click=${() => this.#readSharing()}>${t("content_languages.retry")}</wt-button>` : nothing}
         <wt-button
           slot="footer"
           variant="secondary"

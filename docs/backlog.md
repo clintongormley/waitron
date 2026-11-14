@@ -486,7 +486,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Customer names fall back through guest language, venue default, then internal name; never kitchen.
   Managers can preview a published menu in guest languages and enable local sharing of the default publication. The watcher cleared the
   [build plan](superpowers/plans/2026-11-13-a670-guest-menu-build.md), including browser Print / Save as PDF.
-  Fixed A4 presets offer browser Print / Save as PDF. Cloud delivery and the mobile-data guest link remain; no ordering.
+  Fixed A4 presets offer browser Print / Save as PDF. The box delivers the published copy to Cloud and reports confirmation; mobile-data qualification remains. No ordering.
   [Detail](backlog/catalogue.md#a670--guest-menu-sharing-and-fixed-a4-presets)
 
 - **wt-data-table: heading wrap, long names, odds and ends** (bundle of 9, size M). Holds A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)

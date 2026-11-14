@@ -10,7 +10,12 @@ import { machinePayload } from "./cloud-installation.js";
 import "./errors.js";
 
 export type MachineServiceAction =
-  TranslationAction | "staff-certificate-submit" | "staff-certificate-status";
+  | TranslationAction
+  | "staff-certificate-submit"
+  | "staff-certificate-status"
+  | "guest-menu-status"
+  | "guest-menu-publish"
+  | "guest-menu-withdraw";
 
 export type TranslationAction =
   "translation-submit" | "translation-status" | "translation-collect" | "translation-release";
@@ -88,6 +93,9 @@ export type OnRefusal = (
   publicKey: string,
 ) => Promise<void>;
 const LIMITS: Record<MachineServiceAction, { reply: number; ms: number }> = {
+  "guest-menu-status": { reply: 16384, ms: 8000 },
+  "guest-menu-publish": { reply: 16384, ms: 60000 },
+  "guest-menu-withdraw": { reply: 16384, ms: 8000 },
   "staff-certificate-submit": { reply: 32768, ms: 8000 },
   "staff-certificate-status": { reply: 32768, ms: 8000 },
   "translation-submit": { reply: 65536, ms: 60000 },

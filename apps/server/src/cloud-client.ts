@@ -39,6 +39,11 @@ import { AppError } from "@waitron/shared";
 import { readTunnelPublicKey, writeTunnelConfiguration } from "./cloud-tunnel.js";
 import "./errors.js";
 import { refreshStaffCertificate } from "./cloud-staff-certificate.js";
+import {
+  fetchGuestMenuStatus,
+  publishCloudGuestMenu,
+  withdrawCloudGuestMenu,
+} from "./cloud-guest-menu.js";
 
 export interface CloudRegistration {
   venueId: string;
@@ -419,6 +424,30 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         }
         return project(state);
       }, true);
+    },
+    async guestMenuStatus(signal?: AbortSignal) {
+      const deadline = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
+        : AbortSignal.timeout(8000);
+      return fetchGuestMenuStatus(await leaseState(deadline), deadline, recordRefusal);
+    },
+    async publishGuestMenu(expectedRevision: number, body: string, signal?: AbortSignal) {
+      const deadline = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(60000)])
+        : AbortSignal.timeout(60000);
+      return publishCloudGuestMenu(
+        await leaseState(deadline),
+        expectedRevision,
+        body,
+        deadline,
+        recordRefusal,
+      );
+    },
+    async withdrawGuestMenu(signal?: AbortSignal) {
+      const deadline = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
+        : AbortSignal.timeout(8000);
+      return withdrawCloudGuestMenu(await leaseState(deadline), deadline, recordRefusal);
     },
     async staffCertificate(hostname: string, signal?: AbortSignal): Promise<boolean> {
       const deadline = signal

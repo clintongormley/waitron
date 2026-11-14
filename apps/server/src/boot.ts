@@ -41,6 +41,7 @@ import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
+import { createGuestMenuDelivery } from "./cloud-guest-menu.js";
 import { cloudConnectionJob } from "./cloud-worker.js";
 import { writeTunnelConfiguration } from "./cloud-tunnel.js";
 import { createContentSuggestionRunner, suggestionsJob } from "./content-suggestion-runner.js";
@@ -349,7 +350,7 @@ import {
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { moduleCoreServices } from "./parties.js";
-import { mountGuestMenuApi, mountPublicGuestMenu } from "./guest-menu-api.js";
+import { mountGuestMenuApi, mountPublicGuestMenu, readGuestMenuPages } from "./guest-menu-api.js";
 import { mountCatalogueApi, translationContextFor } from "./catalogue-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -3180,7 +3181,6 @@ async function bootServer(
     },
     log,
   );
-  mountGuestMenuApi(app, { db, venueLocale, serving: () => cloudServing() }, log);
   mountUnitsApi(app, { db, venueLocale }, log);
   mountPurchasingApi(app, { db }, log);
   const drainWaker = createLoopWaker({ minTickMs: timings.minTickMs });
@@ -3845,6 +3845,26 @@ async function bootServer(
   const cloudPrimary = () =>
     holders.mode.current === "primary" && holders.singletonRole.current === "primary" && !fenced;
   cloudServing = cloudPrimary;
+  const guestMenuDelivery = cloudConnection
+    ? createGuestMenuDelivery({
+        connection: cloudConnection,
+        isPrimary: cloudPrimary,
+        readPages: () => readGuestMenuPages(db, venueLocale),
+      })
+    : undefined;
+  mountGuestMenuApi(
+    app,
+    {
+      db,
+      venueLocale,
+      serving: cloudPrimary,
+      delivery: () =>
+        guestMenuDelivery?.status() ??
+        Promise.resolve({ state: "not_connected", receivedAt: null }),
+    },
+    log,
+  );
+
   mountCloudApi(
     app,
     {
@@ -4388,6 +4408,9 @@ async function bootServer(
       cloudConnectionJob({
         connection: cloudConnection,
         isPrimary: cloudPrimary,
+        onGuestMenu: (signal) => guestMenuDelivery!.reconcile(signal),
+        onGuestMenuError: (error) =>
+          log("error", "cloud.guest_menu_failed", { errorCode: codeOf(error) }),
         ...(config.staff && config.environment !== "production"
           ? {
               staffHostname: new URL(config.staff.origin).hostname,

@@ -3225,12 +3225,23 @@ export const en = {
     "The schedule change for {name} was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
   "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
   "menus.guest_sharing_unavailable":
-    "Sharing is On, but no menu is available. Choose an active default menu in Menus and publish it. Cloud delivery is not available yet.",
+    "Sharing is On, but no menu is available. Choose an active default menu in Menus and publish it.",
+  "menus.guest_cloud_not_connected":
+    "Connect this box to Cloud to deliver the guest menu. A last delivered copy may still be available; stop sharing in the Cloud portal to remove it.",
+  "menus.guest_cloud_pending":
+    "Cloud update pending. Its last delivered menu stays available until the update arrives, including when you turn sharing off.",
+  "menus.guest_cloud_current":
+    "Cloud has the current publication. Public access is still being prepared.",
+  "menus.guest_cloud_refused":
+    "Cloud could not accept this publication. Check the menu and its content languages. The box will retry; to remove the last delivered copy, stop sharing in the Cloud portal.",
+  "menus.guest_cloud_off": "Cloud has confirmed that the menu is off.",
+  "menus.guest_cloud_blocked":
+    "Guest sharing is stopped in Cloud. Enable it in the Cloud portal to resume delivery.",
   "menus.guest_local_link": "Open the shared menu on this box",
   "menus.guest_sharing_on":
-    "Public sharing is On for the default menu. Only its published version is shared. Cloud delivery is not available yet.",
+    "Public sharing is On for the default menu. Only its published version is shared.",
   "menus.guest_sharing_off":
-    "Public sharing is Off. Turning it on shares the default menu’s published version on this box, not necessarily the menu shown here. Cloud delivery is not available yet.",
+    "Public sharing is Off. Turning it on shares the default menu’s published version on this box, not necessarily the menu shown here.",
   "menus.guest_turn_on": "Turn sharing on",
   "menus.guest_turn_off": "Turn sharing off",
   "menus.guest_preview": "Guest menu preview",
@@ -7338,12 +7349,23 @@ export const es: Record<StringKey, string> = {
     "No se ha confirmado el cambio de programación de {name}. Abre su pestaña Vista previa y comprueba las Versiones programadas antes de volver a intentarlo.",
   "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
   "menus.guest_sharing_unavailable":
-    "La carta está compartida, pero no hay ninguna disponible. Elige una carta predeterminada activa en Cartas y publícala. El envío a Cloud aún no está disponible.",
+    "La carta está compartida, pero no hay ninguna disponible. Elige una carta predeterminada activa en Cartas y publícala.",
+  "menus.guest_cloud_not_connected":
+    "Conecta esta caja a Cloud para enviar la carta para clientes. La última copia enviada puede seguir disponible; deja de compartir desde el portal de Cloud para retirarla.",
+  "menus.guest_cloud_pending":
+    "Actualización de Cloud pendiente. La última carta enviada sigue disponible hasta que llegue la actualización, incluso al dejar de compartir.",
+  "menus.guest_cloud_current":
+    "Cloud tiene la publicación actual. El acceso público aún se está preparando.",
+  "menus.guest_cloud_refused":
+    "Cloud no ha podido aceptar esta publicación. Revisa la carta y sus idiomas de contenido. La caja volverá a intentarlo; para retirar la última copia enviada, deja de compartir desde el portal de Cloud.",
+  "menus.guest_cloud_off": "Cloud ha confirmado que la carta ya no se comparte.",
+  "menus.guest_cloud_blocked":
+    "La carta está bloqueada en Cloud. Actívala en el portal de Cloud para reanudar los envíos.",
   "menus.guest_local_link": "Abrir la carta compartida en esta caja",
   "menus.guest_sharing_on":
-    "La carta predeterminada está compartida. Solo se comparte su versión publicada. El envío a Cloud aún no está disponible.",
+    "La carta predeterminada está compartida. Solo se comparte su versión publicada.",
   "menus.guest_sharing_off":
-    "La carta no está compartida. Al activarlo, se comparte la versión publicada de la carta predeterminada en esta caja, que puede no ser la que ves aquí. El envío a Cloud aún no está disponible.",
+    "La carta no está compartida. Al activarlo, se comparte la versión publicada de la carta predeterminada en esta caja, que puede no ser la que ves aquí.",
   "menus.guest_turn_on": "Compartir carta",
   "menus.guest_turn_off": "Dejar de compartir",
   "menus.guest_preview": "Vista previa para clientes",

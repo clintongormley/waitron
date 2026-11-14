@@ -508,7 +508,14 @@ de la carta predeterminada. Puede ser distinta de la que estás revisando. Elige
 **Abrir la carta compartida en esta caja** para comprobarla. Publica los cambios antes de revisarlos ahí.
 Solo se muestra una carta predeterminada activa y publicada. Elige **Dejar de compartir** para retirarla.
 La elección se conserva en esta caja al importar una configuración; una caja nueva empieza sin compartir.
-El enlace para clientes con datos móviles y el envío a Cloud aún no están disponibles.
+Cuando esta caja está conectada a Cloud, la vista previa indica si Cloud tiene la publicación actual
+o queda una actualización pendiente. Publica los cambios y espera la confirmación. Si la caja está
+sin conexión, Cloud conserva la última copia enviada. Al dejar de compartir, esa copia se retira
+cuando llega la actualización. Puedes dejar de compartir desde el portal de Cloud mientras la caja
+está sin conexión; vuelve a activarlo allí para reanudar los envíos. Si Cloud rechaza la publicación,
+revisa la carta y sus idiomas de contenido; la caja vuelve a intentarlo. Tras desconectar la caja,
+retira cualquier copia enviada desde el portal de Cloud. El enlace para clientes con datos
+móviles aún se está preparando.
 
 ## Imprime una carta publicada {#guest-paper}
 

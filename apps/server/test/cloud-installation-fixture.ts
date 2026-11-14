@@ -10,6 +10,7 @@ export async function installationFixture(
     translation?: MachineHandler;
     billing?: MachineHandler;
     staffCertificate?: MachineHandler;
+    guestMenu?: MachineHandler;
     tunnel?: MachineHandler;
     translationState?: () => ServiceState;
   } = {},
@@ -73,6 +74,20 @@ export async function installationFixture(
     }
     if (String(values[2]).startsWith("staff-certificate-") && options.staffCertificate) {
       await options.staffCertificate(values, saved, req, res, sent);
+      return;
+    }
+    if (String(values[2]).startsWith("guest-menu-")) {
+      if (options.guestMenu) await options.guestMenu(values, saved, req, res, sent);
+      else
+        res.end(
+          JSON.stringify({
+            version: 1,
+            url: `https://menus.example.test/m/${(saved.view as { registration: { venueId: string } }).registration.venueId}`,
+            revision: 0,
+            state: "off",
+            publication: null,
+          }),
+        );
       return;
     }
     if (values[2] === "billing-display" && options.billing) {

@@ -4,7 +4,7 @@ import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, onTestFinished } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
@@ -334,3 +334,59 @@ it.each(["with-origin", "without-origin"] as const)(
     });
   },
 );
+
+it("withdraws a missing guest publication through boot's Cloud job and reports its confirmation to the manager", async () => {
+  const actions: string[] = [];
+  const f = await installationFixture(undefined, {
+    guestMenu: async (values, saved, _req, res) => {
+      const action = String(values[2]);
+      actions.push(action);
+      res.end(
+        JSON.stringify({
+          version: 1,
+          url: `https://menus.example.test/m/${(saved.view as { registration: { venueId: string } }).registration.venueId}`,
+          revision: action === "guest-menu-withdraw" ? 2 : 1,
+          state: action === "guest-menu-withdraw" ? "off" : "current",
+          publication:
+            action === "guest-menu-withdraw"
+              ? null
+              : {
+                  bodySha256: "a".repeat(64),
+                  defaultLanguage: "en",
+                  receivedAt: "2026-11-14T05:00:00.000Z",
+                },
+        }),
+      );
+    },
+  });
+  onTestFinished(async () => {
+    if (server) {
+      await server.close();
+      server = undefined;
+    }
+    await f.close();
+  });
+  const source = join(f.stateDir, "cloud/connection.json");
+  const saved = JSON.parse(await readFile(source, "utf8"));
+  const running = await boot({
+    modules: VERIFACTU,
+    testSubmissions: false,
+    beforeStart: async (venue, directory, env) => {
+      saved.localVenueId = venue.cfg.locationId;
+      saved.view.localVenueId = venue.cfg.locationId;
+      await mkdir(join(directory, "cloud"), { recursive: true });
+      const destination = join(directory, "cloud/connection.json");
+      await writeFile(destination, JSON.stringify(saved), { mode: 0o600 });
+      await rm(source);
+      await symlink(destination, source);
+      env.WAITRON_CLOUD_ORIGIN = f.options.origin;
+      env.WAITRON_ENV = "dev";
+    },
+  });
+  await vi.waitFor(() => expect(actions).toEqual(["guest-menu-status", "guest-menu-withdraw"]));
+  const response = await fetch(`http://127.0.0.1:${running.port}/management-api/guest-menu`, {
+    headers: { cookie: running.venue.managerCookie, "x-waitron-live": "1" },
+  });
+  expect(response.status).toBe(200);
+  expect((await response.json()).delivery).toEqual({ state: "off", receivedAt: null });
+});
