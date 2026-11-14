@@ -116,6 +116,7 @@ export class BackupAudit extends LitElement {
                               (row) =>
                                 html`<li>
                                   <p>${t(`payments.refunds.${row.reason}`)}</p>
+                                  ${row.providerAt === null && row.localAt === null ? html`<p>${t("payments.refunds.unknown_date")}</p>` : nothing}
                                   ${row.charge ? html`<p>${t("payments.backup.exceptions")}: ${formatMoney(decimal(row.charge.amount), currentLocale())} · ${new Date(row.charge.settledAt).toLocaleString(currentLocale(), { timeZone: audit.timeZone })}</p>` : nothing}
                                   <p>
                                     ${[row.processorRef, row.providerRefundRef, row.paymentRef, row.workingOrderId, row.externalMachine, row.externalRef].filter(Boolean).join(" · ")}

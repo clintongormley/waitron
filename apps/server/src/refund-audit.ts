@@ -57,10 +57,16 @@ export function refundAudit(
     { parent: RefundEvidence["parents"][number]; checkedAt: string }
   >();
   const links = new Map<string, Set<string>>();
+  const unidentified: NonNullable<RefundEvidence["parents"][number]["unidentified"]>[] = [];
   for (const run of selected) {
     const evidence = run.summary?.refundEvidence;
     if (run.periodFrom < to && run.periodTo > from) {
-      if (run.periodFrom > covered || !evidence?.complete) result.complete = false;
+      if (
+        run.periodFrom > covered ||
+        evidence === undefined ||
+        (!evidence.complete && !evidence.parents.some((parent) => parent.issue !== undefined))
+      )
+        result.complete = false;
       if (evidence && run.periodTo > covered) covered = run.periodTo;
       if (evidence) result.checkedAt.push(evidence.checkedAt);
     }
@@ -70,9 +76,23 @@ export function refundAudit(
       links.set(match.paymentRef, ids);
     }
     for (const parent of evidence?.parents ?? []) {
+      if (parent.unidentified) {
+        if (
+          parent.unidentified.at === null ||
+          (parent.unidentified.at >= run.periodFrom && parent.unidentified.at < run.periodTo)
+        )
+          unidentified.push(parent.unidentified);
+        continue;
+      }
       const prior = parents.get(parent.processorRef);
-      if (prior === undefined || evidence!.checkedAt >= prior.checkedAt)
-        parents.set(parent.processorRef, { parent, checkedAt: evidence!.checkedAt });
+      const observedAt = [
+        ...new Set([...(prior?.parent.observedAt ?? []), ...(parent.observedAt ?? [])]),
+      ];
+      const value =
+        prior === undefined || evidence!.checkedAt >= prior.checkedAt
+          ? { parent, checkedAt: evidence!.checkedAt }
+          : prior;
+      parents.set(parent.processorRef, { ...value, parent: { ...value.parent, observedAt } });
     }
   }
   result.complete &&= covered >= to;
@@ -102,6 +122,16 @@ export function refundAudit(
     providerAt: event?.at ?? null,
     localAt: local?.createdAt ?? null,
   });
+  for (const row of unidentified)
+    if (row.at === null || inside(row.at)) {
+      result.complete = false;
+      result.exceptions.push({
+        ...blank(null),
+        reason: "missing_reference",
+        providerAmount: row.amount,
+        providerAt: row.at,
+      });
+    }
   const locals = new Map<string, RefundAuditRow[]>();
   for (const row of rows) {
     const linked = links.get(row.paymentRef);
@@ -125,7 +155,10 @@ export function refundAudit(
     const own = locals.get(id) ?? [];
     const claims = own.flatMap((row) => row.refunds.map((local) => ({ row, local })));
     const used = new Set<(typeof claims)[number]>();
+    const ambiguous = new Set<(typeof claims)[number]>();
     const events = parent?.events ?? [];
+    if (parent === undefined && claims.some((claim) => inside(claim.local.createdAt)))
+      result.complete = false;
     for (const event of events) {
       const exact = claims.filter((claim) => claim.local.providerRefundRef === event.id);
       const amount = claims.filter(
@@ -161,30 +194,44 @@ export function refundAudit(
       } else if (choices.length) {
         for (const claim of choices) {
           used.add(claim);
-          if (inside(event.at) || inside(claim.local.createdAt))
-            result.exceptions.push({
-              ...blank(id, claim.row, claim.local, event),
-              reason: "ambiguous",
-            });
+          ambiguous.add(claim);
         }
+        if (inside(event.at))
+          result.exceptions.push({ ...blank(id, own[0], undefined, event), reason: "ambiguous" });
       } else if (inside(event.at)) {
         const voided = own.find((row) => row.state === "voided");
-        (voided ? result.agreements : result.exceptions).push({
+        result.exceptions.push({
           ...blank(id, voided ?? own[0], undefined, event),
           reason: voided ? "void" : "missing_local",
         });
       }
     }
+    for (const claim of ambiguous)
+      if (inside(claim.local.createdAt))
+        result.exceptions.push({ ...blank(id, claim.row, claim.local), reason: "ambiguous" });
+    if (events.length === 0 && parent?.issue === undefined)
+      for (const row of own)
+        if (row.state === "voided" && inside(row.stateUpdatedAt))
+          result.exceptions.push({ ...blank(id, row), reason: parent ? "void" : "not_checked" });
     for (const claim of claims)
       if (!used.has(claim) && inside(claim.local.createdAt))
         result.exceptions.push({
           ...blank(id, claim.row, claim.local),
-          reason: parent?.issue ?? "missing_provider",
+          reason: parent === undefined ? "not_checked" : (parent.issue ?? "missing_provider"),
         });
-    if (parent?.issue !== undefined) {
+    const knownDates = [
+      ...(parent?.observedAt ?? []),
+      ...claims.map((claim) => claim.local.createdAt),
+      ...own.filter((row) => row.state === "voided").map((row) => row.stateUpdatedAt),
+    ];
+    if (parent?.issue !== undefined && (!knownDates.length || knownDates.some(inside))) {
       result.complete = false;
       if (!claims.some((claim) => inside(claim.local.createdAt)))
-        result.exceptions.push({ ...blank(id), reason: parent.issue });
+        result.exceptions.push({
+          ...blank(id, own[0]),
+          reason: parent.issue,
+          providerAt: parent.observedAt?.find(inside) ?? null,
+        });
     }
     if (stored && claims.some((claim) => inside(claim.local.createdAt)))
       result.checkedAt.push(stored.checkedAt);

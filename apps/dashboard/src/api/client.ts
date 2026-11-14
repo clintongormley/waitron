@@ -2226,6 +2226,7 @@ export interface ModuleRow {
 export interface RefundAuditItem {
   charge?: { amount: string; settledAt: string };
   reason:
+    | "not_checked"
     | "confirmed"
     | "amount_agreement"
     | "amount"

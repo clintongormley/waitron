@@ -12,6 +12,7 @@ const row = (id: string | null = "r1", amount = "2.35"): RefundAuditRow => ({
   externalMachine: null,
   state: "partially_refunded",
   settledAt: "2026-06-01T12:00:00.000Z",
+  stateUpdatedAt: at,
   refunds: [{ id: "local-r1", providerRefundRef: id, amount: amount as never, createdAt: at }],
 });
 const event = (id = "r1", amount = "2.35", time = at) => ({ id, amount, at: time });
@@ -105,7 +106,7 @@ describe("refund comparison", () => {
       { reason: "missing_provider" },
     ]);
     expect(
-      refundAudit(period, runs(), [{ ...row(), state: "voided", refunds: [] }]).agreements,
+      refundAudit(period, runs(), [{ ...row(), state: "voided", refunds: [] }]).exceptions,
     ).toMatchObject([{ reason: "void" }]);
     const history = runs();
     history[1]!.summary.refundEvidence = {
@@ -152,4 +153,71 @@ it("attaches a provider-only refund to its existing unmatched charge", () => {
       [],
     ).exceptions,
   ).toMatchObject([{ charge: { amount: "10.00", settledAt: charge.settledAt } }]);
+});
+
+it("does not call an unexamined refund missing at SumUp", () => {
+  for (const history of [
+    [],
+    runs().map((run) => ({ ...run, summary: {} })),
+    runs().map((run) => ({
+      ...run,
+      summary: { ...run.summary, refundEvidence: { ...run.summary.refundEvidence, parents: [] } },
+    })),
+  ]) {
+    expect(refundAudit(period, history, [row()])).toMatchObject({
+      complete: false,
+      exceptions: [{ reason: "not_checked" }],
+    });
+  }
+});
+
+it("clips a failed lookup to its known local refund day", () => {
+  const history = runs().map((run) => ({
+    ...run,
+    summary: {
+      ...run.summary,
+      refundEvidence: {
+        complete: false,
+        checkedAt: at,
+        parents: [{ processorRef: "charge", events: [], issue: "not_found" as const }],
+      },
+    },
+  }));
+  expect(
+    refundAudit(period, history, [
+      { ...row(), refunds: [{ ...row().refunds[0]!, createdAt: "2026-07-01T03:00:00.000Z" }] },
+    ]),
+  ).toMatchObject({ complete: true, exceptions: [] });
+});
+it("shows a recorded void even when the provider has no refund event", () => {
+  expect(
+    refundAudit(period, runs([]), [{ ...row(), state: "voided", refunds: [] }]).exceptions,
+  ).toMatchObject([{ reason: "void", paymentRef: "pay", localAt: null }]);
+});
+it("shows each side of ambiguous amount matching once", () => {
+  const result = refundAudit(period, runs([event("a"), event("b")]), [row(null)]);
+  expect(
+    result.exceptions.map((row) => [row.providerRefundRef, row.localAmount, row.providerAmount]),
+  ).toEqual([
+    ["a", null, "2.35"],
+    ["b", null, "2.35"],
+    [null, "2.35", null],
+  ]);
+});
+
+it("keeps two unidentified equal refunds distinct without repeating a padded UTC entry", () => {
+  const unknown = {
+    processorRef: "",
+    events: [],
+    issue: "missing_reference" as const,
+    unidentified: { amount: "2.35", at },
+  };
+  const history = runs().map((run) => ({
+    ...run,
+    summary: {
+      ...run.summary,
+      refundEvidence: { complete: false, checkedAt: at, parents: [unknown, unknown] },
+    },
+  }));
+  expect(refundAudit(period, history, []).exceptions).toHaveLength(2);
 });

@@ -269,6 +269,7 @@ describe("SumUp refund evidence", () => {
         {
           processorRef: "tx",
           capturedAt: "2026-06-01T12:00:00.000Z",
+          observedAt: ["2026-07-01T12:00:00.000Z"],
           events: [{ id: "r1", amount: "2.35", at: "2026-07-01T13:00:00.000Z" }],
         },
       ],
@@ -279,6 +280,21 @@ describe("SumUp refund evidence", () => {
   it.each([
     { kind: "failed read", detail: undefined, issue: "read_failed", retry: true },
     { kind: "not found", detail: null, issue: "not_found", retry: false },
+    {
+      kind: "unknown refund status",
+      detail: {
+        refundEvents: [
+          {
+            id: "r",
+            status: "UNKNOWN",
+            amount: decimal("2.00"),
+            timestamp: "2026-07-01T13:00:00Z",
+          },
+        ],
+      },
+      issue: "invalid",
+      retry: false,
+    },
     { kind: "missing events", detail: {}, issue: "missing_events", retry: false },
     {
       kind: "bad content",
@@ -350,4 +366,26 @@ describe("SumUp refund evidence", () => {
       expect(report.retryRefunds).toBe(retry);
     },
   );
+});
+
+it("retains every reference-less refund's available amount and date", async () => {
+  const client = new FakeSumUp();
+  vi.spyOn(client, "historyPage").mockResolvedValue({
+    items: [1, 2, 3].map((amount) => ({
+      type: "REFUND",
+      amount,
+      timestamp: "2026-07-01T13:00:00Z",
+    })),
+  });
+  const report = source(client);
+  await report.fetch(period);
+  expect(await report.fetchRefundEvidence([], period.to)).toMatchObject({
+    complete: false,
+    parents: [1, 2, 3].map((amount) => ({
+      processorRef: "",
+      issue: "missing_reference",
+      unidentified: { amount: `${amount}.00`, at: "2026-07-01T13:00:00.000Z" },
+    })),
+  });
+  expect(report.retryRefunds).toBe(false);
 });

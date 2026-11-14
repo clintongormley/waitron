@@ -107,6 +107,8 @@ export interface RefundEvidence {
   parents: {
     processorRef: string;
     capturedAt?: string;
+    observedAt?: string[];
+    unidentified?: { amount: string | null; at: string | null };
     events: { id: string; amount: string; at: string }[];
     issue?:
       "read_failed" | "not_found" | "missing_events" | "missing_reference" | "invalid" | "pending";

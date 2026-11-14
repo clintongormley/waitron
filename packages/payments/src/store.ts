@@ -13,6 +13,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { devices, nowIso, workingOrders } from "@waitron/db";
 import "./errors.js";
 import { payments } from "./schema/payments.js";
+import { scheduledRuns } from "./schema/scheduled-runs.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import { paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
 import { readerHeldBy, readerPaymentInProgress } from "./device-readers.js";
@@ -773,6 +774,31 @@ export async function listBackupPayments(tx: Transaction, period: { from: Date; 
   return rows.map((row) => ({ ...row, amount: centsToDecimal(row.amount) }));
 }
 
+export async function listPaymentAuditRuns(
+  tx: Transaction,
+  provider: string,
+  starts: readonly string[],
+) {
+  const latest = new Map<string, typeof scheduledRuns.$inferSelect>();
+  const dates = [...new Set(starts)];
+  for (let i = 0; i < dates.length; i += CHUNK_SIZE) {
+    const rows = await tx
+      .select()
+      .from(scheduledRuns)
+      .where(
+        and(
+          eq(scheduledRuns.duty, `payments.reconcile.${provider}`),
+          eq(scheduledRuns.state, "succeeded"),
+          inArray(scheduledRuns.periodFrom, dates.slice(i, i + CHUNK_SIZE)),
+        ),
+      );
+    for (const row of rows)
+      if (!latest.has(row.periodFrom) || row.generation > latest.get(row.periodFrom)!.generation)
+        latest.set(row.periodFrom, row);
+  }
+  return [...latest.values()];
+}
+
 export async function listRefundAuditRows(
   tx: Transaction,
   provider: string,
@@ -849,6 +875,7 @@ export async function listRefundAuditRows(
     externalMachine: row.externalMachine,
     state: row.state,
     settledAt: row.settledAt,
+    stateUpdatedAt: row.updatedAt,
     refunds: refunds
       .filter((refund) => refund.paymentId === row.id)
       .map((refund) => ({

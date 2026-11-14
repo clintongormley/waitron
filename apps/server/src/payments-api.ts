@@ -47,6 +47,7 @@ import {
   PAYMENTS_SETTINGS,
   scheduledRuns,
   listRefundAuditRows,
+  listPaymentAuditRuns,
   type BackupPaymentMatch,
   type BackupPaymentUnmatched,
   appendReaderToProfiles,
@@ -823,54 +824,43 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
               run.summary?.refundEvidence?.parents.map((parent) => parent.processorRef) ?? [],
           ),
         );
-        for (let i = 0; i < days.length; i += 1000) {
-          const older = await tx
-            .select()
-            .from(scheduledRuns)
-            .where(
-              and(
-                eq(scheduledRuns.duty, "payments.reconcile.sumup"),
-                eq(scheduledRuns.state, "succeeded"),
-                inArray(scheduledRuns.periodFrom, days.slice(i, i + 1000)),
-              ),
-            );
-          for (const run of older) {
-            if (
-              summaries.some(
-                (existing) =>
-                  existing.periodFrom === run.periodFrom && existing.generation === run.generation,
-              )
+        const older = await listPaymentAuditRuns(tx, "sumup", days);
+        for (const run of older) {
+          if (
+            summaries.some(
+              (existing) =>
+                existing.periodFrom === run.periodFrom && existing.generation === run.generation,
             )
-              continue;
-            const summary = run.summary as RefundAuditRun["summary"];
-            const matches =
-              summary?.backupMatches?.filter(
-                (match) =>
-                  manualRefs.has(match.paymentRef) ||
-                  match.references.some((id) => observedRefs.has(id)),
-              ) ?? [];
-            const ids = new Set([...observedRefs, ...matches.flatMap((match) => match.references)]);
-            summaries.push({
-              ...run,
-              summary: {
-                backupMatches: matches,
-                backupUnmatched:
-                  summary?.backupUnmatched?.filter((charge) =>
-                    charge.references.some((id) => ids.has(id)),
-                  ) ?? [],
-                ...(summary?.refundEvidence
-                  ? {
-                      refundEvidence: {
-                        ...summary.refundEvidence,
-                        parents: summary.refundEvidence.parents.filter((parent) =>
-                          ids.has(parent.processorRef),
-                        ),
-                      },
-                    }
-                  : {}),
-              },
-            });
-          }
+          )
+            continue;
+          const summary = run.summary as RefundAuditRun["summary"];
+          const matches =
+            summary?.backupMatches?.filter(
+              (match) =>
+                manualRefs.has(match.paymentRef) ||
+                match.references.some((id) => observedRefs.has(id)),
+            ) ?? [];
+          const ids = new Set([...observedRefs, ...matches.flatMap((match) => match.references)]);
+          summaries.push({
+            ...run,
+            summary: {
+              backupMatches: matches,
+              backupUnmatched:
+                summary?.backupUnmatched?.filter((charge) =>
+                  charge.references.some((id) => ids.has(id)),
+                ) ?? [],
+              ...(summary?.refundEvidence
+                ? {
+                    refundEvidence: {
+                      ...summary.refundEvidence,
+                      parents: summary.refundEvidence.parents.filter((parent) =>
+                        ids.has(parent.processorRef),
+                      ),
+                    },
+                  }
+                : {}),
+            },
+          });
         }
         return {
           ...backupAuditDay(

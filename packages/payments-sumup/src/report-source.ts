@@ -44,7 +44,8 @@ export function sumupSettlementReport(
   client: SumUpClient,
   candidates: readonly AuditCandidate[] = [],
 ) {
-  const refundParents = new Set<string>();
+  const refundParents = new Map<string, string[]>();
+  const unidentified: { amount: string | null; at: string | null }[] = [];
   const details = new Map<string, SumUpTransaction | null>();
   const lookup = async (id: string) => {
     if (!details.has(id)) details.set(id, await client.findTransaction({ id }));
@@ -59,8 +60,12 @@ export function sumupSettlementReport(
         checkedAt: now.toISOString(),
         parents: [],
       };
-      for (const id of new Set([...refundParents, ...ids])) {
-        const parent: RefundEvidence["parents"][number] = { processorRef: id, events: [] };
+      for (const id of new Set([...refundParents.keys(), ...ids])) {
+        const parent: RefundEvidence["parents"][number] = {
+          processorRef: id,
+          events: [],
+          ...(refundParents.get(id)?.length ? { observedAt: refundParents.get(id)! } : {}),
+        };
         try {
           const t = id ? await lookup(id) : null;
           if (t?.timestamp && Number.isFinite(Date.parse(t.timestamp)))
@@ -86,9 +91,7 @@ export function sumupSettlementReport(
             const classified = SumUpCloudProvider.classify(t, now);
             if (!valid) parent.issue = "invalid";
             else if (classified.kind !== "captured") {
-              parent.issue = [...unique.values()].some(
-                (event) => refundOutcomeOf(event.status) === "pending",
-              )
+              parent.issue = [...unique.values()].some((event) => event.status === "PENDING")
                 ? "pending"
                 : "invalid";
             } else
@@ -106,6 +109,14 @@ export function sumupSettlementReport(
           source.retryRefunds = true;
         evidence.parents.push(parent);
       }
+      for (const row of unidentified)
+        evidence.parents.push({
+          processorRef: "",
+          events: [],
+          issue: "missing_reference",
+          unidentified: row,
+        });
+      if (unidentified.length) evidence.complete = false;
       return evidence;
     },
     async fetch(
@@ -115,6 +126,7 @@ export function sumupSettlementReport(
       source.unreadableUnlinked = 0;
       source.retryRefunds = false;
       refundParents.clear();
+      unidentified.length = 0;
       details.clear();
       const known = new Set(localReferences);
       const records = new Map<string, SettlementRecord>();
@@ -144,10 +156,26 @@ export function sumupSettlementReport(
             continue;
           }
           if (t.type === "REFUND") {
-            refundParents.add(typeof t.transaction_id === "string" ? t.transaction_id : "");
+            const at =
+              typeof t.timestamp === "string" && Number.isFinite(Date.parse(t.timestamp))
+                ? new Date(t.timestamp).toISOString()
+                : null;
+            if (typeof t.transaction_id === "string" && t.transaction_id !== "") {
+              const times = refundParents.get(t.transaction_id) ?? [];
+              if (at !== null && !times.includes(at)) times.push(at);
+              refundParents.set(t.transaction_id, times);
+            } else
+              unidentified.push({
+                at,
+                amount:
+                  typeof t.amount === "number" && Number.isFinite(t.amount)
+                    ? fromMajorUnits(t.amount)
+                    : null,
+              });
             continue;
           }
-          if (t.status === "REFUNDED" && t.transaction_id) refundParents.add(t.transaction_id);
+          if (t.status === "REFUNDED" && t.transaction_id && !refundParents.has(t.transaction_id))
+            refundParents.set(t.transaction_id, []);
           if (!completed(t.status)) continue;
           try {
             const record = historyRecord(t);

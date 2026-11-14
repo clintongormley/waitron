@@ -158,7 +158,11 @@ it("shows refund identity, evidence labels and checked times separately from bac
   const refundAudit = {
     ...result.refundAudit,
     agreements: [{ ...row, reason: "amount_agreement" }],
-    exceptions: [{ ...row, reason: "not_found" }],
+    exceptions: [
+      { ...row, reason: "not_found" },
+      { ...row, reason: "not_checked" },
+      { ...row, reason: "void", providerAt: null, localAt: null },
+    ],
     outside: [{ ...row, reason: "outside" }],
   };
   const { el } = await mountWidget<LitElement>("dashboard-backup-audit", {
@@ -174,6 +178,8 @@ it("shows refund identity, evidence labels and checked times separately from bac
     "Provider checked",
     "Local record",
     "SumUp record",
+    "Refund not checked against SumUp yet",
+    "Refund date unavailable",
   ])
     expect(el.shadowRoot!.textContent).toContain(text);
 });

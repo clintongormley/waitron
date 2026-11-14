@@ -46,6 +46,7 @@ export {
   listAttempting,
   listReconcilable,
   listRefundAuditRows,
+  listPaymentAuditRuns,
   listAuditCandidates,
   listBackupPayments,
   markReconcileRemediated,
