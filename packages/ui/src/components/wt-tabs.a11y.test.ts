@@ -10,6 +10,17 @@ import "./wt-tabs.js";
 afterEach(cleanup);
 afterEach(() => setHelpMode(false));
 describe.each(["light", "dark"] as const)("tabs accessibility (%s)", (theme) => {
+  test("sticky strip retains tab and panel names while content scrolls", async () => {
+    const wrapper = await mountThemed(
+      '<div style="height:240px; overflow:auto"><wt-tabs sticky label="Department"><p slot="service" style="height:1800px">Service settings</p></wt-tabs></div>',
+      theme,
+    );
+    const tabs = wrapper.querySelector("wt-tabs")!;
+    tabs.items = [{ key: "service", label: "Service" }];
+    await tabs.updateComplete;
+    wrapper.scrollTop = 400;
+    await expectNoA11yViolations(host);
+  });
   test("an action beside the tablist is named and separate from its tabs", async () => {
     const el = (await mountThemed(
       '<wt-tabs label="Venue operations"><div slot="actions"><button>Add department</button></div><p slot="status">Ready for service</p></wt-tabs>',

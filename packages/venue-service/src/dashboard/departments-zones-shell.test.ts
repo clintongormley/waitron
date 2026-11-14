@@ -1,3 +1,8 @@
+import {
+  departmentCancel,
+  selectDepartmentTab,
+  type ReceiptEditorStub,
+} from "../testing/department-edit-fixture.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { html } from "lit";
@@ -5,7 +10,6 @@ import { applyTokens, NavigationGuard } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi } from "./client.js";
 import { zonesModel } from "../testing/department-zones-fixture.js";
-import { selectDepartmentTab, type ReceiptEditorStub } from "../testing/department-edit-fixture.js";
 import "./venue-departments-shell.js";
 const initial = location.href;
 const shells: HTMLElementTagNameMap["venue-departments-shell"][] = [];
@@ -317,7 +321,7 @@ it("closing from the Service tab returns focus to that row's menu", async () => 
   await expect
     .poll(() => location.pathname)
     .toBe("/manage/venue-operations/department/d1/view/service");
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  departmentCancel(form).click();
   await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
   const menu = table
     .shadowRoot!.querySelector("[data-test=open-department-d1]")!

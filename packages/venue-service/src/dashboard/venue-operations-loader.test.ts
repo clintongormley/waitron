@@ -1,3 +1,4 @@
+import { departmentSave, departmentActions } from "../testing/department-edit-fixture.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { applyTokens, LeaveController } from "@waitron/ui";
@@ -136,7 +137,7 @@ async function renameDepartment(shell: HTMLElementTagNameMap["venue-departments-
   await dialog.updateComplete;
   emit(dialog.shadowRoot!.querySelector("[name=name]")!, "wt-change", { value: "Changed name" });
   await dialog.updateComplete;
-  dialog.shadowRoot!.querySelector<HTMLButtonElement>("[data-test=save-editor]")!.click();
+  departmentSave(dialog).click();
   return dialog;
 }
 const reads = (request: ReturnType<typeof vi.fn>) =>
@@ -291,9 +292,7 @@ it("live recovery clears a refresh failure without clearing a later action refus
   writeFailure(true);
   const dialog = await renameDepartment(shell);
   const bottom = async () =>
-    (
-      await formMessageOf(dialog.shadowRoot!.querySelector("wt-form-actions")!)
-    )?.textContent?.trim() ?? "";
+    (await formMessageOf(departmentActions(dialog)))?.textContent?.trim() ?? "";
   await expect.poll(bottom).toBe("The change could not be saved.");
   expect(shell.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
     "The venue configuration could not be loaded.",
@@ -424,15 +423,10 @@ it.each([
     emit(name, "wt-change", { value: "Brunch" });
     await dialog.updateComplete;
     request.mockRejectedValueOnce({ code: "connection.failed" });
-    const save =
-      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-        "[data-test=save-editor]",
-      )!;
+    const save = departmentSave(dialog);
     save.click();
     const bottom = async () =>
-      (
-        await formMessageOf(dialog.shadowRoot!.querySelector("wt-form-actions")!)
-      )?.textContent?.trim() ?? "";
+      (await formMessageOf(departmentActions(dialog)))?.textContent?.trim() ?? "";
     await expect.poll(bottom).toBe(refusal);
     expect(name.error).toBe("");
     expect(save.disabled).toBe(false);
@@ -476,19 +470,12 @@ it("a live failure behind an unsaved dialog leaves its Save message empty", asyn
   await expect
     .poll(() => loader.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim())
     .toBe("The venue configuration could not be loaded.");
-  expect(
-    (
-      await formMessageOf(dialog.shadowRoot!.querySelector("wt-form-actions")!)
-    )?.textContent?.trim() ?? "",
-  ).toBe("");
+  expect((await formMessageOf(departmentActions(dialog)))?.textContent?.trim() ?? "").toBe("");
   expect(dialog.dialog?.kind).toBe("add-department");
   expect(
     dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
   ).toBe("Brunch");
-  expect(
-    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!
-      .disabled,
-  ).toBe(false);
+  expect(departmentSave(dialog).disabled).toBe(false);
   expect(request.mock.calls.filter((call) => call[1] === "POST")).toHaveLength(0);
 });
 
@@ -536,7 +523,7 @@ async function openSettings(shell: HTMLElementTagNameMap["venue-departments-shel
 const inputValue = (form: HTMLElementTagNameMap["department-settings"], name: string) =>
   form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)!.value;
 function submit(form: HTMLElementTagNameMap["department-settings"]) {
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+  departmentSave(form).click();
 }
 async function reopen(shell: HTMLElementTagNameMap["venue-departments-shell"]) {
   await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();

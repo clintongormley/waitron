@@ -1,3 +1,8 @@
+import {
+  departmentSave,
+  departmentCancel,
+  departmentActions,
+} from "../testing/department-edit-fixture.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
@@ -113,7 +118,7 @@ async function dialogs(shell: HTMLElementTagNameMap["venue-departments-shell"]) 
 async function saveName(el: HTMLElementTagNameMap["department-dialogs"], name: string) {
   emit(el.shadowRoot!.querySelector("[name=name]")!, "wt-change", { value: name });
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+  departmentSave(el).click();
 }
 async function listTable(shell: HTMLElementTagNameMap["venue-departments-shell"]) {
   const list = shell.shadowRoot!.querySelector("departments-list")!;
@@ -136,7 +141,7 @@ async function saveDepartmentName(
 ) {
   emit(form.shadowRoot!.querySelector("[name=name]")!, "wt-change", { value: name });
   await form.updateComplete;
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+  departmentSave(form).click();
 }
 function alert(shell: HTMLElementTagNameMap["venue-departments-shell"]) {
   return shell.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim() ?? "";
@@ -200,7 +205,7 @@ it("Cancel returns focus to the real Add button", async () => {
   const opener = list.shadowRoot!.querySelector<HTMLElement>("[data-test=add-department]")!;
   opener.click();
   const el = await dialogs(shell);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  departmentCancel(el).click();
   await expect.poll(() => el.dialog).toBeUndefined();
   await expect.poll(() => list.shadowRoot!.activeElement).toBe(opener);
 });
@@ -258,7 +263,7 @@ it("Cancel returns focus to the real Add zone row-menu trigger", async () => {
   const opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
   action.click();
   const el = await dialogs(shell);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  departmentCancel(el).click();
   await expect.poll(() => el.dialog).toBeUndefined();
   await expect.poll(() => menu.shadowRoot!.activeElement).toBe(opener);
 });
@@ -304,7 +309,7 @@ it.each(["cancel", "save"] as const)(
     await userEvent.click(page.elementLocator(action));
     const form = await departmentForm(shell);
     if (ending === "save") await saveDepartmentName(form, "New name");
-    else form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+    else departmentCancel(form).click();
     await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
     await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
     await expect.poll(() => menu.shadowRoot!.activeElement).toBe(trigger);
@@ -494,7 +499,7 @@ it.each(["success", "failure"] as const)(
       expect(alert(shell)).toBe("");
     } else {
       expect(alert(shell)).toBe("The venue configuration could not be loaded.");
-      expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+      expect(departmentActions(el).error).toBe("");
     }
     expect(request.mock.calls.filter((call) => call[1] === "PUT")).toEqual([
       [
@@ -540,8 +545,7 @@ it("a retained dialog cannot write again while its successful write is refreshin
   await userEvent.fill(page.elementLocator(box.shadowRoot!.querySelector("input")!), "Newer");
   finishWrite();
   await expect.poll(() => shell.getAttribute("aria-busy")).toBe("true");
-  const save =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  const save = departmentSave(el);
   await expect.poll(() => save.disabled).toBe(true);
   expect(save.variant).toBe("secondary");
   await save.updateComplete;
@@ -584,10 +588,7 @@ it("a retained zone draft cannot save twice while its first write is refreshing"
   await field.updateComplete;
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), "Submitted");
   await editor.updateComplete;
-  const save =
-    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      "[data-test=save-editor]",
-    )!;
+  const save = departmentSave(editor);
   save.click();
   await expect
     .poll(() => request.mock.calls.filter(([, method]) => method === "PUT").length)

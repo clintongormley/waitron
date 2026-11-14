@@ -29,6 +29,7 @@ export class WtTabs extends LitElement {
       :host {
         display: block;
         min-width: 0;
+        --wt-tabs-sticky-height: 0px;
       }
       .tab-row {
         position: relative;
@@ -36,6 +37,12 @@ export class WtTabs extends LitElement {
         align-items: center;
         min-width: 0;
         border-bottom: 1px solid var(--wt-color-border);
+      }
+      :host([sticky]) .tab-row {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--wt-tabs-sticky-surface, var(--wt-color-bg));
       }
       [role="tablist"] {
         display: flex;
@@ -126,6 +133,7 @@ export class WtTabs extends LitElement {
   @property({ attribute: false }) items: readonly TabItem[] = [];
   @property() value = "";
   @property() label = "";
+  @property({ type: Boolean, reflect: true }) sticky = false;
   readonly #id = uniqueId("wt-tabs");
   readonly #help = new HelpModeController(this);
 
@@ -188,9 +196,11 @@ export class WtTabs extends LitElement {
       this.#showOverflow();
     }
     this.#placeBadges();
+    this.#syncStickyHeight();
   });
   #observedStrip: Element | null = null;
   #observedWidth: number | null = null;
+  #observedRow: Element | null = null;
   #observedTab: Element | null = null;
   #shownScroll: number | null = null;
   #overflowFrame: number | null = null;
@@ -210,6 +220,12 @@ export class WtTabs extends LitElement {
 
   #observeSizes(): void {
     if (!this.isConnected) return;
+    const row = this.renderRoot.querySelector(".tab-row");
+    if (row !== this.#observedRow) {
+      if (this.#observedRow) this.#sizeObserver.unobserve(this.#observedRow);
+      if (row) this.#sizeObserver.observe(row);
+      this.#observedRow = row;
+    }
     const bar = this.renderRoot.querySelector('[role="tablist"]');
     if (bar !== this.#observedStrip) {
       if (this.#observedStrip) this.#sizeObserver.unobserve(this.#observedStrip);
@@ -338,6 +354,7 @@ export class WtTabs extends LitElement {
     this.#sizeObserver.disconnect();
     this.#observedStrip = null;
     this.#observedTab = null;
+    this.#observedRow = null;
     if (this.#overflowFrame !== null) cancelAnimationFrame(this.#overflowFrame);
     this.#overflowFrame = null;
   }
@@ -347,6 +364,16 @@ export class WtTabs extends LitElement {
     if (changed.has("items") || changed.has("value")) this.#showSelected();
     this.#showOverflow();
     this.#placeBadges();
+    this.#syncStickyHeight();
+  }
+
+  #syncStickyHeight(): void {
+    const row = this.renderRoot.querySelector<HTMLElement>(".tab-row");
+    // Leave one pixel for scroll-position rounding.
+    this.style.setProperty(
+      "--wt-tabs-sticky-height",
+      `${this.sticky && row ? Math.ceil(row.getBoundingClientRect().height) + 1 : 0}px`,
+    );
   }
 
   override render() {

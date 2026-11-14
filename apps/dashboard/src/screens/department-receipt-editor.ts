@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { createRef, ref } from "lit/directives/ref.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   isValidTelephone,
@@ -118,6 +119,11 @@ export class DepartmentReceiptEditor extends LitElement {
     receipt: {},
     policy: { printTradingName: true },
   };
+  @property({ attribute: false }) externalActions = false;
+  private readonly saveRef = createRef<HTMLElementTagNameMap["wt-button"]>();
+  get saveButton() {
+    return this.saveRef.value ?? null;
+  }
   @state() private busy = false;
   readonly #feedback = new FormFeedback(this);
   @state() private errors: Record<string, string> = {};
@@ -220,6 +226,10 @@ export class DepartmentReceiptEditor extends LitElement {
       this.#announcedDescription = description;
       this.#notify("department-receipt-description");
     }
+    if (this.externalActions)
+      this.dispatchEvent(
+        new CustomEvent("footer-change", { detail: {}, bubbles: true, composed: true }),
+      );
     if (this.#marked === this.#announcedMarked) return;
     this.#announcedMarked = this.#marked;
     this.#notify("department-receipt-invalid", this.department?.id, { invalid: this.#marked });
@@ -638,10 +648,38 @@ export class DepartmentReceiptEditor extends LitElement {
           @wt-change=${change}
         ></wt-textarea>`;
   }
+  renderFooter(slot?: "footer"): unknown {
+    if (!this.department) return nothing;
+    const action = saveActionState(this.#scope);
+    const problems = this.#feedback.attempted ? this.#problems() : {};
+    const hasErrors = Object.keys({ ...problems, ...this.errors }).length > 0;
+    return html` <wt-form-actions
+      slot=${slot ?? nothing}
+      .showError=${slot !== "footer"}
+      .error=${bottomMessage(hasErrors ? t("form.fix_fields") : "", this.actionError)}
+    >
+      <wt-button
+        slot="cancel"
+        variant="secondary"
+        data-test="cancel-receipt"
+        ?disabled=${this.busy}
+        @click=${() => this.#notify("department-receipt-cancel")}
+        >${t("action.cancel")}</wt-button
+      >
+      <wt-button
+        ${ref(this.saveRef)}
+        data-test="save-receipt"
+        variant=${action.variant}
+        ?loading=${this.busy}
+        ?disabled=${action.unchanged || this.busy || Object.keys(problems).length > 0}
+        @click=${() => void this.#save()}
+        >${t("action.save")}</wt-button
+      >
+    </wt-form-actions>`;
+  }
   override render() {
     this.#marked = false;
     if (!this.department) return nothing;
-    const action = saveActionState(this.#scope);
     const problems = this.#feedback.attempted ? this.#problems() : {};
     const errors = { ...problems, ...this.errors };
     const hasErrors = Object.keys(errors).length > 0;
@@ -670,173 +708,154 @@ export class DepartmentReceiptEditor extends LitElement {
         )
       : [];
     return html` ${
-        this.readError
-          ? html`<p class="error" role="alert">${this.readError}</p>
-              <wt-button variant="secondary" @click=${() => void this.#load()}
-                >${t("venue_settings.retry")}</wt-button
-              >`
-          : nothing
-      }
-      ${
-        this.model && this.department
-          ? html`<div class="layout">
-              <div
-                class="fields"
-                @keydown=${(event: KeyboardEvent) => submitOnEnter(event, receiptButton(this))}
-                @focusin=${(event: FocusEvent) => {
-                  const focused = event.composedPath()[0];
-                  // The preview's mark answers the control's focus ring, so it shows only with it.
-                  this.focusedField = !(
-                    focused instanceof Element && focused.matches(":focus-visible")
-                  )
-                    ? ""
-                    : ((
-                        event
-                          .composedPath()
-                          .find(
-                            (node) => node instanceof HTMLElement && node.hasAttribute("name"),
-                          ) as HTMLElement | undefined
-                      )?.getAttribute("name") ?? "");
-                }}
-                @focusout=${() => {
-                  this.focusedField = "";
-                }}
-              >
-                <div>
-                  <wt-switch
-                    name="printTradingName"
-                    label=${t("receipts.print_trading_name")}
-                    .description=${errors.printTradingName ?? ""}
-                    .checked=${this.draft.policy.printTradingName}
-                    ?disabled=${this.busy}
-                    @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                      event.stopPropagation();
-                      this.#policy("printTradingName", event.detail.checked);
-                    }}
-                  ></wt-switch
-                  >${errors.printTradingName ? html`<p class="error" data-field-error="printTradingName">${errors.printTradingName}</p>` : nothing}
-                </div>
-                <div>
-                  <wt-switch
-                    name="printAddress"
-                    label=${t("receipts.print_address")}
-                    .description=${errors.printAddress ?? ""}
-                    .checked=${this.draft.receipt.printAddress === true}
-                    ?disabled=${this.busy}
-                    @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                      event.stopPropagation();
-                      if (this.busy) return;
-                      this.draft = {
-                        ...this.draft,
-                        receipt: { ...this.draft.receipt, printAddress: event.detail.checked },
-                      };
-                      const remaining = { ...this.errors };
-                      delete remaining.printAddress;
-                      this.errors = remaining;
-                      this.#scope?.changed();
-                      this.#queuePreview();
-                    }}
-                  ></wt-switch
-                  >${errors.printAddress ? html`<p class="error" data-field-error="printAddress">${errors.printAddress}</p>` : nothing}
-                </div>
-                ${this.model.venueAddress.length ? nothing : html`<p class="note" data-test="venue-address">${t("receipts.no_address")}</p>`}
-                <dashboard-image-upload
-                  name="logo"
-                  logo
-                  .api=${this.api}
-                  .image=${this.draft.receipt.logo ?? null}
-                  .draftParent=${this.#scope?.id}
-                  .disabled=${this.busy}
-                  .invalid=${!!errors.logo}
-                  @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
+      this.readError
+        ? html`<p class="error" role="alert">${this.readError}</p>
+            <wt-button variant="secondary" @click=${() => void this.#load()}
+              >${t("venue_settings.retry")}</wt-button
+            >`
+        : nothing
+    }
+    ${
+      this.model && this.department
+        ? html`<div class="layout">
+            <div
+              class="fields"
+              @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.saveButton)}
+              @focusin=${(event: FocusEvent) => {
+                const focused = event.composedPath()[0];
+                // The preview's mark answers the control's focus ring, so it shows only with it.
+                this.focusedField = !(
+                  focused instanceof Element && focused.matches(":focus-visible")
+                )
+                  ? ""
+                  : ((
+                      event
+                        .composedPath()
+                        .find(
+                          (node) => node instanceof HTMLElement && node.hasAttribute("name"),
+                        ) as HTMLElement | undefined
+                    )?.getAttribute("name") ?? "");
+              }}
+              @focusout=${() => {
+                this.focusedField = "";
+              }}
+            >
+              <div>
+                <wt-switch
+                  name="printTradingName"
+                  label=${t("receipts.print_trading_name")}
+                  .description=${errors.printTradingName ?? ""}
+                  .checked=${this.draft.policy.printTradingName}
+                  ?disabled=${this.busy}
+                  @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                     event.stopPropagation();
-                    this.#edit("logo", event.detail.image);
+                    this.#policy("printTradingName", event.detail.checked);
                   }}
-                ></dashboard-image-upload>
-                ${errors.logo ? html`<p class="error">${errors.logo}</p>` : nothing}
-                ${this.preview?.venueLogo && !this.draft.receipt.logo ? html`<p class="note" data-test="venue-logo">${t("receipts.venue_logo")}</p>` : nothing}
-                ${(["phone", "email"] as const).map(
-                  (field) =>
-                    html`<wt-input
-                      name=${field}
-                      type=${field === "phone" ? "tel" : "email"}
-                      label=${t(field === "phone" ? "receipts.phone" : "receipts.email")}
-                      .value=${this.draft.receipt[field] ?? ""}
-                      hint=${t(field === "phone" ? "receipts.phone_hint" : "receipts.email_hint")}
-                      error=${errors[field] ?? ""}
-                      ?disabled=${this.busy}
+                ></wt-switch
+                >${errors.printTradingName ? html`<p class="error" data-field-error="printTradingName">${errors.printTradingName}</p>` : nothing}
+              </div>
+              <div>
+                <wt-switch
+                  name="printAddress"
+                  label=${t("receipts.print_address")}
+                  .description=${errors.printAddress ?? ""}
+                  .checked=${this.draft.receipt.printAddress === true}
+                  ?disabled=${this.busy}
+                  @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                    event.stopPropagation();
+                    if (this.busy) return;
+                    this.draft = {
+                      ...this.draft,
+                      receipt: { ...this.draft.receipt, printAddress: event.detail.checked },
+                    };
+                    const remaining = { ...this.errors };
+                    delete remaining.printAddress;
+                    this.errors = remaining;
+                    this.#scope?.changed();
+                    this.#queuePreview();
+                  }}
+                ></wt-switch
+                >${errors.printAddress ? html`<p class="error" data-field-error="printAddress">${errors.printAddress}</p>` : nothing}
+              </div>
+              ${this.model.venueAddress.length ? nothing : html`<p class="note" data-test="venue-address">${t("receipts.no_address")}</p>`}
+              <dashboard-image-upload
+                name="logo"
+                logo
+                .api=${this.api}
+                .image=${this.draft.receipt.logo ?? null}
+                .draftParent=${this.#scope?.id}
+                .disabled=${this.busy}
+                .invalid=${!!errors.logo}
+                @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
+                  event.stopPropagation();
+                  this.#edit("logo", event.detail.image);
+                }}
+              ></dashboard-image-upload>
+              ${errors.logo ? html`<p class="error">${errors.logo}</p>` : nothing}
+              ${this.preview?.venueLogo && !this.draft.receipt.logo ? html`<p class="note" data-test="venue-logo">${t("receipts.venue_logo")}</p>` : nothing}
+              ${(["phone", "email"] as const).map(
+                (field) =>
+                  html`<wt-input
+                    name=${field}
+                    type=${field === "phone" ? "tel" : "email"}
+                    label=${t(field === "phone" ? "receipts.phone" : "receipts.email")}
+                    .value=${this.draft.receipt[field] ?? ""}
+                    hint=${t(field === "phone" ? "receipts.phone_hint" : "receipts.email_hint")}
+                    error=${errors[field] ?? ""}
+                    ?disabled=${this.busy}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      event.stopPropagation();
+                      this.#edit(field, event.detail.value);
+                    }}
+                  ></wt-input>`,
+              )}
+              ${warnings.length ? html`<p class="note" data-test="translation-warning" role="note">${t("receipts.translation_warning")}</p>` : nothing}
+              ${this.model.languages.map(
+                (language) =>
+                  html`<div class="language-heading">
+                      <h3 lang=${language}>${receiptLanguageName(language)}</h3>
+                      ${warnings.includes(language) ? html`<span aria-label=${t("receipts.translation_warning")}>⚠</span>` : nothing}
+                    </div>
+                    ${this.#text("headerSubtitle", language)}${this.#text("footerMessage", language)}`,
+              )}
+            </div>
+            <section class="preview" aria-label=${t("receipts.preview")}>
+              <h3>${t("receipts.preview")}</h3>
+              <wt-combobox
+                name="previewLanguage"
+                label=${t("receipts.preview_language")}
+                .options=${this.model.languages.map((language) => ({ value: language, label: receiptLanguageName(language) }))}
+                .value=${this.previewLanguage}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  this.#explicitPreviewLanguage = true;
+                  this.previewLanguage = event.detail.value;
+                  this.#queuePreview(true);
+                }}
+              ></wt-combobox>
+              ${
+                this.preview && this.preview.paperWidths.length > 1
+                  ? html`<wt-combobox
+                      name="previewWidth"
+                      label=${t("printers.paper_width")}
+                      .options=${this.preview.paperWidths.map((width) => ({ value: width, label: t(width === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80") }))}
+                      .value=${this.previewWidth ?? this.preview.paperWidth}
                       @wt-change=${(event: CustomEvent<{ value: string }>) => {
                         event.stopPropagation();
-                        this.#edit(field, event.detail.value);
+                        this.previewWidth = event.detail.value as PrintPaperWidth;
+                        this.#queuePreview(true);
                       }}
-                    ></wt-input>`,
-                )}
-                ${warnings.length ? html`<p class="note" data-test="translation-warning" role="note">${t("receipts.translation_warning")}</p>` : nothing}
-                ${this.model.languages.map(
-                  (language) =>
-                    html`<div class="language-heading">
-                        <h3 lang=${language}>${receiptLanguageName(language)}</h3>
-                        ${warnings.includes(language) ? html`<span aria-label=${t("receipts.translation_warning")}>⚠</span>` : nothing}
-                      </div>
-                      ${this.#text("headerSubtitle", language)}${this.#text("footerMessage", language)}`,
-                )}
-              </div>
-              <section class="preview" aria-label=${t("receipts.preview")}>
-                <h3>${t("receipts.preview")}</h3>
-                <wt-combobox
-                  name="previewLanguage"
-                  label=${t("receipts.preview_language")}
-                  .options=${this.model.languages.map((language) => ({ value: language, label: receiptLanguageName(language) }))}
-                  .value=${this.previewLanguage}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    event.stopPropagation();
-                    this.#explicitPreviewLanguage = true;
-                    this.previewLanguage = event.detail.value;
-                    this.#queuePreview(true);
-                  }}
-                ></wt-combobox>
-                ${
-                  this.preview && this.preview.paperWidths.length > 1
-                    ? html`<wt-combobox
-                        name="previewWidth"
-                        label=${t("printers.paper_width")}
-                        .options=${this.preview.paperWidths.map((width) => ({ value: width, label: t(width === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80") }))}
-                        .value=${this.previewWidth ?? this.preview.paperWidth}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                          event.stopPropagation();
-                          this.previewWidth = event.detail.value as PrintPaperWidth;
-                          this.#queuePreview(true);
-                        }}
-                      ></wt-combobox>`
-                    : nothing
-                }
-                ${this.previewError ? html`<p class="error" role="alert">${this.previewError}</p>` : nothing}
-                ${this.preview ? this.#paper.render(this.preview.preview, marks) : nothing}
-                ${paperStrut(columnsFor("80mm"))}
-              </section>
-            </div>`
-          : nothing
-      }
-      <wt-form-actions
-        .error=${bottomMessage(hasErrors ? t("form.fix_fields") : "", this.actionError)}
-      >
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-test="cancel-receipt"
-          ?disabled=${this.busy}
-          @click=${() => this.#notify("department-receipt-cancel")}
-          >${t("action.cancel")}</wt-button
-        >
-        <wt-button
-          data-test="save-receipt"
-          variant=${action.variant}
-          ?loading=${this.busy}
-          ?disabled=${action.unchanged || this.busy || Object.keys(problems).length > 0}
-          @click=${() => void this.#save()}
-          >${t("action.save")}</wt-button
-        >
-      </wt-form-actions>`;
+                    ></wt-combobox>`
+                  : nothing
+              }
+              ${this.previewError ? html`<p class="error" role="alert">${this.previewError}</p>` : nothing}
+              ${this.preview ? this.#paper.render(this.preview.preview, marks) : nothing}
+              ${paperStrut(columnsFor("80mm"))}
+            </section>
+          </div>`
+        : nothing
+    }
+    ${this.externalActions ? nothing : this.renderFooter()}`;
   }
 }
 /** `description` words a description refusal; the Receipts tab's own save points to Details. */
@@ -868,9 +887,6 @@ function refusal(
                 ? t(description)
                 : codeMessage(codeOf(error));
   return { key, sentence };
-}
-function receiptButton(host: DepartmentReceiptEditor): HTMLElement | null {
-  return host.shadowRoot!.querySelector("[data-test=save-receipt]");
 }
 declare global {
   interface HTMLElementTagNameMap {

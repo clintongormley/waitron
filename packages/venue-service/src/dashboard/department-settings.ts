@@ -1,5 +1,6 @@
 import type { DashboardPanelRenderer } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing } from "lit";
+import { createRef, ref } from "lit/directives/ref.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
@@ -54,6 +55,9 @@ export function offeredDepartmentTabs(model?: VenueServiceView, receipts = false
 export type ReceiptEditorPanel = ReturnType<DashboardPanelRenderer> | undefined;
 export const offersReceiptEditor = (editor: ReceiptEditorPanel) => editor != null;
 interface ReceiptEditor {
+  externalActions?: boolean;
+  renderFooter?: (slot?: "footer") => unknown;
+  saveButton?: HTMLElement | null;
   leaveScope?: object;
   hasUnsavedChanges?: boolean;
   saving?: boolean;
@@ -199,6 +203,11 @@ export class DepartmentSettings extends LitElement {
   @property({ type: Boolean }) refreshing = false;
   @property() tab: DepartmentTab = "details";
   @property({ attribute: false }) receiptEditor: ReceiptEditorPanel;
+  @property({ attribute: false }) externalActions = false;
+  private readonly saveRef = createRef<HTMLElementTagNameMap["wt-button"]>();
+  get saveButton() {
+    return this.saveRef.value ?? null;
+  }
   @state() private draft?: DepartmentDraft;
   @state() private busy = false;
   private readonly feedback = new FormFeedback(this);
@@ -262,17 +271,6 @@ export class DepartmentSettings extends LitElement {
     this.descriptionFocusDue = true;
     this.requestUpdate();
   }
-  protected override updated() {
-    if (!this.descriptionFocusDue) return;
-    const field = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-      "[slot=details] [name=operationDescription]",
-    );
-    if (!field) return;
-    this.descriptionFocusDue = false;
-    void field.updateComplete.then(() => {
-      if (this.tab === "details" && field.isConnected) field.focus();
-    });
-  }
   private selectTab(tab: DepartmentTab, replace: boolean) {
     this.descriptionFocusDue = false;
     this.tab = tab;
@@ -288,7 +286,7 @@ export class DepartmentSettings extends LitElement {
     });
   }
   private submitOnEnter(event: KeyboardEvent) {
-    submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-editor]"));
+    submitOnEnter(event, this.saveButton);
   }
   private receiptInvalid(event: CustomEvent<{ departmentId?: string; invalid?: boolean }>) {
     event.stopPropagation();
@@ -325,7 +323,26 @@ export class DepartmentSettings extends LitElement {
     const editor = event.target as HTMLElement;
     if (this.tab !== "receipt") this.selectTab("receipt", true);
     await this.updateComplete;
-    editor.shadowRoot?.querySelector<HTMLElement>("[data-test=save-receipt]")?.focus();
+    await this.footerRendered();
+    (editor as HTMLElement & ReceiptEditor).saveButton?.focus();
+  }
+  private footerRendered(): Promise<unknown> {
+    const detail: { rendered?: Promise<unknown> } = {};
+    this.dispatchEvent(new CustomEvent("footer-change", { detail, bubbles: true, composed: true }));
+    return detail.rendered ?? Promise.resolve();
+  }
+  protected override updated() {
+    if (this.receipt) this.receipt.externalActions = this.externalActions;
+    if (this.externalActions) void this.footerRendered();
+    if (!this.descriptionFocusDue) return;
+    const field = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[slot=details] [name=operationDescription]",
+    );
+    if (!field) return;
+    this.descriptionFocusDue = false;
+    void field.updateComplete.then(() => {
+      if (this.tab === "details" && field.isConnected) field.focus();
+    });
   }
   protected override willUpdate() {
     if (!this.offeredTabs.includes(this.tab)) this.tab = "details";
@@ -875,18 +892,40 @@ export class DepartmentSettings extends LitElement {
         return labels.length ? [{ zone, labels }] : [];
       });
   }
+  renderFooter(slot?: "footer"): unknown {
+    if (!this.department?.active || !this.draft) return nothing;
+    if (this.tab === "receipt") return this.receipt?.renderFooter?.(slot) ?? nothing;
+    const state = saveActionState(this.scope);
+    const highlighted =
+      Object.keys(this.shownErrors).some((field) => field !== "serviceSteps") ||
+      Object.keys(this.shownStepErrors).length > 0;
+    return html`<wt-form-actions
+      slot=${slot ?? nothing}
+      .showError=${slot !== "footer"}
+      .error=${bottomMessage(this.failure, highlighted ? t("venue.fix_fields") : "")}
+      ><wt-button
+        slot="cancel"
+        variant="secondary"
+        data-test="cancel-editor"
+        ?disabled=${this.busy || this.refreshing}
+        @click=${() => void this.cancel()}
+        >${t("venue.cancel")}</wt-button
+      ><wt-button
+        ${ref(this.saveRef)}
+        data-test="save-editor"
+        variant=${this.refreshing ? "secondary" : state.variant}
+        ?disabled=${this.busy || this.refreshing || state.unchanged || (this.feedback.attempted && Object.keys(this.fieldErrors(this.receipt)).length > 0)}
+        @click=${() => void this.save()}
+        >${t("venue.save")}</wt-button
+      ></wt-form-actions
+    >`;
+  }
   override render() {
     const row = this.department,
       draft = this.draft;
     if (!row || !row.active || !draft) return nothing;
-    const receipt = this.receipt,
-      fieldErrors = this.feedback.attempted ? this.fieldErrors(receipt) : {},
-      errors: Partial<Record<Field, string>> = { ...fieldErrors, ...this.refused },
-      disabled = !row.active,
-      state = saveActionState(this.scope),
-      highlighted =
-        Object.keys(errors).some((field) => field !== "serviceSteps") ||
-        Object.keys(this.shownStepErrors).length > 0;
+    const errors = this.shownErrors,
+      disabled = !row.active;
     const serviceErrors: Partial<Record<keyof ServiceSettingsValue, string>> = {};
     for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
       if (errors[field]) serviceErrors[field] = errors[field];
@@ -905,6 +944,7 @@ export class DepartmentSettings extends LitElement {
           : nothing
       }
       <wt-tabs
+        ?sticky=${this.externalActions}
         label=${t("venue.department")}
         .items=${tabs}
         .value=${this.tab}
@@ -1122,7 +1162,7 @@ export class DepartmentSettings extends LitElement {
             : nothing
         }
       </wt-tabs>
-      ${row.active && this.tab !== "receipt" ? html`<wt-form-actions .error=${bottomMessage(this.failure, highlighted ? t("venue.fix_fields") : "")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || Object.keys(fieldErrors).length > 0} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
+      ${this.externalActions ? nothing : this.renderFooter()}
     </div>`;
   }
 }

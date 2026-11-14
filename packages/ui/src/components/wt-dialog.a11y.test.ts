@@ -13,6 +13,20 @@ afterEach(() => setHelpMode(false));
 type Openable = HTMLElement & { open: boolean; updateComplete: Promise<unknown> };
 
 describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) => {
+  test.each([false, true])("fixed heading with description/help=%s", async (help) => {
+    setHelpMode(help);
+    const el = (await mountThemed(
+      `<wt-dialog fixed-heading heading="Edit department" ${help ? 'description="Department settings"' : ""}>
+      ${help ? '<wt-help-tooltip slot="help" mode="help-mode" aria-label="About departments">Set service preferences.</wt-help-tooltip>' : ""}
+      <p style="height:1800px">Department content</p>
+      <wt-form-actions slot="footer" error="Try again"><wt-button>Save</wt-button></wt-form-actions>
+    </wt-dialog>`,
+      theme,
+    )) as Openable;
+    el.open = true;
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
   // Modal semantics (aria-modal, the focus trap, aria-labelledby pointing at a real heading) only
   // matter once the dialog is actually open — a closed <dialog> isn't exposed to the accessibility
   // tree at all, so this state is the one that counts.

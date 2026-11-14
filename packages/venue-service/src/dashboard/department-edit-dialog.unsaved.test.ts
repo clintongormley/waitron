@@ -1,16 +1,17 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
-import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import {
+  departmentSave,
+  departmentCancel,
   cleanupDepartmentEditors,
   mountDepartmentEditor,
   editDepartmentField,
-  departmentSave,
   selectDepartmentTab,
   supplyReceiptEditor,
   editReceipt,
   receiptInput,
 } from "../testing/department-edit-fixture.js";
+import { afterEach, beforeEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
+import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -89,13 +90,13 @@ it("a pending receipt Save blocks Escape and Cancel", async () => {
   await selectDepartmentTab(form, "receipt");
   await editReceipt(editor, "Thanks");
   editor.hold = true;
-  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-receipt]")!.click();
+  editor.saveButton!.click();
   await expect.poll(() => !!editor.finish).toBe(true);
   expect(await modal.requestClose("escape")).toBe(false);
   expect(await modal.requestClose("cancel")).toBe(false);
-  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-receipt]")!.click();
+  departmentCancel(editor).click();
   await selectDepartmentTab(form, "details");
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  departmentCancel(form).click();
   await form.updateComplete;
   expect(modal.open).toBe(true);
   editor.finish!();

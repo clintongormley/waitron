@@ -665,14 +665,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **A1528. Department window: the owner's review (owner, 2026-11-14).**
-  - **The title, tabs, Save and Cancel stay put; only the content between them scrolls**, on every
-    tab. Save and Cancel go in `wt-modal`'s own footer slot, as other dialogs do
-    (`department-dialogs.ts`); today `department-edit-dialog.ts` draws them inside the scrolling
-    content, and the "Edit department: …" title and the Details / Service / Receipts / Transfers
-    tabs scroll away too. No dialog keeps its heading or tabs still today, so the shared
-    `wt-dialog` needs an opt-in for it (lane D).
-
 - **Department dialog** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)

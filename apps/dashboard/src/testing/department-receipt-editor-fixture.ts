@@ -121,9 +121,7 @@ export async function editReceipt(el: DepartmentReceiptEditor, name: string, val
   await el.updateComplete;
 }
 export function receiptSave(el: DepartmentReceiptEditor) {
-  return receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-button"]>(
-    "[data-test=save-receipt]",
-  )!;
+  return el.saveButton!;
 }
 export async function clickReceiptSave(el: DepartmentReceiptEditor) {
   await userEvent.click(page.elementLocator(receiptSave(el)));

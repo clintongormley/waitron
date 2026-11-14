@@ -59,6 +59,7 @@ export class WtDialog extends LitElement {
     css`
       :host {
         --wt-table-max: none;
+        --wt-tabs-sticky-surface: var(--wt-color-surface-raised);
       }
 
       dialog {
@@ -102,6 +103,17 @@ export class WtDialog extends LitElement {
         overflow: auto;
         overscroll-behavior: contain;
         flex-shrink: 1000000;
+      }
+
+      .header {
+        flex-shrink: 0;
+        padding: var(--wt-space-5);
+      }
+      .header > :last-child {
+        margin-bottom: 0;
+      }
+      :host([fixed-heading]) .body {
+        padding-top: 0;
       }
 
       /* The space below the heading is the row's, not the h2's: a margin inside a flex row does not
@@ -234,6 +246,7 @@ export class WtDialog extends LitElement {
     this.pendingClose = undefined;
   }
   @property() heading = "";
+  @property({ type: Boolean, attribute: "fixed-heading", reflect: true }) fixedHeading = false;
   @property() description = "";
 
   /** Whether Escape may close this dialog. Off for a surface with nothing behind it — the setup
@@ -633,6 +646,22 @@ export class WtDialog extends LitElement {
     }
   }
 
+  private renderHeading() {
+    return html`${
+      this.heading
+        ? html`<div class="heading-row">
+            <h2 id=${this.headingId}>${this.heading}</h2>
+            <slot name="help" @slotchange=${this.updateHasHelp}></slot>
+          </div>`
+        : nothing
+    }
+    ${
+      this.description
+        ? html`<p class="description" id=${this.descriptionId}>${this.description}</p>`
+        : nothing
+    }`;
+  }
+
   override render() {
     return html`
       <dialog
@@ -653,20 +682,9 @@ export class WtDialog extends LitElement {
              aria-labelledby/aria-label from a dialog with no explicit role produced zero axe
              violations, even fully nameless; adding role="dialog" made the same break get
              flagged. Removing this attribute would silently blind wt-dialog.a11y.test.ts. -->
+        ${this.fixedHeading ? html`<div class="header">${this.renderHeading()}</div>` : nothing}
         <div class="body" @keydown=${this.endOpeningFocus} @blur=${this.onBodyBlur}>
-          ${
-            this.heading
-              ? html`<div class="heading-row">
-                  <h2 id=${this.headingId}>${this.heading}</h2>
-                  <slot name="help" @slotchange=${this.updateHasHelp}></slot>
-                </div>`
-              : nothing
-          }
-          ${
-            this.description
-              ? html`<p class="description" id=${this.descriptionId}>${this.description}</p>`
-              : nothing
-          }
+          ${this.fixedHeading ? nothing : this.renderHeading()}
           <slot @wt-form-error=${this.onBodyMessage} @slotchange=${this.observeBody}></slot>
         </div>
         <div class="footer">

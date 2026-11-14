@@ -1,3 +1,4 @@
+import { departmentSave, selectDepartmentTab } from "../testing/department-edit-fixture.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
@@ -7,7 +8,6 @@ import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import { VenueOperationsLoader } from "./venue-operations-loader.js";
 import { zonesModel } from "../testing/department-zones-fixture.js";
 import type { ServiceSettingsValue } from "./service-settings-fields.js";
-import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
 
 customElements.define("a10-policy-loader", class extends VenueOperationsLoader {});
 class PolicyApp extends LitElement {
@@ -114,7 +114,7 @@ it.each([
     await pick(service, field, changed);
     await expect.poll(() => service.value[field]).toBe(changed);
     await settings.updateComplete;
-    settings.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    departmentSave(settings).click();
     await expect.poll(() => shell.model.salePolicies.departments[0]![field]).toBe(changed);
     await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
     expect(writes).toEqual([
@@ -154,14 +154,10 @@ it.each([
     )!;
     expect(combo.options[0]!.label).toBe(`Same as department (${changedLabel})`);
     expect(combo.value).toBe("");
-    expect(
-      zones.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-        "[data-test=save-editor]",
-      )!.disabled,
-    ).toBe(true);
+    expect(departmentSave(zones).disabled).toBe(true);
     await pick(fields, field, override);
     await zones.updateComplete;
-    zones.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    departmentSave(zones).click();
     await expect.poll(() => shell.model.salePolicies.zones[0]![field]).toBe(override);
     await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
     expect(writes[1]).toEqual({
@@ -186,7 +182,7 @@ it.each([
     expect(combo.shadowRoot!.querySelector("button")!.textContent).toContain(overrideLabel);
     await pick(fields, field, "");
     await zones.updateComplete;
-    zones.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    departmentSave(zones).click();
     await expect.poll(() => shell.model.salePolicies.zones[0]![field]).toBeNull();
     await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
     zones = await openZone();

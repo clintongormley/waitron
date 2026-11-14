@@ -11,6 +11,18 @@ import "./wt-input.js";
 afterEach(cleanup);
 
 describe.each(["light", "dark"] as const)("wt-modal a11y (%s theme)", (theme) => {
+  test("fixed heading names its scrolling form", async () => {
+    const modal = (await mountThemed(
+      `<wt-modal fixed-heading heading="Edit department" description="Department settings">
+      <wt-input label="Name"></wt-input><p style="height:1800px">Content</p>
+      <wt-form-actions slot="footer"><wt-button>Save</wt-button></wt-form-actions>
+    </wt-modal>`,
+      theme,
+    )) as WtModal;
+    modal.open = true;
+    await modal.updateComplete;
+    await expectNoA11yViolations(host);
+  });
   test("names the open form and its footer actions", async () => {
     const modal = (await mountThemed(
       `<wt-modal heading="Add printer">

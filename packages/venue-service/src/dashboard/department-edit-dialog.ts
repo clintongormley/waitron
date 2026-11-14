@@ -103,6 +103,7 @@ export class DepartmentEditDialog extends LitElement {
     return keyed(
       department.id,
       html`<wt-modal
+        fixed-heading
         .open=${this.isConnected && !this.dismissed}
         size=${offersReceiptEditor(this.receiptEditor) ? "wide" : "standard"}
         heading=${`${t("venue.edit_department")}: ${department.name}`}
@@ -120,6 +121,12 @@ export class DepartmentEditDialog extends LitElement {
         }}
       >
         <department-settings
+          .externalActions=${true}
+          @footer-change=${(event: CustomEvent<{ rendered?: Promise<unknown> }>) => {
+            event.stopPropagation();
+            this.requestUpdate();
+            event.detail.rendered = this.updateComplete;
+          }}
           .api=${this.api}
           .model=${this.model}
           .publishSaved=${this.#publishSaved}
@@ -146,6 +153,7 @@ export class DepartmentEditDialog extends LitElement {
             void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
           }}
         ></department-settings>
+        ${this.shadowRoot?.querySelector("department-settings")?.renderFooter("footer")}
       </wt-modal>`,
     );
   }

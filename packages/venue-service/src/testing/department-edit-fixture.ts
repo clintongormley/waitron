@@ -1,5 +1,7 @@
-import { LitElement, html } from "lit";
+import { LitElement, html, nothing } from "lit";
 import { applyTokens, draftScopeFor, LeaveController, type DraftScope } from "@waitron/ui";
+import { property } from "lit/decorators.js";
+import { createRef, ref } from "lit/directives/ref.js";
 import { type DashboardRequest } from "@waitron/dashboard-kit";
 import { expect } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -128,10 +130,23 @@ export async function editDepartmentField(
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
   await form.updateComplete;
 }
-export function departmentSave(form: HTMLElementTagNameMap["department-settings"]) {
-  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    "[data-test=save-editor]",
+export function departmentActions(form: HTMLElement) {
+  return (
+    (form as HTMLElement & { saveButton?: HTMLElement | null }).saveButton?.closest(
+      "wt-form-actions",
+    ) ?? form.shadowRoot!.querySelector("wt-form-actions")!
+  );
+}
+export function departmentCancel(form: HTMLElement) {
+  return departmentActions(form).querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[slot=cancel]",
   )!;
+}
+export function departmentSave(form: HTMLElement) {
+  return (
+    (form as HTMLElement & { saveButton?: HTMLElementTagNameMap["wt-button"] | null }).saveButton ??
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!
+  );
 }
 export async function selectDepartmentTab(
   form: HTMLElementTagNameMap["department-settings"],
@@ -148,6 +163,17 @@ export async function selectDepartmentTab(
 }
 
 export class ReceiptEditorStub extends LitElement {
+  @property({ attribute: false }) externalActions = false;
+  private readonly saveRef = createRef<HTMLElementTagNameMap["wt-button"]>();
+  get saveButton() {
+    return this.saveRef.value ?? null;
+  }
+  protected override updated() {
+    if (this.externalActions)
+      this.dispatchEvent(
+        new CustomEvent("footer-change", { detail: {}, bubbles: true, composed: true }),
+      );
+  }
   departmentId = "d1";
   value = "";
   hold = false;
@@ -219,12 +245,14 @@ export class ReceiptEditorStub extends LitElement {
   }
   async save() {
     this.busy = true;
+    this.requestUpdate();
     if (this.hold)
       await new Promise<void>((resolve) => {
         this.finish = resolve;
       });
     this.#scope!.commit(this.value);
     this.busy = false;
+    this.requestUpdate();
     this.notify("department-receipt-saved");
   }
   notify(type: string, detail: object = {}) {
@@ -236,6 +264,24 @@ export class ReceiptEditorStub extends LitElement {
       }),
     );
   }
+  renderFooter(slot?: "footer") {
+    return html`<wt-form-actions slot=${slot ?? nothing} .showError=${slot !== "footer"}>
+      <wt-button
+        ${ref(this.saveRef)}
+        data-test="save-receipt"
+        ?disabled=${this.busy || !this.hasUnsavedChanges}
+        @click=${() => void this.save()}
+        >Save</wt-button
+      >
+      <wt-button
+        slot="cancel"
+        data-test="cancel-receipt"
+        ?disabled=${this.busy}
+        @click=${() => this.notify("department-receipt-cancel")}
+        >Cancel</wt-button
+      >
+    </wt-form-actions>`;
+  }
   override render() {
     return html`<wt-input
         name="receiptSubtitle"
@@ -246,6 +292,7 @@ export class ReceiptEditorStub extends LitElement {
           event.stopPropagation();
           this.value = event.detail.value;
           this.#scope?.changed();
+          this.requestUpdate();
           if (this.error) {
             this.error = "";
             this.requestUpdate();
@@ -255,10 +302,7 @@ export class ReceiptEditorStub extends LitElement {
           }
         }}
       ></wt-input
-      ><button data-test="save-receipt" @click=${() => void this.save()}>Save</button
-      ><button data-test="cancel-receipt" @click=${() => this.notify("department-receipt-cancel")}>
-        Cancel
-      </button>`;
+      >${this.externalActions ? nothing : this.renderFooter()}`;
   }
 }
 customElements.define("dashboard-department-receipt-editor", ReceiptEditorStub);

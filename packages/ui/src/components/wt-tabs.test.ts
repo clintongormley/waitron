@@ -4,8 +4,43 @@ import { cleanup, host, mountInShadowRoot } from "../test-helpers.js";
 import { mountThemed } from "../a11y-helpers.js";
 import type { WtTabs } from "./wt-tabs.js";
 import "./wt-tabs.js";
+import "./wt-input.js";
 
 afterEach(cleanup);
+
+test.each([false, true])(
+  "sticky=%s keeps its strip visible and focused fields below it",
+  async (sticky) => {
+    const wrapper = await mountThemed(`<div style="height: 240px; overflow: auto">
+    <wt-tabs ${sticky ? "sticky" : ""} label="Department">
+      <section slot="service"><div style="height: 300px"></div><wt-input label="Reminder"></wt-input><div style="height: 1400px"></div></section>
+    </wt-tabs></div>`);
+    const tabs = wrapper.querySelector("wt-tabs")!;
+    tabs.items = [{ key: "service", label: "Service" }];
+    await tabs.updateComplete;
+    const field = tabs.querySelector("wt-input")!;
+    await field.updateComplete;
+    const strip = tabs.shadowRoot!.querySelector<HTMLElement>(".tab-row")!;
+    const before = strip.getBoundingClientRect().top;
+    wrapper.scrollTop = 500;
+    if (!sticky) {
+      expect(strip.getBoundingClientRect().top).toBe(before - 500);
+      return;
+    }
+    expect(strip.getBoundingClientRect().top).toBe(before);
+    tabs.style.setProperty("--wt-tabs-sticky-surface", "rgb(12, 23, 34)");
+    expect(getComputedStyle(strip).backgroundColor).toBe("rgb(12, 23, 34)");
+    const input = field.shadowRoot!.querySelector("input")!;
+    await expect
+      .poll(() => parseFloat(getComputedStyle(input).scrollMarginBlockStart))
+      .toBeGreaterThanOrEqual(strip.offsetHeight);
+    input.focus();
+    input.scrollIntoView({ block: "start" });
+    expect(input.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      strip.getBoundingClientRect().bottom,
+    );
+  },
+);
 const markup = `<wt-tabs label="Venue operations"><div slot="status">Ready</div><div slot="menus"><input aria-label="Menu name"></div><div slot="routes">Routing</div></wt-tabs>`;
 const items = [
   { key: "status", label: "Status" },

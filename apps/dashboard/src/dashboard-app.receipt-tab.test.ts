@@ -214,6 +214,23 @@ it("a fieldless receipt refusal returns from Details without marking a field, re
   await showDepartmentTab(app, "details");
   await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/bar");
   const form = departmentForm(app)!;
+  const modal = departmentDialog(app)!.shadowRoot!.querySelector("wt-modal")!;
+  const alertCounts: number[] = [];
+  const observeAlerts = () => {
+    const roots = [
+      modal.shadowRoot!,
+      ...[...modal.querySelectorAll("wt-form-actions")]
+        .map((row) => row.shadowRoot)
+        .filter((root): root is ShadowRoot => root !== null),
+    ];
+    for (const root of roots) observer.observe(root, { childList: true, subtree: true });
+    alertCounts.push(
+      roots.reduce((count, root) => count + root.querySelectorAll('[role="alert"]').length, 0),
+    );
+  };
+  const observer = new MutationObserver(observeAlerts);
+  observer.observe(modal, { childList: true, subtree: true });
+  observeAlerts();
   const push = vi.spyOn(history, "pushState");
   const replace = vi.spyOn(history, "replaceState");
   try {
@@ -235,21 +252,33 @@ it("a fieldless receipt refusal returns from Details without marking a field, re
     await strip.updateComplete;
     expect(strip.items.find(({ key }) => key === "receipt")!.marked).toBeUndefined();
     expect(editor.invalid).toBe(false);
-    const actions = receiptRoot(editor).querySelector("wt-form-actions")!;
+    const actions = receiptSave(editor).closest("wt-form-actions")!;
     await actions.updateComplete;
     expect(actions.error).toBe("Something went wrong, try again");
-    expect(actions.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
-      actions.error,
-    );
+    expect(actions.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(
+      departmentDialog(app)!
+        .shadowRoot!.querySelector("wt-modal")!
+        .shadowRoot!.querySelector('.footer > [role="alert"]')!
+        .textContent!.trim(),
+    ).toBe(actions.error);
     const save = receiptSave(editor);
-    await expect.poll(() => receiptRoot(editor).activeElement).toBe(save);
+    await expect
+      .poll(() =>
+        save.getRootNode() instanceof ShadowRoot
+          ? (save.getRootNode() as ShadowRoot).activeElement
+          : document.activeElement,
+      )
+      .toBe(save);
     expect(save.shadowRoot!.activeElement).toBe(save.shadowRoot!.querySelector("button"));
+    expect(Math.max(...alertCounts)).toBe(1);
   } finally {
+    observer.disconnect();
     push.mockRestore();
     replace.mockRestore();
   }
 });
-it("a receipt refusal naming a field that lands while Receipts shows changes no tab or address", async () => {
+it("a receipt refusal from the scrolled footer focuses its field below the tabs without changing the address", async () => {
   const held = deferred<Response>();
   const { app, editor } = await mountReceiptTab({
     respond: (path, init) =>
@@ -259,6 +288,9 @@ it("a receipt refusal naming a field that lands while Receipts shows changes no 
   const changes = vi.fn();
   form.addEventListener("department-tab-change", changes);
   await editReceipt(editor, "email", "new@example.com");
+  const modal = departmentDialog(app)!.shadowRoot!.querySelector("wt-modal")!;
+  const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  body.scrollTop = body.scrollHeight;
   await userEvent.click(page.elementLocator(receiptSave(editor)));
   await expect.poll(() => editor.saving).toBe(true);
   held.resolve(emailRefusal());
@@ -266,6 +298,10 @@ it("a receipt refusal naming a field that lands while Receipts shows changes no 
   await expect.poll(() => receiptRoot(editor).activeElement).toBe(receiptField(editor, "email"));
   const strip = form.shadowRoot!.querySelector("wt-tabs")!;
   await strip.updateComplete;
+  const input = receiptField(editor, "email").shadowRoot!.querySelector("input")!;
+  expect(input.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    strip.shadowRoot!.querySelector(".tab-row")!.getBoundingClientRect().bottom,
+  );
   expect(strip.items.find(({ key }) => key === "receipt")!.marked).toBe("needs fixing");
   expect(form.tab).toBe("receipt");
   expect(changes).not.toHaveBeenCalled();
@@ -275,7 +311,7 @@ it("a last-language footer refusal at phone width leaves its focused textarea in
   const viewport = { width: innerWidth, height: innerHeight };
   await page.viewport(390, 844);
   try {
-    const { editor, modal } = await mountReceiptTab({
+    const { app, editor, modal } = await mountReceiptTab({
       respond: (path, init) =>
         path.endsWith("/bar/receipt") && init.method === "PUT"
           ? Promise.resolve(
@@ -297,7 +333,11 @@ it("a last-language footer refusal at phone width leaves its focused textarea in
     const inView = () => {
       const shown = body.getBoundingClientRect();
       const field = textarea.getBoundingClientRect();
-      return field.top >= shown.top && field.bottom <= shown.bottom;
+      const strip = departmentForm(app)!
+        .shadowRoot!.querySelector("wt-tabs")!
+        .shadowRoot!.querySelector(".tab-row")!
+        .getBoundingClientRect();
+      return field.top >= Math.max(shown.top, strip.bottom) && field.bottom <= shown.bottom;
     };
     await editReceipt(editor, "footerMessage-ca-ES", "Draft");
     textarea.blur();
