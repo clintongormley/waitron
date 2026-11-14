@@ -915,6 +915,40 @@ describe("putting a case right", () => {
     await vi.waitFor(() => expect(reopened).toHaveProperty("open", false));
   });
 
+  it("keeps a reopened case open when an earlier opening's send finds the case changed", async () => {
+    let refuseFirst!: (error: Error) => void;
+    let finishSecond!: (value: unknown) => void;
+    let sends = 0;
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION), () =>
+      ++sends === 1
+        ? new Promise((_resolve, reject) => (refuseFirst = reject))
+        : new Promise((resolve) => (finishSecond = resolve)),
+    );
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "First description");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    await closeDialog(screen, details);
+    const reopened = await openDetails(screen);
+    await type(screen, reopened, "Second description");
+    action(reopened).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(2));
+    expect(request.mock.calls.length).toBe(3);
+    refuseFirst(refusal("filing_case.action_mismatch"));
+    await vi.waitFor(() => expect(request.mock.calls.length).toBe(4));
+    expect(request.mock.calls[3]![0]).toBe("/management-api/fiscal-filing");
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await screen.updateComplete;
+    expect(reopened).toHaveProperty("open", true);
+    expect(field(reopened).value).toBe("Second description");
+    expect(action(reopened).disabled).toBe(true);
+    expect(screen.shadowRoot!.querySelector("[data-test=case-changed]")).toBeNull();
+    finishSecond({});
+    await vi.waitFor(() => expect(reopened).toHaveProperty("open", false));
+    expect(screen.shadowRoot!.querySelector("[data-test=case-changed]")).toBeNull();
+  });
+
   it("keeps the administrator sign-in available after the sign-in throws", async () => {
     const auth = continuation(["report.export"]);
     auth.signIn.mockImplementation(() => {
