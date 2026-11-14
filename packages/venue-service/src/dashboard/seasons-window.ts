@@ -217,7 +217,7 @@ export class SeasonsWindow extends LitElement {
   private baseline?: SeasonDraft;
   private readonly feedback = new FormFeedback(this);
   /** A refusal with the row keys of the request it answered, in the order of its `save` entries. */
-  @state() private refusal?: { refusal: Refusal; keys: readonly string[] };
+  @state() private refusal?: { refusal: Refusal; keys: readonly string[]; missingName?: string };
   /** Each binned season's delete impact, by id; `token` is the newest read's, and only it may answer. */
   @state() private impacts = new Map<
     string,
@@ -437,9 +437,12 @@ export class SeasonsWindow extends LitElement {
       if (generation !== this.generation) return;
       const refusal = refusalOf(error);
       const goneId = refusal.code === "season.not_found" ? refusal.params?.seasonId : undefined;
-      if (this.baseline!.rows.some((row) => row.key === goneId))
+      const gone = this.baseline!.rows.find((row) => row.key === goneId);
+      if (gone) {
+        const binned = this.draft!.deleted.includes(gone.key);
         this.follow(this.baseline!.rows.filter((row) => row.key !== goneId).map(seasonOf));
-      else this.refusal = { refusal, keys };
+        if (binned) this.refusal = { refusal, keys, missingName: gone.name };
+      } else this.refusal = { refusal, keys };
     } finally {
       if (this.saving === generation) this.saving = undefined;
     }
@@ -675,14 +678,16 @@ export class SeasonsWindow extends LitElement {
     const busy = this.busy;
     const marked =
       own.size > 0 || gone.size > 0 || this.rows.some((row) => row.key === refused?.key);
-    const refusal = !this.refusal
-      ? ""
-      : seasonRefusalField(this.refusal.refusal)
-        ? refused
-          ? ""
-          : t("prep.save_error")
-        : (clockChangeConflictText(this.refusal.refusal) ??
-          seasonRefusalText(this.refusal.refusal));
+    const refusal = this.refusal?.missingName
+      ? format("season.deleted_before_save", { name: this.refusal.missingName })
+      : !this.refusal
+        ? ""
+        : seasonRefusalField(this.refusal.refusal)
+          ? refused
+            ? ""
+            : t("prep.save_error")
+          : (clockChangeConflictText(this.refusal.refusal) ??
+            seasonRefusalText(this.refusal.refusal));
     return html`<wt-form-actions
       slot="footer"
       .error=${bottomMessage(refusal, marked ? t("prep.fix_fields") : "")}

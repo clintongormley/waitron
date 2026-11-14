@@ -2,7 +2,7 @@ import type { CalendarColour } from "@waitron/shared";
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -56,6 +56,7 @@ const chipTints = unsafeCSS(
 export class PeriodsList extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -69,9 +70,8 @@ export class PeriodsList extends LitElement {
         gap: var(--wt-space-3);
         margin-block-end: var(--wt-space-4);
       }
-      h2 {
+      h1 {
         margin: 0;
-        font-size: var(--wt-font-size-lg);
       }
       wt-data-table::part(swatch) {
         display: inline-block;
@@ -340,7 +340,7 @@ export class PeriodsList extends LitElement {
           ]),
     ];
     return html`<div class="toolbar">
-        <h2>${t("period.title")}</h2>
+        <h1>${t("period.title")}</h1>
         ${
           this.readOnly
             ? nothing

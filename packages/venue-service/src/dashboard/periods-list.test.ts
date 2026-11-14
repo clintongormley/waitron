@@ -325,9 +325,10 @@ it.each(["en", "es"])("heading and + Add period share the top row (%s)", async (
   setLocale(locale);
   const el = await mount();
   await loaded(el);
-  const heading = el.shadowRoot!.querySelector("h2")!;
+  const heading = el.shadowRoot!.querySelector("h1")!;
+  expect(heading, "Periods has a page heading").not.toBeNull();
   expect(heading.textContent).toBe(locale === "en" ? "Periods" : "Periodos");
-  expect(el.shadowRoot!.querySelector("h1")).toBeNull();
+  expect(el.shadowRoot!.querySelector("h2")).toBeNull();
   const h = heading.getBoundingClientRect();
   const add = el.shadowRoot!.querySelector("[data-test=add-period]")!.getBoundingClientRect();
   const middle = (h.top + h.bottom) / 2;
@@ -385,7 +386,7 @@ it("a period row opens its dialog; a department row opens nothing; the pinned ac
     .poll(() => el.shadowRoot!.querySelector("period-delete-dialog")?.period?.id)
     .toBe("p1");
   expect(dialogOf(el)).toBeNull();
-  expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe("Periods");
+  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Periods");
   expect(el.shadowRoot!.querySelector("[data-test=add-period]")!.textContent!.trim()).toBe(
     "+ Add period",
   );
@@ -523,7 +524,7 @@ it("Spanish: Periodos, Carta de clientes, Pintado en, Sin pintar en ningún siti
   setLocale("es");
   const el = await mount();
   const grid = await loaded(el);
-  expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe("Periodos");
+  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Periodos");
   expect(el.shadowRoot!.querySelector("[data-test=add-period]")!.textContent!.trim()).toBe(
     "+ Añadir periodo",
   );

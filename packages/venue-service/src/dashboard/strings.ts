@@ -132,6 +132,8 @@ const en = {
   "season.start_required": "Choose a day and a month.",
   "season.last": "A venue keeps at least one season.",
   "season.not_found": "This season no longer exists.",
+  "season.deleted_before_save":
+    "{name} no longer exists. Check the remaining changes before saving.",
   "season.delete_loses": "The hours of {departments} in it are lost.",
   "season.delete_loses_none": "No department has hours in it.",
   "season.open_window": "Seasons…",
@@ -1063,6 +1065,8 @@ const es: Record<keyof typeof en, string> = {
   "season.start_required": "Elige un día y un mes.",
   "season.last": "Un local conserva al menos una temporada.",
   "season.not_found": "Esta temporada ya no existe.",
+  "season.deleted_before_save":
+    "{name} ya no existe. Revisa los cambios restantes antes de guardar.",
   "season.delete_loses": "Se pierden los horarios de {departments} en ella.",
   "season.delete_loses_none": "Ningún departamento tiene horarios en ella.",
   "season.open_window": "Temporadas…",

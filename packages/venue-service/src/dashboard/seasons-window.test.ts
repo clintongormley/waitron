@@ -1361,7 +1361,7 @@ it("a Save refused because a changed season is gone marks that row until it is b
   });
 });
 
-it("a Save refused because a binned season is gone drops its delete and its note", async () => {
+it("a Save refused because a binned season is gone names it, drops its delete and keeps the other edits", async () => {
   const saveSeasons = vi
     .fn<WindowApi["saveSeasons"]>()
     .mockRejectedValueOnce({ code: "season.not_found", params: { seasonId: "autumn" } })
@@ -1374,7 +1374,7 @@ it("a Save refused because a binned season is gone drops its delete and its note
   await press(el, bins(el)[3]!);
   await press(el, save(el));
   await expect.poll(() => notes(el)).toEqual([]);
-  expect(bottom(el)).toBe("");
+  expect(bottom(el)).toBe("Autumn no longer exists. Check the remaining changes before saving.");
   expect(save(el).disabled).toBe(false);
   await press(el, save(el));
   await expect.poll(() => saveSeasons.mock.calls.length).toBe(2);
