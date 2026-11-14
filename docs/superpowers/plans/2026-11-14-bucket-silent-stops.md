@@ -1,0 +1,44 @@
+# Bucket copy: silent stops and a real outage
+
+**Authority:** BUCKET-SILENT-STOPS, `~/waitron-campaign-e/queue.md`; watcher questions.md, 2026-11-14 10:47. Separate Sol high-effort draft, checked by Codex. Claude reviewed it in 299 seconds (`receipts/bucket-silent-stops/plan-review.md`); this revision adopts the smaller route. The watcher cleared this corrected plan on 2026-11-14 at 11:08 (lane questions.md), choosing the first daily miss; no further plan read. Finish/land authorisation does not approve this design.
+
+**Finish line:** an owner-visible retention warning and dated, bounded real-binary loopback measurements. Reuse the supervisor, ongoing alerts, EN/ES renderer and existing stream rigs. Preserve sales, health and safe pruning. No new worker, persisted record, retry policy, email, provider account or fiscal path.
+
+## Build the warning, test first
+
+Modify `packages/stream/src/supervisor.ts`, server `src/{alert-sources,errors}.ts`, dashboard `src/i18n/alert-messages.ts`, and server `src/guide/{en,es}/backup-recovery.md`.
+Add optional `StreamStatus.pruneBlockedSince?: string`, absent when clear. Only a daily prune listing that omits the current marker sets it; preserve its first timestamp. Clear on successful marker read and reset for a new generation. Mutate inside the read only after checking marker identity: boolean false also means no marker write or superseded work. A good clock read remains final for that generation. Thrown/hung reads retain existing handling. Keep daily retries, including up to a day before a later generation's next prune. No unused health/client field or host-decoration changes.
+Emit `backup.stream_retention_blocked` with warning severity (the helper currently hardcodes error), stable since and existing `toSpare` parameter, only streaming/paused. Lag alerts remain independent. Box status already recognises the `backup.stream_` prefix.
+**Watcher choice:** warn at the first prune with an absent marker, potentially the first streaming tick, accepting that a transient omission stays visible until the next daily read. Bell/Box status only. Wording explains retained old copies and daily retry without claiming uploads stopped. To request a fresh marker sooner, name Box status → Restart the box when not serving; verify that path. Do not suggest the hidden streaming copy-restart button or promise a restart repairs provider visibility.
+TDD in stream `src/supervisor.test.ts`: absent marker, daily recovery, later-generation absence after prior success, superseded read leaving current state untouched. Observe new assertions fail before implementation; retain object-survival, eligible-only deletion and hung-bucket pause checks. Server `src/alert-sources.test.ts` owns code/severity/since, suppression, clearing and spare parameters; fail before adding emission. Dashboard `src/i18n/alerts.test.ts` and `src/screens/box-status-rows.test.ts` own words and attention mapping. Preserve existing behavioral assertions.
+
+## Measurements and all five backlog outcomes
+
+1. **Marker:** delete its backlog entry only after the warning works. **Checksum:** keep the helper's same-version skip entry open. Use exported `scripts/setup-{litestream,s3-test-server}.mjs` installers with fresh owned roots to exercise archive verification; export their binary paths. The image has its separate archive check (`deploy/Dockerfile:163–177`). No executable-hash scheme or existing guard changes.
+2. **Idle uploads:** outside-checkout probe reuses `startS3TestServer({ accessLog })`, production configuration and a disposable database. Observe ten idle minutes; record side-file size/header/hash, object changes and write requests separately from reads. Bracket with known writes/uploads. Claim unchanged-file behavior only during actually unchanged intervals. This covers neither daily snapshots nor longer default compaction. Date supported results; retain other Task 7 limits.
+3. **Outage:** read November 6/7 research first. Run existing loop/pause tests unchanged with pinned tools; their forced restart against a frozen bucket is one condition. Probe freezing an already streaming bucket, plus refusing connections after streaming starts, without forced kills. A small temporary loopback forwarder cuts/restores connections; count natural Litestream exits/restarts. Starting the production supervisor against refusal would never launch Litestream: marker write precedes child startup (`supervisor.ts:420–451`).
+Bound each arm at 200 seconds or 40,000 writes. Record side-file peaks/resets, local level-0 bytes, state/pause events and commit times; restore after reconnection and compare every row. Expected reading to test: local checkpointing may continue while level 0 grows, without a pause. Route-based rigs own sale continuity; probe commit times are not sale times. Keep A549's outage bullet open: loopback refusal/freeze does not qualify dropped attempts, unreachable hosts, DNS, Linux or venue conditions; local-folder growth remains unbounded.
+4. **#668/#686/A57/A60/#723:** keep the wizard's shared `backup.stream_name_invalid` 400 bullet open. Reuse exact-field batch-error log assertions; deliberately leaking its key must fail once in a disposable candidate. Real versitygw missing-bucket opening and bad-credential listing probes record observed names/status/logs; other providers/sites remain unqualified.
+Date outcomes in `docs/backlog/box.md`; delete only completed bullets and adjust `docs/backlog.md`. Preserve history. Probe/logs stay outside Git, with absolute repository imports/server dependency resolution, outer deadlines and finally cleanup. Delete owned binaries/databases before firing ends; retain small text receipts. No AWS, containers or host-network changes.
+
+## Verification and bounds
+
+Run changed test files, stream `src/supervisor.cancel.test.ts`, server `src/guide-content.test.ts`, and root `scripts/{ongoing-alert-codes,alert-codes,errors-reachable,guide-links}.test.ts` using each package's `pnpm --filter <package> exec vitest run <files>` (root has no filter).
+Real rigs: with fresh binary paths, `env -u AI_AGENT -u CLAUDECODE WAITRON_REQUIRE_TEST_TOOLS=1 node scripts/run-with-deadline.mjs 1200 --diagnostics -- pnpm --filter @waitron/server exec vitest run src/stream-loop.e2e.test.ts src/stream-pause.e2e.test.ts --reporter=verbose`. Probe uses server `tsx` under that wrapper. Read test counts; no skipped qualification.
+One-time disposable controls remove warning emission, bypass no-clock pruning and leak the log key: corresponding assertions must fail after work settles, then pass restored. Never commit self-mutation tests. Look EN/ES, light/dark, phone/desktop; normal hook and current-head scoped CI, no whole-package local run.
+Estimate: production +90/-5, tests +180/-10, temporary probe/support including forwarder +250/-0; docs +30/-15 separately. Count temporary support too; stop for watcher opinion at 780 additions (1.5×520), after running changed tests. Target PR within three working hours excluding reviewer/watcher waits; ask before splitting unfinished measurements. When #3125 lands, pause cleanly and take A1308-5h.
+
+## Review corrections, 2026-11-14
+
+The two Claude run-it reads found an unused wire field, inaccurate standby/retry advice, and a
+questioned earlier-generation test. Keep the warning internal to ongoing alerts by projecting it out of
+all four status answers (backup, stream, Box status and Box health). Existing exact response
+assertions exercise those projections. The fresh read found Box status, and following every
+reader found Box health; each assertion failed on the extra field before its fix. Wording
+offers the real restart action after service, says it starts a full copy, and qualifies daily retries
+to normal running. Failed marker listings remain explicitly open in the existing error-report bundle.
+
+A supervisor's opening loop can claim a later generation if its first full copy exceeds the
+side-file limit. The earlier-clock regression case stays, with its first successful marker read
+made explicit. The new warning reset is removed: pruning starts after opening. The existing marker
+identity guard stays; no new superseded-read state or retry path is added.

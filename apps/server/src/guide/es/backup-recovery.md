@@ -156,6 +156,13 @@ lee y no cambia nada: **Leer de nuevo** vuelve a leer los datos y no activa las 
 cierra el panel. Tampoco repara nada; para sustituir los ajustes guardados, elige de nuevo los
 destinos y aplícalos. Conserva las claves de recuperación y los archivos de copia existentes.
 
+Si la campana o **Estado del servidor** indica que no se están limpiando las copias antiguas del
+bucket o del servidor en espera, se conservan esas copias. Waitron lo intenta cada día mientras la
+copia funciona con normalidad y retira el aviso cuando encuentra el marcador. Para pedir un
+marcador nuevo antes, un gerente o administrador puede
+usar **Estado del servidor**, **Reiniciar el servidor** cuando no estéis atendiendo. Esto inicia una
+copia completa con un marcador nuevo; los terminales dejan de vender durante el reinicio.
+
 Si la copia en el bucket indica que no se han podido usar sus ajustes de forma segura, elige
 **Cambiar de bucket** en **Copias de seguridad**. Corrige los campos señalados. **Probar** comprueba
 el bucket sin guardar ajustes; **Guardar y activar** también comprueba que un archivo de prueba se pueda leer con su clave y que se rechace su lectura con una clave incorrecta o sin clave antes de aplicar los ajustes. Si rechaza el bucket, sigue el mensaje para permitir esas claves o elige otro proveedor. Guardar puede permitir claves de cifrado proporcionadas por el cliente en los ajustes del bucket. Ese cambio se mantiene si una comprobación posterior falla. **Cancelar** deja los ajustes

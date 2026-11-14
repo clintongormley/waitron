@@ -344,6 +344,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   const statusBody = async () => {
     const env = await deps.readBoxEnv();
     const key = await recoveryKeyFacts(env, () => deps.supervisor.current().recoveryKey);
+    const stream: StreamView & { pruneBlockedSince?: string } = { ...deps.readStream() };
+    delete stream.pruneBlockedSince;
     return {
       ...projectStatus(await deps.supervisor.status()),
       ...(key.fileKey === undefined
@@ -351,7 +353,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         : { keyFingerprint: keyFingerprint(key.fileKey), keyRotatedAt: loadKeyRotatedAt(env) }),
       recoveryKeySet: key.held,
       recoveryKeyTooShort: key.tooShort,
-      stream: deps.readStream(),
+      stream,
     };
   };
 

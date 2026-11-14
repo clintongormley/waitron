@@ -400,6 +400,20 @@ describe("the copy when it goes to the standby server, not the owner's bucket", 
     for (const text of [en, es]) expect(text).not.toMatch(/bucket|internet/i);
   });
 
+  it("explains retained copies and a next step for bucket and standby retention warnings", () => {
+    for (const lang of ["en", "es"] as const) {
+      const bucket = alertMessage("backup.stream_retention_blocked", {}, lang);
+      expect(bucket).toContain(lang === "en" ? "Restart the box" : "Reiniciar el servidor");
+      expect(bucket).toContain(lang === "en" ? "old copies" : "copias antiguas");
+      const spare = alertMessage("backup.stream_retention_blocked", { toSpare: true }, lang);
+      expect(spare).toContain(lang === "en" ? "standby server" : "servidor en espera");
+      expect(spare).not.toMatch(/bucket|internet|contact support|switched on|encendido/i);
+      for (const text of [bucket, spare]) {
+        expect(text).toContain(lang === "en" ? "running normally" : "funciona con normalidad");
+      }
+    }
+  });
+
   it("keeps the bucket wording when the copy goes to a bucket", () => {
     expect(alertMessage("backup.stream_behind", { minutes: 20 }, "en")).toBe(
       "The bucket copy is 20 minutes behind: your most recent sales are not in it yet. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",

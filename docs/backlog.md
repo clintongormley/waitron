@@ -1790,7 +1790,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **A1268 part 2: pair a person's entries by write order after a backward clock step.** [Detail](backlog/box.md#a1268-part-2-pair-a-persons-entries-by-write-order-after-a-backward-clock-step)
 
-- **Bucket copy: silent stops and a real outage** (bundle of 5, 2 important, size S). [Detail](backlog/box.md#bundle-bucket-copy-silent-stops-and-a-real-outage)
+- **Bucket copy: silent stops and a real outage** (bundle of 3, 1 important, size S). [Detail](backlog/box.md#bundle-bucket-copy-silent-stops-and-a-real-outage)
 
 - **Qualify clock confirmation through remote access** (bundle of 2, 1 important, size M). [Detail](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
 

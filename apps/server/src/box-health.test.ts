@@ -96,7 +96,10 @@ describe("collectBoxHealth", () => {
   it("answers an empty venue with nothing read and the stubs' values passed through", async () => {
     const health = await collectBoxHealth(
       suite.db,
-      stubReaders({ notices: { ...stubReaders().notices, filing: () => false } }),
+      stubReaders({
+        notices: { ...stubReaders().notices, filing: () => false },
+        stream: () => ({ state: "off", pruneBlockedSince: "2026-10-22T09:00:00Z" }),
+      }),
     );
     expect(health).toEqual({
       at: NOW.toISOString(),

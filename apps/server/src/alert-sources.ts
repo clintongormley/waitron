@@ -60,9 +60,12 @@ const STOPPED_BY_ITSELF: ReadonlySet<string | null> = new Set([
 
 /** `scripts/ongoing-alert-codes.test.ts` finds each code by a `code: "..."` literal, so every call
  * site spells its code out. */
-function streamAlert(alert: Pick<OngoingAlert, "code" | "params" | "since">): OngoingAlert {
+function streamAlert(
+  alert: Pick<OngoingAlert, "code" | "params" | "since">,
+  severity: OngoingAlert["severity"] = "error",
+): OngoingAlert {
   const { code, params, since } = alert;
-  return { key: code, code, params, severity: "error", since, screen: BACKUP_SCREEN };
+  return { key: code, code, params, severity, since, screen: BACKUP_SCREEN };
 }
 
 /** The standby's store is not the owner's bucket and is reached over the venue's network, so the
@@ -108,6 +111,17 @@ function streamAlerts(stream: HostStreamView, now: Date): OngoingAlert[] {
         params: { minutes: Math.floor(stream.lagMs / 60_000), ...spare },
         since: new Date(now.getTime() - stream.lagMs).toISOString(),
       }),
+    );
+  }
+  if (
+    (stream.state === "streaming" || stream.state === "paused") &&
+    stream.pruneBlockedSince !== undefined
+  ) {
+    alerts.push(
+      streamAlert(
+        { code: "backup.stream_retention_blocked", params: spare, since: stream.pruneBlockedSince },
+        "warning",
+      ),
     );
   }
   if (stream.state === "paused") {

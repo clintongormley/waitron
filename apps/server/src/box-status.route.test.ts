@@ -191,7 +191,7 @@ describe("GET /api/box/status", () => {
     const streamApp = buildApp(nodeId, {
       now: new Date("2026-08-29T10:00:00Z"),
       tlsCertPath: undefined,
-      readStream: () => stream,
+      readStream: () => ({ ...stream, pruneBlockedSince: "2026-08-29T08:00:00Z" }),
     });
     const cookie = await login(streamApp, MANAGER_EMAIL);
     const res = await streamApp.request("/api/box/status", { headers: { cookie } });

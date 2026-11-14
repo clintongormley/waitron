@@ -305,6 +305,17 @@ describe("boxStatusRows", () => {
     expect(other).toBe(0);
   });
 
+  it("shows retention trouble on the bucket row while the copy is current", () => {
+    const warning = alert("backup.stream_retention_blocked", "backup");
+    const { rows, other } = boxStatusRows(quietHealth(), [warning]);
+    expect(row(rows, "bucket")).toMatchObject({
+      state: "attention",
+      line: alertMessage("backup.stream_retention_blocked", {}, "en"),
+      alerts: [warning],
+    });
+    expect(other).toBe(0);
+  });
+
   it("keeps a row's notice line over its alert's sentence, listing the alerts in the bell's order", () => {
     const first = alert("fiscal.submission_delayed", "fiscal", { key: "a" });
     const second = alert("fiscal.awaiting_certificate", "fiscal", { key: "b" });

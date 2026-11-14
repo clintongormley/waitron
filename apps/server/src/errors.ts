@@ -1630,6 +1630,7 @@ declare module "@waitron/shared" {
     /** The live copy stopped Litestream at the side-file limit. Built as data by the backups alert
      * source, never thrown. */
     "backup.stream_paused": { toSpare?: true };
+    "backup.stream_retention_blocked": { toSpare?: true };
     /** The live copy stopped because the pointer changed under it, or names a newer term: usually
      * another box writing this venue; it can also be a late pointer write by this box from before a
      * restart, or, on a bucket that refuses a conditional write to a missing object with 412, a

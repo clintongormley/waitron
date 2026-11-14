@@ -587,7 +587,11 @@ describe("stream settings routes", () => {
 
   it("Save sets a recovery key when there is none, refreshes the locked row, seals the bucket, then starts streaming", async () => {
     await clearBucket();
-    const { app, key, order, seenByReload } = harness();
+    const { app, deps, key, order, seenByReload } = harness();
+    vi.spyOn(deps.stream, "status").mockReturnValue({
+      ...STREAMING,
+      pruneBlockedSince: "2026-09-15T11:00:00.000Z",
+    });
     const cookie = await login(app);
     const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     expect(res.status).toBe(200);

@@ -62,6 +62,8 @@ export interface StreamStatus {
   lagMs: number;
   /** The newest file seen in the live generation, by the bucket's clock. */
   lastConfirmedUploadAt: string | null;
+  /** First daily prune whose listing omitted this generation's marker; absent once read. */
+  pruneBlockedSince?: string;
 }
 
 /**
@@ -886,7 +888,12 @@ export class StreamSupervisor {
     const offset = await bucketClockOffset(this.#store, write.key, write.started, write.ended, {
       signal,
     });
-    if (offset === null || this.#markerWrite !== write) return false;
+    if (this.#markerWrite !== write) return false;
+    if (offset === null) {
+      this.#status.pruneBlockedSince ??= this.#deps.now().toISOString();
+      return false;
+    }
+    delete this.#status.pruneBlockedSince;
     this.#skewMs = offset;
     this.#bucketClockRead = true;
     return true;

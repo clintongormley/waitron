@@ -162,6 +162,9 @@ export async function collectBoxHealth(
     readers.timeHealth(),
   ]);
 
+  const stream: StreamView & { pruneBlockedSince?: string } = { ...readers.stream() };
+  delete stream.pruneBlockedSince;
+
   return {
     at,
     sales: { lastAt: rows.lastAt },
@@ -169,7 +172,7 @@ export async function collectBoxHealth(
     noticesUnavailable,
     filing,
     outbox,
-    stream: readers.stream(),
+    stream,
     ...(readers.spare === undefined ? {} : { spare: await readers.spare() }),
     clock: { authority: readers.authorityClock(), sync },
     printers: rows.printers,
