@@ -1456,7 +1456,6 @@ CREATE TABLE `deployment` (
 --> statement-breakpoint
 CREATE TABLE `node_membership` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
-	`term` integer NOT NULL,
 	`document` text NOT NULL,
 	`updated_at` text NOT NULL,
 	CONSTRAINT "node_membership_singleton_ck" CHECK("node_membership"."id" = 1)

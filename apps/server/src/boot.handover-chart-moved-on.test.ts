@@ -170,7 +170,9 @@ function readDisk() {
   try {
     const count = (table: string) =>
       (venue.prepare(`select count(*) as n from ${table}`).get() as { n: number }).n;
-    const chart = venue.prepare("select term from node_membership").get() as { term: number };
+    const chart = venue
+      .prepare("select json_extract(document, '$.body.term') as term from node_membership")
+      .get() as { term: number };
     const row = node
       .prepare("select state, waiting_reason from node_handover_operations")
       .get() as { state: string; waiting_reason: string | null };

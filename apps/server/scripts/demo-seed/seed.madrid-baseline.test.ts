@@ -161,6 +161,7 @@ const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
 };
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
+  node_membership: ["term"],
   persons: ["role"],
   device_profile_admission_roles: ["role"],
   nodes: ["location_id"],

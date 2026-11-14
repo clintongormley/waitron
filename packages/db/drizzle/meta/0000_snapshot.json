@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "712b367a-bace-47fe-8ceb-775da60bdae6",
+  "id": "8e1a726c-1975-42f2-853c-60568c1a3884",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -9740,13 +9740,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 1
-        },
-        "term": {
-          "name": "term",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
         },
         "document": {
           "name": "document",

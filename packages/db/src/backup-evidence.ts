@@ -158,7 +158,7 @@ async function membershipValid(query: BackupQuery): Promise<boolean> {
     trust[row.id] = row.public_key;
   }
   if (!(await hasTable(query, "node_membership"))) return true;
-  for await (const row of query.rows("select id, term, document from node_membership")) {
+  for await (const row of query.rows("select id, document from node_membership")) {
     if (row.id !== 1n || typeof row.document !== "string") return false;
     let document: unknown;
     try {
@@ -166,11 +166,7 @@ async function membershipValid(query: BackupQuery): Promise<boolean> {
     } catch {
       return false;
     }
-    if (
-      !isMembershipDocument(document) ||
-      row.term !== BigInt(document.body.term) ||
-      !verifyMembershipDocument(document, trust).valid
-    )
+    if (!isMembershipDocument(document) || !verifyMembershipDocument(document, trust).valid)
       return false;
     for (const endorsement of document.endorsements) {
       if (

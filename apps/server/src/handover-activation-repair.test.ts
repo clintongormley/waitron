@@ -190,8 +190,11 @@ async function readDisk() {
       const count = (db: DatabaseSync, query: string) =>
         (db.prepare(`select count(*) as n from ${query}`).get() as { n: number }).n;
       return {
-        chartTerm: (venue.prepare("select term from node_membership").get() as { term: number })
-          .term,
+        chartTerm: (
+          venue
+            .prepare("select json_extract(document, '$.body.term') as term from node_membership")
+            .get() as { term: number }
+        ).term,
         activations: count(venue, "handover_activations"),
         ownSif: count(venue, `registro_sif where node_id = '${standby.nodeId}'`),
         state: (
