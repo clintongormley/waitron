@@ -4229,7 +4229,7 @@ synchronised, a start, or a clock jump of over a minute once the clock watch's n
 after the last ends) finds it, waits for two devices or a person to confirm its time before any
 later payment (owner, 2026-11-10; the jump, 2026-11-11; [below](#every-start-confirms-the-boxs-time-before-it-trades)),
 and AEAT refusing as dated in the future (`1112`) a record written since its time was last confirmed
-makes it wait for a person or its time service (owner, 2026-11-10 and 2026-11-11; A1420 D9): records chain locally
+makes it wait for a person or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, the watcher's): records chain locally
 and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
 is an outbox, never inline.
 

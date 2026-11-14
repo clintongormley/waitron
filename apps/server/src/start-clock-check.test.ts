@@ -193,7 +193,7 @@ describe("waiting because AEAT refused a sale as dated in the future", () => {
     ],
     [
       "answers unavailable",
-      async (): Promise<ClockServiceStatus> => ({ available: false, reason: "lost" }),
+      async (): Promise<ClockServiceStatus> => ({ available: false, reason: "timeout" }),
     ],
   ])(
     "notes that the host does not answer when it %s as a box confirmed by the internet goes back to waiting",

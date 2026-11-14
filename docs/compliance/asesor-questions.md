@@ -574,7 +574,7 @@ copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were a
 > a uno rechazado por duplicado y a una anulación que nunca recibió. Dado que «no pueden quedar RF
 > generados sin remitir a la AEAT» (FAQ de desarrolladores §5) y que hay que reintentar el envío al
 > menos cada hora (OM art. 16.4), ¿podemos retenerlos o debemos remitirlos? Si podemos, ¿hasta
-> cuándo y qué debemos conservar? *(2026-11-14: desde A1420 PR 2, una serie de rechazos `1112`, por fecha futura, no retiene nada.)*
+> cuándo y qué debemos conservar?
 >
 > **Para revisar: corríjanos solo si nos equivocamos.**
 >
@@ -3706,7 +3706,7 @@ Waitron sets `SinRegistroPrevio` yet (Q40(c)).
 > 1. mientras se desconoce la respuesta de la AEAT a un registro anterior y está pendiente su
 >    reenvío; se remiten en cuanto ese registro tiene respuesta;
 > 2. tras tres rechazos seguidos con el mismo código; el primero retenido se reenvía cada hora y,
->    si la respuesta es otra, pueden remitirse los demás. *(2026-11-14: desde A1420 PR 2, una serie de rechazos `1112`, por fecha futura, no retiene nada.)*
+>    si la respuesta es otra, pueden remitirse los demás.
 >
 > Tras un rechazo aislado seguimos remitiendo los posteriores, también tras un rechazo por duplicado
 > (error 3000) cuando la AEAT conserva con ese número y fecha otro registro distinto o uno anulado
