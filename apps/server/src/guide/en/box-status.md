@@ -36,7 +36,7 @@ Each part has a row with a coloured dot:
   **Sales** red.
 
 A row shows the alerts the bell shows for that part, in the bell's words. The **Bucket copy**,
-**Printers** and **Card readers** rows have a **Go to …** button, such as **Go to Backups**, that
+**Spare box**, **Printers** and **Card readers** rows have a **Go to …** button, such as **Go to Backups**, that
 opens their own page when you can open it, and an alert that has a page of its own adds a button for
 that page too. Alerts that belong to none of the rows are counted below the rows, beside **See all
 alerts**.

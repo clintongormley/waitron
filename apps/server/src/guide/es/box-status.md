@@ -41,7 +41,7 @@ Cada parte tiene una fila con un punto de color:
   confirme la hora del servidor. Cualquiera de ellos pone también en rojo **Ventas**.
 
 Cada fila muestra los mismos avisos que la campana para esa parte, con las mismas palabras. Las
-filas **Copia en el bucket**, **Impresoras** y **Lectores de tarjetas** tienen un botón **Ir a …**,
+filas **Copia en el bucket**, **Equipo de reserva**, **Impresoras** y **Lectores de tarjetas** tienen un botón **Ir a …**,
 como **Ir a Copias de seguridad**, que abre su propia página cuando puedes abrirla, y un aviso que
 tiene su propia página añade un botón para esa página. Los avisos que no corresponden a ninguna fila
 se cuentan bajo las filas, junto a **Ver todos los avisos**.
