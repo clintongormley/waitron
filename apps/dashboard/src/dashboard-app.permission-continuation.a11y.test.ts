@@ -68,7 +68,7 @@ describe.each(["light", "dark"] as const)("permission continuation in %s", (them
       const api = {
         getMe: async () => ({
           personId: "reader",
-          role: "manager",
+          roleIds: ["manager"],
           email: "reader@example.test",
           locale,
           venueLocale: locale,

@@ -43,7 +43,7 @@ function stubApi(modules: string[] = ["second", "unordered", "first"]): Dashboar
   return {
     getMe: vi.fn().mockResolvedValue({
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       email: "manager@example.com",
       locale: null,
       venueLocale: "es-ES",

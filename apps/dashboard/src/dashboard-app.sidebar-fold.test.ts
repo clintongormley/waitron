@@ -41,7 +41,7 @@ function stubApi(me: Record<string, unknown> = {}): DashboardApi {
     getGoogleConfig: async () => ({ configured: false }),
     getMe: async () => ({
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       email: "manager@example.com",
       locale: null,
       venueLocale: "es-ES",
@@ -400,7 +400,7 @@ it("a staff session's strip holds only Overview, with no magnifier", async () =>
   await atSize(1280, 800, async () => {
     localStorage.setItem(FOLDED_KEY, "true");
     const { el } = await mountApp({
-      role: "staff",
+      roleIds: ["staff"],
       permissions: ["payment.take"],
       modules: [],
     });
@@ -781,7 +781,7 @@ describe("a section with several pages opens a panel beside its icon", () => {
     await atSize(1280, 800, async () => {
       localStorage.setItem(FOLDED_KEY, "true");
       const { el } = await mountApp({
-        role: "staff",
+        roleIds: ["staff"],
         permissions: ["payment.take"],
         modules: [],
       });

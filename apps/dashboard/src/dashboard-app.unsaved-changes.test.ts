@@ -48,7 +48,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, request?: DashboardA
       getMe: async () => ({
         personId: "p1",
         email: "ada@example.com",
-        role: "staff",
+        roleIds: ["staff"],
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
@@ -599,7 +599,7 @@ it("a guarded product deep link accepts the product and screen in one history st
     getMe: async () => ({
       personId: "p1",
       email: "ada@example.com",
-      role: "manager",
+      roleIds: ["manager"],
       locale: "en-GB",
       venueLocale: "en-GB",
       sessionDefault: "en-GB",
@@ -767,7 +767,7 @@ it.each(["same-app", "device"] as const)(
       getMe: async () => ({
         personId: "p1",
         email: "ada@example.com",
-        role: "manager",
+        roleIds: ["manager"],
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
@@ -867,7 +867,7 @@ it.each([
         getMe: async () => ({
           personId: "p1",
           email: "ada@example.com",
-          role: "manager",
+          roleIds: ["manager"],
           locale: "en-GB",
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
@@ -1104,7 +1104,7 @@ describe("a product swatch link under the app's link router", () => {
       getMe: async () => ({
         personId: "p1",
         email: "ada@example.com",
-        role: "manager",
+        roleIds: ["manager"],
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
@@ -1215,7 +1215,7 @@ describe("a price override row's Edit product link under the app's link router",
       getMe: async () => ({
         personId: "p1",
         email: "ada@example.com",
-        role: "manager",
+        roleIds: ["manager"],
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
@@ -1275,7 +1275,7 @@ describe("a Structure tab product row's Edit product link under the app's link r
       getMe: async () => ({
         personId: "p1",
         email: "ada@example.com",
-        role: "manager",
+        roleIds: ["manager"],
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
@@ -1326,7 +1326,7 @@ describe("allergen warning product links with a dirty schedule", () => {
       getMe: async () => ({
         personId: "p1",
         email: "ada@example.com",
-        role: "manager",
+        roleIds: ["manager"],
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",

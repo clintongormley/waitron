@@ -8,7 +8,7 @@ const people: PersonSummary[] = [
   {
     personId: "p1",
     displayName: "Ada",
-    role: "manager",
+    roleIds: ["manager"],
     status: "active",
     hasPassword: true,
     hasTotp: true,
@@ -17,7 +17,7 @@ const people: PersonSummary[] = [
   {
     personId: "p2",
     displayName: "Bea",
-    role: "staff",
+    roleIds: ["staff"],
     status: "suspended",
     hasPassword: false,
     hasTotp: false,

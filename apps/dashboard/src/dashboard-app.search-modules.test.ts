@@ -149,7 +149,7 @@ async function mount(
   history.replaceState(null, "", options.path ?? "/manage/opening-hours/view/year");
   const session = {
     personId: "p1",
-    role: "manager",
+    roleIds: ["manager"],
     email: "ada@example.com",
     locale: options.locale ?? "en-GB",
     venueLocale: "en-GB",

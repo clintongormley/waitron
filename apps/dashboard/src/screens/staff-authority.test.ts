@@ -15,7 +15,7 @@ const people: PersonSummary[] = [
     lastNames: "Person",
     email: "other@example.test",
     telephone: "+44 20",
-    role: "staff",
+    roleIds: ["staff"],
     status: "pending",
     hasPassword: false,
     hasTotp: false,
@@ -130,7 +130,7 @@ it("offers only editing in a manager's staff row menu", async () => {
 
 it("preserves a manager's own role control", async () => {
   const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
-    person: { ...people[0]!, role: "manager", status: "active" },
+    person: { ...people[0]!, roleIds: ["manager"], status: "active" },
     currentPersonId: "other",
     canAdminister: false,
     open: true,

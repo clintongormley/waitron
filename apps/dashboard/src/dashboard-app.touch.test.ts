@@ -21,7 +21,7 @@ function touchApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getGoogleConfig: async () => ({ configured: false }),
     getMe: async () => ({
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       email: "manager@example.com",
       locale: null,
       venueLocale: "es-ES",
@@ -173,7 +173,7 @@ it.each<[number, number, "capped" | "page", number]>([
     const api = touchApi({
       getMe: async () => ({
         personId: "p1",
-        role: "manager",
+        roleIds: ["manager"],
         email: "manager@example.com",
         locale: "en-GB",
         venueLocale: "en-GB",

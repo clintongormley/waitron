@@ -112,7 +112,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, loaded = profile) {
         {
           personId: "pe1",
           displayName: "Ana",
-          role: "staff",
+          roleIds: ["staff"],
           status: "active",
           hasPassword: true,
           hasTotp: false,
