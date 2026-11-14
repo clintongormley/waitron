@@ -1,35 +1,70 @@
-import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { AppError, colorOrNull, VAT_CLASSES, type VatClass } from "@waitron/shared";
-import { catalogueSettings } from "@waitron/db";
+import { AppError, colorOrNull, isStoredColor, VAT_CLASSES, type VatClass } from "@waitron/shared";
+import { defineSettingsDocument, readSettings, saveSettings } from "@waitron/db";
 import "./errors.js";
 
 import type { CatalogueSettings } from "./settings-types.js";
 export type { CatalogueSettings } from "./settings-types.js";
 
-const SETTINGS_COLUMNS = {
-  defaultProductVatClass: catalogueSettings.defaultProductVatClass,
-  defaultColor: catalogueSettings.defaultColor,
-};
+export interface MenuSettings extends CatalogueSettings {
+  readonly starterUnitsCreated: boolean;
+}
+
+export const MENU_SETTINGS = defineSettingsDocument<MenuSettings>({
+  module: "menu",
+  version: 1,
+  transfers: true,
+  defaults: () => ({
+    defaultProductVatClass: "general",
+    defaultColor: null,
+    starterUnitsCreated: false,
+  }),
+  parse(doc) {
+    if (typeof doc !== "object" || doc === null || Array.isArray(doc))
+      return { ok: false, field: "doc" };
+    const value = doc as Record<string, unknown>;
+    for (const key of Object.keys(value))
+      if (!["defaultProductVatClass", "defaultColor", "starterUnitsCreated"].includes(key))
+        return { ok: false, field: key };
+    if (
+      typeof value.defaultProductVatClass !== "string" ||
+      !VAT_CLASSES.includes(value.defaultProductVatClass as VatClass)
+    )
+      return { ok: false, field: "defaultProductVatClass" };
+    if (value.defaultColor !== null && !isStoredColor(value.defaultColor))
+      return { ok: false, field: "defaultColor" };
+    if (typeof value.starterUnitsCreated !== "boolean")
+      return { ok: false, field: "starterUnitsCreated" };
+    return {
+      ok: true,
+      doc: {
+        defaultProductVatClass: value.defaultProductVatClass as VatClass,
+        defaultColor: value.defaultColor as string | null,
+        starterUnitsCreated: value.starterUnitsCreated,
+      },
+    };
+  },
+});
 
 export async function readCatalogueSettings(tx: Transaction): Promise<CatalogueSettings> {
-  const [row] = await tx
-    .select(SETTINGS_COLUMNS)
-    .from(catalogueSettings)
-    .where(eq(catalogueSettings.id, 1));
-  return row ?? { defaultProductVatClass: "general", defaultColor: null };
+  const { doc } = await readSettings(tx, MENU_SETTINGS);
+  return { defaultProductVatClass: doc.defaultProductVatClass, defaultColor: doc.defaultColor };
 }
 
 async function upsertSettings(
   tx: Transaction,
   values: Partial<CatalogueSettings>,
 ): Promise<CatalogueSettings> {
-  const [row] = await tx
-    .insert(catalogueSettings)
-    .values(values)
-    .onConflictDoUpdate({ target: catalogueSettings.id, set: values })
-    .returning(SETTINGS_COLUMNS);
-  return row!;
+  const { doc, revision } = await readSettings(tx, MENU_SETTINGS);
+  await saveSettings(tx, MENU_SETTINGS, {
+    doc: { ...doc, ...values },
+    expectedRevision: revision,
+    personId: null,
+  });
+  return {
+    defaultProductVatClass: values.defaultProductVatClass ?? doc.defaultProductVatClass,
+    defaultColor: Object.hasOwn(values, "defaultColor") ? values.defaultColor! : doc.defaultColor,
+  };
 }
 
 export async function saveCatalogueSettings(

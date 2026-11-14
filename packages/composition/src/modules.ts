@@ -21,6 +21,7 @@ import {
   CATALOGUE_CONFIGURATION_TRANSFER,
   CATALOGUE_PROVISIONING,
   GUEST_MENU_SETTINGS,
+  MENU_SETTINGS,
 } from "@waitron/menu";
 import {
   CORE_ALERTS,
@@ -197,7 +198,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     changes: CATALOGUE_CHANGE_SOURCES,
     configurationTransfer: CATALOGUE_CONFIGURATION_TRANSFER,
     provisioning: CATALOGUE_PROVISIONING,
-    settings: [GUEST_MENU_SETTINGS],
+    settings: [GUEST_MENU_SETTINGS, MENU_SETTINGS],
   },
   {
     name: "venue-service",
