@@ -50,8 +50,8 @@ record.
 
 - **AEAT answers that did not match what was sent**: AEAT answered a group of records with a
   different number of lines, so Waitron used none of its answer: it put each record back to be sent
-  again, or left it on hold. **Technical details** shows each record sent, where it stands now, and
-  AEAT's lines.
+  again, except any already on hold, which stayed on hold. **Technical details** shows each record
+  sent, where it stands now, and AEAT's lines.
 - **Invoices with a warning from Waitron's own check**: AEAT accepts the invoice, but Waitron's
   check found something AEAT may point out, or totals that do not match the tax lines. For totals,
   check that sale's prices.

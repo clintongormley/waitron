@@ -364,7 +364,7 @@ describe("vf-fiscal-filing-screen", () => {
     expect(unfolded(item)).toBe(
       "AEAT's answer to 2 records sent together had a different number of lines (1), so Waitron applied none of them. " +
         `Seen ${formatIsoMinute(REPLY_MISMATCH.detectedAt)} ` +
-        "What happens now When this answer arrived, Waitron applied none of AEAT's lines and put each record back to be sent again, except any already on hold, which stayed on hold. Each record's state now is under Technical details.",
+        "What happens now When this answer arrived, Waitron put each record back to be sent again, except any already on hold, which stayed on hold. Each record's state now is under Technical details.",
     );
     const fold = item.querySelector("wt-disclosure[data-test=technical]")!;
     expect(fold.getAttribute("heading")).toBe("Technical details");
@@ -420,12 +420,12 @@ describe("vf-fiscal-filing-screen", () => {
       flat(screen.shadowRoot!.querySelector("[data-test=reply-mismatches] > ul > li > dl"));
     const { screen } = await mount(vi.fn(settled));
     expect(now(screen)).not.toMatch(/\bsends\b|\bis tried\b|\bwill\b/);
-    expect(now(screen)).toContain("Waitron applied none of AEAT's lines");
+    expect(now(screen)).toContain("put each record back to be sent again");
 
     setLocale("es");
     const spanish = await mount(vi.fn(settled));
     expect(now(spanish.screen)).not.toMatch(/vuelve a enviar|se vuelve a intentar/);
-    expect(now(spanish.screen)).toContain("Waitron no aplicó ninguna línea de la AEAT");
+    expect(now(spanish.screen)).toContain("volvió a dejar cada registro pendiente de enviar");
   });
 
   it("says which record sent issues an invoice and which cancels one, when both share a number, date and state", async () => {
@@ -502,7 +502,7 @@ describe("vf-fiscal-filing-screen", () => {
       ...spanish.screen.shadowRoot!.querySelectorAll("[data-test=record-warnings] > ul > li"),
     ];
     expect(text(spanish.screen, "[data-test=record-warnings] h3")).toBe(
-      "Facturas con un aviso de la comprobación de Waitron",
+      "Facturas con una advertencia de la comprobación de Waitron",
     );
     expect(unfolded(spanishItems[0]!)).toContain(
       "Los totales de la factura T1/47 (2026-11-08) no cuadran con sus líneas de impuestos.",

@@ -120,8 +120,8 @@ export async function readFilingWarnings(
   return { replyMismatches, recordWarnings, total: counted!.n };
 }
 
-/** A stored alert's params are not checked against their type when read back; one in another
- * shape leaves its list empty rather than failing the whole page. */
+/** A stored alert's params are not checked when read back; a list that is missing or is not a
+ * list reads as empty. Its items are not checked. */
 function listOf<T>(value: T[] | undefined): T[] {
   return Array.isArray(value) ? [...value] : [];
 }

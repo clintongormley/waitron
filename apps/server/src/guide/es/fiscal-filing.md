@@ -54,14 +54,14 @@ un registro.
 
 - **Respuestas de la AEAT que no cuadran con lo enviado**: la AEAT respondió a un grupo de registros
   con otro número de líneas, así que Waitron no usó su respuesta: volvió a dejar cada registro
-  pendiente de enviar, o lo dejó detenido. **Detalles técnicos** muestra cada registro enviado, en
-  qué punto está ahora y las líneas de la AEAT.
-- **Facturas con un aviso de la comprobación de Waitron**: la AEAT acepta la factura, pero la
+  pendiente de enviar, salvo los que ya estaban detenidos, que siguieron detenidos. **Detalles
+  técnicos** muestra cada registro enviado, en qué punto está ahora y las líneas de la AEAT.
+- **Facturas con una advertencia de la comprobación de Waitron**: la AEAT acepta la factura, pero la
   comprobación de Waitron encontró algo que la AEAT puede señalar, o totales que no cuadran con las
   líneas de impuestos. Si son los totales, revisa los precios de esa venta.
 
-Un aviso sale de la lista cuando se marca como resuelto en la campana o en la página **Avisos**. La
-exportación incluye todos los avisos abiertos, no solo los de la pantalla.
+Una advertencia sale de la lista cuando su aviso se marca como resuelto en la campana o en la página
+**Avisos**. La exportación incluye todas las advertencias abiertas, no solo las de la pantalla.
 
 ## Exporta los casos {#export}
 

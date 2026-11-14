@@ -50,7 +50,7 @@ referrals, not completed recovery experiments.
 | [Filing cases](#fiscal-cases) | Build the released filing-case decision path; waiting or finding another person does not resolve a held case. |
 | [Fiscal reply](#fiscal-reply) | Evidence on Fiscal filing → Warnings (2026-11-14); still open: describe only exercised retry behavior and a decision for a persistent malformed reply. |
 | [Fiscal environment](#fiscal-environment) | Offer safe host-configuration or evidence/recovery choices; never relabel records or promote test data. |
-| [Reconciliation](#fiscal-reconcile) | The caller is the daily sweep (`packages/fiscal-verifactu/src/reconcile-sweep.ts`, started through `packages/fiscal-verifactu/src/reconcile-runtime.ts`); offer evidence and a decision path rather than sending the person to an administrator or adviser. |
+| [Reconciliation](#fiscal-reconcile) | The caller is the daily sweep (`packages/fiscal-verifactu/src/reconcile-sweep.ts`, built by `packages/fiscal-verifactu/src/reconcile-runtime.ts` and started by `apps/server/src/fiscal-reconciliation.ts` from `apps/server/src/boot.ts`); offer evidence and a decision path rather than sending the person to an administrator or adviser. |
 | [Payments](#payments) | Preserve confirmed-outcome requirements. Give a way to inspect provider evidence and resolve the held payment without depending on a conversation with provider staff. |
 | [Boot recovery](#boot-recovery) | Referral reworked (A1089, 2026-11-11): each row says plainly what happened and, where nothing at the box can fix it, that it is a fault, with the restart, retry, restore or reinstall choice it already named. `deployment.environment_mismatch` now offers Start again instead (A1501, #2829). No other row gains a way out; the owner's answer names none for these rows, and its Restart the box button (A1498) was built as a dashboard restart of Waitron's server only (watcher, 2026-11-11 10:31), so the held-database row still says to switch the box off and on. |
 
@@ -361,7 +361,7 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:238` and `apps/dashboard/src
 
 State: A reconciliation lookup still finds no authority copy after one resubmission. A lookup discrepancy is not proof of a Waitron bug. Receipt: `packages/fiscal-verifactu/src/reconcile.ts:166`.
 
-Route: Caller: the daily sweep (`packages/fiscal-verifactu/src/reconcile-sweep.ts`, started through `packages/fiscal-verifactu/src/reconcile-runtime.ts`). Missing: evidence inspection and a decision path.
+Route: Caller: the daily sweep (`packages/fiscal-verifactu/src/reconcile-sweep.ts`, built by `packages/fiscal-verifactu/src/reconcile-runtime.ts` and started by `apps/server/src/fiscal-reconciliation.ts` from `apps/server/src/boot.ts`). Missing: evidence inspection and a decision path.
 
 Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say Waitron has already queued the invoice to be sent once more and will not send it again by itself, that it asks AEAT again every day, and that the person should keep the box running and note when this appeared. Still missing: a page showing this alert's evidence. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.reconcile_no_trace`.
 
@@ -1063,9 +1063,9 @@ this audit. Read-only inspection and a decision route for persistent `reconcile_
 `reconcile_drift_anulada` findings remain separate work; a resubmission marker still does not prove
 that a second submission happened. The candidate still needs fiscal review and current-head CI.
 
-**Reconciliation alerts need a production caller and an evidence/decision route.** Do not
-promise a periodic fiscal check or offer another submission until that caller and its recovery
-choices are specified and exercised.
+**Reconciliation alerts need an evidence and decision route.** The caller is the daily sweep (see
+the note above). Do not offer another submission until a recovery choice is specified and
+exercised.
 
 **2026-10-26 caller audit**, against `bc6b9da96639cf055ec8dde15b88d442136b6343`:
 

@@ -310,8 +310,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La AEAT ha respondido sobre un registro de facturación sin un estado que Waitron reconozca, ha dicho que ya tiene un registro para esta factura y Waitron no ha podido confirmar que sea este, o no ha dado ninguna respuesta que Waitron pueda asegurar que corresponde a este registro, así que no se sabe si la AEAT lo ha guardado. Waitron lo volverá a enviar salvo que esté en espera un registro anterior de su cadena. Mensaje de la AEAT, si lo hay: {mensaje} (código {codigo}).",
   },
   "fiscal.respuesta_descuadrada": {
-    en: "The tax agency (AEAT) answered a submission with a different number of lines than the invoice records Waitron sent, so Waitron applied none of them and will send each again unless an earlier record on its chain is on hold. The records sent and AEAT's lines are on Fiscal filing.",
-    es: "La AEAT ha respondido a un envío con un número de líneas distinto del de registros de facturación que Waitron envió, así que Waitron no ha aplicado ninguna y volverá a enviar cada uno salvo que esté en espera un registro anterior de su cadena. Los registros enviados y las líneas de la AEAT están en Remisión a la AEAT.",
+    en: "The tax agency (AEAT) answered a submission with a different number of lines than the invoice records Waitron sent, so Waitron applied none of them and put each record back to be sent again, except any already on hold, which stayed on hold. The records sent and AEAT's lines are on Fiscal filing.",
+    es: "La AEAT ha respondido a un envío con un número de líneas distinto del de registros de facturación que Waitron envió, así que Waitron no ha aplicado ninguna y ha vuelto a dejar cada registro pendiente de enviar, salvo los que ya estaban detenidos, que siguen detenidos. Los registros enviados y las líneas de la AEAT están en Remisión a la AEAT.",
   },
   "fiscal.duplicado_anulado": {
     en: "The tax agency (AEAT) already holds this invoice record as cancelled. The record and AEAT's answer are on Fiscal filing.",
