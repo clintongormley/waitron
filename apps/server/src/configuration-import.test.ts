@@ -44,7 +44,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 33,
+  version: 32,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -177,7 +177,7 @@ describe("staged configuration import", () => {
     ["pre-job-role-move export", { version: 22 }],
     ["pre-today-choice-fold export", { version: 23 }],
     ["pre-menu-document export", { version: 30 }],
-    ["pre-menu-rename export", { version: 32 }],
+    ["pre-menu-rename export", { version: 31 }],
     ["future version", { version: bundle.version + 1 }],
     ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
@@ -915,16 +915,16 @@ describe("routing cells in a staged import", () => {
 
   it("refuses a bundle naming a part this box does not run as parts that differ, before any write", async () => {
     const { bundle, versions } = await exported();
-    expect(versions).not.toHaveProperty("menu");
+    expect(versions).not.toHaveProperty("catalogue");
     const old: ConfigurationBundle = {
       ...bundle,
-      // Menu's migration count just before the squash.
-      modules: { ...bundle.modules, menu: 36 },
+      // Catalogue's migration count just before the squash.
+      modules: { ...bundle.modules, catalogue: 36 },
     };
     const { stateDir, result } = await staged(old, versions);
     await expect(result).rejects.toMatchObject({
       code: "setup.configuration_parts_differ",
-      params: { exportOnly: ["menu"], serverOnly: [] },
+      params: { exportOnly: ["catalogue"], serverOnly: [] },
     });
     expect(await readdir(stateDir)).toEqual([]);
   });

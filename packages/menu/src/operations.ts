@@ -610,12 +610,12 @@ async function offerRowsOn(
  * sets `productPrice`. */
 function offerPrices(row: { grossPrice: number | null; productPrice: number | null }) {
   const override = priceOrNull(row.grossPrice);
-  const productPrice = centsToDecimal(row.productPrice!);
+  const variantProductPrice = centsToDecimal(row.productPrice!);
   const unitPrice = resolveOfferPrice({
     variantMenuPrice: null,
     variantPrice: null,
     parentMenuPrice: override,
-    parentPrice: productPrice,
+    parentPrice: variantProductPrice,
   });
   return { override, unitPrice };
 }

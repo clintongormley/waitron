@@ -253,8 +253,10 @@ it.each(["madrid-renamed-tables", "madrid-name-changes", "madrid-added-rows"])(
 );
 it("keeps base and effective product prices distinct on a rerun", () => {
   const file = "apps/dashboard/src/widgets/test-helpers.ts";
-  const input = "const cataloguePrice = price; const productPrice = decided(cataloguePrice);";
-  const expected = "const productPrice = price; const effectivePrice = decided(productPrice);";
+  const input =
+    "const cataloguePrice = price; const productPrice = decided(cataloguePrice); const catalogueVariants = {}; const catalogue = catalogueVariants.v;";
+  const expected =
+    "const productPrice = price; const effectivePrice = decided(productPrice); const productVariants = {}; const productVariantPrice = productVariants.v;";
   expect(rewrite(input, file)).toBe(expected);
   expect(rewrite(expected, file)).toBe(expected);
 });
@@ -273,4 +275,40 @@ it("scans destructured declarations, skips unrelated text and leaves binary file
   expect(readFileSync(join(root, "packages/menu/src/binary.bin"))).toEqual(
     Buffer.from([0, 99, 97]),
   );
+});
+
+it("keeps Products links consistent outside the dashboard package", () => {
+  expect(
+    rewrite(
+      'return "/manage/catalogue/product/p1";',
+      "packages/media/src/dashboard/image-library.ts",
+    ),
+  ).toBe('return "/manage/products/product/p1";');
+  expect(
+    rewrite("Open /manage/catalogue/category/c1.", "docs/developers/product-categories.md"),
+  ).toBe("Open /manage/products/category/c1.");
+});
+it("keeps historical filenames and translation catalogue meanings", () => {
+  const text =
+    "Run `37932573955` left `catalogue-screen.test.ts` unfinished. A translation catalogue.";
+  expect(rewrite(text, "docs/backlog/ci.md")).toBe(text);
+});
+it("renames zone-offer identifiers without inserting identifiers into prose", () => {
+  expect(
+    rewrite(
+      "const catalogue = data; catalogue.menus; // threads it with the catalogue",
+      "apps/till/src/till-app.ts",
+    ),
+  ).toBe("const zoneOffers = data; zoneOffers.menus; // threads it with the menu");
+});
+
+it("keeps guest settings separate from the existing menu defaults", () => {
+  expect(rewrite('module: "catalogue"', "packages/menu/src/guest-menu-settings.ts")).toBe(
+    'module: "guest_menu"',
+  );
+});
+it("keeps the retired module's refusal fixture historical", () => {
+  const text =
+    'expect(versions).not.toHaveProperty("catalogue"); // Catalogue\'s migration count just before the squash\nmodules: { catalogue: 36 }; params: { exportOnly: ["catalogue"], serverOnly: [] };';
+  expect(rewrite(text, "apps/server/src/configuration-import.test.ts")).toBe(text);
 });

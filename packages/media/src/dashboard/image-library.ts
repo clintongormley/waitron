@@ -46,7 +46,7 @@ function usageHref(use: ImageUsage): string {
     return `/manage/menus/menu/${encodeURIComponent(use.menuId)}/view/structure`;
   if (use.kind === "menu_version" || use.kind === "scheduled_menu_version")
     return `/manage/menus/menu/${encodeURIComponent(use.menuId)}`;
-  return `/manage/menu/product/${encodeURIComponent(use.id)}`;
+  return `/manage/products/product/${encodeURIComponent(use.id)}`;
 }
 
 function usageName(use: ImageUsage): string {

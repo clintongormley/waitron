@@ -493,7 +493,7 @@ export function combinedFixture(
   variants: { variantId: string; price: string | null }[] = [],
   ownPrice: string | null = null,
   productPrice = price,
-  menuVariants: Record<string, string | null> = {},
+  productVariants: Record<string, string | null> = {},
 ): import("@waitron/shared").CombinedOffer {
   type Decimal = import("@waitron/shared").Decimal;
   type Setting<T> = import("@waitron/shared").Setting<T>;
@@ -508,18 +508,19 @@ export function combinedFixture(
     productId,
     price: effectivePrice,
     variants: variants.map((v) => {
-      const menu = menuVariants[v.variantId] ?? null;
+      const productVariantPrice = productVariants[v.variantId] ?? null;
       const parent = decided(
         price as Decimal,
         "parent",
         ownPrice === null ? null : decided(productPrice as Decimal, "parent"),
       );
-      const fallback = menu === null ? parent : decided(menu as Decimal);
+      const fallback =
+        productVariantPrice === null ? parent : decided(productVariantPrice as Decimal);
       return {
         variantId: v.variantId,
         price: {
           ...(v.price === null ? fallback : decided(v.price as Decimal, "own", fallback)),
-          level: v.price !== null || menu !== null ? "variant" : "product",
+          level: v.price !== null || productVariantPrice !== null ? "variant" : "product",
         },
       };
     }),

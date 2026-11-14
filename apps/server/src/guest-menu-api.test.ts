@@ -17,6 +17,8 @@ import {
   setVenueDefaultMenu,
   writeContentLanguages,
   GUEST_MENU_SETTINGS,
+  saveMenuSettings,
+  readMenuSettings,
 } from "@waitron/menu";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountGuestMenuApi, mountPublicGuestMenu } from "./guest-menu-api.js";
@@ -261,7 +263,9 @@ it("gives guests a page rather than an internal settings failure", async () => {
       personId: null,
     }),
   );
-  suite.db.execute(sql`update settings set version = 2 where module = 'menu'`);
+  suite.db.execute(
+    sql`update settings set version = 2 where module = ${GUEST_MENU_SETTINGS.module}`,
+  );
   const failure = await f.app.request("/public/menu");
   expect(failure.status).toBe(500);
   expect(failure.headers.get("content-type")).toContain("text/html");
@@ -453,4 +457,26 @@ it("renders Cloud pages in UTC while the saved venue zone needs repair", async (
     });
   });
   expect((await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en).toContain("UTC");
+});
+
+it("keeps guest sharing separate from saved menu defaults", async () => {
+  const f = await fixture();
+  await withTransaction(suite.db, (tx) =>
+    saveMenuSettings(tx, { defaultProductVatClass: "reduced" }),
+  );
+  const headers = { cookie: f.cookies.manager };
+  const status = await f.app.request("/management-api/guest-menu", { headers });
+  expect(status.status).toBe(200);
+  expect(await status.json()).toEqual({ enabled: false, revision: 0, available: false });
+  const saved = await f.app.request("/management-api/guest-menu", {
+    method: "PUT",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true, expectedRevision: 0 }),
+  });
+  expect(saved.status).toBe(200);
+  expect((await saved.json()).enabled).toBe(true);
+  expect(await readMenuSettings(suite.db)).toEqual({
+    defaultProductVatClass: "reduced",
+    defaultColor: null,
+  });
 });

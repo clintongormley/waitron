@@ -138,7 +138,7 @@ it.each([false, true])(
       revision: 1,
     });
     expect(() =>
-      checkImportedSettings({ menu: { version: 1, doc: { enabled: !enabled } } }, ALL_MODULES),
+      checkImportedSettings({ guest_menu: { version: 1, doc: { enabled: !enabled } } }, ALL_MODULES),
     ).toThrow(expect.objectContaining({ code: "setup.request_invalid" }));
   },
 );

@@ -648,7 +648,7 @@ it("shows usage links and blocks a delete when the server reports uses", async (
   click("[data-test=delete-one]");
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Breakfast"));
   expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-    "/manage/menu/product/product-1",
+    "/manage/products/product/product-1",
   );
   expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
   expect(client.deleteImage).not.toHaveBeenCalled();
@@ -672,7 +672,7 @@ it("links a blocking variant use to the variant's own product page, not its pare
   click("[data-test=delete-one]");
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Large"));
   expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-    "/manage/menu/product/variant-1",
+    "/manage/products/product/variant-1",
   );
   expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
 });
@@ -1852,9 +1852,9 @@ it("lists every place the image is used under a heading, each linked to the plac
   const modal = await openedViewer();
   await vi.waitFor(() => expect(usesShown()).toHaveLength(5));
   expect(usesShown()).toEqual([
-    ["Toast", "/manage/menu/product/toast"],
-    ["Old toast (Archived product)", "/manage/menu/product/old"],
-    ["Large toast", "/manage/menu/product/large"],
+    ["Toast", "/manage/products/product/toast"],
+    ["Old toast (Archived product)", "/manage/products/product/old"],
+    ["Large toast", "/manage/products/product/large"],
     ["Drinks (internal)", "/manage/menus/menu/drinks-menu/view/structure"],
     ["Lunch Menu (Published menu)", "/manage/menus/menu/lunch"],
   ]);
@@ -1886,7 +1886,9 @@ it("shows that the uses are being looked up until the answer arrives", async () 
   );
   expect(modal.querySelector("[data-test=no-uses]")).toBeNull();
   lookup.resolve({ image, uses: everyKindOfUse.slice(0, 1) });
-  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/manage/menu/product/toast"]]));
+  await vi.waitFor(() =>
+    expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]),
+  );
   expect(modal.querySelector(".uses [role=status]")).toBeNull();
 });
 
@@ -1905,7 +1907,9 @@ it("reports a failed lookup in the preview and shows the uses after Try again", 
   );
   expect(usesShown()).toEqual([]);
   modal.querySelector<HTMLElement>("[data-test=retry-uses]")!.click();
-  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/manage/menu/product/toast"]]));
+  await vi.waitFor(() =>
+    expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]),
+  );
   expect(client.getImage).toHaveBeenCalledTimes(2);
   expect(client.getImage).toHaveBeenLastCalledWith("one");
   expect(modal.querySelector(".uses [role=alert]")).toBeNull();
@@ -1956,7 +1960,9 @@ it("shows the uses of the image opened last when an earlier image's lookup answe
   await previewClosed();
   thumbnail("two").click();
   await openedViewer();
-  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/manage/menu/product/toast"]]));
+  await vi.waitFor(() =>
+    expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]),
+  );
   first.resolve({ image, uses: everyKindOfUse.slice(3, 4) });
   await new Promise((resolve) => setTimeout(resolve, 20));
   await el.updateComplete;
@@ -1964,7 +1970,7 @@ it("shows the uses of the image opened last when an earlier image's lookup answe
   expect(viewer()!.querySelector<HTMLImageElement>("img")!.getAttribute("src")).toBe(
     `/media/${mediaTestReference("two.jpg")}`,
   );
-  expect(usesShown()).toEqual([["Toast", "/manage/menu/product/toast"]]);
+  expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]);
 });
 
 it("does not reopen a closed preview when its lookup answers late, or fails late", async () => {

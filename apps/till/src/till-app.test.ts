@@ -92,7 +92,7 @@ import type {
 } from "./api/tender-refund-types.js";
 import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
 
-// The venue's default menu (zoneOffers) — every product fixture below is tagged with its id, so the
+// The venue's default menu — every product fixture below is tagged with its id, so the
 // counter grid (which shows only the selected menu's products) renders them under the default selection.
 const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
 
@@ -9543,7 +9543,7 @@ describe("till-app", () => {
         tabTotal: "3000.01",
         party: { ...openTable.party!, outstanding: "3000.01" },
       };
-      it("loads the tab's lines and threads them (with the zoneOffers) to the screen", async () => {
+      it("loads the tab's lines and threads them (with the menu) to the screen", async () => {
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
@@ -16026,7 +16026,7 @@ describe("the device profile decides which screens a device offers", () => {
         permissions: string[];
       };
 
-    /** The next zoneOffers load waits until the returned function lets it load or fail. */
+    /** The next menu load waits until the returned function lets it load or fail. */
     async function holdMenu(): Promise<(outcome?: "loads" | "fails") => void> {
       const zoneOffers = await currentApi.listDefaultZoneOffers();
       let finish!: (value: typeof zoneOffers) => void;
@@ -16043,7 +16043,7 @@ describe("the device profile decides which screens a device offers", () => {
     }
 
     it.each(["loads", "fails"] as const)(
-      "leaves the newer person signed in when an older sign-in's zoneOffers %s last",
+      "leaves the newer person signed in when an older sign-in's menu %s last",
       async (outcome) => {
         const { el } = await mountApp();
         await flush(el);

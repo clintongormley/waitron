@@ -314,7 +314,11 @@ it.each([
   ],
   // `readMenuHome` (packages/menu/src/menu-home.ts): the details row, the section graph with
   // its menus, and each shortcut's name from `products` or `sections`.
-  ["getMenuHome", ["menu-1"], ["menu_details", "sections", "section_members", "products", "menus"]],
+  [
+    "getMenuHome",
+    ["menu-1"],
+    ["menu_details", "sections", "section_members", "products", "menus"],
+  ],
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile, and the profile's department. Not `devices`,
   // which a device's heartbeat changes every minute.

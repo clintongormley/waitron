@@ -6,7 +6,11 @@ import ts from "typescript";
 import { SCOPE as PATH_SCOPE, NEVER as PATH_NEVER } from "./rename-catalogue-paths.mjs";
 
 export const SCOPE = [...PATH_SCOPE, "apps/server/src/guide/**"];
-export const NEVER = [...PATH_NEVER, "apps/server/src/guide-catalogue*"];
+export const NEVER = [
+  ...PATH_NEVER,
+  "apps/server/src/guide-catalogue*",
+  "docs/backlog/english-only-audit.md",
+];
 export const CATCH_ALL = [
   ["CATALOGUES", "MENUS"],
   ["CATALOGUE", "MENU"],
@@ -46,9 +50,21 @@ export const EXACT = [
   ["zoneCatalogueGeneration", "zoneOffersGeneration"],
 ].map(([from, to]) => ({ from, to }));
 EXACT.push(
+  { from: '"catalogue"', to: '"guest_menu"', files: ["packages/menu/src/guest-menu-settings.ts"] },
+  {
+    from: "checkImportedSettings({ catalogue:",
+    to: "checkImportedSettings({ guest_menu:",
+    files: ["packages/provisioning/src/settings-transfer.test.ts"],
+  },
+  {
+    from: "catalogueVariants",
+    to: "productVariants",
+    files: ["apps/dashboard/src/widgets/test-helpers.ts"],
+  },
   {
     from: "catalogue",
     to: "zoneOffers",
+    identifiers: true,
     files: [
       "apps/till/src/till-app.ts",
       "apps/till/src/till-app.test.ts",
@@ -59,6 +75,14 @@ EXACT.push(
   { from: "defaultCatalogue", to: "defaultZoneOffers", files: ["apps/till/src/till-app.test.ts"] },
 );
 export const PROTECTED = [
+  {
+    id: "K11",
+    files: ["apps/server/src/configuration-import.test.ts"],
+    pattern:
+      /Catalogue's migration count just before the squash|catalogue(?=: 36)|(?<=toHaveProperty\(")catalogue(?="\))|(?<=exportOnly: \[")catalogue(?="\])/g,
+  },
+  { id: "K10", files: ["docs/**"], pattern: /\b[\w-]*catalogue[\w.-]*\.(?:ts|mjs|js)\b/g },
+  { id: "K10", files: ["**"], pattern: /\b(?:translation|string) catalogues?\b/g },
   {
     id: "K1",
     files: ["**"],
@@ -109,6 +133,12 @@ export const PROTECTED = [
   },
 ];
 export const LOCAL_RENAMES = [
+  { file: "packages/menu/src/operations.ts", name: "productPrice", to: "variantProductPrice" },
+  {
+    file: "apps/dashboard/src/widgets/test-helpers.ts",
+    name: "catalogue",
+    to: "productVariantPrice",
+  },
   { file: "packages/venue-service/src/menu-timetable.test.ts", name: "menus", to: "menuRows" },
   { file: "packages/venue-service/src/provisioning.test.ts", name: "menus", to: "menuRows" },
   {
@@ -134,6 +164,18 @@ const historical = (file) =>
   /apps\/server\/scripts\/demo-seed\/(?:testing\/madrid-(?!semantics)[^/]+\.ts|seed\.madrid-baseline\.test\.ts)$/.test(
     file,
   );
+
+function renameIdentifiers(text, file, from, to) {
+  const positions = [];
+  const visit = (node) => {
+    if (ts.isIdentifier(node) && node.text === from) positions.push([node.getStart(), node.end]);
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true));
+  for (const [start, end] of positions.reverse())
+    text = text.slice(0, start) + to + text.slice(end);
+  return text;
+}
 
 export function rewriteWords(original, file) {
   const kept = [];
@@ -194,8 +236,12 @@ export function rewriteWords(original, file) {
     for (const [start, end, replacement] of edits.reverse())
       text = text.slice(0, start) + replacement + text.slice(end);
   }
-  for (const { from, to, files } of EXACT) {
+  for (const { from, to, files, identifiers } of EXACT) {
     if (files && !files.includes(file)) continue;
+    if (identifiers) {
+      text = renameIdentifiers(text, file, from, to);
+      continue;
+    }
     text = text.replace(
       new RegExp(
         `(?<![A-Za-z0-9_])${escape(from)}${from.endsWith(".") ? "" : "(?![A-Za-z0-9_])"}`,
@@ -205,17 +251,8 @@ export function rewriteWords(original, file) {
     );
   }
   text = text.replace(/\bCombineInput\[(["'])catalogue\1\]/g, "CombineInput[$1product$1]");
-  if (/\b(?:CombineInput|combineOffer)\b/.test(original)) {
-    const positions = [];
-    const visit = (node) => {
-      if (ts.isIdentifier(node) && node.text === "catalogue")
-        positions.push([node.getStart(), node.end]);
-      ts.forEachChild(node, visit);
-    };
-    visit(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true));
-    for (const [start, end] of positions.reverse())
-      text = text.slice(0, start) + "product" + text.slice(end);
-  }
+  if (/\b(?:CombineInput|combineOffer)\b/.test(original))
+    text = renameIdentifiers(text, file, "catalogue", "product");
   if (file.startsWith("apps/dashboard/")) {
     text = text.replace(/\bmodules:\s*\[\s*(["'])catalogue\1\s*\]/g, 'modules: ["menu"]');
     text = text
@@ -226,6 +263,7 @@ export function rewriteWords(original, file) {
   }
   for (const { id, files, pattern } of PROTECTED)
     if (files.some((glob) => matchesGlob(file, glob))) text = mask(text, pattern, id);
+  text = text.replace(/\/manage\/catalogue(?=[/"'`?#]|$)/g, "/manage/products");
   text = catchAll(text).replace(/\uE000(\d+)\uE001/g, (_whole, index) => saved[Number(index)]);
   return { text, kept };
 }
