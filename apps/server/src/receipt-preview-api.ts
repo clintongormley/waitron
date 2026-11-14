@@ -71,6 +71,8 @@ export interface ReceiptPreviewResponse {
   paperWidths: PaperWidth[];
   /** The blocks each part of the trim adds; `null` for one that prints nothing. */
   marks: Record<ReceiptPart, BlockRange | null>;
+  /** True when the logo drawn is the venue's, because the draft names none of its own. */
+  venueLogo: boolean;
 }
 
 type Marks = ReceiptPreviewResponse["marks"];
@@ -269,6 +271,7 @@ async function renderDraftPreview(
       available.some((setting) => setting.paperWidth === width),
     ),
     marks: previewMarks(preview, drawn),
+    venueLogo: filename === undefined && venueLogo !== null,
   };
 }
 

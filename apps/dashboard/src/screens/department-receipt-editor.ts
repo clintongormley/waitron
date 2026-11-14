@@ -231,6 +231,7 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#previewDue = false;
     this.#previewSource = undefined;
     this.#queries.release("receipt");
+    this.#queries.release("theme");
     this.#scope?.dispose();
     this.#scope = undefined;
   }
@@ -303,6 +304,21 @@ export class DepartmentReceiptEditor extends LitElement {
         },
       )
       .catch(() => {});
+    // The preview's venue logo comes from the theme in use, which the receipt read does not carry.
+    let themeReads = 0;
+    void this.#queries.watch(
+      "theme",
+      {
+        key: `department-receipt-editor-theme:${department.id}:${opening}`,
+        dependencies: [{ type: "custom_themes" }],
+        read: async () => ++themeReads,
+      },
+      (read) => {
+        if (opening !== this.#opening || read === 1) return;
+        this.#previewSource = undefined;
+        this.#queuePreview();
+      },
+    );
   }
   #adoptUntouched(model: DepartmentReceiptModel): void {
     const current = comparableReceipt(this.#body());
@@ -705,6 +721,7 @@ export class DepartmentReceiptEditor extends LitElement {
                   }}
                 ></dashboard-image-upload>
                 ${errors.logo ? html`<p class="error">${errors.logo}</p>` : nothing}
+                ${this.preview?.venueLogo ? html`<p class="note" data-test="venue-logo">${t("receipts.venue_logo")}</p>` : nothing}
                 ${(["phone", "email"] as const).map(
                   (field) =>
                     html`<wt-input

@@ -1148,9 +1148,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **A print agent somewhere other than the box** (bundle of 4, size L, waits for another entry). Holds A1203, A1204, A1175. [Detail](backlog/printers.md#bundle-a-print-agent-somewhere-other-than-the-box)
 
-- **Department receipt preview** (bundle of 2, size S). [Detail](backlog/printers.md#bundle-department-receipt-preview)
-
-
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
   reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
   is in the server log. Decide how the till should show that outcome and offer another copy.

@@ -637,6 +637,8 @@ export interface ReceiptPreview {
   paperWidth: PrintPaperWidth;
   /** The widths of the active devices' receipt printers, narrowest first; empty when none. */
   paperWidths: PrintPaperWidth[];
+  /** True when the logo drawn is the venue's, because the draft names none of its own. */
+  venueLogo: boolean;
 }
 
 /** The language the venue's receipts print in by default, which the venue's region may fix. */

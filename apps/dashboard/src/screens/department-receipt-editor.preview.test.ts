@@ -272,3 +272,32 @@ it("labels the preview before the width chooser and paper without adding another
   expect(width.compareDocumentPosition(paper) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(receiptRoot(el).querySelector("h1")).toBeNull();
 });
+it("says in words when the preview draws the venue's logo, and only then", async () => {
+  const api = receiptApi();
+  api.previewReceiptDraft.mockResolvedValueOnce({ ...preview(), venueLogo: true });
+  const { el } = await mountReceiptEditor(api);
+  const note = () => receiptRoot(el).querySelector("[data-test=venue-logo]");
+  await expect.poll(() => note()?.textContent?.trim()).toBe(t("receipts.venue_logo"));
+  expect(note()!.classList.contains("note")).toBe(true);
+  await editReceipt(el, "email", "draft@example.com");
+  await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(2);
+  await expect.poll(() => note()).toBeNull();
+  const english = t("receipts.venue_logo");
+  setLocale("es-ES");
+  expect(t("receipts.venue_logo")).not.toBe(english);
+});
+it("redraws the preview when the theme in use changes, with the draft unchanged", async () => {
+  const api = receiptApi();
+  const { el } = await mountReceiptEditor(api);
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")?.textContent).toContain("Sample");
+  expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1);
+  api.previewReceiptDraft.mockResolvedValueOnce({ ...preview("THEMED"), venueLogo: true });
+  api.liveData.invalidate([{ type: "custom_themes" }]);
+  await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(2);
+  expect(api.previewReceiptDraft.mock.calls[1]![0]).toEqual(
+    api.previewReceiptDraft.mock.calls[0]![0],
+  );
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")?.textContent).toContain("THEMED");
+  await expect.poll(() => receiptRoot(el).querySelector("[data-test=venue-logo]")).toBeTruthy();
+  expect(el.hasUnsavedChanges).toBe(false);
+});
