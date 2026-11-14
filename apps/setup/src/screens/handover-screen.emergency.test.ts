@@ -360,7 +360,7 @@ it.each([
   ["restore.archive_resource_limit", "shell.restore.archive_resource_limit", "en-GB"],
   ["restore.archive_resource_limit", "shell.restore.archive_resource_limit", "es-ES"],
 ] as const)(
-  "keeps the archive choice after admission is refused: %s",
+  "keeps the archive choice after admission is refused: %s (%s, %s)",
   async (code, key, locale) => {
     setLocale(locale);
     const { el, posts } = await mount({
