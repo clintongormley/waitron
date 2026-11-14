@@ -69,7 +69,7 @@ import { offerProducts } from "./zone-offers.js";
 const RECOVERY_KEY = "spare-join-e2e-recovery-key";
 const MODULES_M = { modules: { "fiscal-verifactu": false } };
 const LOCALE_M = "en-GB";
-const ADMIN = { email: "owner@example.test", password: "dashPass123" };
+export const ADMIN = { email: "owner@example.test", password: "dashPass123" };
 /** A taxpayer whose territory selects `fiscal-none`, the one fiscal module `MODULES_M` leaves on. */
 const VENUE_M: VenueRequest = {
   country: "GB",
@@ -112,20 +112,20 @@ const SPARE_RESTARTS_AFTER_FIRST_COPY = 2;
 // the start that places it and finishes joining, the mirror's, and once more after the test stops
 // it; M starts four times: first, once it has its bucket copy, in the middle of S's join, and for
 // the start check.
-const BOOT_MS = 30_000;
+export const BOOT_MS = 30_000;
 const HEALTH_MS = POLL_TRIES * POLL_INTERVAL_MS;
 const UNTIMED_MS = 60_000;
 const POINTER_WAIT_MS = 30_000;
 // The main box asks the spare's store and the spare its own store every 5 seconds.
-const LINK_WAIT_MS = 60_000;
-const COPY_WAIT_MS = 120_000;
-const MIRROR_WAIT_MS = 60_000;
+export const LINK_WAIT_MS = 60_000;
+export const COPY_WAIT_MS = 120_000;
+export const MIRROR_WAIT_MS = 60_000;
 // The main box looks for changed backup settings every `SETTINGS_CHECK_MS`, and sends again
 // `SETTINGS_RETRY_MS` after a failed send.
 const SETTINGS_WAIT_MS = 10_000;
 const SETTINGS_CHECK_MS = 1_000;
 const SETTINGS_RETRY_MS = 2_000;
-const WAIT_POLL_MS = 250;
+export const WAIT_POLL_MS = 250;
 export const SPARE_JOIN_SCENARIO_MS =
   9 * BOOT_MS +
   4 * HEALTH_MS +
@@ -214,7 +214,7 @@ function watchConnections(): {
 class ClosedWhileStarting extends Error {}
 
 /** Settles as `starting` does, or throws once it has run `BOOT_MS` unsettled. */
-async function boundedStart(starting: Promise<void>, what: string): Promise<void> {
+export async function boundedStart(starting: Promise<void>, what: string): Promise<void> {
   if (!(await settleWithin(starting, BOOT_MS)))
     throw new Error(`${what} did not finish within ${BOOT_MS} ms`);
   await starting;
@@ -431,7 +431,7 @@ async function seedCounterTill(
 }
 
 /** `read` over the box's databases in `venueDir`, opened without the venue lock its server holds. */
-async function readOutside<T>(
+export async function readOutside<T>(
   venueDir: string,
   read: (store: VenueDatabase) => Promise<T>,
 ): Promise<T> {
@@ -444,7 +444,7 @@ async function readOutside<T>(
 }
 
 /** What a refused join must leave alone on M: its chart, its `nodes` and series rows, its link. */
-function joinState(venueDir: string, nodeId: string): Promise<unknown> {
+export function joinState(venueDir: string, nodeId: string): Promise<unknown> {
   return readOutside(venueDir, async (store) => {
     const chart = await readNodeMembership(store.venue);
     return {
@@ -460,7 +460,7 @@ function joinState(venueDir: string, nodeId: string): Promise<unknown> {
 }
 
 /** The first row `sql` answers in `venueDir`'s `venue.db`, opened read-only. */
-function firstRowIn(venueDir: string, sql: string, ...params: SQLInputValue[]) {
+export function firstRowIn(venueDir: string, sql: string, ...params: SQLInputValue[]) {
   const db = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
   try {
     return db.prepare(sql).get(...params);
@@ -470,7 +470,7 @@ function firstRowIn(venueDir: string, sql: string, ...params: SQLInputValue[]) {
 }
 
 /** The public key `venue.db`'s `nodes` row holds for `nodeId`. */
-function nodeKeyIn(venueDir: string, nodeId: string) {
+export function nodeKeyIn(venueDir: string, nodeId: string) {
   return firstRowIn(venueDir, "select public_key from nodes where id = ?", nodeId)?.public_key;
 }
 
@@ -500,7 +500,7 @@ async function filesUnder(dir: string): Promise<string[]> {
 }
 
 /** The logger's JSON lines among `lines`. */
-function logLines(lines: readonly string[]): LogLine[] {
+export function logLines(lines: readonly string[]): LogLine[] {
   return lines.flatMap((text) => {
     try {
       const parsed = JSON.parse(text) as unknown;
@@ -515,6 +515,89 @@ function describeError(error: unknown): string {
   const cause = (error as { cause?: { code?: unknown; message?: unknown } }).cause;
   const detail = cause === undefined ? "" : ` (${String(cause.code ?? cause.message)})`;
   return `${String(error)}${detail}`;
+}
+
+type Via = ReturnType<typeof httpsVia>["via"];
+
+/** The headers of `ADMIN`'s management session on the box at `url`, with a fresh password proof. */
+export async function managementHeaders(
+  url: string,
+  origin: string,
+  via: Via,
+): Promise<Record<string, string>> {
+  const signIn = await fetch(`${url}/management-api/session`, {
+    ...via,
+    method: "POST",
+    headers: { "content-type": "application/json", origin },
+    body: JSON.stringify(ADMIN),
+  });
+  expect(signIn.status, await signIn.clone().text()).toBe(200);
+  await signIn.arrayBuffer();
+  const managing = {
+    "content-type": "application/json",
+    origin,
+    cookie: signIn.headers.get("set-cookie")!.split(";")[0]!,
+  };
+  const proof = await fetch(`${url}/management-api/session/me/fresh-sign-in`, {
+    ...via,
+    method: "POST",
+    headers: managing,
+    body: JSON.stringify({ method: "password", password: ADMIN.password }),
+  });
+  expect(proof.status, await proof.clone().text()).toBe(204);
+  await proof.arrayBuffer();
+  return managing;
+}
+
+/** The spare at `spareUrl` asked to adopt the main box at `primaryUrl` as `ADMIN`. */
+export async function adoptFrom(
+  spareUrl: string,
+  via: Via,
+  primary: { primaryUrl: string; caPem: string },
+): Promise<{ status: number; body: unknown }> {
+  const adopted = await fetch(`${spareUrl}/setup-api/adopt`, {
+    ...via,
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      primaryUrl: primary.primaryUrl,
+      credential: { email: ADMIN.email, password: ADMIN.password },
+      confirmedCaPem: primary.caPem,
+    }),
+  });
+  return { status: adopted.status, body: (await adopted.json()) as unknown };
+}
+
+/**
+ * Waits until the spare on `stateDir` has no adoption pending and its page at `spareUrl`, read under
+ * the venue's authority (`via`), is the mirror's closed page.
+ */
+export async function waitForMirrorStart(
+  wait: <T>(what: string, ms: number, probe: () => Promise<T | undefined>) => Promise<T>,
+  stateDir: string,
+  spareUrl: string,
+  via: Via,
+): Promise<void> {
+  let lastFetchError: unknown;
+  await wait("the spare to start as a mirror", MIRROR_WAIT_MS, async () => {
+    if (existsSync(join(stateDir, PENDING_ADOPTION_FILE))) return undefined;
+    try {
+      const page = await fetch(`${spareUrl}/`, via);
+      const text = await page.text();
+      lastFetchError = undefined;
+      return text.includes("Restaurant screens are closed here") ? true : undefined;
+    } catch (error) {
+      // The spare is between starts, or answers under an authority the venue's does not verify.
+      lastFetchError = error;
+      return undefined;
+    }
+  }).catch((error: unknown) => {
+    if (lastFetchError === undefined) throw error;
+    throw new Error(
+      `${String(error)}; the spare's last fetch failed with ${describeError(lastFetchError)}`,
+      { cause: error },
+    );
+  });
 }
 
 export function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<void> {
@@ -662,19 +745,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       fingerprint256: new X509Certificate(caM).fingerprint256,
     });
 
-    const adopt = async (): Promise<{ status: number; body: unknown }> => {
-      const adopted = await fetch(`${urlS}/setup-api/adopt`, {
-        ...viaS,
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          primaryUrl: addressM,
-          credential: { email: ADMIN.email, password: ADMIN.password },
-          confirmedCaPem: caM,
-        }),
-      });
-      return { status: adopted.status, body: (await adopted.json()) as unknown };
-    };
+    const adopt = () => adoptFrom(urlS, viaS, { primaryUrl: addressM, caPem: caM });
 
     clock.begin("spare-refused-no-key");
     const beforeNoKey = await joinState(dirsM.venue, m.nodeId);
@@ -707,27 +778,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     expect(await joinState(dirsM.venue, m.nodeId)).toEqual(before);
 
     clock.begin("bucket-stopped");
-    const signIn = await fetch(`${urlM}/management-api/session`, {
-      ...viaM,
-      method: "POST",
-      headers: { "content-type": "application/json", origin: boxM.origin },
-      body: JSON.stringify(ADMIN),
-    });
-    expect(signIn.status, await signIn.clone().text()).toBe(200);
-    await signIn.arrayBuffer();
-    const managing = {
-      "content-type": "application/json",
-      origin: boxM.origin,
-      cookie: signIn.headers.get("set-cookie")!.split(";")[0]!,
-    };
-    const proof = await fetch(`${urlM}/management-api/session/me/fresh-sign-in`, {
-      ...viaM,
-      method: "POST",
-      headers: managing,
-      body: JSON.stringify({ method: "password", password: ADMIN.password }),
-    });
-    expect(proof.status, await proof.clone().text()).toBe(204);
-    await proof.arrayBuffer();
+    const managing = await managementHeaders(urlM, boxM.origin, viaM);
     const keys: string[] = [RECOVERY_KEY];
     const rotate = async (): Promise<string> => {
       const recoveryKey = `spare-join-rotated-${randomUUID()}`;
@@ -803,28 +854,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       linesSince(logAtCopy).find((line) => line.event === "spare.first_copy_ready"),
     );
     console.log(`spare join: first copy ${String(ready.bytes)} bytes, ${String(ready.ms)} ms`);
-    let lastFetchError: unknown;
-    await wait("S to start as a mirror", MIRROR_WAIT_MS, async () => {
-      if (existsSync(join(dirsS.state, PENDING_ADOPTION_FILE))) return undefined;
-      try {
-        const page = await fetch(`${urlS}/`, viaM);
-        const text = await page.text();
-        lastFetchError = undefined;
-        return text.includes("Restaurant screens are closed here") ? true : undefined;
-      } catch (error) {
-        // S is between starts, or answers under an authority M's does not verify.
-        lastFetchError = error;
-        return undefined;
-      }
-    }).catch((error: unknown) => {
-      if (lastFetchError === undefined) throw error;
-      throw new Error(
-        `${String(error)}; S's last fetch failed with ${describeError(lastFetchError)}`,
-        {
-          cause: error,
-        },
-      );
-    });
+    await waitForMirrorStart(wait, dirsS.state, urlS, viaM);
     await spareHolds(digestAtJoin, "after the rotation at the join");
     const node = await fetch(`${urlS}/api/node`, viaM);
     expect(await node.json()).toMatchObject({ acceptingSales: false });

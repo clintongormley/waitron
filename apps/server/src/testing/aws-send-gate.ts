@@ -49,6 +49,11 @@ export function currentRequestScope(): RequestScope | undefined {
   return storage.getStore();
 }
 
+/** Runs `body` outside any scope, so the servers it starts send without a plan's checks. */
+export function outsideRequestScope<T>(body: () => T): T {
+  return storage.exit(body);
+}
+
 export function setSendGateStrict(on: boolean): void {
   strict = on;
 }

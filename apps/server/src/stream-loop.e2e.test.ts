@@ -127,7 +127,13 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
           describeTransport: () => `versitygw ${VERSITYGW_VERSION}. Server log: ${server.log()}`,
           freeze: { pause: () => server.pause(), resume: () => server.resume() },
           signal: stop.signal,
-          record: (event) => events.push(event),
+          versitygwBin: versitygw.bin,
+          record: (event) => {
+            events.push(event);
+            console.log(
+              `stream loop phase ${event.phase}: ${event.outcome}, ${Math.round(event.elapsedMs)} ms`,
+            );
+          },
           serverSeams: {
             spawn: trackedSpawn((pid, args) => {
               if (args[0] !== "replicate") return;

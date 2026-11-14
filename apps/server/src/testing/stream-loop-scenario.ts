@@ -59,11 +59,17 @@ import { ALL_MODULES } from "../modules.js";
 import { runRestore } from "../restore-command.js";
 import { unsealNodeState } from "../sealed-state.js";
 import type { StreamHostDeps } from "../stream-host.js";
+import { outsideRequestScope } from "./aws-send-gate.js";
 import { httpsVia } from "./boot-harness.js";
 import { freePort } from "./free-ports.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 import { bootEnv, boxDirs, copyMigrations, provisionStreamBox } from "./stream-box.js";
+import {
+  STREAM_LOOP_SPARE_MS,
+  STREAM_LOOP_SPARE_PHASES,
+  runLoopSpare,
+} from "./stream-loop-spare.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";
@@ -118,7 +124,8 @@ export const STREAM_LOOP_SCENARIO_MS =
   2 * TIMED_SALES * 1_000 +
   REBUILD_MS +
   RESTORE_MS +
-  UNTIMED_MS;
+  UNTIMED_MS +
+  STREAM_LOOP_SPARE_MS;
 
 export const STREAM_LOOP_PHASES = [
   "probe",
@@ -129,6 +136,7 @@ export const STREAM_LOOP_PHASES = [
   "sale-b",
   "frozen-transport",
   "restore-compare",
+  ...STREAM_LOOP_SPARE_PHASES,
 ] as const;
 export type StreamLoopPhase = (typeof STREAM_LOOP_PHASES)[number];
 
@@ -155,8 +163,10 @@ export interface StreamLoopFixture {
   /** Hangs every bucket call until `resume`; without it stage 8b's sales run unbounded. */
   freeze?: { pause(): Promise<void>; resume(): void };
   record?(event: StreamLoopEvent): void;
-  /** Handed to both servers' stream, so a caller can learn of each Litestream they start. */
+  /** Handed to every server's stream, so a caller can learn of each Litestream they start. */
   serverSeams?: Pick<StreamHostDeps, "spawn">;
+  /** The versitygw a spare runs its store on; without it the spare's phases are skipped. */
+  versitygwBin?: string;
 }
 
 /** Keys in the bucket containing `fragment`, whether the store returns them with its prefix or without. */
@@ -823,6 +833,33 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       );
     } finally {
       await readB.close();
+    }
+
+    // 11. B adds a spare (`stream-loop-spare.ts`).
+    const { versitygwBin } = fixture;
+    if (versitygwBin === undefined) {
+      for (const phase of STREAM_LOOP_SPARE_PHASES) {
+        clock.begin(phase);
+        clock.end("skipped");
+      }
+    } else {
+      // These phases never run against Amazon S3, and B's pair stream writes to C's own store, a
+      // bucket no rehearsal plan names.
+      await outsideRequestScope(() =>
+        runLoopSpare({
+          scratch,
+          migrationsRoot,
+          litestreamBin,
+          versitygwBin,
+          dirsB,
+          portB,
+          nodeIdB: a.nodeId,
+          saleIds: [saleA.saleId, saleB.saleId, lastSaleId],
+          ...(fixture.serverSeams === undefined ? {} : { serverSeams: fixture.serverSeams }),
+          ...(signal === undefined ? {} : { signal }),
+          begin: (phase) => clock.begin(phase),
+        }),
+      );
     }
     clock.end("ok");
   } catch (error) {
