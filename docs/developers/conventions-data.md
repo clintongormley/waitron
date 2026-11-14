@@ -3266,7 +3266,8 @@ keeps the named form-factor trigger refusal and incoming RESTRICT refusal; it re
 foreign-key errors without attributing them to a canvas.
 
 2026-11-14: the watcher cleared two exceptions, stated at `bill-request.ts` and
-`dish-not-sent-alert.ts`, to tolerate every trigger refusal so payments settle. Both read
+`dish-not-sent-alert.ts`, to retain their broad 1811 catches for statement-only recovery.
+`RAISE(ROLLBACK)` still fails the payment (`till-api.unroutable-dish.test.ts`). Both read
 `refusalCode` explicitly; `isRefusal` itself declines 1811, including mixed lists.
 
 ## One process per venue folder

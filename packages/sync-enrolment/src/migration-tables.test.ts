@@ -76,7 +76,7 @@ describe("tablesCreatedBy", () => {
     "SELECT 'it''s -- /* text'; CREATE TABLE kept (id int); -- */",
     'SELECT "a/*b"; CREATE TABLE kept (id int); -- */',
     "SELECT `it's`; CREATE TABLE kept (id int); SELECT 'x';",
-  ])("keeps real SQL after quoted or commented comment markers: %s", (sql) => {
+  ])("keeps real SQL after comment markers or quotes inside lexical tokens: %s", (sql) => {
     expect(tablesCreatedBy([sql])).toEqual(new Set(["kept"]));
   });
 
