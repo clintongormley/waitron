@@ -1405,10 +1405,11 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `void cfg;` (`git grep -n 'void cfg;' apps/server/src`); `setLineCourse` and
   `readTransactionReceipt` retain `_cfg` in their signatures, among others
   (`git grep -n '_cfg:' apps/server/src`). Left open by SQLite slice 1
-  (#490 and the preparation tasks) and A1308 5f-ii's five-function scope. Size on 2026-11-14:
-  eight functions carry an unread `_cfg` and are called from about 690 places, mostly tests
-  (`offerProducts` 285, `createTable` 202, `defaultLayout` 69, `readDrafts` 49, `setLineCourse`
-  48), plus 11 `void cfg;` lines; dropping the parameter touches every one of those calls.
+  (#490 and the preparation tasks) and A1308 5f-ii's five-function scope. Size on 2026-11-14 for
+  the five most-called of the eight, counted as matches of `<name>(` in `apps/server/src`
+  (declarations and same-named test wrappers included): `offerProducts` 284, `createTable` 187,
+  `defaultLayout` 68, `readDrafts` 49, `setLineCourse` 20, mostly in tests, plus 11 `void cfg;`
+  lines.
 
 ## Bundle: Small refactors
 
