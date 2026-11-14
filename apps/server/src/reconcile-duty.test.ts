@@ -1,3 +1,4 @@
+import { systemClock } from "./till-backend.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, workingOrders } from "@waitron/db";
@@ -397,6 +398,8 @@ it("gates reconciliation with the serving node, current role, clock and economic
   let primary = true,
     readOnly = false,
     waiting = false;
+  const clock = systemClock();
+  const reading = { ...clock.now(), instant: NOW, offsetMinutes: 0 };
   const seen: string[] = [];
   backend.refuseNewRefund = async (_tx, nodeId) => {
     seen.push(nodeId);
@@ -406,17 +409,7 @@ it("gates reconciliation with the serving node, current role, clock and economic
     backend,
     admission,
     cfg: { nodeId: seeded.nodeId } as import("./bill-refunds.js").BillRefundDeps["cfg"],
-    clock: {
-      anchor() {},
-      currentAnchor: () => null,
-      now: () => ({
-        instant: NOW,
-        offsetMinutes: 0,
-        confident: true,
-        confidence: "anchored",
-        anchorAgeSeconds: 0,
-      }),
-    },
+    clock: { ...clock, now: () => reading },
     clockUnconfirmed: () => waiting,
     isPrimary: () => primary,
     isReadOnly: () => readOnly,
