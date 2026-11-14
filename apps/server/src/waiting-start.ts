@@ -179,8 +179,8 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
       }
       log("warn", "waiting_start.close_failed", { errorCode: codeOf(error) });
     }
-    // A stepdown that began before the listeners closed is restarting the box, so the start that
-    // was about to go on stops instead.
+    // A stepdown still under way once the listeners have closed is restarting the box, so the start
+    // that was about to go on stops instead.
     const stopped = end.kind === "stopped" || steppingDown;
     if (stopped) {
       endedWith = { kind: "stopped" };
