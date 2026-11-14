@@ -188,15 +188,15 @@ Inside the lane's "small" item. Each task fits one implementer well under 100 to
 4. **Order against A1308 fi1, which renames `fiscal_series_conflicts` and `registro_sif`?** *Default:
    build now*; the new code names the drizzle objects, which fi1's rename map rewrites. Check fi1 is
    not in flight in `reconcile-series.ts` first.
-6. **Do the owner's "interrupted activation" and "explicit return to a fresh short series" count as
+5. **Do the owner's "interrupted activation" and "explicit return to a fresh short series" count as
    met by existing tests** (`restore-emergency-crash.e2e.test.ts:321` and `:354`;
    `hour-restore-retired-inputs.test.ts:335` with the harness's `freshStage()`,
    `staged-hour-crash.ts:300`), rather than by this journey test? *Default: yes*; folding them in
    would repeat a child-process kill those tests already run.
-7. **After a conflict switch** (which also revokes and retires), Task 1's rule keeps adding later
+6. **After a conflict switch** (which also revokes and retires), Task 1's rule keeps adding later
    invoices another system issues under the collided code to the same list. *Default: wanted* — they
    are invoices AEAT holds that this box did not issue, which is what the list says.
-5. **Say in the guide that nothing stops a returning old box on a one-box venue?** *Default: yes*, as
+7. **Say in the guide that nothing stops a returning old box on a one-box venue?** *Default: yes*, as
    an instruction (keep it off and disconnected), until A1418 part 1 lands and changes it.
 
 ## What was run and what was only read
