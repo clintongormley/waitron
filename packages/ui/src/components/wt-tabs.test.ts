@@ -1141,6 +1141,33 @@ test("a selected tab that grows leaves a strip the reader scrolled where it is",
   expect(tablist(el).scrollLeft).toBe(0);
 });
 
+function expectWholeSelectedFits(el: WtTabs, width: number) {
+  const strip = tablist(el).getBoundingClientRect();
+  const selected = buttons(el)[2]!.getBoundingClientRect();
+  expect(strip.width).toBe(width);
+  expect(selected.width).toBeLessThanOrEqual(strip.width);
+  expectSelectedInView(el);
+}
+
+test("a selected tab that grows by its font-size, in a strip whose width stays, is scrolled back so all of it is in view", async () => {
+  const { el } = await selectedWithLittleRoom();
+  const width = tablist(el).getBoundingClientRect().width;
+  buttons(el)[2]!.style.fontSize = "18px";
+  await frames();
+  expectWholeSelectedFits(el, width);
+});
+
+test("a selected tab whose label grows, with the same list of tabs, is scrolled back so all of it is in view", async () => {
+  const own = items.map((item) => ({ ...item }));
+  const { el } = await selectedWithLittleRoom(own);
+  const width = tablist(el).getBoundingClientRect().width;
+  own[2]!.label = "Preparation routes too";
+  el.requestUpdate();
+  await el.updateComplete;
+  await frames();
+  expectWholeSelectedFits(el, width);
+});
+
 test("stops watching a tab once another is selected, and watches the new one", async () => {
   const { el } = await selectedWithLittleRoom();
   const old = buttons(el)[2]!;

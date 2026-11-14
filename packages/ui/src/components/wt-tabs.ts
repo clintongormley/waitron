@@ -169,19 +169,25 @@ export class WtTabs extends LitElement {
 
   // Scrolls the strip, sets its fade width and overflow mark, and places the help badges, none of
   // which changes the size of the strip or the selected tab, so it needs no frame delay. A selected
-  // tab that changes size re-sizes the fade without scrolling, so a strip the reader scrolled stays
-  // put.
+  // tab that changes width is scrolled back into view only while the strip is where it last showed
+  // that tab, so a strip the reader scrolled stays put.
   readonly #sizeObserver = new ResizeObserver((entries) => {
     let stripResized = false;
     let tabResized = false;
+    let tabWidthChanged = false;
     for (const entry of entries) {
-      if (entry.target !== this.#observedStrip) tabResized = true;
-      else if (entry.contentRect.width !== this.#observedWidth) {
+      if (entry.target !== this.#observedStrip) {
+        tabResized = true;
+        const width = entry.borderBoxSize[0]!.inlineSize;
+        tabWidthChanged ||= this.#observedTabWidth !== null && width !== this.#observedTabWidth;
+        this.#observedTabWidth = width;
+      } else if (entry.contentRect.width !== this.#observedWidth) {
         this.#observedWidth = entry.contentRect.width;
         stripResized = true;
       }
     }
-    if (stripResized) this.#showSelected();
+    const unscrolled = this.#observedStrip?.scrollLeft === this.#shownScroll;
+    if (stripResized || (tabWidthChanged && unscrolled)) this.#showSelected();
     if (stripResized || tabResized) {
       this.#sizeFade();
       this.#showOverflow();
@@ -191,6 +197,8 @@ export class WtTabs extends LitElement {
   #observedStrip: Element | null = null;
   #observedWidth: number | null = null;
   #observedTab: Element | null = null;
+  #observedTabWidth: number | null = null;
+  #shownScroll: number | null = null;
   #overflowFrame: number | null = null;
 
   #observeSizes(): void {
@@ -208,6 +216,7 @@ export class WtTabs extends LitElement {
     if (this.#observedTab) this.#sizeObserver.unobserve(this.#observedTab);
     if (tab) this.#sizeObserver.observe(tab, { box: "border-box" });
     this.#observedTab = tab;
+    this.#observedTabWidth = null;
   }
 
   #selectedTab(): { tabs: HTMLButtonElement[]; index: number } {
@@ -235,6 +244,7 @@ export class WtTabs extends LitElement {
     // A tab wider than the strip shows its start, so its label reads from the beginning.
     if (tabBounds.width > barBounds.width) {
       bar.scrollLeft += rtl ? tabBounds.right - barBounds.right : tabBounds.left - barBounds.left;
+      this.#shownScroll = bar.scrollLeft;
       return;
     }
     // Stop short of a faded end wherever another tab lies beyond it, so that tab is the faint one.
@@ -245,6 +255,7 @@ export class WtTabs extends LitElement {
     const toRight = tabBounds.right - barBounds.right + (rtl ? before : after);
     if (rtl ? toRight > 0 : toLeft < 0) bar.scrollLeft += rtl ? toRight : toLeft;
     else if (rtl ? toLeft < 0 : toRight > 0) bar.scrollLeft += rtl ? toLeft : toRight;
+    this.#shownScroll = bar.scrollLeft;
   }
 
   #sizeFade(): void {
@@ -321,6 +332,7 @@ export class WtTabs extends LitElement {
     this.#sizeObserver.disconnect();
     this.#observedStrip = null;
     this.#observedTab = null;
+    this.#observedTabWidth = null;
     if (this.#overflowFrame !== null) cancelAnimationFrame(this.#overflowFrame);
     this.#overflowFrame = null;
   }
