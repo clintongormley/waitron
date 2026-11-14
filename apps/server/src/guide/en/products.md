@@ -482,3 +482,19 @@ version. This may be a different menu from the one you are previewing. Choose
 Only an active, published default menu is shown. Choose **Turn sharing off** to stop sharing.
 The choice stays on this box when you import a configuration; a new box starts with sharing Off.
 A guest link over mobile data and Cloud delivery are not available yet.
+
+
+## Print a published menu {#guest-paper}
+
+In **Guest menu preview**, choose the guest language, then use **A4 printed menu** to choose
+**Bistro** for two balanced columns or **Lunch and wine** for a wider dish column with the last
+section in a narrow panel. Choose the font, spacing, colours and written allergen key. Use inline
+words if you want declarations beside every dish.
+
+Choose a print logo from your image library, move sections up and add page breaks before sections.
+These choices belong to this preview. **Save appearance on this box** remembers the layout, font,
+spacing, colours and key here; another box needs its own choices.
+
+Choose **Preview A4**, check all pages, then **Print / Save as PDF**. Select A4 portrait in your
+browser and turn off its headers and footers. Reopen the guest preview after publishing a new
+version. Printing uses the publication you opened and does not turn on sharing.

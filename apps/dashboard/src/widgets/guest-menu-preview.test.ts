@@ -194,3 +194,41 @@ it("keeps unknown sharing distinct from Off and explains an unavailable publicat
     cleanupWidgets();
   }
 });
+
+it("offers paper controls for the captured publication", async () => {
+  const { DashboardApi } = await import("../api/client.js");
+  const { mountWidget, cleanupWidgets } = await import("./test-helpers.js");
+  const api = new DashboardApi(
+    "",
+    async (input) =>
+      new Response(
+        JSON.stringify(
+          String(input).includes("guest-preview")
+            ? {
+                html: "<h1>Lunch</h1>",
+                language: "en",
+                languages: ["en"],
+                versionId: "captured",
+                members: ["Starters", "Wine"],
+              }
+            : { enabled: false, revision: 0, available: false },
+        ),
+      ),
+  );
+  const { el } = await mountWidget<GuestMenuPreview>("dashboard-guest-menu-preview", {
+    api,
+    menuId: "menu",
+  });
+  try {
+    await page.elementLocator(el.shadowRoot!.querySelector("wt-button")!).click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("dashboard-guest-menu-paper"))
+      .toBeTruthy();
+    const paper = el.shadowRoot!.querySelector("dashboard-guest-menu-paper") as HTMLElement & {
+      versionId: string;
+    };
+    expect(paper.versionId).toBe("captured");
+  } finally {
+    cleanupWidgets();
+  }
+});

@@ -31,7 +31,11 @@ async function fixture() {
     const s = await startManagementSession(tx, { personId: staff!.id });
     const preview = await previewMenu(tx, f.lunch);
     await publishMenu(tx, f.lunch, preview.hash, manager!.id);
-    return { manager: `${MANAGEMENT_COOKIE}=${m.token}`, staff: `${MANAGEMENT_COOKIE}=${s.token}` };
+    return {
+      manager: `${MANAGEMENT_COOKIE}=${m.token}`,
+      staff: `${MANAGEMENT_COOKIE}=${s.token}`,
+      managerId: manager!.id,
+    };
   });
   const app = new Hono();
   let serving = true;
@@ -257,4 +261,87 @@ it("saves paper appearance without sharing and preserves it when sharing changes
   expect(await invalid.json()).toMatchObject({
     error: { code: "management.request_invalid", params: { field: "paper" } },
   });
+});
+
+it("renders the captured publication for paper, with only the selected library logo", async () => {
+  const f = await fixture();
+  const preview = await f.app.request(`/management-api/catalogues/${f.lunch}/guest-preview`, {
+    headers: { cookie: f.cookies.manager },
+  });
+  const captured = await preview.json();
+  const { prepareImage, uploadImage } = await import("@waitron/media");
+  const { default: sharp } = await import("sharp");
+  const png = await sharp({ create: { width: 20, height: 10, channels: 3, background: "red" } })
+    .png()
+    .toBuffer();
+  const prepared = await prepareImage(png, { maxUploadBytes: 100000 });
+  const { image: logo } = await withTransaction(suite.db, (tx) =>
+    uploadImage(tx, { image: prepared, names: { en: "Logo" } }),
+  );
+  await withTransaction(suite.db, async (tx) => {
+    await updateProduct(tx, f.soup, {
+      customerName: { en: "New publication" },
+      unitPrice: "92.34",
+    });
+    const next = await previewMenu(tx, f.lunch);
+    await publishMenu(tx, f.lunch, next.hash, f.cookies.managerId);
+  });
+  const body = {
+    versionId: captured.versionId,
+    language: "en",
+    paper: {
+      preset: "bistro",
+      font: "serif",
+      spacing: "compact",
+      key: "end",
+      ink: "#123456",
+      accent: "#654321",
+    },
+    order: [0],
+    breaks: [],
+    logo: logo.filename,
+  };
+  const request = (value: unknown, cookie = f.cookies.manager) =>
+    f.app.request(`/management-api/catalogues/${f.lunch}/guest-paper`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(value),
+    });
+  const paper = await request(body);
+  expect(paper.status, await paper.clone().text()).toBe(200);
+  const printed = await paper.json();
+  expect(printed.html).toContain("Soup for guests");
+  expect(printed.html).not.toContain("New publication");
+  expect(printed.html).toContain('src="data:image/webp;base64,');
+  expect(printed.html).not.toContain(logo.filename);
+  const plain = await request({ ...body, logo: null });
+  expect((await plain.json()).html).not.toContain('src="data:');
+  const missing = await request({ ...body, logo: "a".repeat(64) + ".webp" });
+  expect((await missing.json()).html).not.toContain('src="data:');
+  const wrongMenu = await f.app.request(`/management-api/catalogues/${f.dinner}/guest-paper`, {
+    method: "POST",
+    headers: { cookie: f.cookies.manager, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  expect(await wrongMenu.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "versionId" } },
+  });
+  expect(captured.members.length).toBeGreaterThan(0);
+  for (const [cookie, code] of [
+    ["", "management_session.required"],
+    [f.cookies.staff, "authorization.not_permitted"],
+  ]) {
+    const refused = await request(body, cookie);
+    expect(await refused.json()).toMatchObject({ error: { code } });
+  }
+  for (const value of [
+    { ...body, paper: null },
+    { ...body, order: [-1] },
+    { ...body, breaks: "all" },
+    { ...body, versionId: crypto.randomUUID() },
+  ]) {
+    const refused = await request(value);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+  }
 });

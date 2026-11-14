@@ -18,6 +18,7 @@ import { GUIDE_PAGE_TOKENS } from "./html-page-tokens.js";
 export interface GuestMenuPaperOptions extends GuestMenuPaperAppearance {
   order?: number[];
   breaks?: number[];
+  logo?: string;
 }
 
 const pageTokens = Object.entries(GUIDE_PAGE_TOKENS)
@@ -96,7 +97,7 @@ export function renderGuestMenuPage(
       .join("");
   const dietKey = key(true);
 
-  return `<!doctype html><html lang="${esc(menu.language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${esc(venueName)} · ${esc(menu.name)}</title><style>
+  return `<!doctype html><html lang="${esc(menu.language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${esc(venueName)} · ${esc(menu.name)}</title><style>
 :root{${pageTokens};color-scheme:light${paper ? `;--wt-font-family:${paper.font === "serif" ? "Georgia, serif" : GUIDE_PAGE_TOKENS["--wt-font-family"]};--wt-color-text:${isStoredColor(paper.ink) ? paper.ink : "var(--wt-color-text-muted)"};--wt-color-primary-text:${isStoredColor(paper.accent) ? paper.accent : "var(--wt-color-text)"}` : ""}}
 *{box-sizing:border-box}
 body{margin:0;padding:var(--wt-space-4);font-family:var(--wt-font-family);font-size:var(--wt-font-size-md);color:var(--wt-color-text);background:var(--wt-color-bg);overflow-wrap:anywhere}
@@ -124,16 +125,17 @@ ${
 body{background:var(--wt-color-bg);padding:0;print-color-adjust:exact}
 main{max-width:186mm;column-count:2;column-gap:var(--wt-space-5)}
 header,footer{column-span:all}
+header img{max-width:50mm;max-height:25mm;object-fit:contain}
 header{border-bottom:1px solid var(--wt-color-primary-text);padding-bottom:var(--wt-space-4)}
 h2{color:var(--wt-color-primary-text);break-after:avoid;margin-top:var(--wt-space-4)}
 article{padding:${paper.spacing === "compact" ? "var(--wt-space-2)" : "var(--wt-space-4)"} 0}
 .declarations{font-size:var(--wt-font-size-md)}
 .page-break{break-before:page}
-${paper.preset === "lunch-wine" ? `main{column-rule:1px solid var(--wt-color-primary-text)}header{font-family:var(--wt-font-family);text-transform:uppercase}main>section:last-of-type{border-inline-start:var(--wt-space-2) solid var(--wt-color-primary-text);padding-inline-start:var(--wt-space-3)}` : `header{text-align:center}`}
+${paper.preset === "lunch-wine" ? `main{display:grid;grid-template-columns:2fr 1fr;column-count:auto;column-gap:var(--wt-space-5)}header,footer{grid-column:1 / -1}main>section,main>article{grid-column:1}header{text-transform:uppercase}main>section:last-of-type{grid-column:2;grid-row:2 / span ${Math.max(1, ordered.length - 1)};border-inline-start:var(--wt-space-2) solid var(--wt-color-primary-text);padding-inline-start:var(--wt-space-3)}` : `header{text-align:center}`}
 `
     : ""
 }
-</style></head><body><main><header><p>${esc(venueName)}</p><h1>${esc(menu.name)}</h1></header>${paper ? "" : `<nav aria-label="${esc(menu.name)}">${sections.map((s) => `<a href="#${s.id}">${esc(s.name)}</a>`).join("")}</nav>`}${languageLinks && !paper ? `<nav lang="${language}" aria-label="${esc(words.languages!)}">${menu.languages.map((code) => `<a href="?language=${encodeURIComponent(code)}" lang="${esc(code)}">${esc(languageDisplayName(code, code))}</a>`).join(" · ")}</nav>` : ""}${body}<footer lang="${language}"><h2>${esc(words.key!)}</h2><p>${esc(words.keyLanguage!)}</p><p>${esc(words.note!)}</p><ul>${key(false)}</ul>${dietKey ? `<h2>${esc(words.diet!)}</h2><ul>${dietKey}</ul>` : ""}</footer></main></body></html>`;
+</style></head><body><main><header>${paper?.logo ? `<img src="${esc(paper.logo)}" alt="">` : ""}<p>${esc(venueName)}</p><h1>${esc(menu.name)}</h1></header>${paper ? "" : `<nav aria-label="${esc(menu.name)}">${sections.map((s) => `<a href="#${s.id}">${esc(s.name)}</a>`).join("")}</nav>`}${languageLinks && !paper ? `<nav lang="${language}" aria-label="${esc(words.languages!)}">${menu.languages.map((code) => `<a href="?language=${encodeURIComponent(code)}" lang="${esc(code)}">${esc(languageDisplayName(code, code))}</a>`).join(" · ")}</nav>` : ""}${body}<footer lang="${language}"><h2>${esc(words.key!)}</h2><p>${esc(words.keyLanguage!)}</p><p>${esc(words.note!)}</p><ul>${key(false)}</ul>${dietKey ? `<h2>${esc(words.diet!)}</h2><ul>${dietKey}</ul>` : ""}</footer></main></body></html>`;
 }
 
 export function renderGuestMenuUnavailable(requested: string, fallback: string): string {

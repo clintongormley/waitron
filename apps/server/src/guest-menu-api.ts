@@ -12,7 +12,10 @@ import {
   readContentLanguages,
   readLiveMenu,
   readGuestMenu,
+  readRecordedDocuments,
+  menusOfVersions,
 } from "@waitron/catalogue";
+import { readCurrentImage, renderRendition } from "@waitron/media";
 import { authorizeManager } from "@waitron/identity";
 import {
   createErrorBoundary,
@@ -110,12 +113,75 @@ export function mountGuestMenuApi(
         const venue = await readVenue(tx);
         return {
           html: renderGuestMenuPage(menu, venue.name, languages.defaultLanguage),
+          versionId: live.versionId,
+          members: menu.members.map((member) => member.name),
           language: menu.language,
           languages: menu.languages,
         };
       });
       c.header("Cache-Control", "no-store");
       return c.json(result);
+    }),
+  );
+  app.post("/management-api/catalogues/:id/guest-paper", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const captured = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "catalogue.manage",
+        });
+        const parsed = GUEST_MENU_SETTINGS.parse({ enabled: false, paper: body.paper });
+        if (!parsed.ok || !parsed.doc.paper)
+          throw new AppError("management.request_invalid", {
+            field: parsed.ok ? "paper" : parsed.field,
+          });
+        if (
+          typeof body.versionId !== "string" ||
+          (await menusOfVersions(tx, [body.versionId])).get(body.versionId) !== menuId
+        )
+          throw new AppError("management.request_invalid", { field: "versionId" });
+        const document = (await readRecordedDocuments(tx, [body.versionId])).get(body.versionId)!;
+        if (body.logo !== null && typeof body.logo !== "string")
+          throw new AppError("management.request_invalid", { field: "logo" });
+        const languages = await readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE);
+        const menu = publicGuestMenu(
+          document,
+          languages,
+          typeof body.language === "string" ? body.language : languages.defaultLanguage,
+        );
+        for (const key of ["order", "breaks"]) {
+          const indices = body[key];
+          if (
+            !Array.isArray(indices) ||
+            indices.some((n) => !Number.isInteger(n) || n < 0 || n >= menu.members.length)
+          )
+            throw new AppError("management.request_invalid", { field: key });
+        }
+        return {
+          menu,
+          defaultLanguage: languages.defaultLanguage,
+          venue: (await readVenue(tx)).name,
+          paper: {
+            ...parsed.doc.paper,
+            order: body.order as number[],
+            breaks: body.breaks as number[],
+          },
+          logo: typeof body.logo === "string" ? await readCurrentImage(tx, body.logo) : null,
+        };
+      });
+      const logo = captured.logo
+        ? `data:image/webp;base64,${Buffer.from(await renderRendition(captured.logo.bytes, "display", captured.logo.framing)).toString("base64")}`
+        : undefined;
+      c.header("Cache-Control", "no-store");
+      return c.json({
+        html: renderGuestMenuPage(captured.menu, captured.venue, captured.defaultLanguage, false, {
+          ...captured.paper,
+          logo,
+        }),
+      });
     }),
   );
 }

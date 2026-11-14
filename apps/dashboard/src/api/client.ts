@@ -3158,25 +3158,59 @@ export class DashboardApi {
     });
   }
 
-  getGuestMenuSharing(): Promise<{ enabled: boolean; revision: number; available: boolean }> {
+  getGuestMenuSharing(): Promise<{
+    enabled: boolean;
+    revision: number;
+    available: boolean;
+    paper?: import("@waitron/shared").GuestMenuPaperAppearance;
+  }> {
     return this.#request("/management-api/guest-menu", "GET", undefined, { passive: true });
   }
 
   setGuestMenuSharing(
     enabled: boolean,
     expectedRevision: number,
-  ): Promise<{ enabled: boolean; revision: number; available: boolean }> {
-    return this.#request("/management-api/guest-menu", "PUT", { enabled, expectedRevision });
+    paper?: import("@waitron/shared").GuestMenuPaperAppearance,
+  ): ReturnType<DashboardApi["getGuestMenuSharing"]> {
+    return this.#request("/management-api/guest-menu", "PUT", {
+      enabled,
+      expectedRevision,
+      ...(paper ? { paper } : {}),
+    });
   }
 
   getGuestMenuPreview(
     menuId: string,
     language?: string,
-  ): Promise<{ html: string; language: string; languages: string[] } | null> {
+  ): Promise<{
+    html: string;
+    versionId: string;
+    members: string[];
+    language: string;
+    languages: string[];
+  } | null> {
     const query = language === undefined ? "" : `?language=${encodeURIComponent(language)}`;
     return this.#request(
       `/management-api/catalogues/${encodeURIComponent(menuId)}/guest-preview${query}`,
       "GET",
+    );
+  }
+
+  getGuestMenuPaper(
+    menuId: string,
+    options: {
+      versionId: string;
+      language: string;
+      paper: import("@waitron/shared").GuestMenuPaperAppearance;
+      order: number[];
+      breaks: number[];
+      logo: string | null;
+    },
+  ): Promise<{ html: string }> {
+    return this.#request(
+      `/management-api/catalogues/${encodeURIComponent(menuId)}/guest-paper`,
+      "POST",
+      options,
     );
   }
 

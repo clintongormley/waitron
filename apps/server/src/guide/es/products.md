@@ -509,3 +509,20 @@ de la carta predeterminada. Puede ser distinta de la que estás revisando. Elige
 Solo se muestra una carta predeterminada activa y publicada. Elige **Dejar de compartir** para retirarla.
 La elección se conserva en esta caja al importar una configuración; una caja nueva empieza sin compartir.
 El enlace para clientes con datos móviles y el envío a Cloud aún no están disponibles.
+
+
+## Imprime una carta publicada {#guest-paper}
+
+En **Vista previa para clientes**, elige el idioma del cliente y usa **Carta impresa A4**.
+Elige **Bistró** para dos columnas equilibradas o **Menú y vinos** para una columna de platos más
+ancha y la última sección en un panel estrecho. Elige la tipografía, el espaciado, los colores y
+la leyenda de alérgenos. Usa las palabras junto a cada plato si prefieres leer allí las declaraciones.
+
+Elige un logotipo de tu biblioteca de imágenes, sube secciones y añade saltos de página antes de
+ellas. Estas elecciones pertenecen a esta vista previa. **Guardar apariencia en esta caja** conserva
+el diseño, la tipografía, el espaciado, los colores y la leyenda aquí; otra caja necesita sus propias elecciones.
+
+Elige **Vista previa A4**, revisa todas las páginas y pulsa **Imprimir / Guardar como PDF**.
+Selecciona A4 vertical en el navegador y desactiva sus encabezados y pies de página. Abre de nuevo
+la vista previa para clientes tras publicar otra versión. La impresión usa la publicación que
+abriste y no activa el uso compartido.

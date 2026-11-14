@@ -197,3 +197,33 @@ it("prints full declaration words when inline words are selected", async () => {
     "system-ui",
   );
 });
+
+it("gives Lunch and wine a wider dishes column and a narrow last-section panel", async () => {
+  const p = await browser!.newPage({ viewport: { width: 900, height: 1200 } });
+  onTestFinished(() => p.close());
+  const section = menu.members[0]!;
+  const dishes = {
+    ...menu,
+    members: [section, { kind: "section" as const, name: "Wine", members: [] }],
+  };
+  await p.setContent(
+    renderGuestMenuPage(dishes, "The Restaurant", "en", false, {
+      preset: "lunch-wine",
+      font: "sans",
+      spacing: "comfortable",
+      key: "end",
+      ink: "#123456",
+      accent: "#654321",
+    }),
+  );
+  const boxes = await p
+    .locator("main > section")
+    .evaluateAll((nodes) =>
+      nodes.map((n) => ({
+        width: n.getBoundingClientRect().width,
+        top: n.getBoundingClientRect().top,
+      })),
+    );
+  expect(boxes[0]!.width).toBeGreaterThan(boxes[1]!.width * 1.5);
+  expect(Math.abs(boxes[0]!.top - boxes[1]!.top)).toBeLessThan(1);
+});

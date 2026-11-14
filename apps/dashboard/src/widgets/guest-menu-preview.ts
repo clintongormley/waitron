@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, leaveCoordinatorFor, type LeaveReason } from "@waitron/ui";
 import { languageDisplayName } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -8,6 +8,8 @@ import "@waitron/ui/src/components/wt-modal.js";
 import type { DashboardApi } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+
+import "./guest-menu-paper.js";
 
 @customElement("dashboard-guest-menu-preview")
 export class GuestMenuPreview extends LitElement {
@@ -79,6 +81,12 @@ export class GuestMenuPreview extends LitElement {
     }
   }
   #sharingGeneration = 0;
+  readonly #beforeClose = async (reason: LeaveReason) => {
+    const leave = leaveCoordinatorFor(this);
+    return (
+      !leave || (await leave.request({ scopes: [this], reason, proceed() {} })) === "proceeded"
+    );
+  };
   #generation = 0;
   #language?: string;
   #clear() {
@@ -136,6 +144,7 @@ export class GuestMenuPreview extends LitElement {
       <wt-modal
         .open=${this.opened}
         heading=${t("menus.guest_preview")}
+        .beforeClose=${this.#beforeClose}
         @wt-close=${() => this.#close()}
       >
         ${
@@ -164,6 +173,7 @@ export class GuestMenuPreview extends LitElement {
               ? html`<p>${t("menus.guest_unpublished")}</p>`
               : nothing
         }
+        ${this.answer?.versionId ? html`<dashboard-guest-menu-paper .api=${this.api} .menuId=${this.menuId} .versionId=${this.answer.versionId} .language=${this.answer.language} .members=${this.answer.members} .draftParent=${this}></dashboard-guest-menu-paper>` : nothing}
         ${this.sharing?.available ? html`<a href="/public/menu" target="_blank" rel="noopener">${t("menus.guest_local_link")}</a>` : nothing}
         ${this.sharing ? html`<p>${t(!this.sharing.enabled ? "menus.guest_sharing_off" : this.sharing.available ? "menus.guest_sharing_on" : "menus.guest_sharing_unavailable")}</p>` : nothing}
         ${this.sharingError ? html`<p id="sharing-error" role="alert">${this.sharingError}</p>` : nothing}
@@ -179,7 +189,7 @@ export class GuestMenuPreview extends LitElement {
           slot="footer"
           variant="secondary"
           @click=${() => {
-            this.#close();
+            void this.shadowRoot!.querySelector("wt-modal")!.requestClose("navigation");
           }}
           >${t("action.close")}</wt-button
         >

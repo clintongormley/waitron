@@ -977,3 +977,10 @@ allowlisted publication as text-safe HTML; working changes reach the preview onl
 The public `/public/menu` page resolves only the opted-in active default publication while the box
 is serving. It uses the same projection and renderer as the protected preview. Sharing is a
 non-transferring catalogue settings document: configuration imports retain this box’s choice.
+
+
+Paper uses the same projected publication and prices. The authenticated paper request binds its
+presentation indices to the captured version, checks that version belongs to the menu and embeds
+only the selected library logo's display rendition. A missing logo leaves the masthead text alone.
+Scalar appearance stays in the non-transferring catalogue settings document; logo, order and breaks
+stay with the preview. Neither changes online or recorded order.
