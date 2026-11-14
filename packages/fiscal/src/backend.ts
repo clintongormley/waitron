@@ -426,12 +426,13 @@ export interface FiscalBackend {
   /**
    * Records a corrective invoice of a prior sale. `sale` is the corrective invoice's OWN data — its
    * own number and its own negative total and breakdown — while `correction.correctsSaleId` names
-   * the sale being corrected.
+   * the sale being corrected. With `replaces`, the corrective is by replacement: `sale` carries the
+   * invoice's full, correct amounts in place of the original's rather than a change to them.
    */
   recordCorrection(
     tx: Transaction,
     sale: SaleForFiscalRecord,
-    correction: { correctsSaleId: SaleId },
+    correction: { correctsSaleId: SaleId; replaces?: true },
   ): Promise<FiscalRecordRef>;
 
   /**

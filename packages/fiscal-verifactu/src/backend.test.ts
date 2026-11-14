@@ -518,6 +518,26 @@ describe("recordCorrection — refusals", () => {
       params: { saleId: original, tipoFactura: "F1" },
     });
   });
+  it("refuses a replacement corrective, which it cannot file yet, and records nothing", async () => {
+    const { saleId: original } = await withTransaction(suite.db, (tx) =>
+      recordSale(tx, backend, saleInput({ nodeId, seriesId })),
+    );
+    const replacement = correctiveSale();
+
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        backend.recordCorrection(tx, replacement, { correctsSaleId: original, replaces: true }),
+      ),
+    ).rejects.toMatchObject({
+      code: "fiscal.correction_unsupported",
+      params: { saleId: original, tipoFactura: "F2" },
+    });
+    const filed = await suite.db
+      .select({ id: registrosFacturacion.id })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.saleId, replacement.saleId));
+    expect(filed).toEqual([]);
+  });
 });
 
 describe("recordSubstitution — refusals", () => {

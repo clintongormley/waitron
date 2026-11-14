@@ -455,7 +455,7 @@ export class VerifactuBackend implements FiscalBackend {
   async recordCorrection(
     tx: Transaction,
     sale: SaleForFiscalRecord,
-    correction: { correctsSaleId: SaleId },
+    correction: { correctsSaleId: SaleId; replaces?: true },
   ): Promise<FiscalRecordRef> {
     const chart = await this.admitIssuance(tx, sale.nodeId);
     const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
@@ -472,7 +472,9 @@ export class VerifactuBackend implements FiscalBackend {
     if (original === undefined) {
       throw new AppError("fiscal.sale_not_recorded", { saleId: correction.correctsSaleId });
     }
-    if (original.tipo_factura !== "F2") {
+    // A replacement is filed only as "S", which this backend does not build yet; filing its full
+    // amounts as "I" would declare the sale twice.
+    if (original.tipo_factura !== "F2" || correction.replaces === true) {
       throw new AppError("fiscal.correction_unsupported", {
         saleId: correction.correctsSaleId,
         // Non-null on every alta; only an anulación stores NULL.
