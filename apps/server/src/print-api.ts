@@ -453,7 +453,7 @@ function screenBluetoothOutcomes(raw: unknown): BluetoothCommandOutcome[] {
     // Unbounded here: the store withholds an error that carries the PIN before bounding it.
     const outcome: BluetoothCommandOutcome = error === undefined ? { id, ok } : { id, ok, error };
     // A code a newer agent sends that this server does not know is dropped; the outcome stands.
-    const known = BLUETOOTH_FAILURE_REASONS.find((code) => code === reason);
+    const known = oneOf(BLUETOOTH_FAILURE_REASONS, reason);
     if (known !== undefined) outcome.reason = known;
     out.push(outcome);
   }
