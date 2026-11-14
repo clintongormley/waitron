@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -33,6 +34,23 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+
+const pause = { beforeChartMint: undefined as (() => Promise<void>) | undefined };
+
+vi.mock("./membership-mint.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./membership-mint.js")>();
+  return {
+    ...actual,
+    mintNextMembershipDocument: async (
+      ...args: Parameters<typeof actual.mintNextMembershipDocument>
+    ) => {
+      const hook = pause.beforeChartMint;
+      pause.beforeChartMint = undefined;
+      await hook?.();
+      return actual.mintNextMembershipDocument(...args);
+    },
+  };
+});
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
@@ -794,6 +812,38 @@ describe("retiring a spare that finished joining", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ removed: true });
+  });
+
+  it("answers an already-removed spare named in an open handover removed:false, and deletes its link", async () => {
+    const p = await primary();
+    const gone = evicted();
+    await holdChart(p, [self(p), gone]);
+    await linkTo(p, gone.nodeId);
+    await openHandover(p, gone.nodeId, p.nodeId);
+
+    const res = await remove(p, gone.nodeId, p.adminCookie, DECLARED);
+
+    expect(await res.json()).toMatchObject({ removed: false });
+    expect(await readPairLink(suite.node, p.nodeId)).toBeNull();
+    expect(p.reloadStream).toHaveBeenCalledOnce();
+  });
+
+  it("holds node.db's lock through the chart commit: a node.db write started mid-round waits for it", async () => {
+    const p = await primary();
+    const gone = standby();
+    await holdChart(p, [self(p), gone]);
+    const before = (await heldTerm(p.db))!;
+    // Run from outside the removal's async context, as another request's write would be.
+    const outside = AsyncLocalStorage.snapshot();
+    let waiting: Promise<number | undefined> | undefined;
+    pause.beforeChartMint = async () => {
+      waiting = outside(() => withNodeTransaction(suite.node, () => heldTerm(p.db)));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    };
+
+    expect((await remove(p, gone.nodeId, p.adminCookie, DECLARED)).status).toBe(200);
+
+    expect(await waiting).toBe(before + 1);
   });
 });
 

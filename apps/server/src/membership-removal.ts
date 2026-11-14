@@ -236,8 +236,9 @@ async function writeChartInRounds<T>(
 /**
  * Marks a standby `evicted` in a new chart this node signs, records the removal in the same
  * transaction, then deletes this box's pair link if it names the standby. node.db's lock is held
- * from the handover check to the link delete; venue.db commits first, so a run stopped between the
- * two deletes the link when it is run again. Every refusal throws before anything commits.
+ * from before the chart is read, through the handover check and the chart commit, to the link
+ * delete; venue.db commits first, so a run stopped between the two deletes the link when it is run
+ * again. Every refusal throws before anything commits.
  */
 export async function removeStandby(
   deps: RemovalDeps,
@@ -250,14 +251,7 @@ export async function removeStandby(
 ): Promise<RemovalResult> {
   const declared = args.declared === true;
   return withNodeTransaction(deps.node, async (nodeTx) => {
-    const open = await readOpenHandoverOperation(nodeTx, deps.nodeId);
-    if (
-      open !== null &&
-      (open.sourceNodeId === args.targetNodeId || open.destinationNodeId === args.targetNodeId)
-    ) {
-      throw new AppError("handover.operation_in_progress", { operationId: open.operationId });
-    }
-    const result = await writeRemoval(deps, args, declared);
+    const result = await writeRemoval(deps, nodeTx, args, declared);
     await unlinkTx(nodeTx, deps, args.targetNodeId);
     return result;
   });
@@ -265,6 +259,7 @@ export async function removeStandby(
 
 function writeRemoval(
   deps: RemovalDeps,
+  nodeTx: NodeTransaction,
   args: { readonly targetNodeId: string; readonly personId: string },
   declared: boolean,
 ): Promise<RemovalResult> {
@@ -281,6 +276,13 @@ function writeRemoval(
     // `held` is non-null past `judgeRemoval`: a null chart is refused as not found.
     if (verdict.kind === "already_removed") {
       return { write: false, result: { removed: false, term: held!.body.term } };
+    }
+    const open = await readOpenHandoverOperation(nodeTx, deps.nodeId);
+    if (
+      open !== null &&
+      (open.sourceNodeId === args.targetNodeId || open.destinationNodeId === args.targetNodeId)
+    ) {
+      throw new AppError("handover.operation_in_progress", { operationId: open.operationId });
     }
     return {
       write: true,
