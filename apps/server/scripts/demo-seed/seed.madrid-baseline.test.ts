@@ -566,6 +566,7 @@ for (const locale of ["en", "es"] as const) {
           "sale.rectify",
           "person.manage",
           "catalogue.manage",
+          "person.admin",
           "venue.configure",
           "venue.view",
           "system.manage",
@@ -1271,20 +1272,25 @@ for (const locale of ["en", "es"] as const) {
             .sort(([a], [b]) => String(a).localeCompare(String(b))),
         );
         phases[phase]!.person_staff_roles = phase === "seeded" ? 7 : 1;
-        const accessData = { roleId: '@roles:["admin"]', builtInKey: "admin", name: null };
-        const accessSubject = '@persons:["owner@example.test"]';
-        const accessId = `@activity_log:${stable(["access_role.member_added", accessSubject, at, JSON.stringify(accessData)])}`;
-        expected[phase].tables.activity_log!.rows[accessId] = {
-          id: accessId,
-          at,
-          kind: "access_role.member_added",
-          subject_kind: "person",
-          subject_id: accessSubject,
-          person_id: null,
-          device_id: null,
-          data: accessData,
-        };
-        phases[phase]!.activity_log! += 1;
+        for (const { person_id, role_id } of accessMemberships) {
+          const accessData = {
+            roleId: role_id,
+            builtInKey: expected[phase].tables.roles!.rows[role_id]!.built_in_key,
+            name: null,
+          };
+          const accessId = `@activity_log:${stable(["access_role.member_added", person_id, at, JSON.stringify(accessData)])}`;
+          expected[phase].tables.activity_log!.rows[accessId] = {
+            id: accessId,
+            at,
+            kind: "access_role.member_added",
+            subject_kind: "person",
+            subject_id: person_id,
+            person_id: null,
+            device_id: null,
+            data: accessData,
+          };
+        }
+        phases[phase]!.activity_log! += accessMemberships.length;
         const data = { staffRoleId: roleId(team), name: team };
         const subject = '@persons:["owner@example.test"]';
         const id = `@activity_log:${stable(["job_role.member_added", subject, at, JSON.stringify(data)])}`;
