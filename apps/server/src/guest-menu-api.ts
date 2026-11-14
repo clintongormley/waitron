@@ -1,15 +1,17 @@
 import type { Hono } from "hono";
-import { readSettings, readVenue, withTransaction, type Database } from "@waitron/db";
+import { readSettings, readVenue, saveSettings, withTransaction, type Database } from "@waitron/db";
 import { GUEST_MENU_SETTINGS, readContentLanguages, readLiveMenu } from "@waitron/catalogue";
 import { authorizeManager } from "@waitron/identity";
 import {
   createErrorBoundary,
   requireManagementSession,
   requireUuidParam,
+  readJsonBody,
 } from "@waitron/server-kit";
-import { FALLBACK_LOCALE, publicGuestMenu } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, publicGuestMenu } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { renderGuestMenuPage } from "./guest-menu-page.js";
+import "./errors.js";
 const run = createErrorBoundary(
   {
     "management_session.required": 401,
@@ -18,6 +20,8 @@ const run = createErrorBoundary(
     "person.suspended": 403,
     "catalogue.not_found": 404,
     "settings.invalid": 500,
+    "settings.out_of_date": 409,
+    "management.request_invalid": 400,
   },
   "catalogue.failed",
 );
@@ -39,6 +43,28 @@ export function mountGuestMenuApi(
       });
       c.header("Cache-Control", "no-store");
       return c.json(answer);
+    }),
+  );
+  app.put("/management-api/guest-menu", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      if (typeof body.enabled !== "boolean")
+        throw new AppError("management.request_invalid", { field: "enabled" });
+      if (!Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 0)
+        throw new AppError("management.request_invalid", { field: "expectedRevision" });
+      const { doc, revision } = await withTransaction(deps.db, async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "catalogue.manage",
+        });
+        return saveSettings(tx, GUEST_MENU_SETTINGS, {
+          doc: { enabled: body.enabled as boolean },
+          expectedRevision: body.expectedRevision as number,
+          personId: authorizedBy,
+        });
+      });
+      return c.json({ ...doc, revision });
     }),
   );
   app.get("/management-api/catalogues/:id/guest-preview", (c) =>

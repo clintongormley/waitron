@@ -77,3 +77,37 @@ it("starts public sharing Off and limits its status to managers", async () => {
     else expect(await answer.json()).toMatchObject({ error: { code } });
   }
 });
+
+it("lets a manager change sharing with its current revision and keeps refusals from changing it", async () => {
+  const f = await fixture();
+  const save = (body: object, cookie = f.cookies.manager) =>
+    f.app.request("/management-api/guest-menu", {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const enabled = await save({ enabled: true, expectedRevision: 0 });
+  expect(enabled.status).toBe(200);
+  expect(await enabled.json()).toEqual({ enabled: true, revision: 1 });
+  for (const [body, cookie, status, code] of [
+    [{ enabled: false, expectedRevision: 1 }, f.cookies.staff, 403, "authorization.not_permitted"],
+    [{ enabled: false, expectedRevision: 0 }, f.cookies.manager, 409, "settings.out_of_date"],
+    [
+      { enabled: "false", expectedRevision: 1 },
+      f.cookies.manager,
+      400,
+      "management.request_invalid",
+    ],
+  ] as const) {
+    const refused = await save(body, cookie);
+    expect(refused.status).toBe(status);
+    expect(await refused.json()).toMatchObject({ error: { code } });
+    const current = await f.app.request("/management-api/guest-menu", {
+      headers: { cookie: f.cookies.manager },
+    });
+    expect(await current.json()).toEqual({ enabled: true, revision: 1 });
+  }
+  const disabled = await save({ enabled: false, expectedRevision: 1 });
+  expect(disabled.status).toBe(200);
+  expect(await disabled.json()).toEqual({ enabled: false, revision: 2 });
+});
