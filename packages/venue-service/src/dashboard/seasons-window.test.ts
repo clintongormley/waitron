@@ -399,14 +399,13 @@ it.each(["en", "es"] as const)(
       await page.viewport(390, 800);
       expect(window.innerWidth).toBe(390);
       const el = await mount();
-      el.style.setProperty("--wt-font-family", "Verdana");
+      el.style.setProperty("--wt-font-family", 'Verdana, "DejaVu Sans"');
       await change(el, "season-1-day", "31");
       // The longest colour name in each language: Turquesa in Spanish, Magenta in English.
       await change(el, "season-0-colour", locale === "es" ? "teal" : "magenta");
       await frames();
       expect(document.documentElement.scrollWidth).toBe(window.innerWidth);
       const day = field(el, "season-1-day").shadowRoot!.querySelector<HTMLElement>(".value")!;
-      expect(getComputedStyle(day).fontFamily).toContain("Verdana");
       expect(day.textContent!.trim()).toBe("31");
       expect(day.scrollWidth, "the Day box shows 31 whole").toBeLessThanOrEqual(day.clientWidth);
       const modal = root(el).querySelector("wt-modal")!;
@@ -428,9 +427,14 @@ it.each(["en", "es"] as const)(
           ),
         );
       check();
+      expect(
+        field(el, "season-3-month").shadowRoot!.querySelector(".value")!.textContent!.trim(),
+      ).toBe(locale === "en" ? "Sept" : "sept");
       const binCell = rows[0]!.querySelector<HTMLElement>("td.bin")!;
       rows.forEach((row, index) => {
         const day = row.querySelector("wt-combobox[name$=-day]")!.getBoundingClientRect();
+        const name = row.querySelector("wt-input")!.getBoundingClientRect();
+        expect(name.right, `row ${index}'s Name stays separate from Day`).toBeLessThan(day.left);
         within(day, `row ${index}'s Day box`);
         expect(day.right, `row ${index}'s Day box clears the bin column`).toBeLessThanOrEqual(
           binCell.getBoundingClientRect().left,

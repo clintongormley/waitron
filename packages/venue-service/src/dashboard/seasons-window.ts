@@ -134,7 +134,7 @@ export class SeasonsWindow extends LitElement {
       @container (width < 480px) {
         th:nth-child(2),
         .name {
-          padding-inline: 0;
+          padding-inline-start: 0;
         }
         .starts {
           padding-inline: 0;
