@@ -5,6 +5,7 @@ import {
   disabledProvisionOnly,
   enabledModules,
   isEnabled,
+  modulesSettings,
   parseModuleConfig,
   parseModuleOverrides,
   serializeModuleConfig,
@@ -186,5 +187,25 @@ describe("enabledModules / disabledProvisionOnly", () => {
   it("a disabled NON-slot provision-only module (no fiscal seat) is still flagged", () => {
     const config = parseModuleOverrides({ "legacy-provision": false }, SLOT_MODULES);
     expect(disabledProvisionOnly(SLOT_MODULES, config)).toEqual(["legacy-provision"]);
+  });
+});
+
+describe("the modules settings document", () => {
+  it("refuses a mandatory module switched off", () => {
+    const definition = modulesSettings(MODULES);
+    expect(() => definition.parse({ modules: { core: false } })).toThrowError(
+      expect.objectContaining({
+        code: "module.mandatory_not_disableable",
+        params: { module: "core" },
+      }),
+    );
+  });
+  it("preserves sparse overrides and defaults to all enabled", () => {
+    const definition = modulesSettings(MODULES);
+    expect(definition.defaults()).toEqual({ modules: {} });
+    expect(definition.parse({ modules: { payments: false } })).toEqual({
+      ok: true,
+      doc: { modules: { payments: false } },
+    });
   });
 });

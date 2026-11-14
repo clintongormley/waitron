@@ -234,3 +234,12 @@ environment plans need not land first.
 ## After the tasks
 
 `/finish-branch` with this plan as its note; the lane marks the PR "owner lands" and does not merge.
+
+## Implementation decisions, 2026-11-14
+
+The watcher cleared the catalogue-aware `modulesSettings(modules)` factory at 03:37,
+instantiated beside server composition as `MODULES_SETTINGS`. The document shape and
+mandatory-module check stay as planned. At 04:14 the watcher replaced Task 1's
+workforce-off example with toggleable bookings: workforce became mandatory in A1002.
+The mandatory-workforce refusal and default-ambiguous assertions stay. These are
+watcher clearances, not a separate owner approval of the design.

@@ -1,6 +1,6 @@
 import { ALL_MODULES } from "@waitron/composition";
 import type { ClassifiedTable } from "@waitron/sync-enrolment";
-import { selectVenueService } from "@waitron/module";
+import { modulesSettings, selectVenueService } from "@waitron/module";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import type {
   AlertEventClaim,
@@ -13,6 +13,7 @@ import type {
 } from "@waitron/module";
 
 export { ALL_MODULES };
+export const MODULES_SETTINGS = modulesSettings(ALL_MODULES);
 
 /** The members of `ALL_MODULES` whose name is listed, in `ALL_MODULES` order. */
 export function modulesNamed(names: readonly string[]): readonly WaitronModule[] {

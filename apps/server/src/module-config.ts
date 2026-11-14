@@ -1,38 +1,22 @@
-import { MODULES_FILE } from "@waitron/store";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { AppError } from "@waitron/shared";
+import { readSettings, saveSettings, withTransaction, type Database } from "@waitron/db";
 import { parseModuleConfig, serializeModuleConfig, type ModuleConfig } from "@waitron/module";
-import { ALL_MODULES } from "./modules.js";
-import { writeFileDurable } from "./fs-atomic.js";
+import { ALL_MODULES, MODULES_SETTINGS } from "./modules.js";
 
-/**
- * Read `<stateDir>/modules.json` into the desired ModuleConfig. Absent file = every module enabled. A
- * present-but-unparseable file is reported as `module.config_invalid` rather than a bare `SyntaxError`.
- */
-export async function readModuleConfig(stateDir: string): Promise<ModuleConfig> {
-  let text: string;
-  try {
-    text = await readFile(join(stateDir, MODULES_FILE), "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return parseModuleConfig({}, ALL_MODULES); // no file → all enabled
-    }
-    throw error;
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    throw new AppError("module.config_invalid", { reason: "modules.json is not valid JSON" });
-  }
-  return parseModuleConfig(raw, ALL_MODULES);
+export async function readModuleConfig(db: Database): Promise<ModuleConfig> {
+  return parseModuleConfig((await readSettings(db, MODULES_SETTINGS)).doc, ALL_MODULES);
 }
 
-/** Write `<stateDir>/modules.json` from a validated ModuleConfig, atomically. Returns the path. */
-export async function writeModuleConfig(stateDir: string, config: ModuleConfig): Promise<string> {
-  const body = JSON.stringify({ modules: serializeModuleConfig(config) }, null, 2) + "\n";
-  const path = join(stateDir, MODULES_FILE);
-  await writeFileDurable(path, body, 0o600);
-  return path;
+export async function writeModuleConfig(
+  db: Database,
+  config: ModuleConfig,
+  actor: string | null,
+): Promise<void> {
+  await withTransaction(db, async (tx) => {
+    const saved = await readSettings(tx, MODULES_SETTINGS);
+    await saveSettings(tx, MODULES_SETTINGS, {
+      doc: { modules: serializeModuleConfig(config) },
+      expectedRevision: saved.revision,
+      personId: actor,
+    });
+  });
 }

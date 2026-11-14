@@ -1,16 +1,16 @@
+import { defineSettingsDocument } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { WaitronModule } from "./module.js";
 import "./errors.js";
 
 /**
- * The desired module set from modules.json: a SPARSE override map — a module is enabled unless it
+ * A SPARSE override map — a module is enabled unless it
  * appears here with `false`. `parseModuleOverrides` refuses a `mandatory` module set `false`.
  */
 export interface ModuleConfig {
   readonly overrides: ReadonlyMap<string, boolean>;
 }
 
-/** Parse modules.json (`{ modules: … }`); the file is operator-editable, so it is validated. */
 export function parseModuleConfig(raw: unknown, modules: readonly WaitronModule[]): ModuleConfig {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new AppError("module.config_invalid", { reason: "not an object" });
@@ -64,7 +64,6 @@ export function enabledModules(
   return modules.filter((m) => isEnabled(config, m.name));
 }
 
-/** The sparse override map (modules.json's inner object); the inverse of `parseModuleOverrides`. */
 export function serializeModuleConfig(config: ModuleConfig): Record<string, boolean> {
   return Object.fromEntries(config.overrides);
 }
@@ -83,4 +82,17 @@ export function disabledProvisionOnly(
       (m) => m.tier === "provision-only" && m.fiscal === undefined && !isEnabled(config, m.name),
     )
     .map((m) => m.name);
+}
+
+export function modulesSettings(modules: readonly WaitronModule[]) {
+  return defineSettingsDocument<{ modules: Record<string, boolean> }>({
+    module: "modules",
+    version: 1,
+    transfers: false,
+    defaults: () => ({ modules: {} }),
+    parse: (raw) => ({
+      ok: true,
+      doc: { modules: serializeModuleConfig(parseModuleConfig(raw, modules)) },
+    }),
+  });
 }

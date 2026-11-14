@@ -1189,7 +1189,7 @@ async function bootServer(
     assertBuiltApp(config.setupAppDir, "WAITRON_SETUP_APP_DIR");
   }
   await assertNoStartAgainDeletion(config.venueDir);
-  const moduleConfig = await readModuleConfig(config.stateDir);
+  let moduleConfig: import("@waitron/module").ModuleConfig = { overrides: new Map() };
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   // Built in setup mode, once the log exists, before any setup route is mounted.
   let setupClockSet: ReturnType<typeof createSetupClockSet> | undefined;
@@ -1203,7 +1203,7 @@ async function bootServer(
     stateDir: config.stateDir,
     venueDir: config.venueDir,
     modules: ALL_MODULES,
-    moduleConfig,
+    moduleConfig: () => moduleConfig,
     freezeConfiguration: async (request, newTaxpayer) => {
       if (setupKeyRing === undefined) throw new AppError("setup.not_ready", {});
       const staged = await readStagedConfigurationImport(config.stateDir, setupKeyRing);
@@ -1323,6 +1323,28 @@ async function bootServer(
   // `applyMigrations` opens and closes its own store, so running it BEFORE the long-lived open below
   // keeps the two from overlapping and leaves nothing open behind a failed migration. Setup mode
   // migrates the FULL schema, which the wizard needs; trading mode migrates only the enabled set.
+  const firstPass =
+    config.node === undefined
+      ? []
+      : migrationOptionsFor(
+          orderedMigrationSets(availableModules).filter(
+            (set) => set.name === "core" || set.database === "node",
+          ),
+          config.migrationsRoot,
+        );
+  const firstPassTables = firstPass.flatMap((set) => set.appendOnlyTables ?? []);
+  const firstPassRestored = await missingBeforeMigration(config.venueDir, firstPassTables);
+  if (firstPass.length > 0) {
+    await withDevMigrationHint(log, config.devMode, () =>
+      applyMigrations(config.venueDir, firstPass),
+    );
+    const moduleProbe = await openVenueDatabase(config.venueDir);
+    try {
+      moduleConfig = await readModuleConfig(moduleProbe.venue);
+    } finally {
+      await moduleProbe.close();
+    }
+  }
   const setsToMigrate =
     config.node === undefined ? availableModules : enabledModules(availableModules, moduleConfig);
   const migrationOptions = migrationOptionsFor(
@@ -1331,7 +1353,13 @@ async function bootServer(
   );
   const appendOnlyTables = migrationOptions.flatMap((set) => set.appendOnlyTables ?? []);
   // A short-lived open, closed before `applyMigrations`, which puts any of these back.
-  const restoredTriggers = await missingBeforeMigration(config.venueDir, appendOnlyTables);
+  const restoredTriggers = [
+    ...firstPassRestored,
+    ...(await missingBeforeMigration(
+      config.venueDir,
+      appendOnlyTables.filter((name) => !firstPassTables.includes(name)),
+    )),
+  ];
   await withDevMigrationHint(log, config.devMode, () =>
     applyMigrations(config.venueDir, migrationOptions),
   );
@@ -1360,6 +1388,7 @@ async function bootServer(
   await noteFullAtStart(diskFull, { dir: config.venueDir, log, spareReleased: released });
   const freeSpace = createFreeSpaceState({ log });
   const db = store.venue;
+  if (config.node === undefined) moduleConfig = await readModuleConfig(db);
   // After migrating, which reinstalls a missing trigger but leaves a same-name altered one in place.
   assertAppendOnlyIntact(db, appendOnlyTables);
   // A missing trigger also shows up after a crash between a set's migration and its trigger

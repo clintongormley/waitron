@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
@@ -1112,18 +1113,11 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("trading mode migrates ONLY the modules.json-enabled sets, skipping a disabled toggleable module (SP-1b)", async () => {
-    // A trading boot migrates only the sets `<stateDir>/modules.json` enables. Only an empty directory
-    // can show a skip: the shared one already carries every journal. This boot throws after the
-    // migration seam, so the assertion is on the resulting journals, not on boot success.
+  it("trading boot migrates core, reads the modules row, then migrates only the enabled sets", async () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-modules-filter-state-"));
-    // `bookings` is toggleable and owns `__drizzle_migrations_bookings`.
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { bookings: false } }),
-    );
     const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-filter-venue-"));
+    await seedModuleSettings(venueDir, { bookings: false });
     let server: StartedServer | undefined;
     let probe: VenueDatabase | undefined;
     try {
@@ -1154,7 +1148,6 @@ describe("startServer, against a migrated venue directory", () => {
       const paymentsExpected = expectedSchemaVersion(payments.migrations, migrationsRoot);
       expect(paymentsExpected).toBeGreaterThan(0);
       expect(await appliedSchemaVersion(probe, payments.migrations)).toBe(paymentsExpected);
-      // `enabledModules` never drops `core`, whatever modules.json says.
       const core = modulesWithSets(ALL_MODULES).find((m) => m.name === "core")!;
       const coreExpected = expectedSchemaVersion(core.migrations, migrationsRoot);
       expect(coreExpected).toBeGreaterThan(0);
