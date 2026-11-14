@@ -316,9 +316,9 @@ Math.floor(generated / 1000)`, exactly one match or null.
 `fiscal-filing-screen.a11y.test.ts`, `test/fiscal-filing-browser-fixture.ts`. Read
 `docs/developers/design-system.md` and `conventions-ui.md` first.
 
-Layout: a section **Warnings** / **Avisos** (`aria-labelledby`, `data-test="warnings"`) between
+Layout: a section **Warnings** / **Advertencias** (`aria-labelledby`, `data-test="warnings"`) between
 **Filing cases** and **Possibly missing history**. When `warnings.total` is 0 it shows one muted
-line, "No open warnings." / "No hay avisos abiertos." Otherwise up to two lists, each shown only
+line, "No open warnings." / "No hay advertencias abiertas." Otherwise up to two lists, each shown only
 when it has a line, built like slice 1's history lists (`historyList`, `field`, `aeatWords`, one
 `wt-disclosure` headed "Technical details" per line). When `total` exceeds what is listed, a muted
 line says "Showing the newest {shown} of {total}. Export them to see every one."
@@ -335,7 +335,7 @@ line says "Showing the newest {shown} of {total}. Export them to see every one."
    the existing `fiscal_filing.record_state.*` strings; "AEAT's lines": each "{number} · {date} ·
    {operation} {status} {code}" with the message in `aeatWords`; and the note "These are the lines
    AEAT gave the first time while this warning is open; a later answer may differ."
-2. **Invoices with a warning from Waitron's own check** / **Facturas con un aviso de la
+2. **Invoices with a warning from Waitron's own check** / **Facturas con una advertencia de la
    comprobación de Waitron**. Line, totals: "The totals of invoice {number} ({date}) do not match its
    tax lines. AEAT accepts it; check that sale's prices." Line, flagged: "Invoice {number} ({date})
    has something AEAT accepts but may point out." With no record identified: "An invoice recorded at
@@ -368,7 +368,7 @@ No buttons, no colour beyond existing tokens, no new primitive.
 **Files:** `apps/server/src/guide/en/fiscal-filing.md`, `apps/server/src/guide/es/fiscal-filing.md`,
 `docs/backlog.md`, `docs/backlog/self-service-refusals.md`.
 
-- [ ] Guide, EN and ES, a section `## Warnings {#warnings}` / `## Avisos {#warnings}` after
+- [ ] Guide, EN and ES, a section `## Warnings {#warnings}` / `## Advertencias {#warnings}` after
   `{#cases}`: what each of the two lists means in one or two sentences, that nothing on the page
   changes a record, that handled alerts leave the list, and that the export carries every warning.
   Only what changes what staff do (CLAUDE.md §3: no corner cases the code handles). Update the

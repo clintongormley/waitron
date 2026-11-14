@@ -558,7 +558,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.warnings.reply.sent": "Registros enviados",
   "fiscal_filing.warnings.reply.lines": "Líneas de la AEAT",
   "fiscal_filing.warnings.reply.first":
-    "Son las líneas que dio la AEAT la primera vez mientras este aviso está abierto; una respuesta posterior puede ser distinta.",
+    "Son las líneas que dio la AEAT la primera vez mientras esta advertencia está abierta; una respuesta posterior puede ser distinta.",
   "fiscal_filing.warnings.record": "Facturas con una advertencia de la comprobación de Waitron",
   "fiscal_filing.warnings.record.totals":
     "Los totales de la factura {number} ({date}) no cuadran con sus líneas de impuestos. La AEAT la acepta; revisa los precios de esa venta.",
