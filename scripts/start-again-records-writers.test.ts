@@ -17,6 +17,7 @@ const ROOT = join(import.meta.dirname, "..");
 const GIT_SPAWN_TIMEOUT_MS = 30_000;
 
 const ALLOWED = [
+  "packages/handover/src/manifest.ts", // Declares names; writes nothing.
   "packages/provisioning/src/first-setup-start-again-choice.ts",
   "packages/provisioning/src/first-setup-start-again-names.ts",
   "packages/provisioning/src/first-setup-start-again-set-aside.ts",

@@ -27,6 +27,7 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
       "packages/provisioning/src/index.ts",
       "packages/provisioning/src/environment-recovery-move.ts", // Names them only to leave them in place.
       "packages/store/src/state-layout.ts",
+      "packages/handover/src/manifest.ts", // Declares names; writes nothing.
     ],
   },
   {
@@ -40,6 +41,7 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
       "packages/provisioning/src/index.ts",
       "packages/provisioning/src/environment-recovery-move.ts", // Names them only to leave them in place.
       "packages/store/src/state-layout.ts",
+      "packages/handover/src/manifest.ts", // Declares names; writes nothing.
     ],
   },
   {
@@ -130,6 +132,10 @@ describe("the spare file guard (weaker than its name: reads text)", () => {
           path: "packages/store/src/state-layout.ts",
           text: 'export const SPARE_SPACE_FILE = "spare-space";',
         },
+        {
+          path: "packages/handover/src/manifest.ts",
+          text: 'const entries = ["spare-space", "spare-space.released"];',
+        },
       ]),
     ).toEqual([]);
     expect(
@@ -138,12 +144,17 @@ describe("the spare file guard (weaker than its name: reads text)", () => {
         { path: "apps/server/src/first-setup-entry.ts", text: releases },
         { path: "apps/server/src/first-setup-entry.ts", text: tops },
         { path: "apps/server/src/start-space.ts", text: 'join(stateDir, "spare-space")' },
+        {
+          path: "apps/server/src/unlisted-write.ts",
+          text: 'await writeFile(join(stateDir, "spare-space"), "control");',
+        },
       ]),
     ).toEqual([
       "apps/server/src/first-setup-entry.ts: \\breleaseSpare\\b",
       "apps/server/src/first-setup-entry.ts: \\btopUpSpare\\b",
       "apps/server/src/free-space-now.ts: \\breleaseSpare\\b",
       "apps/server/src/start-space.ts: \\bSPARE_SPACE_FILE\\b|[\"'`]spare-space[\"'`]",
+      "apps/server/src/unlisted-write.ts: \\bSPARE_SPACE_FILE\\b|[\"'`]spare-space[\"'`]",
     ]);
   });
 
