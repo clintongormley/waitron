@@ -183,6 +183,51 @@ describe("waiting because AEAT refused a sale as dated in the future", () => {
     ).resolves.toBe("unchanged");
     expect(state.status).toBe("by_person");
   });
+
+  it.each([
+    [
+      "throws",
+      async (): Promise<ClockServiceStatus> => {
+        throw new Error("socket gone");
+      },
+    ],
+    [
+      "answers unavailable",
+      async (): Promise<ClockServiceStatus> => ({ available: false, reason: "lost" }),
+    ],
+  ])(
+    "notes that the host does not answer when it %s as a box confirmed by the internet goes back to waiting",
+    async (_name, failing) => {
+      const l = look(async () => clockServiceAnswer(true));
+      await startClockCheck(l.deps);
+      expect(l.state).toMatchObject({ status: "by_internet", hostAnswers: true });
+      await expect(
+        backToWaitingForRefusal({ state: l.state, clockStatus: failing }, "node-a", {
+          position: 8,
+          issuedOn: "2027-03-15",
+        }),
+      ).resolves.toBe("moved");
+      expect(l.state).toMatchObject({
+        status: "waiting",
+        cause: "future_date_refused",
+        hostAnswers: false,
+      });
+    },
+  );
+
+  it("notes that the host answers again when it answers unsynchronised", async () => {
+    const state = startClockState();
+    state.confirm("by_person", { "node-a": 4 });
+    state.noteHost(false);
+    await expect(
+      backToWaitingForRefusal(
+        { state, clockStatus: async () => clockServiceAnswer(false) },
+        "node-a",
+        { position: 5, issuedOn: "2027-03-15" },
+      ),
+    ).resolves.toBe("moved");
+    expect(state).toMatchObject({ status: "waiting", hostAnswers: true });
+  });
 });
 
 describe("going back to waiting unless the time service is synchronised", () => {

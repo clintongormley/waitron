@@ -154,6 +154,7 @@ export async function backToWaitingForRefusal(
     refusedSinceConfirmed(deps.state, nodeId, refusal.position) && !waitingForRefusal(deps.state);
   if (!applies()) return "unchanged";
   const answer = await clockServiceAnswerOf(deps.clockStatus);
+  deps.state.noteHost(answer.available);
   if (answer.available && answer.synchronised) return "synchronised";
   // A person may have confirmed while the time service was read.
   if (!applies()) return "unchanged";
