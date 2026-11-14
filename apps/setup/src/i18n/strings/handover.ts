@@ -43,7 +43,7 @@ export const handoverEn = {
   "handover.emergency.backup_too_old":
     "This backup does not admit this spare under its current main box. Choose a backup made after this spare joined that main box.",
   "handover.emergency.backup_key_missing":
-    "This box has no usable recovery key. If no key is saved on it, enter the backup's recovery key and try again.",
+    "Enter the recovery key for this backup and try again. The box's saved key stays unchanged.",
   "handover.emergency.backup_invalid":
     "The backup could not be opened. Check the encrypted file and its recovery key, then try again.",
   "handover.emergency.copy_changed":
@@ -102,7 +102,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.backup_too_old":
     "Esta copia no admite este servidor de reserva bajo su servidor principal actual. Elige una copia hecha después de que este servidor se uniera al principal.",
   "handover.emergency.backup_key_missing":
-    "Este servidor no tiene una clave de recuperación utilizable. Si no tiene ninguna guardada, introduce la clave de la copia y vuelve a intentarlo.",
+    "Introduce la clave de recuperación de esta copia y vuelve a intentarlo. La clave guardada en el servidor no cambia.",
   "handover.emergency.backup_invalid":
     "No se ha podido abrir la copia. Comprueba el archivo cifrado y su clave de recuperación y vuelve a intentarlo.",
   "handover.heading": "Traspasar el local",

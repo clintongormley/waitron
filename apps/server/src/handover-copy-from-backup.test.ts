@@ -228,6 +228,7 @@ it("keeps the placed source after a second selection is interrupted", async () =
   copyFault.interrupt = false;
   await expect(stat(join(root, "pair-copy", "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   await writeFile(join(root, "pair-copy", "venue.db"), "a crash left an unmarked partial copy");
+  expect(await checkEmergencyCopy({ stateDir: root, venueDir, modules: [] })).toMatchObject(first);
   expect(await placeFirstCopy({ stateDir: root, venueDir, nodeId, log: () => {} })).toBe(false);
   expect(await checkEmergencyCopy({ stateDir: root, venueDir, modules: [] })).toMatchObject(first);
   expect(await readdir(join(root, "pair-copy"))).toEqual(["placed.json"]);

@@ -102,18 +102,16 @@ async function mount(
     if (path.endsWith("/emergency/backup")) {
       expect(init!.body).toBeInstanceOf(FormData);
       expect((init!.body as FormData).get("artifact")).toBeInstanceOf(File);
-      if (options.backupRefusal || body.recoveryKey === undefined)
+      if (options.backupRefusal || body.recoveryKey === undefined) {
+        const code =
+          options.backupRefusal ?? options.backupNeedsKeyCode ?? "handover.backup_key_missing";
         return new Response(
           JSON.stringify({
-            error: {
-              code:
-                options.backupRefusal ??
-                options.backupNeedsKeyCode ??
-                "handover.backup_key_missing",
-            },
+            error: { code },
           }),
-          { status: 409 },
+          { status: code === "recovery.passphrase_invalid" ? 422 : 409 },
         );
+      }
       backupSelected = true;
       return new Response(JSON.stringify({ restarting: true }));
     }
