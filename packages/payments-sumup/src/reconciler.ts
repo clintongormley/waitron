@@ -39,7 +39,7 @@ export class SumUpReconciler implements PaymentReconciler {
       async (tx) => ({
         candidates: await listAuditCandidates(tx, this.provider, period),
         nearbyCandidates: await listAuditCandidates(tx, this.provider, pad(600_000)),
-        manual: await listBackupPayments(tx, pad(300_000)),
+        manual: await listBackupPayments(tx, pad(600_000)),
       }),
     );
     const source = sumupSettlementReport(client, nearbyCandidates);

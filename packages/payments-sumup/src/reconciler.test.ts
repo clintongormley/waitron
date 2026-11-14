@@ -173,12 +173,14 @@ describe("backup-machine comparison", () => {
     { competing: "wrong amount", matched: 0, unmatched: 1 },
     { competing: "late", matched: 0, unmatched: 1 },
     { competing: "other provider", matched: 0, unmatched: 1 },
+    { competing: "next-day only", matched: 0, unmatched: 0 },
+    { competing: "next-day competitor", matched: 0, unmatched: 0 },
   ])(
     "keeps $competing candidates separate without changing money",
     async ({ competing, matched, unmatched }) => {
       const seeded = await seedWorkingOrder(suite.db, freshNif());
       const manualAt = "2026-07-01T23:58:00.000Z";
-      const manual = async (ref: string) =>
+      const manual = async (ref: string, at = manualAt) =>
         withTransaction(suite.db, (tx) =>
           insertCapturedPayment(tx, {
             provider: "manual",
@@ -187,7 +189,7 @@ describe("backup-machine comparison", () => {
             origin: deviceOrigin(seeded.deviceId),
             nodeId: seeded.nodeId,
             workingOrderId: seeded.workingOrderId,
-            settledAt: new Date(manualAt),
+            settledAt: new Date(at),
             externalRef: "operation-7",
             externalMachine: "Backup Solo",
             externalProvider: competing === "other provider" ? "other" : "connected_account",
@@ -195,6 +197,8 @@ describe("backup-machine comparison", () => {
         );
       await manual("backup");
       if (competing === "manual") await manual("second-entry");
+      if (competing === "next-day competitor")
+        await manual("next-entry", "2026-07-02T00:06:00.000Z");
       const item = (id: string, timestamp: string, amount = 10.25) => ({
         transaction_id: id,
         type: "PAYMENT",
@@ -208,7 +212,11 @@ describe("backup-machine comparison", () => {
         items: [
           item(
             "backup-charge",
-            competing === "late" ? "2026-07-01T23:50:00Z" : "2026-07-01T23:57:00Z",
+            competing.startsWith("next-day")
+              ? "2026-07-02T00:02:00Z"
+              : competing === "late"
+                ? "2026-07-01T23:50:00Z"
+                : "2026-07-01T23:57:00Z",
             competing === "wrong amount" ? 10 : 10.25,
           ),
           ...(competing === "charge" ? [item("second-charge", "2026-07-01T23:59:00Z")] : []),
@@ -229,8 +237,16 @@ describe("backup-machine comparison", () => {
         unmatched,
       );
       expect(result.backupUnmatched?.filter((row) => row.kind === "recorded")).toHaveLength(
-        competing === "other provider" || matched ? 0 : competing === "manual" ? 2 : 1,
+        competing === "other provider" || competing === "next-day only" || matched
+          ? 0
+          : competing === "manual"
+            ? 2
+            : 1,
       );
+      if (["manual", "charge", "adjacent-day charge", "next-day competitor"].includes(competing))
+        expect(
+          result.backupUnmatched.filter((row) => row.kind === "recorded").map((row) => row.reason),
+        ).toEqual(competing === "manual" ? ["ambiguous", "ambiguous"] : ["ambiguous"]);
       expect(result.unlinkedCharges).toBe(unmatched);
       expect(result.missingLocal).toHaveLength(unmatched);
       if (matched)
