@@ -103,10 +103,6 @@ export class CourseList extends LitElement {
       .open-name:hover {
         opacity: var(--wt-opacity-hover);
       }
-      th.name-heading,
-      td.name-cell {
-        width: calc(7 * var(--wt-tap-min));
-      }
       wt-segmented-control {
         width: calc(4 * var(--wt-tap-min) - var(--wt-space-3));
       }
