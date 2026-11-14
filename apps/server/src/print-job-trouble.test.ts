@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -14,7 +15,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
-import { printersInTrouble } from "./print-job-trouble.js";
+import { printersInTrouble, printersInTroubleQuery } from "./print-job-trouble.js";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
 
@@ -81,6 +82,23 @@ async function read() {
 }
 
 describe("printersInTrouble", () => {
+  it("searches each printer's unprinted jobs, and its later printed ones, through the pull index", async () => {
+    await prepareVenue();
+    const plan = await withTransaction(suite.db, async (tx) => {
+      const rows = await tx.execute<{ detail: string }>(
+        sql`explain query plan ${printersInTroubleQuery(tx, NOW).getSQL()}`,
+      );
+      return rows.rows.map((row) => row.detail);
+    });
+
+    expect(plan).toContain(
+      "SEARCH print_jobs USING INDEX print_jobs_pull_idx (printer_id=? AND status=?)",
+    );
+    expect(plan).toContain(
+      "SEARCH trouble_later_printed USING INDEX print_jobs_pull_idx (printer_id=? AND status=? AND rowid>?)",
+    );
+  });
+
   it("names an active printer whose document has waited past two minutes, with how many and the oldest", async () => {
     await prepareVenue();
     const id = await seedPrinter({ name: "Bar" });
