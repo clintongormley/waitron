@@ -38,11 +38,7 @@ import { codeMessage, codeOf, allergenRefusalText } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { dashboardPath } from "../navigation.js";
 import { ProductChildCreate, type ProductChildKind } from "../state/product-child-create.js";
-import {
-  productEditorField,
-  productEditorTranslationField,
-  type ProductEditor,
-} from "../widgets/product-editor.js";
+import { productEditorField, type ProductEditor } from "../widgets/product-editor.js";
 import {
   placementMenus,
   type PlacementFailure,
@@ -561,13 +557,13 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * A refusal carries the FIELD it is about, the LANGUAGE whose text is missing, or the id of a
+   * A refusal carries the field it is about or the id of a
    * choice that no longer exists; one that points at no field reaches the screen's banner.
    */
   #rejectedField(error: unknown, submitted: ProductEditorInput): Record<string, string> {
     if (codeOf(error) === "allergen.kinds_required" || codeOf(error) === "allergen.invalid_kind")
       return { allergens: allergenRefusalText(error) };
-    const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
+    const params = (error as { params?: { field?: unknown } }).params ?? {};
     if (typeof params.field === "string") {
       const name = productEditorField(params.field, this.contentLanguages?.defaultLanguage ?? "");
       if (name === null) return {};
@@ -580,10 +576,6 @@ export class CatalogueScreen extends LitElement {
       };
     }
     const code = codeOf(error);
-    if (code === "content.translation_required" && typeof params.language === "string") {
-      const name = productEditorTranslationField(submitted, params.language);
-      return name === null ? {} : { [name]: codeMessage(code) };
-    }
     const name = missingChoiceField(code, error, submitted);
     return name === null ? {} : { [name]: codeMessage(code) };
   }

@@ -12,7 +12,6 @@ import "@waitron/printing";
 // The registry of `product.not_found`, which `requireProductId` throws.
 import "@waitron/catalogue";
 import { parseStationTimingPatch } from "./kitchen-timing.js";
-import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.js";
 import { readPassCoverage } from "./pass-coverage.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -1617,18 +1616,6 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const stations = await withVenueReadAuth(deps, sessionId, (tx) => listStations(tx));
       return c.json(stations);
-    }),
-  );
-
-  app.get("/management-api/stations/outputs-down", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const now = new Date();
-      const result = await withVenueAuth(deps, sessionId, async (tx) => ({
-        printersDown: await stationPrintersDown(tx, now),
-        screensDark: await stationScreensDark(tx, now),
-      }));
-      return c.json(result);
     }),
   );
 

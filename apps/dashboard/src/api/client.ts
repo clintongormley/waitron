@@ -219,16 +219,6 @@ export interface BusinessDayStartPreview {
   conflictCount: number;
   backupDeadlines: VenueClockPreview["backupDeadlines"];
 }
-
-export interface MadeAt {
-  stationId: string | null;
-  stationName: string | null;
-  noPreparation: boolean;
-  noReplacement: boolean;
-  /** The station the routing names for a product with no replacement; null otherwise. */
-  unavailableStationId: string | null;
-  variesByZone: boolean;
-}
 import type {
   ExtraList,
   ExtraListDependants,
@@ -3445,10 +3435,6 @@ export class DashboardApi {
 
   listProducts(catalogueId: string): Promise<Product[]> {
     return this.#request<Product[]>(`/management-api/catalogues/${catalogueId}/products`, "GET");
-  }
-
-  listMadeAt(): Promise<Record<string, MadeAt>> {
-    return this.#request<Record<string, MadeAt>>("/management-api/products/made-at", "GET");
   }
 
   getFolderRouting(): Promise<RoutingView> {

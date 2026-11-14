@@ -944,59 +944,6 @@ export async function stationStates(
   );
 }
 
-export async function describeMakers(tx: Transaction): Promise<
-  ReadonlyMap<
-    string,
-    {
-      route: RouteTarget | null;
-      variesByZone: boolean;
-      noReplacement: boolean;
-      unavailableStationId: string | null;
-    }
-  >
-> {
-  const rules = await loadRoutingRules(tx, null);
-  // A zone no cell names routes every product as Every zone does.
-  const zoned = new Set(rules.cells.map((cell) => cell.zoneId));
-  const zones = (await activeZones(tx)).filter(({ id }) => zoned.has(id));
-  const rows = await tx
-    .select({
-      id: products.id,
-      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
-      categoryId: effectiveProductColumns.categoryId,
-      parentActive: parentProducts.active,
-    })
-    .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .where(eq(products.active, true));
-  const result = new Map<
-    string,
-    {
-      route: RouteTarget | null;
-      variesByZone: boolean;
-      noReplacement: boolean;
-      unavailableStationId: string | null;
-    }
-  >();
-  for (const row of rows) {
-    if (row.parentActive === false) continue;
-    const facts = { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId };
-    const choice = chooseMaker(rules, facts, null, null);
-    result.set(row.id, {
-      route: choice.route,
-      noReplacement: choice.noReplacement,
-      unavailableStationId: choice.noReplacement ? choice.fallbacks[0]!.stationId : null,
-      variesByZone: zones.some(({ id }) => {
-        const inZone = chooseMaker(rules, facts, id, null);
-        return (
-          inZone.noReplacement !== choice.noReplacement || !sameRoute(inZone.route, choice.route)
-        );
-      }),
-    });
-  }
-  return result;
-}
-
 export async function routingModel(tx: Transaction, at: Date): Promise<RoutingModel> {
   const { clock, moment } = await clockAt(tx, at);
   const { rules, folders, stations } = await snapshot(tx, scopeAt(moment));

@@ -8,7 +8,7 @@ import { QUERY_DEPENDENCIES, dashboardQuery, type DashboardQueryName } from "./l
 it("quiets only the audited database queries while connected", () => {
   const expected = `getCatalogueSettings listCatalogues getMenuStructure getMenuPrices getMenuHome
     listCategories getCategory listLibraryProducts listProducts listUnits listOptionLists getOptionList
-    listExtraLists getExtraList listMadeAt getVenueTheme listThemes listPrinters listPrinterProfiles
+    listExtraLists getExtraList getVenueTheme listThemes listPrinters listPrinterProfiles
     listPrinterStationNames listPagePrinters listPrinterStations getPrinterDeleteImpact listReaders
     listReaderHolders getProfileReaders listHeldPayments getDailyClose getSalesPeriod getCategorySales
     getReportPrinters getOrderPrinters listOrderStaff listStaff getStaffRoster getProfile
@@ -853,34 +853,22 @@ it.each([
   }
 });
 
-it.each(["getFolderRouting", "listMadeAt"] as const)(
+it.each(["getFolderRouting"] as const)(
   "%s ignores retired station sources and applies current station changes",
   async (name) => {
     let station = "bar";
-    const value = () =>
-      name === "listMadeAt"
-        ? {
-            cocktail: {
-              stationId: station,
-              stationName: station,
-              noPreparation: false,
-              noReplacement: false,
-              unavailableStationId: null,
-              variesByZone: false,
-            },
-          }
-        : {
-            stationTimes: [],
-            todayEnds: null,
-            clockReadable: true,
-            zones: [],
-            categories: [],
-            products: [],
-            cells: [],
-            defaultStationId: station,
-            stations: [{ id: station, name: station, active: true }],
-            canMakeDefault: true,
-          };
+    const value = () => ({
+      stationTimes: [],
+      todayEnds: null,
+      clockReadable: true,
+      zones: [],
+      categories: [],
+      products: [],
+      cells: [],
+      defaultStationId: station,
+      stations: [{ id: station, name: station, active: true }],
+      canMakeDefault: true,
+    });
     const fetchImpl = vi.fn(async () => Response.json(value()));
     const api = new DashboardApi("", fetchImpl);
     const observed = api.liveData.observe(dashboardQuery(api, name, []), () => {});

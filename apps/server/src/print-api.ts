@@ -61,7 +61,6 @@ import {
   attachPrinterToStation,
   detachPrinterFromStation,
   listStationPrinters,
-  replaceStationPrinters,
 } from "./station-printers.js";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -169,11 +168,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "print.failed");
-// A station's printer list names its printers only in the body's `printerIds`.
-const runStationPrinterList = createErrorBoundary(
-  { ...STATUS, "printer.not_found": 400 },
-  "print.failed",
-);
 // An equipment label names its card reader only in the body's `id`.
 const runEquipmentLabel = createErrorBoundary(
   { ...STATUS, "reader.not_found": 400 },
@@ -1873,24 +1867,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const stationId = requireUuidParam(c.req.param("sid"), "StationId");
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
       await gated(sessionId, (tx) => detachPrinterFromStation(tx, { stationId, printerId }));
-      return c.body(null, 204);
-    }),
-  );
-
-  app.put("/management-api/stations/:sid/printers", (c) =>
-    runStationPrinterList(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const stationId = requireUuidParam(c.req.param("sid"), "StationId");
-      const body = await readJsonBody<{ printerIds?: unknown }>(c);
-      if (
-        !Array.isArray(body.printerIds) ||
-        body.printerIds.some((id) => typeof id !== "string") ||
-        new Set(body.printerIds).size !== body.printerIds.length
-      ) {
-        throw new AppError("management.request_invalid", { field: "printerIds" });
-      }
-      const printerIds = body.printerIds.map((id) => requireUuidParam(id as string, "PrinterId"));
-      await gated(sessionId, (tx) => replaceStationPrinters(tx, stationId, printerIds));
       return c.body(null, 204);
     }),
   );

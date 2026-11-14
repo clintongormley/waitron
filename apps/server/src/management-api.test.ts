@@ -1051,15 +1051,9 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }[];
   }
 
-  it("serves no station health read, while the down-outputs read stays", async () => {
+  it("serves no station health read", async () => {
     const health = await req("/stations/health", { method: "GET" }, managerCookie);
     expect(health.status).toBe(404);
-    const outputs = await req("/stations/outputs-down", { method: "GET" }, managerCookie);
-    expect(outputs.status).toBe(200);
-    expect(await outputs.json()).toEqual({
-      printersDown: expect.any(Array),
-      screensDark: expect.any(Array),
-    });
   });
   it("lets supervisors load station metadata without granting station writes", async () => {
     const name = unique("Supervisor view");
@@ -2250,18 +2244,11 @@ describe("/management-api/stations (KDS-1 config)", () => {
     );
   });
 
-  it("lets a manager read both station output lists", async () => {
-    const res = await req("/stations/outputs-down", { method: "GET" }, managerCookie);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ printersDown: [], screensDark: [] });
-  });
-
   it("a STAFF session is refused on every station/routing route (403 authorization.not_permitted)", async () => {
     const someId = randomUUID();
     // A staff person can log in but holds no `venue.configure`.
     const cases = [
       req("/stations", { method: "GET" }, staffCookie),
-      req("/stations/outputs-down", { method: "GET" }, staffCookie),
       req(
         "/stations",
         { method: "POST", body: JSON.stringify({ name: unique("N") }) },
@@ -2285,7 +2272,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
     const someId = randomUUID();
     const cases = [
       req("/stations", { method: "GET" }, undefined),
-      req("/stations/outputs-down", { method: "GET" }, undefined),
       req("/stations", { method: "POST", body: JSON.stringify({ name: "N" }) }, undefined),
       req(
         `/stations/${someId}`,

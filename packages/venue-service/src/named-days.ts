@@ -1,42 +1,5 @@
-import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
-import { cutoverForBusinessDay } from "@waitron/shared";
-import { readVenueClock, type Transaction } from "@waitron/db";
-import { venueLocalMoment } from "./hours-clock.js";
-import { readCalendarDays, type HolidayReader } from "./hours.js";
-import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import type { HolidayAreaModel, SpecialDaysModel } from "./holiday-types.js";
-export type { SpecialDaysModel } from "./holiday-types.js";
 import { holidayCityKey } from "./holiday-rules.js";
-import type { LocalDate } from "./hours-types.js";
-
-export async function readSpecialDaysModel(
-  tx: Transaction,
-  from: LocalDate,
-  to: LocalDate,
-  at: Date,
-  holidays?: HolidayReader,
-): Promise<SpecialDaysModel> {
-  const clock = await readVenueClock(tx);
-  const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
-  const status = await readBusinessDayScheduleStatus(tx, clock, at);
-  const read = await readHolidays(tx, from, to);
-  const area = await readHolidayAreaModel(tx);
-  return {
-    ...status,
-    timeZone: clock.timeZone,
-    dayCutover:
-      status.currentBusinessDay === null
-        ? clock.dayCutover
-        : cutoverForBusinessDay(clock, status.currentBusinessDay),
-    civilDate,
-    clockReadable: civilDate !== null,
-    days: await readCalendarDays(tx, from, to, holidays ?? (async () => read.facts)),
-    holidayCoverage: read.coverage,
-    holidaySources: read.sources,
-    area: holidayAreaSummary(area),
-    localHolidaysPerYear: area.localHolidaysPerYear,
-  };
-}
 
 export function holidayAreaSummary(area: HolidayAreaModel): SpecialDaysModel["area"] {
   return {

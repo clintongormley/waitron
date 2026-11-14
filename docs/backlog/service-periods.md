@@ -111,7 +111,7 @@ outside (menu publication dates, imports), so it needs a decision.
 ## A server write that changes a department's hours leaves its zones' closures outside them
 
 A write that changes only a department's hours is not refused and does not cut the zone closures
-already stored: the menu-week route (`replaceMenuWeek`), deleting a period (`period-delete.ts`),
+already stored: deleting a period (`period-delete.ts`),
 moving a zone to another department (`configureZone`, `operations.ts`), and a season-week request
 that sends only a department. A closure left outside the new hours stays stored, and the next save
 of that zone is refused, naming that day, until the stretch is deleted or repainted. In the
@@ -123,10 +123,10 @@ writes is the plan's reading of the code, not run here.)
 
 ## The zone-closure hours check runs at the routes, not inside the writers
 
-The check that a zone closure lies inside its department's hours runs in the season-week,
-closed-week and special-day routes and in the configuration import (`configuration-transfer.ts`),
-not inside the writers. The season-week and closed-week routes pass `assertSeasonClosuresInHours`
-(`zone-closure-hours.ts`) to `saveSeasonWeeks` and `replaceZoneClosedWeek` as their optional
+The check that a zone closure lies inside its department's hours runs in the season-week
+and special-day routes and in the configuration import (`configuration-transfer.ts`),
+not inside the writers. The season-week route passes `assertSeasonClosuresInHours`
+(`zone-closure-hours.ts`) to `saveSeasonWeeks` as its optional
 `afterWrite` hook, which the writer runs after its writes; the special-day routes call
 `assertDatedClosuresInHours` after `saveSpecialDay` returns. A caller that passes no hook, or calls
 `saveSpecialDay` directly (tests and the demo seed today), is not checked, and a new route must
@@ -144,7 +144,7 @@ from what is saved. So a stored closure outside the department's hours that date
 ## A change to a department's season week can leave a special date's zone closure outside its new hours
 
 A special date's department hours come from the season week its date falls in, with the day's own
-paint laid over them. A change to that week (a season-painter save, the menu-week route) or to
+paint laid over them. A change to that week (a season-painter save) or to
 which week a date falls in (moving a season's start, deleting a season) changes those hours, and
 nothing checks the zone closures stored on special dates against them: the season-week check reads
 only the zone weeks a request sends, and the special-day check only the zone paint a special-day
@@ -209,10 +209,8 @@ Found while building A788 (the business-day start changes at the next changeover
 says it was run, it comes from a per-task review recorded in the build's ledger and was read in the
 code, not run again here.
 
-- **A862.** Two Calendar reads draw a past day's range uncut where the Calendar cuts it: the
-  special-day painter's season days (`readSeasonDays`,
-  `packages/venue-service/src/opening-hours-calendar.ts`, passes no cut) and the named days'
-  closed flag (`packages/venue-service/src/named-days.ts`).
+- **A862.** The special-day painter's season days draw a past day's range uncut where the Calendar cuts it
+  (`readSeasonDays`, `packages/venue-service/src/opening-hours-calendar.ts`, passes no cut).
 - **A863.** A clash sentence names a range by its period, zone or department and its times only
   (`clockChangeConflictText`, `packages/venue-service/src/dashboard/clock-change-conflict.ts`), so
   a range in another department or on another weekday reads as if it were the one being edited.
@@ -483,6 +481,9 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
   Month does not. The owner's "even on the month view the special day is not shown" may mean it too.
 
 ## Decisions and deliberate limits
+
+_2026-11-14: DEAD-CODE-1 retires the separate menu-week and closed-week HTTP routes;
+the season painter continues saving through the season-week route._
 
 - **A zone closure outside its department's hours is ignored when read (owner, 2026-11-06).** It
   stops being an error, so it no longer blocks the next save of the zone. Example: the Terrace closed

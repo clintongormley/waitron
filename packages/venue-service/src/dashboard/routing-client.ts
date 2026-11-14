@@ -17,17 +17,6 @@ import type {
   RoutingView,
 } from "../routing-types.js";
 
-export interface OutputsDown {
-  printersDown: {
-    stationId: string;
-    stationName: string;
-    printerId: string;
-    printerName: string;
-    since: string;
-  }[];
-  screensDark: { stationId: string; stationName: string; lastSeenAt: string | null }[];
-}
-
 /** A waiting station and zone no pass device could fire. */
 export interface PassCoverageGap {
   stationId: string;
@@ -168,11 +157,6 @@ export class PrepStationsApi {
       `/management-api/stations/${encodeURIComponent(id)}`,
       "DELETE",
     );
-  }
-  listOutputsDown(): Promise<OutputsDown> {
-    return this.request<OutputsDown>("/management-api/stations/outputs-down", "GET", undefined, {
-      passive: true,
-    });
   }
   readPassCoverage(): Promise<PassCoverageGap[]> {
     return this.request<PassCoverageGap[]>(

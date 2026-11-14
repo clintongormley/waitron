@@ -993,8 +993,6 @@ it.each([
               showsRestOfOrder: false,
             },
           ] as never;
-        if (url === "/management-api/stations/outputs-down")
-          return { printersDown: [], screensDark: [] } as never;
         if (url === "/management-api/stations/pass-coverage") return [] as never;
         if (
           [

@@ -87,7 +87,7 @@ name" in `packages/venue-service/src/holidays.test.ts`.
 
 ## The local number is information
 
-`localEntryLimit` remains in the country contract and reaches `readSpecialDaysModel` as
+`localEntryLimit` remains in the country contract and reaches `readHolidayAreaModel` as
 `localHolidaysPerYear`.
 Spain's 2 comes from BOE-A-2025-21667: "hasta dos días de cada año natural con carácter de fiestas
 locales". The source is archived in `packages/country-es/src/data/sources/BOE-A-2025-21667.xml`.

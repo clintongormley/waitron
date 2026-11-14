@@ -776,6 +776,10 @@ possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks prof
 Pricing still reads static offer membership; zone closures do not change recorded prices.
 `working-order.ts` performs the zone check when adding lines, separately from its offer read.
 
+_2026-11-14: DEAD-CODE-1 retires the separate menu-week and closed-week HTTP routes
+named below. The season painter saves through `PUT …/seasons/:seasonId/weeks`;
+`replaceMenuWeek` and `replaceZoneClosedWeek` remain in-process writers._
+
 **2026-10-18, A723.** Stored closures can still lie outside a department's hours (backlog,
 Service periods). The routes refuse a closed range the request writes outside its department's hours, read in the same transaction
 after the write (`packages/venue-service/src/zone-closure-hours.ts`): `PUT …/seasons/:seasonId/weeks`

@@ -493,14 +493,6 @@ it("keeps station status in Stations instead of repeating it in Routing", async 
   expect(routing.querySelector('[data-test="status-upstairs"]')).toBeNull();
   expect(stationRow(el, "upstairs").textContent).toContain("Closed for today → Bar");
 });
-it("makes no outputs-down read", async () => {
-  const a = api({
-    listOutputsDown: vi.fn().mockResolvedValue({ printersDown: [], screensDark: [] }),
-  });
-  const el = await mount(a);
-  expect(stationRow(el, "bar").textContent).toContain("Bar");
-  expect(a.listOutputsDown).not.toHaveBeenCalled();
-});
 function stationHeadings(el: PrepStationsScreen) {
   return [...(stationTable(el)?.querySelectorAll("thead th") ?? [])].map((th) =>
     th.textContent?.trim(),

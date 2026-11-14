@@ -255,7 +255,6 @@ const uses = [
   {
     kind: "variant",
     id: "large",
-    productId: "toast",
     catalogueId: "menu",
     name: "Large",
     active: true,

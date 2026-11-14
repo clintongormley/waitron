@@ -956,18 +956,6 @@ export interface VenueServiceContribution {
     at: Date,
     actor: ActivityActor,
   ): Promise<void>;
-  /** Base maker for active products and variants, plus whether any active zone's maker or no-replacement answer differs. */
-  describeMakers(tx: Transaction): Promise<
-    ReadonlyMap<
-      string,
-      {
-        route: PreparationRoute | null;
-        variesByZone: boolean;
-        noReplacement: boolean;
-        unavailableStationId: string | null;
-      }
-    >
-  >;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
    *  the zone's active menus. With `menuItemIds`, only the offers it names are served. The default
    *  is the menu timetable's at `at` (now when absent); with `withDefault: false` the timetable is

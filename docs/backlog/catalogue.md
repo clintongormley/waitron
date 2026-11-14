@@ -701,18 +701,6 @@ These are watcher-cleared plan decisions, not owner approval of the plan. The
 [online](../superpowers/specs/2026-11-13-a670-online-go-live-study.md) and
 [paper](../superpowers/specs/2026-11-13-a670-printed-template-study.md) studies retain their dated proposals.
 
-## The products' made-at read has no screen since A655
-
-**The products' made-at read has no screen since A655** — `GET /management-api/products/made-at`,
-the venue-service seat behind it (`describeMakers`), the dashboard's `listMadeAt`, its `MadeAt`
-type and its live query are read only by tests. `apps/server/src/catalogue-api.test.ts:1731` pins
-the route, `apps/server/src/kitchen-delete.integration.test.ts:271` checks station deletion
-through it, `packages/venue-service/src/routing-store.test.ts` and `service.test.ts` pin the seat
-(declared at `packages/module/src/module.ts:996`), `apps/dashboard/src/api/client.test.ts` and
-`live-queries.test.ts` pin the client side, and several dashboard test files stub `listMadeAt`
-(`catalogue-screen.test.ts:363` asserts it is never called). Delete them together, or give the
-read a screen.
-
 ## The Products tree's hidden counts may be placed against the page at narrow width
 
 **The Products tree's hidden counts may be placed against the page at narrow width** — not
@@ -804,14 +792,6 @@ against a real database, and taking the result through the till. **Next action:*
 at the real box with the owner present, alongside **The displays and the printers walked at
 the real box** (_What to work on next_), after the owner is back on 2 November (owner,
 2026-10-17).
-
-## Retire the product editor's required-translation refusal mapping
-
-Customer names are
-optional, but `catalogue-screen.ts` still handles `content.translation_required` through
-`productEditorTranslationField`. Trace the product routes before removing that branch and its
-tests. Media still validates required image names and translates its refusal to
-`image.translation_required` with an explicit `names` field.
 
 ## Loose ends left by A343 (a menu's Price overrides tab tidied, #1368)
 

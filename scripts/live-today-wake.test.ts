@@ -24,7 +24,6 @@ const todayReaders = [
 const baseOnlyReaders = [
   "dashboard:listOrderPages", // Order rows show saved table and zone names.
   "dashboard:getOrder", // Order detail resolves table names.
-  "dashboard:listMadeAt", // Product makers follow zone routes.
   "dashboard:getFolderRouting", // Folder routes include zones.
   "dashboard:getProfileScopeChoices", // Profiles offer department zones.
   "dashboard:listProfileKitchenScreens", // Kitchen screen scopes name zones.

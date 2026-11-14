@@ -686,7 +686,6 @@ export const en = {
   "nav.venue_settings": "Venue settings",
   "receipts.subtitle": "Subtitle",
   "receipts.print_trading_name": "Print the trading name above the legal name",
-  "receipts.venue_defaults": "Venue defaults",
   "receipts.header_subtitle_hint": "e.g. a tagline",
   "receipts.print_address": "Print the venue's address",
   "receipts.no_address": "This venue has no address saved. It is set during setup.",
@@ -701,20 +700,13 @@ export const en = {
   "receipts.invalid_email": "Enter an email address such as name@example.com.",
   "receipts.invalid_logo": "Choose an image from the library.",
   "receipts.logo_not_found": "This image is no longer in the library. Choose another.",
-  "receipts.departments_zones": "Departments and zones",
   "receipts.footer_message_hint": "Printed at the bottom, e.g. a thank-you or opening hours",
   "receipts.operation_description_hint":
     "Sent to the tax agency with every sale; not printed on the receipt",
   "receipts.preview": "Preview",
   "receipts.preview_language": "Preview language",
-  "receipts.language_receipts": "receipts",
-  "receipts.language_copies": "copies",
   "receipts.translation_warning": "Some receipt text is missing in this language.",
-  "receipts.preview_for": "Preview for",
-  "receipts.preview_paper": "Receipt preview",
   "receipts.preview_error": "The preview could not be updated.",
-  "receipts.not_printed": "Sent to the tax agency (not printed)",
-  "receipts.trim_save_error": "The receipt settings could not be saved.",
   "receipts.trim_too_long": "Use at most {max} characters.",
   "receipts.language": "Default receipt language",
   "receipts.language_invalid": "Choose one of the languages offered.",
@@ -722,7 +714,6 @@ export const en = {
     "{count} orders at this venue are still in progress in the current receipt language, so it cannot be changed yet.",
   "receipts.language_orders_open_one":
     "1 order at this venue is still in progress in the current receipt language, so it cannot be changed yet.",
-  "receipts.language_save_error": "The receipt language could not be saved.",
   "receipts.language_stored": "By default, receipts print in {stored} until you switch to {fixed}.",
   "receipt_language.warning":
     "By default, receipts print in {receipt}, which is not one of your content languages. Product names on them print in {default}, the default language.",
@@ -4764,7 +4755,6 @@ export const es: Record<StringKey, string> = {
   "nav.venue_settings": "Ajustes del local",
   "receipts.subtitle": "Subtítulo",
   "receipts.print_trading_name": "Imprimir el nombre comercial encima del nombre legal",
-  "receipts.venue_defaults": "Valores del local",
   "receipts.header_subtitle_hint": "p. ej., un lema",
   "receipts.print_address": "Imprimir la dirección del local",
   "receipts.no_address":
@@ -4780,20 +4770,13 @@ export const es: Record<StringKey, string> = {
   "receipts.invalid_email": "Introduce un correo electrónico como nombre@ejemplo.com.",
   "receipts.invalid_logo": "Elige una imagen de la biblioteca.",
   "receipts.logo_not_found": "Esta imagen ya no está en la biblioteca. Elige otra.",
-  "receipts.departments_zones": "Departamentos y zonas",
   "receipts.footer_message_hint": "Se imprime al final; p. ej., un agradecimiento o el horario",
   "receipts.operation_description_hint":
     "Se envía a Hacienda con cada venta; no se imprime en el recibo",
   "receipts.preview": "Vista previa",
   "receipts.preview_language": "Idioma de la vista previa",
-  "receipts.language_receipts": "recibos",
-  "receipts.language_copies": "copias",
   "receipts.translation_warning": "Falta texto del recibo en este idioma.",
-  "receipts.preview_for": "Vista previa para",
-  "receipts.preview_paper": "Vista previa del recibo",
   "receipts.preview_error": "No se ha podido actualizar la vista previa.",
-  "receipts.not_printed": "Se envía a Hacienda (no se imprime)",
-  "receipts.trim_save_error": "No se han podido guardar los ajustes del recibo.",
   "receipts.trim_too_long": "Usa como máximo {max} caracteres.",
   "receipts.language": "Idioma predeterminado del recibo",
   "receipts.language_invalid": "Elige uno de los idiomas ofrecidos.",
@@ -4801,7 +4784,6 @@ export const es: Record<StringKey, string> = {
     "{count} pedidos de este local siguen en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
   "receipts.language_orders_open_one":
     "1 pedido de este local sigue en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
-  "receipts.language_save_error": "No se ha podido guardar el idioma del recibo.",
   "receipts.language_stored":
     "Por defecto, los recibos se imprimen en {stored} hasta que cambies a {fixed}.",
   "receipt_language.warning":

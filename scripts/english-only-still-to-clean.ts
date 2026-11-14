@@ -1135,7 +1135,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "packages/venue-service/src/dashboard/periods-list.test.ts",
   "packages/venue-service/src/dashboard/prep-stations-screen.a11y.test.ts",
   "packages/venue-service/src/dashboard/prep-stations-screen.test.ts",
-  "packages/venue-service/src/dashboard/range-dialog.test.ts",
   "packages/venue-service/src/dashboard/routing-cell-editor.test.ts",
   "packages/venue-service/src/dashboard/routing-grid-model.test.ts",
   "packages/venue-service/src/dashboard/routing-grid.test.ts",

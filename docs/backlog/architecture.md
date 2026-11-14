@@ -1374,34 +1374,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Remove code nothing reaches (replaced or dead, never merely unused)
 
-11 entries, size M.
+1 entry, size S.
 
-- **The products' made-at read has no screen since A655**
-  [Detail](catalogue.md#the-products-made-at-read-has-no-screen-since-a655)
-- **A variant image usage's `productId` has no reader in the dashboard**
-  (`packages/media/src/dashboard/client.ts`). **Next action:** drop the field, or say what it is
-  kept for.
-- **Retire the product editor's required-translation refusal mapping.**
-  [Detail](catalogue.md#retire-the-product-editors-required-translation-refusal-mapping)
-- **Nine `receipts.*` strings in `apps/dashboard/src/i18n/strings.ts` have no reader** — found
-  while doing A755 (#1809); none had one before it either: `departments_zones`,
-  `language_copies`, `language_receipts`, `language_save_error`, `not_printed`, `preview_for`,
-  `preview_paper`, `trim_save_error` and `venue_defaults`.
-- **`opening.follow_week` and `menu.normal_week` have no reader** — found during A723 (#1849); it
-  predates A723. Both strings, English and Spanish, are in
-  `packages/venue-service/src/dashboard/strings.ts` and nothing reads them; delete them or use them.
-- **`GET …/named-days` (`readSpecialDaysModel`, `named-days.ts`) has no dashboard caller**; server
-  suites still pin it. Remove it, or keep it with a stated reason — left open by A506-9, #1651.
-- **`range-dialog.ts` (`<range-dialog>`) has no caller**; only its own tests load it — left open by
-  A506-9, #1651.
-- **`PUT …/departments/:departmentId/menu-week` and `PUT …/zones/:zoneId/closed-week` (`routes.ts`)
-  are called by no client** now that the painter saves through `PUT …/seasons/:seasonId/weeks`.
-  Remove them, or keep them with a stated reason — left open by A506-8, #1634.
-- **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no caller**
-  [Detail](kitchen.md#get-management-apistationsoutputs-down-and-the-dashboards-listoutputsdown-have-no-caller)
-- **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
-  moved a station's printers into the station save; `parseStationPrinterIds`
-  (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.
 - **Unread configuration parameters remain in `apps/server/src`.** Test helpers still use
   `void cfg;` (`git grep -n 'void cfg;' apps/server/src`); `setLineCourse` and
   `readTransactionReceipt` retain `_cfg` in their signatures, among others

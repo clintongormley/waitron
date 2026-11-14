@@ -362,14 +362,6 @@ export const QUERY_DEPENDENCIES = {
     // table, so neither is named here.
     "product_modifiers",
   ],
-  listMadeAt: [
-    "products",
-    "categories",
-    "category_details",
-    "routing_cells",
-    "kitchen_stations",
-    "floor_zones",
-  ],
   getFolderRouting: [
     "categories",
     "category_details",
@@ -579,7 +571,6 @@ export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
   "getOptionList",
   "listExtraLists",
   "getExtraList",
-  "listMadeAt",
   "getVenueTheme",
   "listThemes",
   "listPrinters",

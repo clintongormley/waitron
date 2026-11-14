@@ -259,16 +259,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listProducts: vi
       .fn()
       .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? products : [])),
-    listMadeAt: vi.fn().mockResolvedValue({
-      [products[0]!.id]: {
-        stationId: "bar",
-        stationName: "Bar",
-        noPreparation: false,
-        noReplacement: false,
-        unavailableStationId: null,
-        variesByZone: false,
-      },
-    }),
     getFolderRouting: vi.fn().mockResolvedValue({
       stationTimes: [],
       todayEnds: null,
@@ -362,7 +352,6 @@ describe("catalogue-screen", () => {
     expect(api.listCategories).toHaveBeenCalledOnce();
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
     expect(api.listProducts).toHaveBeenCalledWith("cat-b");
-    expect(api.listMadeAt).not.toHaveBeenCalled();
     expect(api.getFolderRouting).toHaveBeenCalledOnce();
     expect(list(el).routing).toMatchObject({ cells: [], defaultStationId: null });
     expect(list(el).products).toEqual(products);
@@ -1932,55 +1921,6 @@ describe("catalogue-screen", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBeTruthy();
   });
 
-  it("reports a refused translation beside the input for the language the server named", async () => {
-    // The default content language is English and the product carries only a Spanish customer name,
-    // which is what the real save refuses: it names the missing LANGUAGE, never a field.
-    const api = stubApi({
-      getContentLanguages: vi
-        .fn()
-        .mockResolvedValue({ defaultLanguage: "en", languages: ["en", "es"] }),
-      updateProductEditor: vi.fn().mockRejectedValue({
-        code: "content.translation_required",
-        params: { language: "en" },
-        status: 400,
-      }),
-    });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    emit(list(el), "edit-product", { productId: "p1" });
-    await flush(el);
-    await editKitchenName(el);
-    emit(editor(el), "wt-submit", { value });
-    await flush(el);
-    expect(editor(el).open).toBe(true);
-    expect(editor(el).fieldErrors).toEqual({
-      "customer-name-en": codeMessage("content.translation_required"),
-    });
-    // Said once, beside the field — the screen's banner renders behind the open editor.
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
-    await editor(el).updateComplete;
-    const descriptors = editor(el).shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-      '[data-section="descriptors"]',
-    )!;
-    await expect.poll(() => descriptors.open).toBe(true);
-    await expect
-      .poll(() => editor(el).shadowRoot!.activeElement?.getAttribute("name"))
-      .toBe("customer-name-en");
-    const input = editor(el).shadowRoot!.querySelector("[name=customer-name-en]") as unknown as {
-      error: string;
-      invalid: boolean;
-    };
-    expect(input).toMatchObject({
-      error: codeMessage("content.translation_required"),
-      invalid: true,
-    });
-    expect(await bottomOf(editor(el))).toBe(t("form.fix_fields"));
-    expect(
-      editor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!
-        .disabled,
-    ).toBe(false);
-  });
-
   describe("a staff name another Active product already has", () => {
     let locale: string;
     beforeEach(() => {
@@ -2067,64 +2007,6 @@ describe("catalogue-screen", () => {
         }),
       );
     });
-  });
-
-  it("marks the variant whose translation the save refused, and reaches its window", async () => {
-    const variants = [
-      {
-        name: "Half serving",
-        customerName: { en: "Half", es: "Media" },
-        kitchenName: null,
-        image: null,
-        unitPrice: "4.50",
-        available: true,
-        active: true,
-      },
-      {
-        name: "Full serving",
-        customerName: { es: "Portion entera" },
-        kitchenName: null,
-        image: null,
-        unitPrice: "8.50",
-        available: true,
-        active: true,
-      },
-    ];
-    // The product's own customer name is complete, so the only value missing English is the second
-    // variant's — the editor must not point at a field that is fine.
-    const product = { ...value, customerName: { en: "Croquettes", es: "Croquettes" }, variants };
-    const api = stubApi({
-      getContentLanguages: vi
-        .fn()
-        .mockResolvedValue({ defaultLanguage: "en", languages: ["en", "es"] }),
-      getProductEditor: vi.fn().mockResolvedValue(product),
-      updateProductEditor: vi.fn().mockRejectedValue({
-        code: "content.translation_required",
-        params: { language: "en" },
-        status: 400,
-      }),
-    });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    emit(list(el), "edit-product", { productId: "p1" });
-    await flush(el);
-    emit(editor(el), "wt-submit", { value: product });
-    await flush(el);
-    expect(editor(el).fieldErrors).toEqual({
-      "variant-1-name": codeMessage("content.translation_required"),
-    });
-    await editor(el).updateComplete;
-    const table = editor(el).shadowRoot!.querySelector("dashboard-variant-table")!;
-    await table.updateComplete;
-    expect(table.shadowRoot!.querySelector("[data-test=error-1]")?.textContent).toContain(
-      codeMessage("content.translation_required"),
-    );
-    // A variant's names are only editable in its own window, so focus lands on the row's actions —
-    // the way into it. Every other control on the row belongs to a different variant or a different
-    // value.
-    await expect
-      .poll(() => table.shadowRoot!.activeElement?.getAttribute("data-test"))
-      .toBe("actions-1");
   });
 
   it("puts a refusal to give an offered product an Active variant beside that variant, naming the lists", async () => {

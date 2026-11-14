@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   buildMenuDocument,
   createCatalogue,
@@ -12,7 +12,6 @@ import {
 import {
   CORE_MIGRATIONS,
   settings as businessDaySettingsTable,
-  dayCutoverChanges,
   floorZones,
   kitchenStations,
   withTransaction,
@@ -33,7 +32,6 @@ import { configureZone, createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { ensureDefaultSeasons } from "./seasons.js";
-import { starterSeasonName } from "./testing/starter-seasons.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
@@ -156,9 +154,6 @@ async function routed() {
               body !== null && typeof body === "object" && !Array.isArray(body)
                 ? {
                     ...(isPeriodSave(method, path) ? {} : { expectedClockRevision: 1 }),
-                    ...(method === "PUT" && /\/(?:menu|closed)-week$/.test(path)
-                      ? { seasonId: season }
-                      : {}),
                     ...body,
                   }
                 : body,
@@ -237,8 +232,8 @@ describe("the opening-hours routes", () => {
 
     const monday = [{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }];
     await answers(
-      await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week(monday),
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        departments: [{ departmentId: r.restaurant, days: week(monday) }],
       }),
       204,
     );
@@ -376,7 +371,6 @@ describe("the opening-hours routes", () => {
         `/menu-periods/${r.morningPeriod}/delete`,
         { replacementPeriodId: null, expectedClockRevision: 1 },
       ],
-      ["PUT", `/departments/${r.restaurant}/menu-week`, { days: week([]) }],
     ];
     for (const [method, path, body] of writes) {
       const response = await r.send(method, path, r.supervisor, body);
@@ -456,15 +450,13 @@ describe("the opening-hours routes", () => {
       404,
     );
     await answers(
-      await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "09:00" }]),
-      }),
-      400,
-      { code: "menu_timetable.invalid", params: { field: "days.1.slots", reason: "empty" } },
-    );
-    await answers(
-      await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        departments: [
+          {
+            departmentId: r.restaurant,
+            days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
+          },
+        ],
       }),
       204,
     );
@@ -516,7 +508,6 @@ describe("the opening-hours routes", () => {
         "departmentId",
       ],
       ["PATCH", `/menu-periods/${r.morningPeriod}`, { name: "X", menuId: "x" }, "menuId"],
-      ["PUT", `/departments/${r.restaurant}/menu-week`, { days: [], extra: 1 }, "extra"],
     ] as const)
       await answers(await r.send(method, path, r.manager, body), 400, {
         code: "management.request_invalid",
@@ -526,7 +517,6 @@ describe("the opening-hours routes", () => {
       ["POST", "/departments/x/menu-periods"],
       ["PATCH", "/menu-periods/x"],
       ["POST", "/menu-periods/x/delete"],
-      ["PUT", "/departments/x/menu-week"],
     ] as const) {
       const response = await r.send(method, path, r.manager, {});
       expect(response.status, `${method} ${path}`).toBe(400);
@@ -775,254 +765,6 @@ it("answers the unmatched-route 404 to the retired dated timetable and zone clos
     });
   }
   expect(await r.model()).toEqual(before);
-});
-
-describe("zone closed-time routes", () => {
-  it("refuses a closed week outside its department's hours", async () => {
-    const r = await routed();
-    await answers(
-      await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
-      }),
-      204,
-    );
-    const before = await r.model();
-    const days = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-      weekday,
-      ranges: weekday === 1 ? [{ startsAt: "11:00", endsAt: "13:00" }] : [],
-    }));
-    await answers(
-      await r.send("PUT", `/zones/${r.barZone}/closed-week`, r.manager, { days }),
-      400,
-      {
-        code: "zone_closed_time.invalid",
-        params: {
-          field: "days.1.ranges.0",
-          reason: "outside_hours",
-          zoneId: r.barZone,
-          weekday: 1,
-        },
-      },
-    );
-    expect(await r.model()).toEqual(before);
-  });
-
-  it("writes a week and reads its zone ranges", async () => {
-    const r = await routed();
-    await answers(
-      await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
-      }),
-      204,
-    );
-    const ranges = [{ startsAt: "10:00", endsAt: "11:00" }];
-    const days = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-      weekday,
-      ranges: weekday === 1 ? ranges : [],
-    }));
-    await answers(await r.send("PUT", `/zones/${r.barZone}/closed-week`, r.manager, { days }), 204);
-    const response = await r.send("GET", "/opening-hours", r.supervisor);
-    expect(response.status).toBe(200);
-    const saved = (await response.json()) as OpeningHoursModel;
-    expect(restaurantOf(saved, r).zones).toEqual([
-      {
-        id: r.barZone,
-        name: "Bar",
-        seasonWeeks: saved.seasons.map((season) => ({
-          seasonId: season.id,
-          week: season.id === r.season ? days : days.map((day) => ({ ...day, ranges: [] })),
-        })),
-      },
-    ]);
-    await answers(await r.send("PUT", `/zones/${r.barZone}/closed-week`, r.staff, { days }), 403);
-    await answers(
-      await r.send("PUT", `/zones/${r.barZone}/closed-week`, r.manager, {
-        days: [
-          ...days.slice(0, 6),
-          { weekday: 6, ranges: [{ startsAt: "12:10", endsAt: "14:00" }] },
-        ],
-      }),
-      400,
-      { code: "zone_closed_time.invalid", params: { field: "days.6.ranges", reason: "step" } },
-    );
-    const model = await r.model();
-    expect(
-      restaurantOf(model, r).zones[0]!.seasonWeeks.find(
-        (entry) => entry.seasonId === (model.currentSeasonId ?? model.seasons[0]!.id),
-      )!.week,
-    ).toEqual(days);
-  });
-});
-
-it("accepts a fitting week, refuses a clashing one and a stale one while a change waits", async () => {
-  // The route reads the real clock; the stored change must still be waiting whatever today is.
-  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
-  onTestFinished(() => {
-    vi.useRealTimers();
-  });
-  const r = await routed();
-  await scoped(async (tx) => {
-    await tx
-      .update(businessDaySettingsTable)
-      .set({ revision: 2 })
-      .where(eq(businessDaySettingsTable.module, "business_day"));
-    await tx.insert(dayCutoverChanges).values({
-      effectiveBusinessDay: "2026-11-04",
-      dayCutover: "07:00:00",
-    });
-  });
-  const path = `/departments/${r.restaurant}/menu-week`;
-  const days = week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "14:00" }]);
-  const stale = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 1 });
-  await answers(stale, 409, { code: "hours.clock_changed", params: {} });
-  const fits = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 2 });
-  await answers(fits, 204);
-  const kept = (await r.model()).departments;
-  const clash = week([{ periodId: r.morningPeriod, startsAt: "06:00", endsAt: "08:00" }]);
-  const refused = await r.send("PUT", path, r.manager, { days: clash, expectedClockRevision: 2 });
-  await answers(refused, 409, {
-    code: "hours.clock_change_conflict",
-    params: {
-      dayCutover: "07:00",
-      timeZone: "Europe/Madrid",
-      startsAt: "2026-11-04T06:00:00.000Z",
-      conflictCount: 1,
-      conflicts: [
-        {
-          departmentId: r.restaurant,
-          departmentName: "Restaurant",
-          periodId: r.morningPeriod,
-          periodName: "Morning service",
-          seasonId: r.season,
-          seasonName: starterSeasonName("Autumn", "es"),
-          weekday: 1,
-          startsAt: "06:00",
-          endsAt: "08:00",
-          rangeIndex: 0,
-          reason: "range",
-        },
-      ],
-    },
-  });
-  expect((await r.model()).departments).toEqual(kept);
-});
-
-describe("week routes name one season", () => {
-  const closedWeek = (ranges: { startsAt: string; endsAt: string }[]) =>
-    [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: weekday === 1 ? ranges : [] }));
-  const otherSeason = (model: OpeningHoursModel, r: Routed) =>
-    model.seasons.find((season) => season.id !== r.season)!.id;
-
-  it("a department week writes the season it names and no other", async () => {
-    const r = await routed();
-    const named = otherSeason(await r.model(), r);
-    const monday = [{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }];
-    await answers(
-      await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week(monday),
-        seasonId: named,
-      }),
-      204,
-    );
-    const model = await r.model();
-    expect(model.seasons).toHaveLength(4);
-    expect(restaurantOf(model, r).seasonWeeks).toEqual(
-      model.seasons.map((season) => ({
-        seasonId: season.id,
-        week: week(season.id === named ? monday : []),
-      })),
-    );
-  });
-
-  it("a zone week writes the season it names and no other", async () => {
-    const r = await routed();
-    const named = otherSeason(await r.model(), r);
-    await answers(
-      await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
-        seasonId: named,
-      }),
-      204,
-    );
-    const ranges = [{ startsAt: "10:00", endsAt: "11:00" }];
-    await answers(
-      await r.send("PUT", `/zones/${r.barZone}/closed-week`, r.manager, {
-        days: closedWeek(ranges),
-        seasonId: named,
-      }),
-      204,
-    );
-    const model = await r.model();
-    expect(restaurantOf(model, r).zones[0]!.seasonWeeks).toEqual(
-      model.seasons.map((season) => ({
-        seasonId: season.id,
-        week: closedWeek(season.id === named ? ranges : []),
-      })),
-    );
-  });
-
-  const writes = (r: Routed) =>
-    [
-      [
-        `/departments/${r.restaurant}/menu-week`,
-        week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
-      ],
-      [`/zones/${r.barZone}/closed-week`, closedWeek([{ startsAt: "10:00", endsAt: "11:00" }])],
-    ] as const;
-
-  it("refuses a week write naming no season, or a malformed one, changing nothing", async () => {
-    const r = await routed();
-    const before = await r.model();
-    for (const [path, days] of writes(r))
-      for (const seasonId of [undefined, "x", 7, null])
-        await answers(await r.send("PUT", path, r.manager, { days, seasonId }), 400, {
-          code: "management.request_invalid",
-          params: { field: "seasonId" },
-        });
-    expect(await r.model()).toEqual(before);
-  });
-
-  it("refuses an unknown season with season.not_found, changing nothing", async () => {
-    const r = await routed();
-    const before = await r.model();
-    for (const [path, days] of writes(r)) {
-      const seasonId = randomUUID();
-      await answers(await r.send("PUT", path, r.manager, { days, seasonId }), 404, {
-        code: "season.not_found",
-        params: { seasonId },
-      });
-    }
-    expect(await r.model()).toEqual(before);
-  });
-
-  it("refuses someone who may not manage venue service before reading the season", async () => {
-    const r = await routed();
-    const before = await r.model();
-    for (const [path, days] of writes(r))
-      for (const seasonId of [undefined, "x", randomUUID()])
-        await answers(await r.send("PUT", path, r.supervisor, { days, seasonId }), 403);
-    expect(await r.model()).toEqual(before);
-  });
-
-  it("refuses a changing week save with no clock revision or a stale one", async () => {
-    const r = await routed();
-    await scoped((tx) =>
-      tx
-        .update(businessDaySettingsTable)
-        .set({ revision: 2 })
-        .where(eq(businessDaySettingsTable.module, "business_day")),
-    );
-    const before = await r.model();
-    for (const [path, days] of writes(r))
-      for (const expectedClockRevision of [undefined, 0])
-        await answers(await r.send("PUT", path, r.manager, { days, expectedClockRevision }), 409, {
-          code: "hours.clock_changed",
-          params: {},
-        });
-    expect(await r.model()).toEqual(before);
-    for (const [path, days] of writes(r))
-      await answers(await r.send("PUT", path, r.manager, { days, expectedClockRevision: 2 }), 204);
-  });
 });
 
 describe("the season weeks route", () => {
