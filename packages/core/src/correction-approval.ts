@@ -9,11 +9,12 @@ import type { SaleId } from "@waitron/shared";
 
 /** Reads the invoice_corrections row and refuses `sale.correction_approval_invalid`
  * { invoiceCorrectionId, reason } unless it exists (`not_found`), is open (`not_open`), names a
- * sale whose correction target (`correctionTargetFor`) is `correctsSaleId`'s (`other_sale`), and the R5's amount, −total, is no more than its gross
+ * sale whose correction target (`correctionTargetFor`) is `correctsSaleId` (`other_sale`), and the R5's amount, −total, is no more than its gross
  * (`over_amount`); then authorizeApproval(authorized_by, "sale.rectify"). Callers pass the
  * corrective's negative total, so −total is the amount credited. */
 export async function authorizeCorrectionApproval(
   tx: Transaction,
+  /** `correctsSaleId` is already a correction target: a replacement is never itself replaced. */
   args: { invoiceCorrectionId: string; correctsSaleId: SaleId; total: string },
 ): Promise<Authorization> {
   const { invoiceCorrectionId } = args;
@@ -30,10 +31,7 @@ export async function authorizeCorrectionApproval(
     new AppError("sale.correction_approval_invalid", { invoiceCorrectionId, reason });
   if (row === undefined) throw refuse("not_found");
   if (row.state !== "open") throw refuse("not_open");
-  if (
-    (await correctionTargetFor(tx, row.originalSaleId as SaleId)) !==
-    (await correctionTargetFor(tx, args.correctsSaleId))
-  )
+  if ((await correctionTargetFor(tx, row.originalSaleId as SaleId)) !== args.correctsSaleId)
     throw refuse("other_sale");
   // At the cent, as recordCorrection stores and files the total.
   if (-stringToCents(args.total) > row.gross) throw refuse("over_amount");
