@@ -1112,8 +1112,9 @@ rotation is refused while a pair link exists) landed too, and so did 3b-G (the s
 
 **14 November 2026, 3c measurement:** pinned `restore -f` applied an ordinary data-growth
 transaction but failed complete-byte equality against the same frozen generation's direct
-restore. Only header offsets 18, 19 and 24–27 differed. Runtime integration is stopped pending
-the watcher's comparison decision; [measurement and limits](../research/2026-11-14-a947-follow-mode.md).
+restore. Only header offsets 18, 19 and 24–27 differed. The watcher-revised integrity, every-table
+and other-byte checks passed, as did the small reconnect/restart/generation experiments.
+Runtime integration remains unbuilt; [measurement and limits](../research/2026-11-14-a947-follow-mode.md).
 
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
