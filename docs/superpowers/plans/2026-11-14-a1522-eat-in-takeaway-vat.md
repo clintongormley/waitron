@@ -14,6 +14,8 @@
 
 **Reviews so far:** a fresh-context review against the spec and the code (14 November) found 13 points; all are folded in below. The two that would have filed a takeaway sale at the wrong rate were the walk-up sale's in-memory gross and bill merges moving lines outside `carveLines`.
 
+Fable read F5 (2026-11-14) folded in: every sale, pay, park and round request now carries the way the till's screen showed and is refused if the order's way differs, the till labels each order by its own way rather than its department's, the switch checks who is editing a table bill, the cut-off part of a line and every kind of kitchen paper are tested, and kitchen screens show Take away, with the owner's 15:22 answers.
+
 ## Global constraints
 
 - Names in code: the order's way of selling is `dining`, values `"eat_in" | "takeaway"`. The department's setting is `dining`, values `"eat_in" | "takeaway" | "till_choice"`, plus `diningStartsAs`, values `"eat_in" | "takeaway"`. The product's second class is `takeawayVatClass` (`takeaway_vat_class`). The region flag is `takeawayVat`.
@@ -30,14 +32,17 @@
 ## Decisions this plan makes that the spec left open
 
 1. **Lines hold both classes; the order holds `dining`.** (Spec: "left to the builder".) `working_order_lines.vat_class` keeps its name and becomes the served-here class; `takeaway_vat_class` is added beside it, NOT NULL, already resolved (a product with no takeaway class stores its served class there). Nothing rewrites a line when an order switches. `working_line_contexts.vat_class` is left as it is: it feeds only the held-order read's product shape (`working-order.ts:5272`), which no rating or filing path reads.
-2. **`dining` lives on `working_orders`**, NOT NULL with no database default, so every insert must name it.
+2. **`dining` lives on `working_orders`**, NOT NULL with no database default, so every insert must name it. Both new columns stay required with no default (the watcher's ruling on F5's question 3, 14 November 2026).
 3. **Table orders start eaten here** (owner confirmed, 14 November 2026). In a `till_choice` department an order opened at a table (service mode `table_tab`) starts `eat_in` whatever `diningStartsAs` says; counter orders start as `diningStartsAs`.
 4. **"Sent" means the kitchen has it**: a line with `sent_at`, or any `ticket_items` row for the order's lines (a later course's dishes get ticket items without `sent_at`; `till-api.ts:1733-1743` already treats either as sent).
-5. **Moving lines between two orders whose `dining` differs is refused** (`order.dining_differs`): lines follow their order, so a move would silently change a sent line's rate. The check sits in `moveOrderLines` (`working-order.ts:3986`, used by merges and whole-line moves) and in `carveLines`'s partial-split path.
-6. **One rule for any department change**, applied wherever an existing order's department changes: `retargetOrderServiceContext` and `move-bill.ts` `adoptZone`'s new-context branch (`:606-607`). A whole-table move that would change a locked bill's way is refused for the whole table.
-7. **The live menu patch keeps VAT and edits both classes as plain values.** A published menu holds each takeaway class already resolved, so the patch window shows both classes as the values the live menu holds, with no "same as served here" choice, and changing one never changes the other. The patch exists to correct a wrong VAT class at once without publishing unfinished product work (A1151).
+5. **Moving lines between two orders whose `dining` differs is refused** (`order.dining_differs`) (owner confirmed, 14 November 2026: "Keep the refusal"): lines follow their order, so a move would silently change a sent line's rate. This covers merging two bills and moving dishes between them. Moving a whole bill (to another table, or a counter order to a table) is allowed and the bill keeps its way. The check sits in `moveOrderLines` (`working-order.ts:3986`, used by merges and whole-line moves) and in `carveLines`'s partial-split path.
+6. **One rule for any department change**, applied wherever an existing order's department changes: `retargetOrderServiceContext` and `move-bill.ts` `adoptZone`'s new-context branch (`:606-607`). Not locked: a department fixed one way gives the order that way; a `till_choice` department leaves the order's way as it is, for staff to switch. A whole-table move that would change a locked bill's way is refused for the whole table. **A move never switches an order's way by itself otherwise** (owner, 14 November 2026): a takeaway counter order moved to a table, in the same department or into a `till_choice` one, stays takeaway; the move's own send (`adoptZone`, `move-bill.ts:614-620`) then fixes it, and the till shows the order's own way (Decision 10). Decision 3 applies only when an order is opened.
+7. **The live menu patch keeps VAT and edits both classes as plain values** (owner confirmed, 14 November 2026). A published menu holds each takeaway class already resolved, so the patch window shows both classes as the values the live menu holds, with no "same as served here" choice, and changing one never changes the other. The patch exists to correct a wrong VAT class at once without publishing unfinished product work (A1151).
 8. **The department setting is saved through the dashboard only from PR 3**, together with the till's label and switch, so no screen-reachable takeaway sale exists while the till cannot show it. PR 2's tests set the policy with `setDepartmentSalePolicyField`.
 9. **The demo's restaurant drinks take away at 21%.** The restaurant's cola, cola zero and bottled beer gain `takeawayVatClass: "general"`, and the deli menu lists those same products, as the spec's Demo section says.
+10. **An order keeps its own way when its department's setting changes** (owner, 14 November 2026). A department's How it sells may be saved while it has open orders; each open order keeps its `dining`. So the till's label always shows the order's own `dining`; only whether the switch is offered comes from the department (Tasks 14 and 19).
+11. **The till checks the way it showed.** Every sale, pay, park and round request carries the `dining` the screen showed, and the server refuses one that differs from the order's stored way (`working_order.out_of_date`), or for a new order from the way it resolves (`order.dining_fixed`). The field is optional in PR 2, so today's till keeps working while no takeaway order can be made from a screen (Decision 8), and required from PR 3 (Task 18).
+12. **Kitchen screens show Take away too** (owner, 14 November 2026: "Screens too"): the station and pass screens mark a takeaway order's heading, as the paper does (Task 21).
 
 ## Review focus
 
@@ -210,7 +215,7 @@ Starts only once Task 1's note says no marker is needed.
 **Files:** every insert of `working_orders` or `working_order_lines`, found with
 `/usr/bin/grep -rlE "insert\((workingOrders|workingOrderLines)\)|insert into (working_orders|working_order_lines)" --include='*.ts' packages apps scripts bench` (the raw-SQL inserts are invisible to the typecheck). Includes `apps/server/src/working-order.ts:1525,1551,2935,4767,6561`, `packages/bookings/src/testing/fake-core.ts:71`, `packages/db/src/testing/seed.ts:245`, `packages/reporting/test/fixtures.ts:433,473`, `packages/payments/src/reconcile.test.ts`, `packages/venue-service/src/menu-timetable.test.ts`, and the `apps/server/src/testing/*` helpers.
 
-- [ ] **Step 1:** in production code, pass `dining: "eat_in"` and `takeawayVatClass: <the row's vatClass>` for now; Tasks 11 and 12 replace them. In tests and helpers, give a helper a `dining` option defaulting to `"eat_in"`.
+- [ ] **Step 1:** in production code, write every stand-in through one named marker exported from `apps/server/src/working-order.ts`, `A1522_STAND_IN` (`dining: "eat_in"`, and `takeawayVatClass(vatClass)` returning the row's own `vatClass`), never a bare literal; Tasks 11, 12 and 15 replace every use, and PR 2's last step checks none is left. In tests and helpers, give a helper a `dining` option defaulting to `"eat_in"`.
 - [ ] **Step 2:** typecheck every package the grep named, then run each of those packages' tests locally (`pnpm --filter <pkg> test`; check free memory first). Expected: all pass, no behaviour changed.
 - [ ] **Step 3:** commit: "Name the order's way of selling wherever orders and lines are written (A1522)".
 
@@ -219,14 +224,14 @@ Starts only once Task 1's note says no marker is needed.
 **Files:**
 - Modify: `packages/venue-service/src/dining.ts` (`resolveOrderDining`), the port (`packages/venue-service/src/service.ts:173,241`; `packages/module/src/module.ts:983,1142,1220`), `packages/venue-service/src/errors.ts`
 - Modify: `apps/server/src/working-order.ts` `createOpenOrder` (`:1412-1562`, writes `dining`; a split or check order copied from another copies the source's `dining`)
-- Modify: `apps/server/src/till-sale.ts:773,1331`, `parties.ts:173`, `bill-actions.ts:310`, `order-drafts.ts:168`; `apps/server/src/till-api.ts` (`POST /api/sales` `:1786`, `POST /api/pay` `:1846`, `POST /api/working-orders` `:1917` accept optional `dining`)
+- Modify: `apps/server/src/till-sale.ts:778,1336` (`TillSaleRequest` `:213` gains `dining?: Dining`), `parties.ts:173`, `bill-actions.ts:310`, `order-drafts.ts:168`; `apps/server/src/till-api.ts`: the sale, pay, park and round routes accept optional `dining` (`POST /api/sales` `:1788`, `POST /api/pay` `:1848`, `POST /api/working-orders` `:1919`, `PUT /api/working-orders/:id` `:2000`, and a round's `POST /api/parties/:id/drafts/:did/submit` `:3779`)
 - Test: `packages/venue-service/src/dining.test.ts`; create `apps/server/src/order-dining.start.test.ts`
 
-**Produces:** `resolveOrderDining(tx: Transaction, zoneId: string, requested: Dining | undefined): Promise<Dining>`, on the port. Region without `takeawayVat` → `"eat_in"`; a requested `"takeaway"` refused `order.dining_fixed { dining: "eat_in" }`. Department `eat_in`/`takeaway` → that; a different request refused `order.dining_fixed { dining }`. `till_choice` → the request if given; else `"eat_in"` for a `table_tab` zone (Decision 3), else `startsAs`.
+**Produces:** `resolveOrderDining(tx: Transaction, zoneId: string, requested: Dining | undefined): Promise<Dining>`, on the port. Region without `takeawayVat` → `"eat_in"`; a requested `"takeaway"` refused `order.dining_fixed { dining: "eat_in" }`. Department `eat_in`/`takeaway` → that; a different request refused `order.dining_fixed { dining }`. `till_choice` → the request if given; else `"eat_in"` for a `table_tab` zone (Decision 3), else `startsAs`. The zone is the one `createOpenOrder` settles on, so an order delivered to a table is judged by the table's zone (`working-order.ts:1471-1482`). For an existing order (Decision 11): a request whose `dining` differs from the order's stored `dining` is refused `working_order.out_of_date { workingOrderId, revision }` before anything is sent, priced or paid; an absent `dining` is not checked until Task 18 makes it required.
 
-- [ ] **Step 1: failing tests.** Each rule above, including Review focus 4 (a `GB-vat` venue whose department row says `takeaway`). Through the routes: in a takeaway department a parked order has `dining = "takeaway"`; in a `till_choice` department a walk-up `POST /api/sales` with `dining: "takeaway"` creates a takeaway order, and without `dining` one as `startsAs`; a table order there starts `eat_in` with `startsAs = "takeaway"`.
+- [ ] **Step 1: failing tests.** Each rule above, including Review focus 4 (a `GB-vat` venue whose department row says `takeaway`). Through the routes: in a takeaway department a parked order has `dining = "takeaway"`; in a `till_choice` department a walk-up `POST /api/sales` with `dining: "takeaway"` creates a takeaway order, and without `dining` one as `startsAs`; a table order there starts `eat_in` with `startsAs = "takeaway"`. A parked order set to takeaway by a direct update, then paid by `POST /api/sales` or `POST /api/pay`, or parked again by `PUT /api/working-orders/:id`, each with `dining: "eat_in"`, is refused `working_order.out_of_date`; so is a round sent with `dining: "eat_in"` to a table bill set to takeaway the same way; and none of them writes a `sales` row or a ticket item.
 - [ ] **Step 2:** run; expect failures.
-- [ ] **Step 3:** implement; replace Task 10's placeholder `dining`.
+- [ ] **Step 3:** implement; replace Task 10's `A1522_STAND_IN` `dining`.
 - [ ] **Step 4:** pass; also `src/working-order.test.ts`, `src/till-api.fiscal-sale-paths.test.ts`.
 - [ ] **Step 5:** commit: "Start each order eaten here or taken away from its department (A1522)".
 
@@ -242,7 +247,7 @@ Starts only once Task 1's note says no marker is needed.
 
 - [ ] **Step 1: failing tests.** A takeaway order's Coca-Cola line stores `vat_class = "reduced"`, `takeaway_vat_class = "general"`; a cheese line stores its `super_reduced`; an extra on a takeaway dish stores the extra product's own two classes. Review focus 1 in `order-dining.walk-up.test.ts`: walk-up cash `POST /api/sales` and walk-up card `POST /api/pay`, each `dining: "takeaway"` with a €1.80 Coca-Cola, file `sale_lines.vat_rate = 2100` and base €1.49; the same eat-in file 1000 and €1.64. A set lunch on a takeaway order is refused `order.set_lunch_takeaway`, with `canSwitch` true in an open `till_choice` order and false in a takeaway department; on an eat-in order it is accepted.
 - [ ] **Step 2:** run; expect failures.
-- [ ] **Step 3:** implement; replace Task 10's placeholder `takeawayVatClass`.
+- [ ] **Step 3:** implement; replace Task 10's `A1522_STAND_IN` `takeawayVatClass` in the rows `priceOrderLines`, `priceTabRound` and `applyLineEdits` build.
 - [ ] **Step 4:** pass; also `src/vat-class-at-line-add.test.ts`, `src/working-order.test.ts`, `src/lunch-*.test.ts` unchanged.
 - [ ] **Step 5:** commit: "Keep both VAT classes on each line and price a new order for how it is sold (A1522)".
 
@@ -264,9 +269,9 @@ Starts only once Task 1's note says no marker is needed.
 - Modify: the order reads the till gets (`GET /api/working-orders/:id`, `/placed`, and the party/tab reads that carry `serviceMode`, in `apps/server/src/till-api.ts` and the functions they call) gain `dining: Dining` and `diningChoice: "none" | "open" | "locked"`
 - Test: create `apps/server/src/order-dining.read.test.ts`
 
-**Produces:** `diningChoice`: `"none"` when the department is fixed or the region has no distinction; `"open"` when `till_choice` and `orderDiningLocked` is null; `"locked"` when `till_choice` and locked.
+**Produces:** `dining` is always the order's own stored `dining`, never the department's (Decision 10). `diningChoice` (whether the switch is offered, and nothing more): `"none"` when the department is fixed or the region has no distinction; `"open"` when `till_choice` and `orderDiningLocked` is null; `"locked"` when `till_choice` and locked.
 
-- [ ] **Step 1: failing tests.** The three values in the three set-ups; `"open"` turns `"locked"` after `POST .../lines/send`.
+- [ ] **Step 1: failing tests.** The three values in the three set-ups; `"open"` turns `"locked"` after `POST .../lines/send`. Two department changes while orders are open (set with `setDepartmentSalePolicyField`): a `till_choice` counter order parked as takeaway, then its department set to `eat_in`, reads `dining: "takeaway"`, `diningChoice: "none"`; an open table bill in an `eat_in` department, then the department set to `takeaway`, reads `dining: "eat_in"`, `diningChoice: "none"`.
 - [ ] **Step 2–4:** run (fail), implement, pass.
 - [ ] **Step 5:** commit: "Tell the till how each order is sold and whether it can still switch (A1522)".
 
@@ -274,32 +279,32 @@ Starts only once Task 1's note says no marker is needed.
 
 **Files:**
 - Create: `apps/server/src/order-dining.ts` (`switchOrderDining`)
-- Modify: `apps/server/src/till-api.ts` — `PUT /api/working-orders/:id/dining`
-- Modify: `apps/server/src/working-order.ts` — `moveOrderLines` (`:3986`) refuses `order.dining_differs` when the two orders' `dining` differ; `carveLines` (`:4584`) copies `takeawayVatClass` (`:4605`, `:4779`) and does the same check on its partial-split path
+- Modify: `apps/server/src/till-api.ts` — `PUT /api/working-orders/:id/dining`, body `{ dining, revision, expectedEdit }`, the operator being the session's person
+- Modify: `apps/server/src/working-order.ts` — `moveOrderLines` (`:3986`) refuses `order.dining_differs` when the two orders' `dining` differ; `carveLines` (`:4584`) copies `takeawayVatClass` (`:4605`, and `:4779` in place of Task 10's `A1522_STAND_IN`) and does the same check on its partial-split path
 - Modify: `apps/server/src/errors.ts`
 - Test: create `apps/server/src/order-dining.switch.test.ts`; rows in `till-api.profile-actions.test.ts` (refusing case and inventory row), `till-api.profile-zones.test.ts`, and `till-api.session-person.test.ts` (`BODIES`)
 
-**Produces:** `switchOrderDining(tx: Transaction, cfg: TradingContext, workingOrderId: string, dining: Dining, revision: number): Promise<void>`. In order: unknown order → the existing not-found code; not open or wrong revision → `working_order.out_of_date`; department not `till_choice`, or no regional distinction → `order.dining_fixed { dining }`; locked → `order.dining_locked { reason }`; to takeaway with a set-lunch line → `order.set_lunch_takeaway { canSwitch: false }`; else set `dining` and `revision + 1`. `order.dining_differs { fromOrderId, toOrderId }`.
+**Produces:** `switchOrderDining(tx: Transaction, cfg: TradingContext, workingOrderId: string, dining: Dining, revision: number, authority: OrderEditAuthority): Promise<void>`. In order: unknown order → the existing not-found code; not open or wrong revision → `working_order.out_of_date`; then `requireOrderBillEditor(tx, workingOrderId, authority)` (`bill-editing.ts:218`), as `line-cancel.ts:184` does, so a table bill another waiter is editing is refused `draft.taken_over` and a stale edit `draft.out_of_date` (it returns at once for an order with no table party, `:227`); department not `till_choice`, or no regional distinction → `order.dining_fixed { dining }`; locked → `order.dining_locked { reason }`; to takeaway with a set-lunch line → `order.set_lunch_takeaway { canSwitch: false }`; else set `dining` and `revision + 1`. `order.dining_differs { fromOrderId, toOrderId }`.
 
-- [ ] **Step 1: failing tests.** Switch eat-in → takeaway on a fresh counter order succeeds and bumps the revision; stale revision refused; after sending, `order.dining_locked { reason: "sent" }`; after one received payment, `{ reason: "paid" }`; in an `eat_in` department, `order.dining_fixed`; with a set lunch, `order.set_lunch_takeaway`. `POST /api/bills/:id/merge` of a takeaway bill into an eat-in bill refused `order.dining_differs`; `POST /api/bills/:id/move-dishes` likewise, including a partial quantity; between two takeaway bills both work and the moved lines keep both classes.
+- [ ] **Step 1: failing tests.** Switch eat-in → takeaway on a fresh counter order succeeds and bumps the revision; stale revision refused; after sending, `order.dining_locked { reason: "sent" }`; after one received payment, `{ reason: "paid" }`; in an `eat_in` department, `order.dining_fixed`; with a set lunch, `order.set_lunch_takeaway`. On a table bill whose editor is another waiter, the switch is refused `draft.taken_over` and `dining` is unchanged. Two sessions (Decision 11): session A reads an open counter order as eat-in, session B switches it to takeaway, session A pays it by `POST /api/pay` with `dining: "eat_in"`: refused `working_order.out_of_date`, no `sales` row. `POST /api/bills/:id/merge` of a takeaway bill into an eat-in bill refused `order.dining_differs`; `POST /api/bills/:id/move-dishes` (whole lines only, `resolveMoveLines`, `bill-actions.ts:197-229`) likewise; between two takeaway bills both work and the moved lines keep both classes. The cut-off part of a line (only ever cut within its own order, `working-order.ts:4724-4726`): on a takeaway order with three Coca-Colas on one line, discount one of them (`splitLinesWithinOrder`, through `adjustments-apply.ts:1317`), and on a second such order call `splitUnitsWithinOrder` (`working-order.ts:4924`); pay each: every row files 2100, and each new row's `takeaway_vat_class` equals its source row's.
 - [ ] **Step 2:** run; expect failures.
-- [ ] **Step 3:** implement.
+- [ ] **Step 3:** implement; replace Task 10's `A1522_STAND_IN` at `carveLines` `:4779`.
 - [ ] **Step 4:** pass, with the three guards above and `src/till-api.split-bill.test.ts`, `src/bill-actions*.test.ts`.
 - [ ] **Step 5:** commit: "Let staff switch a counter order until it is sent or paid, and keep moved dishes at their order's rate (A1522)".
 
 ### Task 16: moving an order to another department
 
 **Files:**
-- Modify: `packages/venue-service/src/dining.ts` (`applyDepartmentDining`), `operations.ts` `retargetOrderServiceContext` (`:1049-1070`) calls it when the department changes; `apps/server/src/move-bill.ts` `adoptZone` (`:596-612`) calls it in its new-context branch; `packages/venue-service/src/errors.ts`
-- Test: `packages/venue-service/src/department-transfers.test.ts`, `apps/server/src/department-transfer-api.test.ts`, `apps/server/src/table-actions*.test.ts` (whole-table move)
+- Modify: `packages/venue-service/src/dining.ts` (`applyDepartmentDining`), `operations.ts` `retargetOrderServiceContext` (`:1037-1058`) calls it when the department changes (`:1044`); `apps/server/src/move-bill.ts` `adoptZone` (`:596-620`) calls it in its new-context branch (`:606-607`), in both cases before `adoptZone`'s own send (`:614-620`); `packages/venue-service/src/errors.ts`
+- Test: `packages/venue-service/src/department-transfers.test.ts`, `apps/server/src/department-transfer-api.test.ts`, `apps/server/src/table-actions*.test.ts` (whole-table move), `apps/server/src/move-bill*.test.ts` (a move within one department)
 
-**Produces:** `applyDepartmentDining(tx: Transaction, workingOrderId: string, departmentId: string, zoneId: string): Promise<void>`, on the port. No regional distinction: nothing. Not locked: `dining` becomes the department's fixed way, or for `till_choice` its `startsAs` (`eat_in` for a table zone); becoming takeaway with a set lunch refused `order.set_lunch_takeaway { canSwitch: false }`. Locked: kept; a department fixed the other way refused `order.department_dining_differs { dining, departmentDining }`.
+**Produces:** `applyDepartmentDining(tx: Transaction, workingOrderId: string, departmentId: string): Promise<void>`, on the port. No regional distinction: nothing. Not locked: a department fixed one way gives `dining` that way; a `till_choice` department leaves `dining` as it is (Decision 6: a move never switches the way by itself, whatever the zone); becoming takeaway with a set lunch refused `order.set_lunch_takeaway { canSwitch: false }`. Locked: kept; a department fixed the other way refused `order.department_dining_differs { dining, departmentDining }`. A move that leaves the department as it is calls nothing and changes nothing.
 
-- [ ] **Step 1: failing tests.** An unsent counter order from a takeaway department accepted into an eat-in department becomes `eat_in`; a sent takeaway order into an eat-in department refused `order.department_dining_differs`, also through the route; a sent takeaway order into a `till_choice` department keeps `takeaway`. A whole-table move holding one locked takeaway bill into an eat-in department's zone is refused for the whole table, and the refusal names that bill.
-- [ ] **Step 2–4:** run (fail), implement, pass; also `apps/server/src/move-bill*.test.ts`.
+- [ ] **Step 1: failing tests.** An unsent counter order from a takeaway department accepted into an eat-in department becomes `eat_in`; an unsent takeaway counter order moved to a table zone of a `till_choice` department keeps `takeaway`; a sent takeaway order into an eat-in department refused `order.department_dining_differs`, also through the route; a sent takeaway order into a `till_choice` department keeps `takeaway`. Within one `till_choice` department (owner, 14 November 2026): an unsent pay-first takeaway counter order moved by `POST /api/bills/:id/move` to a seated table keeps `dining = "takeaway"`, the move has sent its dishes (a `ticket_items` row exists), and the till's order read gives `dining: "takeaway"`, `diningChoice: "locked"`. Moving a whole takeaway bill from one table to another in the same department keeps `takeaway` (Decision 5). A whole-table move holding one locked takeaway bill into an eat-in department's zone is refused for the whole table, and the refusal names that bill.
+- [ ] **Step 2–4:** run (fail), implement, pass.
 - [ ] **Step 5:** commit: "Keep an order's way of selling right when it moves to another department (A1522)".
 
-**End of PR 2.** `/finish-branch`, full wave (fiscal risk trigger: two Codex run-it seats).
+**End of PR 2.** First, `/usr/bin/grep -rn A1522_STAND_IN apps packages scripts bench` prints nothing (every stand-in of Task 10 is gone from code). Then `/finish-branch`, full wave (fiscal risk trigger: two Codex run-it seats).
 
 ---
 
@@ -308,12 +313,12 @@ Starts only once Task 1's note says no marker is needed.
 ### Task 17: the department settings show "How it sells"
 
 **Files:**
-- Modify: `packages/venue-service/src/routes.ts` (`requireSalePolicyField` `:151-165`; `PUT .../departments/:departmentId/settings` `:730-794` accepts `dining` and `diningStartsAs`), `operations.ts` (`DepartmentEditInput` `:659-670`, `saveDepartmentEditSettings` `:672-705`)
+- Modify: `packages/venue-service/src/routes.ts` (`requireSalePolicyField` `:151-165`; `PUT .../departments/:departmentId/settings` `:730-794` accepts `dining` and `diningStartsAs`), `operations.ts` (`DepartmentEditInput` `:647-658`, `saveDepartmentEditSettings` `:660-693`, which saves while the department has open orders and leaves their `dining` alone, Decision 10)
 - Modify: `packages/venue-service/src/dashboard/service-settings-fields.ts` (two `wt-combobox search="never"`: **How it sells** — Eaten in / Taken away / Chosen on the till; **Starts as** — Eaten here / Taken away, only for Chosen on the till), `department-settings.ts` (`fieldTab`, `equal()`, draft, `fieldRefusal`, `save()`), `client.ts:27-52,305-314`, `strings.ts`
 - Modify: `apps/server/src/guide/en/table-service.md` and `es/table-service.md`: new section `{#eat-here-or-take-away}` (shared id), written from the code
 - Test: `routes.test.ts`, `service-settings-fields.test.ts`, `service-settings-fields.a11y.test.ts`, `department-settings.test.ts`, `department-settings.unsaved.test.ts`
 
-- [ ] **Step 1: failing tests.** The route saves `{ dining: "till_choice", diningStartsAs: "takeaway" }` and refuses `dining: "sometimes"` naming the field. With `takeawayVat` true the Service tab shows How it sells (Eaten in for a new department); Chosen on the till reveals Starts as; changing only these enables Save; leaving asks about unsaved changes. With `takeawayVat` false neither is drawn. Axe passes in both themes with Starts as shown.
+- [ ] **Step 1: failing tests.** The route saves `{ dining: "till_choice", diningStartsAs: "takeaway" }` and refuses `dining: "sometimes"` naming the field. Saving `dining: "eat_in"` while the department holds an open takeaway order succeeds, and that order's `dining` stays `takeaway`. With `takeawayVat` true the Service tab shows How it sells (Eaten in for a new department); Chosen on the till reveals Starts as; changing only these enables Save; leaving asks about unsaved changes. With `takeawayVat` false neither is drawn. Axe passes in both themes with Starts as shown.
 - [ ] **Step 2–4:** run (browser mode; check free memory), implement, pass; plus `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`. Look at the dialog in both themes and at phone width.
 - [ ] **Step 5:** commit: "Show and save how each department sells (A1522)".
 
@@ -322,22 +327,23 @@ Starts only once Task 1's note says no marker is needed.
 **Files:**
 - Modify: `apps/server/src/till-setup.ts:35-117` (`readSetupFields` gains `takeawayVat: boolean`, so it refreshes through `setupRevision`)
 - Modify: the zone catalogue read that builds `ZoneOfferCatalogue.context` (from `apps/server/src/till-api.ts`), gaining `dining: { policy: DiningPolicy; startsAs: Dining } | null` (null without the regional distinction). It refreshes when a department changes: `department_sale_policies` is in the till's live `menu` group (`apps/till/src/api/live-connection.ts:141-158`); the test pins it.
-- Modify: `apps/till/src/api/client.ts` (context and order types; `switchDining(orderId, dining, revision)`; the sale, park and pay bodies send `dining` only when the context's policy is `till_choice`), `apps/till/src/state/working-order.ts` (`dining`, `setDining`)
-- Test: `apps/till/src/state/working-order.test.ts`, the client test that pins request bodies, `apps/server/src/till-setup.test.ts`
+- Modify: `apps/till/src/api/client.ts` (context and order types; `switchDining(orderId, dining, revision, expectedEdit)`; the sale, pay, park and round bodies always send `dining`, in every department: the way the screen shows, Decision 11), `apps/till/src/state/working-order.ts` (`dining`, `setDining`)
+- Modify: `apps/server/src/till-api.ts`: the routes Task 11 lists now require `dining` and refuse a request without it, naming the field, as they refuse other missing fields
+- Test: `apps/till/src/state/working-order.test.ts`, the client test that pins request bodies, `apps/server/src/till-setup.test.ts`, `apps/server/src/order-dining.start.test.ts`
 
-**Produces:** `WorkingOrder.dining: Dining`; `WorkingOrder.setDining(dining: Dining): void` for an unsaved draft (a saved order switches through `switchDining`). No till-side VAT pricing change: the till's `vatBreakdown` is shown on no screen.
+**Produces:** `WorkingOrder.dining: Dining`; for a retrieved order it is the order read's `dining`, never the department's (Decision 10). `WorkingOrder.setDining(dining: Dining): void` for an unsaved draft (a saved order switches through `switchDining`). No till-side VAT pricing change: the till's `vatBreakdown` is shown on no screen.
 
-- [ ] **Step 1: failing tests.** A draft in a takeaway department starts `takeaway`; in `till_choice` starts as `startsAs` (`eat_in` at a table); the sale body carries `dining` in `till_choice` and omits it in a fixed department; a change of the department's policy arrives through the live `menu` group and updates the next draft; `takeawayVat` changes `setupRevision`.
+- [ ] **Step 1: failing tests.** A draft in a takeaway department starts `takeaway`; in `till_choice` starts as `startsAs` (`eat_in` at a table); the sale, pay, park and round bodies carry `dining` in a fixed department and in `till_choice` alike; a retrieved takeaway order in a department since set to `eat_in` holds and sends `takeaway`; each of the server routes refuses a body without `dining`; a change of the department's policy arrives through the live `menu` group and updates the next draft; `takeawayVat` changes `setupRevision`.
 - [ ] **Step 2–4:** run (fail), implement, pass.
 - [ ] **Step 5:** commit: "Let the till hold and send how each order is sold (A1522)".
 
 ### Task 19: the Eat here / Take away switch on the order screens
 
 **Files:**
-- Modify: `apps/till/src/screens/till-counter-screen.ts` (`#gridBody` `:391-446`), `till-table-order-screen.ts` (beside `#viewSwitch` `:3092-3120`): a `wt-segmented-control` **Eat here** / **Take away** when `diningChoice` is `"open"` or for a draft in a `till_choice` department; a label of the current way when `"locked"`; the label **Take away** in a takeaway department; nothing in an eat-in department
+- Modify: `apps/till/src/screens/till-counter-screen.ts` (`#gridBody` `:391-446`), `till-table-order-screen.ts` (beside `#viewSwitch` `:3092-3120`): a `wt-segmented-control` **Eat here** / **Take away** when `diningChoice` is `"open"` or for a draft in a `till_choice` department; otherwise a label of the order's own `dining` (Decision 10), except nothing for an eat-in order whose department sells eaten in or whose region has no distinction. Only whether the switch is offered comes from the department.
 - Test: `apps/till/src/screens/till-counter-screen.test.ts`, `till-table-order-screen.test.ts`
 
-- [ ] **Step 1: failing tests.** Each of the four displays; choosing Take away emits the screen's change event with `"takeaway"`.
+- [ ] **Step 1: failing tests.** The switch (open, and a draft in `till_choice`); a locked order's label; **Take away** for a takeaway order in a takeaway department; nothing for an eat-in order in an eat-in department. The two department-change cases: a takeaway order whose department is now eaten in shows the label **Take away**; an eat-in order whose department is now taken away shows **Eat here**, not Take away. Choosing Take away emits the screen's change event with `"takeaway"`.
 - [ ] **Step 2–4:** run (browser mode), implement, pass. Look at both screens in both themes and at phone width.
 - [ ] **Step 5:** commit: "Show Eat here or Take away on the till's order screens (A1522)".
 
@@ -349,21 +355,22 @@ Starts only once Task 1's note says no marker is needed.
 - Modify: `apps/server/src/guide/en/table-service.md`, `es/` `{#eat-here-or-take-away}`: one or two sentences on the till side
 - Test: create `apps/till/src/till-app-dining.test.ts`
 
-- [ ] **Step 1: failing tests.** Tapping Take away on a saved order sends `PUT /api/working-orders/:id/dining` with the order's revision and shows the label the server returns; on a draft it sends nothing until the sale, whose body carries `takeaway`. A set lunch on a takeaway order shows the refusal with Switch to eat here; choosing it leaves the order eat-in with the set lunch added; with `canSwitch` false the action is absent. Each new code renders its own sentence, not "The server needs attention". Use `userEvent.click`.
+- [ ] **Step 1: failing tests.** Tapping Take away on a saved order sends `PUT /api/working-orders/:id/dining` with the order's revision and its `expectedEdit`, and shows the label the server returns; on a draft it sends nothing until the sale, whose body carries `takeaway`. A set lunch on a takeaway order shows the refusal with Switch to eat here; choosing it leaves the order eat-in with the set lunch added; with `canSwitch` false the action is absent. Each new code renders its own sentence, not "The server needs attention". Use `userEvent.click`.
 - [ ] **Step 2–4:** run (browser mode), implement, pass.
 - [ ] **Step 5:** commit: "Switch an order between eat here and take away from the till (A1522)".
 
-### Task 21: the kitchen ticket and the customer's documents say Take away
+### Task 21: the kitchen ticket, the kitchen screens and the customer's documents say Take away
 
 **Files:**
-- Modify: `apps/server/src/kitchen-print.ts` / `kitchen-ticket.ts` (a **TAKE AWAY** line at the top of a takeaway order's ticket, in the ticket's language)
+- Modify: `apps/server/src/kitchen-print.ts` / `kitchen-ticket.ts` (a **TAKE AWAY** line at the top of every kitchen paper for a takeaway order, in the ticket's language through `kitchenTicketWords`, `apps/server/src/i18n/kitchen-ticket.ts:84`: `formatKitchenTicket` `:412`, which also prints the FIRE and HOLD marks and a reprint's line, `:430-435`, and `formatCorrectionSlip` `:585`, for every `CorrectionSlip` kind, `:502-519`)
+- Modify (Decision 12): `apps/server/src/working-order.ts` `StationQueueGroup` (`:7990`, filled by `listStationQueues` `:8315`) and the pass's `readPassRows` (`:8608`) feeding `PassCard.orders` (`apps/server/src/pass-card.ts:78`) gain `dining`; the till's copies of those types (`apps/till/src/api/client.ts` `StationQueueGroup` `:1680`, `PassCard` `:1974`); `apps/till/src/screens/till-station-screen.ts` and `till-pass-screen.ts` show **Take away** on a takeaway order's heading; `apps/server/src/guide/en/kitchen-service.md` and `es/kitchen-service.md`, section `{#kitchen-screen}`: one sentence that a takeaway order's paper and screen heading say Take away, so it is packed
 - Modify: `packages/country/src/country.ts` `RECEIPT_LABEL_KEYS` and every country pack's receipt label sets (`packages/country-es/src/spain.ts`, `packages/country-gb/src/united-kingdom.ts`) — a `takeAway` label
 - Modify: `apps/server/src/receipt-document.ts:140` (a **Take away** line on a takeaway sale, the order read through `sales.working_order_id`), `apps/till/src/screens/till-ticket-view.ts` (the on-screen receipt), `apps/server/src/invoice-document.ts` and `invoice-email.ts` (the A4 and emailed invoice)
-- Test: `apps/server/src/kitchen-ticket.test.ts`, `receipt-document.test.ts`, `receipt-ticket.test.ts`, `invoice-document.test.ts`, `apps/till/src/screens/till-ticket-view*.test.ts`
+- Test: `apps/server/src/kitchen-ticket.test.ts`, `receipt-document.test.ts`, `receipt-ticket.test.ts`, `invoice-document.test.ts`, `apps/till/src/screens/till-ticket-view*.test.ts`, `till-station-screen.test.ts`, `till-pass-screen.test.ts`, and the server tests of the station and pass reads
 
-- [ ] **Step 1: failing tests.** A takeaway order's kitchen ticket has the takeaway line and an eat-in one does not; a takeaway sale's receipt, on-screen receipt and A4 invoice say "Take away" in English and "Para llevar" in Spanish, an eat-in one neither; the per-line rate column is unchanged.
-- [ ] **Step 2–4:** run (fail), implement, pass; also `src/lunch-receipt.test.ts`. Render one printed receipt to a file and open it with the workspace's Playwright Chromium to look at it.
-- [ ] **Step 5:** commit: "Print Take away on a takeaway order's kitchen ticket, receipt and invoice (A1522)".
+- [ ] **Step 1: failing tests.** For a takeaway order each kind of kitchen paper has the takeaway line, named one by one: the first ticket, a FIRE ticket, a HOLD ticket, a reprint, and a correction slip of each `CorrectionSlip` kind; for an eat-in order none does. The ticket a move sends for a takeaway counter order moved to a table (Task 16) has the line. The station queue and the pass read carry `dining`; the station and pass screens show Take away on a takeaway order's heading and nothing on an eat-in one; a takeaway sale's receipt, on-screen receipt and A4 invoice say "Take away" in English and "Para llevar" in Spanish, an eat-in one neither; the per-line rate column is unchanged.
+- [ ] **Step 2–4:** run (fail; the screen tests in browser mode, check free memory first), implement, pass; also `src/lunch-receipt.test.ts`, `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`. Render one printed receipt to a file and open it with the workspace's Playwright Chromium to look at it; look at the station and pass screens in both themes and at phone width.
+- [ ] **Step 5:** commit: "Show Take away on a takeaway order's kitchen paper and screens, receipt and invoice (A1522)".
 
 ### Task 22: the demo deli sells the ordinary drinks to take away
 
