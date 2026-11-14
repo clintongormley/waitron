@@ -306,11 +306,12 @@ declare module "@waitron/shared" {
     "fiscal.environment_unknown": { registroId: string; hostEnvironment: string };
 
     /**
-     * Thrown by `VerifactuBackend.recordCorrection` (./backend.ts) when the sale being corrected is
-     * not an `F2`. Only `F2 → R5` is supported; rectifying an `F1` is an `R1`, and filing the wrong
-     * rectificativa is unrepairable, so this refuses rather than mis-types it. Also thrown, with
-     * `replaces: true`, for a corrective by replacement of anything but an `F2` whose latest version
-     * AEAT refused. `tipoFactura` is the original's type.
+     * Thrown by `VerifactuBackend.recordCorrection` (./backend.ts) when the alta being corrected is
+     * neither an `F2` nor an R5 by replacement (`TipoRectificativa` "S"), which stands in for the
+     * `F2` it replaced. Rectifying an `F1` is an `R1`, and filing the wrong rectificativa is
+     * unrepairable, so this refuses rather than mis-types it. Also thrown, with `replaces: true`, for
+     * a replacement of anything but an `F2` whose every stored record AEAT refused, none with code
+     * `3000`. `tipoFactura` is the original's type.
      */
     "fiscal.correction_unsupported": { saleId: string; tipoFactura: string; replaces?: true };
 

@@ -2926,6 +2926,8 @@ That is not decided, and it should be settled before the correction screen is de
 already settled and not asked here. A void (*anulación*) is only for an invoice that should never
 have existed ([verifactu-findings.md](verifactu-findings.md) §7; Q25 asks about its VAT period).
 And tickets and full invoices need separate series (Q5).
+*(2026-11-14, Q37-FIX: the backend also files "S", a replacement, for a simplified invoice AEAT
+refused — Q37; a correction of an accepted invoice is still by differences.)*
 
 > Nuestro TPV podrá corregir un ticket ya emitido (factura simplificada) mediante una factura
 > rectificativa (R5). Hoy la rectificativa se emite por diferencias: sólo recoge el importe que

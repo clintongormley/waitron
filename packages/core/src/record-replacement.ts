@@ -41,8 +41,9 @@ export interface RecordReplacementInput {
 /**
  * Records a corrective invoice by replacement: a new invoice, numbered from the rectificative
  * series, carrying the original's own total, stored VAT split and lines in its place. It takes no
- * amounts from the caller. Every refusal comes before a number is allocated; a failed integrity
- * check records an incident and the replacement proceeds anyway, as for any corrective.
+ * amounts from the caller. Its own refusals come before a number is allocated; the fiscal backend's
+ * come after it, inside the same transaction. A failed integrity check records an incident and
+ * the replacement proceeds anyway, as for any corrective.
  */
 export async function recordReplacement(
   tx: Transaction,

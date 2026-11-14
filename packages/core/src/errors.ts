@@ -29,8 +29,8 @@ declare module "@waitron/shared" {
      * retryable. `recordSale`'s immediate settlement runs the same `settleSale`. */
     "sale.tender_unsettled": { deviceId: string | null; saleId: string; unsettledCount: number };
     /** Every tender has settled, but `sum(amount) = total + sum(corrections) + sum(tip_amount)`
-     * does not hold, where the corrections are the signed totals of this sale's corrective
-     * invoices. Fires on overpayment as well as shortfall. The `sale_settlements_check_coverage`
+     * does not hold, where the corrections are the signed totals of the correctives
+     * `correctivesOf` lists (a replacement left out, its own correctives in). Fires on overpayment as well as shortfall. The `sale_settlements_check_coverage`
      * trigger checks the same identity. */
     "sale.tender_shortfall": {
       deviceId: string | null;

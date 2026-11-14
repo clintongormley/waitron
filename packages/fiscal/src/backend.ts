@@ -425,7 +425,7 @@ export interface FiscalBackend {
 
   /**
    * Records a corrective invoice of a prior sale. `sale` is the corrective invoice's OWN data — its
-   * own number and its own negative total and breakdown — while `correction.correctsSaleId` names
+   * own number and its own signed total and breakdown — while `correction.correctsSaleId` names
    * the sale being corrected. With `replaces`, the corrective is by replacement: `sale` carries the
    * invoice's full, correct amounts in place of the original's rather than a change to them, and
    * `operationDate` (a calendar day, `YYYY-MM-DD`) is the day the original sale really happened.

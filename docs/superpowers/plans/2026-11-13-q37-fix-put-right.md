@@ -312,7 +312,7 @@ lines, grouped):
 
 | Reader | What it does with correctives | Decision | Task |
 | --- | --- | --- | --- |
-| `packages/reporting/src/vat-return.ts:39` via `activeSalesClause` (`business-day.ts:217-220`) | counts every sale, correctives included | count the replacement, leave out a replaced original (E) | 3b-1 |
+| `packages/reporting/src/vat-return.ts:39` via `activeSalesClause` (`business-day.ts:217-220`) | counts every sale, correctives included | leave out the replacement; the original carries the sale (owner's answer E) | 3b-1 |
 | `issuedSalesClause` / `reversedSalesClause` (`business-day.ts:229-244`): `vat-summary.ts:111,127`, `counts.ts:18-21`, `category-sales.ts:208,216`, `top-sellers.ts:71,78` | count correctives as rows on their day | leave out the replacement | 3b-1 |
 | `top-sellers.ts:105` | nets corrective lines against the invoice line they name | none needed: replacement lines name no line (`correctsLineId` null, Task 3a); a later refund names the replacement's lines, which are counted on the replacement's day — the replacement itself is out, so test that a refund of a replaced sale nets against nothing it should not | 3b-1 |
 | `apps/server/src/accountant-export.ts:194-212`, `:110` | one row per invoice, type "corrective" | replacement row typed `replacement`, whose label says not to add it; the replaced original keeps its own type (M8 below) | 3b-1 |
@@ -341,7 +341,7 @@ lines, grouped):
 "replacement" row counts toward any total only if the accountant sums the column. Both rows stay
 in the file — the refused original and its replacement are both invoices the venue keeps (owner,
 Q37(c)). Amended 2026-11-14 after review, to follow answer E: the original keeps its ordinary type,
-and the replacement's type reads "Replacement — do not add (repeats the original)" / "Rectificativa
+and the replacement's type reads "Replacement corrective — do not add (repeats the original)" / "Rectificativa
 por sustitución — no sumar (repite la original)", so the file itself says which row counts; the
 "Original invoice number" column names the original.
 

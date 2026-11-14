@@ -112,9 +112,10 @@ type OriginalAlta = Pick<
 /**
  * The columns `recordCorrection` reads off the alta being corrected. Narrower than `OriginalAlta`
  * in one axis and wider in another: no origin (the corrective's OWN `sale` carries it, unlike a
- * void which must recover it), but `tipo_factura` too — the R-type is derived
- * from it (F2 → R5), so it is read here rather than assumed. The three identity columns feed
- * `FacturasRectificadas` directly, the same shortcut `recordVoid` takes for the anulada identity.
+ * void which must recover it), but `tipo_factura` too — the R-type is derived from it (F2 → R5;
+ * an R5 by replacement is corrected like the F2 it replaced), so it is read here rather than
+ * assumed. The three identity columns feed `FacturasRectificadas` directly, the same shortcut
+ * `recordVoid` takes for the anulada identity.
  */
 type OriginalAltaForCorrection = Pick<
   RegistroRow,
