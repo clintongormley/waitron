@@ -90,6 +90,9 @@ export class SalesScreen extends LitElement {
         gap: var(--wt-space-4);
         margin-bottom: var(--wt-space-4);
       }
+      .table-scroll {
+        overflow-x: auto;
+      }
       table {
         width: 100%;
         border-collapse: collapse;
@@ -756,7 +759,8 @@ export class SalesScreen extends LitElement {
     return html`
       <div data-test="daily-close">
         ${renderDepartmentTakings(close.departmentTakings)}
-        ${this.#renderTender(close.cash, close.closureSummary)} ${this.#renderVat(close.vat)}
+        ${this.#renderTender(close.cash, close.closureSummary)} ${this.#renderOutside(close)}
+        ${this.#renderVat(close.vat)}
         <h2>${t("sales.counts_title")}</h2>
         <div class="counts" data-test="counts">
           ${renderMetric(
@@ -772,6 +776,51 @@ export class SalesScreen extends LitElement {
         ${renderTopSellers(close.topSellers, this.#topSellerLabels())}
       </div>
     `;
+  }
+
+  #renderOutside(close: DailyCloseDto): TemplateResult | typeof nothing {
+    if (close.outsidePayments.length === 0) return nothing;
+    return html` <h2>${t("sales.outside_title")}</h2>
+      <p class="muted">${t("sales.outside_current")}</p>
+      <div
+        class="table-scroll"
+        data-test="outside-payments"
+        role="region"
+        aria-label=${t("sales.outside_title")}
+        tabindex="0"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">${t("sales.outside_bill")}</th>
+              <th scope="col">${t("sales.outside_time")}</th>
+              <th scope="col">${t("sales.outside_source")}</th>
+              <th scope="col">${t("sales.outside_machine")}</th>
+              <th scope="col">${t("sales.outside_operation")}</th>
+              <th scope="col">${t("sales.amount")}</th>
+              <th scope="col">${t("sales.outside_state")}</th>
+              <th scope="col">${t("sales.outside_refunded")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${close.outsidePayments.map(
+              (payment) =>
+                html`<tr>
+                  <th scope="row">${payment.workingOrderId}<br />${payment.invoiceNumber ?? ""}</th>
+                  <td>${payment.settledAt}</td>
+                  <td>
+                    ${payment.externalProvider === null ? "—" : t(`sales.outside_${payment.externalProvider}`)}
+                  </td>
+                  <td>${payment.externalMachine ?? "—"}</td>
+                  <td>${payment.externalRef ?? "—"}</td>
+                  <td class="num">${money(payment.amount)}</td>
+                  <td>${t(`sales.outside_${payment.state}`)}</td>
+                  <td class="num">${money(payment.refunded)}</td>
+                </tr>`,
+            )}
+          </tbody>
+        </table>
+      </div>`;
   }
 
   #renderPeriod(period: SalesPeriodDto): TemplateResult {

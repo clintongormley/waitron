@@ -1,3 +1,5 @@
+import { listOutsidePayments } from "./outside-payments-report.js";
+import { validatedRangeWindow } from "@waitron/reporting";
 import { tableInService } from "@waitron/db";
 import "./errors.js";
 import type { Hono } from "hono";
@@ -387,11 +389,21 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           limit: 10,
         });
         const cash = await namedCashUp(tx, close.cash);
+        const outsidePayments = await listOutsidePayments(
+          tx,
+          validatedRangeWindow({
+            ...input,
+            fromBusinessDay: businessDay,
+            toBusinessDay: businessDay,
+          }),
+          nodeIds,
+        );
         const closureSummary = summariseClosures(close);
         return {
           businessDay,
           vat: close.vat,
           cash,
+          outsidePayments,
           closureSummary,
           departmentTakings: close.departmentTakings,
           counts: close.counts,

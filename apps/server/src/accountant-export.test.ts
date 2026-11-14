@@ -73,10 +73,66 @@ const purchase = {
 };
 
 describe("accountant workbook", () => {
+  it.each(["en", "es"] as const)(
+    "exports outside payments as literal detail cells (%s)",
+    async (language) => {
+      const files = unzipSync(
+        await renderAccountantWorkbook(
+          {
+            invoices: [],
+            purchases: [],
+            outsidePayments: [
+              {
+                id: "payment-1",
+                workingOrderId: "bill-1",
+                saleId: "sale-1",
+                invoiceNumber: "A/1",
+                nodeId: "box-1",
+                amount: decimal("12.34"),
+                refunded: decimal("3.03"),
+                settledAt: "2026-11-03T12:00:00.000Z",
+                externalProvider: "other",
+                externalMachine: "=Backup & 001",
+                externalRef: "00042",
+                state: "partially_refunded",
+              },
+            ],
+          },
+          language,
+        ),
+      );
+      expect(files["xl/worksheets/sheet3.xml"]).toBeDefined();
+      const xml = strFromU8(files["xl/worksheets/sheet3.xml"]!);
+      expect(row(xml, 2)).toEqual([
+        "payment-1",
+        "bill-1",
+        "sale-1",
+        "A/1",
+        "box-1",
+        "2026-11-03T12:00:00.000Z",
+        "12.34",
+        language === "en" ? "Paid outside Waitron" : "Pagado fuera de Waitron",
+        "=Backup &amp; 001",
+        "00042",
+        language === "en" ? "Partially refunded" : "Reembolsado parcialmente",
+        "3.03",
+      ]);
+      expect(xml).not.toContain("<f>");
+      expect(strFromU8(files["xl/workbook.xml"]!)).toContain(
+        language === "en" ? 'name="Other card machines"' : 'name="Otros terminales"',
+      );
+      expect(strFromU8(files["[Content_Types].xml"]!)).toContain("/xl/worksheets/sheet3.xml");
+      expect(strFromU8(files["xl/_rels/workbook.xml.rels"]!)).toContain("worksheets/sheet3.xml");
+    },
+  );
   it("yields to another event-loop turn before completing a large workbook", async () => {
     const encoding = Promise.resolve(
       renderAccountantWorkbook(
-        { invoices: Array.from({ length: 10_000 }, () => invoice), purchases: [] },
+        {
+          invoices: Array.from({ length: 10_000 }, () => invoice),
+          purchases: [],
+          outsidePayments: [],
+        },
         "en",
       ),
     );
@@ -90,7 +146,11 @@ describe("accountant workbook", () => {
   it("keeps a zero-total invoice with no recorded VAT groups, leaving its missing VAT facts blank", async () => {
     const files = unzipSync(
       await renderAccountantWorkbook(
-        { invoices: [{ ...invoice, vatBreakdown: [], total: decimal("0.00") }], purchases: [] },
+        {
+          invoices: [{ ...invoice, vatBreakdown: [], total: decimal("0.00") }],
+          purchases: [],
+          outsidePayments: [],
+        },
         "en",
       ),
     );
@@ -99,13 +159,16 @@ describe("accountant workbook", () => {
     expect(cells.slice(11, 15)).toEqual(["", "", "", "0.00"]);
   });
   it.each(["en", "es"] as const)(
-    "opens two header-only sheets when the period is empty (%s)",
+    "opens three header-only sheets when the period is empty (%s)",
     async (language) => {
-      const bytes = await renderAccountantWorkbook({ invoices: [], purchases: [] }, language);
+      const bytes = await renderAccountantWorkbook(
+        { invoices: [], purchases: [], outsidePayments: [] },
+        language,
+      );
       expect([...bytes.subarray(0, 4)]).toEqual([80, 75, 3, 4]);
       const files = unzipSync(bytes);
       const workbook = strFromU8(files["xl/workbook.xml"]!);
-      expect(workbook.match(/<sheet /g)).toHaveLength(2);
+      expect(workbook.match(/<sheet /g)).toHaveLength(3);
       expect(workbook).toContain(
         language === "en"
           ? 'name="Issued invoices"'
@@ -147,6 +210,7 @@ describe("accountant workbook", () => {
             },
           ],
           purchases: [],
+          outsidePayments: [],
         },
         "en",
       ),
@@ -205,6 +269,7 @@ describe("accountant workbook", () => {
       await renderAccountantWorkbook(
         {
           invoices: [],
+          outsidePayments: [],
           purchases: [
             purchase,
             { ...purchase, id: "purchase-2", total: decimal("23.10") },
@@ -260,6 +325,7 @@ describe("accountant workbook", () => {
               customerAddress: "@SUM(A1:A2)\tRoad\nFlat 1\r",
             },
           ],
+          outsidePayments: [],
           purchases: [
             {
               ...purchase,
@@ -393,7 +459,11 @@ describe("accountant period selection", () => {
         voidedAt: null,
       },
     ]);
-    expect(await list("2027-01-01", "2027-01-01")).toEqual({ invoices: [], purchases: [] });
+    expect(await list("2027-01-01", "2027-01-01")).toEqual({
+      invoices: [],
+      purchases: [],
+      outsidePayments: [],
+    });
   });
 
   it("links signed corrections outside the period, retains original tickets and flags later voids", async () => {

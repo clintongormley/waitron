@@ -12,6 +12,22 @@ import { today } from "../date-utils.js";
 import { t } from "../i18n/t.js";
 
 const close: DailyCloseDto = {
+  outsidePayments: [
+    {
+      id: "p1",
+      workingOrderId: "bill-1",
+      saleId: null,
+      invoiceNumber: null,
+      nodeId: "box-1",
+      settledAt: "2026-11-03T12:00:00.000Z",
+      amount: "12.34",
+      refunded: "0.00",
+      externalProvider: null,
+      externalMachine: null,
+      externalRef: null,
+      state: "captured",
+    },
+  ],
   businessDay: "2026-08-29",
   vat: {
     byRate: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
