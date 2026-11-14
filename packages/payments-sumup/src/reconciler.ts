@@ -5,6 +5,8 @@ import {
   existingReferences,
   listAuditCandidates,
   listBackupPayments,
+  listRefundAuditRows,
+  listPaymentAuditRuns,
   reconcilePayments,
 } from "@waitron/payments";
 import type {
@@ -34,14 +36,46 @@ export class SumUpReconciler implements PaymentReconciler {
       from: new Date(period.from.getTime() - ms),
       to: new Date(period.to.getTime() + ms),
     });
-    const { candidates, nearbyCandidates, manual } = await withTransaction(
-      this.deps.db,
-      async (tx) => ({
-        candidates: await listAuditCandidates(tx, this.provider, period),
-        nearbyCandidates: await listAuditCandidates(tx, this.provider, pad(600_000)),
-        manual: await listBackupPayments(tx, pad(600_000)),
-      }),
-    );
+    const { candidates, nearbyCandidates, manual, refundRows, backupRefundRefs } =
+      await withTransaction(this.deps.db, async (tx) => {
+        const refundRows = await listRefundAuditRows(tx, this.provider, period);
+        const manualRefs = new Set(
+          refundRows
+            .filter(
+              (row) => row.provider === "manual" && row.externalProvider === "connected_account",
+            )
+            .map((row) => row.paymentRef),
+        );
+        const prior = await listPaymentAuditRuns(
+          tx,
+          this.provider,
+          refundRows.flatMap((row) =>
+            manualRefs.has(row.paymentRef) && row.settledAt !== null
+              ? [-300_000, 0, 300_000].map(
+                  (offset) =>
+                    `${new Date(Date.parse(row.settledAt!) + offset).toISOString().slice(0, 10)}T00:00:00.000Z`,
+                )
+              : [],
+          ),
+        );
+        const links = new Map<string, Set<string>>();
+        for (const run of prior)
+          for (const match of (run.summary?.backupMatches ?? []) as BackupPaymentMatch[])
+            if (manualRefs.has(match.paymentRef))
+              links.set(
+                match.paymentRef,
+                new Set([...(links.get(match.paymentRef) ?? []), ...match.references]),
+              );
+        return {
+          candidates: await listAuditCandidates(tx, this.provider, period),
+          nearbyCandidates: await listAuditCandidates(tx, this.provider, pad(600_000)),
+          manual: await listBackupPayments(tx, pad(600_000)),
+          refundRows,
+          backupRefundRefs: [...links.values()].flatMap((refs) =>
+            refs.size === 1 ? [...refs] : [],
+          ),
+        };
+      });
     const source = sumupSettlementReport(client, nearbyCandidates);
     const originalCandidates = new Set(candidates.map((row) => row.paymentRef));
     const thisDb = this.deps.db;
@@ -144,14 +178,31 @@ export class SumUpReconciler implements PaymentReconciler {
       await originalDay.fetch(period);
       unreadableUnlinked = originalDay.unreadableUnlinked;
     }
+    const refundEvidence = await source.fetchRefundEvidence(
+      [
+        ...backupRefundRefs,
+        ...backupMatches
+          .filter((match) =>
+            refundRows.some(
+              (row) => row.provider === "manual" && row.paymentRef === match.paymentRef,
+            ),
+          )
+          .flatMap((match) => match.references),
+        ...refundRows.flatMap((row) =>
+          row.provider === this.provider && row.externalRef !== null ? [row.externalRef] : [],
+        ),
+      ],
+      now,
+    );
     return {
       ...result,
+      refundEvidence,
       backupMatches,
       backupUnmatched,
       unlinkedCharges:
         unreadableUnlinked +
         result.missingLocal.filter((row) => row.workingOrderId === null).length,
-      ...(candidates.some((row) => row.state === "attempting")
+      ...(source.retryRefunds || candidates.some((row) => row.state === "attempting")
         ? { resweepAfter: new Date(now.getTime() + 86_400_000) }
         : {}),
     };

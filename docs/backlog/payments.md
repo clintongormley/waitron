@@ -174,11 +174,11 @@ that fallback is not live-qualified. A lost fallback reply has no supplied refer
 Recovery records the gross capture and identified completed refunds together. Uncertain refund
 evidence stays attempting for another check; a failed refund alone leaves the charge. A partly
 refunded unfiled charge keeps the order held. Retaining and allocating the remaining charge after
-a partial refund is still unavailable. Bank-payout audit, refund reconciliation, orphan self-heal, durable reversal attempts
+a partial refund is still unavailable. Bank-payout audit, orphan self-heal, durable reversal attempts
 and backup-machine hardware qualification remain open, along with signature handling.
 
-The daily gross-charge audit is implemented; it does not establish bank arrival or reconcile refunds.
-Bank-payout audit, refund reconciliation and orphan self-heal remain to build. The original transaction can stay
+The daily gross-charge audit and read-only refund comparison do not establish bank arrival.
+Bank-payout audit and orphan self-heal remain to build. The original transaction can stay
 `SUCCESSFUL` while identified `REFUND` events in `events` and `transaction_events` show money
 returned; its status alone cannot establish what remains collected.
 

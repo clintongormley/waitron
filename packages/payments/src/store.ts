@@ -13,6 +13,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { devices, nowIso, workingOrders } from "@waitron/db";
 import "./errors.js";
 import { payments } from "./schema/payments.js";
+import { scheduledRuns } from "./schema/scheduled-runs.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import { paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
 import { readerHeldBy, readerPaymentInProgress } from "./device-readers.js";
@@ -772,6 +773,120 @@ export async function listBackupPayments(tx: Transaction, period: { from: Date; 
     );
   return rows.map((row) => ({ ...row, amount: centsToDecimal(row.amount) }));
 }
+
+export async function listPaymentAuditRuns(
+  tx: Transaction,
+  provider: string,
+  starts: readonly string[],
+) {
+  const latest = new Map<string, typeof scheduledRuns.$inferSelect>();
+  const dates = [...new Set(starts)];
+  for (let i = 0; i < dates.length; i += CHUNK_SIZE) {
+    const rows = await tx
+      .select()
+      .from(scheduledRuns)
+      .where(
+        and(
+          eq(scheduledRuns.duty, `payments.reconcile.${provider}`),
+          eq(scheduledRuns.state, "succeeded"),
+          inArray(scheduledRuns.periodFrom, dates.slice(i, i + CHUNK_SIZE)),
+        ),
+      );
+    for (const row of rows)
+      if (!latest.has(row.periodFrom) || row.generation > latest.get(row.periodFrom)!.generation)
+        latest.set(row.periodFrom, row);
+  }
+  return [...latest.values()];
+}
+
+export async function listRefundAuditRows(
+  tx: Transaction,
+  provider: string,
+  period: { from: Date; to: Date },
+  processorRefs: readonly string[] = [],
+  paymentRefs: readonly string[] = [],
+) {
+  const successful = tx
+    .select({ paymentId: paymentRefunds.paymentId })
+    .from(paymentRefunds)
+    .where(
+      and(
+        eq(paymentRefunds.state, "succeeded"),
+        gte(paymentRefunds.createdAt, period.from.toISOString()),
+        lt(paymentRefunds.createdAt, period.to.toISOString()),
+      ),
+    );
+  const eligible = or(eq(payments.provider, provider), eq(payments.provider, "manual"));
+  const select = () => tx.select().from(payments);
+  const rows = await select().where(
+    and(
+      eligible,
+      or(
+        inArray(payments.id, successful),
+        and(
+          eq(payments.state, "voided"),
+          gte(payments.updatedAt, period.from.toISOString()),
+          lt(payments.updatedAt, period.to.toISOString()),
+        ),
+      ),
+    ),
+  );
+  for (let i = 0; i < Math.max(processorRefs.length, paymentRefs.length); i += CHUNK_SIZE) {
+    rows.push(
+      ...(await select().where(
+        or(
+          and(
+            eq(payments.provider, provider),
+            inArray(payments.externalRef, [...processorRefs.slice(i, i + CHUNK_SIZE)]),
+          ),
+          and(
+            eq(payments.provider, "manual"),
+            inArray(payments.paymentRef, [...paymentRefs.slice(i, i + CHUNK_SIZE)]),
+          ),
+        ),
+      )),
+    );
+  }
+  const parents = [...new Map(rows.map((row) => [row.id, row])).values()];
+  const refunds: (typeof paymentRefunds.$inferSelect)[] = [];
+  for (let i = 0; i < parents.length; i += CHUNK_SIZE) {
+    refunds.push(
+      ...(await tx
+        .select()
+        .from(paymentRefunds)
+        .where(
+          and(
+            eq(paymentRefunds.state, "succeeded"),
+            inArray(
+              paymentRefunds.paymentId,
+              parents.slice(i, i + CHUNK_SIZE).map((row) => row.id),
+            ),
+          ),
+        )
+        .orderBy(paymentRefunds.createdAt, paymentRefunds.id)),
+    );
+  }
+  return parents.map((row) => ({
+    paymentRef: row.paymentRef,
+    provider: row.provider,
+    workingOrderId: row.workingOrderId,
+    externalRef: row.externalRef,
+    externalProvider: row.externalProvider,
+    externalMachine: row.externalMachine,
+    state: row.state,
+    settledAt: row.settledAt,
+    updatedAt: row.updatedAt,
+    refunds: refunds
+      .filter((refund) => refund.paymentId === row.id)
+      .map((refund) => ({
+        id: refund.id,
+        providerRefundRef: refund.providerRefundRef,
+        amount: centsToDecimal(refund.amount),
+        createdAt: refund.createdAt,
+      })),
+  }));
+}
+export type RefundAuditRow = Awaited<ReturnType<typeof listRefundAuditRows>>[number];
 
 /** Keeps an `IN` list under the engine's bind-parameter ceiling however large the input. */
 export const CHUNK_SIZE = 1000;

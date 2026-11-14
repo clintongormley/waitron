@@ -67,6 +67,15 @@ including tips, within five minutes. Check ambiguous or unmatched charges in Sum
 any correction. The comparison sends no refunds. An incomplete day waits for the remaining daily
 check; the complete day is available after the following UTC midnight’s check.
 
+The refund groups compare the saved SumUp check with your current refund records. Refresh after
+recording an outcome. A confirmed match has the same refund ID and amount; an amount agreement is
+unverified, so check it in SumUp before acting. Compare both dates and the provider checked times.
+An incomplete comparison tells you which evidence is missing; it does not send money or record an
+outcome. If a date or reference is unknown, check in SumUp; entries without a reference may describe
+the same refund. Refunds on other providers, or backup payments without a unique link, appear separately.
+If you refund an older payment in SumUp’s app, check it there too: this view finds it only if SumUp
+lists it on the refund day. That path has not yet been tested with SumUp.
+
 ## Choose documents after paying {#settlement-document}
 
 After the final payment, choose **Receipt**, **Full invoice** or **None**. An edit that finishes

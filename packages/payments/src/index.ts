@@ -45,6 +45,8 @@ export {
   insertInitiated,
   listAttempting,
   listReconcilable,
+  listRefundAuditRows,
+  listPaymentAuditRuns,
   listAuditCandidates,
   listBackupPayments,
   markReconcileRemediated,
@@ -60,6 +62,7 @@ export type {
   CapturedPaymentForOrder,
   PaymentRow,
   ReconcilableRow,
+  RefundAuditRow,
   SettledInitiated,
 } from "./store.js";
 export {
@@ -118,6 +121,7 @@ export type {
   BackupPaymentUnmatched,
   PaymentReconciler,
   ReconcileDeps,
+  RefundEvidence,
   ReconcilePeriod,
   ReversalFn,
   SettlementRecord,

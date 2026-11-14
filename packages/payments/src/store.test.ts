@@ -17,6 +17,7 @@ import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { cardReaders } from "./schema/card-readers.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import { payments } from "./schema/payments.js";
+import { scheduledRuns } from "./schema/scheduled-runs.js";
 import {
   assertReversible,
   associatePaymentWithSale,
@@ -38,6 +39,8 @@ import {
   listAuditCandidates,
   listBackupPayments,
   listReconcilable,
+  listRefundAuditRows,
+  listPaymentAuditRuns,
   markReconcileRemediated,
   recordFailedRefund,
   recordRefund,
@@ -1783,4 +1786,93 @@ it("reads exact gross amounts for same-account backup entries, including later r
       },
     ]);
   });
+});
+
+describe("refund audit facts", () => {
+  it("reads successful refunds across dates for selected parents, including manual entries, without failed attempts", async () => {
+    const seeded = await seedTenant();
+    await capture(seeded, "refund-parent");
+    await capture(seeded, "ignored-parent");
+    await withTransaction(suite.db, async (tx) => {
+      await recordRefund(tx, {
+        provider: "fake",
+        paymentRef: "refund-parent",
+        amount: decimal("2.35"),
+        providerRefundRef: "refund-1",
+      });
+      await recordRefund(tx, {
+        provider: "fake",
+        paymentRef: "refund-parent",
+        amount: decimal("1.25"),
+      });
+      await recordFailedRefund(tx, {
+        provider: "fake",
+        paymentRef: "refund-parent",
+        amount: decimal("3.00"),
+      });
+      await tx.update(paymentRefunds).set({ createdAt: "2026-07-23T12:00:00.000Z" });
+      await tx
+        .update(paymentRefunds)
+        .set({ createdAt: "2026-07-23T12:01:00.000Z" })
+        .where(eq(paymentRefunds.amount, 125));
+    });
+    const period = { from: new Date("2026-07-23T00:00:00Z"), to: new Date("2026-07-24T00:00:00Z") };
+    const rows = await withTransaction(suite.db, (tx) =>
+      listRefundAuditRows(tx, "fake", period, [], []),
+    );
+    expect(
+      rows.map((row) => ({
+        paymentRef: row.paymentRef,
+        state: row.state,
+        refunds: row.refunds.map(({ amount, providerRefundRef }) => ({
+          amount,
+          providerRefundRef,
+        })),
+      })),
+    ).toEqual([
+      {
+        paymentRef: "refund-parent",
+        state: "partially_refunded",
+        refunds: [
+          { amount: "2.35", providerRefundRef: "refund-1" },
+          { amount: "1.25", providerRefundRef: null },
+        ],
+      },
+    ]);
+    await suite.db.update(paymentRefunds).set({ createdAt: "2026-07-22T12:00:00.000Z" });
+    await suite.db
+      .update(payments)
+      .set({ provider: "manual", externalProvider: "connected_account" })
+      .where(eq(payments.paymentRef, "refund-parent"));
+    const late = await withTransaction(suite.db, (tx) =>
+      listRefundAuditRows(tx, "fake", period, [], ["refund-parent"]),
+    );
+    expect(late.map((row) => [row.paymentRef, row.provider, row.refunds.length])).toEqual([
+      ["refund-parent", "manual", 2],
+    ]);
+    expect(
+      await withTransaction(suite.db, (tx) => listRefundAuditRows(tx, "sumup", period, [], [])),
+    ).toEqual([]);
+  });
+});
+
+it("reads only the latest successful payment audit generation for each requested UTC day", async () => {
+  for (const generation of [0, 1, 2])
+    await suite.db.insert(scheduledRuns).values({
+      duty: "payments.reconcile.sumup",
+      periodFrom: "2026-06-01T00:00:00.000Z",
+      periodTo: "2026-06-02T00:00:00.000Z",
+      generation,
+      state: generation === 2 ? "failed" : "succeeded",
+      summary: { generation },
+    });
+  const rows = await withTransaction(suite.db, (tx) =>
+    listPaymentAuditRuns(tx, "sumup", ["2026-06-01T00:00:00.000Z"]),
+  );
+  expect(rows.map((row) => [row.generation, row.summary])).toEqual([[1, { generation: 1 }]]);
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      listPaymentAuditRuns(tx, "stripe", ["2026-06-01T00:00:00.000Z"]),
+    ),
+  ).toEqual([]);
 });

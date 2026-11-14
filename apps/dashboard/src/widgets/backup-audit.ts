@@ -64,6 +64,7 @@ export class BackupAudit extends LitElement {
   }
   override render() {
     const audit = this.audit;
+    const refunds = audit?.refundAudit;
     const charge = (row: { amount: string; settledAt: string; references: string[] }) =>
       html` <p>
           ${formatMoney(decimal(row.amount), currentLocale())} ·
@@ -101,6 +102,45 @@ export class BackupAudit extends LitElement {
           ? html`
               <p>${audit.day} · ${audit.timeZone}</p>
               ${audit.complete ? nothing : html`<p role="status">${t("payments.backup.incomplete")}</p>`}
+              ${
+                refunds
+                  ? html`
+                      <h3>${t("payments.refunds.title")}</h3>
+                      ${refunds.complete ? nothing : html`<p role="status">${t("payments.refunds.incomplete")}</p>`}
+                      ${refunds.checkedAt.map((at) => html`<p>${t("payments.refunds.checked")}: ${new Date(at).toLocaleString(currentLocale(), { timeZone: audit.timeZone })}</p>`)}
+                      ${(["matches", "agreements", "exceptions", "outside"] as const).map(
+                        (group) => html`
+                          <h4>${t(`payments.refunds.${group}`)}</h4>
+                          <ul>
+                            ${refunds[group].map(
+                              (row) =>
+                                html`<li>
+                                  <p>${t(`payments.refunds.${row.reason}`)}</p>
+                                  ${row.providerAt === null && row.localAt === null ? html`<p>${t("payments.refunds.unknown_date")}</p>` : nothing}
+                                  ${row.charge ? html`<p>${t("payments.backup.exceptions")}: ${formatMoney(decimal(row.charge.amount), currentLocale())} · ${new Date(row.charge.settledAt).toLocaleString(currentLocale(), { timeZone: audit.timeZone })}</p>` : nothing}
+                                  <p>
+                                    ${[row.processorRef, row.providerRefundRef, row.paymentRef, row.workingOrderId, row.externalMachine, row.externalRef].filter(Boolean).join(" · ")}
+                                  </p>
+                                  ${(["provider", "local"] as const).map((side) => {
+                                    const amount =
+                                      side === "provider" ? row.providerAmount : row.localAmount;
+                                    const at = side === "provider" ? row.providerAt : row.localAt;
+                                    return amount === null
+                                      ? nothing
+                                      : html`<p>
+                                          ${t(`payments.refunds.${side}`)}:
+                                          ${formatMoney(decimal(amount), currentLocale())}
+                                          ${at ? new Date(at).toLocaleString(currentLocale(), { timeZone: audit.timeZone }) : nothing}
+                                        </p>`;
+                                  })}
+                                </li>`,
+                            )}
+                          </ul>
+                        `,
+                      )}
+                    `
+                  : nothing
+              }
               <h3>${t("payments.backup.matched")}</h3>
               <ul>
                 ${audit.backupMatches.map((row) => html`<li>${charge(row)} ${details(row)}</li>`)}

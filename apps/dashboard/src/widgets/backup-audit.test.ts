@@ -27,6 +27,28 @@ const result = {
       externalRef: "operation-7",
     },
   ],
+  refundAudit: {
+    complete: false,
+    checkedAt: ["2026-07-03T00:05:00.000Z"],
+    matches: [
+      {
+        reason: "confirmed",
+        processorRef: "charge-r",
+        providerRefundRef: "refund-r",
+        paymentRef: "payment-r",
+        workingOrderId: "order-r",
+        externalMachine: null,
+        externalRef: null,
+        providerAmount: "2.35",
+        localAmount: "2.35",
+        providerAt: "2026-07-01T13:00:00.000Z",
+        localAt: "2026-07-01T13:01:00.000Z",
+      },
+    ],
+    agreements: [],
+    exceptions: [],
+    outside: [],
+  },
   backupUnmatched: [
     {
       kind: "recorded",
@@ -125,4 +147,48 @@ it.each(
   await expect.poll(() => el.shadowRoot?.textContent).toContain("Backup Solo");
   await expectNoA11yViolations(host);
   expect(host.scrollWidth).toBeLessThanOrEqual(width);
+  await page.screenshot({
+    path: `__screenshots__/a949-refunds/${locale}-${theme}-${width}.png`,
+    fullPage: true,
+  });
+});
+
+it("shows refund identity, evidence labels and checked times separately from backup payments", async () => {
+  const row = result.refundAudit.matches[0]!;
+  const refundAudit = {
+    ...result.refundAudit,
+    agreements: [{ ...row, reason: "amount_agreement" }],
+    exceptions: [
+      { ...row, reason: "not_found" },
+      { ...row, reason: "not_checked" },
+      {
+        ...row,
+        reason: "missing_reference",
+        processorRef: null,
+        providerRefundRef: null,
+        providerAt: null,
+        localAt: null,
+      },
+      { ...row, reason: "void", providerAt: null, localAt: null },
+    ],
+    outside: [{ ...row, reason: "outside" }],
+  };
+  const { el } = await mountWidget<LitElement>("dashboard-backup-audit", {
+    api: { getBackupAudit: async () => ({ ...result, refundAudit }) },
+  } as never);
+  await expect.poll(() => el.shadowRoot?.textContent).toContain("refund-r");
+  for (const text of [
+    "Confirmed refund matches",
+    "Unverified agreements",
+    "Refunds to check",
+    "Recorded outside this comparison",
+    "Provider detail not found",
+    "Provider checked",
+    "Local record",
+    "SumUp record",
+    "Refund not checked against SumUp yet",
+    "Date unknown",
+    "No reference: check in SumUp. Entries may describe the same refund.",
+  ])
+    expect(el.shadowRoot!.textContent).toContain(text);
 });

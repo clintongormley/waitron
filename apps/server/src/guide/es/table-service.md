@@ -72,6 +72,16 @@ los cargos ambiguos o sin coincidencia en SumUp antes de corregir nada. La compa
 devoluciones. Un día incompleto espera la comprobación diaria que falta; el día completo estará
 disponible tras la comprobación de la siguiente medianoche UTC.
 
+Los grupos de devoluciones comparan la consulta guardada de SumUp con tus anotaciones actuales.
+Actualiza después de anotar un resultado. Una coincidencia confirmada tiene el mismo identificador
+e importe; una coincidencia solo por importe no está verificada, así que compruébala en SumUp antes
+de actuar. Compara ambas fechas y la fecha de consulta. Si faltan datos, verás el motivo; la vista
+no envía dinero ni anota un resultado. Si faltan la fecha o la referencia, compruébalo en SumUp; las
+entradas sin referencia pueden describir la misma devolución. Las devoluciones de otros proveedores o de pagos de reserva
+sin vínculo único aparecen por separado. Si devuelves un pago antiguo desde la aplicación de
+SumUp, compruébalo también allí: esta vista solo lo encuentra si SumUp lo incluye el día de la
+devolución. Ese caso aún no se ha probado con SumUp.
+
 ## Elegir documentos después de cobrar {#settlement-document}
 
 Después del último pago, elige **Recibo**, **Factura completa** o **Ninguno**. Un cambio que deja
