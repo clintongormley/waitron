@@ -13,7 +13,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
-import { printJobInTrouble } from "./print-job-trouble.js";
+import { printJobInTrouble, UNPRINTED_STATUSES } from "./print-job-trouble.js";
 import { compareStationNames } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { firedPassDishes, passScopeOf, passSees } from "./pass-board.js";
@@ -75,7 +75,7 @@ export function stationPrintersDownQuery(
         options.withSwitchedOff === true ? undefined : eq(kitchenStations.active, true),
         stationIds === undefined ? undefined : inArray(kitchenStations.id, [...stationIds]),
         eq(printers.active, true),
-        inArray(printJobs.status, ["queued", "printing", "failed"]),
+        inArray(printJobs.status, UNPRINTED_STATUSES),
         printJobInTrouble(now),
         or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
         sql`not exists (select 1 from ${printJobs} as ${laterDocument} indexed by print_jobs_pull_idx

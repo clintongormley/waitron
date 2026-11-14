@@ -15,6 +15,9 @@ import { kitchenJobsNotWaiting } from "./kitchen-print.js";
 /** A document job older than this that has not printed counts as in trouble. */
 export const JOBS_WAITING_MS = 2 * 60 * 1000;
 
+/** The statuses of a job that has not printed. */
+export const UNPRINTED_STATUSES = ["queued", "printing", "failed"] as const;
+
 const copy = alias(printJobs, "resend_copy");
 const link = alias(kitchenPrintJobs, "trouble_link");
 const reprintLink = alias(kitchenPrintJobs, "trouble_reprint_link");
@@ -48,10 +51,7 @@ export function printJobInTrouble(now: Date): SQL {
   return and(
     eq(printJobs.kind, "document"),
     or(
-      and(
-        inArray(printJobs.status, ["queued", "printing", "failed"]),
-        lt(printJobs.createdAt, stuckBefore),
-      ),
+      and(inArray(printJobs.status, UNPRINTED_STATUSES), lt(printJobs.createdAt, stuckBefore)),
       and(eq(printJobs.status, "failed"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
     ),
     not(
@@ -150,8 +150,8 @@ export function printersInTroubleQuery(tx: Transaction, now: Date) {
         and(
           eq(printJobs.printerId, printers.id),
           eq(printers.active, true),
-          // Implied by `printJobInTrouble`; stated so the index search skips printed jobs.
-          inArray(printJobs.status, ["queued", "printing", "failed"]),
+          // Lets the index search skip printed jobs.
+          inArray(printJobs.status, UNPRINTED_STATUSES),
           printJobInTrouble(now),
           // Ended on purpose by an Unpair, not a fault to fix.
           or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),

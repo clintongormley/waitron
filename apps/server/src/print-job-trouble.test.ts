@@ -111,6 +111,14 @@ describe("printersInTrouble", () => {
     ]);
   });
 
+  it("counts a document still printing past two minutes", async () => {
+    await prepareVenue();
+    const id = await seedPrinter({ name: "Bar" });
+    await seedJob({ printerId: id, createdAt: minsAgo(3), status: "printing" });
+
+    expect(await read()).toMatchObject([{ id, count: 1, oldest: minsAgo(3) }]);
+  });
+
   it("names nothing for a young job, a drawer pulse, a job an Unpair ended, or a switched-off printer", async () => {
     await prepareVenue();
     const bar = await seedPrinter({ name: "Bar" });
