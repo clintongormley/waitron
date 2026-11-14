@@ -290,3 +290,6 @@ Privacy storage assertions read the document while retaining the identity and st
 The watcher cleared up to 1,200 gross handwritten lines on 15 November at 00:19 for this scope,
 including explicit null actor arguments in existing fixtures and formatter reflows. Mechanical
 argument changes are counted separately in the pull request.
+
+At 00:30 the watcher cleared the three live-query dependency assertions to name settings.venue;
+the exact dependency equality and real invalidation/refetch checks stay.
