@@ -4593,6 +4593,30 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(api.takeBillPayment).not.toHaveBeenCalled();
   });
 
+  it("says the parked orders could not refresh, not that the sale failed, when they cannot be read after a short capture", async () => {
+    const el = await retrieved({
+      pay: vi.fn().mockResolvedValue({ outcome: "partial", balance: counterBalance }),
+      getBillBalance: vi.fn().mockResolvedValue(counterBalance),
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
+        .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    emit(counter(el), "collect-card", {});
+    await flush(el);
+
+    expect(api.pay).toHaveBeenCalledOnce();
+    const alertText = text(el.shadowRoot!.querySelector('.error[role="alert"]'));
+    expect(alertText).not.toContain(t("sale.unconfirmed"));
+    expect(alertText).not.toContain(t("sale.error"));
+    expect(
+      text(el.shadowRoot!.querySelector('[data-refresh-notice="held"] .refresh-message')),
+    ).toBe(t("refresh.held"));
+    expect(dialog(el)).not.toBeNull();
+  });
+
   it("offers the bill payment once a card at the reader is refused because another till took a payment first", async () => {
     const el = await retrieved({
       listWorkingOrders: vi

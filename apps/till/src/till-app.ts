@@ -9688,7 +9688,7 @@ export class TillApp extends LitElement {
     const said = failure !== undefined && !movedOn();
     if (said) this.errorKey = failure;
     if (session !== this.#operatorSession) return "unread";
-    await this.#refreshHeldOrders();
+    await this.#refreshAfterWrite("held", "refresh.held");
     if (failure === undefined) return "read";
     return said && failure === "held.stale" ? "gone" : "unread";
   }
