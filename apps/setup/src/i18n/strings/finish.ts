@@ -21,7 +21,7 @@ export const finishEn = {
   "reset.heading": "Reset this server",
   "reset.heading_resetting": "Resetting this server",
   "reset.explanation":
-    "This removes what the half-finished join left on this server and restarts it at a fresh setup. Nothing on the primary server is changed, so the primary may still list this server. To take it off that list, open the primary's dashboard, then Settings, then Servers, open this server's row menu and choose Remove, then open the row menu again and choose Clear from list. If its row already says Removed, only Clear from list is needed. Do this before you join this server again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+    "This removes what the half-finished join left on this server and restarts it at a fresh setup. Nothing on the primary server is changed, so the primary may still list this server. To take it off that list, open the primary's dashboard, then System, then Servers, open this server's row menu and choose Remove, then open the row menu again and choose Clear from list. If its row already says Removed, only Clear from list is needed. Do this before you join this server again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
   "reset.prompt": "Enter the admin email and password you used to connect this server.",
   "reset.email_label": "Admin email",
   "reset.password_label": "Admin password",
@@ -98,7 +98,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "reset.heading": "Restablecer este servidor",
   "reset.heading_resetting": "Restableciendo este servidor",
   "reset.explanation":
-    "Esto elimina lo que la unión a medias dejó en este servidor y lo reinicia con una configuración desde cero. No se cambia nada en el servidor principal, así que puede que el principal siga mostrando este servidor en su lista. Para quitarlo de esa lista, abre el panel del servidor principal, luego Ajustes y luego Servidores; abre el menú de la fila de este servidor y elige Retirar, y después vuelve a abrir el menú de la fila y elige Quitar de la lista. Si su fila ya dice Retirado, solo hace falta Quitar de la lista. Hazlo antes de volver a unir este servidor: si no, la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
+    "Esto elimina lo que la unión a medias dejó en este servidor y lo reinicia con una configuración desde cero. No se cambia nada en el servidor principal, así que puede que el principal siga mostrando este servidor en su lista. Para quitarlo de esa lista, abre el panel del servidor principal, luego Sistema y luego Servidores; abre el menú de la fila de este servidor y elige Retirar, y después vuelve a abrir el menú de la fila y elige Quitar de la lista. Si su fila ya dice Retirado, solo hace falta Quitar de la lista. Hazlo antes de volver a unir este servidor: si no, la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
   "reset.prompt":
     "Introduce el correo y la contraseña del administrador que usaste para conectar este servidor.",
   "reset.email_label": "Correo del administrador",

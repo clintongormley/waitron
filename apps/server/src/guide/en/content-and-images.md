@@ -28,7 +28,7 @@ A new venue starts with its content languages already chosen: the languages Wait
 for its region, plus English. Spanish stays enabled throughout Spain; your region can add other
 required languages and choose a regional language as the default. For example, a new venue in
 the Valencian Community starts with Valencian as its default, plus Spanish and English.
-To add another, open **Settings**, then **Content languages**, which shows your languages and
+To add another, open **System**, then **Content languages**, which shows your languages and
 their missing-name counts in a table, with the default first. Select **Add language**, then choose
 the language to add it. The choices show your country's official languages first, under
 **Official languages**, while any of them is not yet added. The added language's translation fields are then available throughout your content editors.

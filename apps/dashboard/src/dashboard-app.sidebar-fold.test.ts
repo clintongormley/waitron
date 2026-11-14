@@ -19,6 +19,7 @@ const SECTION_ICONS = {
   operations: "section-operations",
   team: "section-team",
   purchasing: "section-purchasing",
+  hardware: "section-hardware",
   configuration: "gear",
 } as const;
 
@@ -226,7 +227,7 @@ it("in a strip that scrolls, a section's panel shows beside the strip, its first
   });
 });
 
-it("in a window too short for it, the Settings panel stays within the layout beside its icon and scrolls", async () => {
+it("in a window too short for it, the System panel stays within the layout beside its icon and scrolls", async () => {
   await atSize(844, 390, async () => {
     const { el } = await mountApp();
     expectFolded(el, true);
@@ -557,7 +558,7 @@ describe("a section with several pages opens a panel beside its icon", () => {
   });
 
   it("kept within the layout when its icon is low in the window", async () => {
-    await atSize(1280, 600, async () => {
+    await atSize(1280, 650, async () => {
       const { el } = await mountFoldedReading("configuration");
       const settings = stripButton(el, "configuration");
       const bottom = layout(el).getBoundingClientRect().bottom;

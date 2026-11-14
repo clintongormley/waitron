@@ -31,7 +31,7 @@ El español se mantiene activado en toda España. La región puede añadir otros
 establecer uno de ellos como predeterminado. Por ejemplo, un local nuevo en la Comunidad Valenciana
 empieza con el valenciano como predeterminado, además del español y del inglés.
 
-Abre **Ajustes**, **Idiomas del contenido** para ver tus idiomas y cuántos nombres faltan en cada
+Abre **Sistema**, **Idiomas del contenido** para ver tus idiomas y cuántos nombres faltan en cada
 uno. El predeterminado aparece primero. Selecciona **Añadir idioma** y elige uno de la lista.
 Los idiomas oficiales que aún no has añadido aparecen primero, bajo **Idiomas oficiales**.
 Al añadirlo, sus campos de traducción quedan disponibles en los editores del contenido.

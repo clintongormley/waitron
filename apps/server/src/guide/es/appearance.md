@@ -1,12 +1,12 @@
 # Apariencia
 
 El panel y las cajas pueden llevar los colores de tu local en lugar del azul de Waitron. La página
-**Apariencia**, dentro de **Ajustes**, muestra el aspecto en uso y permite a un encargado
+**Apariencia**, dentro de **Sistema**, muestra el aspecto en uso y permite a un encargado
 cambiarlo y ver el resultado antes de que lo vea nadie más.
 
 ## Consulta el aspecto en uso {#look}
 
-Abre **Ajustes** y después **Apariencia**. La tarjeta **Aspecto** muestra el **Tema en uso** y las
+Abre **Sistema** y después **Apariencia**. La tarjeta **Aspecto** muestra el **Tema en uso** y las
 elecciones que lo forman:
 
 - **Logotipo**: **Ninguno**, o el logotipo del tema seguido de cómo lo muestran las pantallas

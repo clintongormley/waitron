@@ -2,7 +2,7 @@
 
 ## Configurar un proveedor de tarjeta {#set-up}
 
-Abre **Módulos** en Ajustes, o elige **Configurar proveedores de tarjeta** en **Pagos con tarjeta**.
+Abre **Módulos** en Sistema, o elige **Configurar proveedores de tarjeta** en **Pagos con tarjeta**.
 El enlace de Pagos con tarjeta muestra todos los proveedores, incluidos los que aún necesitan configuración.
 
 Elige **Configurar** en el menú de la fila del proveedor, introduce sus credenciales y pulsa **Guardar**.
@@ -26,7 +26,7 @@ credenciales están guardadas; es independiente de **Habilitado**.
 ## Activar o desactivar Reservas {#bookings-state}
 
 Como administrador, elige **Desactivar** o **Activar** en el menú de la fila de Reservas y confirma.
-**Pendiente de reinicio** indica que el cambio está guardado. Abre **Estado del servidor** en Ajustes y elige **Reiniciar el servidor**
+**Pendiente de reinicio** indica que el cambio está guardado. Abre **Estado del servidor** en Sistema y elige **Reiniciar el servidor**
 cuando puedas pausar el servicio. Las cajas se reconectan; comprueba y repite cualquier envío a cocina interrumpido por el reinicio.
 Las reservas guardadas permanecen en este equipo cuando Reservas está desactivado.
 
@@ -37,7 +37,7 @@ Un administrador sin contraseña no puede usar esa acción de recuperación.
 ## Activar o desactivar Pagos o Normativa laboral española {#module-state}
 
 Como administrador, elige **Desactivar** o **Activar** en el menú de la fila del módulo y confirma.
-**Pendiente de reinicio** indica que tu elección está guardada. Abre **Estado del servidor** en Ajustes
+**Pendiente de reinicio** indica que tu elección está guardada. Abre **Estado del servidor** en Sistema
 y elige **Reiniciar el servidor** cuando puedas pausar el servicio. Comprueba y repite cualquier envío a cocina interrumpido por el reinicio.
 
 Antes de desactivar Pagos, desactiva todos los proveedores de tarjeta; elimina o desvincula sus lectores primero.

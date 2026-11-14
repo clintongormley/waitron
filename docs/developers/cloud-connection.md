@@ -5,7 +5,7 @@
 > runtime](../../deploy/tunnel/README.md) for A951-S; this historical material adds no build steps to it.
 
 
-The Cloud services screen in Settings connects this installation to a Cloud
+The Cloud services screen in System connects this installation to a Cloud
 organisation and legal business. You need a local manager with `system.manage` and
 a Cloud account with permission to register venues for that business.
 
@@ -248,7 +248,7 @@ writer temporary files, leaving other control files alone.
 A failed replacement write preserves the previous complete file. Local configuration and file
 errors use `cloud.tunnel_unavailable`; a refused placement can therefore leave the Cloud connection
 active while its tunnel is off. The container notices removal on its next poll; this gives no
-instant shutdown guarantee. The writer runs in Cloud's background refresh and when you change remote access in Settings.
+instant shutdown guarantee. The writer runs in Cloud's background refresh and when you change remote access in Cloud services.
 
 The on/off choice belongs to this box. A replacement starts with its own choice; importing the
 Cloud registration does not copy the old box's saved off choice.

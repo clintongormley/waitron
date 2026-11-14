@@ -21,7 +21,7 @@ Antes de empezar, comprueba dos cosas en el servidor principal:
   **Desactivar** en ese apartado; tu bucket deja entonces de recibir los cambios del local y, en
   esta versión, no puede volver a recibirlos mientras el servidor de reserva siga en el local.
 
-También necesitas una cuenta que pueda abrir **Ajustes → Servidores** en el servidor principal, con
+También necesitas una cuenta que pueda abrir **Sistema → Servidores** en el servidor principal, con
 el correo con el que inicia sesión, su contraseña y el código actual del autenticador, si está
 configurado.
 
@@ -31,13 +31,13 @@ muestra después de **Use this box's own address**. Elige **Unirse o recuperar**
 **Añadir un nodo réplica**.
 
 Introduce la dirección HTTPS del servidor principal y elige **Continuar**. En un dispositivo que ya
-tenga la sesión iniciada en el panel del servidor principal, abre **Ajustes → Servidores** y compara
+tenga la sesión iniciada en el panel del servidor principal, abre **Sistema → Servidores** y compara
 **Huella del certificado público de este servidor** con la que muestra el servidor nuevo. Elige
 **Coincide** solo si son iguales. Después introduce los datos de la cuenta y elige **Conectar**. El
 servidor nuevo recibe su primera copia por la red del local y se reinicia solo como servidor de
 reserva.
 
-En el servidor principal, abre **Ajustes → Servidores** para comprobar el retraso del equipo de reserva en segundos y la **Última copia recibida**.
+En el servidor principal, abre **Sistema → Servidores** para comprobar el retraso del equipo de reserva en segundos y la **Última copia recibida**.
 Deja ambos equipos encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
 comprueba que el equipo de reserva esté conectado a la red del restaurante. **Reconstruyendo la copia** indica que debes dejar ambos equipos encendidos mientras se restaura la copia.
 
@@ -46,7 +46,7 @@ La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicac
 
 ## Retirar un servidor de reserva {#remove-a-spare}
 
-En el servidor principal, abre **Ajustes → Servidores**, abre el menú de la fila del servidor de
+En el servidor principal, abre **Sistema → Servidores**, abre el menú de la fila del servidor de
 reserva y elige **Retirar**. Si ha terminado de unirse, apágalo primero y asegúrate de que no hay
 otra recuperación en curso; después activa las dos declaraciones. Una vez retirado, el servidor principal
 deja de esperarlo en cada inicio, y puedes guardar tu bucket o añadir otro servidor de reserva. Para
@@ -100,7 +100,7 @@ cajón. No restablezcas el servidor anterior mientras necesites sus datos.
 
 Usa este proceso solo con un servidor de reserva que haya terminado de unirse al local.
 
-En el servidor principal, abre **Ajustes → Servidores**. Abre el menú de la fila del servidor de reserva
+En el servidor principal, abre **Sistema → Servidores**. Abre el menú de la fila del servidor de reserva
 y elige **Traspasar el local**. Lee la explicación. Elige **Parar** para mantener el local en este
 servidor, o **Traspasar el local** para detener las ventas aquí y mover la copia final. Si se te pide,
 [confirma tu acceso](staff.md#account-access). Se reutiliza una confirmación reciente; si usaste un código
@@ -242,9 +242,9 @@ terminado.
 Activar el acceso remoto pide la [confirmación de identidad compartida](staff.md#account-access).
 Desactivarlo no pide una nueva confirmación de identidad.
 
-Si restauras una copia hecha antes de conectarlo con Cloud, abre **Servicios Cloud** en **Ajustes** y elige **Conectar con Cloud** de nuevo.
+Si restauras una copia hecha antes de conectarlo con Cloud, abre **Servicios Cloud** en **Sistema** y elige **Conectar con Cloud** de nuevo.
 
-Para impedir que el personal abra el panel desde fuera del local, abre **Servicios Cloud** en **Ajustes**
+Para impedir que el personal abra el panel desde fuera del local, abre **Servicios Cloud** en **Sistema**
 en el servidor principal y elige **Desactivar el acceso remoto**. Si usas la dirección del personal,
 confirma **Desactivar el acceso remoto** para desconectarte también, o elige **Detener** para mantenerlo activado. Ten a mano la dirección local del servidor. La vinculación con
 Cloud y los demás servicios de Cloud se mantienen. Elige **Activar el acceso remoto** para que el

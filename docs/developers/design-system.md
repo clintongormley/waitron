@@ -127,7 +127,7 @@ even when data-theme is set` for the regression test.
 
 ## Retheming a deployment
 
-A venue changes its look on Settings → Appearance, which stores a theme and writes the 22 colours,
+A venue changes its look on System → Appearance, which stores a theme and writes the 22 colours,
 three radii, four text sizes, the typeface and three weights of `THEME_TOKENS` (`packages/ui-core/src/theme/tokens.ts`) from the
 venue's choices, warning about hard-to-read colours and text sizes drawn under 12 px rather than refusing them. The override
 described below is for a deployment's own stylesheet. A venue theme's sheet, built from worked-out
@@ -238,7 +238,7 @@ primary colour has to override this one as well, with a light and a dark value: 
 reaches 4.5:1 on both themes' `--wt-color-bg`. A venue's theme writes it: worked out
 from the theme's own button colour, unless it is set by hand, and Waitron's own value when the theme
 chooses neither (`THEME_COLOURS`, `packages/ui-core/src/theme/tokens.ts`). The dashboard and the
-till apply the theme in use (`packages/ui/src/venue-theme.ts`). A manager edits it on Settings →
+till apply the theme in use (`packages/ui/src/venue-theme.ts`). A manager edits it on System →
 Appearance (A841), and the management API (`/management-api/themes`,
 `/management-api/theme-in-use`) and a configuration transfer can write it too.
 
@@ -499,7 +499,7 @@ A user-chosen data colour is the one deliberate exception to "no hex, no hardcod
 colour a person gave a category, a product or a menu section is painted as it is, never mapped to a
 token. Its users are the colour chooser's palette (`apps/dashboard/src/widgets/color-field.ts`), the
 category swatches in the Products tree, the product and section swatches in a menu's Structure tree,
-the brand colour, fix shade and hand-set button colour chips on Settings → Appearance's Look
+the brand colour, fix shade and hand-set button colour chips on System → Appearance's Look
 card (`apps/dashboard/src/screens/look-card.ts`), the colour pickers in that card's Advanced
 section (`apps/dashboard/src/widgets/theme-advanced.ts`), the colour chips in the Themes card's rows
 (`apps/dashboard/src/screens/themes-card.ts`), and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
@@ -3179,7 +3179,7 @@ and nothing guards it across screens:
   `apps/dashboard/src/screens/venue-defaults-panel.unsaved.test.ts`;
 - A980 S1a: Venue settings' Privacy card, editing in place. Its leave cases are in
   `apps/dashboard/src/screens/venue-privacy-panel.unsaved.test.ts`;
-- A841 slice 5: the Look card on Settings → Appearance, editing in place
+- A841 slice 5: the Look card on System → Appearance, editing in place
   (`apps/dashboard/src/screens/look-card.ts`). Its leave cases are in `look-card.unsaved.test.ts`
   beside it, Advanced's (A841 slice 6) and its sections' (A841 slice 12) among them;
 - A841 slice 13: the theme name dialog (`apps/dashboard/src/widgets/theme-name-dialog.ts`); Make a
@@ -4528,7 +4528,7 @@ rather than assuming this composition applies unchanged.
 
 ### Appearance (venue themes)
 
-Settings → Appearance holds two cards: Look (`apps/dashboard/src/screens/look-card.ts`, A841
+System → Appearance holds two cards: Look (`apps/dashboard/src/screens/look-card.ts`, A841
 slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
 (`apps/dashboard/src/screens/themes-card.ts`, A841 slice 13). The Look card:
 
@@ -6400,7 +6400,7 @@ slot" in `apps/till/src/widgets/till-shell.test.ts`, and `apps/till/src/till-app
 ### Box status page (dashboard)
 
 `dashboard-box-status-screen` (`apps/dashboard/src/screens/box-status-screen.ts`, rows worked out
-in `box-status-rows.ts`) is under Settings, before Diagnostics, for people with `system.manage`. It
+in `box-status-rows.ts`) is under System, before Diagnostics, for people with `system.manage`. It
 reads `GET /api/box/health` every 15 seconds (passively after the first read) and the bell's own
 alert list.
 

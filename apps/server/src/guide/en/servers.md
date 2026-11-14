@@ -20,7 +20,7 @@ Before you start, check two things on the main box:
   bucket then stops receiving the venue's changes, and in this version it cannot receive them again
   while the spare is there.
 
-You also need an account that can open **Settings → Servers** on the main box, with the email it
+You also need an account that can open **System → Servers** on the main box, with the email it
 signs in with, its password and its current authenticator code, if set up.
 
 Connect the new box to the venue's network and switch it on; it needs no internet connection.
@@ -28,12 +28,12 @@ Because `waitron.local` reaches the main box, open the address that the new box'
 after **Use this box's own address**. Choose **Join or recover**, then **Add a mirror node**.
 
 Enter the main box's HTTPS address and choose **Continue**. On a device already signed in to the
-main box's dashboard, open **Settings → Servers** and compare **This server's public certificate
+main box's dashboard, open **System → Servers** and compare **This server's public certificate
 fingerprint** with the one the new box shows. Choose **It matches** only if they are the same.
 Then enter the account's details and choose **Connect**. The new box takes its first copy over the
 venue's network and restarts by itself as the spare.
 
-On the main box, open **Settings → Servers** to check the spare's delay in seconds and **Last copy received**.
+On the main box, open **System → Servers** to check the spare's delay in seconds and **Last copy received**.
 Keep both boxes switched on. If the copy is more than a minute behind or **Freshness unknown** stays on screen,
 check that the spare is connected to the restaurant's network. **Rebuilding the copy** means you should leave both boxes on while the copy is restored.
 
@@ -42,7 +42,7 @@ The bell and **Box status** warn when sending or applying changes is delayed, or
 
 ## Remove a spare box {#remove-a-spare}
 
-On the main box, open **Settings → Servers**, open the spare's row menu and choose **Remove**. For a
+On the main box, open **System → Servers**, open the spare's row menu and choose **Remove**. For a
 spare that has finished joining, first switch it off and make sure no other recovery is in
 progress, then turn on both statements. Once it is removed, the main box stops waiting for it at
 each start, and you can save your bucket or add another spare. To use that machine again, reset
@@ -92,7 +92,7 @@ still need its data.
 
 Use this flow only with a spare that has finished joining the venue.
 
-On the main box, open **Settings → Servers**. Open the spare’s row menu and choose **Hand over the
+On the main box, open **System → Servers**. Open the spare’s row menu and choose **Hand over the
 venue**. Read the explanation. Choose **Stop** to keep the venue on this box, or **Hand over the
 venue** to stop sales here and move the final copy. If asked, [confirm your sign-in](staff.md#account-access).
 A recent confirmation is reused; a recovery-code confirmation must be replaced with your current
@@ -218,9 +218,9 @@ deletes this box's venue data even if the return has stopped or is unfinished.
 Turning remote access on asks for the [shared sign-in confirmation](staff.md#account-access).
 Turning it off needs no new sign-in confirmation.
 
-If you restore a backup made before connecting to Cloud, open **Cloud services** in **Settings** and choose **Connect to Cloud** again.
+If you restore a backup made before connecting to Cloud, open **Cloud services** in **System** and choose **Connect to Cloud** again.
 
-To stop staff reaching your dashboard from outside the venue, open **Cloud services** in **Settings**
+To stop staff reaching your dashboard from outside the venue, open **Cloud services** in **System**
 on the main box and choose **Turn off remote access**. If you are using the staff address,
 confirm **Turn off remote access** to disconnect yourself too, or choose **Stop** to keep it on. Keep the box's local address available. Your Cloud pairing and other
 Cloud services stay in place. Choose **Turn on remote access** to let the box reconnect.

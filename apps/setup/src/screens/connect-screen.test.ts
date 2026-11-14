@@ -511,7 +511,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith("https://waitron.local");
     expect(text(q(el, "[data-test=fingerprint]")!)).toBe(CERT.fingerprint256);
     expect(text(q(el, "[data-test=compare]")!)).toBe(
-      "On a device already signed in to your primary server's dashboard, open Settings, then Servers. The public certificate fingerprint shown there must match this one.",
+      "On a device already signed in to your primary server's dashboard, open System, then Servers. The public certificate fingerprint shown there must match this one.",
     );
     expect(q(el, "[data-test=password]")).toBeNull();
     expect(q(el, "[data-test=connect]")).toBeNull();
@@ -847,7 +847,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     await pressed(el, "continue");
     await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
     expect(text(q(el, "[data-test=compare]")!)).toBe(
-      "En un dispositivo que ya tenga la sesión iniciada en el panel de tu servidor principal, abre Ajustes y luego Servidores. La huella del certificado público que aparece allí debe coincidir con esta.",
+      "En un dispositivo que ya tenga la sesión iniciada en el panel de tu servidor principal, abre Sistema y luego Servidores. La huella del certificado público que aparece allí debe coincidir con esta.",
     );
     expect(text(q(el, "[data-test=matches]")!)).toBe("Coincide");
     expect(text(q(el, "[data-test=mismatch]")!)).toBe("No coincide");

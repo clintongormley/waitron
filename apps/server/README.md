@@ -405,7 +405,7 @@ The Prepare and Live setup test endpoint is `POST /setup-api/email-test`. Outsid
 publishing the trading configuration. Missing settings answer `setup.email_required`, naming
 `email`; malformed settings name the offending field. Demo refuses supplied settings,
 and development provisioning may omit them. You can enter these settings in the Prepare or Live wizard
-or, as an admin, on the dashboard's **Settings → Email** page (`/manage/email`). Managers can view
+or, as an admin, on the dashboard's **System → Email** page (`/manage/email`). Managers can view
 the redacted settings there. The dashboard shows the server and sender
 without returning the saved password; you enter fresh credentials to change an authenticated
 gateway, or explicitly switch authentication off.

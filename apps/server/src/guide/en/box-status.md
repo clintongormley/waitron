@@ -16,7 +16,7 @@ Describe what happened, check the preview, then choose **Download report**. The 
 this browser's recent activity, rather than the box's log. Nothing is sent or saved on the box.
 Keep passwords, payment details and personal information out of your description.
 
-Open **Settings → Box status**, just above **Diagnostics**. Only people who can manage the system
+Open **System → Box status**, just above **Diagnostics**. Only people who can manage the system
 see it.
 
 The page reads the box again about every 15 seconds, so you can leave it open. These automatic

@@ -845,7 +845,7 @@ export const en = {
   "device.join_name_hint":
     "Give this device a name, then ask a manager to approve it in the dashboard",
   "device.join_approval_guide": "A manager approves this device in the dashboard under",
-  "device.join_approval_link": "Settings → Devices",
+  "device.join_approval_link": "Hardware → Devices",
   "device.join_name_label": "Name",
   "device.join_submit": "Ask to join",
   "device.join_waiting_title": "Waiting for approval",
@@ -2912,7 +2912,7 @@ export const es: Record<StringKey, string> = {
   "device.join_name_hint":
     "Pon un nombre a este dispositivo y pide a un responsable que lo apruebe en el panel",
   "device.join_approval_guide": "Un responsable aprueba este dispositivo en el panel, en",
-  "device.join_approval_link": "Ajustes → Dispositivos",
+  "device.join_approval_link": "Hardware → Dispositivos",
   "device.join_name_label": "Nombre",
   "device.join_submit": "Solicitar alta",
   "device.join_waiting_title": "Esperando aprobación",

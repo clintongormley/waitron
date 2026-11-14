@@ -10,14 +10,14 @@ afterEach(cleanupWidgets);
 for (const [locale, on, off, theme] of [
   [
     "en",
-    "On in Settings · connection not checked here",
-    "Off in Settings · disconnection not checked here",
+    "On in Cloud services · connection not checked here",
+    "Off in Cloud services · disconnection not checked here",
     "light",
   ],
   [
     "es",
-    "Activado en Ajustes · conexión sin comprobar aquí",
-    "Desactivado en Ajustes · desconexión sin comprobar aquí",
+    "Activado en Servicios Cloud · conexión sin comprobar aquí",
+    "Desactivado en Servicios Cloud · desconexión sin comprobar aquí",
     "dark",
   ],
 ] as const)

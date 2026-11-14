@@ -73,7 +73,7 @@ describe("setup-reset-screen", () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
     expect(text).toContain(
-      "To take it off that list, open the primary's dashboard, then Settings, then Servers, open this server's row menu and choose Remove, then open the row menu again and choose Clear from list.",
+      "To take it off that list, open the primary's dashboard, then System, then Servers, open this server's row menu and choose Remove, then open the row menu again and choose Clear from list.",
     );
     expect(text).toContain("If its row already says Removed, only Clear from list is needed.");
     expect(text).toContain(

@@ -2,7 +2,7 @@
 
 ## Set up a card provider {#set-up}
 
-Open **Modules** in Settings, or choose **Configure card providers** on **Card payments**.
+Open **Modules** in System, or choose **Configure card providers** on **Card payments**.
 The Card payments link shows every card provider, including those that still need setup.
 
 Choose **Configure** in the provider's row menu, enter its credentials and choose **Save**.
@@ -25,7 +25,7 @@ credentials are saved; it is separate from **Enabled**.
 ## Turn Bookings on or off {#bookings-state}
 
 As an administrator, choose **Turn off** or **Turn on** in the Bookings row menu and confirm.
-**Waiting for restart** means the change is saved. Open **Box status** in Settings and choose **Restart the box**
+**Waiting for restart** means the change is saved. Open **Box status** in System and choose **Restart the box**
 when you can pause service. Tills reconnect; check and resend any kitchen send interrupted by the restart.
 Your saved bookings stay on this box when Bookings is off.
 
@@ -36,7 +36,7 @@ An administrator without a password cannot use that recovery action.
 ## Turn Payments or Spanish workforce rules on or off {#module-state}
 
 As an administrator, choose **Turn off** or **Turn on** in the module's row menu and confirm.
-**Waiting for restart** means your choice is saved. Open **Box status** in Settings and choose
+**Waiting for restart** means your choice is saved. Open **Box status** in System and choose
 **Restart the box** when you can pause service. Check and resend any kitchen send interrupted by the restart.
 
 Before turning Payments off, turn every card provider off, removing or unpairing its readers first.
