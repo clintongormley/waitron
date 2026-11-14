@@ -3094,7 +3094,11 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
   async function cardSale(
     app: Hono,
     cookie: string,
-    body: { workingOrderId: string; menuItemId: string },
+    body: {
+      workingOrderId: string;
+      menuItemId: string;
+      outside?: { externalProvider: "sumup"; externalMachine: string };
+    },
   ): Promise<Response> {
     return await app.request("/api/sales", {
       method: "POST",
@@ -3102,7 +3106,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       body: JSON.stringify({
         workingOrderId: body.workingOrderId,
         lines: [{ menuItemId: body.menuItemId, quantity: "2" }],
-        tender: { method: "card", amount: "3.00" },
+        tender: { method: "card", amount: "3.00", ...body.outside },
       }),
     });
   }
@@ -3121,8 +3125,13 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     const first = await cardSale(app, cookie, {
       workingOrderId,
       menuItemId: each.menuItemId,
+      outside: { externalProvider: "sumup", externalMachine: "Spare Solo" },
     });
     expect(first.status).toBe(200);
+    expect((await first.json()).tender).toMatchObject({
+      externalProvider: "sumup",
+      externalMachine: "Spare Solo",
+    });
     expect(
       (
         await app.request(`/api/sales/${workingOrderId}/receipt`, {
@@ -3154,6 +3163,10 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       menuItemId: each.menuItemId,
     });
     expect(replay.status).toBe(200);
+    expect((await replay.json()).tender).toMatchObject({
+      externalProvider: "sumup",
+      externalMachine: "Spare Solo",
+    });
     expect(await drawerOpenRows()).toHaveLength(1);
     expect((await jobs()).drawer).toHaveLength(1);
   });

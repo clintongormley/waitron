@@ -532,6 +532,8 @@ interface PaymentBody {
   addedTip?: string;
   choice?: "full_with_tip" | "use_pool";
   externalRef?: string;
+  externalProvider?: unknown;
+  externalMachine?: unknown;
   applied: string;
   tip: string;
 }
@@ -1022,6 +1024,29 @@ describe("a contribution (design §8 test 2)", () => {
     expect(await statusOf(billId)).toBe("settled");
   });
 
+  it.each([
+    { entry: "manual", extra: { externalProvider: null }, field: "externalProvider" },
+    { entry: "manual", extra: { externalProvider: ["sumup"] }, field: "externalProvider" },
+    { entry: "manual", extra: { externalProvider: "bank" }, field: "externalProvider" },
+    { entry: "manual", extra: { externalMachine: 17 }, field: "externalMachine" },
+    { entry: "reader", extra: { externalProvider: "sumup" }, field: "externalProvider" },
+  ] as const)(
+    "refuses outside-card details $extra on $entry entry",
+    async ({ entry, extra, field }) => {
+      const result = await pay(await bill120(), {
+        kind: "contribution",
+        amount: "40.00",
+        method: "card",
+        entry,
+        applied: "40.00",
+        tip: "0.00",
+        ...extra,
+      });
+      expect(result.status).toBe(400);
+      expect(result.json).toMatchObject({ code: "management.request_invalid", params: { field } });
+    },
+  );
+
   it("records a hand-keyed card with its manual payment row, linked to the bill payment", async () => {
     const billId = await bill120();
 
@@ -1031,11 +1056,21 @@ describe("a contribution (design §8 test 2)", () => {
       method: "card",
       entry: "manual",
       externalRef: "OP-7781",
+      externalProvider: "other",
+      externalMachine: "Bank counter",
       applied: "40.00",
       tip: "0.00",
     });
 
     expect(paid.status).toBe(200);
+    expect(paid.json.payment).toMatchObject({
+      externalRef: "OP-7781",
+      externalProvider: "other",
+      externalMachine: "Bank counter",
+    });
+    expect((await balance(billId)).json.payments).toEqual(
+      expect.arrayContaining([expect.objectContaining({ externalMachine: "Bank counter" })]),
+    );
     const paymentId = (paid.json.payment as { id: string }).id;
     const rows = await inTx((tx) =>
       tx.select().from(payments).where(eq(payments.billPaymentId, paymentId)),

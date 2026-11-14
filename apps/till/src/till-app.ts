@@ -1,3 +1,4 @@
+import { outsideCardValues } from "./widgets/outside-card.js";
 import { TillLiveConnection, TILL_LIVE_TYPES } from "./api/live-connection.js";
 import { liveRefresh, queuedLiveRefresh } from "./state/live-gate.js";
 import {
@@ -19716,6 +19717,7 @@ export class TillApp extends LitElement {
             method: "card",
             amount: bill.outstanding,
             ...(detail.externalRef === undefined ? {} : { externalRef: detail.externalRef }),
+            ...outsideCardValues(detail),
             ...guestCount,
           };
     const paid = await this.#payWholeTab(tender, (error) => {
@@ -21360,6 +21362,7 @@ export class TillApp extends LitElement {
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
         .cardProvider=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
+        .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
         .canMoveStation=${this.capabilities.includes("take-orders")}
         .canEditKitchenNote=${this.capabilities.includes("take-orders")}
         .tipsEnabled=${this.tipsEnabled}

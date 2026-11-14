@@ -34,6 +34,8 @@ export const paymentState = enumType([
   "initiated",
 ]);
 
+const externalProviderType = enumType(["sumup", "other"]);
+
 /**
  * One row per electronic tender, updated as it moves through its states — unlike core's immutable
  * `tenders` row, which is why core carries no payment column.
@@ -60,6 +62,8 @@ export const payments = table(
     /** The processor's own reference, or for a manual tender the operation number keyed off a
      * standalone terminal. Its format is never validated. */
     externalRef: label("external_ref"),
+    externalProvider: externalProviderType("external_provider"),
+    externalMachine: label("external_machine"),
     /** Card-present facts for the payment slip, written at capture by a provider that supplies
      * them; null otherwise. */
     cardScheme: label("card_scheme"),
@@ -129,6 +133,7 @@ export const payments = table(
       sql`${t.cardEntryMode} is null or ${t.cardEntryMode} in ('contactless','chip','swipe','unknown')`,
     ),
     check("payments_state_ck", enumCheck(t.state)),
+    check("payments_external_provider_ck", enumCheck(t.externalProvider)),
     ...originChecks("payments", t.source, t.deviceId),
   ],
 );

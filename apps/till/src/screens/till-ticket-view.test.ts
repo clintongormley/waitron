@@ -1064,9 +1064,18 @@ describe("till-ticket-view", () => {
 
     it("shows the operator's manual reference when present", async () => {
       const { el } = await mount({
-        tender: { method: "card", charged: "20.90", tip: "0.00", reference: "4471" },
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          reference: "4471",
+          externalProvider: "other",
+          externalMachine: "Bank counter",
+        },
       });
       expect(text(el)).toContain("Ref. 4471");
+      expect(text(el)).toContain("Bank counter");
+      expect(text(el)).toContain(uiText("tender.outside_other"));
     });
 
     it("still shows the cash Efectivo/Cambio rows for a cash sale, unchanged", async () => {
@@ -1240,7 +1249,15 @@ describe("till-ticket-view", () => {
             change: "10.00",
             refunds: [],
           },
-          { method: "card", amount: "11.00", tip: "1.00", reference: "OP-9", refunds: [] },
+          {
+            method: "card",
+            amount: "11.00",
+            tip: "1.00",
+            reference: "OP-9",
+            externalProvider: "sumup",
+            externalMachine: "Spare Solo",
+            refunds: [],
+          },
           {
             method: "cash",
             amount: "10.00",
@@ -1252,6 +1269,7 @@ describe("till-ticket-view", () => {
         ],
       });
 
+      expect(text(el)).toContain("Spare Solo");
       expect(tenderRows(el)).toEqual([
         "Efectivo 20,00 €",
         "Cambio 10,00 €",

@@ -83,6 +83,8 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
         amount: decimal("12.10"),
         settledAt: BASE,
         externalRef: "OP-000123",
+        externalProvider: "sumup",
+        externalMachine: "Spare Solo",
       });
       await associatePaymentWithSale(tx, {
         provider: MANUAL_PROVIDER,
@@ -98,7 +100,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       sale_id: string | null;
       external_ref: string | null;
     }>(sql`
-      select provider, state, sale_id, external_ref
+      select *
       from payments where working_order_id = ${s.workingOrderId}
     `);
     expect(rows.rows).toHaveLength(1);
@@ -107,6 +109,8 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       state: "captured",
       sale_id: saleId,
       external_ref: "OP-000123",
+      external_provider: "sumup",
+      external_machine: "Spare Solo",
     });
   });
 

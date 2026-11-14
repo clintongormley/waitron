@@ -1,3 +1,4 @@
+import { readOutsideCardDetails } from "./outside-card.js";
 import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
@@ -125,6 +126,7 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
   } else if (body.entry !== undefined) {
     throw invalid("entry");
   }
+  Object.assign(request, readOutsideCardDetails(body, request.entry === "manual"));
   if (request.entry === "manual") {
     if (body.externalRef !== undefined) {
       if (typeof body.externalRef !== "string") throw invalid("externalRef");

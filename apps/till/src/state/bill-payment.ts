@@ -13,6 +13,7 @@ import {
 } from "@waitron/shared";
 import {
   isNetworkFailure,
+  type OutsideCardDetails,
   type AllocationChoice,
   type AllocationPreview,
   type BillBalance,
@@ -105,7 +106,7 @@ export function paymentAsk(
 
 /** How a card is charged: on a terminal the till does not drive, or on a reader. */
 export type CardEntry =
-  | { entry: "manual"; externalRef?: string }
+  | ({ entry: "manual"; externalRef?: string } & OutsideCardDetails)
   | {
       entry: "reader";
       readerId?: string;

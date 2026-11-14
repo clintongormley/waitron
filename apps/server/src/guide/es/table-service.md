@@ -45,6 +45,17 @@ antes de cobrar el siguiente.
 
 Añade un artículo antes de cobrar o enviar un pedido.
 
+## Usar otro datáfono {#outside-card}
+
+Cobra primero la tarjeta en el otro datáfono. En **Cobrar**, elige **Otro datáfono** e introduce
+su número de operación y el datáfono utilizado. Puedes elegir **Esta cuenta de SumUp** si usa la
+cuenta conectada, o **Cobrado fuera de Waitron** si es de otro proveedor. Los campos son
+opcionales; la cuenta conserva los datos que introduzcas.
+
+Registra cada pago cuando lo cobres, mientras Waitron acepte pagos. Si Waitron rechaza un pago,
+sigue las indicaciones antes de volver a registrarlo; no cobres dos veces al cliente. Si no tienes
+un datáfono de reserva, elige **Efectivo**.
+
 ## Elegir documentos después de cobrar {#settlement-document}
 
 Después del último pago, elige **Recibo**, **Factura completa** o **Ninguno**. Un cambio que deja

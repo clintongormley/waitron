@@ -1,3 +1,5 @@
+import { outsideCardFields, outsideCardValues, outsideCardStyles } from "./outside-card.js";
+import type { OutsideCardDetails } from "../api/client.js";
 import type { BillUnsent } from "../api/client.js";
 import { billUnsentText } from "../state/bill-unsent.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
@@ -35,12 +37,18 @@ export interface FindBillPayDetail {
   invoiced: boolean;
 }
 
-type CollectionDraft = { method: "cash" | "card"; cash: string; externalRef: string };
+type CollectionDraft = {
+  method: "cash" | "card";
+  cash: string;
+  externalRef: string;
+  outside: OutsideCardDetails;
+};
 
 @customElement("till-find-bill-dialog")
 export class TillFindBillDialog extends LitElement {
   static override styles = [
     baseStyles,
+    outsideCardStyles,
     css`
       .body {
         display: flex;
@@ -84,6 +92,7 @@ export class TillFindBillDialog extends LitElement {
   @state() private cash = "";
   @state() private cashError = false;
   @state() private externalRef = "";
+  @state() private outside: OutsideCardDetails = {};
   @state() private active = true;
   #generation = 0;
   #scope?: DraftScope<CollectionDraft>;
@@ -122,6 +131,7 @@ export class TillFindBillDialog extends LitElement {
       } else if (tender.method === "card") {
         this.method = "card";
         this.externalRef = tender.externalRef ?? "";
+        this.outside = outsideCardValues(tender);
       }
       this.cashError = false;
     }
@@ -140,6 +150,7 @@ export class TillFindBillDialog extends LitElement {
         this.method = value.method;
         this.cash = value.cash;
         this.externalRef = value.externalRef;
+        this.outside = value.outside;
         this.cashError = false;
       },
     });
@@ -156,12 +167,21 @@ export class TillFindBillDialog extends LitElement {
   }
 
   #draft(): CollectionDraft {
-    return { method: this.method, cash: this.cash, externalRef: this.externalRef };
+    return {
+      method: this.method,
+      cash: this.cash,
+      externalRef: this.externalRef,
+      outside: this.outside,
+    };
   }
 
   #comparable(value: CollectionDraft): string {
     if (value.method === "card")
-      return JSON.stringify({ method: "card", externalRef: value.externalRef.trim() });
+      return JSON.stringify({
+        method: "card",
+        externalRef: value.externalRef.trim(),
+        ...outsideCardValues(value.outside),
+      });
     let amount: string | { invalid: string };
     try {
       amount = stringToCents(value.cash).toString();
@@ -253,6 +273,7 @@ export class TillFindBillDialog extends LitElement {
               method: "card",
               amount: bill.stillOwed,
               ...(this.externalRef.trim() ? { externalRef: this.externalRef.trim() } : {}),
+              ...outsideCardValues(this.outside),
             },
       invoiced: bill.invoiceNumber !== null,
     } satisfies FindBillPayDetail);
@@ -360,17 +381,25 @@ export class TillFindBillDialog extends LitElement {
               }}
             ></wt-price-input>`
           : html`<wt-input
-              name="terminal-reference"
-              .label=${t("find_bill.card_reference")}
-              .value=${live(this.externalRef)}
-              .disabled=${this.busy || this.unconfirmed}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
-                this.externalRef = event.detail.value;
-                this.#scope?.changed();
-              }}
-            ></wt-input>`
+                name="terminal-reference"
+                .label=${t("find_bill.card_reference")}
+                .value=${live(this.externalRef)}
+                .disabled=${this.busy || this.unconfirmed}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
+                  this.externalRef = event.detail.value;
+                  this.#scope?.changed();
+                }}
+              ></wt-input
+              >${outsideCardFields(
+                this.outside,
+                (value) => {
+                  this.outside = value;
+                  this.#scope?.changed();
+                },
+                this.busy || this.unconfirmed,
+              )}`
       } `;
   }
 

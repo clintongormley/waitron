@@ -42,6 +42,17 @@ for each payment. After a part payment, check **Still to pay** before taking the
 
 Add an item before paying or sending an order.
 
+## Use another card machine {#outside-card}
+
+Take the card payment on the separate machine first. In **Pay**, choose **Other card machine**
+and record its operation number and machine. You can choose **This SumUp account** when the
+machine uses the connected account, or **Paid outside Waitron** for another provider. These
+fields are optional; the bill keeps the details you enter.
+
+Record each payment as you take it while Waitron accepts payments. If Waitron refuses a payment,
+follow the message before recording it again; do not charge the customer twice. If you have no
+backup card machine, choose **Cash**.
+
 ## Choose documents after paying {#settlement-document}
 
 After the final payment, choose **Receipt**, **Full invoice** or **None**. An edit that finishes

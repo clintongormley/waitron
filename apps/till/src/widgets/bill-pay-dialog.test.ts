@@ -1947,13 +1947,25 @@ describe("till-bill-pay-dialog: on a handheld", () => {
     await pick(el, "method", "manual");
     expect(field(el, "externalRef")).not.toBeNull();
     await type(el, "externalRef", " 000123 ");
+    const source = root(el).querySelector<HTMLInputElement>(
+      'input[name="external-provider"][value="sumup"]',
+    );
+    expect(source).not.toBeNull();
+    source!.click();
+    await el.updateComplete;
+    await type(el, "externalMachine", " Spare Solo ");
     await click(el, "[data-pay-continue]");
 
     expect(asked).toEqual([
       {
         choice: { kind: "contribution", amount: "120.00" },
         pay: { method: "card" },
-        card: { entry: "manual", externalRef: "000123" },
+        card: {
+          entry: "manual",
+          externalRef: "000123",
+          externalProvider: "sumup",
+          externalMachine: "Spare Solo",
+        },
       },
     ]);
   });
@@ -3396,4 +3408,21 @@ describe("till-bill-pay-dialog: Close as deferred payment", () => {
     await pick(el, "way", "whole");
     expect(deferred(el)).not.toBeNull();
   });
+});
+
+it("offers a separate card machine at a counter with a configured reader", async () => {
+  const el = await mount({ cardReader: "sumup_cloud", takesManualCard: true, way: "contribution" });
+  const manual = root(el).querySelector('input[name="method"][value="manual"]');
+  expect(manual).not.toBeNull();
+  await pick(el, "method", "manual");
+  await type(el, "amount", "12");
+  const asked = capture<PayRequest>(el, "bill-pay-preview");
+  await click(el, "[data-pay-continue]");
+  expect(asked).toEqual([
+    {
+      choice: { kind: "contribution", amount: "12" },
+      pay: { method: "card" },
+      card: { entry: "manual" },
+    },
+  ]);
 });

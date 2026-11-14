@@ -1,3 +1,4 @@
+import { outsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
 import { readBillSlipPayments } from "./payment-slip-print.js";
 import { withIssuanceTransaction } from "@waitron/core";
 import { prepareIssueClock } from "@waitron/fiscal";
@@ -151,7 +152,7 @@ export interface BillPaymentAsk {
 }
 
 /** A payment request as taken: the ask, the allocation the operator saw, and its retry key. */
-export interface BillPaymentRequest extends BillPaymentAsk {
+export interface BillPaymentRequest extends BillPaymentAsk, OutsideCardDetails {
   submissionId: string;
   printCardSlip?: boolean;
   /** A card only: `manual` is a card charged on a terminal the POS does not drive, `reader` one
@@ -181,7 +182,8 @@ export interface BillRefundView {
   completedAt: string | null;
 }
 
-export interface BillPaymentView {
+export interface BillPaymentView extends OutsideCardDetails {
+  externalRef?: string;
   canCopySlip?: true;
   id: string;
   submissionId: string;
@@ -585,9 +587,12 @@ function toView(
   lines: readonly PaymentLineRow[],
   refunds: readonly RefundRow[],
   lineNos: ReadonlyMap<string, number>,
-  manualCards: ReadonlySet<string>,
+  manualCards: ReadonlyMap<string, OutsideCardDetails & { externalRef: string | null }>,
 ): BillPaymentView {
+  const manual = manualCards.get(payment.id);
   return {
+    ...outsideCardDetails(manual ?? {}),
+    ...(manual?.externalRef == null ? {} : { externalRef: manual.externalRef }),
     id: payment.id,
     submissionId: payment.submissionId,
     kind: payment.kind,
@@ -656,13 +661,15 @@ export async function linkBillCardPaymentsToSale(
 
 /** The card payments keyed on a separate terminal: their provider row is the manual one, written in
  * the payment's own transaction (`takeBillPayment`). */
-async function manualCardsOf(tx: Transaction, rows: readonly PaymentRow[]): Promise<Set<string>> {
+async function manualCardsOf(tx: Transaction, rows: readonly PaymentRow[]) {
   const provided = await findPaymentsByBillPayments(
     tx,
     rows.filter((row) => row.method === "card").map((row) => row.id),
   );
-  return new Set(
-    [...provided].filter(([, card]) => card.provider === MANUAL_PROVIDER).map(([id]) => id),
+  return new Map(
+    [...provided]
+      .filter(([, card]) => card.provider === MANUAL_PROVIDER)
+      .map(([id, card]) => [id, { ...outsideCardDetails(card), externalRef: card.externalRef }]),
   );
 }
 
@@ -1356,6 +1363,7 @@ export async function takeBillPayment(
           amount: centsToDecimal(payment.applied + payment.tip),
           settledAt: receivedAt,
           externalRef: req.externalRef,
+          ...outsideCardDetails(req),
           billPaymentId: payment.id,
         });
         await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operator.personId, printers);

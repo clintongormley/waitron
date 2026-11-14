@@ -116,3 +116,19 @@ it("opens one Counter Pay window and keeps Park beside it", async () => {
   await userEvent.click(page.elementLocator(pay!));
   expect(seen.mock.calls[0]![0].detail).toEqual({});
 });
+
+it("passes the separate-machine capability to a counter collecting with a reader", async () => {
+  const { el } = await mount({
+    cardProvider: "sumup_cloud",
+    takesManualCard: true,
+    stage: "collect",
+    orderFlow: "ticket_then_pay",
+  });
+  const tender = el.shadowRoot!.querySelector("till-tender-pay")!;
+  await tender.updateComplete;
+  expect(tender.shadowRoot!.querySelector(".pay-manual-card")).not.toBeNull();
+  el.takesManualCard = false;
+  await el.updateComplete;
+  await tender.updateComplete;
+  expect(tender.shadowRoot!.querySelector(".pay-manual-card")).toBeNull();
+});

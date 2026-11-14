@@ -1,3 +1,10 @@
+import {
+  outsideCardFields,
+  outsideCardValues,
+  outsideCardStyles,
+  outsideCardSummary,
+} from "./outside-card.js";
+import type { OutsideCardDetails } from "../api/client.js";
 import { EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import { cardSlipChoice } from "./pay-equipment.js";
 import { LitElement, css, html, nothing } from "lit";
@@ -53,7 +60,8 @@ import { helpAnchorStyles, helpBadge } from "./help-badge.js";
  * optional operation number.
  */
 export type ConfirmPaymentDetail = (
-  { method: "cash"; amount: string } | { method: "card"; amount: string; externalRef?: string }
+  | { method: "cash"; amount: string }
+  | ({ method: "card"; amount: string; externalRef?: string } & OutsideCardDetails)
 ) &
   ReceiptGuestsDetail;
 
@@ -127,7 +135,7 @@ const CARD_FAILURE_MESSAGES = new Map<string, StringKey>([
 
 const ZERO = decimal("0");
 
-type EntryDraft = { entry: string; label: string; ref: string };
+type EntryDraft = { entry: string; label: string; ref: string; outside: OutsideCardDetails };
 type CardDraft = {
   tip: string;
   simulation: "captured" | "declined" | "attempting";
@@ -143,6 +151,7 @@ type View = "idle" | "paying" | "weighing" | "holding" | "card" | "collecting" |
 export class TillTenderPay extends LitElement {
   static override styles = [
     baseStyles,
+    outsideCardStyles,
     segmentedOptionStyles,
     formMessageStyles,
     guestsStepperStyles,
@@ -297,6 +306,7 @@ export class TillTenderPay extends LitElement {
   /** False on a device whose profile does not take cash: no Cash button, and a line saying where to
    * take it. */
   @property({ type: Boolean }) takesCash = true;
+  @property({ type: Boolean }) takesManualCard = false;
   @property({ attribute: false }) cardOutcome?: CardOutcome;
   @property({ attribute: false }) cardRetryDetail?: CollectCardDetail;
   /** Bumped by the app when no card attempt is still running, after any retry and any
@@ -327,6 +337,7 @@ export class TillTenderPay extends LitElement {
   @state() private entry = "";
   @state() private labelEntry = "";
   @state() private refEntry = "";
+  @state() private outside: OutsideCardDetails = {};
   @state() private selected?: TillProduct;
   @state() private tipEntry = "";
   @state() private tipAttempted = false;
@@ -374,7 +385,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #entryDraft(): EntryDraft {
-    return { entry: this.entry, label: this.labelEntry, ref: this.refEntry };
+    return { entry: this.entry, label: this.labelEntry, ref: this.refEntry, outside: this.outside };
   }
 
   #cardDraft(): CardDraft {
@@ -415,12 +426,16 @@ export class TillTenderPay extends LitElement {
           view === "holding"
             ? a.label.trim() === b.label.trim()
             : view === "card"
-              ? a.ref.trim() === b.ref.trim()
+              ? a.ref.trim() === b.ref.trim() &&
+                a.outside.externalProvider === b.outside.externalProvider &&
+                (a.outside.externalMachine ?? "").trim() ===
+                  (b.outside.externalMachine ?? "").trim()
               : this.#sameNumber(a.entry, b.entry),
         restore: (value) => {
           this.entry = value.entry;
           this.labelEntry = value.label;
           this.refEntry = value.ref;
+          this.outside = value.outside;
         },
       });
       this.#entryScope?.commit(this.#entryBaseline);
@@ -617,6 +632,7 @@ export class TillTenderPay extends LitElement {
 
   #startCard(): void {
     this.refEntry = "";
+    this.outside = {};
     this.view = "card";
   }
 
@@ -797,6 +813,7 @@ export class TillTenderPay extends LitElement {
       method: "card",
       amount: this.store.total,
       ...(ref === "" ? {} : { externalRef: ref }),
+      ...outsideCardValues(this.outside),
       ...this.#guestsDetail(),
     };
     this.view = "idle";
@@ -925,6 +942,20 @@ export class TillTenderPay extends LitElement {
       >
         ${t("tender.card")}
       </wt-button>
+      ${
+        this.takesManualCard && this.cardProvider !== "none"
+          ? html`<wt-button
+              class="pay-manual-card"
+              variant="secondary"
+              size="md"
+              ?disabled=${disabled || this.#guestsHeld()}
+              @click=${() => {
+                if (!this.#quietTap()) this.#checkBeforeTender(() => this.#startCard());
+              }}
+              >${t("bill_pay.method_other_terminal")}</wt-button
+            >`
+          : nothing
+      }
     `;
   }
 
@@ -1251,6 +1282,7 @@ export class TillTenderPay extends LitElement {
     const { tender, outstanding, guestCount } = confirmation;
     return html`
       <div class="summary">
+        ${outsideCardSummary(tender.method === "card" ? tender : {})}
         <p class="tender-kind">${t(tender.method === "cash" ? "tender.cash" : "tender.card")}</p>
         <div class="row">
           <span class="label">${t("label.total")}</span>
@@ -1374,6 +1406,14 @@ export class TillTenderPay extends LitElement {
         .label=${t("tender.card_ref")}
         @wt-change=${(event: Event) => this.#onRefChange(event)}
       ></wt-input>
+      ${outsideCardFields(
+        this.outside,
+        (value) => {
+          this.outside = value;
+          this.#entryScope?.changed();
+        },
+        this.busy,
+      )}
       <div class="actions">
         <wt-button
           class="confirm"
