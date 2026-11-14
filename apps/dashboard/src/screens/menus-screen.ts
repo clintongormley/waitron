@@ -2538,7 +2538,10 @@ export class MenusScreen extends LitElement {
     if (probe === undefined) return;
     this.#probes.set(kind, probe);
     this.#listSize ??= new ResizeObserver(() => {
-      this.layout = this.#measuredLayout();
+      // Column changes wait until the searchable table's resize delivery has finished.
+      requestAnimationFrame(() => {
+        if (this.isConnected) this.layout = this.#measuredLayout();
+      });
     });
     this.#listSize.observe(probe);
   }
@@ -2569,6 +2572,8 @@ export class MenusScreen extends LitElement {
           ? html`<div class="list">
               <wt-data-table
                 noMatchesMessage=${tableNoMatches()}
+                searchable
+                searchLabel=${t("menus.search")}
                 data-test="menus"
                 class=${this.layout}
                 aria-label=${t("menus.title")}

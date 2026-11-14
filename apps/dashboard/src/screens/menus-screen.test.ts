@@ -1357,6 +1357,45 @@ describe("a menus list row", () => {
   }
 });
 
+it.each([
+  [1280, 900, "en-GB", "Search menus"],
+  [390, 844, "es-ES", "Buscar cartas"],
+] as const)(
+  "searches menu names with the list controls (%i px)",
+  async (width, height, locale, label) => {
+    await at([width, height], locale, async () => {
+      const el = await mount();
+      const list = table(el);
+      await list.updateComplete;
+      const search = list.shadowRoot.querySelector<HTMLInputElement>('input[name="search"]');
+      expect(search).not.toBeNull();
+      expect(search!.getAttribute("aria-label")).toBe(label);
+      const names = () =>
+        [...list.shadowRoot.querySelectorAll('tbody [data-test^="open-menu-"]')].map((row) =>
+          row.textContent!.trim(),
+        );
+      await userEvent.fill(search!, "lunch");
+      await vi.waitFor(() => expect(names()).toEqual(["Lunch Menu"]));
+      await userEvent.fill(search!, "Dinner");
+      await vi.waitFor(() => expect(names()).toEqual(["Dinner Menu"]));
+      await userEvent.fill(search!, "Burger");
+      await vi.waitFor(() => expect(names()).toEqual([]));
+      await userEvent.fill(search!, "");
+      await vi.waitFor(() => expect(names()).toEqual(["Dinner Menu", "Lunch Menu"]));
+      const chooser = list.shadowRoot.querySelector<HTMLElement>(".columns-trigger");
+      if (width === 1280) {
+        expect(chooser).not.toBeNull();
+        const inputBox = search!.getBoundingClientRect();
+        const chooserBox = chooser!.getBoundingClientRect();
+        expect(
+          Math.abs(inputBox.top + inputBox.height / 2 - chooserBox.top - chooserBox.height / 2),
+        ).toBeLessThan(2);
+        expect(inputBox.right).toBeLessThanOrEqual(chooserBox.left);
+      }
+    });
+  },
+);
+
 describe("the menus list's columns", () => {
   it.each([
     [1280, 900, true],
@@ -1371,7 +1410,7 @@ describe("the menus list's columns", () => {
           expect(table(el).shadowRoot.querySelectorAll("tbody tr")).toHaveLength(2);
         });
         expect(table(el).shadowRoot.querySelector(".columns-trigger") !== null).toBe(offered);
-        expect(table(el).shadowRoot.querySelector(".table-toolbar") !== null).toBe(offered);
+        expect(table(el).shadowRoot.querySelector(".table-toolbar")).not.toBeNull();
       });
     },
   );
@@ -1818,8 +1857,11 @@ describe("the menus list's Changes column", () => {
     await vi.waitFor(async () => {
       await table(el).updateComplete;
       expect(heads(el)).toHaveLength(3);
+      expect(heads(el)[1]).toBe(t("menus.status"));
+      expect(link(el, "menu-lunch")?.closest("td")).toBe(
+        row(el, "menu-lunch").querySelectorAll("td")[1],
+      );
     });
-    expect(heads(el)[1]).toBe(t("menus.status"));
   }
 
   describe.each([

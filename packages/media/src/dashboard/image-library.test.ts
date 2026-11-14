@@ -791,7 +791,9 @@ it("deletes unused images only after confirmation", async () => {
   client.listImages.mockResolvedValue({ images: [], total: 0 });
   click("[data-test=confirm-delete]");
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-image=one]")).toBeNull());
-  expect(el.shadowRoot!.textContent).toContain("No images found");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-file-input[data-test=empty-library]")).not.toBeNull(),
+  );
 });
 
 it("retains deletion confirmation after a failure and allows it to be dismissed", async () => {

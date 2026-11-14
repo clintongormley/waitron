@@ -6,6 +6,7 @@ import type { WtInput, WtSegmentedControl } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import type { Course, DashboardApi } from "../api/client.js";
 import { CourseList } from "./course-list.js";
 
@@ -1171,6 +1172,54 @@ describe("reordering", () => {
 });
 
 describe("layout", () => {
+  it("shows a name heading and compact rows with timing beside names", async () => {
+    const previous = [window.innerWidth, window.innerHeight] as const;
+    try {
+      await page.viewport(1280, 900);
+      const { el } = await mount(stubApi());
+      const heading = q(el, "thead th:nth-child(2)")!;
+      expect(
+        (heading.querySelector("span") ?? heading).getBoundingClientRect().width,
+      ).toBeGreaterThan(20);
+      const row = q(el, 'tr[data-course="c1"]')!;
+      const handle = q(el, '[data-test="drag-c1"]')!.getBoundingClientRect();
+      expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(handle.height * 1.25);
+      const timing = row.querySelector("wt-segmented-control")!.getBoundingClientRect();
+      expect(timing.left - nameButton(el, "c1")!.getBoundingClientRect().left).toBeLessThan(500);
+    } finally {
+      await page.viewport(...previous);
+    }
+  });
+  it.each([
+    ["en", "Rename", "Delete"],
+    ["es", es["kitchen.rename_course"], es["action.delete"]],
+  ])(
+    "offers named Rename/Delete actions and focuses the editor (%s)",
+    async (locale, renameText, deleteText) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mount(stubApi());
+        const menu = q<HTMLElementTagNameMap["wt-row-actions"]>(el, "wt-row-actions")!;
+        await menu.updateComplete;
+        const trigger = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+        await userEvent.click(trigger);
+        const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        expect(popup.matches(":popover-open")).toBe(true);
+        const rename = menu.querySelector<HTMLElement>('[data-action="rename"]');
+        expect(rename?.textContent!.trim()).toBe(renameText);
+        expect(menu.querySelector('[data-action="delete"]')!.textContent!.trim()).toBe(deleteText);
+        expect(menu.querySelector('[data-action="delete"]')).not.toBeNull();
+        await userEvent.click(rename!);
+        await vi.waitFor(() => expect(field(el)?.value).toBe("Starters"));
+        expect(popup.matches(":popover-open")).toBe(false);
+        expect(el.shadowRoot!.activeElement).toBe(field(el));
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
   it.each([
     [1280, "light"],
     [1280, "dark"],
@@ -1325,7 +1374,7 @@ describe("permanent delete", () => {
 });
 
 describe("permanent delete lifecycle", () => {
-  it("omits deleted rows, Status columns and filters and keeps only Delete on every active menu", async () => {
+  it("omits deleted rows, Status columns and filters and keeps Rename and Delete on every active menu", async () => {
     const { el } = await mount(stubApi({}, ALL));
     expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
     expect(el.shadowRoot!.textContent).not.toContain("Brunch");
@@ -1336,7 +1385,7 @@ describe("permanent delete lifecycle", () => {
         [...q(el, `tr[data-course="${id}"] wt-row-actions`)!.querySelectorAll("wt-button")].map(
           (b) => b.textContent!.trim(),
         ),
-      ).toEqual([t("action.delete")]);
+      ).toEqual([t("kitchen.rename_course"), t("action.delete")]);
     expect(
       [...el.shadowRoot!.querySelectorAll("th")].map((h) =>
         (h.querySelector(".timing-title") ?? h).textContent!.trim(),
@@ -1838,14 +1887,15 @@ it("keeps timing choices in place and focused while a change waits", async () =>
   await el.settled();
 });
 
-it("opens the course's confirmation directly from its named trash button and returns focus on cancel", async () => {
+it("opens the course's confirmation from Delete in its row menu and returns focus on cancel", async () => {
   const { el } = await mount(stubApi());
   const actions = q(el, '[data-course="c1"] wt-row-actions')!;
   const trigger = actions.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
   await vi.waitFor(() =>
-    expect(trigger.getAttribute("aria-label")).toBe(`${t("action.delete")}: Starters`),
+    expect(trigger.getAttribute("aria-label")).toBe(`${t("kitchen.course_actions")}: Starters`),
   );
   await userEvent.click(trigger);
+  await userEvent.click(actions.querySelector<HTMLElement>('[data-action="delete"]')!);
   await vi.waitFor(() => expect(deleteControl(el, "cancel")).not.toBeNull());
   await userEvent.click(deleteControl(el, "cancel")!);
   await vi.waitFor(() => expect(deleteDialog(el)).toBeNull());
@@ -1935,12 +1985,21 @@ it("holds live replacement rows after a real pointer crosses a row", async () =>
 it("does not measure every timing group while a course name is typed", async () => {
   const { el } = await mount(stubApi());
   await openRename(el, "c1");
-  await new Promise<void>((resolve) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-  );
   const groups = [...el.shadowRoot!.querySelectorAll("wt-segmented-control")].map((control) =>
     control.shadowRoot!.querySelector<HTMLElement>('[role="radiogroup"]')!,
   );
+  // Start measuring typing after the groups' initial resize delivery and deferred fitting.
+  await new Promise<void>((resolve) => {
+    const waiting = new Set<Element>(groups);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) waiting.delete(entry.target);
+      if (waiting.size > 0) return;
+      observer.disconnect();
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    onTestFinished(() => observer.disconnect());
+    for (const group of groups) observer.observe(group);
+  });
   const reads = groups.map((group) => vi.spyOn(group, "getBoundingClientRect"));
   await typeName(el, "Starters revised");
   await new Promise<void>((resolve) =>

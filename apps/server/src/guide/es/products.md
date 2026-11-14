@@ -136,8 +136,8 @@ en vez de tratar cada curso como una sección fija para toda la mesa.
 En **Cursos**, elige **Marchar ya** para colocar los platos nuevos directamente en ese grupo de
 la mesa. Elige **Dejar para después** para agrupar el primer pedido por curso. En pedidos posteriores,
 comprueba el grupo propuesto antes de enviar; puedes mover los platos entre grupos. Añade un curso
-con **Añadir curso** y guarda su nombre con Intro o al salir del campo. Usa la papelera junto a un
-curso para eliminarlo.
+con **Añadir curso** y guarda su nombre con Intro o al salir del campo. Abre el menú ⋮ de la fila
+para renombrar o eliminar un curso.
 
 **Editar cursos…**, al final de la lista **Curso**, abre la lista de cursos en una
 ventana que guarda cada cambio al hacerlo. Al cerrarla, el último curso que añadiste pasa a ser el
@@ -277,6 +277,9 @@ Los datos de compras existentes y los datos registrados de los pedidos siguen di
 alérgenos y la aptitud dietética vigentes de los productos los gestionas en **Productos**.
 
 ## Pon un producto nuevo en tus cartas {#menus}
+
+Usa **Buscar cartas** en la lista de Cartas para encontrar una carta por su nombre. **Columnas**,
+a su lado, elige qué columnas ves.
 
 Cuando guardas un producto nuevo, el editor se cierra y una ventana como **Añadir Flat white a las
 cartas** pregunta dónde va. Muestra el **Nivel principal** de cada carta y sus secciones: marca los

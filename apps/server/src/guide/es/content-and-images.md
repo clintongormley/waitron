@@ -134,7 +134,7 @@ conservan su texto registrado. Consulta [el papel de cocina](kitchen-service.md#
 ## Sube una fotografía una sola vez {#upload}
 
 Para varias fotos, abre la **Biblioteca de imágenes** y suéltalas en cualquier parte de la página, o
-selecciona **elige archivos**. Las subidas empiezan enseguida. Un archivo llamado
+selecciona **Elegir fotos** en la parte superior de la página. Las subidas empiezan enseguida. Un archivo llamado
 `patatas-bravas.jpg` empieza como **Patatas bravas** en tu idioma de contenido predeterminado. La
 línea de progreso cuenta las fotos subidas; una foto nueva lleva una insignia **Nueva**. Si falla una
 subida, ves el nombre de su archivo y el motivo, y las demás subidas continúan.

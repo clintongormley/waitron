@@ -395,3 +395,51 @@ it.each([
     expect(el.shadowRoot!.querySelector(".batch-progress")!.textContent!.trim()).toBe(wanted),
   );
 });
+
+it("keeps the multiple chooser in the header and the drop box only in an empty library", async () => {
+  const api = await mount();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector('[data-test="empty-library"]')).not.toBeNull(),
+  );
+  const chooser = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-file-input"]>(
+    "header wt-file-input[multiple]",
+  );
+  expect(chooser).not.toBeNull();
+  expect(chooser!.copy.choose).toBe("Choose photos");
+  api.listImages.mockResolvedValue({ images: [image("one", "Bread")], total: 1 });
+  api.liveData.invalidate([{ type: "media_images" }]);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[data-image="one"]')).not.toBeNull());
+  expect(el.shadowRoot!.querySelector('[data-test="empty-library"]')).toBeNull();
+  expect(el.shadowRoot!.querySelectorAll("wt-file-input[multiple]")).toHaveLength(1);
+});
+it("shows the empty-library box only after the unfiltered search answers, never for a pending or failed search", async () => {
+  const api = await mount();
+  const empty = () => el.shadowRoot!.querySelector('[data-test="empty-library"]');
+  await vi.waitFor(() => expect(empty()).not.toBeNull());
+  const search = (value: string) =>
+    el
+      .shadowRoot!.querySelector('[name="image-search"]')!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+  const miss = deferred<{ images: LibraryImage[]; total: number }>();
+  api.listImages.mockReturnValueOnce(miss.promise);
+  search("missing");
+  await vi.waitFor(() => expect(api.listImages).toHaveBeenCalledTimes(2));
+  expect(empty()).toBeNull();
+  expect(text()).not.toContain("No images found.");
+  miss.resolve({ images: [], total: 0 });
+  await vi.waitFor(() => expect(text()).toContain("No images found."));
+  expect(empty()).toBeNull();
+  const cleared = deferred<{ images: LibraryImage[]; total: number }>();
+  api.listImages.mockReturnValueOnce(cleared.promise);
+  search("");
+  await el.updateComplete;
+  expect(empty()).toBeNull();
+  await vi.waitFor(() => expect(api.listImages).toHaveBeenCalledTimes(3));
+  expect(empty()).toBeNull();
+  expect(text()).not.toContain("No images found.");
+  cleared.reject(new Error("offline"));
+  await vi.waitFor(() => expect(text()).toContain("The image library could not be loaded."));
+  expect(empty()).toBeNull();
+});

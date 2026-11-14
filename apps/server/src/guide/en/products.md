@@ -130,7 +130,8 @@ fixed section for the whole table.
 In **Courses**, choose **Fire now** to put new dishes straight into that group at a table.
 Choose **Hold for later** to group the first order by course. On later orders, check the proposed
 group before sending; you can move dishes between groups. Add a course with **Add course**, then
-save its name with Enter or by leaving the field. Use the trash button beside a course to delete it.
+save its name with Enter or by leaving the field. Open the row’s ⋮ menu to rename or delete a
+course.
 
 **Edit courses…** at the end of the **Course** list opens the course list in a window that
 saves each change as you make it. When you close it, the last course you added becomes the product's
@@ -264,6 +265,9 @@ Existing purchasing data and recorded order facts remain available, but you main
 product allergens and dietary suitability in **Products**.
 
 ## Put a new product on your menus {#menus}
+
+Use **Search menus** on the Menus list to find a menu by name. **Columns** beside it chooses
+which columns you see.
 
 When you save a new product, the editor closes and a window such as **Add Flat white to menus** asks where it goes. It
 lists each menu's **Top level** and the sections inside it: tick the places you want and choose

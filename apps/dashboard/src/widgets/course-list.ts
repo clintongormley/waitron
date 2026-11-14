@@ -66,7 +66,7 @@ export class CourseList extends LitElement {
         display: block;
       }
       thead th {
-        padding: 0;
+        padding: var(--wt-space-3) var(--wt-space-1);
         border: 0;
       }
       /* Not the shared baseline, which lines the grip and row menu up with the name button's LAST
@@ -74,6 +74,7 @@ export class CourseList extends LitElement {
          instead, where the top-aligned grip and menu have theirs. */
       tbody td {
         vertical-align: top;
+        padding-block: var(--wt-space-1);
       }
       tfoot td {
         vertical-align: middle;
@@ -102,8 +103,9 @@ export class CourseList extends LitElement {
       .open-name:hover {
         opacity: var(--wt-opacity-hover);
       }
-      td.timing-cell {
-        width: 1%;
+      th.name-heading,
+      td.name-cell {
+        width: calc(7 * var(--wt-tap-min));
       }
       wt-segmented-control {
         width: calc(4 * var(--wt-tap-min) - var(--wt-space-3));
@@ -117,14 +119,9 @@ export class CourseList extends LitElement {
       td.actions-cell {
         padding-inline-end: var(--wt-space-3);
       }
-      th.held-heading {
+      .timing-label {
         position: relative;
-        text-align: start;
-        padding-inline: var(--wt-space-1);
-      }
-      th wt-help-tooltip {
-        margin-block-start: 0;
-        margin-inline-end: 0;
+        display: inline-block;
       }
       .empty {
         margin: 0;
@@ -529,11 +526,17 @@ export class CourseList extends LitElement {
         <wt-button
           align="start"
           variant="ghost"
+          data-action="rename"
+          @click=${() => void this.#open(course.id, course.name)}
+          >${t("kitchen.rename_course")}</wt-button
+        >
+        <wt-button
+          align="start"
+          variant="ghost"
           data-action="delete"
           aria-label=${`${t("action.delete")}: ${course.name}`}
           data-test=${`remove-${course.id}`}
           @click=${(event: Event) => {
-            event.stopPropagation();
             const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions");
             this.#remove(
               course,
@@ -553,7 +556,7 @@ export class CourseList extends LitElement {
     const edit = this.edit?.id === course.id ? this.edit : null;
     return html`<tr data-course=${course.id}>
       <td class="handle-cell">${this.#reorder.handle(course.id)}</td>
-      <td>
+      <td class="name-cell">
         ${
           edit
             ? this.#nameField(edit, t("kitchen.course_name"))
@@ -649,18 +652,20 @@ export class CourseList extends LitElement {
         <thead>
           <tr>
             <th scope="col"><span class="visually-hidden">${t("kitchen.reorder_course")}</span></th>
-            <th scope="col"><span class="visually-hidden">${t("kitchen.course_name")}</span></th>
+            <th scope="col" class="name-heading">${t("kitchen.course_name")}</th>
             <th scope="col" class="held-heading">
               ${
                 this.courses.length
-                  ? html`<span class="timing-title">${t("courses.on_the_till")}</span
+                  ? html`<span class="timing-label"
+                      ><span class="timing-title">${t("courses.on_the_till")}</span
                       ><wt-help-tooltip
                         mode="help-mode"
                         aria-label=${t("courses.help_label")}
                         guide-href=${guideHref("products.course")}
                         guide-label=${t("courses.help_guide")}
                         >${t("courses.help")}</wt-help-tooltip
-                      >`
+                      ></span
+                    >`
                   : html`<span class="visually-hidden">${t("courses.on_the_till")}</span>`
               }
             </th>

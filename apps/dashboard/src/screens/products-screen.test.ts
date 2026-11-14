@@ -2250,7 +2250,17 @@ describe("catalogue-screen", () => {
       expect(timing).not.toBeNull();
       expect(timing.getAttribute("hide-label")).not.toBeNull();
       const actions = inList(el, "tr wt-row-actions");
-      expect(actions.shadowRoot!.querySelector("button")!.getAttribute("popovertarget")).toBeNull();
+      const trigger = actions.shadowRoot!.querySelector("button")!;
+      expect(trigger.getAttribute("popovertarget")).not.toBeNull();
+      await userEvent.click(trigger);
+      const popup = actions.shadowRoot!.querySelector("[popover]")!;
+      expect(popup.matches(":popover-open")).toBe(true);
+      expect(
+        [...actions.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
+      ).toEqual([t("kitchen.rename_course"), t("action.delete")]);
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
+      expect(dialog.open).toBe(true);
     });
 
     it("selects a course added in the window once Done closes it, keeping the product's unsaved edits", async () => {

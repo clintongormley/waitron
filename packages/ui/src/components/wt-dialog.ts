@@ -683,7 +683,7 @@ export class WtDialog extends LitElement {
              violations, even fully nameless; adding role="dialog" made the same break get
              flagged. Removing this attribute would silently blind wt-dialog.a11y.test.ts. -->
         ${this.fixedHeading ? html`<div class="header">${this.renderHeading()}</div>` : nothing}
-        <div class="body" @keydown=${this.endOpeningFocus} @blur=${this.onBodyBlur}>
+        <div class="body" part="body" @keydown=${this.endOpeningFocus} @blur=${this.onBodyBlur}>
           ${this.fixedHeading ? nothing : this.renderHeading()}
           <slot @wt-form-error=${this.onBodyMessage} @slotchange=${this.observeBody}></slot>
         </div>
