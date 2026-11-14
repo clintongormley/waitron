@@ -1,54 +1,23 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { sourceFilesIn } from "./no-till-as-issuer.mjs";
 
 /**
  * Contract: the styles of the dashboard's and the till's views read colours and rem/em lengths from
  * declared `--wt-*` tokens, as `packages/ui/src/no-hardcoded-chrome.test.ts` requires of the
  * shared primitives.
  *
- * Weaker than its name. It reads the TEXT of each Lit `css` tagged template in a tracked,
- * non-test `.ts` under `apps/dashboard/src` and `apps/till/src`, and does not see: px sizes;
- * styles outside a `css` tag (inline `style=` attributes, `unsafeCSS` strings, string constants
- * such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`, `index.html`); the condition of a `@media` or
- * `@container` rule, which cannot read a custom property; a value interpolated with `${…}`; any
- * other app. Only the short list of named colours below is caught.
+ * Weaker than its name. It reads the TEXT of each Lit `css` tagged template in every non-test
+ * `.ts` on disk under `apps/dashboard/src` and `apps/till/src`, skipping `sourceFilesIn`'s
+ * ignored folders, and does not see: px sizes; styles outside a `css` tag (inline `style=`
+ * attributes, `unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`,
+ * `index.html`); the condition of a `@media` or `@container` rule, which cannot read a custom
+ * property; a value interpolated with `${…}`; any other app. Only the short list of named colours below is caught.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
 const APPS = ["apps/dashboard/src", "apps/till/src"] as const;
-
-const GIT_SPAWN_TIMEOUT_MS = 30_000;
-const SPAWN_TEST_TIMEOUT_MS = 60_000;
-
-function isolatedGitEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  for (const name of [
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_COMMON_DIR",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_NAMESPACE",
-  ]) {
-    delete env[name];
-  }
-  return env;
-}
-
-function viewFiles(dir: string): string[] {
-  return execFileSync("git", ["ls-files", "-z", "--", dir], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    env: isolatedGitEnv(),
-    timeout: GIT_SPAWN_TIMEOUT_MS,
-    maxBuffer: 64 * 1024 * 1024,
-  })
-    .split("\0")
-    .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"));
-}
 
 interface CssBlock {
   readonly line: number;
@@ -162,21 +131,19 @@ describe("the scanner", () => {
 });
 
 describe.each(APPS)("%s views", (dir) => {
-  it(
-    "declare no literal colours or rem/em lengths in their css",
-    () => {
-      const offenders: string[] = [];
-      let blockCount = 0;
-      for (const file of viewFiles(dir)) {
-        for (const block of cssBlocks(readFileSync(join(repoRoot, file), "utf8"))) {
-          blockCount += 1;
-          const literals = hardcodedLiterals(block.body);
-          if (literals.length > 0) offenders.push(`${file}:${block.line} ${literals.join(", ")}`);
-        }
+  it("declare no literal colours or rem/em lengths in their css", () => {
+    const offenders: string[] = [];
+    let blockCount = 0;
+    for (const file of sourceFilesIn(repoRoot, dir).filter(
+      (path) => path.endsWith(".ts") && !path.endsWith(".test.ts"),
+    )) {
+      for (const block of cssBlocks(readFileSync(join(repoRoot, file), "utf8"))) {
+        blockCount += 1;
+        const literals = hardcodedLiterals(block.body);
+        if (literals.length > 0) offenders.push(`${file}:${block.line} ${literals.join(", ")}`);
       }
-      expect(blockCount).toBeGreaterThan(0);
-      expect(offenders).toEqual([]);
-    },
-    SPAWN_TEST_TIMEOUT_MS,
-  );
+    }
+    expect(blockCount).toBeGreaterThan(0);
+    expect(offenders).toEqual([]);
+  });
 });
