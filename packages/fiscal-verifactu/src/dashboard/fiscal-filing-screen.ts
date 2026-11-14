@@ -39,18 +39,14 @@ import type {
 } from "../filing-overview-types.js";
 import { descriptionProblem, putRightFor } from "../put-right.js";
 import type { FiscalFilingClient } from "./fiscal-filing-client.js";
-import { refusalKey } from "./put-right-words.js";
+import { REFUSAL_WORDS, refusalKey } from "./put-right-words.js";
 import { t } from "./strings.js";
 
 const RECOVERY_PATH = "/manage/recovery/fiscal-conflict";
 const PAGE_SIZE = 50;
-const CASE_CHANGED: ReadonlySet<string> = new Set([
-  "fiscal.remedy_invalid",
-  "filing_case.not_found",
-  "filing_case.action_mismatch",
-  "filing_case.already_resolved",
-  "fiscal.record_already_corrected",
-]);
+const CASE_CHANGED: ReadonlySet<string> = new Set(
+  Object.keys(REFUSAL_WORDS).filter((code) => refusalKey(code) === "fiscal_filing.refused.changed"),
+);
 const NEEDS_ADMIN: ReadonlySet<string> = new Set([
   "authorization.not_permitted",
   "person.suspended",
@@ -868,8 +864,8 @@ export class FiscalFilingScreen extends LitElement {
       }
       ${
         cases.length > 0
-          ? html`<p class="muted" data-test="no-correction">
-              ${t("fiscal_filing.cases.no_correction")}
+          ? html`<p class="muted" data-test="open-to-put-right">
+              ${t("fiscal_filing.cases.open_to_put_right")}
             </p>`
           : nothing
       }

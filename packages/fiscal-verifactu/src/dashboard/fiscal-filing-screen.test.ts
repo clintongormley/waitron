@@ -542,15 +542,15 @@ describe("vf-fiscal-filing-screen", () => {
 
   it("says once, while there are cases, to open one to see whether it can be put right", async () => {
     const { screen } = await mount(vi.fn(async () => overview()));
-    expect(screen.shadowRoot!.querySelectorAll("[data-test=no-correction]")).toHaveLength(1);
-    expect(text(screen, "[data-test=cases] [data-test=no-correction]")).toBe(
+    expect(screen.shadowRoot!.querySelectorAll("[data-test=open-to-put-right]")).toHaveLength(1);
+    expect(text(screen, "[data-test=cases] [data-test=open-to-put-right]")).toBe(
       "Open a case to see whether Waitron can put it right.",
     );
 
     const { screen: empty } = await mount(
       vi.fn(async () => overview({ cases: [], totalCases: 0 })),
     );
-    expect(empty.shadowRoot!.querySelector("[data-test=no-correction]")).toBeNull();
+    expect(empty.shadowRoot!.querySelector("[data-test=open-to-put-right]")).toBeNull();
   });
 
   it("says the list is the newest 200 when there are more", async () => {
