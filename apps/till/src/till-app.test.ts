@@ -1886,6 +1886,61 @@ describe("till-app", () => {
     expect(listZoneOffers).toHaveBeenCalledTimes(2);
   });
 
+  it("a kitchen queue that cannot be read after the counter zone loaded says the queue could not refresh, not that the zone could not load", async () => {
+    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
+    defaultCatalogue.zones = [
+      {
+        id: "zone-counter",
+        name: "Counter",
+        departmentId: "department-default",
+        departmentName: "Restaurant",
+        serviceMode: "prepay",
+      },
+      {
+        id: "zone-deli",
+        name: "Deli",
+        departmentId: "department-deli",
+        departmentName: "Deli",
+        serviceMode: "ticket_then_pay",
+      },
+    ];
+    const deliCatalogue = fixtureOffers({
+      menus: [{ id: "menu-deli", name: "Deli", isDefault: true }],
+      products: [{ ...ham, catalogueId: "menu-deli", catalogueName: "Deli" }],
+    });
+    deliCatalogue.context = {
+      departmentName: "Restaurant",
+      zoneId: "zone-deli",
+      departmentId: "department-deli",
+      serviceMode: "ticket_then_pay",
+    };
+    const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
+    const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultCatalogue)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
+      listZoneOffers: vi.fn().mockResolvedValue(deliCatalogue),
+      getStationQueue,
+    });
+    const c = await toCounter(el);
+    const said = () =>
+      el.shadowRoot!.querySelector('[data-refresh-notice="station"]')?.textContent ?? "";
+    expect(said()).not.toContain(t("refresh.station"));
+    expect(c.selectedMenuId).not.toBe("menu-deli");
+    const reads = getStationQueue.mock.calls.length;
+    getStationQueue.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
+    await flush(el);
+
+    expect(getStationQueue).toHaveBeenCalledTimes(reads + 1);
+    expect(c.selectedServiceZoneId).toBe("zone-deli");
+    expect(c.selectedMenuId).toBe("menu-deli");
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent ?? "").not.toContain(
+      t("service_zone.load_error"),
+    );
+    expect(said()).toContain(t("refresh.station"));
+  });
+
   it("visibly refuses a service-zone change while the basket has lines", async () => {
     const catalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
     catalogue.zones = [

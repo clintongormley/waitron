@@ -6007,10 +6007,6 @@ export class TillApp extends LitElement {
     return this.#refreshList("held");
   }
 
-  #refreshStationQueue(): Promise<void> {
-    return this.#refreshList("station");
-  }
-
   /** Never throws: a failure is said in the list's own retry notice. */
   #refreshWaiting(): Promise<void> {
     return this.#refreshList("waiting", "refresh.waiting");
@@ -6346,7 +6342,7 @@ export class TillApp extends LitElement {
       this.stage = "order";
       this.collectFlow = undefined;
       this.#onTabSelect("counter");
-      await this.#refreshStationQueue();
+      await this.#refreshList("station", "refresh.station");
       if (session !== this.#operatorSession) return;
       this.#followDefault();
       this.errorKey = undefined;
