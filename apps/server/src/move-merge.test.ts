@@ -3089,6 +3089,7 @@ it("moves 32,772 lines, preserves sent numbers and portions, then moves the comp
   const unrelated = await ticketItemsWithBill(db).where(
     eq(workingOrderLines.workingOrderId, target.tabId),
   );
+  // Leave enough fired items past 32,766 after the held and made-here exclusions.
   const ids = [template!.id, ...Array.from({ length: 32771 }, () => randomUUID())];
   const portionIds = ids.map(() => randomUUID());
   const number = (await billRow(v, source.tabId)).orderNumber;

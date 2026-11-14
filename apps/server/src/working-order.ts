@@ -1012,7 +1012,8 @@ export async function priceOrderLines(
     }
   }
 
-  // Dishes precede their extras so chunked inserts satisfy the parent foreign key.
+  // Pre-generated ids let extras name their dish before either row is written.
+  // gross.lines lists each dish before its extras, as chunked inserts need for the parent key.
   const ids = gross.lines.map(() => randomUUID());
   const byLineNo = new Map(gross.lines.map((line, i) => [line.lineNo, ids[i]!]));
   const lineRows = gross.lines.map((line, i) => {

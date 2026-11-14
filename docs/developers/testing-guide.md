@@ -796,7 +796,7 @@ parent written in an earlier chunk exists when you insert its child. Collect all
 before recording the round's contexts or checking its total.
 
 For growing ID filters, the JSON-list predicate in `apps/server/src/bill-actions.ts` binds one
-value while retaining the query's ordering. Use it for reads and updates; insert chunk sizes do
+value while retaining the query's ordering. Use it for reads, updates and deletes; insert chunk sizes do
 not budget a predicate repeated twice in an update.
 
 The guard, "refuses a statement binding one
