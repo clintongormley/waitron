@@ -22,9 +22,10 @@ export function readOutsideCardDetails(
     throw invalid("externalMachine");
   return {
     ...(externalProvider === undefined ? {} : { externalProvider }),
-    ...(typeof externalMachine === "string" && externalMachine.trim() !== ""
-      ? { externalMachine: externalMachine.trim() }
-      : {}),
+    externalMachine:
+      typeof externalMachine === "string" && externalMachine.trim() !== ""
+        ? externalMachine.trim()
+        : undefined,
   };
 }
 

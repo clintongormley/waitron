@@ -2612,3 +2612,32 @@ it("records a separate-machine card with its details while an integrated reader 
     },
   ]);
 });
+
+it.each(["2.00", "bad"])(
+  "does not silently discard reader tip %s when choosing another machine",
+  async (tip) => {
+    const previous = currentLocale();
+    setLocale("en");
+    onTestFinished(() => setLocale(previous));
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cardProvider: "sumup_cloud",
+      takesManualCard: true,
+      tipsEnabled: true,
+    });
+    await typeTip(el, tip);
+    click(el, ".pay-manual-card");
+    await el.updateComplete;
+    if (tip === "bad") {
+      expect(query(el, ".ref-input")).toBeNull();
+      expect((query(el, ".tip-input") as HTMLElement & { error: string }).error).not.toBe("");
+    } else {
+      expect(query(el, "[data-reader-tip-cleared]")?.textContent).toContain("not included");
+      click(el, ".cancel");
+      await el.updateComplete;
+      expect((query(el, ".tip-input") as HTMLElement & { value: string }).value).toBe("");
+    }
+  },
+);

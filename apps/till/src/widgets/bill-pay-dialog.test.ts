@@ -3414,6 +3414,11 @@ it("offers a separate card machine at a counter with a configured reader", async
   const el = await mount({ cardReader: "sumup_cloud", takesManualCard: true, way: "contribution" });
   const manual = root(el).querySelector('input[name="method"][value="manual"]');
   expect(manual).not.toBeNull();
+  el.takesManualCard = false;
+  await el.updateComplete;
+  expect(root(el).querySelector('input[name="method"][value="manual"]')).toBeNull();
+  el.takesManualCard = true;
+  await el.updateComplete;
   await pick(el, "method", "manual");
   await type(el, "amount", "12");
   const asked = capture<PayRequest>(el, "bill-pay-preview");
@@ -3425,4 +3430,22 @@ it("offers a separate card machine at a counter with a configured reader", async
       card: { entry: "manual" },
     },
   ]);
+});
+
+it("labels the operation number on a saved manual payment", async () => {
+  const el = await mount({
+    balance: balanceOf({
+      payments: [
+        {
+          ...pendingCard,
+          state: "received",
+          entry: "manual",
+          externalRef: "OP-73",
+          externalProvider: "other",
+          externalMachine: "Bank",
+        },
+      ],
+    }),
+  });
+  expect(text(root(el).querySelector("[data-payment]"))).toContain("Operation number OP-73");
 });

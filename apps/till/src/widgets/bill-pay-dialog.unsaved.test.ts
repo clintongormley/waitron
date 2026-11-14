@@ -9,6 +9,7 @@ import type { PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
 
 class BillPayLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
+  takesCash = true;
   closes = 0;
   edits = 0;
   confirms = 0;
@@ -19,6 +20,7 @@ class BillPayLeaveApp extends LitElement {
         .balance=${{ workingOrderId: "bill-1", status: "open", total: "30.00", received: "0.00", reserved: "0.00", outstanding: "30.00", tips: "0.00", payments: [], paidLines: [] }}
         .way=${"contribution"}
         .amount=${"10.00"}
+        .takesCash=${this.takesCash}
         .handheld=${this.handheld}
         .cardReader=${this.handheld ? "stripe_terminal" : "none"}
         .takesManualCard=${this.handheld}
@@ -319,6 +321,21 @@ it("on a handheld opens unchanged on its default method, and a change of method 
   await form.updateComplete;
   expect(unload()).toBe(true);
   click(form, "input[name=method][value=card]");
+  await form.updateComplete;
+  expect(unload()).toBe(false);
+});
+
+it("outside-card details alone protect the draft and normalized reverts are clean", async () => {
+  const { form } = await mount({ takesCash: false });
+  expect(unload()).toBe(false);
+  await fill(form, "externalMachine", " Spare ");
+  expect(unload()).toBe(true);
+  await fill(form, "externalMachine", "   ");
+  expect(unload()).toBe(false);
+  click(form, 'input[name="external-provider"][value="sumup"]');
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  click(form, 'input[name="external-provider"][value=""]');
   await form.updateComplete;
   expect(unload()).toBe(false);
 });

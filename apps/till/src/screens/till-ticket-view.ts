@@ -294,8 +294,7 @@ function renderBillPayment(payment: BillTenderLine, locale: string, labels: Rece
             : nothing
         }`;
   return html`
-    ${paid} ${outsideCardSummary(payment.method === "card" ? payment : {})}
-    ${payment.tip !== "0.00" ? tenderRow(labels.tip, payment.tip, locale) : nothing}
+    ${paid} ${payment.tip !== "0.00" ? tenderRow(labels.tip, payment.tip, locale) : nothing}
     ${payment.refunds.map((refund) =>
       tenderRow(labels.refund, negateDecimal(given(refund)), locale),
     )}
@@ -326,7 +325,6 @@ function renderTender(result: TillSaleResult, locale: string, labels: ReceiptLab
   }
   return html`
     <div class="tender-row"><span>${labels.card}</span></div>
-    ${outsideCardSummary(t)}
     ${
       t.reference !== null
         ? html`<div class="tender-row"><span>${labels.reference} ${t.reference}</span></div>`
@@ -1406,6 +1404,15 @@ export class TillTicketView extends LitElement {
             : nothing
         }
       </article>
+      <section data-outside-payment-facts>
+        ${
+          r.payments?.length
+            ? r.payments.map((payment) =>
+                outsideCardSummary(payment.method === "card" ? payment : {}),
+              )
+            : outsideCardSummary(r.tender.method === "card" ? r.tender : {})
+        }
+      </section>
 
       ${this.renderOriginalDelivery()}
       ${

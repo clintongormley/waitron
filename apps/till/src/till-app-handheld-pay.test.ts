@@ -546,11 +546,23 @@ describe("a presented bill on a handheld", () => {
 
   it("another card machine is collected as a card of the whole amount with its operation number", async () => {
     const { el } = await openPresented();
-    await payFromSheet(el, { method: "manual", externalRef: "OP-7", guestCount: null });
+    await payFromSheet(el, {
+      method: "manual",
+      externalRef: "OP-7",
+      externalProvider: "other",
+      externalMachine: "Bank counter",
+      guestCount: null,
+    });
 
     expect(vi.mocked(api.collectOrder).mock.calls[0]).toEqual([
       "wo-4",
-      { method: "card", amount: "120.00", externalRef: "OP-7" },
+      {
+        method: "card",
+        amount: "120.00",
+        externalRef: "OP-7",
+        externalProvider: "other",
+        externalMachine: "Bank counter",
+      },
       undefined,
       null,
       editOfBill,

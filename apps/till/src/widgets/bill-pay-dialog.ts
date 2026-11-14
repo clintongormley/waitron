@@ -1371,7 +1371,7 @@ export class TillBillPayDialog extends LitElement {
     return html`<li class="payment" data-payment=${payment.id}>
       <div class="payment-text">
         ${outsideCardSummary(payment)}
-        ${payment.externalRef ? html`<p>${payment.externalRef}</p>` : nothing}
+        ${payment.externalRef ? html`<p>${t("tender.operation_number")} ${payment.externalRef}</p>` : nothing}
         <span class="payment-head">
           ${t("bill_pay.payment")
             .replace("{n}", String(n))

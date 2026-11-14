@@ -45,12 +45,18 @@ antes de cobrar el siguiente.
 
 Añade un artículo antes de cobrar o enviar un pedido.
 
+Si cobras con otro datáfono, consulta [Usar otro datáfono](table-service.md#outside-card).
+
 ## Usar otro datáfono {#outside-card}
 
 Cobra primero la tarjeta en el otro datáfono. En **Cobrar**, elige **Otro datáfono** e introduce
 su número de operación y el datáfono utilizado. Puedes elegir **Esta cuenta de SumUp** si usa la
 cuenta conectada, o **Cobrado fuera de Waitron** si es de otro proveedor. Los campos son
 opcionales; la cuenta conserva los datos que introduzcas.
+
+Si habías introducido una propina para el datáfono conectado, el formulario directo del
+mostrador la borra y te avisa de que no se incluye. Usa la ventana de cobro de la cuenta para
+registrar una propina cobrada en otro datáfono.
 
 Registra cada pago cuando lo cobres, mientras Waitron acepte pagos. Si Waitron rechaza un pago,
 sigue las indicaciones antes de volver a registrarlo; no cobres dos veces al cliente. Si no tienes

@@ -341,6 +341,7 @@ export class TillTenderPay extends LitElement {
   @state() private selected?: TillProduct;
   @state() private tipEntry = "";
   @state() private tipAttempted = false;
+  @state() private readerTipCleared = false;
   /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
   @state() private guestsEntry?: string;
   @state() private guestsAttempted = false;
@@ -633,6 +634,8 @@ export class TillTenderPay extends LitElement {
   #startCard(): void {
     this.refEntry = "";
     this.outside = {};
+    this.readerTipCleared = this.tipEntry.trim() !== "";
+    this.tipEntry = "";
     this.view = "card";
   }
 
@@ -672,6 +675,14 @@ export class TillTenderPay extends LitElement {
         ...this.#guestsDetail(),
         ...(this.#slipAvailable() ? { printCardSlip: this.printCardSlip } : {}),
       });
+    });
+  }
+
+  #onOtherCardTap(): void {
+    if (this.#tipRefused() || this.#guestsRefused()) return;
+    this.#checkBeforeTender(() => {
+      if (this.#tipRefused() || this.#guestsRefused()) return;
+      this.#startCard();
     });
   }
 
@@ -948,9 +959,9 @@ export class TillTenderPay extends LitElement {
               class="pay-manual-card"
               variant="secondary"
               size="md"
-              ?disabled=${disabled || this.#guestsHeld()}
+              ?disabled=${disabled || (this.tipAttempted && this.#tipInvalid()) || this.#guestsHeld()}
               @click=${() => {
-                if (!this.#quietTap()) this.#checkBeforeTender(() => this.#startCard());
+                if (!this.#quietTap()) this.#onOtherCardTap();
               }}
               >${t("bill_pay.method_other_terminal")}</wt-button
             >`
@@ -1391,6 +1402,7 @@ export class TillTenderPay extends LitElement {
 
   #renderCard() {
     return html`
+      ${this.readerTipCleared ? html`<p data-reader-tip-cleared>${t("tender.reader_tip_cleared")}</p>` : nothing}
       <div class="summary">
         <p class="tender-kind">${t("tender.card")}</p>
         <div class="row">

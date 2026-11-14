@@ -48,6 +48,7 @@ import type { VenueResult } from "@waitron/provisioning";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import {
   MANUAL_PROVIDER,
+  payments,
   SimulatorPaymentProvider,
   cardReaderHolders,
   cardReaders,
@@ -3315,6 +3316,63 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     expect(printed.documents).toHaveLength(1);
   });
 
+  it.each(["sales", "collect"] as const)(
+    "normalizes outside-card details on the %s route",
+    async (route) => {
+      const { each, app, cookie } = await venueWithTill("ticket_then_pay");
+      const id = randomUUID();
+      if (route === "collect") {
+        const parked = await app.request("/api/working-orders", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie },
+          body: JSON.stringify({ id, lines: [{ menuItemId: each.menuItemId, quantity: "2" }] }),
+        });
+        expect(parked.status).toBe(200);
+        expect(
+          (
+            await app.request(`/api/working-orders/${id}/place`, {
+              method: "POST",
+              headers: { cookie },
+            })
+          ).status,
+        ).toBe(200);
+      }
+      const request = (tender: Record<string, unknown>) =>
+        app.request(route === "sales" ? "/api/sales" : `/api/working-orders/${id}/collect`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie },
+          body: JSON.stringify(
+            route === "sales"
+              ? {
+                  workingOrderId: id,
+                  lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+                  tender,
+                }
+              : { tender },
+          ),
+        });
+      const refused = await request({ method: "cash", amount: "3.00", externalProvider: "other" });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "externalProvider" } },
+      });
+      const paid = await request({
+        method: "card",
+        amount: "3.00",
+        externalProvider: "other",
+        externalMachine: "   ",
+      });
+      expect(paid.status).toBe(200);
+      expect((await paid.json()).tender).not.toHaveProperty("externalMachine");
+      expect(
+        await suite.db
+          .select({ source: payments.externalProvider, machine: payments.externalMachine })
+          .from(payments)
+          .where(eq(payments.workingOrderId, id)),
+      ).toEqual([{ source: "other", machine: null }]);
+    },
+  );
+
   it.each(["ticket_then_pay", "ticket_then_pay"] as const)(
     "collecting a placed %s order by hand-keyed card opens the device's drawer once for the slip, and a replay opens nothing more",
     async (orderFlow) => {
@@ -3345,9 +3403,27 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         app.request(`/api/working-orders/${workingOrderId}/collect`, {
           method: "POST",
           headers: { "content-type": "application/json", cookie: both },
-          body: JSON.stringify({ tender: { method: "card", amount: "3.00" } }),
+          body: JSON.stringify({
+            tender: {
+              method: "card",
+              amount: "3.00",
+              externalProvider: "sumup",
+              externalMachine: "Spare Solo",
+            },
+          }),
         });
-      expect((await collect()).status).toBe(200);
+      const collected = await collect();
+      expect(collected.status).toBe(200);
+      expect((await collected.json()).tender).toMatchObject({
+        externalProvider: "sumup",
+        externalMachine: "Spare Solo",
+      });
+      expect(
+        await suite.db
+          .select({ source: payments.externalProvider, machine: payments.externalMachine })
+          .from(payments)
+          .where(eq(payments.workingOrderId, workingOrderId)),
+      ).toEqual([{ source: "sumup", machine: "Spare Solo" }]);
 
       const saleId = await saleIdOf(workingOrderId);
       expect(await drawerOpenRows()).toEqual([

@@ -1924,9 +1924,22 @@ describe("till-ticket-view: the sale's own language", () => {
   it("names a card, its reference, tip and charge in the sale's language", async () => {
     const { el } = await mount({
       locale: "eu-ES",
-      tender: { method: "card", charged: "9.90", tip: "0.50", reference: "4471" },
+      tender: {
+        method: "card",
+        charged: "9.90",
+        tip: "0.50",
+        reference: "4471",
+        externalProvider: "other",
+        externalMachine: "Bank counter",
+      },
     });
 
+    expect(
+      el.shadowRoot!.querySelector("article")!.querySelector("[data-outside-card-details]"),
+    ).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-outside-payment-facts]")?.textContent).toContain(
+      "Bank counter",
+    );
     expect(rows(el, ".meta-row")[1]).toBe(`Data ${spanishDate}`);
     expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("eu-ES");
     expect(rows(el, ".tender .tender-row")).toEqual([
