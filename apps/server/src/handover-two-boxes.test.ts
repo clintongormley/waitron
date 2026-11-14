@@ -461,7 +461,7 @@ describe("a controlled handover to the joined spare, then the old box back by em
       const { copy } = preview.body as { copy: { identifier: string; lastChangeAtMs: number } };
       const declared = await boxRequest(declaration, "/api/node/handover/emergency/declare", {
         operationId: EMERGENCY_OP,
-        expectedCopy: { identifier: copy.identifier, lastChangeAtMs: copy.lastChangeAtMs },
+        expectedCopy: copy,
         signIn,
         statements: {
           sourceSwitchedOff: true,

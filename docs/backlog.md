@@ -1723,14 +1723,10 @@ Not in any track until the standalone primary is done.
 
 - **Address search provider, province names, guide lines** (bundle of 2, size M, waits for another entry). Holds A1171, A1171. [Detail](backlog/replication-cloud.md#bundle-address-search-provider-province-names-guide-lines)
 
-- **A1018. Finish local handover qualification; physical boxes and Cloud remain separate.**
-  A947 3b-F landed as [#3172](https://github.com/clintongormley/waitron/pull/3172).
-  The 14 November current-main two-box run passes the controlled case but refuses the emergency
-  test's declaration because its fixture drops the preview copy's required source. Correct that
-  request and run the two-box flow before calling the local build complete. Physical qualification
-  belongs to the owner. Cloud emergency start is A1188; Cloud-to-box handover is A1505.
-  The extra emergency wait in Task 7.4b was deliberately excluded by the owner's next-free-minute
-  choice. [Audit, scope and build history](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
+- **A1018: physical-box qualification remains the owner's.** The local two-box test covers a
+  controlled handover and a reset/rejoin emergency takeover with Veri*Factu. Cloud emergency start
+  stays with A1188; Cloud-to-box handover stays with A1505.
+  [Local receipts and remaining qualification](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **A947 owns the spare's authenticated switch screen** (watcher, 2026-11-08); the spare's
   dashboard is retired. [Decision](backlog/replication-cloud.md#decisions-and-deliberate-limits).
