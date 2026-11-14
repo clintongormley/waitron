@@ -1,6 +1,7 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import {
   billPaymentRefunds,
+  billPayments,
   saleSettlements,
   saleVoids,
   tenderRefunds,
@@ -99,6 +100,13 @@ export async function readRefundableTenders(
           appliedAmount: centsToDecimal(row.appliedAmount),
           tipAmount: centsToDecimal(row.tipAmount),
         }));
+  const originalBills =
+    billIds.length === 0
+      ? []
+      : await tx
+          .select({ id: billPayments.id, applied: billPayments.applied, tip: billPayments.tip })
+          .from(billPayments)
+          .where(inArray(billPayments.id, billIds));
   const providerReturns =
     captures.length === 0
       ? []
@@ -151,8 +159,20 @@ export async function readRefundableTenders(
           .filter((refund) => refund.billPaymentId === row.billPaymentId)
           .map((refund) => addDecimal(refund.appliedAmount, refund.tipAmount)),
       );
+      const original = originalBills.find((bill) => bill.id === row.billPaymentId);
+      // Retention receives the net capture; its earlier provider returns are already outside that receipt.
+      const retainedReturns =
+        original === undefined
+          ? ZERO
+          : maximum(
+              ZERO,
+              subtractDecimal(
+                centsToDecimal(payment.amount),
+                addDecimal(centsToDecimal(original.applied), centsToDecimal(original.tip)),
+              ),
+            );
       const accounted = addDecimal(
-        preInvoice,
+        addDecimal(preInvoice, retainedReturns),
         sumDecimals(
           returns
             .filter((refund) => refund.state === "completed")

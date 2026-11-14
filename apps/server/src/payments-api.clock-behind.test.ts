@@ -127,6 +127,12 @@ const ROUTES: {
   next: { status: number; code: string };
 }[] = [
   {
+    name: "partial refund retain",
+    path: (id) => `/management-api/payments/partial-refunds/${id}/retain`,
+    body: { remaining: "60.00", applied: "60.00", tip: "0.00" },
+    next: { status: 409, code: "payment.not_stuck" },
+  },
+  {
     name: "partial refund release",
     path: (id) => `/management-api/payments/partial-refunds/${id}/release`,
     next: { status: 409, code: "payment.not_stuck" },

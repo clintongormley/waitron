@@ -1,3 +1,4 @@
+import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { outsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
 import { readBillSlipPayments } from "./payment-slip-print.js";
 import { withIssuanceTransaction } from "@waitron/core";
@@ -1495,13 +1496,8 @@ export function attestationColumns(attestation: Attestation | undefined) {
     : { attestedBy: attestation.attestedBy, attestationNote: attestation.note };
 }
 
-/**
- * P3's work for a card bill payment whose charge has gone through (design §5.3, §7): the payment
- * becomes `received`, dated when the money moved, and the invoice is issued if the bill is now
- * fully paid. Shared by the live attempt, the loop's recovery and the manager's actions, each of
- * which has read the payment pending in the same transaction; `bill_payments_guard_update` refuses
- * the change for one that is not. `total` is the bill's total when issuing priced it.
- */
+/** Receive a pending card payment at its settlement time, then issue when fully paid.
+ * A partial refund requires explicit net amounts: the gross provider charge includes returned money. */
 export async function completeBillPayment(
   tx: Transaction,
   deps: BillPaymentDeps,
@@ -1510,6 +1506,7 @@ export async function completeBillPayment(
   receivedAt: Date,
   attestation?: Attestation,
   guestCount?: GuestCountChoice,
+  confirmedNet?: { applied: Decimal; tip: Decimal },
 ): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const [pending] = await tx
@@ -1521,11 +1518,40 @@ export async function completeBillPayment(
     .from(billPayments)
     .where(eq(billPayments.id, billPaymentId));
   const provided = await findPaymentByBillPayment(tx, billPaymentId);
-  const actual =
-    provided !== undefined && provided.state === "captured"
+  if (provided?.state === "partially_refunded") {
+    const refunds = await tx
+      .select()
+      .from(paymentRefunds)
+      .where(and(eq(paymentRefunds.paymentId, provided.id), eq(paymentRefunds.state, "succeeded")));
+    const net = subtractDecimal(
+      decimal(provided.amount),
+      sumDecimals(refunds.map((r) => centsToDecimal(r.amount))),
+    );
+    if (
+      !confirmedNet ||
+      compareDecimal(net, ZERO) <= 0 ||
+      compareDecimal(addDecimal(confirmedNet.applied, confirmedNet.tip), net) !== 0
+    )
+      throw new AppError("bill.attestation_contradicted", {
+        id: billPaymentId,
+        evidence: "captured",
+      });
+  } else if (confirmedNet) {
+    throw new AppError("bill.attestation_contradicted", {
+      id: billPaymentId,
+      evidence: "captured",
+    });
+  }
+  const actual = confirmedNet
+    ? decimalToCents(addDecimal(confirmedNet.applied, confirmedNet.tip))
+    : provided !== undefined && provided.state === "captured"
       ? decimalToCents(decimal(provided.amount))
       : undefined;
-  const applied = actual === undefined ? undefined : Math.min(pending!.applied, actual);
+  const applied = confirmedNet
+    ? decimalToCents(confirmedNet.applied)
+    : actual === undefined
+      ? undefined
+      : Math.min(pending!.applied, actual);
   let remainingAfter: number | undefined;
   if (pending!.method === "card") {
     const funds = fundsOf(

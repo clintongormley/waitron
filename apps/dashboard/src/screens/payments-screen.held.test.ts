@@ -545,6 +545,65 @@ describe("partly refunded charges", () => {
     startedAt: "2026-09-27T10:00:00Z",
     partialRefund: { paymentId: "p-part", captured: "1.50", refunded: "0.40", remaining: "1.10" },
   };
+  it.each(["en", "es"] as const)(
+    "confirms the displayed allocation before retaining money (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const retention = { remaining: "1.10", applied: "1.00", tip: "0.10", outstanding: "0.00" };
+      const retain = vi.fn().mockResolvedValue({ outcome: "retained", ...retention });
+      const el = await mount(
+        stubApi({
+          listStuckPayments: vi.fn().mockResolvedValue([{ ...row, retention }]),
+          retainPartialRefund: retain,
+        }),
+      );
+      q(el, "[data-test=retain-partial-p-part]")!.click();
+      await flush(el);
+      const dialog = q(el, "[data-test=partial-refund-dialog]")!;
+      expect(dialog.textContent).toContain(locale === "en" ? "tip" : "propina");
+      expect(dialog.textContent).toContain(locale === "en" ? "0.10" : "0,10");
+      expect(dialog.querySelector("wt-input")).toBeNull();
+      q(el, "[data-test=cancel-partial-refund]")!.click();
+      await flush(el);
+      expect(retain).not.toHaveBeenCalled();
+      q(el, "[data-test=retain-partial-p-part]")!.click();
+      await flush(el);
+      q(el, "[data-test=confirm-partial-refund]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=partial-refund-dialog]")).toBeNull());
+      expect(retain).toHaveBeenCalledExactlyOnceWith("p-part", {
+        remaining: "1.10",
+        applied: "1.00",
+        tip: "0.10",
+      });
+    },
+  );
+
+  it("keeps failed retention held without claiming it checked a full refund", async () => {
+    const el = await mount(
+      stubApi({
+        listStuckPayments: vi
+          .fn()
+          .mockResolvedValue([
+            {
+              ...row,
+              retention: { remaining: "1.10", applied: "1.10", tip: "0.00", outstanding: "0.40" },
+            },
+          ]),
+        retainPartialRefund: vi
+          .fn()
+          .mockRejectedValue({ code: "payment.outcome_unknown", params: { reason: "ambiguous" } }),
+      }),
+    );
+    q(el, "[data-test=retain-partial-p-part]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-partial-refund]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=stuck-result]")!.textContent).toContain(
+        "could not confirm this allocation",
+      ),
+    );
+  });
+
   it.each(["whole order", "bill payment"])(
     "shows honest amounts and releases a %s only after confirmation",
     async (kind) => {

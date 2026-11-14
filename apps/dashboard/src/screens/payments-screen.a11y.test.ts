@@ -142,6 +142,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
             listStuckPayments: vi.fn().mockResolvedValue([
               {
                 ...STUCK[0]!,
+                retention: { remaining: "8.50", applied: "8.00", tip: "0.50", outstanding: "2.00" },
                 partialRefund: {
                   paymentId: "pay-1",
                   captured: "12.50",
@@ -158,6 +159,11 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=partial-refund-pay-1]")).not.toBeNull();
       await expectNoA11yViolations(host);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=retain-partial-pay-1]")!.click();
+      await flush(el);
+      await expectNoA11yViolations(host);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-partial-refund]")!.click();
+      await flush(el);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=release-partial-pay-1]")!.click();
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=partial-refund-dialog]")).not.toBeNull();

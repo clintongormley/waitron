@@ -46,7 +46,12 @@ import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fi
 import { ensureFixtureJobRole, seedNode } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
-import { payments, SimulatorPaymentProvider } from "@waitron/payments";
+import {
+  insertCapturedPayment,
+  recordRefund,
+  payments,
+  SimulatorPaymentProvider,
+} from "@waitron/payments";
 import { createPrinter, MAX_DELIVERY_ATTEMPTS, resendPrintJob } from "@waitron/printing";
 import {
   confirmReceiptHandover,
@@ -58,6 +63,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { planVenue } from "@waitron/provisioning";
 import {
   decimal,
+  workingOrderId as brandWorkingOrderId,
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
@@ -1506,6 +1512,87 @@ describe("the invoice at full payment", () => {
       },
     );
   });
+
+  it.each(["items", "share", "contribution"] as const)(
+    "retains explicit net money without changing a pending %s selection",
+    async (kind) => {
+      const billId = await tabWith("Beer");
+      const id = await insertPayment(billId, {
+        kind,
+        applied: 300,
+        ...(kind === "share" ? { shareOf: 1 } : {}),
+      });
+      const [line] = await suite.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, billId));
+      if (kind === "items")
+        await suite.db
+          .insert(billPaymentLines)
+          .values({ billPaymentId: id, lineId: line!.id, quantity: 1000, amount: 300 });
+      const before = await suite.db
+        .select()
+        .from(billPaymentLines)
+        .where(eq(billPaymentLines.billPaymentId, id));
+      const key = { provider: "simulator", paymentRef: randomUUID() };
+      await inTx(async (tx) => {
+        await insertCapturedPayment(tx, {
+          ...key,
+          nodeId: venue.cfg.nodeId,
+          workingOrderId: brandWorkingOrderId(billId),
+          billPaymentId: id,
+          origin: venue.cfg.origin,
+          amount: decimal("3.00"),
+          settledAt: clock.now().instant,
+        });
+        await recordRefund(tx, {
+          ...key,
+          amount: decimal("1.00"),
+          providerRefundRef: "outside-return",
+        });
+      });
+      const complete = (applied: string) =>
+        inTx((tx) =>
+          completeBillPayment(
+            tx,
+            { ...fiscal(), admission: testTradingAdmission() },
+            venue.cfg,
+            id,
+            clock.now().instant,
+            { attestedBy: OPERATOR, note: "Confirmed net" },
+            undefined,
+            { applied: decimal(applied), tip: decimal("0.00") },
+          ),
+        );
+      await expect(complete("3.00")).rejects.toMatchObject({
+        code: "bill.attestation_contradicted",
+      });
+      const done = await complete("2.00");
+      expect(done.payment).toMatchObject({
+        kind,
+        applied: 200,
+        tip: 0,
+        requestedBy: OPERATOR,
+        state: "received",
+      });
+      expect(done.invoice).toBeNull();
+      expect(
+        await suite.db
+          .select()
+          .from(billPaymentLines)
+          .where(eq(billPaymentLines.billPaymentId, id)),
+      ).toEqual(before);
+      expect((await inTx((tx) => readBillBalance(tx, billId))).outstanding).toBe("1.00");
+      await take(billId, cash("1.00"));
+      const [sale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, billId));
+      expect(
+        await suite.db
+          .select({ amount: tenders.amount })
+          .from(tenders)
+          .where(eq(tenders.saleId, sale!.id)),
+      ).toEqual([{ amount: 200 }, { amount: 100 }]);
+    },
+  );
 
   it.each(["F1", "F2"] as const)(
     "captured-card completion retains the %s invoice and explicitly requested paper on replay",

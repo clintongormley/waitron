@@ -72,6 +72,7 @@ async function paid(
     settle?: boolean;
     total?: number;
     netApplied?: number;
+    captured?: number;
   } = {},
 ) {
   const sale =
@@ -147,7 +148,7 @@ async function paid(
               paymentRef: randomUUID(),
               externalRef: randomUUID(),
               state: options.state ?? "captured",
-              amount: 1100,
+              amount: options.captured ?? 1100,
               cardLast4: "0042",
             })
             .returning()
@@ -199,6 +200,28 @@ async function prior(
 }
 
 describe("settled-tender reservation inside the caller's transaction", () => {
+  it("can reserve all the retained receipt after its earlier provider refund", async () => {
+    const target = await paid("card", { bill: true, captured: 1500, state: "partially_refunded" });
+    await store.db
+      .insert(paymentRefunds)
+      .values({
+        paymentId: target.capture!.id,
+        provider: "fake",
+        paymentRef: target.capture!.paymentRef,
+        providerRefundRef: "before-retention",
+        amount: 400,
+        state: "succeeded",
+      });
+    const result = await reserve(
+      target.saleId,
+      request(target.tenderId, { appliedAmount: "10.00", tipAmount: "1.00" }),
+    );
+    expect(result).toMatchObject({
+      refund: { state: "pending", appliedAmount: 1000, tipAmount: 100 },
+    });
+    expect(await rows()).toMatchObject([{ appliedAmount: 1000, tipAmount: 100 }]);
+  });
+
   it("stores cents and provenance without changing the invoice, tender, settlement or provider rows", async () => {
     const target = await paid();
     const snapshot = {

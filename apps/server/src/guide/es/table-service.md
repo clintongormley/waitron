@@ -473,12 +473,18 @@ dará, y deja escribirlos cuando eliges nombres personalizados; **Añadir mesa u
 ## Cambiar de cuenta {#bill-switcher}
 
 Si se devolvió parte de un pago antes de registrar su factura, no vuelvas a cobrar.
-El pedido sigue bloqueado. En **Pagos con tarjeta**, comprueba los importes cobrados, devueltos
-y aún retenidos. Devuelve el resto en el panel de SumUp y elige **Confirmar devolución completa**
-en Waitron. Waitron consulta el registro de SumUp antes de liberar este pago. Si no puede confirmar
-la devolución completa, comprueba las devoluciones en SumUp e inténtalo de nuevo. Una vez liberado,
-vuelve a abrir el pedido para continuar. Revisa los demás pagos del aviso de devolución compartido
-antes de marcarlo como atendido; puede que los pagos posteriores no aparezcan en él.
+En **Pagos con tarjeta**, comprueba los importes cobrados, devueltos y aún retenidos. Elige
+**Conservar en esta cuenta** para aplicar el dinero restante a la cuenta. Antes de confirmar,
+comprueba el importe aplicado, el exceso conservado como propina y lo que aún tienes que cobrar.
+Por ejemplo, de 100 € cobrados y 40 € devueltos, puedes conservar 60 € en la cuenta y cobrar solo
+lo que falte. Solo puedes conservar un exceso si las propinas están activadas. El cobro cuenta
+en el día del cargo original.
+
+Para devolver todo el dinero, devuelve el resto en SumUp y elige **Confirmar devolución completa**
+en Waitron. Usa también esta opción si el pago de la cuenta ya figura como fallido. Si SumUp no
+puede confirmar los importes, comprueba sus devoluciones e inténtalo de nuevo. Revisa los demás
+pagos del aviso de devolución compartido antes de marcarlo como atendido; puede que los pagos
+posteriores no aparezcan en él.
 
 Es habitual que los clientes paguen por separado: dos parejas en una misma mesa, o alguien que paga
 sus propias bebidas. Cada uno tiene entonces su propia cuenta en la mesa. El selector de cuentas,

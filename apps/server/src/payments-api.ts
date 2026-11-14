@@ -20,6 +20,7 @@ import {
   businessDayAt,
   businessDayBounds,
   centsToDecimal,
+  decimalToCents,
   compareDecimal,
   decimal,
   isAppError,
@@ -102,7 +103,15 @@ import type { DeploymentEnvironment } from "./config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
-import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
+import {
+  issueIfFullyPaid,
+  readBillBalance,
+  billPaymentIsLive,
+  completeBillPayment,
+  failBillPayment,
+} from "./bill-payments.js";
+import { previewAllocation, MONEY, ZERO } from "./bill-allocation.js";
+import { refuseRefundInProgress } from "./working-order.js";
 import { CHARGED, settleFromProviderRow } from "./bill-payments-loop.js";
 import { inPinTurn, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
@@ -1324,6 +1333,296 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     };
   };
 
+  const acceptRefundEvidence = async (
+    tx: Transaction,
+    payment: typeof payments.$inferSelect,
+    refunds: (typeof paymentRefunds.$inferSelect)[],
+    evidence: Awaited<ReturnType<NonNullable<PaymentProvider["lookupCompletedRefunds"]>>>,
+    personId: string,
+    full: boolean,
+  ) => {
+    const paymentId = payment.id;
+    const total =
+      evidence.kind === "known" ? sumDecimals(evidence.refunds.map((r) => r.amount)) : ZERO;
+    if (
+      evidence.kind !== "known" ||
+      compareDecimal(total, ZERO) <= 0 ||
+      (full
+        ? compareDecimal(total, evidence.captured) !== 0
+        : compareDecimal(total, evidence.captured) >= 0)
+    )
+      throw new AppError("payment.outcome_unknown", { paymentId, reason: "ambiguous" });
+    const unknown = () =>
+      new AppError("payment.outcome_unknown", { paymentId, reason: "ambiguous" });
+    if (
+      evidence.kind !== "known" ||
+      evidence.processorRef !== payment.externalRef ||
+      compareDecimal(evidence.captured, centsToDecimal(payment.amount)) !== 0
+    )
+      throw unknown();
+    const byRef = new Map(evidence.refunds.map((r) => [r.providerRefundRef, r]));
+    if (
+      byRef.size !== evidence.refunds.length ||
+      evidence.refunds.some(
+        (r) => !r.providerRefundRef || compareDecimal(r.amount, decimal("0")) <= 0,
+      )
+    )
+      throw unknown();
+    const recorded = new Set<string>();
+    for (const refund of refunds) {
+      const ref = refund.providerRefundRef;
+      if (ref === null)
+        throw new AppError("payment.outcome_unknown", {
+          paymentId,
+          reason: "refund_reference_missing",
+        });
+      if (
+        recorded.has(ref) ||
+        !byRef.has(ref) ||
+        compareDecimal(byRef.get(ref)!.amount, centsToDecimal(refund.amount)) !== 0
+      )
+        throw unknown();
+      recorded.add(ref);
+    }
+    for (const refund of evidence.refunds)
+      if (!recorded.has(refund.providerRefundRef)) {
+        // The manager confirms the provider's refund here; this does not identify its original sender.
+        await recordRefund(tx, {
+          provider: payment.provider,
+          paymentRef: payment.paymentRef,
+          ...refund,
+          authorizedBy: personId,
+        });
+      }
+  };
+
+  const retentionPreview = async (
+    tx: Transaction,
+    payment: typeof payments.$inferSelect,
+    remaining: string,
+  ) => {
+    const balance = await readBillBalance(tx, payment.workingOrderId);
+    const own = balance.payments.find((row) => row.id === payment.billPaymentId);
+    const reserved = subtractDecimal(
+      decimal(balance.reserved),
+      own?.state === "pending" ? decimal(own.applied) : ZERO,
+    );
+    if (compareDecimal(reserved, ZERO) > 0)
+      throw new AppError("order.payment_in_flight", { workingOrderId: payment.workingOrderId });
+    await refuseRefundInProgress(tx, [payment.workingOrderId]);
+    const preview = previewAllocation(
+      {
+        workingOrderId: payment.workingOrderId,
+        total: decimal(balance.total),
+        received: decimal(balance.received),
+        reserved,
+        hasPending: false,
+      },
+      {
+        kind: "contribution",
+        amount: decimal(remaining),
+        payment: { method: "card", addedTip: ZERO },
+      },
+      { tipsEnabled: deps.cfg.tipsEnabled },
+    );
+    if (preview.kind !== "allocated")
+      throw new AppError("payment.not_stuck", { paymentId: payment.id });
+    return {
+      remaining: decimal(remaining),
+      applied: preview.applied,
+      tip: preview.tip,
+      outstanding: subtractDecimal(
+        subtractDecimal(decimal(balance.total), decimal(balance.received)),
+        preview.applied,
+      ),
+    };
+  };
+  const listedRetention = async (tx: Transaction, paymentId: string, remaining: string) => {
+    const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId));
+    if (payment!.billPaymentId !== null) {
+      const [bill] = await tx
+        .select()
+        .from(billPayments)
+        .where(eq(billPayments.id, payment!.billPaymentId));
+      if (bill?.state !== "pending") return {};
+    }
+    try {
+      return { retention: await retentionPreview(tx, payment!, remaining) };
+    } catch (error) {
+      if (
+        isAppError(error) &&
+        [
+          "bill.tip_not_allowed",
+          "bill.nothing_outstanding",
+          "order.payment_in_flight",
+          "bill.refund_in_progress",
+        ].includes(error.code)
+      )
+        return {};
+      throw error;
+    }
+  };
+
+  const partialView = async (tx: Transaction, paymentId: string, amount: number) => {
+    const { partialRefund } = await refundFacts(tx, paymentId, amount);
+    return { partialRefund, ...(await listedRetention(tx, paymentId, partialRefund.remaining)) };
+  };
+
+  app.post("/management-api/payments/partial-refunds/:id/retain", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const paymentId = requireUuidParam(c.req.param("id"), "PaymentId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const seen = {} as { remaining: string; applied: string; tip: string };
+      for (const field of ["remaining", "applied", "tip"] as const) {
+        if (typeof body[field] !== "string" || !MONEY.test(body[field]))
+          throw new AppError("management.request_invalid", { field });
+        seen[field] = body[field];
+      }
+      const read = async (tx: Transaction) => {
+        const [row] = await tx
+          .select({ payment: payments, bill: billPayments, order: workingOrders })
+          .from(payments)
+          .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
+          .leftJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
+          .where(and(eq(payments.id, paymentId), await collectionScope(tx)));
+        if (!row) {
+          await refuseUntilRecordable(tx);
+          throw new AppError("payment.not_stuck", { paymentId });
+        }
+        const { payment, bill, order } = row;
+        if (
+          bill?.state === "received" &&
+          bill.attestationNote === "Retained confirmed remaining money"
+        ) {
+          if (
+            compareDecimal(decimal(seen.applied), centsToDecimal(bill.applied)) !== 0 ||
+            compareDecimal(decimal(seen.tip), centsToDecimal(bill.tip)) !== 0 ||
+            decimalToCents(decimal(seen.remaining)) !== bill.applied + bill.tip
+          )
+            throw new AppError("management.request_invalid", { field: "remaining" });
+          return {
+            ...row,
+            replay: true as const,
+            allocation: { ...seen, outstanding: centsToDecimal(bill.remainingAfter!) },
+          };
+        }
+        await refuseUntilRecordable(tx);
+        if (
+          !refundReleaseProviders.includes(payment.provider) ||
+          payment.state !== "partially_refunded" ||
+          payment.saleId !== null ||
+          !["open", "placed"].includes(order.status) ||
+          (bill !== null && bill.state !== "pending") ||
+          paymentAttemptIsLive(deps.db, payment.workingOrderId) ||
+          (bill && billPaymentIsLive(deps.db, bill.id))
+        )
+          throw new AppError("payment.not_stuck", { paymentId });
+        const facts = await refundFacts(tx, paymentId, payment.amount);
+        if (facts.refunds.some((r) => r.providerRefundRef === null))
+          throw new AppError("payment.outcome_unknown", {
+            paymentId,
+            reason: "refund_reference_missing",
+          });
+        const allocation = await retentionPreview(tx, payment, facts.partialRefund.remaining);
+        for (const field of ["remaining", "applied", "tip"] as const)
+          if (compareDecimal(decimal(seen[field]), allocation[field]) !== 0)
+            throw new AppError("bill.allocation_changed", {
+              workingOrderId: payment.workingOrderId,
+            });
+        return { ...row, replay: false as const, allocation, refunds: facts.refunds };
+      };
+      const before = await gated(sessionId, read);
+      if (before.replay) return c.json({ outcome: "retained", ...before.allocation });
+      await gated(sessionId, (tx) =>
+        requireConnected(tx, cardProviderById(deps.providers, before.payment.provider)),
+      );
+      const provider = await deps.pool.get(before.payment.provider);
+      if (!provider.lookupCompletedRefunds)
+        throw new AppError("payment.resolve_unsupported", { providerId: before.payment.provider });
+      const evidence =
+        before.payment.externalRef === null
+          ? { kind: "unknown" as const }
+          : await provider.lookupCompletedRefunds(before.payment.externalRef);
+      let evidenceChanged = false;
+      const answer = await gated(sessionId, async (tx, personId) => {
+        const current = await read(tx);
+        if (current.replay) return current.allocation;
+        const { payment, bill, order, allocation, refunds } = current;
+        await acceptRefundEvidence(tx, payment, refunds, evidence, personId, false);
+        const nowFacts = await refundFacts(tx, paymentId, payment.amount);
+        if (compareDecimal(nowFacts.partialRefund.remaining, allocation.remaining) !== 0) {
+          // Keep identified provider refunds visible on refresh; the bill stays held for a new confirmation.
+          evidenceChanged = true;
+          return allocation;
+        }
+        const attestation = { attestedBy: personId, note: "Retained confirmed remaining money" };
+        const receivedAt = new Date(payment.settledAt!);
+        if (bill)
+          await completeBillPayment(
+            tx,
+            fiscal,
+            deps.cfg,
+            bill.id,
+            receivedAt,
+            attestation,
+            undefined,
+            { applied: allocation.applied, tip: allocation.tip },
+          );
+        else {
+          const attendanceKey = await pendingIntegratedAttendanceKey(
+            tx,
+            deps.attendance,
+            payment.workingOrderId,
+            payment.provider,
+          );
+          const [part] = await tx
+            .insert(billPayments)
+            .values({
+              workingOrderId: payment.workingOrderId,
+              submissionId: `capture:${paymentId}`,
+              fingerprint: paymentId,
+              kind: "contribution",
+              method: "card",
+              state: "received",
+              applied: decimalToCents(allocation.applied),
+              tip: decimalToCents(allocation.tip),
+              remainingAfter: decimalToCents(allocation.outstanding),
+              requestedBy: personId,
+              ...storedDeviceOrigin(payment),
+              receivedAt: receivedAt.toISOString(),
+              attestedBy: personId,
+              attestationNote: attestation.note,
+            })
+            .returning();
+          await tx
+            .update(payments)
+            .set({ billPaymentId: part!.id })
+            .where(eq(payments.id, paymentId));
+          await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
+          if (order.paymentAttemptAt !== null)
+            await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
+          await issueIfFullyPaid(
+            tx,
+            fiscal,
+            { ...deps.cfg, origin: storedDeviceOrigin(payment) },
+            payment.workingOrderId,
+            personId,
+            { moneyMoved: true },
+          );
+        }
+        if (order.paymentAttemptAt !== null)
+          await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
+        return allocation;
+      });
+      if (evidenceChanged)
+        throw new AppError("bill.allocation_changed", {
+          workingOrderId: before.payment.workingOrderId,
+        });
+      return c.json({ outcome: "retained", ...answer });
+    }),
+  );
+
   app.post("/management-api/payments/partial-refunds/:id/release", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1374,50 +1673,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       await gated(sessionId, async (tx, personId) => {
         const { payment, mark, billState, refunds } = await read(tx);
         if (payment.state === "refunded") return;
-        const unknown = () =>
-          new AppError("payment.outcome_unknown", { paymentId, reason: "ambiguous" });
-        if (
-          evidence.kind !== "known" ||
-          evidence.processorRef !== payment.externalRef ||
-          compareDecimal(evidence.captured, centsToDecimal(payment.amount)) !== 0 ||
-          compareDecimal(sumDecimals(evidence.refunds.map((r) => r.amount)), evidence.captured) !==
-            0
-        )
-          throw unknown();
-        const byRef = new Map(evidence.refunds.map((r) => [r.providerRefundRef, r]));
-        if (
-          byRef.size !== evidence.refunds.length ||
-          evidence.refunds.some(
-            (r) => !r.providerRefundRef || compareDecimal(r.amount, decimal("0")) <= 0,
-          )
-        )
-          throw unknown();
-        const recorded = new Set<string>();
-        for (const refund of refunds) {
-          const ref = refund.providerRefundRef;
-          if (ref === null)
-            throw new AppError("payment.outcome_unknown", {
-              paymentId,
-              reason: "refund_reference_missing",
-            });
-          if (
-            recorded.has(ref) ||
-            !byRef.has(ref) ||
-            compareDecimal(byRef.get(ref)!.amount, centsToDecimal(refund.amount)) !== 0
-          )
-            throw unknown();
-          recorded.add(ref);
-        }
-        for (const refund of evidence.refunds)
-          if (!recorded.has(refund.providerRefundRef)) {
-            // The manager confirms the provider's refund here; this does not identify its original sender.
-            await recordRefund(tx, {
-              provider: payment.provider,
-              paymentRef: payment.paymentRef,
-              ...refund,
-              authorizedBy: personId,
-            });
-          }
+        await acceptRefundEvidence(tx, payment, refunds, evidence, personId, true);
         if (payment.billPaymentId !== null && billState === "pending")
           await settleFromProviderRow(tx, fiscal, payment.billPaymentId, deps.clock.now().instant);
         if (mark !== null) await clearPaymentAttemptMark(tx, payment.workingOrderId, mark);
@@ -1473,9 +1729,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         for (const { partial, ...row } of rows)
           result.push({
             ...row,
-            ...(partial
-              ? { partialRefund: (await refundFacts(tx, row.paymentId, row.amount)).partialRefund }
-              : {}),
+            ...(partial ? await partialView(tx, row.paymentId, row.amount) : {}),
           });
         return result;
       });
@@ -1647,6 +1901,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             startedAt: billPayments.createdAt,
             provider: payments.provider,
             providerState: payments.state,
+            billState: billPayments.state,
           })
           .from(billPayments)
           .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
@@ -1664,10 +1919,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           result.push({
             ...row,
             ...(partial && providerPaymentId !== null && providerAmount !== null
-              ? {
-                  partialRefund: (await refundFacts(tx, providerPaymentId, providerAmount))
-                    .partialRefund,
-                }
+              ? await partialView(tx, providerPaymentId, providerAmount)
               : {}),
           });
         return result;

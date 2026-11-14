@@ -3050,7 +3050,7 @@ export const en = {
   "payments.reader_pairing_processing": "Pairing…",
   "payments.stuck.heading": "Card payments needing attention",
   "payments.stuck.intro":
-    "Check these card payments before charging again. Use the action beside each payment to check its outcome or confirm that its full charge has been refunded.",
+    "Check these card payments before charging again. Use the action beside each payment to check its outcome, retain confirmed remaining money on the bill, or confirm its full refund.",
   "payments.stuck.order": "Order {number}",
   "payments.stuck.device": "Device",
   "payments.stuck.provider": "Provider",
@@ -3062,6 +3062,15 @@ export const en = {
     "Waitron will ask {provider} what happened to this {amount} payment ({order}). If it went through, the sale is recorded. If it did not, Waitron cancels it at {provider} where it can still be cancelled, and unlocks the order so it can be paid again, unless another card payment on the order is still unresolved.",
   "payments.stuck.confirm": "Check now",
   "payments.stuck.partial": "Payment recorded. The rest is still due.",
+  "payments.partial.retain_unconfirmed":
+    "The provider could not confirm this allocation. The money stays held. Check its refunds at the provider and try again.",
+  "payments.partial.retain": "Retain on this bill",
+  "payments.partial.retain_instructions":
+    "Apply {applied} to this bill and keep {tip} as a tip. Staff will collect {outstanding} next. Confirming checks the provider once and records this allocation; it sends no charge or refund.",
+  "payments.partial.retained":
+    "Remaining money recorded on the bill. Collect only what is still due.",
+  "payments.partial.failed_link":
+    "This bill payment has already failed. Refund the rest at the provider, then confirm the full refund here.",
   "payments.partial.amounts": "Charged {captured} · Refunded {refunded} · Still held {remaining}",
   "payments.partial.confirm": "Confirm full refund",
   "payments.partial.instructions":
@@ -7273,7 +7282,7 @@ export const es: Record<StringKey, string> = {
   "payments.reader_pairing_processing": "Emparejando…",
   "payments.stuck.heading": "Cobros con tarjeta pendientes de revisión",
   "payments.stuck.intro":
-    "Revisa estos cobros con tarjeta antes de volver a cobrar. Usa la acción junto a cada pago para consultar su resultado o confirmar que se ha devuelto el cobro completo.",
+    "Revisa estos cobros con tarjeta antes de volver a cobrar. Usa la acción junto a cada pago para consultar su resultado, conservar el dinero restante confirmado en la cuenta o confirmar la devolución completa.",
   "payments.stuck.order": "Pedido {number}",
   "payments.stuck.device": "Dispositivo",
   "payments.stuck.provider": "Proveedor",
@@ -7285,6 +7294,15 @@ export const es: Record<StringKey, string> = {
     "Waitron preguntará a {provider} qué pasó con este cobro de {amount} ({order}). Si se completó, se registra la venta. Si no, Waitron lo cancela en {provider} si todavía se puede cancelar, y desbloquea el pedido para poder cobrarlo de nuevo, salvo que otro pago con tarjeta del pedido siga sin resolver.",
   "payments.stuck.confirm": "Consultar ahora",
   "payments.stuck.partial": "Pago registrado. Queda parte de la cuenta por cobrar.",
+  "payments.partial.retain_unconfirmed":
+    "El proveedor no ha podido confirmar este reparto. El dinero sigue retenido. Comprueba las devoluciones en el proveedor e inténtalo de nuevo.",
+  "payments.partial.retain": "Conservar en esta cuenta",
+  "payments.partial.retain_instructions":
+    "Aplicar {applied} a esta cuenta y conservar {tip} como propina. El personal cobrará {outstanding} después. Al confirmar se consulta al proveedor una vez y se registra este reparto; no se envía ningún cobro ni devolución.",
+  "payments.partial.retained":
+    "El importe restante se ha registrado en la cuenta. Cobra solo lo que falte.",
+  "payments.partial.failed_link":
+    "Este pago de la cuenta ya ha fallado. Devuelve el resto en el proveedor y confirma aquí la devolución completa.",
   "payments.partial.amounts": "Cobrado {captured} · Devuelto {refunded} · Aún retenido {remaining}",
   "payments.partial.confirm": "Confirmar devolución completa",
   "payments.partial.instructions":

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import {
   adjustmentReasons,
+  billPayments,
   drawerOpens,
   invoiceCorrectionRefunds,
   invoiceCorrections,
@@ -29,6 +30,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   businessDayAt,
+  workingOrderId as brandOrderId,
   centsToDecimal,
   decimal,
   decimalToCents,
@@ -37,6 +39,8 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
+import { insertCapturedPayment, recordRefund } from "@waitron/payments";
+import { issueIfFullyPaid } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import { parkOrder } from "./working-order.js";
@@ -321,6 +325,79 @@ async function behindLatestRecord(): Promise<TrustedClock> {
 }
 
 describe("openInvoiceCorrection", () => {
+  it("previews correcting a retained receipt using its net refundable money", async () => {
+    const id = randomUUID();
+    await parkOrder(
+      {
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        admission: testTradingAdmission(),
+      },
+      venue.cfg,
+      {
+        id,
+        lines: [{ menuItemId: offerOf("Rib steak"), quantity: "1" }],
+        zoneId: venue.zoneId,
+        operatorId: venue.operatorId,
+      },
+    );
+    const saleId = await inTx(venue, async (tx) => {
+      const [bill] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: id,
+          submissionId: randomUUID(),
+          fingerprint: "retained",
+          kind: "contribution",
+          method: "card",
+          applied: 1210,
+          tip: 0,
+          state: "received",
+          requestedBy: venue.operatorId,
+          ...venue.cfg.origin,
+          receivedAt: venue.clock.now().instant.toISOString(),
+        })
+        .returning();
+      const key = { provider: "fake", paymentRef: randomUUID() };
+      await insertCapturedPayment(tx, {
+        ...key,
+        nodeId: venue.cfg.nodeId,
+        workingOrderId: brandOrderId(id),
+        billPaymentId: bill!.id,
+        origin: venue.cfg.origin,
+        amount: decimal("16.10"),
+        settledAt: venue.clock.now().instant,
+      });
+      await recordRefund(tx, {
+        ...key,
+        amount: decimal("4.00"),
+        providerRefundRef: "outside-retention",
+      });
+      await issueIfFullyPaid(
+        tx,
+        {
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          admission: testTradingAdmission(),
+        },
+        venue.cfg,
+        id,
+        venue.operatorId,
+      );
+      const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, id));
+      return brandSaleId(sale!.id);
+    });
+    expect(
+      await inTx(venue, (tx) =>
+        previewInvoiceCorrection(tx, venue.backend, venue.cfg, venue.clock.now(), saleId, {
+          gross: "12.10",
+        }),
+      ),
+    ).toMatchObject({ gross: "12.10", moneyRefundable: "12.10" });
+  });
+
   it("opens a €6.05 correction of a €12.10 cash steak, filing nothing and moving no money", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const before = await original(saleId);

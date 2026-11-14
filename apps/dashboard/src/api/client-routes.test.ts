@@ -890,6 +890,23 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("sends the displayed net allocation for explicit retention", async () => {
+    const answer = {
+      outcome: "retained",
+      remaining: "60.00",
+      applied: "55.00",
+      tip: "5.00",
+      outstanding: "0.00",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+    const allocation = { remaining: "60.00", applied: "55.00", tip: "5.00" };
+    await expect(api.retainPartialRefund("pay-1", allocation)).resolves.toEqual(answer);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/payments/partial-refunds/pay-1/retain", "POST", allocation],
+    ]);
+  });
+
   it("lists held card payments and sends an outcome, leaving out a note that was not given", async () => {
     const held = [{ holdId: "h-1", orderNumber: 57 }];
     const fetchImpl = vi
