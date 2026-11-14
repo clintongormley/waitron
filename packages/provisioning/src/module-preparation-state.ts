@@ -156,7 +156,7 @@ export async function modulePreparationMergeFits(
   for (const module of new Set(incoming.map((row) => row.binding.module))) {
     const current = await readModuleRecord(options.stateDir, module);
     const prepared = merged.filter((row) => row.binding.module === module);
-    if (Buffer.byteLength(JSON.stringify({ ...current, prepared })) > LIMIT) return false;
+    if (Buffer.byteLength(JSON.stringify({ ...current, prepared })) > LIMIT - room) return false;
   }
   return true;
 }

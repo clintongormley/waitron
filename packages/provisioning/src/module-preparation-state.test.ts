@@ -472,6 +472,7 @@ const textToLimit = (incoming: unknown[], own: unknown[], revisionOf: (text: str
 describe("modulePreparationMergeFits", () => {
   it.each([
     [950_000, false],
+    [850_000, false],
     [10, true],
   ])("counts %i retained bytes when judging a merge", async (size, fits) => {
     const f = await fixture();

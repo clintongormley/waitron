@@ -109,11 +109,13 @@ it("Start again clears malformed prepared data while keeping a readable retained
 
 it("an oversized restored record names its file only in the log reason", async () => {
   const root = await fixture();
-  await expect(
-    moduleRecordBytes(root, "fiscal-verifactu", { archive: "x".repeat(1024 * 1024) }),
-  ).rejects.toMatchObject({
+  const refusal = await moduleRecordBytes(root, "fiscal-verifactu", {
+    archive: "x".repeat(1024 * 1024),
+  }).catch((error: unknown) => error);
+  expect(refusal).toMatchObject({
     code: "setup.attempt_invalid",
     params: {},
     reason: "module-records/fiscal-verifactu.json exceeds its size limit",
   });
+  expect(JSON.stringify(refusal)).not.toContain("module-records/fiscal-verifactu.json");
 });
