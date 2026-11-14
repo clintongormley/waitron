@@ -2,7 +2,7 @@ import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { storedRecipientIdentifier } from "./invoice-selection.js";
 import type { BusinessDayClock } from "@waitron/shared";
 import { canEmailInvoice } from "./invoice-email-contact.js";
-import { and, asc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
   billPaymentRefunds,
@@ -962,7 +962,7 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .leftJoin(persons, eq(persons.id, sales.operatorId))
     .where(eq(sales.id, saleId));
-  const corrections = await tx
+  const correctives = await tx
     .select({
       id: sales.id,
       number: sales.invoiceNumber,
@@ -970,25 +970,20 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
       issuedAt: sales.issuedAt,
       total: sales.total,
       rungBy: persons.displayName,
+      replacesOriginal: sales.replacesOriginal,
     })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .leftJoin(persons, eq(persons.id, sales.operatorId))
-    .where(sql`${sales.id} in (${correctivesOf(sql`${saleId}`)})`)
+    .where(
+      or(
+        sql`${sales.id} in (${correctivesOf(sql`${saleId}`)})`,
+        and(eq(sales.correctsSaleId, saleId), eq(sales.replacesOriginal, true)),
+      ),
+    )
     .orderBy(sales.issuedAt, sql`${sales}.rowid`);
-  const replacements = await tx
-    .select({
-      id: sales.id,
-      number: sales.invoiceNumber,
-      code: invoiceSeries.code,
-      issuedAt: sales.issuedAt,
-      total: sales.total,
-      rungBy: persons.displayName,
-    })
-    .from(sales)
-    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-    .leftJoin(persons, eq(persons.id, sales.operatorId))
-    .where(and(eq(sales.correctsSaleId, saleId), eq(sales.replacesOriginal, true)));
+  const replacements = correctives.filter((invoice) => invoice.replacesOriginal);
+  const corrections = correctives.filter((invoice) => !invoice.replacesOriginal);
   const substitutes = await tx
     .select({
       id: sales.id,

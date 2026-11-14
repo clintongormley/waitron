@@ -1,4 +1,4 @@
-import { and, asc, between, eq, sql } from "drizzle-orm";
+import { and, asc, between, eq, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   correctivesOf,
@@ -72,42 +72,35 @@ export async function listDeferredPaymentInvoices(
   // No date limit on the corrections: one issued weeks after the close is still named.
   const correction = alias(sales, "correction");
   const correctionSeries = alias(invoiceSeries, "correction_series");
-  const corrections = await tx
+  const correctives = await tx
     .select({
       saleId: deferredClosures.saleId,
       code: correctionSeries.code,
       number: correction.invoiceNumber,
       total: correction.total,
+      replacesOriginal: correction.replacesOriginal,
     })
     .from(deferredClosures)
     .innerJoin(
       correction,
-      sql`${correction.id} in (${correctivesOf(sql`${deferredClosures.saleId}`)})`,
+      or(
+        sql`${correction.id} in (${correctivesOf(sql`${deferredClosures.saleId}`)})`,
+        and(
+          eq(correction.correctsSaleId, deferredClosures.saleId),
+          eq(correction.replacesOriginal, true),
+        ),
+      ),
     )
     .innerJoin(correctionSeries, eq(correctionSeries.id, correction.seriesId))
     .where(inRange)
     .orderBy(asc(correction.issuedAt), asc(correction.id));
-  const replacements = await tx
-    .select({
-      saleId: deferredClosures.saleId,
-      code: correctionSeries.code,
-      number: correction.invoiceNumber,
-    })
-    .from(deferredClosures)
-    .innerJoin(
-      correction,
-      and(
-        eq(correction.correctsSaleId, deferredClosures.saleId),
-        eq(correction.replacesOriginal, true),
-      ),
-    )
-    .innerJoin(correctionSeries, eq(correctionSeries.id, correction.seriesId))
-    .where(inRange);
   const replacedBy = new Map(
-    replacements.map((row) => [row.saleId, formatInvoiceNumber(row.code, row.number)]),
+    correctives
+      .filter((row) => row.replacesOriginal)
+      .map((row) => [row.saleId, formatInvoiceNumber(row.code, row.number)]),
   );
   const bySale = new Map<string, { numbers: string[]; totals: Decimal[] }>();
-  for (const row of corrections) {
+  for (const row of correctives.filter((row) => !row.replacesOriginal)) {
     const entry = bySale.get(row.saleId) ?? { numbers: [], totals: [] };
     entry.numbers.push(formatInvoiceNumber(row.code, row.number));
     entry.totals.push(centsToDecimal(row.total));
