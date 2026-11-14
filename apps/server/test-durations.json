@@ -1237,7 +1237,7 @@
   "src/webhook.test.ts": 3.8,
   "src/workforce-api.gate-sweep.test.ts": 2.9,
   "src/workforce-api.test.ts": 1.5,
-  "src/working-order-reads.sqlite.test.ts": 2.1,
+  "src/working-order-reads.test.ts": 2.1,
   "src/working-order.customer-fallback.test.ts": 4.7,
   "src/working-order.late-send.test.ts": 7.3,
   "src/working-order.many-tickets.test.ts": 18.6,

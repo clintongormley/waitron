@@ -139,14 +139,6 @@ export function resolveInstalledContentLanguageRules(input: VenueGeography): Con
   };
 }
 
-/** A NEW venue's default content language where its area names one, as a language code. */
-export function resolveInstalledDefaultContentLanguage(input: VenueGeography): string | undefined {
-  const pack = packFor(input);
-  const locale =
-    pack === undefined ? undefined : contentLanguageRules(pack, input.area).defaultContentLocale;
-  return locale === undefined ? undefined : contentLanguageCode(locale);
-}
-
 export interface StartingContentLanguages {
   readonly defaultLanguage: string;
   /** The default first, then the area's required languages, then English. */

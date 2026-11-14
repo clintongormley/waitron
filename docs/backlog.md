@@ -2107,7 +2107,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   hyphenated segment (`/management-api/venue-details`, `/venue-defaults`). Pick one shape before
   go-live.
 
-- **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 20, size M). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
+- **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 16, size M). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
 
 - **Go-live day steps.**
   [Detail](backlog/architecture.md#go-live-day-steps).
