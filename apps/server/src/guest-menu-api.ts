@@ -63,6 +63,7 @@ export async function readGuestMenuPages(db: Database, venueLocale: string) {
           undefined,
           "lang",
           live.since,
+          venue.timeZone,
         ),
       ]),
     ),
@@ -78,6 +79,13 @@ export function mountGuestMenuApi(
   },
   log: Logger,
 ): void {
+  async function deliveryStatus() {
+    try {
+      return deps.delivery ? { delivery: await deps.delivery() } : {};
+    } catch {
+      return {};
+    }
+  }
   app.get("/management-api/guest-menu", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -89,7 +97,7 @@ export function mountGuestMenuApi(
         return sharingStatus(tx, deps.serving);
       });
       c.header("Cache-Control", "no-store");
-      return c.json({ ...answer, ...(deps.delivery ? { delivery: await deps.delivery() } : {}) });
+      return c.json({ ...answer, ...(await deliveryStatus()) });
     }),
   );
   app.put("/management-api/guest-menu", (c) =>
@@ -119,7 +127,7 @@ export function mountGuestMenuApi(
         });
         return sharingStatus(tx, deps.serving);
       });
-      return c.json({ ...answer, ...(deps.delivery ? { delivery: await deps.delivery() } : {}) });
+      return c.json({ ...answer, ...(await deliveryStatus()) });
     }),
   );
   app.get("/management-api/catalogues/:id/guest-preview", (c) =>

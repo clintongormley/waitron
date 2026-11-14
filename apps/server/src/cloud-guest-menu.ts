@@ -127,7 +127,7 @@ export async function withdrawCloudGuestMenu(
 }
 
 export interface GuestMenuDeliveryStatus {
-  state: "not_connected" | "pending" | "current" | "off" | "blocked";
+  state: "not_connected" | "pending" | "current" | "off" | "blocked" | "refused";
   receivedAt: string | null;
 }
 
@@ -138,6 +138,7 @@ export function createGuestMenuDelivery(options: {
 }) {
   let confirmed: CloudGuestMenuView | undefined;
   let identity: string | undefined;
+  let refused: string | undefined;
   const digest = (body: string) => createHash("sha256").update(body).digest("hex");
   const desiredBody = async () => {
     const pages = await options.readPages();
@@ -153,28 +154,39 @@ export function createGuestMenuDelivery(options: {
       identity = venue;
       const body = await desiredBody();
       if (signal.aborted || !options.isPrimary()) return;
-      if (body === null) {
-        if (remote.state === "current")
-          confirmed = await options.connection.withdrawGuestMenu(signal);
-      } else if (remote.state !== "blocked" && remote.publication?.bodySha256 !== digest(body)) {
-        confirmed = await options.connection.publishGuestMenu(remote.revision, body, signal);
+      try {
+        if (body === null) {
+          if (remote.state === "current")
+            confirmed = await options.connection.withdrawGuestMenu(signal);
+        } else if (remote.state !== "blocked" && remote.publication?.bodySha256 !== digest(body)) {
+          confirmed = await options.connection.publishGuestMenu(remote.revision, body, signal);
+        }
+        refused = undefined;
+      } catch (error) {
+        if (error instanceof AppError && error.code === "cloud.request_invalid")
+          refused = body === null ? "off" : digest(body);
+        throw error;
       }
     },
     async status(): Promise<GuestMenuDeliveryStatus> {
-      const venue = await currentIdentity();
-      if (!venue) return { state: "not_connected", receivedAt: null };
+      const local = await options.connection.status();
+      const venue = local.registration?.venueId;
+      if (!venue || local.installation?.state === "revoked")
+        return { state: "not_connected", receivedAt: null };
       const body = await desiredBody();
       const remote = venue === identity && options.isPrimary() ? confirmed : undefined;
       const state =
         remote?.state === "blocked"
           ? "blocked"
-          : body === null
-            ? remote?.state === "off"
-              ? "off"
-              : "pending"
-            : remote?.state === "current" && remote.publication?.bodySha256 === digest(body)
-              ? "current"
-              : "pending";
+          : remote && refused === (body === null ? "off" : digest(body))
+            ? "refused"
+            : body === null
+              ? remote?.state === "off"
+                ? "off"
+                : "pending"
+              : remote?.state === "current" && remote.publication?.bodySha256 === digest(body)
+                ? "current"
+                : "pending";
       return { state, receivedAt: remote?.publication?.receivedAt ?? null };
     },
   };

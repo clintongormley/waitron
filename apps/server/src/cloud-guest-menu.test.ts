@@ -1,9 +1,11 @@
 import { expect, it, onTestFinished } from "vitest";
-import type { IncomingMessage } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { createHash } from "node:crypto";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 
-async function fixture(wait: (req: IncomingMessage) => Promise<void> = async () => {}) {
+async function fixture(
+  wait: (req: IncomingMessage, res: ServerResponse) => Promise<void> = async () => {},
+) {
   const calls: object[] = [];
   const reply: Record<string, unknown> = {
     version: 1,
@@ -21,8 +23,8 @@ async function fixture(wait: (req: IncomingMessage) => Promise<void> = async () 
         currentLease: values[6] === JSON.stringify((saved.lifecycle as { lease: unknown }).lease),
         ...(typeof sent.body === "string" ? { text: sent.body } : {}),
       });
-      await wait(req);
-      res.end(JSON.stringify(reply));
+      await wait(req, res);
+      if (!res.writableEnded) res.end(JSON.stringify(reply));
     },
   });
   onTestFinished(() => f.close());
@@ -210,7 +212,7 @@ it("reconciles changed publications on later passes and withdraws missing public
 });
 
 it.each(["abort", "stepdown"] as const)(
-  "does not publish if %s arrives during the status exchange",
+  "keeps the wire idle when %s stops a reconciliation read",
   async (stop) => {
     const controller = new AbortController();
     let primary = true;
@@ -271,4 +273,40 @@ it("confirms a publish whose reply was lost on the next connected pass without r
     "guest-menu-status",
   ]);
   expect((await f.client.status()).installation?.state).toBe("active");
+});
+
+it("reports a refused publication until a later pass succeeds without stopping its Cloud connection", async () => {
+  let refuse = true;
+  const f = await fixture(async (_req, res) => {
+    const last = f.calls.at(-1) as { action: string; body: { bodySha256: string } };
+    if (last.action !== "guest-menu-publish") return;
+    if (refuse) {
+      res.writeHead(400);
+      res.end('{"error":"invalid_input"}');
+    } else
+      Object.assign(f.reply, {
+        revision: 1,
+        state: "current",
+        publication: {
+          bodySha256: last.body.bodySha256,
+          defaultLanguage: "en",
+          receivedAt: "2026-11-14T05:00:00.000Z",
+        },
+      });
+  });
+  const { createGuestMenuDelivery } = await import("./cloud-guest-menu.js");
+  const delivery = createGuestMenuDelivery({
+    connection: f.client,
+    isPrimary: () => true,
+    readPages: async () => ({ defaultLanguage: "en", pages: { en: "<h1>Lunch</h1>" } }),
+  });
+  const signal = new AbortController().signal;
+  await expect(delivery.reconcile(signal)).rejects.toMatchObject({ code: "cloud.request_invalid" });
+  expect((await delivery.status()).state).toBe("refused");
+  expect((await f.client.status()).installation?.state).toBe("active");
+  refuse = false;
+  await delivery.reconcile(signal);
+  expect((await delivery.status()).state).toBe("current");
+  await f.client.revoke(async () => {});
+  expect((await delivery.status()).state).toBe("not_connected");
 });

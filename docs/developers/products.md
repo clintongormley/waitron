@@ -982,7 +982,8 @@ non-transferring catalogue settings document: configuration imports retain this 
 Cloud delivery reuses the existing connection job's one-minute passes. It rereads the opted-in
 publication and content languages, renders each public page with its publication date, and compares
 the exact body's digest with Cloud's confirmation. Sharing Off or an unavailable default withdraws
-the hosted copy; a portal block is preserved. Manager reads compare the current desired pages with
+the hosted copy; a portal block is preserved. A permanent publish refusal is shown separately
+from pending and retried on the next pass; revocation points to portal takedown. Manager reads compare the current desired pages with
 the last confirmation in memory, without making network calls. Public/mobile-data qualification
 remains separate, so the manager preview does not expose a Cloud guest URL.
 

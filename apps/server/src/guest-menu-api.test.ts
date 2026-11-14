@@ -1,5 +1,6 @@
+import { AppError } from "@waitron/shared";
 import { setTimeout as delay } from "node:timers/promises";
-import { expect, it } from "vitest";
+import { expect, it, vi, onTestFinished } from "vitest";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { CORE_MIGRATIONS, withTransaction, saveSettings } from "@waitron/db";
@@ -10,6 +11,7 @@ import { menusFixture } from "@waitron/catalogue/test/menus-fixture.js";
 import {
   previewMenu,
   publishMenu,
+  queueMenuPublication,
   updateProduct,
   setVenueDefaultCatalogue,
   writeContentLanguages,
@@ -20,7 +22,7 @@ import { mountGuestMenuApi, mountPublicGuestMenu } from "./guest-menu-api.js";
 import * as guestMenuApi from "./guest-menu-api.js";
 import "./errors.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-async function fixture() {
+async function fixture(delivery?: Parameters<typeof mountGuestMenuApi>[1]["delivery"]) {
   const f = await menusFixture(suite.db);
   const cookies = await withTransaction(suite.db, async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en"] });
@@ -41,7 +43,11 @@ async function fixture() {
   const app = new Hono();
   let serving = true;
   mountPublicGuestMenu(app, { db: suite.db, serving: () => serving }, () => {});
-  mountGuestMenuApi(app, { db: suite.db, venueLocale: "en", serving: () => serving }, () => {});
+  mountGuestMenuApi(
+    app,
+    { db: suite.db, venueLocale: "en", serving: () => serving, delivery },
+    () => {},
+  );
   return {
     ...f,
     app,
@@ -51,7 +57,7 @@ async function fixture() {
     },
   };
 }
-it("builds every Cloud page from the opted-in publication without dropping content-language tags", async () => {
+it("builds every Cloud page from published content without dropping content-language tags", async () => {
   const f = await fixture();
   await expect((async () => guestMenuApi.readGuestMenuPages(suite.db, "en"))()).resolves.toBeNull();
   await withTransaction(suite.db, async (tx) => {
@@ -372,4 +378,64 @@ it("renders the captured publication for paper, with only the selected library l
     expect(refused.status).toBe(400);
     expect(await refused.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   }
+});
+
+it("keeps sharing and paper settings usable when Cloud confirmation cannot be read", async () => {
+  const f = await fixture(async () => {
+    throw new AppError("cloud.state_invalid", {});
+  });
+  const response = await f.app.request("/management-api/guest-menu", {
+    method: "PUT",
+    headers: { cookie: f.cookies.manager, "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true, expectedRevision: 0 }),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ enabled: true, revision: 1, available: false });
+  const read = await f.app.request("/management-api/guest-menu", {
+    headers: { cookie: f.cookies.manager },
+  });
+  expect(read.status).toBe(200);
+  expect(await read.json()).toEqual({ enabled: true, revision: 1, available: false });
+});
+
+it("reads a due edition without a save and follows the new default on the next read", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  vi.setSystemTime(new Date("2026-11-14T05:00:00Z"));
+  const f = await fixture();
+  await withTransaction(suite.db, async (tx) => {
+    await setVenueDefaultCatalogue(tx, f.lunch);
+    await saveSettings(tx, GUEST_MENU_SETTINGS, {
+      doc: { enabled: true },
+      expectedRevision: 0,
+      personId: null,
+    });
+    await updateProduct(tx, f.soup, { customerName: { en: "Scheduled soup" } });
+    const preview = await previewMenu(tx, f.lunch);
+    await queueMenuPublication(
+      tx,
+      f.lunch,
+      preview.hash,
+      new Date("2026-11-14T05:01:00Z"),
+      f.cookies.managerId,
+    );
+  });
+  expect((await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en).toContain(
+    "Soup for guests",
+  );
+  vi.setSystemTime(new Date("2026-11-14T05:02:00Z"));
+  expect((await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en).toContain(
+    "Scheduled soup",
+  );
+  expect((await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en).toContain("06:01");
+  await withTransaction(suite.db, async (tx) => {
+    const preview = await previewMenu(tx, f.dinner);
+    await publishMenu(tx, f.dinner, preview.hash, f.cookies.managerId);
+    await setVenueDefaultCatalogue(tx, f.dinner);
+  });
+  const dinner = (await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en;
+  expect(dinner).toContain("Burger for guests");
+  expect(dinner).not.toContain("Scheduled soup");
 });

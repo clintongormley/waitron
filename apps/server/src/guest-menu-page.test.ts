@@ -280,3 +280,22 @@ it("keeps a one-section Lunch-and-wine menu in the wide dishes column", async ()
     (await p.locator("main").evaluate((el) => el.getBoundingClientRect().width)) * 0.6,
   );
 });
+
+it("shows the publication time in the venue's time zone", async () => {
+  const p = await browser!.newPage();
+  onTestFinished(() => p.close());
+  await p.setContent(
+    renderGuestMenuPage(
+      menu,
+      "The Restaurant",
+      "en",
+      true,
+      undefined,
+      "lang",
+      "2026-11-14T05:00:00.000Z",
+      "Europe/Madrid",
+    ),
+  );
+  expect(await p.locator("time").getAttribute("datetime")).toBe("2026-11-14T05:00:00.000Z");
+  expect(await p.locator("time").textContent()).toContain("06:00");
+});

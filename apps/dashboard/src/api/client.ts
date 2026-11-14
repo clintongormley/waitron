@@ -3188,7 +3188,7 @@ export class DashboardApi {
     revision: number;
     available: boolean;
     delivery?: {
-      state: "not_connected" | "pending" | "current" | "off" | "blocked";
+      state: "not_connected" | "pending" | "current" | "off" | "blocked" | "refused";
       receivedAt: string | null;
     };
     paper?: import("@waitron/shared").GuestMenuPaperAppearance;

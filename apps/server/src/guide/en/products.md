@@ -485,7 +485,9 @@ When this box is connected to Cloud, the preview shows whether Cloud has the cur
 or an update is pending. Publish your changes, then wait for confirmation. If the box is offline,
 Cloud keeps its last delivered copy. Turning sharing off also waits for delivery before that copy
 is removed. You can stop sharing in the Cloud portal while the box is offline; enable it there to
-resume delivery. A guest link over mobile data is still being prepared.
+resume delivery. If Cloud refuses a publication, check the menu and its content languages; the box
+retries. After disconnecting the box, remove any delivered copy in the Cloud portal.
+A guest link over mobile data is still being prepared.
 
 ## Print a published menu {#guest-paper}
 
