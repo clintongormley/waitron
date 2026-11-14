@@ -36,7 +36,7 @@ export const baseStyles = css`
 
   :host,
   :where(input, textarea, select, button, [tabindex]) {
-    scroll-margin-block-start: var(--wt-tabs-sticky-height, 0px);
+    scroll-margin-block-start: var(--wt-tabs-sticky-height);
   }
 `;
 
