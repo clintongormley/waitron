@@ -993,3 +993,16 @@ it("tells staff an open correction carries on from Correct invoice", () => {
     "Hay una rectificación de esta factura en curso. Abre Rectificar factura para continuarla.",
   );
 });
+
+it.each([
+  ["en", "Orders", "week", "refund receipts"],
+  ["es", "Pedidos", "semana", "recibos de devolución"],
+])("explains expired print payloads and their next step in %s", (locale, orders, week, refunds) => {
+  const sale = codeMessage("print_job.sale_payload_expired", locale);
+  expect(sale).toContain(orders);
+  expect(sale).toContain(week);
+  const opaque = codeMessage("print_job.payload_expired", locale);
+  expect(opaque).toContain(refunds);
+  expect(opaque).toContain(week);
+  expect(opaque).not.toContain(orders);
+});

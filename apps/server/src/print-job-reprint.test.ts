@@ -25,6 +25,7 @@ import {
   type EscSetting,
 } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
+import { clearOldPrintPayloads } from "./housekeeping.js";
 import { deletePrinter } from "./printer-delete.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
@@ -211,6 +212,25 @@ const ticketAt = (setting: EscSetting) =>
   esc(setting).init().printArea(dots(setting)).line("Refund").feedAndCut().bytes();
 
 describe("reprintJobOn", () => {
+  it("expired print payload wins over the alternate-printer width refusal", async () => {
+    const id = await kitchenTicket(at58);
+    const target = await printerAt(at80);
+    await setJob(id, { createdAt: "2026-11-01T00:00:00.000Z" });
+    const links = () =>
+      inTx(venue, (tx) =>
+        tx.select().from(kitchenPrintJobs).where(eq(kitchenPrintJobs.printJobId, id)),
+      );
+    const before = await links();
+    await clearOldPrintPayloads(
+      venue.db,
+      new Date("2026-11-14T04:00:00.000Z"),
+      new AbortController().signal,
+    );
+    expect((await jobRow(id)).payload.byteLength).toBe(0);
+    expect(await links()).toEqual(before);
+    expect((await refusal(id, target)).code).toBe("print_job.payload_expired");
+  });
+
   it("lays a receipt out again for a printer of the same setting as the bytes it first printed", async () => {
     const { original } = await paidSale(at80);
     await setJob(original.id, exhausted);

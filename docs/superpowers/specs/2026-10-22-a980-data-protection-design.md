@@ -1,5 +1,8 @@
 # A980: data protection (RGPD), Waitron's side
 
+> **2026-11-14, A1532:** [Print-payload retention](../plans/2026-11-14-a1532-print-payload-retention.md) supersedes this snapshot
+> where it says raw print bytes are kept indefinitely. Eligible jobs give up bytes after one week; rows remain.
+
 **Revision 2, 2026-10-24 · OWNER DECISIONS ANSWERED · NO CODE.** Revision 1 was written
 2026-10-22 and revised the same day after review. Build plan:
 [2026-10-24-a980-data-protection-build.md](../plans/2026-10-24-a980-data-protection-build.md).

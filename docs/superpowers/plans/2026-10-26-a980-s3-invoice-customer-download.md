@@ -1,5 +1,8 @@
 # A980 slice S3: find an invoice customer by tax number, and download what the box holds about them
 
+> **2026-11-14, A1532:** [Print-payload retention](2026-11-14-a1532-print-payload-retention.md) supersedes this snapshot
+> where it says raw print bytes are kept indefinitely. Eligible jobs give up bytes after one week; rows remain.
+
 > **2026-11-08, A1113:** the mirror's ambient administrator and dashboard are retired. All private
 > mirror reads now refuse; the mirror-access observations below are historical.
 

@@ -1,5 +1,9 @@
 # A1308 jr7 — the daily tidy-up job, `housekeeping` — Implementation Plan
 
+**2026-11-14 update:** [A1532](2026-11-14-a1532-print-payload-retention.md) supplies the
+`housekeeping` job with its one-week print-payload step. Add this plan's remaining steps to that
+seat; the earlier “print job payloads” exclusion below is superseded by the owner's chosen period.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Owner lands:** no (rules §6). It deletes expired sign-in ceremonies, idle dashboard sign-ins and

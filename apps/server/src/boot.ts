@@ -419,6 +419,7 @@ import { ownInterfaceAddresses, requestProvenFromBox } from "./request-from-box.
 import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } from "./box-name.js";
 import { createJobRunner } from "./job-runner.js";
 import { menuActivationJob } from "./menu-activation.js";
+import { housekeepingJob } from "./housekeeping.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
 import {
@@ -4277,6 +4278,18 @@ async function bootServer(
     menuActivationJob({
       db,
       isPrimary: () => holders.singletonRole.current === "primary",
+      now,
+      log,
+      maxWaitMs: timings.maxTickMs,
+    }),
+  );
+
+  jobRunner.add(
+    housekeepingJob({
+      db,
+      isPrimary: () => holders.singletonRole.current === "primary",
+      readClock: () => withTransaction(db, (tx) => resolveVenueClock(tx, tradingContext.nodeId)),
+      jitterSeed: tradingContext.nodeId,
       now,
       log,
       maxWaitMs: timings.maxTickMs,

@@ -313,8 +313,13 @@ a sale never waits long for the write lock. Its writes stay on the main thread (
 | Replaced photo data | `media_blobs` rows that no photo names any more | `tables-menu.md`; README U10 |
 | Service commands | `service_commands` records a day after their party or bill closes. **Not switched on until the latest possible till retry is confirmed**, because a record is needed while a retry can still arrive | `tables-ordersales.md` D7 |
 
+**2026-11-14, A1532:** `housekeeping` also empties finished or abandoned print-job payloads
+older than one week, retaining rows and links and undecided failures. The owner chose one week;
+[A1532](../../plans/2026-11-14-a1532-print-payload-retention.md) supplies this job with only that
+step before jr7 adds its remaining steps.
+
 Everything else stays out of this job until A980's specialists agree a period (README U10): ended `till_sessions`,
-`staff_activity` and print job payloads. `outgoing_mail` is not pruned either: a finished row is what stops the same
+`staff_activity`. `outgoing_mail` is not pruned either: a finished row is what stops the same
 mail being queued twice, and it names a person, so how long it stays goes to A980 (README U10). Until then nothing deletes it.
 
 ### Draft: the `outgoing_mail` table

@@ -2666,6 +2666,30 @@ describe("mountPrintApi — management: recent jobs", () => {
     ).toBe(404);
   });
 
+  it("answers 409 for an expired print payload resend", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused");
+    const id = await enqueue(printerId, new Uint8Array(0));
+    await suite.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, id));
+    const response = await send(app, "POST", `/management-api/print-jobs/${id}/resend`, {
+      cookie: managerCookie,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "print_job.payload_expired" } });
+  });
+
+  it("explains an expired print payload instead of drawing an empty preview", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused");
+    const id = await enqueue(printerId, new Uint8Array(0));
+    await suite.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, id));
+    const response = await send(app, "GET", `/management-api/print-jobs/${id}/preview`, {
+      cookie: managerCookie,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "print_job.payload_expired" } });
+  });
+
   it("returns a job preview only to printer managers", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused");

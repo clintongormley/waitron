@@ -1413,16 +1413,21 @@ describe("closing a started server", () => {
     await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
   }, 60_000);
 
-  it("stops the menu activation duty", async () => {
+  it("stops the menu activation and housekeeping duties", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
     const env = await tradingEnv(venueDir, state);
     const stop = await spyOnJobRunnerStop();
     const server = await startServer(env);
     await listening(Number(env.WAITRON_HTTP_PORT));
-    expect(stop).not.toHaveBeenCalled();
-
-    await server.close();
+    const runner = vi.mocked(createJobRunner).mock.results.at(-1)!.value;
+    try {
+      expect(stop).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(runner.views().housekeeping?.state).toBe("waiting"));
+    } finally {
+      await server.close();
+    }
+    expect(runner.views().housekeeping?.state).toBe("stopped");
     expect(stop).toHaveBeenCalledTimes(2);
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);

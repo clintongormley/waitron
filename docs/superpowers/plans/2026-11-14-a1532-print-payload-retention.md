@@ -61,3 +61,8 @@ Tell lane E in the PR and append one line to its questions.md so jr7 reuses this
 Estimate +180–260/−20–40 production, +300–420/−0–20 tests (outside opinion beyond 1.5×), no test support, +80/−20 docs.
 Leave jr7's other steps, A664, row deletion, production VACUUM, new clock gates, streamed uploads,
 new records/protocols/deadlines/approval systems and fiscal writers out.
+
+**2026-11-14 18:12 correction, cleared by the watcher:** Orders does not reach the saved-byte
+resend helper: `orders-api.ts` calls `requestPrintDelivery`, which builds fresh receipt bytes.
+Its new test is a 200 fresh-layout control; no Orders expiry-status mapping is added. The print
+and till mounts retain their 409 cases. This corrects the earlier call-chain assumption above.

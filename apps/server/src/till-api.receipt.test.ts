@@ -3172,7 +3172,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
         operatorId,
       });
     });
-    const post = (action: "receipt" | "reprint") =>
+    const post = (action: "receipt" | "reprint" | "receipt/retry") =>
       app.request(`/api/sales/${orderId}/${action}`, {
         method: "POST",
         headers: { cookie, "content-type": "application/json" },
@@ -3189,6 +3189,30 @@ describe("explicit F1 receipt delivery enrollment", () => {
       );
     return { cfg, printerId, sale, orderId, post, email, supervisorId };
   }
+
+  it("answers 409 for an expired print payload on the till receipt retry", async () => {
+    const { sale, post } = await issued();
+    expect((await post("receipt")).status).toBe(200);
+    const [delivery] = await suite.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.saleId, sale.saleId));
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(invoiceDeliveries)
+        .set({ status: "failed" })
+        .where(eq(invoiceDeliveries.id, delivery!.id));
+      await tx
+        .update(printJobs)
+        .set({ status: "failed", attempts: 5, payload: new Uint8Array(0) })
+        .where(eq(printJobs.id, delivery!.printJobId!));
+    });
+    const response = await post("receipt/retry");
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "print_job.sale_payload_expired" },
+    });
+  });
 
   it("enrolls the explicit original once with the requesting staff member, preserving invoice and drawer", async () => {
     const { cfg, printerId, sale, post, supervisorId } = await issued();

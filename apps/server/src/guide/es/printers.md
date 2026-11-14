@@ -67,6 +67,10 @@ cualquier impresora de tickets; una comanda de cocina o un justificante de devol
 igual de ancha. Una impresión que espera en una impresora deshabilitada, o en una impresora USB o Bluetooth que
 ningún agente ve, se puede mover igual, y allí se cancela. Las demás impresiones solo se reimprimen en su propia impresora.
 
+Si la cola indica que los datos guardados de una impresión han caducado, abre **Pedidos**
+para imprimir el ticket o la factura desde la venta. Ya no puedes reimprimir desde ese trabajo
+comandas de cocina, recibos de devolución, comprobantes de pago ni informes si sus datos se han eliminado.
+
 ## Agentes de impresión {#print-agents}
 
 En **Impresoras**, abre **Agentes** y elige **Eliminar** en el menú del agente. Las impresoras accesibles solo a través de este agente no pueden imprimir hasta que lo añadas de nuevo; siguen en la lista.

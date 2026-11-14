@@ -259,28 +259,13 @@ checked on the box).
 
 ## The virtual PDF printer
 
-- **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
-  **Finished jobs are kept for one month** (owner, 2026-10-14); a reprint from the print queue is
-  for something that just failed or went missing, and the Orders screen rebuilds a receipt or
-  invoice from its sale at any age. Receipt copies wait until the `receipt_reprints` question
-  below is settled. Venue-wide retention is A664. Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
-  `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a
-  printed reprint's links brings back the failures it cleared, so a sweep must remove a bill's
-  kitchen print jobs all together or not at all. It must also keep or remove a resend chain
-  together: deleting a printed resend brings back the "in trouble" state of the job it copied (for
-  a resend of a till Reprint, also the original kitchen ticket's alert and the table's problem that
-  it cleared), and deleting a chain's first job while a resend still names it is refused by the
-  `resend_of` key (read, not run). A receipt copy now adds an append-only `receipt_reprints` row
-  with a required `print_job_id` key using `ON DELETE RESTRICT`
-  (`packages/db/src/schema/receipt-reprints.ts`); include that audit link when designing retention.
-  Whether a future replication drain can carry the audit row to a node without its print job is
-  unverified and needs a test when that drain is built.
+- **The virtual PDF printer.** The virtual PDF output remains to be built. Print-payload retention is handled by the daily housekeeping job.
 
 ## Reprint kitchen tickets and other printouts laid out again for any printer
 
 - **Reprint kitchen tickets and other printouts laid out again for any printer (left open by A405
-  point 4, #2678).** Receipts and full invoices are laid out again from the sale. Every other job keeps
-  only its finished bytes, so Reprint copies them: kitchen tickets and refund receipts to an
+  point 4, #2678).** Receipts and full invoices are laid out again from the sale. For other printouts,
+  Reprint copies the stored bytes while they remain available: kitchen tickets and refund receipts to an
   active receipt printer at least as wide, centred; everything else to its own printer only.
   Laying them out again needs each job to keep the printer-independent document it was built from,
   with a version number, in a new `print_jobs` column, and each builder (`formatKitchenTicket`,
@@ -631,6 +616,15 @@ Hardware and inbox checks to complete in the owner session.
   [Detail](printers.md#loose-ends-left-by-a663-part-3b-1827)
 
 ## Decisions and deliberate limits
+
+- **Print jobs keep their rows; finished or abandoned jobs release their bytes after one week**
+  (owner, 2026-11-14 17:02, “a week is fine”; watcher cleared all printouts at 17:37 and the
+  plan at 17:49; [A1532 plan](../superpowers/plans/2026-11-14-a1532-print-payload-retention.md)).
+  The owner’s 2026-10-14 distinction stays: the print queue is for something just lost or failed;
+  Orders rebuilds sale receipts and invoices at any age. Expired queue reprints refuse consistently,
+  including another printer. Kitchen tickets, refund receipts, payment slips and reports lose their
+  queue reprint. Keeping rows preserves receipt-copy audits, invoice delivery and kitchen/resend links;
+  failed documents still waiting for a decision keep their bytes. This replaces the one-month period.
 
 - **Document/printer routing scope (A790).** The owner dropped G4/A947, the recovery-origin
   file, browser journal, prepare/accept and duplicate-print protection on 9 November 2026 at
