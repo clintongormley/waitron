@@ -682,6 +682,36 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   - **The empty "Also edit" column goes** (moved here from the Department dialog bundle; the owner
     did not know what it was for).
 
+- **A1528. Department window and the delete dialogs: the owner's review (owner, 2026-11-14).**
+  Same page as A1525; can land with it or after it.
+  - **Adding a receipt logo reloads the page a few seconds later, losing unsaved changes.** On the
+    Receipts tab, Chrome asked "Reload site? Changes that you made may not be saved", and Reload
+    throws away the window's unsaved edits. Nothing asked for a reload: the dashboard's own reload
+    calls all wait for a button. Not diagnosed; it may be the development stack only (the
+    dashboard's dev server reloading, or the server restarting on a file change). Find the cause
+    and stop it; where a reload cannot be avoided, the window's unsaved edits survive it.
+  - **After a logo is added, the receipt preview's logo takes focus and draws a blue outline.** The
+    preview is only to look at and never takes focus; focus stays on the logo controls
+    (`apps/dashboard/src/screens/department-receipt-editor.ts`).
+  - **"Invoice operation description" moves from the Receipts tab to the Details tab.** It prints
+    on no receipt or invoice PDF; it is the description filed in each Veri\*Factu record. Its
+    label and hint say it goes to AEAT and does not print.
+  - **The title, tabs, Save and Cancel stay put; only the content between them scrolls**, on every
+    tab. Save and Cancel go in `wt-modal`'s own footer slot, as other dialogs do
+    (`department-dialogs.ts`); today `department-edit-dialog.ts` draws them inside the scrolling
+    content, and the "Edit department: …" title and the Details / Service / Receipts / Transfers
+    tabs scroll away too.
+  - **Delete department and Delete zone list only what changes outside the thing deleted.** A
+    department added a moment ago listed "Removes 1 department period", "Removes hours in 4
+    seasons", "Removes 1 department service setting" and "Removes 3 service steps", all made
+    automatically and never seen. Both dialogs keep the refusal reasons and "Work ended". Under
+    "Settings removed" they keep zones, tables, floor plans, device profiles, kitchen screens,
+    routing and the default-department and Counter-default lines, and drop the item's own
+    settings: periods, hours, service settings, service steps and zone extensions. With nothing
+    left, the dialog is the name and "This can't be undone." The owner first asked for no list at
+    all, and took this version once told that a till's profile can lose a zone it serves without
+    any other warning (`service-delete-copy.ts`, `service-delete-settings.ts`).
+
 - **Department dialog** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)
