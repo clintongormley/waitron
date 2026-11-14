@@ -2571,7 +2571,7 @@ guide. Floor: the tables toolbar (its text follows the map or list view and whet
 may be changed), whose box links to the Table service guide's service steps section; the layout
 banner; the Needs moving window when it offers Leave it here; and, on a handheld, the Ready bar,
 whose box links to the Table service guide's Ready bar section. Order: the Fire / Send all group,
-whose box links to the Kitchen service guide's section on a dish sent after its period ended; the
+whose box links to the Station service guide's section on a dish sent after its period ended; the
 group is drawn only as wide as its buttons so the badge sits on Send all's corner. Counter's payment buttons carry none yet. At phone width the Floor's toolbar and banner keep
 room on their trailing side for half the badge, whether help is on or off, so a badge stays inside
 the window and turning help on moves nothing; the layout banner is only as wide as its words and
@@ -2582,7 +2582,7 @@ search field's and the list headings' badges are whole
 `till-counter-screen.ts`, `till-floor-screen.ts` and `till-table-order-screen.ts` (Counter and Floor
 keep their axe cases in a `*.help.a11y.test.ts` beside it), and `menu-browser.help.test.ts`.
 
-**Kitchen screens.** A kitchen screen never waits at the lock screen, so help there goes off by itself after two
+**Station screens.** A kitchen screen never waits at the lock screen, so help there goes off by itself after two
 minutes without a touch, and a guide page or About Waitron left open in the shell closes with it;
 About Waitron opened with help off closes after the same two idle minutes, and help stays off.
 `HelpIdleController` (`apps/till/src/state/help-idle.ts`) runs the clock in `till-shell` while help
@@ -2597,8 +2597,8 @@ Merged / Stacked, drawn only on a kitchen screen with more than one station; the
 (`till-pass-board`, on the pass, its monitor and a till's Pass) marks its first card drawn and
 Columns, and the first Ready, whose wrapper is drawn only while help is on.
 One card and one lever per board carry a badge, so a busy
-board does not fill with identical "?" marks and Tab stops. These badges show on a till's Kitchen and
-Passs too. On these boards the cards, Columns and the first lever carry `help-inset`
+board does not fill with identical "?" marks and Tab stops. These badges show on a till's Stations and
+Pass too. On these boards the cards, Columns and the first lever carry `help-inset`
 (`kitchenHelpStyles` in `help-badge.ts`), which keeps the badge inside the part's trailing edge:
 at phone width the boards have no side padding, and a badge hung past a full-width card or the
 right-aligned Columns would make the screen scroll sideways. Merged / Stacked sits at the leading
@@ -3798,7 +3798,7 @@ somebody actually changes most days get lost in it. Fold the optional detail awa
 frequently-edited fields always visible and put each group of the rest inside a `wt-disclosure`.
 The product editor (`apps/dashboard/src/widgets/product-editor.ts`) keeps Category and Name on
 screen, with one pencil-marked thumbnail beside Name opening the image and colour controls.
-Selling, Kitchen, Descriptors, Nutritional info, Pricing, Variants and Modifiers each use a ruled
+Selling, Prep station, Descriptors, Nutritional info, Pricing, Variants and Modifiers each use a ruled
 disclosure. Selling holds Available and the three joined choices for who can order the product on
 its own, with the chosen explanation below. Its closed line paints Unavailable with the warning
 token. A variant's Selling section holds only Available.
@@ -3809,12 +3809,12 @@ Three rules make the fold safe rather than merely tidy.
 values in `summaryFields`, or as rows in `summaryRows`. Each
 `summaryRows` row is cut after its own number of lines, which can hide a later value in that row
 completely (a long English name hides the Spanish one), so opening the section is what shows every
-value. Build it from the values themselves, joined with a middot. The product editor's Kitchen,
+value. Build it from the values themselves, joined with a middot. The product editor's Prep station,
 Descriptors and Nutritional info sections name every field they hold, filled or not, each value
-after its field's name in bold. Empty Kitchen and Descriptors fields read “None specified”
+after its field's name in bold. Empty Prep station and Descriptors fields read “None specified”
 (“Sin especificar”, `modifiers.none_specified`). Nutritional info distinguishes “Not yet reviewed”
 from “None” for allergens and lists chosen diets before their implied labels, with the latter in
-italic. The Kitchen section reads "**Prep station name:** Café c/leche ·
+italic. The Prep station section reads "**Prep station name:** Café c/leche ·
 **Course:** Drinks", or "**Prep station name:** None specified · **Course:** None specified" with
 neither set. The Descriptors section has one row per field, its languages
 side by side and only the field name bold — "**Name:** EN: Beef tenderloin · ES: Solomillo de
@@ -3825,7 +3825,7 @@ allergens with their kinds and the diet labels separated by commas. On a variant
 page, a field the variant leaves blank to take its parent's value (the course, the description,
 the allergens, the dietary preferences) shows the parent's value in italic (`placeholder`), or,
 where the parent has none either, “None” for nutritional values and “None specified” for the
-other fields, or “Not yet reviewed” for allergens the parent has not had reviewed. A variant's blank kitchen and customer-facing names fall back to its own
+other fields, or “Not yet reviewed” for allergens the parent has not had reviewed. A variant's blank prep station and customer-facing names fall back to its own
 Name, not the parent's, so they read "None specified" as on a product. The Pricing fold still
 leaves a blank base price, and a VAT class the form does not offer, off its line. A names section
 (the Extras editor's "Customer-facing names") puts each language's customer-facing
@@ -3847,7 +3847,7 @@ A folded section may hold folded sections, each with its own closed line: Advanc
 holds five (`apps/dashboard/src/widgets/theme-advanced.ts`). An invalid field opens every fold
 around it, and a warning opens none.
 
-**Open/closed state is not remembered across openings.** In the product editor Kitchen starts
+**Open/closed state is not remembered across openings.** In the product editor Prep station starts
 open. Pricing starts open without Active variants; with Active variants it starts closed and
 Variants starts open. Modifiers starts open when lists are attached. Selling, Descriptors and
 Nutritional info start closed. Without variants, the closed Variants line reads None; opening it
@@ -5043,7 +5043,7 @@ html`<wt-tabs
   label="Venue settings"
   .items=${[
     { key: "receipts", label: "Receipts" },
-    { key: "kitchen", label: "Kitchen" },
+    { key: "kitchen", label: "Stations" },
   ]}
   .value=${this.view}
   @wt-tab-change=${this.selectView}
@@ -5823,10 +5823,10 @@ too and, like any tab change, adds a Back stop.
 
 Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for the till's fixed primary
 screens. Nested views and zones extend those paths, such as `/manage/floor-plan/set/<set>/zone/<zone>`.
-Till Schedule, Kitchen and Pass use `/tabs/<key>/view/<destination>`, with destinations
-`schedule`, `station` and `expo`. The operator Kitchen picker adds `/station/<id>`;
+Till Schedule, Stations and Pass use `/tabs/<key>/view/<destination>`, with destinations
+`schedule`, `station` and `expo`. The operator Stations picker adds `/station/<id>`;
 an embedded station keeps its selection local to its screen. Restore these destinations
-only after login and device validation. A kitchen display opens the one kitchen screen its device
+only after login and device validation. A prep station display opens the one kitchen screen its device
 chose and cannot open operator destinations from a path. A primary key outside the device's fixed
 choices returns to its home screen by replacing the current history entry.
 Only meaningful navigation pushes history. Payment steps, modifier dialogs and draft edits do not;
@@ -5870,8 +5870,8 @@ account menu; see "Dashboard banner"); inside More on a signed-in till; on a sig
 inside More at every width, in its Settings group after Equipment and before Theme, as the same
 `layout="group"` row a till's More holds, and never on the bar. The counter screen's own header
 draws one only when not embedded in the shell, and the app always embeds it. A till screen with no
-top bar — the sign-in and join screens, the kitchen display and kiosk mode, whose shell draws no bar
-— holds it at the top right, above the content. The kitchen display's and kiosk mode's corner
+top bar — the sign-in and join screens, the prep station display and kiosk mode, whose shell draws no bar
+— holds it at the top right, above the content. The prep station display's and kiosk mode's corner
 holds an ⓘ after the Help switch and before Theme, a ghost `wt-button` named "About Waitron"
 (`about.title`), drawn as the basket's ⓘ; it opens `/legal/declaration` in the shell's guide sheet, as More's About Waitron does on a till or
 a handheld. The sign-in and join screens' corner starts with the same ⓘ
@@ -5881,7 +5881,7 @@ drawn outside the shell. Setup's card header starts its controls with the same �
 `wt-modal size="full"` of its own, and Close or Escape returns focus to the ⓘ.
 
 The Theme chooser (`wt-theme-chooser`) sits just before the language chooser in setup's card header,
-the till's sign-in and join screens and the kitchen display's and kiosk mode's corner, and in the
+the till's sign-in and join screens and the prep station display's and kiosk mode's corner, and in the
 dashboard's banner while nobody is signed in (signed in, Theme is in the account menu; see
 "Dashboard banner"). The counter screen's own header has none, because the till never shows that
 header. On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in person's
@@ -5917,9 +5917,9 @@ forward once it loads. Cases: `apps/till/src/widgets/till-shell.counter-logo.tes
 
 On a till, More permanently holds Find a bill, My schedule, Profile when there is a profile choice,
 Language, Settings, About Waitron and Log out, then, while a venue logo is in use and has not failed, a rule and
-`wt-powered-by` with `login.powered_by` (A1096), last even when Testing shows. Settings holds Equipment and Zones on this device. Kitchen appears
+`wt-powered-by` with `login.powered_by` (A1096), last even when Testing shows. Settings holds Equipment and Zones on this device. The Stations entry appears
 only under Testing on Demo or Preparation installs with the existing kitchen permission. Live tills
-keep Kitchen off their navigation; kitchen displays retain their own fixed primary screen. Find a
+keep Stations off their navigation; prep station displays retain their own fixed primary screen. Find a
 bill opens Bills and Transactions. Its Back returns to the device's home screen without replacing
 the basket, and reads "Back to counter" only where that home is Counter; elsewhere it reads "Back".
 The Pass, the station screen and My schedule label their Back the same way. A transaction receipt
@@ -5959,7 +5959,7 @@ everything fits, and is never drawn at phone width, where the name is always in 
 has failed and the bar leaves it out at its first step, the bar steps back every
 `VENUE_LOGO_RETRY_MS` so the box can ask for the image again. Every other entry is in More at every
 width, in this order, the groups separated by a token-coloured rule: the name with its clock state,
-the clock actions, My hours and Fix my hours, while the name is in More; Pass, Kitchen, Find a bill,
+the clock actions, My hours and Fix my hours, while the name is in More; Pass, Stations, Find a bill,
 My schedule, Profile and Transfers, each where offered; a `role="group"` headed Settings ("Settings"
 / «Ajustes») holding Zones on this device, Equipment, the language chooser and Theme; then About
 Waitron and Log out;
@@ -5987,7 +5987,7 @@ its full name, by each app's own `::part` rule (`apps/setup/src/setup-app.ts`,
 accessible name carries the full name either way: `Español` with the name shown, `ES Español` with
 the code shown. Its menu opens downwards. The parent passes the
 page's language as `active` and decides what a pick means. A signed-in operator's choice uses the
-existing preference write; login, pairing and kitchen-display choices are local UI changes.
+existing preference write; login, pairing and station-display choices are local UI changes.
 
 At phone width the till's page keeps `--wt-space-2` at its edges (`apps/till/index.html`), and the
 Floor, table Order, Pass, Station, Counter and Schedule screens add no side padding of
@@ -6003,12 +6003,12 @@ screens; there is no saved screen layout or screen editor.
 | --- | --- | --- |
 | Till | Selected Counter and Floor zones | Saved starting zone |
 | Phone or tablet handheld | Floor, Order | Floor |
-| Kitchen display | Kitchen | Kitchen |
+| Prep station display | Stations | Stations |
 
 `builtInScreensFor` in `apps/till/src/built-in-screens.ts` owns these choices. `till-shell` renders
-the header; `TillApp` mounts Counter, Floor, Order and Kitchen directly. Opening a table on a till
+the header; `TillApp` mounts Counter, Floor, Order and Stations directly. Opening a table on a till
 opens Order over Floor. On a handheld it shows the Order screen, which has no tab there: the open
-table's button on the bar stands for it. A kitchen display needs
+table's button on the bar stands for it. A prep station display needs
 `act-as-kds` before any station, pass, pass-monitor or selection notice is mounted. Profile screen
 preferences and restored URLs retain their capability checks.
 
@@ -6359,14 +6359,14 @@ business day keeps the blocked chip "Last orders have ended" (`.not-offered`).
 
 The window is `till-late-send-dialog` (`apps/till/src/widgets/late-send-dialog.ts`), a `wt-dialog`
 carrying `trackDialog()`. Its heading is "{period} has ended", or "{periods} have ended" with the
-names joined by `Intl.ListFormat`; then "Check with the kitchen before sending:" and the dishes,
+names joined by `Intl.ListFormat`; then "Check with the station before sending:" and the dishes,
 one per line as `dishLine` spells them ("2× Tortilla"). The footer holds Remove them (secondary)
-then Kitchen agreed — send (primary); on a counter Park the primary reads Kitchen agreed — save,
+then Station agreed — send (primary); on a counter Park the primary reads Station agreed — save,
 because a park stores the order without sending it. The window holds a choice, not staged input,
 so it takes no draft scope and has no `*.unsaved.test.ts`; Escape or closing it sends nothing and
 removes nothing. The app draws one at a time (`lateSendWindow` in `apps/till/src/till-app.ts`).
 
-When Kitchen agreed is refused for want of `venue.configure`, the manager's PIN step reuses
+When Station agreed is refused for want of `venue.configure`, the manager's PIN step reuses
 `till-supervisor-override-dialog` with the people from
 `GET /api/service-day/authorizers`; that dialog registers its own digits with the leave coordinator.
 
@@ -6924,7 +6924,7 @@ order, and remains available on products with no mark.
 
 Counter and table-order lines place the dish’s allergen and positive diet icons after its name.
 Each icon carries the localized name, including cereal or nut kinds. A dish with unreviewed allergens
-shows no line icons. The separate As served and Diet rows are retired. Kitchen allergen chips stay
+shows no line icons. The separate As served and Diet rows are retired. Station allergen chips stay
 textual and omit the unreviewed-allergen warning.
 
 Shift+F10 or the context-menu key opens the same information window for a focused product. Enter

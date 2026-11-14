@@ -249,7 +249,7 @@ const en = {
   "prep.health.late": "Late",
   "prep.health.no_screen": "No screen",
   "prep.health.minutes": "min",
-  "prep.health.dish": "Stations dish",
+  "prep.health.dish": "Station dish",
   "prep.health.remaining": "Remaining quantity",
   "prep.health.order": "Order",
   "prep.health.tables": "Tables",
@@ -383,7 +383,7 @@ const en = {
     "Nothing fires dishes from {stations} that have no service zone: only a pass view on every service zone covers them. Set one up under {devices}.",
   "prep.pass_gap_every_zone":
     "No pass view covers {stations} in any zone. Set one up under {devices}.",
-  "prep.pass_gap_error": "Which pass views cover these stations could not be checked.",
+  "prep.pass_gap_error": "Which passes cover these stations could not be checked.",
   "prep.save_error": "The change could not be saved.",
   "prep.fix_fields": "Correct the highlighted fields to continue.",
   "prep.station_disabled": "This station is disabled. Choose an active station.",
@@ -489,7 +489,7 @@ const en = {
   "venue.department_tab.receipt": "Receipts",
   "venue.department_tab.transfers": "Transfers",
   "venue.orders_and_payment": "Orders and payment",
-  "venue.courses_and_kitchen": "Courses and the station",
+  "venue.courses_and_kitchen": "Courses and stations",
   "venue.table_states": "Table states",
   "venue.needs_clearing": "Needs clearing",
   "venue.needs_clearing_hint":
@@ -1318,7 +1318,7 @@ const es: Record<keyof typeof en, string> = {
     "Nadie marcha los platos de {stations} sin zona de servicio: solo los cubre una vista de pase con todas las zonas de servicio. Configura una en {devices}.",
   "prep.pass_gap_every_zone":
     "Ninguna vista de pase cubre {stations} en ninguna zona. Configura una en {devices}.",
-  "prep.pass_gap_error": "No se pudo comprobar qué pantallas de pase cubren estas estaciones.",
+  "prep.pass_gap_error": "No se pudo comprobar qué pases cubren estas estaciones.",
   "prep.save_error": "No se pudo guardar el cambio.",
   "prep.fix_fields": "Corrige los campos marcados para continuar.",
   "prep.station_disabled": "Esta estación está deshabilitada. Elige una estación activa.",
@@ -1430,7 +1430,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.department_tab.receipt": "Recibos",
   "venue.department_tab.transfers": "Traslados",
   "venue.orders_and_payment": "Pedidos y cobro",
-  "venue.courses_and_kitchen": "Cursos y la estación",
+  "venue.courses_and_kitchen": "Cursos y estaciones",
   "venue.table_states": "Estados de la mesa",
   "venue.needs_clearing": "Por recoger",
   "venue.needs_clearing_hint":

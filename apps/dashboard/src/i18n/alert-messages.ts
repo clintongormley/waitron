@@ -60,11 +60,11 @@ export const ALERT_MESSAGES: Readonly<
   },
   "kitchen_screen.pass_dark": {
     en: "Pass {device} has dishes waiting and has not checked in for over three minutes. Check it; until then, use the till's Pass view.",
-    es: "La vista de pase {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísala; mientras tanto, usa la vista de pase del TPV.",
+    es: "El pase {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísalo; mientras tanto, usa la vista de pase del TPV.",
   },
   "kitchen_screen.pass_monitor_dark": {
     en: "Pass display (view only) {device} has dishes waiting and has not checked in for over three minutes. Check it; until then, use the till's Pass view.",
-    es: "El pantalla de pase (solo lectura) {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísalo; mientras tanto, usa la vista de pase del TPV.",
+    es: "La pantalla de pase (solo lectura) {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísala; mientras tanto, usa la vista de pase del TPV.",
   },
   "backup.destination_overdue": {
     en: "Backups to “{destination}” are overdue, or the destination could not be checked. Check it on the Backups page.",
@@ -455,8 +455,8 @@ export const ALERT_MESSAGES: Readonly<
     es: `Se devolvieron {moneyBack:money} a un cliente por una rectificación de factura, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta, elige la rectificación en Rectificaciones en curso y pulsa Registrar la rectificación; si indica que la factura ya no se puede rectificar, pulsa Cerrar y conservar las devoluciones.${MORE_ES}`,
   },
   "route.dish_not_sent": {
-    en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the station. Pass them to the station by hand, and check the Prep stations page: a closed station with no replacement, or no active default station, leaves a dish nowhere to go.",
-    es: "El pedido pagado {orderNumber} tiene platos que ninguna estación de preparación podía recibir: {dishes}. No se han enviado a la estación. Pásalos a la estación a mano y revisa la página de Estaciones de preparación: una estación cerrada sin sustituta, o ninguna estación predeterminada activa, deja un plato sin destino.",
+    en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the station. Tell the staff preparing these dishes directly, and check the Prep stations page: a closed station with no replacement, or no active default station, leaves a dish nowhere to go.",
+    es: "El pedido pagado {orderNumber} tiene platos que ninguna estación de preparación podía recibir: {dishes}. No se han enviado a la estación. Avisa directamente al personal que prepara estos platos y revisa la página de Estaciones de preparación: una estación cerrada sin sustituta, o ninguna estación predeterminada activa, deja un plato sin destino.",
   },
   "route.released_at_closed_station": {
     en: "Order {orderNumber}: {dishes} went to {station}, which is closed or disabled, and the prep station rules sent them nowhere else. If nobody is making them there, move them to another station from the till (Move to station…), or open {station} for today on the Prep stations page. Dishes left at a closed station later do not add to this alert while it is open, so there may be more.",

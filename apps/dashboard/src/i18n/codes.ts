@@ -968,8 +968,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los datos de impresión guardados se eliminan al cabo de una semana. Vuelve a imprimir este recibo o factura desde Pedidos en el panel.",
   },
   "print_job.payload_expired": {
-    en: "Saved print data is removed after a week. This printout can no longer be reprinted, including kitchen tickets, refund receipts, payment slips and reports.",
-    es: "Los datos de impresión guardados se eliminan al cabo de una semana. Ya no se puede reimprimir este documento, incluidos los tickets de cocina, recibos de devolución, comprobantes de pago e informes.",
+    en: "Saved print data is removed after a week. This printout can no longer be reprinted, including station tickets, refund receipts, payment slips and reports.",
+    es: "Los datos de impresión guardados se eliminan al cabo de una semana. Ya no se puede reimprimir este documento, incluidos los tickets de estación, recibos de devolución, comprobantes de pago e informes.",
   },
   "print_job.not_resendable": {
     en: "That job is still waiting to print or retry automatically",

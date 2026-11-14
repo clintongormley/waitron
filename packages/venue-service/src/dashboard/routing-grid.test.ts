@@ -750,15 +750,13 @@ describe("venue-routing-grid", () => {
     expect(shown(button)).toEqual({ text: "Bar", muted: false });
   });
 
-  it("All × Every zone shows the default without an editing action, or its repair message", async () => {
+  it("All × Every zone shows the default without an editing action, or No station", async () => {
     const { el } = await mount();
     const fixed = cell(el, "all", "every");
     expect(fixed.textContent!.trim()).toBe("Kitchen");
     expect(fixed.querySelector("button")).toBeNull();
     const repair = await mount(routing({ defaultStationId: null }));
-    expect(cell(repair.el, "all", "every").textContent).toContain(
-      "No default prep station is active",
-    );
+    expect(cell(repair.el, "all", "every").textContent!.trim()).toBe("No station");
     expect(cell(repair.el, "all", "every").querySelector("button")).toBeNull();
   });
 

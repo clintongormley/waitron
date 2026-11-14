@@ -567,19 +567,12 @@ export class PrepStationsScreen extends LitElement {
       ? t("prep.no_preparation")
       : this.#stationName(target.stationId);
   }
-  /** Whether `run` succeeded. */
   /** The grid's open editor closes once its choice is written. */
   #closeCellEditor(): void {
     this.renderRoot.querySelector("venue-routing-grid")?.closeEditor();
   }
   async #makeDefault(stationId: string) {
     if (this.busy || this.pending) return;
-    if (
-      stationId === this.view?.routing.defaultStationId ||
-      !this.view?.routing.canMakeDefault ||
-      !this.view.stations.some((station) => station.active && station.id === stationId)
-    )
-      return;
     const run = ++this.#cellRun;
     this.busy = true;
     this.#showError("");

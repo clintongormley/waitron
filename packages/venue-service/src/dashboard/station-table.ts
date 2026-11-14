@@ -126,7 +126,7 @@ export class StationTable extends LitElement {
       .columns=${this.#columns()}
       .rows=${rows}
       .rowKey=${(station: PrepStation) => station.id}
-      .rowClickLabel=${() => t("prep.edit_station")}
+      .rowClickLabel=${(station: PrepStation) => `${t("prep.edit_station")}: ${station.name}`}
       .rowClick=${
         this.disabled
           ? undefined

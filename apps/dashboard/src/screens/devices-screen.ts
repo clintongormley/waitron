@@ -448,6 +448,7 @@ export class DevicesScreen extends LitElement {
     (error) => this.#showReadError(error),
     () => {
       if (this.#readErrorShown) this.#showError(null);
+      if (this.#initialRead) this.#openLinkedDevice();
     },
   );
 
@@ -773,41 +774,37 @@ export class DevicesScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.#showError(null);
-    try {
-      await Promise.all([
-        this.#watchDevices(),
-        this.#queries.watch("listStations", [], (value) => {
-          this.stations = value;
-        }),
-        this.#queries.watch("listZones", [], (value) => {
-          this.zones = value;
-        }),
-        this.#queries.watch("listDeviceProfiles", [], (value) => {
-          this.deviceProfiles = value;
-        }),
-        this.#queries.watch("listProfileKitchenScreens", [], (value) => {
-          this.kitchenScreens = value;
-        }),
-        this.#queries.watch("listPrinters", [], (value) => {
-          this.printers = value;
-          this.printerListsRead = new Set([...this.printerListsRead, "printers"]);
-        }),
-        this.#queries.watch("listPagePrinters", [], (value) => {
-          this.pagePrinters = value;
-          this.printerListsRead = new Set([...this.printerListsRead, "pages"]);
-        }),
-        this.#queries.watch("pairingMode", [], (value) => {
-          this.pairing = value;
-        }),
-        this.#queries.watch("joinRequests", ["device"], (value) => {
-          this.#applyJoins(value);
-        }),
-      ]);
-      this.#initialRead = true;
-      this.#openLinkedDevice();
-    } catch (error) {
-      this.#showReadError(error);
-    }
+    await Promise.allSettled([
+      this.#watchDevices(),
+      this.#queries.watch("listStations", [], (value) => {
+        this.stations = value;
+      }),
+      this.#queries.watch("listZones", [], (value) => {
+        this.zones = value;
+      }),
+      this.#queries.watch("listDeviceProfiles", [], (value) => {
+        this.deviceProfiles = value;
+      }),
+      this.#queries.watch("listProfileKitchenScreens", [], (value) => {
+        this.kitchenScreens = value;
+      }),
+      this.#queries.watch("listPrinters", [], (value) => {
+        this.printers = value;
+        this.printerListsRead = new Set([...this.printerListsRead, "printers"]);
+      }),
+      this.#queries.watch("listPagePrinters", [], (value) => {
+        this.pagePrinters = value;
+        this.printerListsRead = new Set([...this.printerListsRead, "pages"]);
+      }),
+      this.#queries.watch("pairingMode", [], (value) => {
+        this.pairing = value;
+      }),
+      this.#queries.watch("joinRequests", ["device"], (value) => {
+        this.#applyJoins(value);
+      }),
+    ]);
+    this.#initialRead = true;
+    if (!this.#readErrorShown) this.#openLinkedDevice();
   }
 
   #watchDevices(): Promise<void> {
@@ -1358,7 +1355,6 @@ export class DevicesScreen extends LitElement {
 
   #endEdit(clearAddress = true): void {
     if (this.editing === null) return;
-    if (clearAddress) this.#clearDeviceAddress();
     this.#editEpoch++;
     this.#editScope?.dispose();
     this.#editScope = undefined;
@@ -1366,6 +1362,7 @@ export class DevicesScreen extends LitElement {
     this.#editLeave = undefined;
     this.editing = null;
     this.editSaving = false;
+    if (clearAddress) this.#clearDeviceAddress();
   }
 
   /** Sent only when the choice or the profile changed: the server replaces the whole stored choice

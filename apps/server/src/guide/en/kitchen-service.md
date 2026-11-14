@@ -343,7 +343,7 @@ A divider ends that run before the next unmarked dish; a new group or station he
 On the station screen, the card shows **After Lunch — agreed** above it.
 
 Each department sets whether sending such a dish needs a manager, or a manager's PIN, with
-**Manager's PIN to send after a period ends** under **Courses and the station** on its **Service**
+**Manager's PIN to send after a period ends** under **Courses and stations** on its **Service**
 tab in the dashboard. Off, anyone who can send confirms with the station. When it is on and the
 person sending is not a manager, the till asks for a manager's PIN after **Station agreed**.
 
@@ -370,7 +370,7 @@ station or the pass, read the copy already attached to each dish. The station sc
 the table's allergy editor. At the station, acknowledge any corrections.
 
 A held group falls due a set number of minutes after the dishes fired before it have been
-served. Set the delay under **Courses and the station** on the department’s **Service** tab
+served. Set the delay under **Courses and stations** on the department’s **Service** tab
 in the dashboard. Choose **At once** to remind you as soon as those dishes are served, or **Off**
 to turn the reminder off.
 

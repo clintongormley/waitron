@@ -24,6 +24,8 @@ function station(overrides: Partial<PrepStation> & Pick<PrepStation, "id" | "nam
 }
 const bar = station({ id: "bar", name: "Bar", isDefault: true });
 type StationTable = HTMLElement & {
+  disabled: boolean;
+  updateComplete: Promise<boolean>;
   stations: readonly PrepStation[];
   statusNotes: Record<string, string>;
   actions: Record<string, unknown>;
@@ -63,11 +65,20 @@ it("draws its rows from the stations list, with its daily status beside Name", a
   expect(el.shadowRoot?.textContent).not.toContain("Loading station health");
 });
 it("activates a station row with the station to edit", async () => {
-  const el = await mount();
+  const el = await mount([bar, station({ id: "grill", name: "Grill" })]);
+  expect(
+    [...table(el)!.querySelectorAll(".row-activate")].map((button) =>
+      button.getAttribute("aria-label"),
+    ),
+  ).toEqual(["Edit station: Bar", "Edit station: Grill"]);
   const edits: unknown[] = [];
   el.parentElement!.addEventListener("station-edit", (event) => {
     edits.push((event as CustomEvent).detail);
   });
+  await userEvent.click(table(el)!.querySelector("tbody tr td")!);
+  expect(edits).toEqual([{ station: bar }]);
+  el.disabled = true;
+  await el.updateComplete;
   await userEvent.click(table(el)!.querySelector("tbody tr td")!);
   expect(edits).toEqual([{ station: bar }]);
 });
@@ -156,7 +167,7 @@ it.each([
 const outputs = {
   bar: {
     printedOn: "Epson, Star",
-    shownOn: html`<span data-test="screen-device">Pantalla Cocina — station screen</span>`,
+    shownOn: html`<span data-test="screen-device">Bar display</span>`,
   },
 };
 function headings(el: HTMLElement) {
@@ -240,7 +251,7 @@ it.each([
       }
     }
     expect(root.textContent).toContain("Epson, Star");
-    expect(root.textContent).toContain("Pantalla Cocina — station screen");
+    expect(root.textContent).toContain("Bar display");
     const wrapped = scroll.scrollWidth;
     summary.wrapToFit = false;
     await summary.updateComplete;

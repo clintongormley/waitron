@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import type { DeleteImpact } from "@waitron/shared";
-import { LeaveController } from "@waitron/ui";
+import { LeaveController, UrlStateController } from "@waitron/ui";
+import { dashboardPath } from "../navigation.js";
 import { registerCatalogue, type CardProviderPanel } from "@waitron/dashboard-kit";
 import {
   chooseOption,
@@ -343,6 +344,14 @@ const text = (el: DevicesScreen, sel: string) => q(el, sel)?.textContent?.trim()
 /** The screen inside an application that asks before unsaved changes are lost. */
 class DevicesLeaveHost extends LitElement {
   readonly leave = new LeaveController(this);
+  readonly url = new UrlStateController(this, () => {}, {
+    ...dashboardPath,
+    leave: {
+      isDirty: () => this.leave.coordinator.isDirty(),
+      request: (proceed, signal) =>
+        this.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    },
+  });
   api!: DashboardApi;
   override render() {
     return html`<dashboard-devices-screen
@@ -1181,7 +1190,9 @@ describe("the Edit dialog", () => {
     history.replaceState(null, "", "/manage/devices/device/t1");
     let answer!: (profiles: DeviceProfile[]) => void;
     const api = editApi({
-      listDeviceProfiles: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+      listDeviceProfiles: vi.fn(
+        () => new Promise<DeviceProfile[]>((resolve) => (answer = resolve)),
+      ),
     });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
       api,
@@ -1199,6 +1210,38 @@ describe("the Edit dialog", () => {
     expect(el.shadowRoot!.activeElement).not.toBeNull();
   });
 
+  it("opens a linked device when an initial failed read recovers", async () => {
+    history.replaceState(null, "", "/manage/devices/device/t1");
+    const liveData = new LiveData();
+    const api = Object.assign(
+      editApi({
+        listPrinters: vi
+          .fn()
+          .mockRejectedValueOnce(Object.assign(new Error(), { code: "connection.failed" }))
+          .mockResolvedValue([]),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await vi.waitFor(() => expect(q(el, "[data-test=page-error]")?.textContent).toBeTruthy());
+    expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
+    liveData.refresh();
+    await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
+    expect(location.pathname).toBe("/manage/devices/device/t1");
+  });
+
+  it("closes a linked editor when the address returns to Devices", async () => {
+    history.replaceState(null, "", "/manage/devices/device/t1");
+    const { el: host } = await mountWidget<DevicesLeaveHost>("devices-screen-leave-test-host", {
+      api: editApi(),
+    });
+    const el = host.shadowRoot!.querySelector<DevicesScreen>("dashboard-devices-screen")!;
+    await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
+    await host.url.write({ device: null });
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(location.pathname).toBe("/manage/devices");
+  });
+
   it("clears an unknown linked device after loading the list", async () => {
     history.replaceState(null, "", "/manage/devices/device/missing");
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api: editApi() });
@@ -1210,7 +1253,10 @@ describe("the Edit dialog", () => {
     history.replaceState(null, "", "/manage/devices/device/t1");
     const liveData = new LiveData();
     const api = Object.assign(editApi(), { liveData });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    const { el: host } = await mountWidget<DevicesLeaveHost>("devices-screen-leave-test-host", {
+      api,
+    });
+    const el = host.shadowRoot!.querySelector<DevicesScreen>("dashboard-devices-screen")!;
     await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
     await rename(el, "Front counter");
     vi.mocked(api.listDevices).mockResolvedValue([{ ...till, label: "Saved name" }, kitchen]);

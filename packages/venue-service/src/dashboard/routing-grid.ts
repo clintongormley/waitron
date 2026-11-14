@@ -700,9 +700,7 @@ export class RoutingGrid extends LitElement {
       colour: this.#colourOf(target),
       content:
         target === null
-          ? html`<span class="repair" data-test="default-repair"
-              >${t("routing.default_repair")}</span
-            >`
+          ? html`<span class="repair">${t("routing.no_station")}</span>`
           : html`<span class="station default-station">${this.#targetText(target)}</span>`,
     };
   }

@@ -14,11 +14,11 @@ abre el diálogo del nombre: elige **Añadir**.
 Si no aparece una impresora de red, abre **Comprobar una dirección conocida**, escribe su dirección
 IP y elige **Conectar**.
 
-Para quitar una impresora de recibos o la estación, elige **Eliminar** en su menú o en sus detalles.
+Para quitar una impresora de recibos o de estación, elige **Eliminar** en su menú o en sus detalles.
 La confirmación indica las asignaciones que se eliminan y el trabajo que finaliza. Para volver a
 usarla, elige **Añadir impresora** y después **Añadir** junto a ella. Si se reconoce, conserva su
 nombre y calibración, así que no necesitas repetirlos. Vuelve a asignar sus dispositivos y
-puestos de estación.
+estaciones de preparación.
 
 ## Calibrar una impresora de recibos {#calibrate}
 
@@ -69,7 +69,7 @@ ningún agente ve, se puede mover igual, y allí se cancela. Las demás impresio
 
 Si la cola indica que los datos guardados de una impresión han caducado, abre **Pedidos**
 para imprimir el ticket o la factura desde la venta. Ya no puedes reimprimir desde ese trabajo
-comandas de cocina, recibos de devolución, comprobantes de pago ni informes si sus datos se han eliminado.
+comandas de estación, recibos de devolución, comprobantes de pago ni informes si sus datos se han eliminado.
 
 ## Agentes de impresión {#print-agents}
 

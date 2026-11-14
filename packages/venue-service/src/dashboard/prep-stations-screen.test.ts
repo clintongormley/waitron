@@ -168,9 +168,6 @@ async function routingGrid(el: PrepStationsScreen) {
   return grid;
 }
 const containing = (words: string) => new RegExp(words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-/** A whole name, word for word; a comma after a drawn block may read with a space before it. */
-const spoken = (words: string) =>
-  new RegExp(`^${containing(words).source.replaceAll(", ", " ?, ")}$`);
 /** What a routing cell draws: its button's target and accessible name, and its refusal. */
 function gridCombo(grid: HTMLElement, row: string, zone: string) {
   const td = () =>
@@ -2214,12 +2211,9 @@ it("at 320 px in Spanish, every tab shows whole and the tab row does not overflo
   );
 });
 
-it.each([
-  { locale: "en", name: "Add station" },
-  { locale: "es", name: "Añadir estación" },
-] as const)(
-  "at 390 px, the Stations tab shows every tab and its add button whole ($locale)",
-  async ({ locale, name }) => {
+it.each(["en", "es"] as const)(
+  "at 390 px, the Stations tab shows every tab and its add button whole (%s)",
+  async (locale) => {
     setLocale(locale);
     history.replaceState(null, "", "/manage/prep-stations");
     const el = await mount(api());
@@ -5939,7 +5933,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     const a = api({ liveData, load, readPassCoverage });
     const el = await mount(a);
     await settle(el);
-    const failed = "Which pass views cover these stations could not be checked.";
+    const failed = "Which passes cover these stations could not be checked.";
     expect(lines(el)).toEqual([failed]);
     expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
     expect(stationRow(el, "bar")).not.toBeNull();
@@ -5978,7 +5972,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     readPassCoverage.mockRejectedValue({ code: "connection.failed" });
     liveData.invalidate([{ type: "devices" }]);
     await vi.waitFor(() =>
-      expect(lines(el)).toEqual(["Which pass views cover these stations could not be checked."]),
+      expect(lines(el)).toEqual(["Which passes cover these stations could not be checked."]),
     );
     expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
   });
