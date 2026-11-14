@@ -1165,6 +1165,25 @@ reader refuses.
 `packages/shared/src/conventions.test.ts` (reads `cents.ts` as TEXT, and nothing outside
 `packages/shared/src`, so a second file crossing into the number type is seen by nobody).
 
+## A sale's correctives are summed through `correctivesOf`
+
+A corrective by replacement repeats its original's full total, and the original carries the sale:
+its payments and settlement stay on it, and a later refund corrects the replacement (Q37-FIX plan,
+`docs/superpowers/plans/2026-11-13-q37-fix-put-right.md`, "How the sale is counted once"). So what
+a sale owes is its total plus its own correctives except the replacement, plus the replacement's
+correctives. `correctivesOf(saleId)` in `packages/db/src/correctives-of.ts` is that set, as an
+id subquery; every money reader and every "has it been credited" test uses it.
+
+`scripts/corrective-sums.test.ts` holds the rule, and is weaker than its name. It reads non-test
+`.ts` files under `apps/*/src` and `packages/*/src`, leaving out `testing/` folders, one LINE at a
+time, and flags an SQL equality on `corrects_sale_id` and a Drizzle `eq(` or `inArray(` whose
+first argument is a `correctsSaleId` column. Everything else passes it: a comparison split across
+lines, a column reached through an alias the pattern does not spell, a helper it does not
+recognise, and SQL outside those folders. The `sale_settlements_check_coverage` trigger in
+`packages/db/triggers/core.sql` is such SQL: it still adds every corrective, a replacement
+included. Each allowlist entry carries its reason, and an entry that no longer matches fails the
+guard.
+
 ## A quantity counts whole thousandths and a rate whole basis points, and neither is the money scale
 
 Task P6, 2026-09-21. Seven columns followed money out of `numeric`: two quantities
