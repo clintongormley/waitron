@@ -1305,7 +1305,7 @@ export class MenuStructureTable extends LitElement {
       this.#productById.has(productId)
         ? html`<a
             data-test=${`edit-product-${key}`}
-            href=${`/manage/catalogue/product/${encodeURIComponent(productId)}`}
+            href=${`/manage/products/product/${encodeURIComponent(productId)}`}
             @click=${(event: MouseEvent) => {
               if (leftToBrowser(event)) return;
               event.preventDefault();

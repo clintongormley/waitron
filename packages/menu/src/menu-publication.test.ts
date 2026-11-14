@@ -16,7 +16,7 @@ import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import { captureError, engineErrorMessage, withTransaction, type Transaction } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import {
   menusFixture,
   offerOf,
@@ -40,15 +40,15 @@ import {
   readRecordedDocuments,
 } from "./menu-publication.js";
 import {
-  createCatalogue,
+  createMenu,
   createProduct,
   updateMenuDetails,
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
 import { updateCategory } from "./categories.js";
-import { saveCatalogueDefaultColor } from "./settings.js";
-import { moveCatalogueItems } from "./product-items.js";
+import { saveMenuDefaultColor } from "./settings.js";
+import { moveProductItems } from "./product-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { createUnit, updateUnit, assignProductUnit } from "./units.js";
 import { setIncludeFolder } from "./include-folder.js";
@@ -71,7 +71,7 @@ import {
 import { NO_ICE } from "../test/menus-fixture.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 beforeEach(() =>
   seedLibraryImages(fx.db, "drinks.jpg", "large.jpg", "lemon.jpg", "lemonade.jpg", "new-soup.jpg"),
 );
@@ -561,7 +561,7 @@ describe("publishMenu", () => {
     await menusFixture(fx.db);
     await expect(
       app((tx) => publishMenu(tx, "00000000-0000-4000-8000-000000000000", "x", "person-1")),
-    ).rejects.toMatchObject({ code: "catalogue.not_found" });
+    ).rejects.toMatchObject({ code: "menu.not_found" });
   });
 
   it("keeps empty slots for unreachable shortcuts and still publishes", async () => {
@@ -655,7 +655,7 @@ describe("readLiveDocuments keeps each version's parsed document", () => {
     const menuIds = [f.lunch];
     await publish(f.lunch);
     for (let n = 1; n <= 32; n++) {
-      const menu = await app((tx) => createCatalogue(tx, { name: `Menu ${n}` }));
+      const menu = await app((tx) => createMenu(tx, { name: `Menu ${n}` }));
       await publish(menu.id);
       menuIds.push(menu.id);
     }
@@ -982,14 +982,14 @@ describe("a category's colour", () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await publish(f.dinner);
-    await app((tx) => saveCatalogueDefaultColor(tx, "#777777"));
+    await app((tx) => saveMenuDefaultColor(tx, "#777777"));
     expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
     expect((await liveColors(f.lunch)).get(f.lemonade)).toBeNull();
     expect(changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)).toContainEqual({
       ...colorChange(f.lemonade, "Lemonade"),
       alsoOn: ["Dinner Menu"],
     });
-    await app((tx) => saveCatalogueDefaultColor(tx, null));
+    await app((tx) => saveMenuDefaultColor(tx, null));
     expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
   });
 
@@ -1021,7 +1021,7 @@ describe("a category's colour", () => {
     await publish(f.lunch);
     expect(await states(f)).toMatchObject({ lunch: "current" });
     await app((tx) =>
-      moveCatalogueItems(tx, { productIds: [], categoryIds: [f.softDrinks] }, f.coldDrinks),
+      moveProductItems(tx, { productIds: [], categoryIds: [f.softDrinks] }, f.coldDrinks),
     );
     expect(await states(f)).toMatchObject({ lunch: "changed" });
     expect(changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)).toEqual([
@@ -1134,7 +1134,7 @@ describe("menuStatus", () => {
   it("answers every menu when no ids are named", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.dinner);
-    const brunch = await app((tx) => createCatalogue(tx, { name: "Brunch Menu" }));
+    const brunch = await app((tx) => createMenu(tx, { name: "Brunch Menu" }));
     const status = await app((tx) => menuStatus(tx));
     expect([...status.keys()].sort()).toEqual([f.lunch, f.dinner, f.drinksMenu, brunch.id].sort());
     expect(status.get(f.dinner)).toMatchObject({ state: "current", version: 1 });
@@ -1801,7 +1801,7 @@ describe("previewMenu", () => {
     it("credits Lunch clearing its own Lemonade price to Lunch on Brunch, which includes Lunch", async () => {
       const f = await menusFixture(fx.db);
       const brunch = await app(async (tx) => {
-        const created = await createCatalogue(tx, { name: "Brunch Menu" });
+        const created = await createMenu(tx, { name: "Brunch Menu" });
         const root = (await readMenuStructure(tx, created.id)).rootSectionId;
         await addMember(tx, root, section(f.lunchRoot));
         return created.id;
@@ -2099,7 +2099,7 @@ describe("previewMenu", () => {
       async (tx) =>
         (
           await createProduct(tx, {
-            catalogueId: f.lunch,
+            menuId: f.lunch,
             categoryId: null,
             name: "Juice",
             customerName: { en: "Pressed juice" },
@@ -2210,7 +2210,7 @@ describe("previewMenu", () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await publish(f.dinner);
-    await app((tx) => createCatalogue(tx, { name: "Brunch Menu" }));
+    await app((tx) => createMenu(tx, { name: "Brunch Menu" }));
     await app((tx) => updateProduct(tx, f.lemonade, { allergens: { sulphites: {} } }));
     const graphs = vi.spyOn(sectionGraph, "loadSectionGraph");
     const offers = vi.spyOn(operations, "listMenuOffers");
@@ -2307,13 +2307,13 @@ describe("previewMenu", () => {
   it("refuses a menu that does not exist", async () => {
     await expect(
       app((tx) => previewMenu(tx, "00000000-0000-4000-8000-000000000000")),
-    ).rejects.toMatchObject({ code: "catalogue.not_found" });
+    ).rejects.toMatchObject({ code: "menu.not_found" });
   });
 
   it("previews a menu created after the others were published", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
-    const brunch = await app((tx) => createCatalogue(tx, { name: "Brunch Menu" }));
+    const brunch = await app((tx) => createMenu(tx, { name: "Brunch Menu" }));
     const preview = await app((tx) => previewMenu(tx, brunch.id));
     expect(preview.changes).toEqual([]);
     expect((await app((tx) => menuStatus(tx, [brunch.id]))).get(brunch.id)).toEqual({
@@ -2440,7 +2440,7 @@ describe("combined menu publication", () => {
       await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lager), {
         grossPrice: "9.00",
       });
-      const menu = await createCatalogue(tx, { name: "Outer" });
+      const menu = await createMenu(tx, { name: "Outer" });
       const root = await requireMenuRoot(tx, menu.id);
       await addMember(tx, root, section(f.dinnerRoot));
       return menu.id;
@@ -2457,7 +2457,7 @@ describe("combined menu publication", () => {
   });
   it("omits an inactive inclusion's offers from management prices", async () => {
     const f = await menusFixture(fx.db);
-    await app((tx) => operations.deactivateCatalogue(tx, f.drinksMenu));
+    await app((tx) => operations.deactivateMenu(tx, f.drinksMenu));
     expect(
       (await app((tx) => operations.menuPrices(tx, f.dinner))).map((p) => p.productId),
     ).toEqual([f.burger]);
@@ -2467,15 +2467,15 @@ describe("combined menu publication", () => {
 it("filters inactive top-level and transitive menus before combining", async () => {
   const f = await menusFixture(fx.db);
   const outer = await app(async (tx) => {
-    const outer = await createCatalogue(tx, { name: "Outer" });
+    const outer = await createMenu(tx, { name: "Outer" });
     await addMember(tx, await requireMenuRoot(tx, outer.id), section(f.dinnerRoot));
     return outer.id;
   });
-  await app((tx) => operations.deactivateCatalogue(tx, f.drinksMenu));
+  await app((tx) => operations.deactivateMenu(tx, f.drinksMenu));
   expect((await app((tx) => operations.menuPrices(tx, outer))).map((p) => p.productId)).toEqual([
     f.burger,
   ]);
-  await app((tx) => operations.deactivateCatalogue(tx, outer));
+  await app((tx) => operations.deactivateMenu(tx, outer));
   expect(await app((tx) => operations.menuPrices(tx, outer))).toEqual([]);
   expect(await app((tx) => operations.listMenuOffers(tx, [outer]))).toEqual([]);
 });
@@ -2544,7 +2544,7 @@ it("lists direct and indirect parents beside an included menu's own price edit e
     await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lager), {
       grossPrice: "9.00",
     });
-    const outer = await createCatalogue(tx, { name: "Outer" });
+    const outer = await createMenu(tx, { name: "Outer" });
     await addMember(tx, await requireMenuRoot(tx, outer.id), section(f.dinnerRoot));
     return outer.id;
   });
@@ -2634,11 +2634,11 @@ describe("review regressions", () => {
     async (includeInactive) => {
       const f = await menusFixture(fx.db);
       const parent = await app(async (tx) => {
-        const parent = await createCatalogue(tx, { name: "Own placement" });
+        const parent = await createMenu(tx, { name: "Own placement" });
         const root = await requireMenuRoot(tx, parent.id);
         if (includeInactive) await addMember(tx, root, section(f.drinks));
         await addMember(tx, root, product(f.lager));
-        await operations.deactivateCatalogue(tx, f.drinksMenu);
+        await operations.deactivateMenu(tx, f.drinksMenu);
         return parent.id;
       });
       const preview = await app((tx) => previewMenu(tx, parent));
@@ -2782,7 +2782,7 @@ it("retains two direct included sources for independent variant edits", async ()
       ],
       "en",
     );
-    const second = await createCatalogue(tx, { name: "Second drinks" });
+    const second = await createMenu(tx, { name: "Second drinks" });
     const root = await requireMenuRoot(tx, second.id);
     await addMember(tx, root, product(f.lemonade));
     await addMember(tx, f.dinnerRoot, section(root));

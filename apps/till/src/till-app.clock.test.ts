@@ -42,7 +42,7 @@ describe("till clocking integration", () => {
     });
     const f = await clockApp({ timeoutSeconds: 60, props: { sessionActivity: activity } });
     const original = await f.api.listDefaultZoneOffers();
-    const held = deferred<import("./api/client.js").ZoneOfferCatalogue>();
+    const held = deferred<import("./api/client.js").ZoneOffers>();
     f.api.listDefaultZoneOffers.mockReturnValueOnce(held.promise);
     await signIn(f.el);
     await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());

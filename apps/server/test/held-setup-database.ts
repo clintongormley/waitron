@@ -41,7 +41,7 @@ export interface HeldSetupOptions {
   /**
    * `venue.db`, its `-wal` and its `-shm` as copied while the database was open: rows of about
    * `databaseBytes` checkpointed into `venue.db`, then rows of about `walBytes` written to
-   * `catalogues` in one transaction, then `invoices` invoice records. Past SQLite's 1000-page
+   * `menus` in one transaction, then `invoices` invoice records. Past SQLite's 1000-page
    * automatic checkpoint a commit also copies its pages into `venue.db`.
    * `checkpointed` then moves every page into `venue.db` and empties the `-wal`.
    */
@@ -243,7 +243,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
           withTransaction(held.venue, async (tx) => {
             for (const end = row + Math.ceil(bytes / name.length); row < end; row++)
               await tx.run(
-                sql`insert into catalogues (id, name, created_at, updated_at) values (${`crash-${row}`}, ${name}, ${at}, ${at})`,
+                sql`insert into menus (id, name, created_at, updated_at) values (${`crash-${row}`}, ${name}, ${at}, ${at})`,
               );
           });
         await write(crash.databaseBytes ?? 0);

@@ -16,8 +16,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   EACH_UNIT,
@@ -173,7 +173,7 @@ interface SeededVenue {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back two
+ * Stand up a fresh chained venue + registered SIF, then seed a menu and read back two
  * `each`/general(21%) products. Each test gets its OWN taxpayer so its sale / fiscal record counts are
  * order-independent (CLAUDE.md §4).
  */
@@ -216,10 +216,10 @@ async function setupVenue(): Promise<SeededVenue> {
     receipt: { operationDescription: "Venta en establecimiento" },
   });
   const available = await withTransaction(suite.db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
@@ -227,14 +227,14 @@ async function setupVenue(): Promise<SeededVenue> {
       vatClass: "general",
     });
     await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     return (await listAvailableProducts(tx)).products;
   });
   return offerAtCounter(cfg, available);
@@ -722,7 +722,7 @@ describe("payWorkingOrder", () => {
     expect(await fiscalRecordCount(id)).toBe(1);
   });
 
-  it("files a parked line at its LOCKED price after the catalogue price changes (line-add snapshot)", async () => {
+  it("files a parked line at its LOCKED price after the menu price changes (line-add snapshot)", async () => {
     const { cfg, coffee, zoneId } = await setupVenue();
     const id = randomUUID();
 
@@ -733,7 +733,7 @@ describe("payWorkingOrder", () => {
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
 
-    // Change the catalogue price AFTER the lock — the exact mutation across the park→pay gap that
+    // Change the menu price AFTER the lock — the exact mutation across the park→pay gap that
     // separates the two pricing models (CLAUDE.md §1: a measurement where both answers look alike
     // measures nothing). A re-price at pay would file 9.99; filing from the lock files 1.50.
     await withTransaction(suite.db, async (tx) => {

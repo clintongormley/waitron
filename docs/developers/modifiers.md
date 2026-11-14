@@ -145,7 +145,7 @@ greyed and unpickable, with "Has variants, so it can't be an extra" as its secon
 save would be refused `extras.product_has_variants`. A row already on the list whose product has an
 Active variant says the same under its name, with "Remove it from this list.", as soon as the form
 opens; a save is then refused beside that row and in the bottom message, and Save stays disabled
-until the row is removed. The catalogue's own saves refuse to build that state (below), so the
+until the row is removed. The menu's own saves refuse to build that state (below), so the
 mark is for rows written some other way.
 
 ## Ordering and stored facts
@@ -391,14 +391,14 @@ Six things it is worth knowing about that payload:
   itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`
   (`apps/server/src/working-order.ts`). A pick of a variant
-  still sells, as does a product whose only variants are archived. The catalogue's own saves do
+  still sells, as does a product whose only variants are archived. The menu's own saves do
   not build that state: an extras list save naming such a product is refused
   `extras.product_has_variants` (`extras.ts`), and a save that would give a product an extras
   list offers an Active variant — from the parent's editor or the variant's own page — is refused
   `product.offered_as_extra`, naming every list that offers it (`assertNotOfferedAsExtra`,
   `variants.ts`). Both answer 409. Tests: "an extras list and products with variants" in
   `packages/menu/src/extras.test.ts`, "a product an extras list offers" in
-  `packages/menu/src/product-editor.test.ts`, and "mountCatalogueApi — extras lists and
+  `packages/menu/src/product-editor.test.ts`, and "mountMenuApi — extras lists and
   products with variants" in `apps/server/src/menu-api.test.ts`. Tests for the order path:
   "an extra that is a parent with Active variants" in `packages/menu/src/offered-modifiers.test.ts`; "refuses a
   menu offer's extras pick of a parent with an Active variant, and sells its variant" in
@@ -418,7 +418,7 @@ Six things it is worth knowing about that payload:
 
 ## On the filed sale
 
-A filed sale is a snapshot and never holds a catalogue key (`packages/db/src/schema/sales.ts`,
+A filed sale is a snapshot and never holds a menu key (`packages/db/src/schema/sales.ts`,
 architecture §6), so the two kinds of answer land differently:
 
 - An options answer is copied onto the DISH's own `sale_lines.option_snapshots` — the same six names
@@ -485,18 +485,18 @@ the kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 ## Storage
 
 Five tables carry the feature, plus two columns that hold what an order froze. All of them are in
-core's migration set: the five tables are the catalogue module's, whose tables have lived there
+core's migration set: the five tables are the menu module's, whose tables have lived there
 since A760.
 
 | Table or column | Set | What it holds |
 | --- | --- | --- |
-| `option_lists`, `option_labels` | core (catalogue's) | an options list and its labels |
-| `extra_lists`, `extra_list_items` | core (catalogue's) | an extras list and the products it offers |
-| `product_modifiers` | core (catalogue's) | a dish's one ordered attachment list |
+| `option_lists`, `option_labels` | core (menu's) | an options list and its labels |
+| `extra_lists`, `extra_list_items` | core (menu's) | an extras list and the products it offers |
+| `product_modifiers` | core (menu's) | a dish's one ordered attachment list |
 | `working_order_lines.option_snapshots` | core | an open order line's frozen options answers |
 | `sale_lines.option_snapshots` | core | a filed line's frozen options answers |
 
-All five catalogue tables are classified `state` in `CORE_CLASSIFICATION`
+All five menu tables are classified `state` in `CORE_CLASSIFICATION`
 (`packages/db/src/classification.ts`); none is declared `appendOnly()`, so none carries the
 `RAISE(ABORT)` trigger pair `applyMigrations` installs after each set migrates
 (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`).
@@ -510,7 +510,7 @@ plain value with no foreign key beside the frozen names (_On the filed sale_, ab
 This feature takes no lock of any kind, and asks no JSON containment question.
 
 `scripts/menu-engine-neutral.test.ts` guards the narrow half of this: the feature's own files
-carry none of `pg_advisory_*_lock` or `@>` / `<@`, and the catalogue files among them carry no
+carry none of `pg_advisory_*_lock` or `@>` / `<@`, and the menu files among them carry no
 `pgEnum(` either. It is weaker than that sounds. It reads the files as TEXT, so
 it cannot tell code from a comment; it covers only the files it names; and `content-languages.ts` is
 not one of them.

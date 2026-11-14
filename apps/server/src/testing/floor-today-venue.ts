@@ -13,7 +13,7 @@ import {
   floorZones,
   todayColumns,
 } from "@waitron/db";
-import { createCatalogue } from "@waitron/menu";
+import { createMenu } from "@waitron/menu";
 import {
   createDepartment,
   createServiceZone,
@@ -162,7 +162,7 @@ export async function setsDepartment(
       name: name("Inside"),
       departmentId: department.id,
     });
-    const menu = await createCatalogue(tx, { name: name("Menu") });
+    const menu = await createMenu(tx, { name: name("Menu") });
     const period = async (periodName: string) =>
       (
         await saveMenuPeriod(tx, department.id, {

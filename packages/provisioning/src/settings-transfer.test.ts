@@ -138,8 +138,13 @@ it.each([false, true])(
       revision: 1,
     });
     expect(() =>
-      checkImportedSettings({ catalogue: { version: 1, doc: { enabled: !enabled } } }, ALL_MODULES),
-    ).toThrow(expect.objectContaining({ code: "setup.request_invalid" }));
+      checkImportedSettings(
+        { [GUEST_MENU_SETTINGS.module]: { version: 1, doc: { enabled: !enabled } } },
+        ALL_MODULES,
+      ),
+    ).toThrow(
+      expect.objectContaining({ code: "setup.request_invalid", params: { field: "settings" } }),
+    );
   },
 );
 

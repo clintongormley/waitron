@@ -66,8 +66,8 @@ async function authorRange(
       name: options.name ?? "Late service",
       orderStart: "counter",
     });
-    const menuId = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`))
-      .rows[0]!.id;
+    const menuId = (await tx.execute<{ id: string }>(sql`select id from menus limit 1`)).rows[0]!
+      .id;
     const period = await saveMenuPeriod(tx, department.id, {
       name: "Service",
       menuId,

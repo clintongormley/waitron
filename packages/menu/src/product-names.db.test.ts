@@ -5,14 +5,14 @@ import {
   plantStoredProduct,
   racePair,
   seedLegacySellingUnits,
-  useCatalogueDb,
+  useMenuDb,
 } from "../test/fixtures.js";
 import { createCategory } from "./categories.js";
-import { createCatalogue, createProduct, updateProduct } from "./operations.js";
+import { createMenu, createProduct, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { listProductVariants, setProductVariants, type VariantWrite } from "./variants.js";
 
-const suite = useCatalogueDb();
+const suite = useMenuDb();
 const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);
 const taken = (field: string, name: string) => ({
   code: "product.name_taken",
@@ -24,21 +24,21 @@ beforeEach(async () => {
   await seedTaxpayer(suite.db);
   await seedLegacySellingUnits(suite.db);
   await app(async (tx) => {
-    lunch = (await createCatalogue(tx, { name: "Lunch" })).id;
-    dinner = (await createCatalogue(tx, { name: "Dinner" })).id;
+    lunch = (await createMenu(tx, { name: "Lunch" })).id;
+    dinner = (await createMenu(tx, { name: "Dinner" })).id;
     food = (await createCategory(tx, { name: "Food" })).id;
     drinks = (await createCategory(tx, { name: "Drinks" })).id;
   });
-  cola = await make("Cola", { catalogueId: lunch, categoryId: drinks });
+  cola = await make("Cola", { menuId: lunch, categoryId: drinks });
 });
 
 async function make(
   name: string,
-  { catalogueId = dinner, categoryId = food, active = true } = {},
+  { menuId = dinner, categoryId = food, active = true } = {},
 ): Promise<string> {
   const created = await app((tx) =>
     createProduct(tx, {
-      catalogueId,
+      menuId,
       categoryId,
       name,
       pricingUnit: "each",
@@ -436,7 +436,7 @@ describe("two writes started together", () => {
   it("lets one of two creates of one staff name through, and refuses the other", async () => {
     const create = (name: string) => (tx: Transaction) =>
       createProduct(tx, {
-        catalogueId: dinner,
+        menuId: dinner,
         categoryId: null,
         name,
         pricingUnit: "each",

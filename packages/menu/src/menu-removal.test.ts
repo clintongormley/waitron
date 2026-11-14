@@ -2,19 +2,19 @@ import { menuItems, menuItemVariantOverrides, products, sectionMembers } from "@
 import { and, eq, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { captureError, withTransaction, type Transaction } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, section } from "../test/menus-fixture.js";
 import { createCategory } from "./categories.js";
-import { deleteCatalogueItems } from "./product-items.js";
+import { deleteProductItems } from "./product-items.js";
 import { addShortcut, readMenuHome } from "./menu-home.js";
 import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
 import * as menuRemoval from "./menu-removal.js";
 import { menusHolding, takeOffMenus } from "./menu-removal.js";
 import { readMenuStructure } from "./menu-structure.js";
 import {
-  createCatalogue,
+  createMenu,
   createProduct,
-  deactivateCatalogue,
+  deactivateMenu,
   deactivateProduct,
   listMenuOffers,
   menuPrices,
@@ -25,7 +25,7 @@ import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import { addMember, addProducts, createSectionIn, replaceMember } from "./sections.js";
 import { listProductVariants, setMenuVariantPrice, setProductVariants } from "./variants.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 async function codeOf(fn: () => Promise<unknown>): Promise<unknown> {
@@ -36,12 +36,12 @@ async function removalFixture() {
   await menusFixture(fx.db);
   return app(async (tx) => {
     const tapasFolder = (await createCategory(tx, { name: "Tapas" })).id;
-    const tapas = (await createCatalogue(tx, { name: "Tapas" })).id;
-    const terrace = (await createCatalogue(tx, { name: "Terrace" })).id;
+    const tapas = (await createMenu(tx, { name: "Tapas" })).id;
+    const terrace = (await createMenu(tx, { name: "Terrace" })).id;
     const make = async (name: string) =>
       (
         await createProduct(tx, {
-          catalogueId: tapas,
+          menuId: tapas,
           categoryId: tapasFolder,
           name,
           pricingUnit: "each",
@@ -230,11 +230,7 @@ describe("a product made Inactive comes off every menu", () => {
   it("for every product one Disable of a product selection names", async () => {
     const r = await removalFixture();
     await app((tx) =>
-      deleteCatalogueItems(
-        tx,
-        { productIds: [r.omelette, r.croquette], categoryIds: [] },
-        "delete",
-      ),
+      deleteProductItems(tx, { productIds: [r.omelette, r.croquette], categoryIds: [] }, "delete"),
     );
     await expectOffEveryMenu(r, r.omelette);
     await expectOffEveryMenu(r, r.croquette);
@@ -244,11 +240,7 @@ describe("a product made Inactive comes off every menu", () => {
   it("for a product disabled beside a folder deleted with its contents moved up", async () => {
     const r = await removalFixture();
     await app((tx) =>
-      deleteCatalogueItems(
-        tx,
-        { productIds: [r.omelette], categoryIds: [r.tapasFolder] },
-        "move_up",
-      ),
+      deleteProductItems(tx, { productIds: [r.omelette], categoryIds: [r.tapasFolder] }, "move_up"),
     );
     await expectOffEveryMenu(r, r.omelette);
     await expectStillOnEveryMenu(r, r.croquette);
@@ -257,7 +249,7 @@ describe("a product made Inactive comes off every menu", () => {
   it("for every product in a folder deleted with its contents", async () => {
     const r = await removalFixture();
     await app((tx) =>
-      deleteCatalogueItems(tx, { productIds: [], categoryIds: [r.tapasFolder] }, "delete"),
+      deleteProductItems(tx, { productIds: [], categoryIds: [r.tapasFolder] }, "delete"),
     );
     await expectOffEveryMenu(r, r.omelette);
     await expectOffEveryMenu(r, r.croquette);
@@ -312,7 +304,7 @@ describe("takeOffMenus", () => {
       async (tx) =>
         (
           await createProduct(tx, {
-            catalogueId: r.tapas,
+            menuId: r.tapas,
             categoryId: null,
             name: "Tomato soup",
             pricingUnit: "each",
@@ -343,7 +335,7 @@ describe("an Inactive product cannot be added to a menu list", () => {
   async function inactive(r: Removal): Promise<string> {
     return app(async (tx) => {
       const { id } = await createProduct(tx, {
-        catalogueId: r.tapas,
+        menuId: r.tapas,
         categoryId: null,
         name: "Tomato soup",
         pricingUnit: "each",
@@ -629,7 +621,7 @@ describe("menusHolding", () => {
     expect(await count([f.extraLemon])).toBe(0);
     expect(await count([])).toBe(0);
 
-    await app((tx) => deactivateCatalogue(tx, f.dinner));
+    await app((tx) => deactivateMenu(tx, f.dinner));
     expect(await count([f.lemonade])).toBe(2);
     expect(await count([f.burger])).toBe(0);
   });
@@ -639,7 +631,7 @@ describe("menusHolding", () => {
     const gazpacho = await app(async (tx) => {
       const id = (
         await createProduct(tx, {
-          catalogueId: r.tapas,
+          menuId: r.tapas,
           categoryId: null,
           name: "Tomato soup",
           pricingUnit: "each",

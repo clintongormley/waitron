@@ -21,7 +21,7 @@ function product(id: string, name: string, image: string | null = null): Product
   return {
     id,
     modifiers: [],
-    catalogueId: "cat-1",
+    menuId: "cat-1",
     categoryId: null,
     primaryCategoryId: null,
     name,
@@ -1237,7 +1237,7 @@ describe("moving into or out of a section by key", () => {
       "m-lager-top",
     ],
     [
-      "a product no longer in the catalogue",
+      "a product no longer in the menu",
       () => [drinksNode("m-drinks"), productNode("m-gone", "p-gone")],
       "m-gone",
     ],
@@ -1294,7 +1294,7 @@ describe("moving into or out of a section by key", () => {
       "m-drinks/m-beer/m-lager-2",
     ],
     [
-      "for a product no longer in the catalogue",
+      "for a product no longer in the menu",
       () => {
         const drinks = drinksNode("m-drinks");
         drinks.children!.push(productNode("m-gone", "p-gone"));
@@ -1887,7 +1887,7 @@ describe("dragging into another list", () => {
       ]);
     });
 
-    it("a product no longer in the catalogue, over another list", async () => {
+    it("a product no longer in the menu, over another list", async () => {
       const el = await mount({ nodes: [productNode("m-gone", "p-gone"), ...lunchNodes()] });
       await toggle(el, "m-drinks");
       await refused(el, "m-gone", [
@@ -1911,7 +1911,7 @@ describe("dragging into another list", () => {
     expect(intos).toEqual([]);
   });
 
-  it("still reorders a product no longer in the catalogue among its siblings, never into one", async () => {
+  it("still reorders a product no longer in the menu among its siblings, never into one", async () => {
     const el = await mount({ nodes: [productNode("m-gone", "p-gone"), ...lunchNodes()] });
     const moves = listen(el, "wt-member-move");
     const intos = listen(el, "wt-member-move-into");
@@ -2430,7 +2430,7 @@ describe("colour swatches", () => {
     const sent = sentEvents(el);
     const swatch = swatchOf(el, "m-drinks/m-lemonade");
     expect(swatch.tagName).toBe("A");
-    expect(swatch.getAttribute("href")).toBe("/manage/catalogue/product/p-lemonade?field=image");
+    expect(swatch.getAttribute("href")).toBe("/manage/products/product/p-lemonade?field=image");
     expect(swatch.getAttribute("aria-label")).toBe(
       t("product.edit_named").replace("{name}", "Lemonade"),
     );
@@ -2662,7 +2662,7 @@ describe("Structure product media", () => {
     const frame = media!.querySelector<HTMLElement>('[data-test="thumb"]')!;
     expect(getComputedStyle(frame).borderTopColor).toBe("rgb(37, 107, 177)");
     expect(parseFloat(getComputedStyle(frame).borderTopWidth)).toBeGreaterThan(1);
-    expect(media!.getAttribute("href")).toBe("/manage/catalogue/product/p-burger?field=image");
+    expect(media!.getAttribute("href")).toBe("/manage/products/product/p-burger?field=image");
     media!.focus();
     expect(table(el).shadowRoot!.activeElement).toBe(media);
   });
@@ -2729,14 +2729,14 @@ describe("a product row's Available and Edit product", () => {
     const link = item(el, "edit-product-m-burger");
     expect(link.tagName).toBe("A");
     expect(link.textContent!.trim()).toBe(t("product.edit"));
-    expect(link.getAttribute("href")).toBe("/manage/catalogue/product/p-burger");
+    expect(link.getAttribute("href")).toBe("/manage/products/product/p-burger");
     await toggle(el, "m-drinks");
     expect(menuItems(el, "m-drinks/m-lemonade")).toEqual([
       "edit-product-m-drinks/m-lemonade",
       "remove-m-drinks/m-lemonade",
     ]);
     expect(item(el, "edit-product-m-drinks/m-lemonade").getAttribute("href")).toBe(
-      "/manage/catalogue/product/p-lemonade",
+      "/manage/products/product/p-lemonade",
     );
 
     const heard = vi.fn();

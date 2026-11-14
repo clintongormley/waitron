@@ -7,12 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withTransaction } from "@waitron/db";
-import {
-  assignCatalogueToVenue,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { insertCapturedPayment } from "@waitron/payments";
 import type { CollectParams, PaymentProvider } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
@@ -66,10 +61,10 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     await inTx(venue, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Menu" });
+      const cat = await createMenu(tx, { name: "Menu" });
       const category = await createCategory(tx, { name: "Food" });
       const dish = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: category.id,
         name: "Dish",
         pricingUnit: "each",
@@ -77,7 +72,7 @@ useVenueDb({
         vatClass: "general",
       });
       dishId = dish.id;
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
     });
   },

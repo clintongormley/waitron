@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { addProductToMenu, createCatalogue, createCategory, createProduct } from "@waitron/menu";
+import { addProductToMenu, createMenu, createCategory, createProduct } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   floorZones,
@@ -56,11 +56,11 @@ async function fixture(db: Transaction) {
       { ...cfg, name: "Off", active: false },
     ])
     .returning();
-  const menu = (await createCatalogue(db, { name: randomUUID() })).id;
+  const menu = (await createMenu(db, { name: randomUUID() })).id;
   const category = (await createCategory(db, { name: randomUUID() })).id;
   const product = (
     await createProduct(db, {
-      catalogueId: menu,
+      menuId: menu,
       name: randomUUID(),
       categoryId: category,
       unitPrice: "3",
@@ -381,12 +381,12 @@ it("refuses unknown stations", async () => {
 it("reads products from staff menus and routes a variant by its parent's category", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    const empty = (await createCatalogue(db, { name: randomUUID() })).id;
+    const empty = (await createMenu(db, { name: randomUUID() })).id;
     const [variant] = await db
       .insert(products)
-      .values({ catalogueId: f.menu, parentId: f.product, name: randomUUID(), categoryId: null })
+      .values({ menuId: f.menu, parentId: f.product, name: randomUUID(), categoryId: null })
       .returning();
-    const variantMenu = (await createCatalogue(db, { name: randomUUID() })).id;
+    const variantMenu = (await createMenu(db, { name: randomUUID() })).id;
     await addProductToMenu(db, { menuId: variantMenu, productId: f.product });
     await db.update(products).set({ active: false }).where(eq(products.id, f.product));
     expect(variant!.parentId).toBe(f.product);

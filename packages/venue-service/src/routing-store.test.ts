@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  createCatalogue,
+  createMenu,
   createCategory,
   addProductToMenu,
   buildMenuDocument,
@@ -20,7 +20,7 @@ import {
 } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   categories,
   departments,
   floorZones,
@@ -123,11 +123,11 @@ async function fixture(tx: Transaction, suffix = "") {
   const beer = (await createCategory(tx, { name: "Beer", parentId: drinks })).id;
   const cocktails = (await createCategory(tx, { name: "Cocktails", parentId: drinks })).id;
   const food = (await createCategory(tx, { name: `Food${suffix}` })).id;
-  const menu = await createCatalogue(tx, { name: `Menu${suffix}` });
+  const menu = await createMenu(tx, { name: `Menu${suffix}` });
   const product = async (name: string, categoryId: string | null) =>
     (
       await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         name,
         categoryId,
         pricingUnit: "each",
@@ -139,7 +139,7 @@ async function fixture(tx: Transaction, suffix = "") {
   const bread = await product(`Bread${suffix}`, null);
   const [variant] = await tx
     .insert(products)
-    .values({ catalogueId: menu.id, parentId: mojito, name: "Large", categoryId: null })
+    .values({ menuId: menu.id, parentId: mojito, name: "Large", categoryId: null })
     .returning();
   return {
     cfg,
@@ -163,13 +163,13 @@ const noCategoryRow = { kind: "no_category" as const };
 /** A variant of the uncategorised bread that stores a category of its own (Food). */
 async function breadVariant(tx: Transaction, f: { bread: string; food: string }) {
   const [bread] = await tx
-    .select({ catalogueId: products.catalogueId })
+    .select({ menuId: products.menuId })
     .from(products)
     .where(eq(products.id, f.bread));
   const [half] = await tx
     .insert(products)
     .values({
-      catalogueId: bread!.catalogueId,
+      menuId: bread!.menuId,
       parentId: f.bread,
       name: "Half",
       categoryId: f.food,
@@ -201,7 +201,7 @@ const storedChoice = async (
   );
 
 describe("maker descriptions and the deciding cell", () => {
-  it("loads a frozen cell list, so routing a whole catalogue indexes it once", async () =>
+  it("loads a frozen cell list, so routing a whole menu indexes it once", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await setCategoryCell(tx, f.cocktails, station(f.bar));
@@ -1220,9 +1220,9 @@ describe("routing previews", () => {
         .insert(floorZones)
         .values({ ...f.cfg, departmentId: f.department, name: "Inside" })
         .returning();
-      const menu = await createCatalogue(tx, { name: "Drinks menu" });
+      const menu = await createMenu(tx, { name: "Drinks menu" });
       const lager = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         name: "Lager",
         categoryId: f.beer,
         pricingUnit: "each",
@@ -1369,7 +1369,7 @@ describe("routing previews", () => {
       const product = async (name: string, categoryId: string | null) =>
         (
           await createProduct(tx, {
-            catalogueId: f.menu,
+            menuId: f.menu,
             name,
             categoryId,
             pricingUnit: "each",
@@ -1683,7 +1683,7 @@ describe("routing previews", () => {
           await writeProductModifiers(tx, dish, [{ kind: "extras", id: f.toppings }]);
           await setRoutingCell(tx, { row: productRow(dish), zoneId: null }, station(f.terraceBar));
         }
-        const second = await createCatalogue(tx, { name: "Second menu" });
+        const second = await createMenu(tx, { name: "Second menu" });
         await offerMenuThroughZone(tx, patio!.id, second.id, { displayOrder: 1 });
         await addProductToMenu(tx, { menuId: second.id, productId: dishes[1]! });
         const { document } = await buildMenuDocument(tx, second.id);
@@ -1761,7 +1761,7 @@ describe("routing previews", () => {
           const [variant] = await tx
             .insert(products)
             .values({
-              catalogueId: f.menu,
+              menuId: f.menu,
               parentId: await f.product(name, sides),
               name: "Large",
               categoryId: null,
@@ -1833,11 +1833,11 @@ describe("routing previews", () => {
       const grills = (await createCategory(tx, { name: "Grills", parentId: mains })).id;
       const drinks = (await createCategory(tx, { name: "Drinks" })).id;
       const sides = (await createCategory(tx, { name: "Sides" })).id;
-      const menu = await createCatalogue(tx, { name: "Menu" });
+      const menu = await createMenu(tx, { name: "Menu" });
       const product = async (name: string, categoryId: string | null) =>
         (
           await createProduct(tx, {
-            catalogueId: menu.id,
+            menuId: menu.id,
             name,
             categoryId,
             pricingUnit: "each",
@@ -1848,7 +1848,7 @@ describe("routing previews", () => {
       const variant = async (parentId: string, name: string, categoryId: string | null) => {
         const [row] = await tx
           .insert(products)
-          .values({ catalogueId: menu.id, parentId, name, categoryId })
+          .values({ menuId: menu.id, parentId, name, categoryId })
           .returning();
         return row!.id;
       };
@@ -2136,11 +2136,11 @@ async function extrasFixture(tx: Transaction) {
   const extras = (await createCategory(tx, { name: "Extras" })).id;
   const sides = (await createCategory(tx, { name: "Sides", parentId: extras })).id;
   const toppings = (await createCategory(tx, { name: "Toppings", parentId: extras })).id;
-  const menu = await createCatalogue(tx, { name: "Extras menu" });
+  const menu = await createMenu(tx, { name: "Extras menu" });
   const product = async (name: string, categoryId: string) =>
     (
       await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         name,
         categoryId,
         pricingUnit: "each",
@@ -2152,7 +2152,7 @@ async function extrasFixture(tx: Transaction) {
   const cheese = await product("Cheese", toppings);
   const [variant] = await tx
     .insert(products)
-    .values({ catalogueId: menu.id, parentId: chips, name: "Large chips", categoryId: null })
+    .values({ menuId: menu.id, parentId: chips, name: "Large chips", categoryId: null })
     .returning();
   await setCategoryCell(tx, sides, { kind: "station", stationId: fryer!.id });
   return {
@@ -2906,7 +2906,7 @@ describe("saving a cell's period choices", () => {
       .returning();
     const daiquiri = (
       await createProduct(tx, {
-        catalogueId: f.menu,
+        menuId: f.menu,
         name: "Daiquiri",
         categoryId: f.cocktails,
         pricingUnit: "each",
@@ -2914,9 +2914,9 @@ describe("saving a cell's period choices", () => {
         vatClass: "general",
       })
     ).id;
-    const lunchMenu = (await createCatalogue(tx, { name: "Lunch menu" })).id;
+    const lunchMenu = (await createMenu(tx, { name: "Lunch menu" })).id;
     await addProductToMenu(tx, { menuId: lunchMenu, productId: f.mojito });
-    const breadMenu = (await createCatalogue(tx, { name: "Bread menu" })).id;
+    const breadMenu = (await createMenu(tx, { name: "Bread menu" })).id;
     await addProductToMenu(tx, { menuId: breadMenu, productId: f.bread });
     const period = async (
       departmentId: string,
@@ -3649,7 +3649,7 @@ describe("saving a cell's period choices", () => {
       await tx
         .insert(sectionMembers)
         .values({ sectionId: root!.id, position: 9, productId: f.variant });
-      const [rootless] = await tx.insert(catalogues).values({ name: "No root" }).returning();
+      const [rootless] = await tx.insert(menus).values({ name: "No root" }).returning();
       const aperitivo = (
         await saveMenuPeriod(tx, f.department, {
           name: "Aperitivo",

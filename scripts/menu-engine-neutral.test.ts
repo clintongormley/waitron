@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * The catalogue and order-path files listed below contain none of three PostgreSQL-only
+ * The menu and order-path files listed below contain none of three PostgreSQL-only
  * constructs: an advisory lock, the JSON containment operators, and a `pgEnum` declaration.
- * `pgEnum` is checked in the catalogue files only; the order and sale path files are not scanned
+ * `pgEnum` is checked in the menu files only; the order and sale path files are not scanned
  * for it.
  *
  * READS TEXT, so it is weaker than "proves engine neutrality":
@@ -21,8 +21,8 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = join(import.meta.dirname, "..");
 
-/** The catalogue's extras, options, sections, product-modifier and sale-classification files. */
-const CATALOGUE_FILES = [
+/** The menu's extras, options, sections, product-modifier and sale-classification files. */
+const MENU_FILES = [
   "packages/db/src/schema/menu/options.ts",
   "packages/db/src/schema/menu/extras.ts",
   "packages/db/src/schema/menu/sections.ts",
@@ -87,22 +87,22 @@ function offenders(files: readonly string[], pattern: RegExp): string[] {
 describe("the extras and options machinery stays engine-neutral", () => {
   it("scans every file it names — a path that is gone fails by name, not as a throw", () => {
     // A listed path that is gone makes every check over it throw; this names the path first.
-    const missing = [...CATALOGUE_FILES, ...ORDER_PATH_FILES].filter(
+    const missing = [...MENU_FILES, ...ORDER_PATH_FILES].filter(
       (file) => !existsSync(join(repoRoot, file)),
     );
     expect(missing).toEqual([]);
   });
 
   it("takes no advisory lock of its own", () => {
-    expect(offenders([...CATALOGUE_FILES, ...ORDER_PATH_FILES], ADVISORY_LOCK)).toEqual([]);
+    expect(offenders([...MENU_FILES, ...ORDER_PATH_FILES], ADVISORY_LOCK)).toEqual([]);
   });
 
   it("asks no JSON containment question", () => {
-    expect(offenders([...CATALOGUE_FILES, ...ORDER_PATH_FILES], JSON_CONTAINMENT)).toEqual([]);
+    expect(offenders([...MENU_FILES, ...ORDER_PATH_FILES], JSON_CONTAINMENT)).toEqual([]);
   });
 
-  it("declares no enum type in the catalogue's own schema", () => {
-    expect(offenders(CATALOGUE_FILES, PG_ENUM)).toEqual([]);
+  it("declares no enum type in the menu's own schema", () => {
+    expect(offenders(MENU_FILES, PG_ENUM)).toEqual([]);
   });
 });
 

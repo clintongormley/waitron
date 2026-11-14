@@ -89,7 +89,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "printer.not_found": 404,
-  // Today's catalogue fails the checks a sale's snapshot passes, as the till route answers it.
+  // Today's menu fails the checks a sale's snapshot passes, as the till route answers it.
   "sale_classification.invalid": 409,
 };
 

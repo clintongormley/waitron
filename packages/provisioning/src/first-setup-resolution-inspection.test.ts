@@ -474,7 +474,7 @@ it("captures exact configured evidence once and retains missing sources explicit
 
 it("sees an attempt's modules whose tables live in the core set as an empty core-only database", async () => {
   const hosted = ALL_MODULES.filter((module) => module.tablesIn === "core").map((m) => m.name);
-  expect(hosted).toEqual(expect.arrayContaining(["catalogue", "identity"]));
+  expect(hosted).toEqual(expect.arrayContaining(["menu", "identity"]));
   const f = await fixture("active", hosted, { modules: ALL_MODULES });
   expect(await f.service.inspectFirstSetupResolution()).toMatchObject({
     database: "no-venue-rows",

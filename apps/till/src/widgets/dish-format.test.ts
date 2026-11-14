@@ -25,7 +25,7 @@ it("trims a negative quantity, drops a bare point, and leaves a whole zero alone
 });
 
 it("keeps a stored receipt name in a language the venue has since disabled", () => {
-  // Live catalogue text reads enabled languages only; a snapshot keeps whatever it was frozen in.
+  // Live menu text reads enabled languages only; a snapshot keeps whatever it was frozen in.
   const frozen = { ca: "Pa amb tomàquet" };
   expect(descriptionFor(frozen, "staff name", "es")).toBe("staff name");
   expect(snapshotDescriptionFor(frozen, "staff name", "es")).toBe("Pa amb tomàquet");

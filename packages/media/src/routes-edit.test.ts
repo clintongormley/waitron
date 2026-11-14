@@ -193,7 +193,7 @@ it("rechecks permission after preparation and rolls the entire save back", async
   expect(render).toHaveBeenCalledTimes(1);
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({
-    error: { code: "authorization.not_permitted", params: { permission: "catalogue.manage" } },
+    error: { code: "authorization.not_permitted", params: { permission: "menu.manage" } },
   });
   expect(await readImage(suite.db, image.id)).toMatchObject({
     names: image.names,

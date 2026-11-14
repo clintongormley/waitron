@@ -265,7 +265,7 @@ it("refuses module selection drift before running another preparation", async ()
   const changed = createFirstSetupRuntime({
     ...f.settings,
     modules: f.settings.modules.map((module) =>
-      module.name === "catalogue" ? { ...module, version: "99.0.0" } : module,
+      module.name === "menu" ? { ...module, version: "99.0.0" } : module,
     ),
   });
   await expect(
@@ -280,7 +280,7 @@ it("refuses module selection drift before running another preparation", async ()
 });
 
 it.each([
-  { module: "catalogue", code: "setup.request_invalid", params: { field: "body" } },
+  { module: "menu", code: "setup.request_invalid", params: { field: "body" } },
   {
     module: "missing-module",
     code: "module.operation_invalid",
@@ -400,7 +400,7 @@ it("reuses an existing owner hold for preparation and candidate selection", asyn
     f.host.preparation.import(owner, MODULE, { publicValue: "checked" }, hold),
   );
   expect(imported.inputs[MODULE]).toEqual({ publicValue: "checked" });
-  await expect(f.host.assertFreshAssignment(imported, "catalogue")).resolves.toBeUndefined();
+  await expect(f.host.assertFreshAssignment(imported, "menu")).resolves.toBeUndefined();
 }, 5000);
 
 it.each([null, "", "x".repeat(65537)])(

@@ -47,7 +47,7 @@ import type {
   TableState,
   TillApi,
   TillSaleResult,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 import { showView } from "./screens/till-table-order-screen.test-helpers.js";
 
@@ -175,7 +175,7 @@ const till = {
   servers: [],
 };
 
-const offers: ZoneOfferCatalogue = {
+const offers: ZoneOffers = {
   service: {
     open: true,
     zoneOpen: true,

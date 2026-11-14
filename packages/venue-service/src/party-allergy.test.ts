@@ -238,7 +238,7 @@ it.each([
   expect(await read()).toMatchObject({ answer: null, guests: [], revision: 0 });
 });
 
-it("uses the catalogue kind validator and normalises printable guest text", async () => {
+it("uses the menu kind validator and normalises printable guest text", async () => {
   await expect(
     save({ answer: "allergies", guests: [{ ...guest, allergens: { gluten: {} } }] }),
   ).rejects.toMatchObject({ code: "allergy.invalid", params: { field: "guests.0.allergens" } });

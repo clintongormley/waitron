@@ -7,12 +7,7 @@ import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  assignCatalogueToVenue,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
@@ -127,7 +122,7 @@ describe("the category report reconciles with the till's sales", () => {
     // Drinks > Softs; Water sits in Drinks itself; Bread and Olives have no category. Two rates, and
     // prices whose VAT does not divide evenly, so a net summed some other way would drift a cent.
     const { products, managerSid } = await withTransaction(suite.db, async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Delicatessen" });
+      const menu = await createMenu(tx, { name: "Delicatessen" });
       const drinks = await createCategory(tx, { name: "Bebidas" });
       const softs = await createCategory(tx, {
         name: "Refrescos",
@@ -141,7 +136,7 @@ describe("the category report reconciles with the till's sales", () => {
       ) =>
         (
           await createProduct(tx, {
-            catalogueId: menu.id,
+            menuId: menu.id,
             categoryId,
             name,
             pricingUnit: "each",
@@ -155,7 +150,7 @@ describe("the category report reconciles with the till's sales", () => {
         bread: await product("Pan", null, "0.95", "reduced"),
         olives: await product("Aceitunas", null, "3.33", "general"),
       };
-      await assignCatalogueToVenue(tx, menu.id);
+      await assignMenuToVenue(tx, menu.id);
       const [manager] = await seedPersons(tx, {
         displayName: "The Manager",
         pinHash: hashPin("1234"),

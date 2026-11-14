@@ -505,7 +505,7 @@ describe("A773 pass board widget", () => {
     });
     afterEach(() => setLocale(previous));
 
-    it("reads the column headings and kind words from the Spanish catalogue", async () => {
+    it("reads the column headings and kind words from the Spanish menu", async () => {
       const el = await mountBoard({
         board: passBoard({ held: [heldCard], toFire: [toFireCard], inProgress: [billInProgress] }),
       });
@@ -1023,7 +1023,7 @@ describe("A773 pass board widget", () => {
       expect(before(part, held)).toBe(true);
     });
 
-    it("reads the held part and To fire's heading from the Spanish catalogue", async () => {
+    it("reads the held part and To fire's heading from the Spanish menu", async () => {
       const previous = currentLocale();
       setLocale("es-ES");
       try {

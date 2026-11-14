@@ -11,7 +11,7 @@ import {
   units,
 } from "@waitron/db";
 import { addMember } from "./sections.js";
-import { createCatalogue } from "./operations.js";
+import { createMenu } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 import { pruneSuggestions } from "./content-suggestion-collect.js";
@@ -270,7 +270,7 @@ describe("language correction evidence", () => {
   it("captures inherited correction evidence and invalidates it when the root changes", async () => {
     const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
     const member = await app(async (tx) => {
-      const child = await createCatalogue(tx, {
+      const child = await createMenu(tx, {
         name: "STAFF child",
         names: { ca: "CLIENT inherited" },
       });

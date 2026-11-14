@@ -22,7 +22,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     // `seedVenue` writes the taxpayer row through `seedTaxpayer`: country 'ES' (and legal_name
     // 'Test SL', a generated tax_id).
-    // Barcelona prefers Catalan in the Spain pack. This server build ships no Catalan UI catalogue,
+    // Barcelona prefers Catalan in the Spain pack. This server build ships no Catalan UI menu,
     // so locale resolution falls through to the country default.
     await seedVenue(db, {
       name: "Counter",

@@ -7,8 +7,8 @@ import {
   HOME_DISPLAY_DEFAULTS,
   addShortcut,
   buildMenuDocument,
-  createCatalogue,
-  setVenueDefaultCatalogue,
+  createMenu,
+  setVenueDefaultMenu,
   createCategory,
   createExtraList,
   createOptionList,
@@ -16,7 +16,7 @@ import {
   addProductToMenu,
   createProduct,
   createSectionIn,
-  deactivateCatalogue,
+  deactivateMenu,
   menuDocumentHash,
   NO_LIVE_FIELDS,
   publishMenu,
@@ -346,12 +346,12 @@ describe("order flow from sale policies", () => {
 
 describe("new department service periods", () => {
   it("names a new department's period in a Spanish venue's staff language", async () => {
-    const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
+    const menu = await scoped((tx) => createMenu(tx, { name: `Menu ${randomUUID()}` }));
     await seedVenue(db, {
       name: `Spanish ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
       operationDescription: "Hospitality",
-      defaultCatalogueId: menu.id,
+      defaultMenuId: menu.id,
     });
     const department = await scoped((tx) =>
       createDepartment(tx, { name: "Restaurant", orderStart: "counter" }),
@@ -363,9 +363,9 @@ describe("new department service periods", () => {
   });
 
   it("places the venue's menu in Open on weekdays", async () => {
-    const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
+    const menu = await scoped((tx) => createMenu(tx, { name: `Menu ${randomUUID()}` }));
     await seedFixtureVenue(`New ${randomUUID()}`);
-    await scoped((tx) => setVenueDefaultCatalogue(tx, menu.id));
+    await scoped((tx) => setVenueDefaultMenu(tx, menu.id));
     const department = await scoped((tx) =>
       createDepartment(tx, { name: "Restaurant", orderStart: "counter" }),
     );
@@ -392,9 +392,9 @@ describe("new department service periods", () => {
   });
 
   async function waitingVenue(dayCutover: string) {
-    const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
+    const menu = await scoped((tx) => createMenu(tx, { name: `Menu ${randomUUID()}` }));
     const id = await seedFixtureVenue(`Waiting ${randomUUID()}`);
-    await scoped((tx) => setVenueDefaultCatalogue(tx, menu.id));
+    await scoped((tx) => setVenueDefaultMenu(tx, menu.id));
     await db
       .update(businessDaySettingsTable)
       .set({ revision: 2 })
@@ -565,7 +565,7 @@ describe("venue service routing", () => {
       const department = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
       const zone = (await seedZoneRow(tx, { name: "Terrace", departmentId: department.id })).id;
       await configureZone(tx, { zoneId: zone, departmentId: department.id });
-      const menu = await createCatalogue(tx, { name: "Terrace menu" });
+      const menu = await createMenu(tx, { name: "Terrace menu" });
       await offerMenuThroughZone(tx, zone, menu.id, { makeDefault: true });
       const { rootSectionId } = await readMenuStructure(tx, menu.id);
       const drinks = await createSectionIn(tx, rootSectionId, { internalName: "Drinks" });
@@ -582,7 +582,7 @@ describe("venue service routing", () => {
       await expect(listVenueReadiness(tx)).resolves.toEqual([menuEmpty]);
 
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Lemonade",
         pricingUnit: "each",
@@ -601,7 +601,7 @@ describe("venue service routing", () => {
     await scoped(async (tx) => {
       const restaurant = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
       const bar = await createDepartment(tx, { name: "Bar", orderStart: "counter" });
-      const menu = await createCatalogue(tx, { name: "Lunch menu" });
+      const menu = await createMenu(tx, { name: "Lunch menu" });
       const lunch = await saveMenuPeriod(tx, restaurant.id, {
         name: "Lunch",
         menuId: menu.id,
@@ -663,7 +663,7 @@ describe("venue service routing", () => {
         { code: "zone.menu_unpublished", zoneId: zone, zoneName: "Terrace" },
       ]);
 
-      const menu = await createCatalogue(tx, { name: "Terrace menu" });
+      const menu = await createMenu(tx, { name: "Terrace menu" });
       await offerMenuThroughZone(tx, zone, menu.id, {
         makeDefault: true,
       });
@@ -744,10 +744,10 @@ describe("venue service routing", () => {
           serviceMode: "table_tab",
         },
       ]);
-      const menu = await createCatalogue(tx, { name: "Drinks" });
+      const menu = await createMenu(tx, { name: "Drinks" });
       const category = await createCategory(tx, { name: "Cocktails" });
       const negroni = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: "Negroni",
         pricingUnit: "each",
@@ -797,10 +797,10 @@ describe("venue service routing", () => {
         zoneId: zone,
         departmentId: department.id,
       });
-      const menu = await createCatalogue(tx, { name: "Deli takeaway" });
+      const menu = await createMenu(tx, { name: "Deli takeaway" });
       const category = await createCategory(tx, { name: "Cold cuts" });
       const ham = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: "Sliced ham",
         pricingUnit: "weight",
@@ -812,7 +812,7 @@ describe("venue service routing", () => {
         productId: ham.id,
         grossPrice: "24.90",
       });
-      const hiddenMenu = await createCatalogue(tx, { name: "Staff" });
+      const hiddenMenu = await createMenu(tx, { name: "Staff" });
       const hiddenOffer = await addProductToMenu(tx, {
         menuId: hiddenMenu.id,
         productId: ham.id,
@@ -903,7 +903,7 @@ describe("venue service routing", () => {
         ),
       ).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
       await tx.execute(sql`
-        update catalogues set name = 'Renamed menu'
+        update menus set name = 'Renamed menu'
         where id = ${menu.id}`);
       await tx.execute(sql`
         update departments set name = 'Renamed department'
@@ -983,10 +983,10 @@ describe("venue service routing", () => {
     await scoped(async (tx) => {
       const department = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
       await configureZone(tx, { zoneId: zone, departmentId: department.id });
-      const menu = await createCatalogue(tx, { name: "Deli takeaway" });
+      const menu = await createMenu(tx, { name: "Deli takeaway" });
       // Deleting its product_units row makes the offer read resolve it to the synthetic Each unit.
       const sweets = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Loose sweets",
         pricingUnit: "each",
@@ -1068,9 +1068,9 @@ describe("venue service routing", () => {
       ).rejects.toMatchObject({ code: "department.not_found" });
       await expect(
         offerMenuThroughZone(tx, zone, "00000000-0000-4000-8000-000000000099"),
-      ).rejects.toMatchObject({ code: "catalogue.not_found" });
+      ).rejects.toMatchObject({ code: "menu.not_found" });
 
-      const menu = await createCatalogue(tx, { name: "Terrace" });
+      const menu = await createMenu(tx, { name: "Terrace" });
       await expect(
         offerMenuThroughZone(tx, "00000000-0000-4000-8000-000000000099", menu.id),
       ).rejects.toMatchObject({
@@ -1149,7 +1149,7 @@ async function productWithCategory(
 ): Promise<{ id: string; categoryId: string }> {
   const category = withCategory ? await createCategory(tx, { name: `${name} category` }) : null;
   const product = await createProduct(tx, {
-    catalogueId: menuId,
+    menuId: menuId,
     categoryId: category?.id ?? null,
     name,
     pricingUnit: "each",
@@ -1177,7 +1177,7 @@ describe("routing outcomes and menu readiness", () => {
     await scoped(async (tx) => {
       const kitchen = await insertStation(tx, "Kitchen");
       const bar = await insertStation(tx, "Bar");
-      const menu = await createCatalogue(tx, { name: "Drinks" });
+      const menu = await createMenu(tx, { name: "Drinks" });
       const cocktail = await productWithCategory(tx, menu.id, "Cocktail");
       await setRoutingCell(
         tx,
@@ -1210,9 +1210,9 @@ describe("routing outcomes and menu readiness", () => {
       const closedGrill = await insertStation(tx, "Closed grill");
       const parent = await createCategory(tx, { name: "Food" });
       const child = await createCategory(tx, { name: "Grilled", parentId: parent.id });
-      const menu = await createCatalogue(tx, { name: "Menu" });
+      const menu = await createMenu(tx, { name: "Menu" });
       const steak = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: child.id,
         name: "Steak",
         pricingUnit: "each",
@@ -1244,9 +1244,9 @@ describe("routing outcomes and menu readiness", () => {
   it("serves an Unavailable product marked while readiness still judges its setup", async () => {
     const { zoneId, otherZoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Tapas" });
+      const menu = await createMenu(tx, { name: "Tapas" });
       const croquette = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Croquetas",
         pricingUnit: "each",
@@ -1805,9 +1805,9 @@ async function seedSellingVenue() {
     const barZone = (await seedZoneRow(tx, { name: "Bar", departmentId: bar.id })).id;
     await configureZone(tx, { zoneId: diningZone, departmentId: restaurant.id });
     await configureZone(tx, { zoneId: barZone, departmentId: bar.id, orderStart: "counter" });
-    const menu = await createCatalogue(tx, { name: "All day" });
+    const menu = await createMenu(tx, { name: "All day" });
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Tortilla",
       pricingUnit: "each",
@@ -2032,7 +2032,7 @@ describe("retired and moved zones", () => {
   it("moves a zone between departments, keeping its tables and inheriting the destination periods", async () => {
     const venue = await seedSellingVenue();
     const destinationMenu = await scoped(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Destination period menu" });
+      const menu = await createMenu(tx, { name: "Destination period menu" });
       await offerMenuThroughZone(tx, venue.diningZone, menu.id, { makeDefault: true });
       await publish(tx, menu.id);
       return menu.id;
@@ -2351,11 +2351,11 @@ const WITH_ICE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 async function seedTwoMenuVenue() {
   const venue = await seedSellingVenue();
   return scoped(async (tx) => {
-    const dinner = await createCatalogue(tx, { name: "Dinner" });
+    const dinner = await createMenu(tx, { name: "Dinner" });
     const make = async (name: string, unitPrice: string) =>
       (
         await createProduct(tx, {
-          catalogueId: dinner.id,
+          menuId: dinner.id,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -2624,7 +2624,7 @@ describe("zone offers from the published menus", () => {
   it("leaves a zone's unpublished menus out, and falls back to its first published menu", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
-      const brunch = await createCatalogue(tx, { name: "Brunch" });
+      const brunch = await createMenu(tx, { name: "Brunch" });
       await offerMenuThroughZone(tx, venue.diningZone, brunch.id, { makeDefault: true });
       const served = await listZoneOffers(tx, venue.diningZone);
       expect(served.defaultMenuId).toBe(venue.menuId);
@@ -2665,7 +2665,7 @@ describe("zone offers from the published menus", () => {
     await scoped(async (tx) => {
       await expect(listVenueReadiness(tx)).resolves.toEqual([]);
 
-      const brunch = await createCatalogue(tx, { name: "Brunch" });
+      const brunch = await createMenu(tx, { name: "Brunch" });
       await offerMenuThroughZone(tx, venue.barZone, brunch.id, { makeDefault: true });
       await tx.execute(
         sql`delete from menu_period_staff_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
@@ -2713,7 +2713,7 @@ describe("zone offers from the published menus", () => {
   it("sells nothing from a published menu once it is deactivated, and keeps selling an active one beside it", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
-      await deactivateCatalogue(tx, venue.menuId);
+      await deactivateMenu(tx, venue.menuId);
 
       const dining = await listZoneOffers(tx, venue.diningZone);
       expect(dining.defaultMenuId).toBe(venue.dinner);
@@ -2764,7 +2764,7 @@ describe("zone offers from the published menus", () => {
     await scoped(async (tx) => {
       await expect(listVenueReadiness(tx)).resolves.toEqual([]);
       // The bar sells All day alone; the dining room still has Dinner, which stays active.
-      await deactivateCatalogue(tx, venue.menuId);
+      await deactivateMenu(tx, venue.menuId);
       await expect(listVenueReadiness(tx)).resolves.toEqual([
         { code: "zone.menu_unpublished", zoneId: venue.barZone, zoneName: "Bar" },
       ]);
@@ -2793,7 +2793,7 @@ describe("zone offers from the published menus", () => {
   it("a zone with no published menu names NO_LIVE_FIELDS on both reads", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
-      await deactivateCatalogue(tx, venue.menuId);
+      await deactivateMenu(tx, venue.menuId);
       expect((await menuState(tx, venue.barZone)).liveFields).toBe(NO_LIVE_FIELDS);
       expect((await listZoneOffers(tx, venue.barZone)).liveFields).toBe(NO_LIVE_FIELDS);
       expect((await menuState(tx, UNKNOWN_ID)).liveFields).toBe(NO_LIVE_FIELDS);
@@ -2971,7 +2971,7 @@ describe("each served menu's structure and Device Home Page", () => {
     return scoped(async (tx) => {
       const cola = (
         await createProduct(tx, {
-          catalogueId: venue.dinner,
+          menuId: venue.dinner,
           categoryId: null,
           name: "Cola",
           pricingUnit: "each",
@@ -3060,8 +3060,8 @@ describe("each served menu's structure and Device Home Page", () => {
         orderStart: "table",
       });
       await configureZone(tx, { zoneId, departmentId: restaurant.id });
-      const lunchMenu = (await createCatalogue(tx, { name: "Lunch menu" })).id;
-      const dinnerMenu = (await createCatalogue(tx, { name: "Dinner menu" })).id;
+      const lunchMenu = (await createMenu(tx, { name: "Lunch menu" })).id;
+      const dinnerMenu = (await createMenu(tx, { name: "Dinner menu" })).id;
       await publish(tx, lunchMenu);
       await publish(tx, dinnerMenu);
       const lunch = await saveMenuPeriod(tx, restaurant.id, {
@@ -3129,9 +3129,9 @@ describe("each served menu's structure and Device Home Page", () => {
         orderStart: "table",
       });
       await configureZone(tx, { zoneId, departmentId: restaurant.id });
-      const lunchMenu = (await createCatalogue(tx, { name: "Lunch menu" })).id;
-      const afternoonMenu = (await createCatalogue(tx, { name: "Afternoon menu" })).id;
-      const drinksMenu = (await createCatalogue(tx, { name: "Drinks" })).id;
+      const lunchMenu = (await createMenu(tx, { name: "Lunch menu" })).id;
+      const afternoonMenu = (await createMenu(tx, { name: "Afternoon menu" })).id;
+      const drinksMenu = (await createMenu(tx, { name: "Drinks" })).id;
       for (const menuId of [lunchMenu, afternoonMenu, drinksMenu]) await publish(tx, menuId);
       const lunch = await saveMenuPeriod(tx, restaurant.id, {
         name: "Lunch",
@@ -3732,9 +3732,9 @@ describe("products a zone's listed menus offer", () => {
   it("answers the products and variants a listed menu of the zone offers in its live version", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
-      const barMenu = await createCatalogue(tx, { name: "Bar specials" });
+      const barMenu = await createMenu(tx, { name: "Bar specials" });
       const nuts = await createProduct(tx, {
-        catalogueId: barMenu.id,
+        menuId: barMenu.id,
         categoryId: null,
         name: "Bar nuts",
         pricingUnit: "each",

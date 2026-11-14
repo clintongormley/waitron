@@ -193,13 +193,13 @@ describe("orderedMigrationSets", () => {
 
 describe("a module with no set of its own", () => {
   it("modulesWithSets keeps only the modules that carry a set, in list order", () => {
-    const mods = [mod("core"), setless("catalogue", { core: "*" }), mod("sync")];
+    const mods = [mod("core"), setless("menu", { core: "*" }), mod("sync")];
     expect(modulesWithSets(mods).map((m) => m.name)).toEqual(["core", "sync"]);
   });
 
   it("migrationSetsHolding names each module's own set or its host's, once each, keeping unknown names", () => {
-    const mods = [mod("core"), setless("catalogue", { core: "*" }), mod("sync")];
-    expect(migrationSetsHolding(mods, ["catalogue", "sync", "core", "retired"])).toEqual([
+    const mods = [mod("core"), setless("menu", { core: "*" }), mod("sync")];
+    expect(migrationSetsHolding(mods, ["menu", "sync", "core", "retired"])).toEqual([
       "core",
       "sync",
       "retired",
@@ -208,8 +208,8 @@ describe("a module with no set of its own", () => {
 
   it("orderedMigrationSets omits it, yet still orders the modules that depend on it after it", () => {
     const mods = [
-      mod("orders", { modules: { catalogue: "*" } }),
-      setless("catalogue", { modules: { media: "*" } }),
+      mod("orders", { modules: { menu: "*" } }),
+      setless("menu", { modules: { media: "*" } }),
       mod("media", { core: "*" }),
       mod("core"),
     ];
@@ -217,51 +217,51 @@ describe("a module with no set of its own", () => {
   });
 
   it("orderedMigrationSets still validates its requires", () => {
-    const mods = [mod("core"), setless("catalogue", { modules: { media: "*" } })];
+    const mods = [mod("core"), setless("menu", { modules: { media: "*" } })];
     expect(thrownCode(() => orderedMigrationSets(mods))).toBe("module.dependency_missing");
   });
 
   it("orderedMigrationSets refuses one that names no set to hold its tables", () => {
-    const neither: WaitronModule = { ...setless("catalogue"), tablesIn: undefined };
+    const neither: WaitronModule = { ...setless("menu"), tablesIn: undefined };
     expect(ownershipRefusal([mod("core"), neither])).toEqual({
-      module: "catalogue",
+      module: "menu",
       reason: "no_set",
     });
   });
 
   it("orderedMigrationSets refuses one that has a set of its own and names another", () => {
-    const both: WaitronModule = { ...mod("catalogue"), tablesIn: "core" };
+    const both: WaitronModule = { ...mod("menu"), tablesIn: "core" };
     expect(ownershipRefusal([mod("core"), both])).toEqual({
-      module: "catalogue",
+      module: "menu",
       reason: "two_sets",
     });
   });
 
   it("orderedMigrationSets refuses a tablesIn naming a module that is not in the list", () => {
-    expect(ownershipRefusal([mod("media"), setless("catalogue")])).toEqual({
-      module: "catalogue",
+    expect(ownershipRefusal([mod("media"), setless("menu")])).toEqual({
+      module: "menu",
       reason: "host_missing",
     });
   });
 
   it("orderedMigrationSets refuses a tablesIn naming a module with no set of its own", () => {
-    const mods = [mod("core"), setless("media"), fakeSetlessModule("catalogue", "media")];
-    expect(ownershipRefusal(mods)).toEqual({ module: "catalogue", reason: "host_has_no_set" });
+    const mods = [mod("core"), setless("media"), fakeSetlessModule("menu", "media")];
+    expect(ownershipRefusal(mods)).toEqual({ module: "menu", reason: "host_has_no_set" });
   });
 
   it("orderedMigrationSets refuses a classification on it, which no set would protect", () => {
     const classified: WaitronModule = {
-      ...setless("catalogue"),
-      classification: [appendOnly("catalogue_entries", "ledger", "what happened")],
+      ...setless("menu"),
+      classification: [appendOnly("menu_entries", "ledger", "what happened")],
     };
     expect(ownershipRefusal([mod("core"), classified])).toEqual({
-      module: "catalogue",
+      module: "menu",
       reason: "classified_without_set",
     });
   });
 
   it("packageDirOf throws for it, so a guard has to filter first", () => {
-    expect(() => packageDirOf(setless("catalogue"))).toThrow(/catalogue.*no migration set/);
+    expect(() => packageDirOf(setless("menu"))).toThrow(/menu.*no migration set/);
   });
 });
 

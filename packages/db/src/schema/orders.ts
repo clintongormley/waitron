@@ -134,7 +134,7 @@ export const workingOrders = table(
 
 /**
  * Gross prices, VAT classes, descriptions and the reporting classification are snapshotted here
- * when a line is added, never read live from the catalogue, so a later catalogue edit to any of them
+ * when a line is added, never read live from the menu, so a later menu edit to any of them
  * is a freshness problem, never a correctness one. The filed `sale_lines` carry the line's gross total,
  * descriptions and classification, and the percentage the class had on the day of issue, naming a
  * product only as a value, never a key.
@@ -188,7 +188,7 @@ export const workingOrderLines = table(
     // `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY DIVERGES from
     // the FILED `sale_lines.line_total`, which is the NET base.
     lineTotal: money("line_total").notNull(),
-    // Snapshotted analytics label, NOT a category_id or a catalogue FK.
+    // Snapshotted analytics label, NOT a category_id or a menu FK.
     category: label("category"),
     // Set only once the whole line is served; `served_quantity` counts a part served before that.
     servedAt: tsString("served_at"),

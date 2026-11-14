@@ -64,7 +64,7 @@ it("honours the direct all-provider link and separates Enabled from Needs setup"
   expect(text).toContain("Needs setup");
   expect(text).not.toContain("Disabled");
 });
-it("shows a failed catalogue read and retries without substituting an empty list", async () => {
+it("shows a failed menu read and retries without substituting an empty list", async () => {
   const api = modulesClient({
     listModules: vi
       .fn()

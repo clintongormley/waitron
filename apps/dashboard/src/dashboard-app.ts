@@ -155,7 +155,7 @@ const CORE_SCREENS = [
   "orders",
   "staff",
   "access-roles",
-  "catalogue",
+  "products",
   "modifiers",
   "menus",
   "courses",
@@ -263,9 +263,9 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "nav.group.menu",
     icon: "section-menu",
     items: [
-      { screen: "catalogue", labelKey: "nav.catalogue" },
-      { screen: "menus", labelKey: "nav.menus", requiresPermission: "catalogue.manage" },
-      { screen: "modifiers", labelKey: "nav.modifiers", requiresPermission: "catalogue.manage" },
+      { screen: "products", labelKey: "nav.products" },
+      { screen: "menus", labelKey: "nav.menus", requiresPermission: "menu.manage" },
+      { screen: "modifiers", labelKey: "nav.modifiers", requiresPermission: "menu.manage" },
       { screen: "courses", labelKey: "nav.courses", requiresPermission: "venue.view" },
       { screen: "units", labelKey: "nav.units" },
     ],
@@ -314,7 +314,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         screen: "content-languages",
         labelKey: "nav.content_languages",
-        requiresPermission: "catalogue.manage",
+        requiresPermission: "menu.manage",
       },
       { screen: "modules", labelKey: "nav.modules", requiresPermission: "hardware.manage" },
       { screen: "email", labelKey: "nav.email", requiresPermission: "person.manage" },
@@ -2396,12 +2396,12 @@ export class DashboardApp extends LitElement {
     main.focus();
   }
 
-  /** A screen (the units in-use modal) asks to open a product's editor; navigate to the catalogue
+  /** A screen (the units in-use modal) asks to open a product's editor; navigate to the menu
    * screen with that product deep-linked. No automatic return — the person navigates back themselves. */
   #onEditProduct(event: CustomEvent<{ productId: string }>): void {
     event.stopPropagation();
-    const screen = this.#permittedScreen("catalogue");
-    if (screen !== "catalogue") return;
+    const screen = this.#permittedScreen("products");
+    if (screen !== "products") return;
     void this.#url.write({ dashboard: screen, view: null, product: event.detail.productId });
   }
 
@@ -3223,8 +3223,8 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .reportLateSave=${this.#lateSaveReporter("menus.schedule_not_saved")}
         ></dashboard-menus-screen>`;
-      case "catalogue":
-        return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
+      case "products":
+        return html`<dashboard-products-screen .api=${this.api}></dashboard-products-screen>`;
       case "units":
         return html`<dashboard-units-screen .api=${this.api}></dashboard-units-screen>`;
       case "courses":

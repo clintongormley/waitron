@@ -8,7 +8,7 @@ import {
 } from "@waitron/db";
 import { seedLegacySellingUnits, seedVenueWithSeries } from "./fixtures.js";
 import { libraryImageName, seedLibraryImages } from "./library-images.js";
-import { createCatalogue, createProduct, updateMenuItem } from "../src/operations.js";
+import { createMenu, createProduct, updateMenuItem } from "../src/operations.js";
 import { createCategory } from "../src/categories.js";
 import { createExtraList } from "../src/extras.js";
 import { createOptionList } from "../src/options.js";
@@ -63,12 +63,12 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
     await seedLibraryImages(tx, "lemonade.jpg", "large.jpg");
     const softDrinks = (await createCategory(tx, { name: "Soft drinks" })).id;
     const coldDrinks = (await createCategory(tx, { name: "Cold drinks" })).id;
-    const lunch = await createCatalogue(tx, { name: "Lunch Menu" });
-    const dinner = await createCatalogue(tx, { name: "Dinner Menu" });
+    const lunch = await createMenu(tx, { name: "Lunch Menu" });
+    const dinner = await createMenu(tx, { name: "Dinner Menu" });
     const make = async (name: string, unitPrice: string, image: string | null = null) =>
       (
         await createProduct(tx, {
-          catalogueId: lunch.id,
+          menuId: lunch.id,
           categoryId: softDrinks,
           name,
           customerName: { en: `${name} for guests` },
@@ -102,7 +102,7 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
     const soup = await make("Soup", "5.00");
     const extraLemon = await make("Extra lemon", "0.50");
 
-    const drinksMenu = await createCatalogue(tx, {
+    const drinksMenu = await createMenu(tx, {
       name: "Drinks",
       names: { en: "Something to drink" },
     });

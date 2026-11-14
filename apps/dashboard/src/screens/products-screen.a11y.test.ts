@@ -6,9 +6,9 @@ import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./products-screen.js";
-import type { CatalogueScreen } from "./products-screen.js";
+import type { ProductsScreen } from "./products-screen.js";
 import type {
-  CatalogueSummary,
+  MenuSummary,
   CategorySummary,
   DashboardApi,
   SectionDetails,
@@ -19,7 +19,7 @@ import type {
 
 registerIcons(DASHBOARD_ICONS);
 
-const catalogues: CatalogueSummary[] = [
+const menus: MenuSummary[] = [
   { id: "cat-a", name: "Food", active: true, version: 1 },
   { id: "cat-b", name: "Drinks", active: true, version: 1 },
 ];
@@ -30,7 +30,7 @@ const products: Product[] = [
   {
     id: "p1",
     modifiers: [],
-    catalogueId: "cat-a",
+    menuId: "cat-a",
     categoryId: "c1",
     primaryCategoryId: "c1",
     name: "Ham croquettes",
@@ -120,8 +120,8 @@ const sections: SectionDetails[] = [
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const api = {
-    listCatalogues: vi.fn().mockResolvedValue(catalogues),
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    listMenus: vi.fn().mockResolvedValue(menus),
+    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue(categories),
     listProducts: vi.fn().mockResolvedValue(products),
@@ -161,7 +161,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return api;
 }
 
-async function flush(el: CatalogueScreen): Promise<void> {
+async function flush(el: ProductsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
 }
@@ -169,10 +169,10 @@ async function flush(el: CatalogueScreen): Promise<void> {
 afterEach(cleanupWidgets);
 afterEach(() => localStorage.clear());
 
-describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (theme) => {
-  it("renders accessibly with catalogues loaded", async () => {
-    const { el, host } = await mountWidget<CatalogueScreen>(
-      "dashboard-catalogue-screen",
+describe.each(["light", "dark"] as const)("menu-screen a11y (%s theme)", (theme) => {
+  it("renders accessibly with menus loaded", async () => {
+    const { el, host } = await mountWidget<ProductsScreen>(
+      "dashboard-products-screen",
       { api: stubApi() },
       theme,
     );
@@ -180,10 +180,10 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("renders accessibly when no catalogue exists yet", async () => {
-    const api = stubApi({ listCatalogues: vi.fn().mockResolvedValue([]) });
-    const { el, host } = await mountWidget<CatalogueScreen>(
-      "dashboard-catalogue-screen",
+  it("renders accessibly when no menu exists yet", async () => {
+    const api = stubApi({ listMenus: vi.fn().mockResolvedValue([]) });
+    const { el, host } = await mountWidget<ProductsScreen>(
+      "dashboard-products-screen",
       { api },
       theme,
     );
@@ -192,13 +192,13 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
   });
 
   it("renders the product delete confirmation accessibly", async () => {
-    const { el, host } = await mountWidget<CatalogueScreen>(
-      "dashboard-catalogue-screen",
+    const { el, host } = await mountWidget<ProductsScreen>(
+      "dashboard-products-screen",
       { api: stubApi() },
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
+    el.shadowRoot!.querySelector("dashboard-product-browser")!.dispatchEvent(
       new CustomEvent("delete-product", {
         detail: { productId: "p1" },
         bubbles: true,
@@ -211,13 +211,13 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
 
   it("renders the courses window over the product editor accessibly at phone width", async () => {
     await page.viewport(390, 900);
-    const { el, host } = await mountWidget<CatalogueScreen>(
-      "dashboard-catalogue-screen",
+    const { el, host } = await mountWidget<ProductsScreen>(
+      "dashboard-products-screen",
       { api: stubApi() },
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
+    el.shadowRoot!.querySelector("dashboard-product-browser")!.dispatchEvent(
       new CustomEvent("add-product", {
         detail: { categoryId: null },
         bubbles: true,
@@ -242,13 +242,13 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
   });
 
   it("renders the Add to menus step that follows a create accessibly", async () => {
-    const { el, host } = await mountWidget<CatalogueScreen>(
-      "dashboard-catalogue-screen",
+    const { el, host } = await mountWidget<ProductsScreen>(
+      "dashboard-products-screen",
       { api: stubApi() },
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
+    el.shadowRoot!.querySelector("dashboard-product-browser")!.dispatchEvent(
       new CustomEvent("add-product", {
         detail: { categoryId: null },
         bubbles: true,
@@ -298,8 +298,8 @@ describe.each(["light", "dark"] as const)("archive confirmation a11y (%s)", (the
               },
             }),
           });
-          const { el, host } = await mountWidget<CatalogueScreen>(
-            "dashboard-catalogue-screen",
+          const { el, host } = await mountWidget<ProductsScreen>(
+            "dashboard-products-screen",
             { api },
             theme,
           );
@@ -307,13 +307,13 @@ describe.each(["light", "dark"] as const)("archive confirmation a11y (%s)", (the
           await vi.waitFor(() =>
             expect(
               (
-                el.shadowRoot!.querySelector("dashboard-catalogue-browser") as unknown as {
+                el.shadowRoot!.querySelector("dashboard-product-browser") as unknown as {
                   products: Product[];
                 }
               ).products.map(({ id }) => id),
             ).toContain("p1"),
           );
-          el.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
+          el.shadowRoot!.querySelector("dashboard-product-browser")!.dispatchEvent(
             new CustomEvent("delete-product", {
               detail: { productId: "p1" },
               bubbles: true,
@@ -429,13 +429,13 @@ describe.each(["light", "dark"] as const)("named extras archive warnings (%s)", 
                 })),
               ),
             });
-            const { el, host } = await mountWidget<CatalogueScreen>(
-              "dashboard-catalogue-screen",
+            const { el, host } = await mountWidget<ProductsScreen>(
+              "dashboard-products-screen",
               { api },
               theme,
             );
             await flush(el);
-            const browser = el.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
+            const browser = el.shadowRoot!.querySelector("dashboard-product-browser")!;
             await vi.waitFor(() => expect(browser.products).toHaveLength(1));
             if (entry === "product" || entry === "variant") {
               browser.dispatchEvent(

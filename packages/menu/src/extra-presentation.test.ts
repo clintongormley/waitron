@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { menuVersions, products, withTransaction, type Transaction } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
 import { createProduct, updateProduct } from "./operations.js";
 import { createExtraList } from "./extras.js";
@@ -12,14 +12,14 @@ import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-
 import { writeContentLanguages } from "./content-languages.js";
 import { newCustomerPresentation } from "@waitron/shared";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 async function sourceFixture(variant: boolean) {
   const f = await menusFixture(fx.db);
   const extraId = await app(async (tx) => {
     const parent = await createProduct(tx, {
-      catalogueId: f.lunch,
+      menuId: f.lunch,
       categoryId: null,
       unitId: null,
       name: "Staff topping",
@@ -117,7 +117,7 @@ describe("extras presentation sources", () => {
     ).toBe("Staff topping");
   });
 
-  it("resolves a new default from the frozen pair without borrowing a third language or today's catalogue", async () => {
+  it("resolves a new default from the frozen pair without borrowing a third language or today's menu", async () => {
     const f = await sourceFixture(true);
     await publish(f.lunch);
     const rows = await fx.db

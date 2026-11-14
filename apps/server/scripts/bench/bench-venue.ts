@@ -9,7 +9,7 @@ import {
   staffRoles,
   personStaffRoles,
   deviceProfileAdmissionRoles,
-  catalogues,
+  menus,
   devices,
   deviceProfiles,
   diningTables,
@@ -23,8 +23,8 @@ import {
   type Transaction,
 } from "@waitron/db";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   menuItems,
@@ -85,7 +85,7 @@ const TILL_PREFIX = "Bench till ";
 const KDS_PREFIX = "Bench kitchen screen ";
 const WAITER_PREFIX = "Bench waiter ";
 const MANAGER_NAME = "Bench manager";
-const CATALOGUE_NAME = "Bench menu";
+const MENU_NAME = "Bench menu";
 const PRINT_AGENT_NAME = "Bench print agent";
 
 /** The modules of a Veri*Factu box: every module but the other one filling the fiscal slot. */
@@ -358,7 +358,7 @@ async function seed(
     };
     for (const id of Object.values(stations)) await updateStation(tx, id, { printHeldWork: true });
 
-    const catalogue = await createCatalogue(tx, { name: CATALOGUE_NAME });
+    const menu = await createMenu(tx, { name: MENU_NAME });
     let made = 0;
     for (const [index, course] of COURSES.entries()) {
       const category = await createCategory(tx, { name: course.name });
@@ -370,7 +370,7 @@ async function seed(
       for (let n = 1; n <= count; n++) {
         const label = `${course.name} ${String(made + n).padStart(3, "0")}`;
         await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: category.id,
           name: label,
           customerName: { [LOCALE]: `House ${label.toLowerCase()}` },
@@ -382,7 +382,7 @@ async function seed(
       }
       made += count;
     }
-    await assignCatalogueToVenue(tx, catalogue.id);
+    await assignMenuToVenue(tx, menu.id);
 
     const zonesPerDepartment = BENCH_PROFILE.zones / BENCH_PROFILE.departments;
     const zonesOf = new Map<string, string[]>();
@@ -561,8 +561,8 @@ async function readSeeded(db: Database, cookies: Record<string, string>) {
     .select({ productId: products.id, menuItemId: menuItems.id })
     .from(menuItems)
     .innerJoin(products, eq(products.id, menuItems.productId))
-    .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
-    .where(eq(catalogues.name, CATALOGUE_NAME))
+    .innerJoin(menus, eq(menus.id, products.menuId))
+    .where(eq(menus.name, MENU_NAME))
     .orderBy(asc(products.name));
   const zoneRows = db.all<{ id: string; departmentId: string }>(
     sql`select z.id as id, z.department_id as departmentId from floor_zones z

@@ -12,7 +12,7 @@ import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 export const beer: TillProduct = {
   id: "beer",
   menuItemId: "offer-beer",
-  catalogueId: "menu-table",
+  menuId: "menu-table",
   name: "Beer",
   customerName: { es: "Cerveza de barril" },
   pricingUnit: "each",

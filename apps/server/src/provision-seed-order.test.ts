@@ -45,7 +45,7 @@ describe("first setup module seeds", () => {
     const venue = await applyVenue(actions, { db: suite.db, modules: ALL_MODULES });
     const { nodeId, seeded } = venue;
     expect(seeded.map((s) => s.module)).toEqual([
-      "catalogue",
+      "menu",
       "venue-service",
       "fiscal-verifactu",
       "adjustments",

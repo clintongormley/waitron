@@ -110,7 +110,7 @@ and now records its stations. Left open by A756 PR 6's review.
 - Left open by A366 slice 4 Part A's review:
   every read of the routing model works out each period's products (`readRoutingPeriods`,
   `packages/venue-service/src/routing-periods.ts`), which only the routing cell editor needs, so the
-  catalogue's folder read pays for it too; and the Opening hours model reads every period's routing
+  menu's folder read pays for it too; and the Opening hours model reads every period's routing
   uses (`readRoutingUses`, `packages/venue-service/src/menu-timetable.ts`), re-read on any product
   or category change, though since A506-11 nothing reads the model's copy: the period delete dialog
   reads its own through `GET …/menu-periods/:periodId/delete-impact`. Work each out only where it is
@@ -418,7 +418,7 @@ the change (plan PR 8 Decision 1).
   the lines after the station on one line (option 3: crowds narrow columns).
 
 - **The Routes search differs on purpose from the Products and Menu Structure search (A507, owner
-  2026-10-11).** Those list matches flat with inline paths (A461, `catalogue.md` → _Decisions_);
+  2026-10-11).** Those list matches flat with inline paths (A461, `menu.md` → _Decisions_);
   the Routes grid shows each match under every category above it, because those rows carry the
   stations being inherited.
 

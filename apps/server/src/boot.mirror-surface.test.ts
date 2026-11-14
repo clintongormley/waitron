@@ -485,7 +485,7 @@ describe("a spare's network surface", () => {
     const { server, app, stateDir } = await boot("latch", { fromBox: { current: false } });
     try {
       await walk(app, (method, path) => LATCH_ANSWERS[`${method} ${path}`] ?? { status: 404 });
-      for (const path of ["/", "/manage", "/api/node", "/management-api/catalogues"])
+      for (const path of ["/", "/manage", "/api/node", "/management-api/menus"])
         expect((await app.request(path)).status).toBe(404);
       expect(await (await app.request("/api/box/status")).json()).toEqual({ adoption: "pending" });
     } finally {

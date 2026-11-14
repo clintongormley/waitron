@@ -40,13 +40,13 @@ const changed: MenuStatus = {
 
 function api(status: MenuStatus = changed): DashboardApi {
   return {
-    listCatalogues: vi
+    listMenus: vi
       .fn()
       .mockResolvedValue([{ id: "menu-lunch", name: "Lunch Menu", active: true, version: 1 }]),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listLibraryProducts: vi.fn().mockResolvedValue([lager]),
     listCategories: vi.fn().mockResolvedValue([]),
-    getCatalogueSettings: vi
+    getMenuSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getMenuStructure: vi.fn().mockResolvedValue({

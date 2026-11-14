@@ -338,7 +338,7 @@ export class TillCounterScreen extends LitElement {
       : shownMenu(this.menus, this.selectedMenuId);
     if (menu === undefined) return nothing;
     const served = this.products.filter((product) =>
-      this.menus.some((each) => each.id === product.catalogueId && each.orderable),
+      this.menus.some((each) => each.id === product.menuId && each.orderable),
     );
     return html`<till-menu-browser
       .changeAvailability=${this.changeAvailability}

@@ -1,11 +1,11 @@
 import { expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
 import { updateProduct } from "./operations.js";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 it("publishing an included menu keeps its includer's live document and pending changes", async () => {
   const f = await menusFixture(fx.db);
   const publish = async (menuId: string) =>

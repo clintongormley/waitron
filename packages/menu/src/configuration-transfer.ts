@@ -117,7 +117,7 @@ function checkContentLanguages(
   checkedContentLanguages(config, required);
 }
 
-export function validateCatalogueConfiguration(
+export function validateMenuConfiguration(
   tables: Readonly<Record<string, Rows>>,
   bundle?: {
     readonly country: string;
@@ -199,7 +199,7 @@ export function validateCatalogueConfiguration(
   }
 }
 
-export const CATALOGUE_CONFIGURATION_TRANSFER = {
+export const MENU_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
     { name: "category_details" },
@@ -216,7 +216,7 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "section_members" },
     { name: "menu_details" },
   ],
-  validate: validateCatalogueConfiguration,
+  validate: validateMenuConfiguration,
   async beforeImport(
     tx: Transaction,
     _tables: Readonly<Record<string, Rows>>,

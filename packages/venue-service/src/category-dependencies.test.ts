@@ -1,11 +1,11 @@
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
-  createCatalogue,
+  createMenu,
   createCategory,
   createProduct,
   createUnit,
-  deleteCatalogueItems,
+  deleteProductItems,
   deleteCategory,
   readCategory,
   updateProduct,
@@ -44,12 +44,12 @@ it("deleting a category removes its own and its subtree's category cells and kee
         .values([{ name: "Kitchen" }, { name: "Bar" }])
         .returning({ id: kitchenStations.id })
     ).map((row) => row.id);
-    const catalogue = await createCatalogue(tx, { name: "Menu" });
+    const menu = await createMenu(tx, { name: "Menu" });
     const food = await createCategory(tx, { name: "Food" });
     const drinks = await createCategory(tx, { name: "Drinks", parentId: food.id });
     const cocktails = await createCategory(tx, { name: "Cocktails", parentId: drinks.id });
     const negroni = await createProduct(tx, {
-      catalogueId: catalogue.id,
+      menuId: menu.id,
       categoryId: cocktails.id,
       name: "Negroni",
       pricingUnit: "each",
@@ -70,7 +70,7 @@ it("deleting a category removes its own and its subtree's category cells and kee
     );
 
     await expect(
-      deleteCatalogueItems(tx, { productIds: [], categoryIds: [drinks.id] }, "delete"),
+      deleteProductItems(tx, { productIds: [], categoryIds: [drinks.id] }, "delete"),
     ).resolves.toBeUndefined();
 
     const cells = await tx
@@ -115,7 +115,7 @@ it("deleting a category removes its own and its subtree's category cells and kee
 it("an open order keeps its copied category label after the category is deleted", async () => {
   await venue();
   await withTransaction(suite.db, async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: "Menu" });
+    const menu = await createMenu(tx, { name: "Menu" });
     const category = await createCategory(tx, { name: "Bakery" });
     const unit = await createUnit(
       tx,
@@ -129,7 +129,7 @@ it("an open order keeps its copied category label after the category is deleted"
       "en",
     );
     const product = await createProduct(tx, {
-      catalogueId: catalogue.id,
+      menuId: menu.id,
       categoryId: category.id,
       name: "Bread",
       unitId: unit.id,

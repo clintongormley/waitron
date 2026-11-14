@@ -14,7 +14,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { racePair, useCatalogueDb } from "../test/fixtures.js";
+import { racePair, useMenuDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, type MenusFixture } from "../test/menus-fixture.js";
 import { documentImages, MENU_DOCUMENT_FORMAT } from "./menu-document.js";
 import {
@@ -38,7 +38,7 @@ import { addMember } from "./sections.js";
 import { updateMenuItem, updateProduct } from "./operations.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 beforeEach(() => seedLibraryImages(fx.db, "soup-a.jpg", "soup-b.jpg"));
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
@@ -167,7 +167,7 @@ async function readsAtClock(asserted: string) {
 }
 
 const DRAFT_TABLES = [
-  "catalogues",
+  "menus",
   "categories",
   "category_details",
   "extra_list_items",
@@ -328,7 +328,7 @@ describe("queueMenuPublication", () => {
       const unknown = "00000000-0000-4000-8000-000000000000";
       await refuses(
         () => app((tx) => queueMenuPublication(tx, unknown, "x", day(8), ANA, { at: NOW })),
-        { code: "catalogue.not_found", params: { catalogueId: unknown } },
+        { code: "menu.not_found", params: { menuId: unknown } },
       );
     });
 
@@ -860,16 +860,16 @@ describe("a due edition is live at once", () => {
       const stamp = NOW.toISOString();
       await fx.db.run(sql`
         with recursive n(i) as (select 1 union all select i + 1 from n where i < ${count})
-        insert into catalogues (id, name, active, version, created_at, updated_at)
+        insert into menus (id, name, active, version, created_at, updated_at)
         select 'planted-menu-' || i, 'Planted ' || i, 1, 1, ${stamp}, ${stamp} from n`);
       await fx.db.run(sql`
         insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
         select 'planted-version-' || substr(id, 14), id, 1, ${document}, 'planted', ${stamp}, ${ANA}
-        from catalogues where id like 'planted-menu-%'`);
+        from menus where id like 'planted-menu-%'`);
       await fx.db.run(sql`
         insert into menu_publications (menu_id, version_id, published_at)
         select id, 'planted-version-' || substr(id, 14), ${stamp}
-        from catalogues where id like 'planted-menu-%'`);
+        from menus where id like 'planted-menu-%'`);
       const menuIds = Array.from({ length: count }, (_, i) => `planted-menu-${i + 1}`);
 
       let size = 0;

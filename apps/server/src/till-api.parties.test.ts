@@ -27,12 +27,7 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import {
-  assignCatalogueToVenue,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { mountTillApi } from "./till-api.js";
@@ -240,17 +235,17 @@ describe("POST /api/tables/:id/seat", () => {
   it("takes the guest count alone: lines sent with the seat are not rung", async () => {
     await seedLegacySellingUnits(suite.db);
     const { menuItemId, tableId } = await withTransaction(suite.db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Daily menu" });
+      const menu = await createMenu(tx, { name: "Daily menu" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const coffee = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: drinks.id,
         name: "Café",
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToVenue(tx, catalogue.id);
+      await assignMenuToVenue(tx, menu.id);
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const { id } = await createTable(tx, cfg, {
         label: `Mesa ${randomUUID()}`,

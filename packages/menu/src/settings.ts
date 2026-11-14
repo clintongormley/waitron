@@ -3,10 +3,10 @@ import { AppError, colorOrNull, isStoredColor, VAT_CLASSES, type VatClass } from
 import { defineSettingsDocument, readSettings, saveSettings } from "@waitron/db";
 import "./errors.js";
 
-import type { CatalogueSettings } from "./settings-types.js";
-export type { CatalogueSettings } from "./settings-types.js";
+import type { MenuDefaults } from "./settings-types.js";
+export type { MenuDefaults } from "./settings-types.js";
 
-export interface MenuSettings extends CatalogueSettings {
+export interface MenuSettings extends MenuDefaults {
   readonly starterUnitsCreated: boolean;
 }
 
@@ -46,16 +46,16 @@ export const MENU_SETTINGS = defineSettingsDocument<MenuSettings>({
   },
 });
 
-export async function readCatalogueSettings(tx: Transaction): Promise<CatalogueSettings> {
+export async function readMenuSettings(tx: Transaction): Promise<MenuDefaults> {
   const { doc } = await readSettings(tx, MENU_SETTINGS);
   return { defaultProductVatClass: doc.defaultProductVatClass, defaultColor: doc.defaultColor };
 }
 
 async function upsertSettings(
   tx: Transaction,
-  values: Partial<CatalogueSettings>,
+  values: Partial<MenuDefaults>,
   personId: string | null,
-): Promise<CatalogueSettings> {
+): Promise<MenuDefaults> {
   const { doc, revision } = await readSettings(tx, MENU_SETTINGS);
   const saved = await saveSettings(tx, MENU_SETTINGS, {
     doc: { ...doc, ...values },
@@ -68,22 +68,22 @@ async function upsertSettings(
   };
 }
 
-export async function saveCatalogueSettings(
+export async function saveMenuSettings(
   tx: Transaction,
   input: { defaultProductVatClass: unknown },
   personId: string | null = null,
-): Promise<CatalogueSettings> {
+): Promise<MenuDefaults> {
   const value = input.defaultProductVatClass;
   if (typeof value !== "string" || !VAT_CLASSES.includes(value as VatClass))
     throw new AppError("product.invalid", { field: "defaultProductVatClass" });
   return upsertSettings(tx, { defaultProductVatClass: value as VatClass }, personId);
 }
 
-export async function saveCatalogueDefaultColor(
+export async function saveMenuDefaultColor(
   tx: Transaction,
   color: unknown,
   personId: string | null = null,
-): Promise<CatalogueSettings> {
+): Promise<MenuDefaults> {
   const defaultColor = colorOrNull(color, () => {
     throw new AppError("category.invalid", { field: "color" });
   });

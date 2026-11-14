@@ -2,7 +2,7 @@ import { is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import * as adjustments from "./adjustments/index.js";
-import * as catalogue from "./menu/index.js";
+import * as menu from "./menu/index.js";
 import * as credentials from "./credentials/index.js";
 import * as handover from "./handover/index.js";
 import * as identity from "./identity/index.js";
@@ -27,7 +27,7 @@ const folders = [
   { barrel: media, name: "media" },
   { barrel: handover, name: "handover" },
   { barrel: identity, name: "identity" },
-  { barrel: catalogue, name: "catalogue" },
+  { barrel: menu, name: "menu" },
   { barrel: adjustments, name: "adjustments" },
   { barrel: venueService, name: "venue-service" },
 ] as const;

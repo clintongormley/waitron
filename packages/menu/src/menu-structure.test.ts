@@ -10,12 +10,12 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
+import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import {
   addProductToMenu,
-  createCatalogue,
+  createMenu,
   createProduct,
-  deactivateCatalogue,
+  deactivateMenu,
   deactivateProduct,
   listMenuOffers,
   menuPrices,
@@ -39,7 +39,7 @@ import { listMenuVariants, setMenuVariants, setProductVariants } from "./variant
 import type { MemberRef } from "@waitron/shared";
 
 // A menu's structure and the settings rows it keeps in step with it.
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const product = (productId: string): MemberRef => ({ kind: "product", productId });
@@ -71,13 +71,13 @@ async function fixture(): Promise<Fixture> {
   await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
-    const lunch = await createCatalogue(tx, { name: "Lunch menu" });
-    const dinner = await createCatalogue(tx, { name: "Dinner menu" });
+    const lunch = await createMenu(tx, { name: "Lunch menu" });
+    const dinner = await createMenu(tx, { name: "Dinner menu" });
     // Three different names per product, so a read of the wrong one cannot pass by accident.
     const make = async (name: string, unitPrice: string) =>
       (
         await createProduct(tx, {
-          catalogueId: lunch.id,
+          menuId: lunch.id,
           categoryId: null,
           name: `${name} (staff)`,
           customerName: { en: `${name} (customer)` },
@@ -158,7 +158,7 @@ const offerNames = async (menuId: string) =>
 describe("creating a menu", () => {
   it("makes a root and a home section the menu owns, and records both in menu_details", async () => {
     await seedTaxpayer(fx.db);
-    const menu = await app((tx) => createCatalogue(tx, { name: "Lunch menu" }));
+    const menu = await app((tx) => createMenu(tx, { name: "Lunch menu" }));
     const owned = await app((tx) =>
       tx
         .select({ id: sections.id, role: sections.role, internalName: sections.internalName })
@@ -201,7 +201,7 @@ describe("creating a menu", () => {
 
   it("keeps the root's internal name the menu's name when the menu is renamed", async () => {
     await seedTaxpayer(fx.db);
-    const menu = await app((tx) => createCatalogue(tx, { name: "Lunch menu" }));
+    const menu = await app((tx) => createMenu(tx, { name: "Lunch menu" }));
     await app((tx) => updateMenuDetails(tx, menu.id, { name: "Weekday lunch" }));
     const { rootSectionId } = await app((tx) => readMenuStructure(tx, menu.id));
     const [root] = await app((tx) =>
@@ -216,7 +216,7 @@ describe("creating a menu", () => {
   it("reads saved menu presentation back when reopening its details", async () => {
     await seedTaxpayer(fx.db);
     const menu = await app((tx) =>
-      createCatalogue(tx, {
+      createMenu(tx, {
         name: "Lunch menu",
         names: { en: "Lunch", es: "Almuerzo" },
         color: "#aa3300",
@@ -246,7 +246,7 @@ describe("creating a menu", () => {
   it("refuses the structure of a menu that does not exist", async () => {
     await seedTaxpayer(fx.db);
     await expect(app((tx) => readMenuStructure(tx, crypto.randomUUID()))).rejects.toMatchObject({
-      code: "catalogue.not_found",
+      code: "menu.not_found",
     });
   });
 });
@@ -635,7 +635,7 @@ describe("putting a product on a menu's top level", () => {
       (await app((tx) => readMenuStructure(tx, f.lunch))).nodes.map((node) => node.ref),
     ).toEqual([product(f.lemonade), product(f.water)]);
     for (const [input, code] of [
-      [{ menuId: crypto.randomUUID(), productId: f.lemonade }, "catalogue.not_found"],
+      [{ menuId: crypto.randomUUID(), productId: f.lemonade }, "menu.not_found"],
       [{ menuId: f.lunch, productId: crypto.randomUUID() }, "product.not_found"],
       [{ menuId: f.lunch, productId: f.large }, "menu_item.variant_not_allowed"],
       [{ menuId: f.lunch, productId: f.lemonade }, "menu_section.member_duplicate"],
@@ -940,7 +940,7 @@ describe("a menu's prices", () => {
     const cheese = await app(async (tx) => {
       const category = await createCategory(tx, { name: "Cheese" });
       const created = await createProduct(tx, {
-        catalogueId: f.lunch,
+        menuId: f.lunch,
         categoryId: category.id,
         name: "Manchego (staff)",
         customerName: { en: "Manchego (customer)" },
@@ -962,14 +962,14 @@ describe("a menu's prices", () => {
     expect(await app((tx) => menuPrices(tx, f.lunch))).toEqual([]);
     await app((tx) => addMember(tx, f.lunchRoot, product(f.water)));
     expect(await app((tx) => menuPrices(tx, f.lunch))).toHaveLength(1);
-    await app((tx) => deactivateCatalogue(tx, f.lunch));
+    await app((tx) => deactivateMenu(tx, f.lunch));
     expect(await app((tx) => menuPrices(tx, f.lunch))).toEqual([]);
   });
 
   it("refuses a menu that does not exist", async () => {
     await seedTaxpayer(fx.db);
     await expect(app((tx) => menuPrices(tx, crypto.randomUUID()))).rejects.toMatchObject({
-      code: "catalogue.not_found",
+      code: "menu.not_found",
     });
   });
 });

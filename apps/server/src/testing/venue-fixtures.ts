@@ -2,12 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { sql } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
-import {
-  assignCatalogueToVenue,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { startManagementSession } from "@waitron/identity";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
@@ -58,7 +53,7 @@ function nextNif(): string {
 }
 
 /**
- * A provisioned venue in `ticket_then_pay`, a two-product catalogue, and a manager and a staff
+ * A provisioned venue in `ticket_then_pay`, a two-product menu, and a manager and a staff
  * management session.
  */
 export async function setupVenue(db: Database): Promise<Venue> {
@@ -98,10 +93,10 @@ export async function setupVenue(db: Database): Promise<Venue> {
   const cfg = tillConfigFromVenue(venue);
 
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Delicatessen ${venue.nodeId}` });
+    const cat = await createMenu(tx, { name: `Delicatessen ${venue.nodeId}` });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const coffee = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Coffee",
       pricingUnit: "each",
@@ -109,14 +104,14 @@ export async function setupVenue(db: Database): Promise<Venue> {
       vatClass: "general",
     });
     const water = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Water",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
 
     const [mgr] = await seedPersons(tx, {
       displayName: "The Manager",

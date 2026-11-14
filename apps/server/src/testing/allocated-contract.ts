@@ -2,7 +2,7 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { readVenueSettings } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
 import {
-  catalogues,
+  menus,
   deployment,
   invoiceSeries,
   nodes,
@@ -85,8 +85,8 @@ export async function prepareStandbyDatabase(
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.nodeId, primary.nodeId), isNull(invoiceSeries.retiredAt)));
   await target.insert(taxpayer).values(taxpayerRow);
-  const catalogue = await source.select().from(catalogues).where(eq(catalogues.isDefault, true));
-  if (catalogue.length > 0) await target.insert(catalogues).values(catalogue);
+  const menu = await source.select().from(menus).where(eq(menus.isDefault, true));
+  if (menu.length > 0) await target.insert(menus).values(menu);
 
   await seedVenueSettings(target, (await readVenueSettings(source)).doc);
   await target.insert(nodes).values(node);

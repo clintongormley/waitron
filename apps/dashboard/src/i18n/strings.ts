@@ -39,8 +39,8 @@ export const en = {
     "Review attendance questions and propose, approve or decline working-time corrections. Approving your own time also needs Approve your own working time.",
   "permission.workforce.self_approve.help":
     "Approve your own working-time corrections without another person’s approval. You also need Correct working time.",
-  "permission.catalogue.manage.help":
-    "Edit products, menus, modifiers and catalogue images. Configure and publish guest menus where the venue uses them.",
+  "permission.menu.manage.help":
+    "Edit products, menus, modifiers and product images. Configure and publish guest menus where the venue uses them.",
   "permission.venue.view.help":
     "View venue settings, courses, appearance, job roles and staffing calendars. Changing those settings needs their editing permission.",
   "permission.venue.configure.help":
@@ -104,7 +104,7 @@ export const en = {
   "permission.schedule.manage": "Manage the rota",
   "permission.workforce.correct": "Correct working time",
   "permission.workforce.self_approve": "Approve your own working time",
-  "permission.catalogue.manage": "Manage the catalogue",
+  "permission.menu.manage": "Manage menus",
   "permission.venue.view": "View venue settings",
   "permission.venue.configure": "Change venue settings",
   "permission.hardware.manage": "Manage devices and printers",
@@ -988,8 +988,8 @@ export const en = {
   "printers.add_help":
     "Waitron lists the printers its print agents find. Not listed? Check it is on; for a network printer, type its address under Check a known address.",
   "printers.seen_on": "Seen on",
-  "catalogue_settings.default_vat": "VAT class for new products",
-  "catalogue_settings.invalid": "Choose a VAT class for new products.",
+  "menu_settings.default_vat": "VAT class for new products",
+  "menu_settings.invalid": "Choose a VAT class for new products.",
   "action.save": "Save",
   "table.customise_columns": "Customise columns",
   "table.customise": "Customise",
@@ -1264,7 +1264,7 @@ export const en = {
   "nav.sales": "Sales & takings",
   "nav.vat_return": "VAT return (modelo 303)",
   "nav.staff": "Users",
-  "nav.catalogue": "Products",
+  "nav.products": "Products",
   "nav.units": "Units",
   "nav.courses": "Courses",
   "nav.approvals": "Approvals",
@@ -1613,7 +1613,7 @@ export const en = {
   "staff.data_copy_not_found_unreloaded":
     "{name} is on this list, but the box has no record of them. That is a fault in Waitron.",
   "staff.sign_in_as_admin": "Sign in as an administrator",
-  "catalogue.title": "Products",
+  "products.title": "Products",
   "units.title": "Units",
   "units.description": "Define how product quantities are measured and displayed.",
   "units.create": "Add unit",
@@ -1655,8 +1655,8 @@ export const en = {
   "units.cancel_selection": "Cancel selection",
   "units.selected_count": "{count} selected",
   "units.selected_one": "1 selected",
-  "catalogue.add_product": "Add product",
-  "catalogue.empty_prompt": "Create a menu on the Menus screen before adding products.",
+  "products.add_product": "Add product",
+  "products.empty_prompt": "Create a menu on the Menus screen before adding products.",
   "receipt.header_subtitle": "Slogan",
   "receipt.footer_message": "Footer message",
   "floor_plan_editor.title": "Floor plan",
@@ -4236,8 +4236,8 @@ export const es: Record<StringKey, string> = {
     "Revisa las incidencias de presencia y propone, aprueba o rechaza correcciones del registro horario. Para aprobar tu propio horario también necesitas Aprobar tus propias horas.",
   "permission.workforce.self_approve.help":
     "Aprueba las correcciones de tu propio registro horario sin la aprobación de otra persona. También necesitas Corregir horas trabajadas.",
-  "permission.catalogue.manage.help":
-    "Edita productos, cartas, modificadores e imágenes del catálogo. Configura y publica las cartas para clientes cuando el local las utiliza.",
+  "permission.menu.manage.help":
+    "Edita productos, cartas, modificadores e imágenes de productos. Configura y publica las cartas para clientes cuando el local las utiliza.",
   "permission.venue.view.help":
     "Consulta la configuración del local, pases, apariencia, puestos y calendarios de personal. Para cambiarlos necesitas el permiso de edición correspondiente.",
   "permission.venue.configure.help":
@@ -4300,7 +4300,7 @@ export const es: Record<StringKey, string> = {
   "permission.schedule.manage": "Gestionar turnos",
   "permission.workforce.correct": "Corregir horas trabajadas",
   "permission.workforce.self_approve": "Aprobar tus propias horas",
-  "permission.catalogue.manage": "Gestionar el catálogo",
+  "permission.menu.manage": "Gestionar las cartas",
   "permission.venue.view": "Ver ajustes del local",
   "permission.venue.configure": "Cambiar ajustes del local",
   "permission.hardware.manage": "Gestionar dispositivos e impresoras",
@@ -5202,8 +5202,8 @@ export const es: Record<StringKey, string> = {
   "printers.add_help":
     "Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida; si es de red, escribe su dirección en Comprobar una dirección conocida.",
   "printers.seen_on": "Detectada en",
-  "catalogue_settings.default_vat": "Clase de IVA para productos nuevos",
-  "catalogue_settings.invalid": "Elige una clase de IVA para productos nuevos.",
+  "menu_settings.default_vat": "Clase de IVA para productos nuevos",
+  "menu_settings.invalid": "Elige una clase de IVA para productos nuevos.",
   "action.save": "Guardar",
   "table.customise_columns": "Personalizar columnas",
   "table.customise": "Personalizar",
@@ -5481,7 +5481,7 @@ export const es: Record<StringKey, string> = {
   "nav.sales": "Ventas y recaudación",
   "nav.vat_return": "Modelo 303 (IVA)",
   "nav.staff": "Usuarios",
-  "nav.catalogue": "Productos",
+  "nav.products": "Productos",
   "nav.units": "Unidades",
   "nav.courses": "Cursos",
   "nav.approvals": "Aprobaciones",
@@ -5844,7 +5844,7 @@ export const es: Record<StringKey, string> = {
   "staff.data_copy_not_found_unreloaded":
     "{name} aparece en esta lista, pero el servidor no tiene ningún registro suyo. Es un fallo de Waitron.",
   "staff.sign_in_as_admin": "Iniciar sesión como administrador",
-  "catalogue.title": "Productos",
+  "products.title": "Productos",
   "units.title": "Unidades",
   "units.description": "Define cómo se miden y muestran las cantidades de los productos.",
   "units.create": "Añadir unidad",
@@ -5886,8 +5886,8 @@ export const es: Record<StringKey, string> = {
   "units.cancel_selection": "Cancelar selección",
   "units.selected_count": "{count} seleccionados",
   "units.selected_one": "1 seleccionado",
-  "catalogue.add_product": "Añadir producto",
-  "catalogue.empty_prompt": "Crea una carta en la pantalla Cartas antes de añadir productos.",
+  "products.add_product": "Añadir producto",
+  "products.empty_prompt": "Crea una carta en la pantalla Cartas antes de añadir productos.",
   "receipt.header_subtitle": "Eslogan",
   "receipt.footer_message": "Mensaje de pie",
   "floor_plan_editor.title": "Plano de sala",

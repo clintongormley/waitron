@@ -261,14 +261,14 @@ it.each(["name", "colour", "menuId", "staffMenuIds"])(
   },
 );
 
-it("names a duplicate under Name and maps a missing catalogue by the submitted menu id", async () => {
+it("names a duplicate under Name and maps a missing menu by the submitted menu id", async () => {
   const el = await mount(true);
   await change(el, "name", { value: "Dinner" });
   save(el).click();
   el.refusal = { code: "menu_period.name_taken" };
   await el.updateComplete;
   expect(field(el, "name").error).toBe("Another period of this department already has this name.");
-  el.refusal = { code: "catalogue.not_found", params: { catalogueId: "deli" } };
+  el.refusal = { code: "menu.not_found", params: { menuId: "deli" } };
   await el.updateComplete;
   expect(field(el, "staffMenuIds").error).toBe("Choose active menus.");
   expect(field(el, "menuId").error).toBe("");
@@ -394,16 +394,16 @@ it.each([
   expect(save(el).disabled).toBe(false);
 });
 
-it("maps a refused customer menu before a submission, but an unrelated catalogue stays at the bottom", async () => {
+it("maps a refused customer menu before a submission, but an unrelated menu stays at the bottom", async () => {
   const el = await mount(true);
   await change(el, "name", { value: "Dinner" });
-  el.refusal = { code: "catalogue.not_found", params: { catalogueId: "lunch" } };
+  el.refusal = { code: "menu.not_found", params: { menuId: "lunch" } };
   await el.updateComplete;
   expect(field(el, "menuId").error).toBe("Choose active menus.");
   expect(field(el, "staffMenuIds").error).toBe("");
   await change(el, "colour", { value: "green" });
   expect(field(el, "menuId").error).toBe("Choose active menus.");
-  el.refusal = { code: "catalogue.not_found", params: { catalogueId: "other" } };
+  el.refusal = { code: "menu.not_found", params: { menuId: "other" } };
   await el.updateComplete;
   expect(field(el, "menuId").error).toBe("");
   expect(

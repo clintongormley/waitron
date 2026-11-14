@@ -17,9 +17,9 @@ it("lets a manager open the rendered page and change its language", async () => 
   const finished = deferred<void>();
   const api = new DashboardApi("", async (input, init) => {
     const url = new URL(String(input), location.origin);
-    if (url.pathname === "/management-api/catalogues/waiting/guest-preview") return earlier.promise;
+    if (url.pathname === "/management-api/menus/waiting/guest-preview") return earlier.promise;
     if (
-      url.pathname !== "/management-api/catalogues/menu/guest-preview" ||
+      url.pathname !== "/management-api/menus/menu/guest-preview" ||
       init?.method !== "GET" ||
       new Headers(init?.headers).has("x-waitron-live")
     )

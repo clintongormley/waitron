@@ -8,7 +8,7 @@ import { archiveProducts } from "./archive.js";
 import { isTopLevelProduct } from "./variant-fallback.js";
 import "./errors.js";
 
-export interface CatalogueSelection {
+export interface ProductSelection {
   productIds: string[];
   categoryIds: string[];
 }
@@ -100,16 +100,16 @@ async function requireTopLevelProducts(tx: Transaction, ids: readonly string[]):
   if (missing !== undefined) throw new AppError("product.not_found", { productId: missing });
 }
 
-async function readTree(tx: Transaction, selection: CatalogueSelection): Promise<FolderTree> {
+async function readTree(tx: Transaction, selection: ProductSelection): Promise<FolderTree> {
   await requireTopLevelProducts(tx, selection.productIds);
   const tree = new FolderTree(await listCategories(tx));
   for (const id of selection.categoryIds) tree.require(id);
   return tree;
 }
 
-export async function moveCatalogueItems(
+export async function moveProductItems(
   tx: Transaction,
-  selection: CatalogueSelection,
+  selection: ProductSelection,
   to: string | null,
 ): Promise<void> {
   const tree = await readTree(tx, selection);
@@ -133,9 +133,9 @@ export async function moveCatalogueItems(
       .onConflictDoUpdate({ target: categoryDetails.categoryId, set: { parentId: to } });
 }
 
-export async function deleteCatalogueItems(
+export async function deleteProductItems(
   tx: Transaction,
-  selection: CatalogueSelection,
+  selection: ProductSelection,
   contents: FolderContents,
   shown?: readonly ShownFolderCounts[],
 ): Promise<void> {
@@ -219,7 +219,7 @@ async function assertContentsAsShown(
 
 /** Deletes one category, moving its products and the categories under it up to its parent. */
 export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
-  await deleteCatalogueItems(tx, { productIds: [], categoryIds: [id] }, "move_up");
+  await deleteProductItems(tx, { productIds: [], categoryIds: [id] }, "move_up");
 }
 
 /**

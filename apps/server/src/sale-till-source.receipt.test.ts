@@ -11,8 +11,8 @@ import { sales, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   addProductToMenu,
   createProduct,
@@ -134,17 +134,17 @@ async function setupVenue(): Promise<{
     receipt: { operationDescription: "Venta en establecimiento" },
   });
   const { product, operatorId } = await withTransaction(suite.db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
     const created = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const menuItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: created.id,

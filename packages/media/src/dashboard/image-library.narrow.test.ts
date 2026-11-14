@@ -244,18 +244,18 @@ for (const theme of ["light", "dark"] as const) {
 }
 
 const uses = [
-  { kind: "product", id: "toast", catalogueId: "menu", name: "Toast", active: true },
+  { kind: "product", id: "toast", menuId: "menu", name: "Toast", active: true },
   {
     kind: "product",
     id: "old",
-    catalogueId: "menu",
+    menuId: "menu",
     name: "Old country toast with seeds",
     active: false,
   },
   {
     kind: "variant",
     id: "large",
-    catalogueId: "menu",
+    menuId: "menu",
     name: "Large",
     active: true,
   },
@@ -340,7 +340,7 @@ for (const theme of ["light", "dark"] as const) {
 const unbroken = {
   kind: "product",
   id: "long",
-  catalogueId: "menu",
+  menuId: "menu",
   name: "Tostadadepanrusticoconsemillasyaceitedeoliva",
   active: true,
 };

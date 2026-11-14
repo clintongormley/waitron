@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   extraLists,
   menuDetails,
   optionLabels,
@@ -17,7 +17,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { contentLanguageChoices, type ContentLanguages } from "@waitron/shared";
-import { createCatalogue, createProduct } from "./operations.js";
+import { createMenu, createProduct } from "./operations.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
 import {
   listTranslationGapReport,
@@ -34,8 +34,8 @@ const context = { fallbackLanguage: "es", required: ["es"] };
 
 async function fixture(tx: Transaction, names: Record<string, string> | null) {
   await writeContentLanguages(tx, config);
-  const menu = await createCatalogue(tx, { name: "STAFF Menu", names: names ?? {} });
-  const child = await createCatalogue(tx, {
+  const menu = await createMenu(tx, { name: "STAFF Menu", names: names ?? {} });
+  const child = await createMenu(tx, {
     name: "STAFF Included",
     names: { es: "CLIENT Hijo", en: "CLIENT Child" },
   });
@@ -43,7 +43,7 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
   const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
   const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
   const product = await createProduct(tx, {
-    catalogueId: menu.id,
+    menuId: menu.id,
     categoryId: null,
     name: "STAFF Product",
     customerName: null,
@@ -56,7 +56,7 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
   const [variant] = await tx
     .insert(products)
     .values({
-      catalogueId: menu.id,
+      menuId: menu.id,
       parentId: product.id,
       name: "STAFF Variant",
       customerName: names,
@@ -169,7 +169,7 @@ describe("complete translation gap predicates", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, config);
-      const menu = await createCatalogue(tx, {
+      const menu = await createMenu(tx, {
         name: "STAFF Menu",
         names: { es: "CLIENT Carta", en: "CLIENT Menu" },
       });
@@ -204,7 +204,7 @@ describe("complete translation gap predicates", () => {
         .insert(products)
         .values(
           [...blankValues, "\u0085", "\u200b", " CLIENT "].map((text, i) => ({
-            catalogueId: menu.id,
+            menuId: menu.id,
             name: `STAFF ${i}`,
             customerName: { es: text, en: "CLIENT Present" },
             kitchenName: `KITCHEN ${i}`,
@@ -319,7 +319,7 @@ describe("complete translation gap predicates", () => {
       await tx.update(optionLists).set({ active: false }).where(eq(optionLists.id, f.list.id));
       await tx.update(extraLists).set({ active: false }).where(eq(extraLists.id, f.extra.id));
       await tx.update(sections).set({ role: "home_layout" }).where(eq(sections.id, f.section.id));
-      await tx.update(catalogues).set({ active: false }).where(eq(catalogues.id, f.menu.id));
+      await tx.update(menus).set({ active: false }).where(eq(menus.id, f.menu.id));
       expect(await listTranslationGapCounts(tx, config)).toEqual([
         { language: "es", count: 1 },
         { language: "en", count: 1 },

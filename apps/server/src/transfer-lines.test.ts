@@ -14,8 +14,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   createProduct,
@@ -85,10 +85,10 @@ async function setupVenue(): Promise<Seeded> {
     simplifiedInvoiceLimit: null,
   };
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Carta" });
+    const cat = await createMenu(tx, { name: "Carta" });
     const drinks = await createCategory(tx, { name: "Bebidas" });
     const coffee = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
@@ -96,7 +96,7 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "general",
     });
     const water = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
@@ -104,7 +104,7 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "general",
     });
     const ham = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Jamón",
       pricingUnit: "weight",
@@ -112,14 +112,14 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "reduced",
     });
     const bacon = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Bacon",
       pricingUnit: "each",
       unitPrice: "0.50",
       vatClass: "reduced",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const a = await createTable(tx, cfg, { label: "A", zoneId: offers.zoneId });
     return {

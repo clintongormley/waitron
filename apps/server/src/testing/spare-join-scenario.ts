@@ -9,12 +9,7 @@ import { Socket } from "node:net";
 import { join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { expect } from "vitest";
-import {
-  assignCatalogueToVenue,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import {
   invoiceSeries,
   nodes,
@@ -377,10 +372,10 @@ async function seedCounterTill(venueDir: string, box: { nodeId: string }): Promi
       simplifiedInvoiceLimit: null,
     } as unknown as TradingContext;
     const seeded = await withTransaction(db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Counter menu" });
+      const menu = await createMenu(tx, { name: "Counter menu" });
       const category = await createCategory(tx, { name: "Drinks" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: "Coffee",
         customerName: { [LOCALE_M]: "Flat white" },
@@ -389,7 +384,7 @@ async function seedCounterTill(venueDir: string, box: { nodeId: string }): Promi
         unitPrice: "3.00",
         vatClass: "general",
       });
-      await assignCatalogueToVenue(tx, catalogue.id);
+      await assignMenuToVenue(tx, menu.id);
       const offers = await offerProducts(tx, cfg, { zone: "counter" });
       const [person] = await seedPersons(tx, {
         displayName: "Sam",

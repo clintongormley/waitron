@@ -4,7 +4,7 @@ import { sql, and, isNotNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { createCatalogue } from "@waitron/menu";
+import { createMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   dayCutoverChanges,
@@ -53,7 +53,7 @@ async function fixture() {
       .values({ ...cfg, name: `Dining${suffix}`, departmentId })
       .returning();
     await configureZone(tx, { zoneId: zone!.id, departmentId });
-    const menu = await createCatalogue(tx, { name: `Menu${suffix}` });
+    const menu = await createMenu(tx, { name: `Menu${suffix}` });
     const lunch = (
       await saveMenuPeriod(tx, departmentId, {
         name: "Lunch",

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
+import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   departmentDayRanges,
@@ -77,7 +77,7 @@ async function venue(options: { oneSeason?: boolean } = {}) {
     for (const zone of zones) await configureZone(tx, { zoneId: zone.id, departmentId });
     const menus: Record<string, string> = {};
     const period = async (name: string) => {
-      const menuId = (await createCatalogue(tx, { name: `${name}` })).id;
+      const menuId = (await createMenu(tx, { name: `${name}` })).id;
       menus[name] = menuId;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");

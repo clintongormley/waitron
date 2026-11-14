@@ -10,7 +10,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   contentSuggestionJobs,
   contentSuggestions,
-  createCatalogue,
+  createMenu,
   createProduct,
   readActiveSuggestionJob,
   startSuggestionRun,
@@ -22,7 +22,7 @@ import {
 import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { translationCloudFixture } from "../test/translation-cloud-fixture.js";
-import { mountCatalogueApi } from "./menu-api.js";
+import { mountMenuApi } from "./menu-api.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import {
   mountContentSuggestionsApi,
@@ -109,12 +109,12 @@ async function read(http: Hono): Promise<ContentSuggestionRead> {
 /** One complete menu and one product missing English; returns the product's id. */
 async function bread(): Promise<string> {
   return inTx(async (tx) => {
-    const menu = await createCatalogue(tx, {
+    const menu = await createMenu(tx, {
       name: "STAFF Lunch",
       names: { es: "CLIENT-es Almuerzo", en: "CLIENT-en Lunch" },
     });
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       unitId: null,
       name: "STAFF Bread",
@@ -176,7 +176,7 @@ it.each([
   ["GET", LIST, undefined],
   ["DELETE", `${LIST}/00000000-0000-4000-8000-000000000000`, undefined],
 ] as const)(
-  "%s %s refuses no session with 401 and a person without catalogue.manage with 403",
+  "%s %s refuses no session with 401 and a person without menu.manage with 403",
   async (method, url, body) => {
     await bread();
     const http = mount();
@@ -399,7 +399,7 @@ it("saving the name through the translations route removes its suggestion", asyn
     expected: "{}",
   });
   const http = mount();
-  mountCatalogueApi(
+  mountMenuApi(
     http,
     { db: suite.db, venueLocale: "es-ES", contentLanguageRules: { required: [], official: [] } },
     () => {},

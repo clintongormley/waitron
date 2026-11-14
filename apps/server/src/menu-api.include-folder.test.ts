@@ -10,7 +10,7 @@ import { mediaImages } from "@waitron/media";
 
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
-import { mountCatalogueApi } from "./menu-api.js";
+import { mountMenuApi } from "./menu-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
@@ -58,7 +58,7 @@ const noopLog: Logger = () => {};
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountCatalogueApi(
+  mountMenuApi(
     app,
     {
       db: suite.db,
@@ -98,7 +98,7 @@ async function structureOf(
   app: Hono,
   menuId: string,
 ): Promise<{ rootSectionId: string; nodes: MenuStructureNode[] }> {
-  return json(await send(app, "GET", `/management-api/catalogues/${menuId}/structure`), 200);
+  return json(await send(app, "GET", `/management-api/menus/${menuId}/structure`), 200);
 }
 
 interface Fixture {
@@ -117,9 +117,9 @@ interface Fixture {
  */
 async function lunchIncludingDrinks(app: Hono): Promise<Fixture> {
   const tag = crypto.randomUUID();
-  const lunchId = (await created(app, "/management-api/catalogues", { name: `Lunch ${tag}` })).id;
+  const lunchId = (await created(app, "/management-api/menus", { name: `Lunch ${tag}` })).id;
   const drinksId = (
-    await created(app, "/management-api/catalogues", {
+    await created(app, "/management-api/menus", {
       name: `Drinks staff ${tag}`,
       names: { es: "Bebidas de la carta", en: "Drinks list" },
     })
@@ -131,8 +131,7 @@ async function lunchIncludingDrinks(app: Hono): Promise<Fixture> {
     .id;
   const productId = (
     await created(app, "/management-api/products", {
-      catalogueId: (await created(app, "/management-api/catalogues", { name: `Kitchen ${tag}` }))
-        .id,
+      menuId: (await created(app, "/management-api/menus", { name: `Kitchen ${tag}` })).id,
       categoryId: null,
       name: `Soup ${tag}`,
       pricingUnit: "each",
@@ -308,7 +307,7 @@ describe("PUT /management-api/sections/:id/members/:memberId/folder", () => {
     });
     expect(await json(set, 200)).toEqual({ showAsFolder: true, overrides: { image: PHOTO } });
     const preview = await json<MenuPreview>(
-      await send(app, "GET", `/management-api/catalogues/${f.lunchId}/preview`),
+      await send(app, "GET", `/management-api/menus/${f.lunchId}/preview`),
       200,
     );
     const include = preview.document.root.members.find(

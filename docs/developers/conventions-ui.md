@@ -84,7 +84,7 @@ never disables the action by itself (owner, 2026-09-29: "Fields with errors shou
 "if there is a form validation error leave it disabled; if the error comes from a request leave it
 enabled"); when handling a refusal empties or reveals a required field, that field's own check holds
 the action until the field is filled. Cost: before C54, many forms outside the till — the login and
-profile screens and the catalogue editors among them — disabled their action after a server refusal
+profile screens and the menu editors among them — disabled their action after a server refusal
 naming a field, until that field changed. Every input has a semantic
 `name` (plus the standard `autocomplete` purpose when one exists), never a generated widget id as
 its identity. A customer's details typed on a shared till or office machine take `autocomplete="off"`
@@ -858,9 +858,9 @@ stream, so a misspelled name affects other screens too. The guard catches unknow
 SQL dependencies or disabled-module combinations. Cost: the live-updates run-it review found this
 unguarded coupling.
 
-The dependency list belongs in `live-queries.ts`. The guard reads that catalogue and does not
+The dependency list belongs in `live-queries.ts`. The guard reads that menu and does not
 inspect an inline list in a client method. A585-7's review renamed such an inline dependency to an
-unknown name and the guard passed; moving the names into the catalogue made it refuse them.
+unknown name and the guard passed; moving the names into the menu made it refuse them.
 The fix also registered the labour module's own change source. Its real subscription probe changed
 from HTTP 400 to 200, with a shifts-only 200 control. The warning read follows the rota's live
 observation once; a second independent observation had fetched the warnings twice per notice.
@@ -1646,7 +1646,7 @@ those apart through the read-back. Built in #367; the QR size rule and the calib
 
 ## Resolve live content and receipt snapshots separately
 
-Live catalogue text uses enabled content languages and their configured default. Stored order and
+Live menu text uses enabled content languages and their configured default. Stored order and
 sale descriptions contain receipt-language keys, so that filter can hide every recorded name when
 receipt and content languages differ. Snapshot displays may fall back to a stored nonblank value;
 they never rewrite the record. Regression: `packages/shared/src/content-languages.test.ts`,
@@ -1735,7 +1735,7 @@ Search/category filters do not author a write and stay exempt. Section additions
 closing and refreshing; each accepted placement is removed from its pending destinations, so a
 partial refusal retains only the failed choices. Keep the placement dialog's own close event
 available to its screen's focus return; nested close events cannot dismiss that owner. Cases:
-`apps/dashboard/src/widgets/menu-selections.unsaved.test.ts` and the existing Catalogue/Menu
+`apps/dashboard/src/widgets/menu-selections.unsaved.test.ts` and the existing Menu/Menu
 screen suites. Other audited owners remain pending.
 
 
@@ -1840,7 +1840,7 @@ fallback. Unknown positions start a new epoch before old indices can imply a tra
 `forceReset()` retires draft handles. A sensitive form retained across that boundary must rebuild
 or register a new scope before accepting fresh input. Regression
 receipts are in the dated W69 audit; `navigation-guard.test.ts`, `url-state.unsaved.test.ts`, the
-catalogue/login shell cases and the venue-operations Hours case exercise these behaviors.
+menu/login shell cases and the venue-operations Hours case exercise these behaviors.
 
 
 ### Preserve the selection when normalising a typed decimal
@@ -1881,7 +1881,7 @@ failed against main `c7624e1b4396fe6123cdbe26487b3b06134e6bc0` on Chromium's
 The 2026-10-08 instrumented phone-price experiment observed a currency callback increase its
 field from 141.4375 to 150.109375 px and a subsequent scroll-area notification reduce its height
 by 17 px in that delivery. It does not establish that either size was painted or that a permanent
-loop existed. The earlier eight-suite catalogue/Preview/prices/navigation run passed 630 cases
+loop existed. The earlier eight-suite menu/Preview/prices/navigation run passed 630 cases
 without that warning; its EN/ES light/dark screenshots were inspected at measured 390/1280 px.
 These results covered those fixtures, not every resize observer.
 
@@ -2034,7 +2034,7 @@ order is on screen once it has opened (`#menuPoll`'s `zones`), whether either mo
 table in it opens. The poll starts at
 sign-in (`#enterSignedIn`, `apps/till/src/till-app.ts`).
 
-**Each zone's menu.** The till keeps the menu of every zone it has read (`#zoneCatalogues`). A table
+**Each zone's menu.** The till keeps the menu of every zone it has read (`#zoneOffers`). A table
 in a zone already held shows that menu at once and sends one `/api/menu-state` check for the zone
 (`#openTable`). The answer goes to `#onMenuState`, which reads the whole menu again only when the
 published versions, the service state or `liveFields` moved; `unavailable` (sold-out dishes and

@@ -620,7 +620,7 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
 });
 
 // `grossLockedLines` prices from the STORED gross unit exactly as `priceBasket` prices from the
-// live catalogue.
+// live menu.
 describe("rateLines over grossLockedLines — a locked line rates as a walk-up does", () => {
   it("prices locked lines to the difference-method VAT breakdown (base 4.55 / tax 0.95), like a walk-up", () => {
     // coffee×1 (gross 1.50) + water×2 (gross unit 2.00, qty 2). Group base 4.55, gross 5.50, tax 0.95

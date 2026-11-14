@@ -28,6 +28,9 @@ export function madridWithRenamedColumns(
     const rename = (cell: string) => (Object.hasOwn(columns, cell) ? columns[cell]! : cell);
     for (const column of table.columns) column.name = rename(column.name);
     for (const foreignKey of table.foreignKeys) foreignKey.from = rename(foreignKey.from);
+    for (const source of Object.values(result.tables))
+      for (const foreignKey of source.foreignKeys)
+        if (foreignKey.table === name) foreignKey.to = rename(foreignKey.to);
     const rows: typeof table.rows = {};
     for (const [key, row] of Object.entries(table.rows)) {
       const renamed = Object.fromEntries(

@@ -7,7 +7,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   departments,
   kitchenStations,
   specialDayDates,
@@ -72,7 +72,7 @@ async function fixture(): Promise<Fixture> {
       .values([{ name: "Pass" }, { name: "Grill" }])
       .returning();
     const [calendarMenu] = await tx
-      .insert(catalogues)
+      .insert(menus)
       .values({ name: `Calendar ${randomUUID()}` })
       .returning();
     const calendarPeriod = await saveMenuPeriod(tx, restaurant!.id, {
@@ -201,7 +201,7 @@ describe("the calendar's Closed colour", () => {
   it("is Closed when no active department has a service range, whatever the stations do", async () => {
     const f = await fixture();
     const deliPeriod = await withTransaction(db, async (tx) => {
-      const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
+      const [menu] = await tx.insert(menus).values({ name: randomUUID() }).returning();
       const restaurantPeriod = await saveMenuPeriod(tx, f.departmentIds.restaurant, {
         name: "Lunch",
         menuId: menu!.id,
@@ -249,7 +249,7 @@ describe("the calendar's Closed colour", () => {
     const { terraceDepartment: terrace } = await addSubjects();
     expect(await toneAndClosed("2026-10-21")).toEqual(["special_day", true]);
     await withTransaction(db, async (tx) => {
-      const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
+      const [menu] = await tx.insert(menus).values({ name: randomUUID() }).returning();
       const period = await saveMenuPeriod(tx, terrace.id, {
         name: "Terrace",
         menuId: menu!.id,

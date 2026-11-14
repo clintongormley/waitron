@@ -18,12 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { createCategory } from "./categories.js";
-import {
-  createCatalogue,
-  createProduct,
-  deactivateCatalogue,
-  deactivateProduct,
-} from "./operations.js";
+import { createMenu, createProduct, deactivateMenu, deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import type { HouseStyleExample, SuggestionItem } from "./content-suggestion-types.js";
 import { startSuggestionRun } from "./content-suggestion-jobs.js";
@@ -71,7 +66,7 @@ async function inVenue<T>(body: (tx: Transaction, lunch: Lunch) => Promise<T>): 
   await seedTaxpayer(suite.db);
   return withTransaction(suite.db, async (tx) => {
     await writeContentLanguages(tx, THREE);
-    const menu = await createCatalogue(tx, { name: "STAFF Lunch", names: LUNCH_NAMES });
+    const menu = await createMenu(tx, { name: "STAFF Lunch", names: LUNCH_NAMES });
     return body(tx, { menuId: menu.id, rootId: await rootOf(tx, menu.id) });
   });
 }
@@ -90,7 +85,7 @@ async function product(
   categoryId: string | null = null,
 ): Promise<string> {
   const created = await createProduct(tx, {
-    catalogueId: lunch.menuId,
+    menuId: lunch.menuId,
     categoryId,
     unitId: null,
     name: `STAFF ${name}`,
@@ -113,7 +108,7 @@ async function variant(
   const [row] = await tx
     .insert(products)
     .values({
-      catalogueId: lunch.menuId,
+      menuId: lunch.menuId,
       parentId,
       name: `STAFF ${name}`,
       kitchenName: `KITCHEN ${name}`,
@@ -137,7 +132,7 @@ async function manyProducts(
     const rows = Array.from({ length: Math.min(100, count - start) }, (_, offset) => {
       const { name, customerName, categoryId = null } = make(start + offset);
       return {
-        catalogueId: lunch.menuId,
+        menuId: lunch.menuId,
         categoryId,
         name,
         kitchenName: `KITCHEN ${start + offset}`,
@@ -160,7 +155,7 @@ async function manyVariants(
 ): Promise<void> {
   for (let start = 0; start < count; start += 100) {
     const rows = Array.from({ length: Math.min(100, count - start) }, (_, offset) => ({
-      catalogueId: lunch.menuId,
+      menuId: lunch.menuId,
       parentId,
       kitchenName: `KITCHEN variant ${start + offset}`,
       ...make(start + offset),
@@ -315,7 +310,7 @@ describe("the house style", () => {
 
   it("leaves out a menu whose top-level list another menu owns, as the translations dialog does", async () => {
     await inVenue(async (tx, lunch) => {
-      const terrace = await createCatalogue(tx, {
+      const terrace = await createMenu(tx, {
         name: "STAFF Terrassa",
         names: { ca: "CLIENT-CA Terrassa" },
       });
@@ -363,12 +358,12 @@ describe("the house style", () => {
       const spice = await optionList(tx, "Picant", { ca: "CLIENT-CA Picant" });
       await optionLabel(tx, spice, "Molt", { ca: "CLIENT-CA Molt" });
       await tx.update(optionLists).set({ active: false }).where(eq(optionLists.id, spice));
-      const terrace = await createCatalogue(tx, {
+      const terrace = await createMenu(tx, {
         name: "STAFF Terrassa",
         names: { ca: "CLIENT-CA Terrassa" },
       });
       await section(tx, terrace.id, "Postres", { ca: "CLIENT-CA Postres" });
-      await deactivateCatalogue(tx, terrace.id);
+      await deactivateMenu(tx, terrace.id);
       await extraList(tx, "Salses", { ca: "CLIENT-CA Salses" });
       await tx.insert(units).values({
         staffName: "Staff unit",

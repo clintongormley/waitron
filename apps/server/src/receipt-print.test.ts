@@ -53,8 +53,8 @@ import {
   createDepartment,
 } from "@waitron/venue-service";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   listAvailableProducts,
@@ -203,7 +203,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 }
 
 /**
- * A fresh chained venue and a one-`each`-product catalogue (1.50 gross, general/21 %), offered in
+ * A fresh chained venue and a one-`each`-product menu (1.50 gross, general/21 %), offered in
  * the counter zone under `orderFlow`.
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
@@ -244,17 +244,17 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
 
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinksCategory = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinksCategory.id,
       name: "Mineral water",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     return {
       available: (await listAvailableProducts(tx)).products,
       offers: await offerProducts(tx, cfg, {

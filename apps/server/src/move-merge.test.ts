@@ -31,9 +31,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToVenue,
+  assignMenuToVenue,
   assignProductUnit,
-  createCatalogue,
+  createMenu,
   createCategory,
   createProduct,
   units,
@@ -179,10 +179,10 @@ async function setupVenue(): Promise<Seeded> {
     simplifiedInvoiceLimit: null,
   };
   const { coffeeId, waterId, baconId } = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Daily menu" });
+    const cat = await createMenu(tx, { name: "Daily menu" });
     const drinksCategory = await createCategory(tx, { name: "Drinks" });
     const coffee = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinksCategory.id,
       name: "Café",
       pricingUnit: "each",
@@ -190,7 +190,7 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "general",
     });
     const water = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinksCategory.id,
       name: "Agua",
       pricingUnit: "each",
@@ -198,14 +198,14 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "general",
     });
     const bacon = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinksCategory.id,
       name: "Bacon",
       pricingUnit: "each",
       unitPrice: "0.50",
       vatClass: "reduced",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     return { coffeeId: coffee.id, waterId: water.id, baconId: bacon.id };
   });
   offersByCfg.set(

@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { mountSetup } from "./setup-api.js";
 import type { WaitronModule } from "@waitron/module";
 import { sql } from "drizzle-orm";
-import { createCatalogue, createCategory, createProduct } from "@waitron/menu";
+import { createMenu, createCategory, createProduct } from "@waitron/menu";
 import { loadKeyRing } from "@waitron/credentials";
 import { kitchenStations, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -44,7 +44,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 31,
+  version: 32,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -177,6 +177,7 @@ describe("staged configuration import", () => {
     ["pre-job-role-move export", { version: 22 }],
     ["pre-today-choice-fold export", { version: 23 }],
     ["pre-menu-document export", { version: 30 }],
+    ["pre-menu-rename export", { version: 31 }],
     ["future version", { version: bundle.version + 1 }],
     ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
@@ -655,11 +656,11 @@ describe("routing cells in a staged import", () => {
         });
         const [station] = await tx.insert(kitchenStations).values({ name: "Bar" }).returning();
         const category = await createCategory(tx, { name: "Drinks" });
-        const menu = await createCatalogue(tx, {
+        const menu = await createMenu(tx, {
           name: `Configuration import menu`,
         });
         const product = await createProduct(tx, {
-          catalogueId: menu.id,
+          menuId: menu.id,
           categoryId: category.id,
           name: "Mojito",
           pricingUnit: "each",
@@ -668,7 +669,7 @@ describe("routing cells in a staged import", () => {
         });
         const [large] = await tx
           .insert(products)
-          .values({ catalogueId: menu.id, parentId: product.id, name: "Large", categoryId: null })
+          .values({ menuId: menu.id, parentId: product.id, name: "Large", categoryId: null })
           .returning();
         await setRoutingCell(
           tx,

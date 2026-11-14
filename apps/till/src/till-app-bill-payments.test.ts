@@ -4024,7 +4024,7 @@ describe("till-app: a partly paid order at the counter", () => {
       {
         id: "beer",
         menuItemId: "offer-beer",
-        catalogueId: "cat-default",
+        menuId: "cat-default",
         name: "Beer",
         pricingUnit: "each",
         unitPrice: "5.00",
@@ -4072,7 +4072,7 @@ describe("till-app: a partly paid order at the counter", () => {
       {
         id: "beer",
         menuItemId: "offer-beer",
-        catalogueId: "cat-default",
+        menuId: "cat-default",
         name: "Beer",
         pricingUnit: "each",
         unitPrice: "5.00",
@@ -4159,7 +4159,7 @@ describe("till-app: a partly paid order at the counter", () => {
             product: {
               id: "meal",
               menuItemId: "offer-meal",
-              catalogueId: "cat-default",
+              menuId: "cat-default",
               name: "Meal",
               pricingUnit: "each",
               unitPrice: "120.00",
@@ -4196,7 +4196,7 @@ describe("till-app: a partly paid order at the counter", () => {
     const draughtBeer = {
       id: "cana",
       menuItemId: "offer-cana",
-      catalogueId: "cat-default",
+      menuId: "cat-default",
       name: "Caña",
       pricingUnit: "each" as const,
       unitPrice: "2.50",
@@ -4647,8 +4647,8 @@ describe("till-app: a partly paid order at the counter", () => {
       vatClass: "general",
       category: null,
       allergens: null,
-      catalogueId: "cat-default",
-      catalogueName: "Carta",
+      menuId: "cat-default",
+      menuName: "Carta",
     };
 
     async function edited(overrides: Record<string, unknown>): Promise<TillApp> {

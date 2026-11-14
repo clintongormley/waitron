@@ -7,7 +7,7 @@ import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   activateDueMenuPublications,
   addMember,
-  createCatalogue,
+  createMenu,
   createProduct,
   menuDocumentHash,
   menuPublications,
@@ -43,10 +43,10 @@ it("changes presentation without rewriting product, variant, section, folder, re
       { image: original, names: { en: "Dish", es: "Plato" } },
       { fallbackLanguage: "en" },
     );
-    const menu = await createCatalogue(tx, { name: "Lunch" });
-    const included = await createCatalogue(tx, { name: "Drinks", image: image.filename });
+    const menu = await createMenu(tx, { name: "Lunch" });
+    const included = await createMenu(tx, { name: "Drinks", image: image.filename });
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Staff dish",
       pricingUnit: "each",
@@ -55,7 +55,7 @@ it("changes presentation without rewriting product, variant, section, folder, re
       image: image.filename,
     });
     await tx.insert(products).values({
-      catalogueId: menu.id,
+      menuId: menu.id,
       parentId: product.id,
       name: "Large",
       pricingUnit: "each",

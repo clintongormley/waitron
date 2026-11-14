@@ -72,12 +72,12 @@ function client(moveSectionMembersInto: () => Promise<unknown>) {
     }),
   };
   const api = {
-    listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+    listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
     listLibraryProducts: async () => [
       { id: "p-burger", name: "Burger", active: true, modifiers: [], variants: [] },
     ],
     listCategories: async () => [],
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     getMenuStatuses: async () => ({ menu: { state: "unpublished", clashes: 0 } }),
     getMenuPrices: async () => [],

@@ -18,7 +18,7 @@ function dish(key: string, name: string, menuId: string, extra: Partial<TillProd
     id: `p-${key}`,
     productId: `p-${key}`,
     menuItemId: `mi-${menuId}-${key}`,
-    catalogueId: menuId,
+    menuId: menuId,
     available: true,
     name,
     unitPrice: "2.00",

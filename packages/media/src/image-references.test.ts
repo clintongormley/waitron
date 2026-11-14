@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   products,
   withTransaction,
   type Database,
@@ -12,7 +12,7 @@ import {
   activateDueMenuPublications,
   addMember,
   cancelMenuPublication,
-  createCatalogue,
+  createMenu,
   createProduct,
   createSectionIn,
   menuVersionImages,
@@ -54,21 +54,21 @@ const PRESENT = `${"a".repeat(64)}.jpg`;
 const ABSENT = `${"b".repeat(64)}.jpg`;
 
 interface Fixture {
-  catalogueId: string;
+  menuId: string;
   productId: string;
   sectionId: string;
 }
 
-/** One image, one catalogue with a product, and one section. */
+/** One image, one menu with a product, and one section. */
 async function fixture(db: Database): Promise<Fixture> {
   await db.insert(mediaImages).values({ filename: PRESENT, names: { en: "Bread" } });
-  const [menu] = await db.insert(catalogues).values({ name: "Lunch" }).returning({
-    id: catalogues.id,
+  const [menu] = await db.insert(menus).values({ name: "Lunch" }).returning({
+    id: menus.id,
   });
   const [product] = await db
     .insert(products)
     .values({
-      catalogueId: menu!.id,
+      menuId: menu!.id,
       name: "Bread",
       pricingUnit: "each",
       unitPrice: 200,
@@ -80,7 +80,7 @@ async function fixture(db: Database): Promise<Fixture> {
     .values({ internalName: "Bakery", ownerMenuId: menu!.id })
     .returning({ id: sections.id });
   return {
-    catalogueId: menu!.id,
+    menuId: menu!.id,
     productId: product!.id,
     sectionId: section!.id,
   };
@@ -143,7 +143,7 @@ describe("a written image filename", () => {
   // `expect(...).rejects` refuses anything that is not one.
   const insertProduct = async (image: string | null): Promise<void> => {
     await suite.db.insert(products).values({
-      catalogueId: ids.catalogueId,
+      menuId: ids.menuId,
       name: "Roll",
       pricingUnit: "each",
       unitPrice: 100,
@@ -186,7 +186,7 @@ describe("a section's image", () => {
   const insert = async (image: string | null): Promise<void> => {
     await suite.db
       .insert(sections)
-      .values({ internalName: "Drinks", image, ownerMenuId: ids.catalogueId });
+      .values({ internalName: "Drinks", image, ownerMenuId: ids.menuId });
   };
   const update = async (image: string): Promise<void> => {
     await suite.db.execute(sql`update sections set image = ${image} where id = ${ids.sectionId}`);
@@ -229,7 +229,7 @@ describe("a section's image", () => {
   });
 });
 
-describe("an image a catalogue row still names", () => {
+describe("an image a menu row still names", () => {
   it("cannot be deleted or renamed while a product names it, and can once the product lets go", async () => {
     await suite.db.execute(sql`update products set image = ${PRESENT} where id = ${ids.productId}`);
     await expect(removeImages()).rejects.toMatchObject({
@@ -260,14 +260,14 @@ describe("an image a catalogue row still names", () => {
 describe("an image an include's folder names", () => {
   let memberId: string;
 
-  /** A second catalogue, "Drinks", whose root is included in Lunch's root. */
+  /** A second menu, "Drinks", whose root is included in Lunch's root. */
   beforeEach(async () => {
     const [lunchRoot] = await suite.db
       .insert(sections)
-      .values({ internalName: "Lunch", role: "menu_root", ownerMenuId: ids.catalogueId })
+      .values({ internalName: "Lunch", role: "menu_root", ownerMenuId: ids.menuId })
       .returning({ id: sections.id });
-    const [drinks] = await suite.db.insert(catalogues).values({ name: "Drinks" }).returning({
-      id: catalogues.id,
+    const [drinks] = await suite.db.insert(menus).values({ name: "Drinks" }).returning({
+      id: menus.id,
     });
     const [drinksRoot] = await suite.db
       .insert(sections)
@@ -309,7 +309,7 @@ describe("an image an include's folder names", () => {
     const insert = async (image: string | null): Promise<string> => {
       const [extra] = await suite.db
         .insert(sections)
-        .values({ internalName: "Extra", ownerMenuId: ids.catalogueId })
+        .values({ internalName: "Extra", ownerMenuId: ids.menuId })
         .returning({ id: sections.id });
       await suite.db.insert(sectionMembers).values({
         sectionId: ids.sectionId,
@@ -387,9 +387,9 @@ describe("an image an include's folder names", () => {
 async function publishedOnly(): Promise<{ menuId: string; productId: string }> {
   await seedTaxpayer(suite.db);
   return withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const menu = await createMenu(tx, { name: "Lunch Menu" });
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Toast",
       pricingUnit: "each",
@@ -465,7 +465,7 @@ describe("an image a live menu version names", () => {
     const [version] = await suite.db
       .insert(menuVersions)
       .values({
-        menuId: ids.catalogueId,
+        menuId: ids.menuId,
         number: 1,
         document: {} as never,
         contentHash: "hash",

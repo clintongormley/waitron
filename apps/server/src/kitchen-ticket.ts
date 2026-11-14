@@ -183,7 +183,7 @@ function itemLine(item: KitchenTicketItem, locale: string): string {
 /**
  * The note is operator-typed, so it can carry line breaks and other control bytes that would split it
  * across lines or reach the printer as commands. Each run of them becomes one space. Only the note is
- * sanitised; dish and modifier names are catalogue text.
+ * sanitised; dish and modifier names are menu text.
  */
 function sanitizeNote(note: string): string {
   // eslint-disable-next-line no-control-regex -- deliberately matching C0 controls + DEL to strip them

@@ -28,7 +28,7 @@ function dbWith(hashes: readonly string[], tableName = CORE.table) {
   return { venue: db, node: db } as never;
 }
 
-/** A database whose journal table does not exist: the catalogue reports it absent, and the journal
+/** A database whose journal table does not exist: the menu reports it absent, and the journal
  *  read is never reached — the never-migrated set. */
 const noJournal = { execute: () => Promise.resolve({ rows: [] }) };
 const dbWithoutJournal = { venue: noJournal, node: noJournal } as never;
@@ -102,7 +102,7 @@ describe("assertNotAhead", () => {
   // The stub answers every set with the same journal, so both sets are ahead.
   it("reports the first ahead set when several are ahead", async () => {
     const unknown = "f".repeat(64);
-    const sets = manifestSets().filter((set) => set.name === "core" || set.name === "catalogue");
+    const sets = manifestSets().filter((set) => set.name === "core" || set.name === "menu");
     await expect(assertNotAhead(dbWith([unknown]), sets, null)).rejects.toMatchObject({
       code: "provisioning.database_ahead",
       params: { set: "core" },

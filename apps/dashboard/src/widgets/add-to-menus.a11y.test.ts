@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { CatalogueSummary, MenuStructure } from "../api/client.js";
+import type { MenuSummary, MenuStructure } from "../api/client.js";
 import { AddToMenus, placementMenus } from "./add-to-menus.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 
 afterEach(cleanupWidgets);
 
-const menus: CatalogueSummary[] = [
+const menus: MenuSummary[] = [
   { id: "m-lunch", name: "Lunch Menu", active: true, version: 1 },
   { id: "m-dinner", name: "Dinner Menu", active: true, version: 1 },
 ];

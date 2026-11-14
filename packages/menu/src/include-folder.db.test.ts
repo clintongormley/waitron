@@ -8,7 +8,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, type MenusFixture } from "../test/menus-fixture.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { setIncludeFolder } from "./include-folder.js";
@@ -17,7 +17,7 @@ import { readMenuStructure } from "./menu-structure.js";
 import type { IncludeFolderInput } from "@waitron/shared";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 beforeEach(() => seedLibraryImages(fx.db, "drinks.jpg"));
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 

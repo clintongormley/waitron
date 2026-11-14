@@ -5,8 +5,8 @@ import { workingOrderLines, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   createProduct,
@@ -38,10 +38,10 @@ export function useSplitExtrasDb(database: Database): void {
 
 export interface Venue {
   cfg: DeviceRequestConfig;
-  catalogueId: string;
+  menuId: string;
 }
 
-/** A fresh venue, till, node and assigned catalogue, returning the till's config. */
+/** A fresh venue, till, node and assigned menu, returning the till's config. */
 export async function setupVenue(): Promise<Venue> {
   await seedLegacySellingUnits(db);
   await seedVenue(db, {
@@ -50,9 +50,9 @@ export async function setupVenue(): Promise<Venue> {
     operationDescription: "Venta en establecimiento",
   });
   const nodeId = await seedNode(db);
-  const catalogueId = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Split extras menu ${nodeId}` });
-    await assignCatalogueToVenue(tx, cat.id);
+  const menuId = await withTransaction(db, async (tx) => {
+    const cat = await createMenu(tx, { name: `Split extras menu ${nodeId}` });
+    await assignMenuToVenue(tx, cat.id);
     return cat.id;
   });
   const cfg = await deviceRequestCfg(db, {
@@ -61,12 +61,12 @@ export async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   } satisfies TradingContext);
-  return { cfg, catalogueId };
+  return { cfg, menuId };
 }
 
 /** A reusable table and counter venue for the split-extra send, release and edit suites. */
 export async function setupSplitExtrasVenue() {
-  const { cfg, catalogueId } = await setupVenue();
+  const { cfg, menuId } = await setupVenue();
   const built = await withTransaction(db, async (tx) => {
     await ensureOperator(tx, OPERATOR);
     const stations = {
@@ -149,7 +149,7 @@ export async function setupSplitExtrasVenue() {
     ) =>
       (
         await createProduct(tx, {
-          catalogueId,
+          menuId,
           categoryId,
           name,
           customerName: { [defaultLanguage]: customer },
@@ -211,7 +211,7 @@ export async function setupSplitExtrasVenue() {
     const party = { tableId, zoneId: tables.zoneId, partyId: seated.partyId, tabId: seated.tabId };
     return { stations, printers, folders, products, lists, tables, counter, party };
   });
-  return { cfg, catalogueId, ...built };
+  return { cfg, menuId, ...built };
 }
 
 export type ProductLine = {
@@ -294,7 +294,7 @@ type NamedExtraItem = ExtraItem & { customerName: string; kitchenName: string };
 export function addExtras(
   tx: Transaction,
   cfg: TradingContext,
-  catalogueId: string,
+  menuId: string,
   dishId: string,
   items: NamedExtraItem[],
 ): Promise<{ listId: string; productIds: string[] }>;
@@ -302,7 +302,7 @@ export function addExtras(
 export function addExtras(
   tx: Transaction,
   cfg: TradingContext,
-  catalogueId: string,
+  menuId: string,
   dishId: string,
   items: ExtraItem[],
   options: { staffNameOnly: true },
@@ -310,7 +310,7 @@ export function addExtras(
 export async function addExtras(
   tx: Transaction,
   cfg: TradingContext,
-  catalogueId: string,
+  menuId: string,
   dishId: string,
   items: ExtraItem[],
   options?: { staffNameOnly: true },
@@ -326,7 +326,7 @@ export async function addExtras(
     )
       throw new Error("addExtras: three distinct names required");
     const { id } = await createProduct(tx, {
-      catalogueId,
+      menuId,
       categoryId: item.categoryId ?? null,
       name: item.name,
       ...(item.customerName === undefined

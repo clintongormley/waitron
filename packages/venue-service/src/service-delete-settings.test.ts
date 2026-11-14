@@ -3,7 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   departmentDayRanges,
   departmentDays,
   departmentReceipts,
@@ -290,7 +290,7 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
     await tx
       .delete(deviceProfileServiceAccess)
       .where(inArray(deviceProfileServiceAccess.deviceProfileId, [f.explicit, f.every]));
-    const [menu] = await tx.insert(catalogues).values({ name: "Published menu" }).returning();
+    const [menu] = await tx.insert(menus).values({ name: "Published menu" }).returning();
     const periods = await tx
       .insert(menuPeriods)
       .values([
@@ -351,7 +351,7 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       desks: departmentTransferDesks,
       routes: departmentTransferDestinations,
       receipts: departmentReceipts,
-      menus: catalogues,
+      menus: menus,
     };
     const before: Record<string, Record<string, unknown>[]> = {};
     for (const [key, table] of Object.entries(tables)) before[key] = await tx.select().from(table);
@@ -433,7 +433,7 @@ it("delete takes the department's season days and their ranges before its period
     await tx
       .delete(deviceProfileServiceAccess)
       .where(inArray(deviceProfileServiceAccess.deviceProfileId, [f.explicit, f.every]));
-    const [menu] = await tx.insert(catalogues).values({ name: "Published menu" }).returning();
+    const [menu] = await tx.insert(menus).values({ name: "Published menu" }).returning();
     const [lunch, other] = await tx
       .insert(menuPeriods)
       .values([
@@ -510,7 +510,7 @@ it("delete takes the department's season days and their ranges before its period
 
 async function paintSeasons(tx: Transaction) {
   const f = await fixture(tx);
-  const [menu] = await tx.insert(catalogues).values({ name: "Published menu" }).returning();
+  const [menu] = await tx.insert(menus).values({ name: "Published menu" }).returning();
   const [lunch] = await tx
     .insert(menuPeriods)
     .values({ departmentId: f.department, name: "Lunch", menuId: menu!.id })

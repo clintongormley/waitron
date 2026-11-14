@@ -372,7 +372,7 @@ it.each(["mirror", "primary"] as const)(
       expect(observed.orders?.tradingContext).toBe(observed.cfg);
       expect(observed.customers?.tradingContext).toBe(observed.cfg);
       if (mode === "mirror") {
-        const write = await fetch(`${base}/management-api/catalogues`, {
+        const write = await fetch(`${base}/management-api/menus`, {
           method: "POST",
           headers,
           body: "{}",

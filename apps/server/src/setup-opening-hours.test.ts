@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
-import { CORE_MIGRATIONS, catalogues, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, menus, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -22,12 +22,12 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 
 async function seed(withMenu = true, receiptLocale = "en-GB") {
   const db = suite.db;
-  const [menu] = await db.insert(catalogues).values({ name: "First menu" }).returning();
+  const [menu] = await db.insert(menus).values({ name: "First menu" }).returning();
   await seedVenue(db, {
     name: "First venue",
     invoiceLocales: [receiptLocale],
     operationDescription: "Hospitality",
-    defaultCatalogueId: withMenu ? menu!.id : null,
+    defaultMenuId: withMenu ? menu!.id : null,
   });
   const cfg = {
     nodeId: await seedNode(db),
@@ -62,7 +62,7 @@ describe("setup's saved first opening hours", () => {
     expect(await readSetupOpeningHours(suite.db)).toEqual({ departmentId: department.id });
   });
 
-  it("has no weekday summary when provisioning has no catalogue", async () => {
+  it("has no weekday summary when provisioning has no menu", async () => {
     await seed(false);
     expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });

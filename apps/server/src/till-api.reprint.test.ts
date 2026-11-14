@@ -15,7 +15,7 @@ import {
 } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createProduct } from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -67,16 +67,16 @@ const suite = useVenueDb({
 
     // One sellable product no routing cell covers, routed to the default station.
     await withTransaction(db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Menu" });
+      const menu = await createMenu(tx, { name: "Menu" });
       const coffee = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: COFFEE,
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToVenue(tx, catalogue.id);
+      await assignMenuToVenue(tx, menu.id);
       coffeeOffer = (await offerProducts(tx, cfg)).offerFor(coffee.id);
     });
   },

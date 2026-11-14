@@ -65,7 +65,7 @@ import {
 } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { ADJUSTMENTS_TABLES } from "@waitron/adjustments";
-import { CATALOGUE_TABLES } from "@waitron/menu";
+import { MENU_TABLES } from "@waitron/menu";
 import { CREDENTIALS_TABLES } from "@waitron/credentials";
 import { HANDOVER_TABLES } from "@waitron/handover";
 import { IDENTITY_TABLES } from "@waitron/identity";
@@ -85,7 +85,7 @@ it("declares merged permissions once and retains their default holders", () => {
     ["venue.configure", [false, false, true, true]],
     ["schedule.manage", [false, false, true, true]],
     ["system.manage", [false, false, true, true]],
-    ["catalogue.manage", [false, false, true, true]],
+    ["menu.manage", [false, false, true, true]],
   ] as const) {
     expect(roles.map((role) => roleHasPermission(role, permission))).toEqual(holders);
   }
@@ -174,7 +174,7 @@ describe("the eight sets", () => {
     // A hosted module names its tables in a plain list; the host's own share is what its own backup
     // check covers, which the verifier requires to match the set's classification once combined.
     const hostedTables: Record<string, readonly string[]> = {
-      catalogue: CATALOGUE_TABLES,
+      menu: MENU_TABLES,
       "venue-service": VENUE_SERVICE_TABLES,
       media: MEDIA_TABLES,
       adjustments: ADJUSTMENTS_TABLES,

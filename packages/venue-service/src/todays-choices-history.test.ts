@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { seedDevice, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCatalogue } from "@waitron/menu";
+import { createMenu } from "@waitron/menu";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { keepZoneOpen } from "./keep-open.js";
@@ -29,7 +29,7 @@ async function fixture() {
     const { deviceId } = await seedDevice(tx);
     const actor = { personId: "staff", deviceId, authorizedBy: "manager" };
     const zone = await seedZone(tx, { name: "Terrace" });
-    const menu = await createCatalogue(tx, { name: "Dinner" });
+    const menu = await createMenu(tx, { name: "Dinner" });
     const period = await saveMenuPeriod(tx, zone.departmentId, {
       name: "Dinner",
       menuId: menu.id,

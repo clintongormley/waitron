@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
-import type { CatalogueSummary, DashboardApi, ExtraListRow, OptionListRow } from "../api/client.js";
+import type { MenuSummary, DashboardApi, ExtraListRow, OptionListRow } from "../api/client.js";
 
 afterEach(cleanupWidgets);
 
-const catalogues: CatalogueSummary[] = [{ id: "cat-1", name: "Main", active: true, version: 1 }];
+const menus: MenuSummary[] = [{ id: "cat-1", name: "Main", active: true, version: 1 }];
 
 /** The three names read differently, so a surface showing the wrong one is visible (CLAUDE.md §3). */
 const optionList: OptionListRow = {
@@ -46,7 +46,7 @@ function api(state: "empty" | "populated" | "failed"): DashboardApi {
       : vi.fn().mockResolvedValue(state === "empty" ? [] : value);
   return {
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
-    listCatalogues: vi.fn().mockResolvedValue(catalogues),
+    listMenus: vi.fn().mockResolvedValue(menus),
     listProducts: vi.fn().mockResolvedValue([]),
     listExtraLists: lists([extraList]),
     listOptionLists: lists([optionList]),

@@ -1715,10 +1715,10 @@ function readNotice() {
 }
 
 describe("contentSuggestionsAlertSource", () => {
-  it("belongs to the content area and needs catalogue.manage", () => {
+  it("belongs to the content area and needs menu.manage", () => {
     const source = contentSuggestionsAlertSource();
     expect(source.area).toBe("content");
-    expect(source.permission).toBe("catalogue.manage");
+    expect(source.permission).toBe("menu.manage");
     expect(source.readOutsideTransaction).toBeUndefined();
   });
 

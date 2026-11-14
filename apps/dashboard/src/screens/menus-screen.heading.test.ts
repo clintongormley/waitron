@@ -9,7 +9,7 @@ import {
 } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type {
-  CatalogueSummary,
+  MenuSummary,
   DashboardApi,
   MenuPreview,
   MenuStatus,
@@ -69,7 +69,7 @@ const CHANGED: MenuStatus = {
 
 function api(
   status: () => Promise<MenuStatus> = async () => CHANGED,
-  menus: CatalogueSummary[] = [
+  menus: MenuSummary[] = [
     { id: "menu-lunch", name: "Lunch Menu", active: true, version: 1 },
     { id: "menu-dinner", name: "Dinner Menu", active: true, version: 1 },
   ],
@@ -84,10 +84,10 @@ function api(
     document: menuDocument([], {}),
   };
   return {
-    listCatalogues: vi.fn().mockResolvedValue(menus),
+    listMenus: vi.fn().mockResolvedValue(menus),
     listLibraryProducts: vi.fn().mockResolvedValue([burger]),
     listCategories: vi.fn().mockResolvedValue([]),
-    getCatalogueSettings: vi
+    getMenuSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),

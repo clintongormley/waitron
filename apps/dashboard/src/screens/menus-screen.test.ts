@@ -23,7 +23,7 @@ import {
 import { MenusScreen } from "./menus-screen.js";
 import { DashboardApi } from "../api/client.js";
 import type {
-  CatalogueSummary,
+  MenuSummary,
   CategorySummary,
   IncludeFolder,
   IncludeFolderInput,
@@ -100,7 +100,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
   return {
     id,
     modifiers: [],
-    catalogueId: "cat-1",
+    menuId: "cat-1",
     categoryId: null,
     primaryCategoryId: null,
     name,
@@ -148,7 +148,7 @@ const categories: CategorySummary[] = [
   { id: "c-mains", name: "Mains", parentId: null, color: null },
 ];
 
-const menus: CatalogueSummary[] = [
+const menus: MenuSummary[] = [
   { id: "menu-lunch", name: "Lunch Menu", active: true, version: 1 },
   { id: "menu-dinner", name: "Dinner Menu", active: true, version: 1 },
 ];
@@ -355,8 +355,8 @@ function variantProducts(): Product[] {
 }
 
 const WRITES = [
-  "createCatalogue",
-  "duplicateCatalogue",
+  "createMenu",
+  "duplicateMenu",
   "updateMenuDetails",
   "createSectionIn",
   "updateSection",
@@ -510,10 +510,10 @@ function api(
 ) {
   let root = nodes;
   const client = {
-    listCatalogues: vi.fn().mockResolvedValue(menus),
+    listMenus: vi.fn().mockResolvedValue(menus),
     listLibraryProducts: vi.fn().mockResolvedValue(products),
     listCategories: vi.fn().mockResolvedValue(categories),
-    getCatalogueSettings: vi
+    getMenuSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
@@ -552,13 +552,13 @@ function api(
             nodes: [],
           },
     ),
-    createCatalogue: vi.fn(async (name: string) => ({
+    createMenu: vi.fn(async (name: string) => ({
       id: "menu-new",
       name,
       active: true,
       version: 1,
     })),
-    duplicateCatalogue: vi.fn(async (_id: string, name: string) => ({
+    duplicateMenu: vi.fn(async (_id: string, name: string) => ({
       id: "menu-copy",
       name,
       active: true,
@@ -1014,7 +1014,7 @@ it("lists the menus by name, and reverses that order when the name heading is pr
   // it came in, or sorted by id, fails.
   const el = await mount(
     api({
-      listCatalogues: vi.fn().mockResolvedValue([
+      listMenus: vi.fn().mockResolvedValue([
         { id: "menu-a", name: "Terrace Menu", active: true, version: 1 },
         { id: "menu-b", name: "Brunch Menu", active: true, version: 1 },
       ]),
@@ -1093,7 +1093,7 @@ it("replaces an address naming an unknown menu or tab rather than adding a histo
 });
 
 it("puts Add menu under the empty menu table's sentence, opening the same form", async () => {
-  const el = await mount(api({ listCatalogues: vi.fn().mockResolvedValue([]) }));
+  const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([]) }));
   const button = table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
   expect(button.assignedSlot).not.toBeNull();
   expect(button.textContent!.trim()).toBe(t("menus.add"));
@@ -1121,7 +1121,7 @@ async function afterDialogCloses(el: MenusScreen): Promise<void> {
 
 it("returns focus to the top Add menu after the first menu is made from the empty table", async () => {
   const el = await mount(
-    api({ listCatalogues: vi.fn().mockResolvedValueOnce([]).mockResolvedValue(menus) }),
+    api({ listMenus: vi.fn().mockResolvedValueOnce([]).mockResolvedValue(menus) }),
   );
   const button = await openFromEmptyTable(el);
   type(inModal(el, "menu-form", 'wt-input[name="name"]'), "Brunch");
@@ -1134,7 +1134,7 @@ it("returns focus to the top Add menu after the first menu is made from the empt
 });
 
 it("returns focus to the empty table's Add menu after Cancel", async () => {
-  const el = await mount(api({ listCatalogues: vi.fn().mockResolvedValue([]) }));
+  const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([]) }));
   const button = await openFromEmptyTable(el);
   inModal(el, "menu-form", '[data-test="cancel"]').click();
   await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
@@ -1216,14 +1216,14 @@ describe("the menus list's heading row", () => {
   });
 
   it("still offers Add menu under the empty table's sentence, and in the heading's row", async () => {
-    const el = await mount(api({ listCatalogues: vi.fn().mockResolvedValue([]) }));
+    const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([]) }));
     expect(table(el).querySelector(":scope > [slot=empty-action]")).not.toBeNull();
     expect(headerAdd(el)).not.toBeNull();
   });
 
   it("returns focus to the heading's Add menu after a menu is made from it, and after Cancel", async () => {
     const el = await mount(
-      api({ listCatalogues: vi.fn().mockResolvedValueOnce(menus).mockResolvedValue(menus) }),
+      api({ listMenus: vi.fn().mockResolvedValueOnce(menus).mockResolvedValue(menus) }),
     );
     headerAdd(el).focus();
     headerAdd(el).click();
@@ -1487,7 +1487,7 @@ describe("the menus list's columns", () => {
 
 describe("the menus list's Changes column", () => {
   const PREVIEW = (id: string) => `/manage/menus/menu/${id}/view/preview`;
-  const BRUNCH: CatalogueSummary = {
+  const BRUNCH: MenuSummary = {
     id: "menu-brunch",
     name: "Brunch Menu",
     active: true,
@@ -1497,7 +1497,7 @@ describe("the menus list's Changes column", () => {
   /** Lunch has changes on its live version 2, Dinner is current, Brunch was never published. */
   function mixed(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): Api {
     return api({
-      listCatalogues: vi.fn().mockResolvedValue([...menus, BRUNCH]),
+      listMenus: vi.fn().mockResolvedValue([...menus, BRUNCH]),
       getMenuStatuses: vi
         .fn()
         .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished", clashes: 0 } }),
@@ -1827,7 +1827,7 @@ describe("the menus list's Changes column", () => {
   /** The mixed list, with Lunch, the menu that has changes, under a long name. */
   function named(name: string): Api {
     return mixed({
-      listCatalogues: vi.fn().mockResolvedValue([{ ...menus[0]!, name }, menus[1]!, BRUNCH]),
+      listMenus: vi.fn().mockResolvedValue([{ ...menus[0]!, name }, menus[1]!, BRUNCH]),
     });
   }
 
@@ -2073,7 +2073,7 @@ it("creating a menu needs a name: an empty one is explained beside the field and
   await el.updateComplete;
   expect(name.error).toBe(t("menus.name_required"));
   expect(await bottom(el, "menu-form")).toBe(t("form.fix_fields"));
-  expect(client.createCatalogue).not.toHaveBeenCalled();
+  expect(client.createMenu).not.toHaveBeenCalled();
 
   type(name, "  Brunch  ");
   type(customerName, "");
@@ -2081,12 +2081,12 @@ it("creating a menu needs a name: an empty one is explained beside the field and
   expect(name.error).toBe("");
   inModal(el, "menu-form", '[data-test="menu-save"]').click();
   await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
-  expect(client.createCatalogue).toHaveBeenCalledExactlyOnceWith("Brunch", {
+  expect(client.createMenu).toHaveBeenCalledExactlyOnceWith("Brunch", {
     names: {},
     image: null,
     color: null,
   });
-  expect(client.listCatalogues).toHaveBeenCalledTimes(2);
+  expect(client.listMenus).toHaveBeenCalledTimes(2);
   // Only the menus can have changed.
   for (const read of [
     client.listLibraryProducts,
@@ -2143,7 +2143,7 @@ describe("unique menu names on Create and Rename", () => {
         await page.screenshot({
           path: `__screenshots__/a1172-unique/${mode}-${locale}-${theme}-${width}.png`,
         });
-        expect(client.createCatalogue).not.toHaveBeenCalled();
+        expect(client.createMenu).not.toHaveBeenCalled();
         expect(client.updateMenuDetails).not.toHaveBeenCalled();
       } finally {
         setLocale(previous);
@@ -2174,7 +2174,7 @@ describe("unique menu names on Create and Rename", () => {
         inModal<HTMLElementTagNameMap["wt-button"]>(el, "menu-form", '[data-test="menu-save"]')
           .disabled,
       ).toBe(true);
-      expect(client.createCatalogue).not.toHaveBeenCalled();
+      expect(client.createMenu).not.toHaveBeenCalled();
       expect(client.updateMenuDetails).not.toHaveBeenCalled();
       type(name, "Brunch");
       await el.updateComplete;
@@ -2182,7 +2182,7 @@ describe("unique menu names on Create and Rename", () => {
       inModal(el, "menu-form", '[data-test="menu-save"]').click();
       await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
       if (mode === "create")
-        expect(client.createCatalogue).toHaveBeenCalledExactlyOnceWith("Brunch", {
+        expect(client.createMenu).toHaveBeenCalledExactlyOnceWith("Brunch", {
           names: {},
           image: null,
           color: null,
@@ -2201,7 +2201,7 @@ describe("unique menu names on Create and Rename", () => {
     "puts a late server conflict under the name on %s and permits retry",
     async (mode) => {
       const client = api();
-      const save = mode === "create" ? client.createCatalogue : client.updateMenuDetails;
+      const save = mode === "create" ? client.createMenu : client.updateMenuDetails;
       save.mockRejectedValueOnce({ code: "menu.name_taken", params: { field: "name" } });
       const el = await mount(client);
       if (mode === "create") await click(el, "add-menu");
@@ -2230,9 +2230,7 @@ describe("unique menu names on Create and Rename", () => {
 
   it("allows presentation edits when the menu name already has a duplicate", async () => {
     const client = api({
-      listCatalogues: vi
-        .fn()
-        .mockResolvedValue(menus.map((menu) => ({ ...menu, name: "Lunch Menu" }))),
+      listMenus: vi.fn().mockResolvedValue(menus.map((menu) => ({ ...menu, name: "Lunch Menu" }))),
     });
     const el = await mount(client);
     await inTable(el, "rename-menu-lunch");
@@ -2261,7 +2259,7 @@ it("saves a name on Enter in its field", async () => {
     .shadowRoot!.querySelector("input")!
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
   await vi.waitFor(() =>
-    expect(client.createCatalogue).toHaveBeenCalledExactlyOnceWith("Brunch", {
+    expect(client.createMenu).toHaveBeenCalledExactlyOnceWith("Brunch", {
       names: {},
       image: null,
       color: null,
@@ -2271,7 +2269,7 @@ it("saves a name on Enter in its field", async () => {
 
 it("keeps the form and the name when the server refuses a new menu, and says why", async () => {
   const client = api({
-    createCatalogue: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
+    createMenu: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
   });
   const el = await mount(client);
   await click(el, "add-menu");
@@ -2288,7 +2286,7 @@ it("keeps the form and the name when the server refuses a new menu, and says why
 
 it("closes the form once a menu is created, even when the list then fails to reload", async () => {
   const client = api({
-    listCatalogues: vi.fn().mockResolvedValueOnce(menus).mockRejectedValue(new Error("down")),
+    listMenus: vi.fn().mockResolvedValueOnce(menus).mockRejectedValue(new Error("down")),
   });
   const el = await mount(client);
   await click(el, "add-menu");
@@ -2297,7 +2295,7 @@ it("closes the form once a menu is created, even when the list then fails to rel
   inModal(el, "menu-form", '[data-test="menu-save"]').click();
   await vi.waitFor(() => expect(q(el, '[data-test="load-error"]')).not.toBeNull());
   expect(modal(el, "menu-form").open).toBe(false);
-  expect(client.createCatalogue).toHaveBeenCalledOnce();
+  expect(client.createMenu).toHaveBeenCalledOnce();
 });
 
 it("renames a menu, refusing an empty name", async () => {
@@ -2322,13 +2320,13 @@ it("renames a menu, refusing an empty name", async () => {
     image: null,
     color: null,
   });
-  expect(client.createCatalogue).not.toHaveBeenCalled();
-  await vi.waitFor(() => expect(client.listCatalogues).toHaveBeenCalledTimes(2));
+  expect(client.createMenu).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(client.listMenus).toHaveBeenCalledTimes(2));
   expect(client.getMenuStructure).toHaveBeenCalled();
 });
 
 describe("copying a menu from the list", () => {
-  const copy: CatalogueSummary = {
+  const copy: MenuSummary = {
     id: "menu-copy",
     name: "Weekday lunch",
     active: true,
@@ -2355,7 +2353,7 @@ describe("copying a menu from the list", () => {
     const client = api();
     const el = await mount(client);
     await inTable(el, "duplicate-menu-lunch");
-    expect(client.duplicateCatalogue).not.toHaveBeenCalled();
+    expect(client.duplicateMenu).not.toHaveBeenCalled();
     expect(form(el).open).toBe(true);
     await form(el).updateComplete;
     expect(field(el).value).toBe("");
@@ -2376,7 +2374,7 @@ describe("copying a menu from the list", () => {
   });
   it("copies under the trimmed chosen name, stays on the list and lists the copy", async () => {
     const client = api({
-      listCatalogues: vi
+      listMenus: vi
         .fn()
         .mockResolvedValueOnce(menus)
         .mockResolvedValue([...menus, copy]),
@@ -2388,14 +2386,11 @@ describe("copying a menu from the list", () => {
     await vi.waitFor(() =>
       expect(table(el).shadowRoot.querySelector('tr[data-row-key="menu-copy"]')).not.toBeNull(),
     );
-    expect(client.duplicateCatalogue).toHaveBeenCalledExactlyOnceWith(
-      "menu-lunch",
-      "Weekday lunch",
-    );
+    expect(client.duplicateMenu).toHaveBeenCalledExactlyOnceWith("menu-lunch", "Weekday lunch");
     expect(form(el).open).toBe(false);
     expect(location.pathname).toBe("/manage/menus");
     expect(q(el, '[data-test="member-error"]')).toBeNull();
-    expect(writeCalls(client)).toEqual(["duplicateCatalogue"]);
+    expect(writeCalls(client)).toEqual(["duplicateMenu"]);
   });
   it("refuses taken and blank names inline, then enables Copy when corrected", async () => {
     const client = api();
@@ -2407,7 +2402,7 @@ describe("copying a menu from the list", () => {
     expect(field(el).error).toBe(t("menus.name_taken"));
     expect(action(el).disabled).toBe(true);
     expect(form(el).shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
-    expect(client.duplicateCatalogue).not.toHaveBeenCalled();
+    expect(client.duplicateMenu).not.toHaveBeenCalled();
     await name(el, "");
     expect(field(el).error).toBe(t("menus.name_required"));
     await name(el, "Weekday lunch");
@@ -2423,11 +2418,11 @@ describe("copying a menu from the list", () => {
     expect(writeCalls(client)).toEqual([]);
   });
   it("keeps Copy busy and prevents a repeated request until the answer", async () => {
-    let finish!: (value: CatalogueSummary) => void;
+    let finish!: (value: MenuSummary) => void;
     const client = api({
-      duplicateCatalogue: vi.fn(
+      duplicateMenu: vi.fn(
         () =>
-          new Promise<CatalogueSummary>((resolve) => {
+          new Promise<MenuSummary>((resolve) => {
             finish = resolve;
           }),
       ),
@@ -2441,7 +2436,7 @@ describe("copying a menu from the list", () => {
     expect(action(el).disabled).toBe(true);
     expect(action(el).loading).toBe(true);
     expect(field(el).disabled).toBe(true);
-    expect(client.duplicateCatalogue).toHaveBeenCalledOnce();
+    expect(client.duplicateMenu).toHaveBeenCalledOnce();
     expect(
       table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
         '[data-test="duplicate-menu-lunch"]',
@@ -2474,11 +2469,11 @@ describe("copying a menu from the list", () => {
     expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
     await userEvent.click(menu.querySelector('[data-test="duplicate-menu-lunch"]')!);
     expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
-    expect(client.duplicateCatalogue).not.toHaveBeenCalled();
+    expect(client.duplicateMenu).not.toHaveBeenCalled();
   });
   it("places a server name conflict inline, permits retry, and clears it on an edit", async () => {
     const client = api({
-      duplicateCatalogue: vi
+      duplicateMenu: vi
         .fn()
         .mockRejectedValue({ code: "menu.name_taken", params: { field: "name" } }),
     });
@@ -2495,9 +2490,9 @@ describe("copying a menu from the list", () => {
   });
   it("retains the name and reports a non-field refusal at the bottom, then retries", async () => {
     const client = api({
-      duplicateCatalogue: vi
+      duplicateMenu: vi
         .fn()
-        .mockRejectedValueOnce({ code: "catalogue.not_found" })
+        .mockRejectedValueOnce({ code: "menu.not_found" })
         .mockResolvedValue(copy),
     });
     const el = await mount(client);
@@ -2506,7 +2501,7 @@ describe("copying a menu from the list", () => {
     action(el).click();
     await expect
       .poll(() => form(el).shadowRoot!.querySelector("wt-form-actions")!.error)
-      .toBe(codeMessage("catalogue.not_found"));
+      .toBe(codeMessage("menu.not_found"));
     expect(field(el).error).toBe("");
     expect(action(el).disabled).toBe(false);
     expect(
@@ -2514,10 +2509,10 @@ describe("copying a menu from the list", () => {
         row.getAttribute("data-row-key"),
       ),
     ).toEqual(["menu-dinner", "menu-lunch"]);
-    expect(client.listCatalogues).toHaveBeenCalledOnce();
+    expect(client.listMenus).toHaveBeenCalledOnce();
     action(el).click();
     await expect.poll(() => form(el).open).toBe(false);
-    expect(client.duplicateCatalogue).toHaveBeenCalledTimes(2);
+    expect(client.duplicateMenu).toHaveBeenCalledTimes(2);
   });
   it("Spanish Copy uses the chosen name without adding a suffix", async () => {
     const client = api();
@@ -2528,15 +2523,12 @@ describe("copying a menu from the list", () => {
       expect(action(el).textContent!.trim()).toBe(t("menus.copy_action"));
       action(el).click();
       await expect.poll(() => form(el).open).toBe(false);
-      expect(client.duplicateCatalogue).toHaveBeenCalledExactlyOnceWith(
-        "menu-lunch",
-        "Weekend lunch",
-      );
+      expect(client.duplicateMenu).toHaveBeenCalledExactlyOnceWith("menu-lunch", "Weekend lunch");
     });
   });
   it("reports a failed reload after a copy as a load failure and closes the dialog", async () => {
     const client = api({
-      listCatalogues: vi.fn().mockResolvedValueOnce(menus).mockRejectedValue(new Error("down")),
+      listMenus: vi.fn().mockResolvedValueOnce(menus).mockRejectedValue(new Error("down")),
     });
     const el = await mount(client);
     await open(el);
@@ -2545,7 +2537,7 @@ describe("copying a menu from the list", () => {
     await vi.waitFor(() => expect(q(el, '[data-test="load-error"]')).not.toBeNull());
     expect(form(el).open).toBe(false);
     expect(q(el, '[data-test="member-error"]')).toBeNull();
-    expect(client.duplicateCatalogue).toHaveBeenCalledOnce();
+    expect(client.duplicateMenu).toHaveBeenCalledOnce();
   });
 });
 
@@ -2587,7 +2579,7 @@ it("reopens menu details with customer names, image and colour and retains them 
 
 it("says the menus could not be loaded, and tries again", async () => {
   const client = api({
-    listCatalogues: vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue(menus),
+    listMenus: vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue(menus),
   });
   const el = await mount(client);
   expect(q(el, '[data-test="load-error"]')).not.toBeNull();
@@ -7497,7 +7489,7 @@ describe("the Structure tree", () => {
       );
       const link = inStructure<HTMLAnchorElement>(el, '[data-test="edit-product-m-burger"]')!;
       expect(link.textContent!.trim()).toBe(t("product.edit"));
-      expect(link.getAttribute("href")).toBe("/manage/catalogue/product/p-burger");
+      expect(link.getAttribute("href")).toBe("/manage/products/product/p-burger");
       await vi.waitFor(() => {
         const at = link.getBoundingClientRect();
         expect(at.width).toBeGreaterThan(0);
@@ -7819,7 +7811,7 @@ it.each([
         venueLocale: locale,
         sessionDefault: locale,
         venueName: "Venue",
-        permissions: ["product.manage", "catalogue.manage", "venue.view"],
+        permissions: ["product.manage", "menu.manage", "venue.view"],
         modules: [],
       }),
       forgetLocales: () => {},
@@ -8205,12 +8197,12 @@ it("names the product when its save is refused after the person has gone to anot
   history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
-  pending.reject({ code: "catalogue.not_found" });
+  pending.reject({ code: "menu.not_found" });
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="member-error"]'))).toBe(
       t("menus.change_not_saved")
         .replace("{name}", "Burger")
-        .replace("{reason}", codeMessage("catalogue.not_found")),
+        .replace("{reason}", codeMessage("menu.not_found")),
     ),
   );
   expect(prices(el).outcome).toBeNull();
@@ -8358,12 +8350,12 @@ it("reports beside the Structure tab a save refused after Back left the Price ov
   await commitPrice(el, "mi-burger", "11.00");
   history.back();
   await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
-  pending.reject({ code: "catalogue.not_found" });
+  pending.reject({ code: "menu.not_found" });
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="member-error"]'))).toBe(
       t("menus.change_not_saved")
         .replace("{name}", "Burger")
-        .replace("{reason}", codeMessage("catalogue.not_found")),
+        .replace("{reason}", codeMessage("menu.not_found")),
     ),
   );
   expect(prices(el).outcome).toBeNull();
@@ -9206,7 +9198,7 @@ describe("publishing", () => {
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
         venueName: "Venue",
-        permissions: ["product.manage", "catalogue.manage", "venue.view"],
+        permissions: ["product.manage", "menu.manage", "venue.view"],
         modules: [],
       }),
       forgetLocales: () => {},
@@ -9675,7 +9667,7 @@ describe("publishing", () => {
         },
       });
       const client = api({
-        listCatalogues: vi.fn().mockResolvedValue([{ ...menus[0]!, name }]),
+        listMenus: vi.fn().mockResolvedValue([{ ...menus[0]!, name }]),
         getMenuPreview: vi.fn().mockResolvedValue(snapshot),
       });
       const el = await mount(client, PREVIEW_PATH, theme);
@@ -9794,7 +9786,7 @@ describe("publishing", () => {
 
   it("shows each menu's publication state in the list, from one read for every menu", async () => {
     const client = api({
-      listCatalogues: vi
+      listMenus: vi
         .fn()
         .mockResolvedValue([
           ...menus,
@@ -9819,7 +9811,7 @@ describe("publishing", () => {
 
   it("puts the menus waiting for a publish first when the status heading is pressed", async () => {
     const client = api({
-      listCatalogues: vi
+      listMenus: vi
         .fn()
         .mockResolvedValue([
           ...menus,
@@ -9882,7 +9874,7 @@ describe("publishing", () => {
 
   it("reads every menu's state again when the person retries a failed load", async () => {
     const client = api({
-      listCatalogues: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(menus),
+      listMenus: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(menus),
       getMenuStatuses: vi
         .fn()
         .mockRejectedValueOnce(new Error("offline"))
@@ -9903,7 +9895,7 @@ describe("publishing", () => {
 
   it("keeps the open menu's state and reads its preview again when a failed load is retried on the Preview tab", async () => {
     const client = api({
-      listCatalogues: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(menus),
+      listMenus: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(menus),
     });
     const el = await mount(client, PREVIEW_PATH);
     expect(q(el, '[data-test="load-error"]')).not.toBeNull();
@@ -9970,7 +9962,7 @@ describe("publishing", () => {
 
   it("sorts by name, and shows it, when a list sorted by status turns phone-width", async () => {
     const client = api({
-      listCatalogues: vi
+      listMenus: vi
         .fn()
         .mockResolvedValue([
           ...menus,
@@ -11404,7 +11396,7 @@ describe("the name forms", () => {
       save: "menu-save",
       field: "name",
       required: "menus.name_required",
-      write: "createCatalogue",
+      write: "createMenu",
       path: "/manage/menus",
       open: (el) => click(el, "add-menu"),
     },
@@ -11563,7 +11555,7 @@ describe("the menus list just wider than its narrow layout", () => {
   it.each(["en-GB", "es-ES"])(
     "keeps every menu row's menu on screen and uncovered while the other columns scroll sideways (600 px, %s)",
     async (locale) => {
-      const longMenus: CatalogueSummary[] = [
+      const longMenus: MenuSummary[] = [
         {
           id: "menu-lunch",
           name: "Weekday-lunch-menu-with-starters-main-and-cakes",
@@ -11579,7 +11571,7 @@ describe("the menus list just wider than its narrow layout", () => {
         setLocale(locale);
         await page.viewport(600, 844);
         expect(window.innerWidth).toBe(600);
-        const el = await mount(api({ listCatalogues: vi.fn().mockResolvedValue(longMenus) }));
+        const el = await mount(api({ listMenus: vi.fn().mockResolvedValue(longMenus) }));
         await vi.waitFor(async () => {
           await table(el).updateComplete;
           expect(table(el).shadowRoot.querySelectorAll("tbody tr")).toHaveLength(2);
@@ -12183,13 +12175,13 @@ describe("after the server comes back", () => {
     const live = new LiveData();
     const client = api({
       liveData: live,
-      listCatalogues: vi.fn().mockResolvedValue(menus),
+      listMenus: vi.fn().mockResolvedValue(menus),
       listLibraryProducts: vi.fn().mockResolvedValue(products),
       listCategories: vi.fn().mockResolvedValue(categories),
     });
     const answer = failing(
       client,
-      "listCatalogues",
+      "listMenus",
       "listLibraryProducts",
       "listCategories",
       "getContentLanguages",
@@ -12308,7 +12300,7 @@ describe("colour swatches on the Structure tab", () => {
             item.id === "p-burger" ? { ...item, categoryId: null, color: null } : item,
           ),
         ),
-      getCatalogueSettings: vi
+      getMenuSettings: vi
         .fn()
         .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: "#b12525" }),
     });
@@ -12318,7 +12310,7 @@ describe("colour swatches on the Structure tab", () => {
       inStructure(el, '[data-test="color-m-burger"] [part~="color-swatch"]')!;
     expect(getComputedStyle(burgerChip()).backgroundColor).toBe("rgb(177, 37, 37)");
 
-    client.getCatalogueSettings.mockResolvedValue({
+    client.getMenuSettings.mockResolvedValue({
       defaultProductVatClass: "general",
       defaultColor: "#256bb1",
     });
@@ -12480,21 +12472,21 @@ describe("one menu read after an edit", () => {
         }
         reads.push(path);
         const bodies: Record<string, () => unknown | Promise<unknown>> = {
-          "/management-api/catalogues": () => menus,
+          "/management-api/menus": () => menus,
           "/management-api/products": () => products,
           "/management-api/categories": () => categories,
           "/api/content-languages": () => ({ defaultLanguage: "es", languages: ["es", "en"] }),
-          "/management-api/catalogues/status": () => statuses(),
-          "/management-api/catalogues/menu-lunch/structure": () => lunch,
-          "/management-api/catalogues/menu-lunch/home": () => home,
-          "/management-api/catalogues/menu-lunch/status": () => statuses()["menu-lunch"],
-          "/management-api/catalogues/menu-lunch/preview": () => lunchPreview(),
+          "/management-api/menus/status": () => statuses(),
+          "/management-api/menus/menu-lunch/structure": () => lunch,
+          "/management-api/menus/menu-lunch/home": () => home,
+          "/management-api/menus/menu-lunch/status": () => statuses()["menu-lunch"],
+          "/management-api/menus/menu-lunch/preview": () => lunchPreview(),
         };
         const url = new URL(path, "http://localhost");
-        if (url.pathname === "/management-api/catalogues/menu-lunch/read") {
+        if (url.pathname === "/management-api/menus/menu-lunch/read") {
           const entries = await Promise.all(
             url.searchParams.getAll("part").map(async (part) => {
-              const read = bodies[`/management-api/catalogues/menu-lunch/${part}`];
+              const read = bodies[`/management-api/menus/menu-lunch/${part}`];
               if (!read) throw new Error(`Unexpected menu part: ${part}`);
               return [part, { status: 200, body: await read() }];
             }),
@@ -12562,18 +12554,18 @@ describe("one menu read after an edit", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 200));
       const menuReads = reads.filter((path) =>
-        path.startsWith("/management-api/catalogues/menu-lunch/"),
+        path.startsWith("/management-api/menus/menu-lunch/"),
       );
       expect(writes[0]).toEqual(
         view === "structure"
           ? { path: "/management-api/sections/root-lunch/members/m-burger", body: undefined }
           : view === "shortcut"
             ? {
-                path: "/management-api/catalogues/menu-lunch/home/shortcuts/t-burger",
+                path: "/management-api/menus/menu-lunch/home/shortcuts/t-burger",
                 body: undefined,
               }
             : {
-                path: "/management-api/catalogues/menu-lunch/home-display",
+                path: "/management-api/menus/menu-lunch/home-display",
                 body: { device: "handheld", columns: 2 },
               },
       );
@@ -13159,17 +13151,17 @@ describe("a name put into a sentence", () => {
     history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
-    pending.reject({ code: "catalogue.not_found" });
+    pending.reject({ code: "menu.not_found" });
     await vi.waitFor(() =>
       expect(text(q(el, '[data-test="member-error"]'))).toBe(
-        `Your change to Burger $& {reason} was not saved. ${codeMessage("catalogue.not_found")}`,
+        `Your change to Burger $& {reason} was not saved. ${codeMessage("menu.not_found")}`,
       ),
     );
   });
 
   it("heads the rename window with a menu name holding a replacement pattern as written", async () => {
     const client = api({
-      listCatalogues: vi
+      listMenus: vi
         .fn()
         .mockResolvedValue(
           menus.map((menu) => (menu.id === "menu-lunch" ? { ...menu, name: "Lunch $&" } : menu)),

@@ -252,7 +252,7 @@ export class VenueDefaultsPanel extends LitElement {
       else if (code === "management.request_invalid" && field === "receiptLanguage")
         this.errors = { receiptLanguage: t("receipts.language_invalid") };
       else if (code === "product.invalid" && field === "defaultProductVatClass")
-        this.errors = { defaultProductVatClass: t("catalogue_settings.invalid") };
+        this.errors = { defaultProductVatClass: t("menu_settings.invalid") };
       else this.actionError = codeMessage(code);
       this.submitting = false;
       if (Object.keys(this.errors).length > 0) {
@@ -310,7 +310,7 @@ export class VenueDefaultsPanel extends LitElement {
       ></wt-combobox>
       <wt-combobox
         name="defaultProductVatClass"
-        label=${t("catalogue_settings.default_vat")}
+        label=${t("menu_settings.default_vat")}
         required
         search="never"
         .options=${VAT_CLASSES.map((value) => ({ value, label: vatClassLabel(value) }))}
@@ -406,7 +406,7 @@ export class VenueDefaultsPanel extends LitElement {
                     dataTest: "saved-receiptLanguage",
                   },
                   {
-                    label: t("catalogue_settings.default_vat"),
+                    label: t("menu_settings.default_vat"),
                     value: vatClassLabel(model.defaultProductVatClass),
                     dataTest: "saved-defaultProductVatClass",
                   },

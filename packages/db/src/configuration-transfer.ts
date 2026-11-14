@@ -67,7 +67,7 @@ export function validateCoreConfiguration(
 export const CORE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
-    { name: "catalogues" },
+    { name: "menus" },
     {
       name: "kitchen_stations",
       jsonReferences: [{ column: "printer_ids", paths: [["*"]] }],
@@ -76,7 +76,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     },
     { name: "kitchen_courses", leaveBehindWhenFalse: "active" },
     { name: "categories" },
-    // The catalogue module's `afterImport` sets `name_key` from the name.
+    // The menu module's `afterImport` sets `name_key` from the name.
     { name: "products", omit: ["name_key"] },
     { name: "device_profiles", leaveBehindWhenSet: "retired_at" },
     {

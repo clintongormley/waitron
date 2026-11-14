@@ -266,8 +266,8 @@ export class PeriodDialog extends LitElement {
       (field !== "floorPlanSetId" || this.floorPlanSets !== undefined)
     )
       return field as Field;
-    if (refusal.code === "catalogue.not_found") {
-      const id = refusal.params?.catalogueId;
+    if (refusal.code === "menu.not_found") {
+      const id = refusal.params?.menuId;
       const submitted = this.submitted ?? this.input;
       if (id === submitted.menuId) return "menuId";
       if (submitted.staffMenuIds.includes(id as string)) return "staffMenuIds";
@@ -277,7 +277,7 @@ export class PeriodDialog extends LitElement {
   private error(field: Field): string {
     if (this.refusalField() === field) {
       if (this.refusal?.code === "menu_period.name_taken") return t("menu.name_taken");
-      if (this.refusal?.code === "catalogue.not_found") return t("opening.active_menus_required");
+      if (this.refusal?.code === "menu.not_found") return t("opening.active_menus_required");
       if (this.refusal?.code === "department.not_found") return t("menu.department_gone");
       if (field === "floorPlanSetId") return t("floor_plans.set_gone");
       return t("menu.field_refused");

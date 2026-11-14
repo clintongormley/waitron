@@ -55,8 +55,8 @@ Each name write stores its folded `products.name_key`. Product and single-varian
 compare that key within the relevant parent scope; a row with a null key is absent from those
 lookups. A whole-family save compares the submitted variant names directly. Configuration
 imports also compare names directly, grouping products separately from each product's variants
-(`validateCatalogueConfiguration`, `packages/menu/src/configuration-transfer.ts`). An
-import sets the keys through `storeProductNameKeys` in the catalogue module's `afterImport`;
+(`validateMenuConfiguration`, `packages/menu/src/configuration-transfer.ts`). An
+import sets the keys through `storeProductNameKeys` in the menu module's `afterImport`;
 a bundle carrying a name key is refused. A product with no `active` value counts as active,
 the column's default. An import refuses an `active` value other than 0 or 1, a category or
 product name that is not text, or a product, category or section colour other than null or
@@ -91,7 +91,7 @@ the new text on the till.
 
 The `inline changes preserve publication and recorded names` cases in
 `packages/menu/src/menu-publication.test.ts` and `apps/server/src/till-api.receipt.test.ts`
-exercise this boundary. The catalogue case translates all nine kinds, reads both working menus,
+exercise this boundary. The menu case translates all nine kinds, reads both working menus,
 checks the audience-specific name consumers and retains the published rows until explicit
 publication. The server case files a sale, saves a customer name through the authenticated
 translation route and reprints the recorded customer text. It compares the complete stored
@@ -101,7 +101,7 @@ reprint. These checks cover those fixtures; they do not exercise an external fil
 ## What a sold line freezes
 
 A line freezes its names, its gross price and its VAT class when it is added and never reads them
-from the catalogue again, so editing a product does not rewrite yesterday's receipt; the VAT class
+from the menu again, so editing a product does not rewrite yesterday's receipt; the VAT class
 comes from the published menu, and the rate from the day the invoice is issued, below. `working_order_lines` and `sale_lines` each carry:
 
 - `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
@@ -142,7 +142,7 @@ comes from the published menu, and the rate from the day the invoice is issued, 
 The open order's line names what it sells in `working_order_lines.product_id`: the chosen variant,
 or the product itself when it has no Active variant. The filed `sale_lines` row keeps the frozen
 names, and records the same product in its own `product_id` and a variant's parent in
-`parent_product_id`, as plain values with no foreign key, so no catalogue edit reaches a filed line
+`parent_product_id`, as plain values with no foreign key, so no menu edit reaches a filed line
 (sales classification spec §3). Neither table has a `variant_id` column.
 
 **A line's VAT class is the one its published menu froze, fixed when its price is; its rate is the
@@ -197,7 +197,7 @@ The recorded-answer reader, `customerOptionSnapshotLabels`
 (`packages/menu/src/option-snapshot-labels.ts`), keeps its own fallback for those older
 forms. It takes a nonblank customer map or otherwise the frozen staff map, then resolves the
 requested locale, the default captured in the staff map's key, and finally another stored value.
-It does not consult today's catalogue. `optionSnapshotLabels` uses the frozen prep station name or
+It does not consult today's menu. `optionSnapshotLabels` uses the frozen prep station name or
 the frozen staff name; `staffOptionSnapshotLabels` supplies staff wording. The till reaches
 these readers through `apps/till/src/widgets/option-snapshot.ts`.
 
@@ -276,7 +276,7 @@ name or the wrong one. Cost: a report reading the diner's wording, recorded abov
 
 New option answers resolve an existing customer map before freezing it. If that map is absent,
 the snapshot keeps it absent and stores the staff name separately; the customer reader uses
-that frozen staff name. Neither path needs today's catalogue to read the answer later.
+that frozen staff name. Neither path needs today's menu to read the answer later.
 
 ## Unit names on future orders
 
@@ -323,7 +323,7 @@ uses that same whitespace rule when collecting and storing name suggestions.
 `listTranslationGapReport` returns the full per-language gap lists, with staff names and parent
 identities. `listTranslationGapCounts` returns only `{language, count}` rows, including zero counts,
 in one database read. Both use the same gap query and count an item at most once per language.
-`listContentTranslationGaps` retains its catalogue-specific identifiers and a variant's product id
+`listContentTranslationGaps` retains its menu-specific identifiers and a variant's product id
 for its internal callers, with the same discovery rules.
 
 When you choose Edit translations, you open the same editor from every language row. Missing in
@@ -361,7 +361,7 @@ does not change the 20-language Cloud contract documented in the open Translate 
 
 When you copy a Prepare configuration into a fresh Live venue, the imported content-language
 setting must keep the languages required by the bundle's country and province enabled. You can
-still choose another enabled language as the default. The catalogue checks the saved setting
+still choose another enabled language as the default. The menu checks the saved setting
 before staging replaces an earlier artifact. Before the import replaces database rows, it also
 checks the destination venue's country and province, which may differ from the bundle's.
 Malformed saved language lists and defaults are refused as `content.languages_invalid`;
@@ -427,8 +427,8 @@ or on its Price overrides tab.
 That colour is worked out in order. It is the product's own colour (`products.color`) if it has
 one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
 nearest category above it that does (`category_details.color`). Otherwise it is the venue's
-default colour (`settings.menu.defaultColor`, which the catalogue's setup step sets to the
-pale blue `#abcced` when it creates the menu settings document, `CATALOGUE_PROVISIONING` in `packages/menu/src/provisioning.ts`); with no default it has none, and each
+default colour (`settings.menu.defaultColor`, which the menu's setup step sets to the
+pale blue `#abcced` when it creates the menu settings document, `MENU_PROVISIONING` in `packages/menu/src/provisioning.ts`); with no default it has none, and each
 screen draws its usual neutral look. The rule lives in one place, `effectiveColor`, `categoryColor` and
 `categoryColorSource` (which also says which category the colour came from) in
 `packages/shared/src/menu-document/color-inheritance.ts`, which the server and the
@@ -445,11 +445,11 @@ reads "Use default colour" and shows the default (`renderColor`,
 `apps/dashboard/src/widgets/product-editor.ts`). Choosing it saves no colour of the product's own.
 A colour is lowercase `#rrggbb`, or null for none. A save refuses anything else, an empty string
 included, as `product.invalid` with `field: "color"`; a default colour is refused as
-`category.invalid` with `field: "color"` (`saveCatalogueDefaultColor`,
+`category.invalid` with `field: "color"` (`saveMenuDefaultColor`,
 `packages/menu/src/settings.ts`). A configuration import refuses the whole
 bundle when a product's, a category's or a menu section's colour, or the default, is anything else,
 as `setup.request_invalid` with `field` set to `products.color`, `category_details.color`,
-`sections.color` (`validateCatalogueConfiguration`, `packages/menu/src/configuration-transfer.ts`)
+`sections.color` (`validateMenuConfiguration`, `packages/menu/src/configuration-transfer.ts`)
 or `settings.menu.defaultColor` (`checkImportedSettings`, `packages/provisioning/src/settings-transfer.ts`). A category's colour is set from the colour
 square before its name in the Products tree, or from the one in the box that names or renames it
 ([product-categories.md](product-categories.md)). The default is set from the square before
@@ -460,7 +460,7 @@ width the tree hides that square, as it hides the categories'.
 in the menu's version, as it does the photo and description (`freezeOffer`,
 `packages/menu/src/menu-document.ts`). Changing a category's colour, or moving an uncoloured
 category under a coloured one, whether through `updateCategory` or the Products tree's Move
-(`moveCatalogueItems`), or changing the venue's default colour (`saveCatalogueDefaultColor`), makes a published menu read as changed when it holds a product whose worked-out
+(`moveProductItems`), or changing the venue's default colour (`saveMenuDefaultColor`), makes a published menu read as changed when it holds a product whose worked-out
 colour this changes (one with no colour of its own and no coloured category nearer to it), and the
 menu's Preview tab names the change "colour" for that product. The version on sale keeps the old colour until you
 publish (the "a category's colour" cases in `packages/menu/src/menu-publication.test.ts`). The
@@ -494,7 +494,7 @@ light theme, and the page's own `--wt-color-bg` in the dark, a level below an av
 its colour as a stripe along its left edge, `--wt-space-1` wide, with a one-pixel `--wt-color-text`
 line on the tile's side of the stripe (W92a, A292). Both are inset shadows, which take no layout
 width, so the labels stay centred; a shadow's offset is physical, so the stripe would stay on the
-left in a right-to-left language, and the till has none (`catalogues`,
+left in a right-to-left language, and the till has none (`menus`,
 `apps/till/src/i18n/strings.ts`). The button opens information by tap or Enter; Add stays disabled while the dish cannot be sold. The "tile
 colours" cases in `apps/till/src/widgets/menu-browser.test.ts` work out each label's contrast as it
 is seen, the button's opacity included, and hold it at 4.5:1 or more in both themes; they also pin
@@ -515,7 +515,7 @@ two painted (dark and pale) sold-out tiles and a weighed product's tile, has no 
 
 A variant is a `products` row whose `parent_id` names its parent product — "125 ml" and
 "175 ml" under "Wine by the glass". There is no separate variant table. A variant's parent is a
-top-level product in the same catalogue, is fixed when the variant is created, and a variant has no
+top-level product in the same menu, is fixed when the variant is created, and a variant has no
 variants of its own (the `products_variant_one_level_insert`, `products_variant_parent_fixed_update`
 and `products_id_fixed_update` triggers in `packages/db/drizzle/0000_baseline.sql`). A product
 may have any number of variants, one included.
@@ -693,7 +693,7 @@ listed, drawn disabled; each is labelled with its difference from the parent's p
 the difference is worked out in `apps/till/src/api/client.ts`). A product none of whose variants is
 available on that menu keeps its button, greyed (`hasSomethingToSell`). An extras list does not offer a product
 that has an Active variant (`readExtraProducts`, `packages/menu/src/offered-modifiers.ts`),
-since the order path refuses one picked as an extra (below). The catalogue refuses both ways of
+since the order path refuses one picked as an extra (below). The menu refuses both ways of
 putting one there: an extras list naming such a product (`extras.product_has_variants`), and an
 Active variant on a product an extras list offers (`product.offered_as_extra`, which names the
 lists). A variant itself may be an extra.
@@ -813,7 +813,7 @@ keys from the engine sees it; and a write naming a missing filename is refused w
 (`SQLITE_CONSTRAINT_FOREIGNKEY`), while a refused delete of an image in use is 1811 either way when
 the key is `on delete restrict`. Guard:
 `packages/media/src/image-references.test.ts`, whose cases use top-level products. For a variant
-row, measured 2026-09-23 with a throwaway suite over the core, catalogue and media migration sets:
+row, measured 2026-09-23 with a throwaway suite over the core, menu and media migration sets:
 inserting a variant naming a photo that does not exist, and deleting with raw SQL a photo a variant
 uses, were each refused with errcode 1811 by `products_media_image_fk`, while a variant naming a
 photo that exists was accepted.
@@ -976,7 +976,7 @@ allowlisted publication as text-safe HTML; working changes reach the preview onl
 
 The public `/public/menu` page resolves only the opted-in active default publication while the box
 is serving. It uses the same projection and renderer as the protected preview. Sharing is a
-non-transferring catalogue settings document: configuration imports retain this box’s choice.
+non-transferring menu settings document: configuration imports retain this box’s choice.
 
 
 Cloud delivery reuses the existing connection job's one-minute passes. It rereads the opted-in
@@ -990,5 +990,5 @@ remains separate, so the manager preview does not expose a Cloud guest URL.
 Paper uses the same projected publication and prices. The authenticated paper request binds its
 presentation indices to the captured version, checks that version belongs to the menu and embeds
 only the selected library logo's display rendition. A missing logo leaves the masthead text alone.
-Scalar appearance stays in the non-transferring catalogue settings document; logo, order and breaks
+Scalar appearance stays in the non-transferring menu settings document; logo, order and breaks
 stay with the preview. Neither changes online or recorded order.

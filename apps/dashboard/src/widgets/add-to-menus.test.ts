@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { CatalogueSummary, MenuStructure } from "../api/client.js";
+import type { MenuSummary, MenuStructure } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { AddToMenus, placementMenus, type PlacementMenu } from "./add-to-menus.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
@@ -8,7 +8,7 @@ import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 
 afterEach(cleanupWidgets);
 
-const menus: CatalogueSummary[] = [
+const menus: MenuSummary[] = [
   { id: "m-lunch", name: "Lunch Menu", active: true, version: 1 },
   { id: "m-dinner", name: "Dinner Menu", active: true, version: 1 },
 ];

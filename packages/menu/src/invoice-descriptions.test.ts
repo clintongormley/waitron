@@ -30,27 +30,27 @@ describe("toInvoiceLineDescriptions", () => {
     });
   });
 
-  it("drops catalogue languages not requested in invoiceLocales", () => {
+  it("drops menu languages not requested in invoiceLocales", () => {
     expect(toInvoiceLineDescriptions({ es: "Café", en: "Coffee" }, ["es-ES"], "es")).toEqual({
       "es-ES": "Café",
     });
   });
 
-  it("tolerates a catalogue already keyed by full tag (exact-tag arm)", () => {
+  it("tolerates a menu already keyed by full tag (exact-tag arm)", () => {
     expect(toInvoiceLineDescriptions({ "es-ES": "Café" }, ["es-ES"], "es")).toEqual({
       "es-ES": "Café",
     });
   });
 
-  it("matches by language when the catalogue is keyed by a different full tag", () => {
-    // Catalogue authored under es-419 (Latin-American Spanish), invoice wants es-ES: neither the
+  it("matches by language when the menu is keyed by a different full tag", () => {
+    // Menu authored under es-419 (Latin-American Spanish), invoice wants es-ES: neither the
     // exact tag nor the bare `es` key exists, so it resolves via the first same-language key.
     expect(toInvoiceLineDescriptions({ "es-419": "Café" }, ["es-ES"], "es")).toEqual({
       "es-ES": "Café",
     });
   });
 
-  it("maps every tag to the empty string for an empty catalogue (no throw)", () => {
+  it("maps every tag to the empty string for an empty menu (no throw)", () => {
     expect(toInvoiceLineDescriptions({}, ["es-ES"], "es")).toEqual({ "es-ES": "" });
   });
 

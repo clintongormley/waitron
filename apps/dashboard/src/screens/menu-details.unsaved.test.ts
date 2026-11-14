@@ -46,13 +46,13 @@ for (const kind of ["menu", "section"] as const) {
         members: [],
       };
       const client = {
-        listCatalogues: async () => {
+        listMenus: async () => {
           if (written) throw { code: "connection.failed" };
           return [{ id: "menu", name: "Menu", active: true, version: 1 }];
         },
         listLibraryProducts: async () => [],
         listCategories: async () => [],
-        getCatalogueSettings: async () => ({
+        getMenuSettings: async () => ({
           defaultProductVatClass: "general",
           defaultColor: null,
         }),
@@ -63,7 +63,7 @@ for (const kind of ["menu", "section"] as const) {
           if (written) throw { code: "connection.failed" };
           return { rootSectionId: "root", root, includable: [], includedBy: [], nodes: [] };
         },
-        createCatalogue: async (name: string, details: Omit<SectionInput, "internalName">) =>
+        createMenu: async (name: string, details: Omit<SectionInput, "internalName">) =>
           write({ internalName: name, ...details }),
         createSectionIn: async (_id: string, input: SectionInput) => write(input),
       } as unknown as DashboardApi;
@@ -142,10 +142,10 @@ for (const succeeds of [true, false]) {
     history.replaceState(null, "", "/manage/menus/menu/menu/view/home");
     const writes: unknown[] = [];
     const client = {
-      listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+      listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
       listLibraryProducts: async () => [],
       listCategories: async () => [],
-      getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+      getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
       getMenuStatuses: async () => ({ menu: { state: "unpublished", clashes: 0 } }),
       getMenuStatus: async () => ({ state: "unpublished", clashes: 0 }),

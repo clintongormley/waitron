@@ -10,7 +10,7 @@ import type { LiveMenu, MenuPatchResult, MenuPreview } from "@waitron/menu";
 import { mediaImages } from "@waitron/media";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
-import { mountCatalogueApi } from "./menu-api.js";
+import { mountMenuApi } from "./menu-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
@@ -54,7 +54,7 @@ beforeEach(async () => {
     sql`update products set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
   );
   await suite.db.execute(
-    sql`update catalogues set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
+    sql`update menus set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
   );
   await suite.db.execute(
     sql`update sections set internal_name = 'earlier test ' || owner_menu_id where role = 'menu_root'`,
@@ -65,7 +65,7 @@ const noopLog: Logger = () => {};
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountCatalogueApi(app, { db: suite.db, venueLocale: "es" }, noopLog);
+  mountMenuApi(app, { db: suite.db, venueLocale: "es" }, noopLog);
   return app;
 }
 
@@ -95,9 +95,9 @@ async function created(app: Hono, path: string, body: unknown): Promise<string> 
 
 /** A menu "Lunch" offering a product "Soup", not yet published. */
 async function lunchWithSoup(app: Hono): Promise<{ menuId: string; itemId: string }> {
-  const menuId = await created(app, "/management-api/catalogues", { name: "Lunch" });
+  const menuId = await created(app, "/management-api/menus", { name: "Lunch" });
   const productId = await created(app, "/management-api/products", {
-    catalogueId: await created(app, "/management-api/catalogues", { name: "Kitchen" }),
+    menuId: await created(app, "/management-api/menus", { name: "Kitchen" }),
     categoryId: null,
     name: "Soup",
     pricingUnit: "each",
@@ -105,7 +105,7 @@ async function lunchWithSoup(app: Hono): Promise<{ menuId: string; itemId: strin
     vatClass: "general",
   });
   const structure = await json<{ rootSectionId: string }>(
-    await send(app, "GET", `/management-api/catalogues/${menuId}/structure`),
+    await send(app, "GET", `/management-api/menus/${menuId}/structure`),
     200,
   );
   await json(
@@ -115,7 +115,7 @@ async function lunchWithSoup(app: Hono): Promise<{ menuId: string; itemId: strin
     201,
   );
   const prices = await json<{ menuItemId: string; productId: string }[]>(
-    await send(app, "GET", `/management-api/catalogues/${menuId}/prices`),
+    await send(app, "GET", `/management-api/menus/${menuId}/prices`),
     200,
   );
   return { menuId, itemId: prices.find((row) => row.productId === productId)!.menuItemId };
@@ -123,11 +123,11 @@ async function lunchWithSoup(app: Hono): Promise<{ menuId: string; itemId: strin
 
 async function publish(app: Hono, menuId: string): Promise<void> {
   const preview = await json<MenuPreview>(
-    await send(app, "GET", `/management-api/catalogues/${menuId}/preview`),
+    await send(app, "GET", `/management-api/menus/${menuId}/preview`),
     200,
   );
   await json(
-    await send(app, "POST", `/management-api/catalogues/${menuId}/publish`, {
+    await send(app, "POST", `/management-api/menus/${menuId}/publish`, {
       body: { expectedHash: preview.hash },
     }),
     200,
@@ -135,13 +135,13 @@ async function publish(app: Hono, menuId: string): Promise<void> {
 }
 
 async function live(app: Hono, menuId: string, cookie?: string): Promise<Response> {
-  return send(app, "GET", `/management-api/catalogues/${menuId}/live`, {
+  return send(app, "GET", `/management-api/menus/${menuId}/live`, {
     ...(cookie === undefined ? {} : { cookie }),
   });
 }
 
 async function patch(app: Hono, menuId: string, body: unknown, cookie?: string): Promise<Response> {
-  return send(app, "POST", `/management-api/catalogues/${menuId}/patch`, {
+  return send(app, "POST", `/management-api/menus/${menuId}/patch`, {
     body,
     ...(cookie === undefined ? {} : { cookie }),
   });
@@ -271,14 +271,14 @@ describe("reading and patching a menu's live version", () => {
     expect(await publicationTables()).toEqual(before);
   });
 
-  it("refuses a session without the catalogue permission, writing nothing", async () => {
+  it("refuses a session without the menu permission, writing nothing", async () => {
     const app = mountApp();
     const { menuId, itemId } = await lunchWithSoup(app);
     await publish(app, menuId);
     const base = await json<LiveMenu>(await live(app, menuId), 200);
     const before = await publicationTables();
     const refused = [
-      await send(app, "POST", `/management-api/catalogues/${menuId}/publish`, {
+      await send(app, "POST", `/management-api/menus/${menuId}/publish`, {
         body: { expectedHash: "x" },
         cookie: staffCookie,
       }),
@@ -312,7 +312,7 @@ describe("reading and patching a menu's live version", () => {
     ];
     for (const res of refused)
       expect(await json(res, 404)).toMatchObject({
-        error: { code: "catalogue.not_found", params: { catalogueId: missing } },
+        error: { code: "menu.not_found", params: { menuId: missing } },
       });
     expect(await publicationTables()).toEqual(before);
   });

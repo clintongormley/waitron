@@ -15,8 +15,8 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
-import { addProductToMenu, createCatalogue, createProduct, updateProduct } from "./operations.js";
+import { MENU_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
+import { addProductToMenu, createMenu, createProduct, updateProduct } from "./operations.js";
 import {
   createExtraList,
   deleteExtraList,
@@ -54,10 +54,10 @@ const unitPrices = { sourdough: "2.50", focaccia: "4.00", rye: "3.25" };
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
   await run(async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: "Deli" });
+    const menu = await createMenu(tx, { name: "Deli" });
     for (const [key, unitPrice] of Object.entries(unitPrices)) {
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: key,
         unitId: null,
@@ -117,9 +117,9 @@ describe("extra list CRUD", () => {
         },
         "en",
       );
-      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Cheese",
         unitId: unit.id,
@@ -151,9 +151,9 @@ describe("extra list CRUD", () => {
         },
         "en",
       );
-      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Cheese",
         unitId: unit.id,
@@ -186,9 +186,9 @@ describe("extra list CRUD", () => {
         "en",
       );
       await tx.execute(sql`update units set hardware_unit = 'g' where id = ${unit.id}`);
-      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Cheese",
         unitId: unit.id,
@@ -224,9 +224,9 @@ describe("extra list CRUD", () => {
         "en",
       );
       await tx.execute(sql`update units set seed_key = ${seedKey} where id = ${unit.id}`);
-      const catalogue = await createCatalogue(tx, { name: "Poured extras" });
+      const menu = await createMenu(tx, { name: "Poured extras" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Olive oil",
         unitId: unit.id,
@@ -263,9 +263,9 @@ describe("extra list CRUD", () => {
         "en",
       );
       await tx.execute(sql`update units set seed_key = 'each' where id = ${unit.id}`);
-      const catalogue = await createCatalogue(tx, { name: "Counted extras" });
+      const menu = await createMenu(tx, { name: "Counted extras" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Olive",
         unitId: unit.id,
@@ -305,9 +305,9 @@ describe("extra list CRUD", () => {
         "en",
       );
       await tx.execute(sql`update units set seed_key = 'ml' where id = ${unit.id}`);
-      const catalogue = await createCatalogue(tx, { name: "Poured extras" });
+      const menu = await createMenu(tx, { name: "Poured extras" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Olive oil",
         unitId: unit.id,
@@ -418,9 +418,9 @@ describe("extra list CRUD", () => {
         },
         "en",
       );
-      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Cheese",
         unitId: unit.id,
@@ -684,9 +684,9 @@ describe("extra list CRUD", () => {
         },
         "en",
       );
-      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Cheese",
         unitId: unit.id,
@@ -717,9 +717,9 @@ describe("extra list CRUD", () => {
         },
         "en",
       );
-      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Cheese",
         unitId: unit.id,
@@ -1029,14 +1029,14 @@ describe("extra list CRUD", () => {
   it("names every product that carries the list, by the product's staff name", async () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
     const dishes = await run(async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Counter" });
+      const menu = await createMenu(tx, { name: "Counter" });
       const made: string[] = [];
       // Two dishes with DIFFERENT names, so a join that reaches the wrong product row shows up
       // here rather than passing. A third carries nothing, so a read that simply listed every
       // product would fail too.
       for (const name of ["sandwich", "toastie", "soup"]) {
         const product = await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: null,
           name,
           unitId: null,
@@ -1065,11 +1065,11 @@ describe("extra list CRUD", () => {
       createExtraList(tx, { ...breadList(), name: "Soup" }, "en"),
     );
     await run(async (tx) => {
-      const lunch = await createCatalogue(tx, { name: "Lunch" });
-      const dinner = await createCatalogue(tx, { name: "Dinner" });
+      const lunch = await createMenu(tx, { name: "Lunch" });
+      const dinner = await createMenu(tx, { name: "Dinner" });
       const dish = async (name: string, listId: string) => {
         const product = await createProduct(tx, {
-          catalogueId: lunch.id,
+          menuId: lunch.id,
           categoryId: null,
           name,
           unitId: null,
@@ -1367,8 +1367,8 @@ describe("what the database refuses under an extras list", () => {
   });
 });
 
-describe("extra lists in the catalogue's configuration transfer", () => {
-  const transferred = CATALOGUE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+describe("extra lists in the menu's configuration transfer", () => {
+  const transferred = MENU_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
 
   it("copies a list before the items that point at it", () => {
     expect(transferred).toContain("extra_lists");

@@ -312,8 +312,8 @@ it("setup series made at activation, before any invoice, write nothing to the in
 
 it.each([
   [
-    "catalogue",
-    "insert into catalogues(id, name, created_at, updated_at) values ('menu', 'Retained', '2026-10-16', '2026-10-16')",
+    "menu",
+    "insert into menus(id, name, created_at, updated_at) values ('menu', 'Retained', '2026-10-16', '2026-10-16')",
   ],
   [
     "invoice counter",
@@ -328,7 +328,7 @@ it.each([
     "insert into filing_cases(id, registro_id, cause, evidence, opened_at) values ('filing', 'record', 'retained', '{}', 1)",
   ],
   ["unknown table", "create table unknown_rows(value text)"],
-  ["partial schema", "drop table catalogues"],
+  ["partial schema", "drop table menus"],
 ] as const)(
   "hour restart refuses retained %s before selecting any replacement",
   async (_name, sql) => {

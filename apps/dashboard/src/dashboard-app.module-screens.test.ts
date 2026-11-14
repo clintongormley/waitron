@@ -208,7 +208,7 @@ it("refuses to start when a further screen repeats another screen's id", async (
   }
 });
 
-it("opens the core Modules catalogue for hardware managers without relying on enabled contributions", async () => {
+it("opens the core Modules menu for hardware managers without relying on enabled contributions", async () => {
   history.replaceState(null, "", "/manage/modules/view/card-providers/state/all");
   const api = stubApi();
   vi.mocked(api.getMe).mockResolvedValue({

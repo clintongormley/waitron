@@ -56,7 +56,7 @@ import type {
   StationThresholds,
   TableSignal,
   TimingBand,
-  AccessibleCatalogue,
+  AccessibleMenu,
   OfferedModifier,
   ProductOrdering,
   LiveOffer,
@@ -360,9 +360,9 @@ export interface TillProduct {
   courseId?: string | null;
   /** The menu this product is sold from; the till's menu filter shows only the selected menu's
    * products, and an absent value never matches one. */
-  catalogueId?: string;
+  menuId?: string;
   /** The menu's display name; the switcher renders `TillMenu.name`, not this. */
-  catalogueName?: string;
+  menuName?: string;
   /**
    * The ordered extras and options lists this dish offers, in the product's own attachment order. The
    * basket resolves a pick's allergens and dietary labels off it BY PRODUCT ID.
@@ -411,7 +411,7 @@ export function sellingValuesOf(source: TillSellingValues): TillSellingValues {
   };
 }
 
-export type TillMenu = AccessibleCatalogue;
+export type TillMenu = AccessibleMenu;
 
 /** A product's selling identity on one menu — the `offers[]` of `GET /api/service-zones/:zoneId/offers`:
  * the menu's published version, each offer, variant, extras item and option label marked with whether
@@ -422,7 +422,7 @@ export type TillMenuOffer = LiveOffer;
  * structure and Device Home Page. */
 export type TillZoneMenu = ServedMenu;
 
-export interface ZoneOfferCatalogue {
+export interface ZoneOffers {
   service: MenuState["service"];
   context: {
     zoneId: string;
@@ -489,8 +489,8 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     category: offer.category,
     allergens: offer.allergens,
     courseId: offer.courseId,
-    catalogueId: offer.menuId,
-    catalogueName: offer.menuName,
+    menuId: offer.menuId,
+    menuName: offer.menuName,
     // The offered lists pass through in the order they arrive — the product's own attachment order,
     // which nothing on the till re-sorts.
     variants: offer.variants.map((variant) => {
@@ -2386,7 +2386,7 @@ export interface TabLine {
   changesAfterSending: ChangesAfterSending | null;
   movable: boolean;
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
-   * only on a fixture that omits it, which falls back to the live catalogue name. */
+   * only on a fixture that omits it, which falls back to the live menu name. */
   name?: string;
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
    *  every child line. The six names per answer are the server's, copied by value. */
@@ -2939,8 +2939,8 @@ export class TillApi {
     await this.#request<void>("/api/device/battery", "PUT", report, options.signal);
   }
 
-  async listZoneOffers(zoneId: string, options: ReadOptions = {}): Promise<ZoneOfferCatalogue> {
-    return this.#request<ZoneOfferCatalogue>(
+  async listZoneOffers(zoneId: string, options: ReadOptions = {}): Promise<ZoneOffers> {
+    return this.#request<ZoneOffers>(
       `/api/service-zones/${encodeURIComponent(zoneId)}/offers`,
       "GET",
       undefined,
@@ -2978,8 +2978,8 @@ export class TillApi {
     );
   }
 
-  async listDefaultZoneOffers(): Promise<ZoneOfferCatalogue> {
-    return this.#request<ZoneOfferCatalogue>("/api/default-service-zone/offers", "GET");
+  async listDefaultZoneOffers(): Promise<ZoneOffers> {
+    return this.#request<ZoneOffers>("/api/default-service-zone/offers", "GET");
   }
 
   /** Set the service zone used for newly created counter orders after the app accepts an offer load. */

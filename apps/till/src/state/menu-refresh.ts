@@ -190,8 +190,8 @@ export function repriceRebuilt(
 /** Whether the line was priced against a version of its menu other than the live one. A line with
  * no version is priced by the server from the live version. */
 export function isStale(line: OrderLine, liveVersions: ReadonlyMap<string, string>): boolean {
-  const { menuVersionId, catalogueId } = line.product;
-  return menuVersionId !== undefined && liveVersions.get(catalogueId ?? "") !== menuVersionId;
+  const { menuVersionId, menuId } = line.product;
+  return menuVersionId !== undefined && liveVersions.get(menuId ?? "") !== menuVersionId;
 }
 
 /**
@@ -214,7 +214,7 @@ export function refreshBasket(
   lines.forEach((line, index) => {
     if (line.workingOrderLineId !== undefined || !isStale(line, liveVersions)) return;
     const { product } = line;
-    const live = liveVersions.get(product.catalogueId ?? "");
+    const live = liveVersions.get(product.menuId ?? "");
     const lineNo = index + 1;
     const offer = offerById.get(product.menuItemId ?? "");
     const block = lineBlock(line, offer);

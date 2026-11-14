@@ -9,7 +9,7 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
-import { catalogues, products } from "./menus.js";
+import { menus, products } from "./menus.js";
 import { invoiceSeries } from "./series.js";
 
 const BOGUS_PRODUCT = "99999999-9999-4999-8999-999999999999";
@@ -61,14 +61,11 @@ describe("park & retrieve schema", () => {
       .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
     seriesA = series.id;
-    const [catalogue] = await admin
-      .insert(catalogues)
-      .values({ name: "Deli" })
-      .returning({ id: catalogues.id });
+    const [menu] = await admin.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const [product] = await admin
       .insert(products)
       .values({
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         name: "Café solo",
         pricingUnit: "each",
         unitPrice: 100,

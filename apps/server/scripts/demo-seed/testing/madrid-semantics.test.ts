@@ -76,7 +76,7 @@ it("checks each published hash before replacing generated references", async () 
     .digest("hex");
   const accepted = await canonical({
     tables: {
-      catalogues: table([{ id, name: "Restaurant" }]),
+      menus: table([{ id, name: "Restaurant" }]),
       menu_versions: table([
         {
           id: otherId,
@@ -89,12 +89,12 @@ it("checks each published hash before replacing generated references", async () 
     },
   });
   expect(Object.values(accepted.tables.menu_versions!.rows)[0]!.document).toMatchObject({
-    menuId: '@catalogues:["Restaurant"]',
+    menuId: '@menus:["Restaurant"]',
   });
   await expect(
     canonical({
       tables: {
-        catalogues: table([{ id, name: "Restaurant" }]),
+        menus: table([{ id, name: "Restaurant" }]),
         menu_versions: table([
           {
             id: otherId,

@@ -1,5 +1,5 @@
 import type { Transaction } from "@waitron/db";
-import { createCatalogue } from "../src/operations.js";
+import { createMenu } from "../src/operations.js";
 import { requireMenuRoot } from "../src/menu-structure.js";
 import { readSection } from "../src/sections.js";
 import type { SectionInput, SectionDetails } from "@waitron/shared";
@@ -9,7 +9,7 @@ export async function createIncludedMenu(
   tx: Transaction,
   input: SectionInput,
 ): Promise<SectionDetails & { ownerMenuId: string }> {
-  const menu = await createCatalogue(tx, {
+  const menu = await createMenu(tx, {
     name: input.internalName,
     names: input.names,
     image: input.image,

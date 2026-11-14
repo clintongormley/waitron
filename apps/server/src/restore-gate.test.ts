@@ -93,7 +93,7 @@ describe("checkRestoreCompatibility", () => {
       core: 207,
       node: 2,
       handover: 1,
-      catalogue: 36,
+      menu: 36,
       "venue-service": 74,
       media: 11,
       identity: 11,

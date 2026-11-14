@@ -25,12 +25,12 @@ import { payments } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addProductToMenu,
-  createCatalogue,
+  createMenu,
   createCategory,
   createProduct,
   createExtraList,
   writeProductModifiers,
-  deactivateCatalogue,
+  deactivateMenu,
 } from "@waitron/menu";
 import {
   departmentSalePolicies,
@@ -142,10 +142,10 @@ async function setupVenue(options: {
       const terraceZone = await zone("Terrace", restaurant);
       const deliCounterZone = await zone("Deli counter", deli);
       const menus = {} as Record<MenuName, string>;
-      for (const name of MENUS) menus[name] = (await createCatalogue(tx, { name })).id;
-      const product = (catalogueId: string, name: string, unitPrice: string) =>
+      for (const name of MENUS) menus[name] = (await createMenu(tx, { name })).id;
+      const product = (menuId: string, name: string, unitPrice: string) =>
         createProduct(tx, {
-          catalogueId,
+          menuId,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -1178,7 +1178,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     )!;
     const { extraId, listId } = await withTransaction(suite.db, async (tx) => {
       const extra = await createProduct(tx, {
-        catalogueId: v.menus["Midday menu"],
+        menuId: v.menus["Midday menu"],
         categoryId: null,
         name: "Butter",
         pricingUnit: "each",
@@ -1948,7 +1948,7 @@ describe("menu-state follows department service periods", () => {
     "never falls back to another period after %s loses its customer menu",
     async (instant, inactive, fallback, periodName) => {
       const v = await setupPeriods();
-      await withTransaction(suite.db, (tx) => deactivateCatalogue(tx, v.menus[inactive]));
+      await withTransaction(suite.db, (tx) => deactivateMenu(tx, v.menus[inactive]));
       at(new Date(instant));
       const answer = await sendAsTill(v, "GET", `/api/menu-state?zoneId=${v.diningZone}`);
       expect(answer.status).toBe(200);
@@ -2016,7 +2016,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       );
       const cocktails = (await createCategory(tx, { name: "Cocktails" })).id;
       const mojito = await createProduct(tx, {
-        catalogueId: v.menus["Midday menu"],
+        menuId: v.menus["Midday menu"],
         categoryId: cocktails,
         name: "Mojito",
         pricingUnit: "each",
@@ -2218,7 +2218,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
         { kind: "station", stationId: c.downstairs.stationId },
       );
       const mint = await createProduct(tx, {
-        catalogueId: c.v.menus["Midday menu"],
+        menuId: c.v.menus["Midday menu"],
         categoryId: garnish,
         name: "Mint",
         pricingUnit: "each",

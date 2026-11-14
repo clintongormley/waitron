@@ -80,15 +80,15 @@ function blankInherited(written: object): Partial<Record<(typeof INHERITED_KEYS)
 }
 
 /**
- * The product exists and is not itself a variant; returns the catalogue its variants are created in,
+ * The product exists and is not itself a variant; returns the menu its variants are created in,
  * and its name and Active state for the unique-name check.
  */
 async function assertProductForWrite(
   tx: Transaction,
   productId: string,
-): Promise<{ catalogueId: string; name: string; active: boolean }> {
+): Promise<{ menuId: string; name: string; active: boolean }> {
   const [product] = await tx
-    .select({ catalogueId: products.catalogueId, name: products.name, active: products.active })
+    .select({ menuId: products.menuId, name: products.name, active: products.active })
     .from(products)
     .where(productWithId(productId, "top-level"));
   if (!product) throw new AppError("product.not_found", { productId });
@@ -286,7 +286,7 @@ async function writeProductVariants(
         ...values,
         available: input.available ?? true,
         parentId: productId,
-        catalogueId: parent.catalogueId,
+        menuId: parent.menuId,
         ordering: "public",
         ...blankInherited(values),
       });

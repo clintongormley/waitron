@@ -203,7 +203,7 @@ export interface ZoneMenuOffer {
   readonly productId: string;
   /** The STORED menu price, null when the menu sets none; `unitPrice` is the one charged. */
   readonly grossPrice: string | null;
-  /** The price this offer charges, resolved along the catalogue's menu price chain. */
+  /** The price this offer charges, resolved along the menu's menu price chain. */
   readonly unitPrice: string;
   readonly menuName: string;
   /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top

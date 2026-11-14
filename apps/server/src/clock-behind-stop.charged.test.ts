@@ -4,12 +4,7 @@ import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  assignCatalogueToVenue,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import {
@@ -42,10 +37,10 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     await inTx(venue, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Menu" });
+      const menu = await createMenu(tx, { name: "Menu" });
       const category = await createCategory(tx, { name: "Food" });
       const dish = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: "Dish",
         pricingUnit: "each",
@@ -53,7 +48,7 @@ useVenueDb({
         vatClass: "general",
       });
       dishId = dish.id;
-      await assignCatalogueToVenue(tx, catalogue.id);
+      await assignMenuToVenue(tx, menu.id);
       counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
     });
     const first = await send(venue.app, venue.cookie, "POST", "/api/sales", {

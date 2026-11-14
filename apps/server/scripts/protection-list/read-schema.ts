@@ -81,7 +81,7 @@ export interface SchemaIndex {
   readonly predicate: string | null;
   readonly columns: readonly SchemaIndexColumn[];
   readonly sql: string | null;
-  /** Null for a WITHOUT ROWID table's primary key, which the engine keeps no catalogue row for. */
+  /** Null for a WITHOUT ROWID table's primary key, which the engine keeps no menu row for. */
   readonly rowid: number | null;
 }
 
@@ -101,7 +101,7 @@ export interface SchemaList {
   readonly triggers: readonly SchemaTrigger[];
 }
 
-interface CatalogueRow {
+interface MenuRow {
   readonly type: string;
   readonly name: string;
   readonly tbl_name: string;
@@ -253,7 +253,7 @@ function readRows(db: DatabaseSync, table: string, columns: readonly SchemaColum
 function readIndexes(
   db: DatabaseSync,
   table: string,
-  catalogue: ReadonlyMap<string, CatalogueRow>,
+  menu: ReadonlyMap<string, MenuRow>,
 ): SchemaIndex[] {
   const list = all<{ name: string; unique: number; origin: string; partial: number }>(
     db,
@@ -262,9 +262,9 @@ function readIndexes(
   );
   return list.map((index) => {
     const stored =
-      index.origin === "pk" && !catalogue.has(`index:${index.name}`)
+      index.origin === "pk" && !menu.has(`index:${index.name}`)
         ? { sql: null, rowid: null }
-        : catalogueRow(catalogue, "index", index.name);
+        : menuRow(menu, "index", index.name);
     const parts = stored.sql === null ? null : indexParts(stored.sql);
     const columns = all<{
       seqno: number;
@@ -303,18 +303,14 @@ function readIndexes(
   });
 }
 
-function catalogueRow(
-  catalogue: ReadonlyMap<string, CatalogueRow>,
-  type: string,
-  name: string,
-): CatalogueRow {
-  const row = catalogue.get(`${type}:${name}`);
+function menuRow(menu: ReadonlyMap<string, MenuRow>, type: string, name: string): MenuRow {
+  const row = menu.get(`${type}:${name}`);
   if (row === undefined) throw new Error(`${type} ${name} is not in sqlite_schema`);
   return row;
 }
 
-function readTriggers(catalogue: ReadonlyMap<string, CatalogueRow>): SchemaTrigger[] {
-  const stored = [...catalogue.values()]
+function readTriggers(menu: ReadonlyMap<string, MenuRow>): SchemaTrigger[] {
+  const stored = [...menu.values()]
     .filter((row) => row.type === "trigger")
     .sort((first, second) => first.rowid - second.rowid);
   const seenOnTable = new Map<string, number>();
@@ -339,8 +335,8 @@ function readTriggers(catalogue: ReadonlyMap<string, CatalogueRow>): SchemaTrigg
 
 /** Lists the `main` schema. `sqlite_schema` itself is left out: its rows are what this list reports. */
 export function readSchema(db: DatabaseSync): SchemaList {
-  const catalogue = new Map(
-    all<CatalogueRow>(db, "SELECT type, name, tbl_name, sql, rowid FROM main.sqlite_schema").map(
+  const menu = new Map(
+    all<MenuRow>(db, "SELECT type, name, tbl_name, sql, rowid FROM main.sqlite_schema").map(
       (row) => [`${row.type}:${row.name}`, row],
     ),
   );
@@ -355,11 +351,11 @@ export function readSchema(db: DatabaseSync): SchemaList {
   for (const entry of listed) {
     const columns = readColumns(db, entry.name);
     if (entry.type === "view") {
-      const { sql, rowid } = catalogueRow(catalogue, "view", entry.name);
+      const { sql, rowid } = menuRow(menu, "view", entry.name);
       views.push({ name: entry.name, sql, rowid, columns });
       continue;
     }
-    const { sql, rowid } = catalogueRow(catalogue, "table", entry.name);
+    const { sql, rowid } = menuRow(menu, "table", entry.name);
     const plainDdl = entry.type === "virtual" || sql === null ? null : sql;
     const { foreignKeys, ...declared } =
       plainDdl === null ? { columns: [], keys: [], foreignKeys: [] } : tableDeclarations(plainDdl);
@@ -377,7 +373,7 @@ export function readSchema(db: DatabaseSync): SchemaList {
       declared,
       rows: readRows(db, entry.name, columns),
     });
-    indexes.push(...readIndexes(db, entry.name, catalogue));
+    indexes.push(...readIndexes(db, entry.name, menu));
   }
-  return { tables, views, indexes: indexes.sort(byName), triggers: readTriggers(catalogue) };
+  return { tables, views, indexes: indexes.sort(byName), triggers: readTriggers(menu) };
 }

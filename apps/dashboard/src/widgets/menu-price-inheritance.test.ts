@@ -147,23 +147,23 @@ interface OwnPrices {
 const d = (value: string) => value as Decimal;
 
 /** The clash rows come from the real `combineOffer`: this menu places the product in its own
- * sections at its catalogue prices and includes a Drinks menu that sets `drinks` itself. */
+ * sections at its menu prices and includes a Drinks menu that sets `drinks` itself. */
 function combined(
   productId: string,
-  catalogue: { price: string; variants: Record<string, string | null> },
+  product: { price: string; variants: Record<string, string | null> },
   lunch: OwnPrices,
   drinks: OwnPrices,
 ): MenuPriceRow["combined"] {
-  const ids = Object.keys(catalogue.variants);
+  const ids = Object.keys(product.variants);
   const prices = (price: string | null | undefined) => (price == null ? null : d(price));
   const offer = (own: OwnPrices, included: Parameters<typeof combineOffer>[0]["included"]) =>
     combineOffer({
       productId,
-      catalogue: {
-        price: d(catalogue.price),
+      product: {
+        price: d(product.price),
         variants: ids.map((variantId) => ({
           variantId,
-          price: prices(catalogue.variants[variantId]),
+          price: prices(product.variants[variantId]),
         })),
       },
       own: {
@@ -175,10 +175,10 @@ function combined(
     });
   return offer(lunch, [{ menuId: "drinks", menuName: "Drinks", offer: offer(drinks, []) }]);
 }
-const lemonadeCatalogue = { price: "3.00", variants: { "v-small": null, "v-large": "3.40" } };
+const lemonadeMenu = { price: "3.00", variants: { "v-small": null, "v-large": "3.40" } };
 const lemonadeOn = (lunch: OwnPrices, drinks: OwnPrices): MenuPriceRow => ({
   ...lemonade,
-  combined: combined("p-lemonade", lemonadeCatalogue, lunch, drinks),
+  combined: combined("p-lemonade", lemonadeMenu, lunch, drinks),
 });
 
 const lagerClash: MenuPriceRow = {
@@ -241,8 +241,8 @@ describe("productInherited", () => {
     ["steak, past its own 18.00", steak, range("20.00")],
     ["lemonade, a following variant and a variant's own price", lemonade, range("3.00", "3.75")],
     ["wine, counting each variant's own price", wine, range("7.00", "15.00")],
-    ["juice, a variant's own price and a catalogue variant price", juice, range("3.50", "5.00")],
-    ["cider, a catalogue variant price and a following variant", cider, range("4.00", "4.50")],
+    ["juice, a variant's own price and a menu variant price", juice, range("3.50", "5.00")],
+    ["cider, a menu variant price and a following variant", cider, range("4.00", "4.50")],
   ])("%s", (_, row, expected) => {
     expect(productInherited(row)).toEqual(expected);
   });
@@ -273,7 +273,7 @@ describe("variantInherited", () => {
     ["the product's saved menu price while its field is untouched", "v-small", undefined, "2.50"],
     ["the price typed in the product's field", "v-small", "2.80", "2.80"],
     ["the product's inherited price once its field is emptied", "v-small", null, "3.00"],
-    ["a variant's catalogue price, past its own override", "v-large", undefined, "3.40"],
+    ["a variant's menu price, past its own override", "v-large", undefined, "3.40"],
   ] as const)("gives %s", (_, variantId, parent, expected) => {
     expect(variantInherited(lemonade, variantId, parent)).toEqual(range(expected));
   });
@@ -456,7 +456,7 @@ describe("withoutOwn", () => {
     expect(withoutOwn(following)).toBe(following);
   });
 
-  it("keeps a setting from the catalogue", () => {
+  it("keeps a setting from the menu", () => {
     expect(withoutOwn(burger.combined.price)).toBe(burger.combined.price);
   });
 

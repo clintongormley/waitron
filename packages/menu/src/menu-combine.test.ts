@@ -7,7 +7,7 @@ const input = (
   rest: Partial<CombineInput> = {},
 ): CombineInput => ({
   productId: "lager",
-  catalogue: { price: d("3.00"), variants: [{ variantId: "pint", price: null }] },
+  product: { price: d("3.00"), variants: [{ variantId: "pint", price: null }] },
   own: { price: null, variants: [], ...own },
   placedInOwnSections: false,
   included: [],
@@ -111,12 +111,12 @@ describe("combined menu decisions", () => {
       combineOffer(input({ price: d("4") }, { included: via() })).variants[0]!.price,
     ).toMatchObject({ state: "decided", value: "4", level: "product", source: { kind: "parent" } });
   });
-  it("catalogue variant prices participate in variant clashes", () => {
+  it("menu variant prices participate in variant clashes", () => {
     const offer = combineOffer(
       input(
         {},
         {
-          catalogue: { price: d("3"), variants: [{ variantId: "pint", price: d("5") }] },
+          product: { price: d("3"), variants: [{ variantId: "pint", price: d("5") }] },
           placedInOwnSections: true,
           included: via(local({ variants: [{ variantId: "pint", price: d("6") }] })),
         },
@@ -131,7 +131,7 @@ describe("combined menu decisions", () => {
       input(
         {},
         {
-          catalogue: { price: d("3.5"), variants: [] },
+          product: { price: d("3.5"), variants: [] },
           placedInOwnSections: true,
           included: via(),
         },
@@ -149,7 +149,7 @@ it("propagates an unresolved variant-level candidate even beside an unpriced own
     {},
     {
       placedInOwnSections: true,
-      catalogue: { price: d("3"), variants: [{ variantId: "pint", price: d("5") }] },
+      product: { price: d("3"), variants: [{ variantId: "pint", price: d("5") }] },
       included: via(local({ variants: [{ variantId: "pint", price: d("6") }] })),
     },
   );
@@ -175,15 +175,15 @@ describe("price clashes, with no menu on/off setting", () => {
       { variantId: "half", price: null },
     ],
   };
-  const priced = (catalogue: CombineInput["catalogue"], price: string) =>
-    combineOffer(input({ price: d(price) }, { catalogue, placedInOwnSections: true }));
-  const both = (catalogue: CombineInput["catalogue"]) => [
-    { menuId: "drinks", menuName: "Drinks", offer: priced(catalogue, "3.50") },
-    { menuId: "bar", menuName: "Bar", offer: priced(catalogue, "4.00") },
+  const priced = (product: CombineInput["product"], price: string) =>
+    combineOffer(input({ price: d(price) }, { product, placedInOwnSections: true }));
+  const both = (product: CombineInput["product"]) => [
+    { menuId: "drinks", menuName: "Drinks", offer: priced(product, "3.50") },
+    { menuId: "bar", menuName: "Bar", offer: priced(product, "4.00") },
   ];
 
   it("reports two included menus' different prices, though the parent places nothing itself", () => {
-    const offer = combineOffer(input({}, { catalogue: noVariants, included: both(noVariants) }));
+    const offer = combineOffer(input({}, { product: noVariants, included: both(noVariants) }));
     expect(clashesOf(offer)).toEqual([
       {
         productId: "lager",
@@ -206,9 +206,7 @@ describe("price clashes, with no menu on/off setting", () => {
   });
 
   it("reports the price clash once for every variant", () => {
-    const offer = combineOffer(
-      input({}, { catalogue: withVariants, included: both(withVariants) }),
-    );
+    const offer = combineOffer(input({}, { product: withVariants, included: both(withVariants) }));
     expect(clashesOf(offer).map((c) => [c.field, c.variantId])).toEqual([
       ["price", "pint"],
       ["price", "half"],
@@ -216,9 +214,7 @@ describe("price clashes, with no menu on/off setting", () => {
   });
 
   it("carries no on/off setting for the offer or any variant", () => {
-    const offer = combineOffer(
-      input({}, { catalogue: withVariants, included: both(withVariants) }),
-    );
+    const offer = combineOffer(input({}, { product: withVariants, included: both(withVariants) }));
     expect(offer).not.toHaveProperty("offered");
     for (const variant of offer.variants) expect(variant).not.toHaveProperty("offered");
   });

@@ -43,7 +43,7 @@ import type {
   TillMenu,
   TillProduct,
   TillSaleResult,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 
 const coffee: TillProduct = {
@@ -54,8 +54,8 @@ const coffee: TillProduct = {
   vatClass: "general",
   category: null,
   allergens: null,
-  catalogueId: "cat-default",
-  catalogueName: "Carta",
+  menuId: "cat-default",
+  menuName: "Carta",
 };
 
 const floorZone: FloorZone = {
@@ -164,10 +164,10 @@ const till = {
 };
 
 function zoneOffers(
-  catalogue: { menus: TillMenu[]; products: TillProduct[] },
+  menu: { menus: TillMenu[]; products: TillProduct[] },
   defaultMenuId: string | null,
-): ZoneOfferCatalogue {
-  const body: ZoneOfferCatalogue = {
+): ZoneOffers {
+  const body: ZoneOffers = {
     service: {
       open: true,
       zoneOpen: true,
@@ -186,16 +186,16 @@ function zoneOffers(
     // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
     // suites pin are the ones a till sends against the live version.
     menus: [],
-    offers: catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
+    offers: menu.products.map((product, index): ZoneOffers["offers"][number] => ({
       id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
-      menuId: product.catalogueId ?? "menu-fixture",
+      menuId: product.menuId ?? "menu-fixture",
       productId: product.productId ?? product.id,
       grossPrice: product.unitPrice,
       unitPrice: product.unitPrice,
       available: true,
       image: null,
       description: null,
-      menuName: product.catalogueName ?? "Menu",
+      menuName: product.menuName ?? "Menu",
       placements: [[]],
       name: product.name,
       customerName: null,
@@ -212,7 +212,7 @@ function zoneOffers(
       courseId: null,
     })),
   };
-  body.menus = servedMenus(catalogue.menus, body.offers) as ZoneOfferCatalogue["menus"];
+  body.menus = servedMenus(menu.menus, body.offers) as ZoneOffers["menus"];
   return body;
 }
 
@@ -229,8 +229,8 @@ const diningOffers = zoneOffers(
   {
     menus: diningMenus,
     products: [
-      { ...coffee, id: "sopa", name: "Sopa", catalogueId: "menu-lunch" },
-      { ...coffee, id: "cordero", name: "Cordero", catalogueId: "menu-dinner" },
+      { ...coffee, id: "sopa", name: "Sopa", menuId: "menu-lunch" },
+      { ...coffee, id: "cordero", name: "Cordero", menuId: "menu-dinner" },
     ],
   },
   "menu-dinner",
@@ -316,7 +316,7 @@ async function ringCoffee(el: TillApp, screen: TillTableOrderScreen) {
   store.addProduct(
     {
       id: "cafe",
-      catalogueId: screen.selectedMenuId ?? "menu-dinner",
+      menuId: screen.selectedMenuId ?? "menu-dinner",
       menuItemId: "menu-item-cafe-0",
       name: "Café",
       pricingUnit: "each",
@@ -455,16 +455,14 @@ describe("till-app table ordering: the table's menus", () => {
   it("switches the TABLE's menu on a pick, leaving the counter's menu and its stored preference alone", async () => {
     const { el } = await mountApp();
     const screen = await toTableOrder(el);
-    const counterMenu = (el as unknown as { selectedCatalogueId: string }).selectedCatalogueId;
+    const counterMenu = (el as unknown as { selectedMenuId: string }).selectedMenuId;
     const storedPreference = sessionStorage.getItem("waitron.lastMenu");
 
     emit(screen, "menu-selected", { id: "menu-lunch" });
     await flush(el);
 
     expect(tableOrder(el)!.selectedMenuId).toBe("menu-lunch");
-    expect((el as unknown as { selectedCatalogueId: string }).selectedCatalogueId).toBe(
-      counterMenu,
-    );
+    expect((el as unknown as { selectedMenuId: string }).selectedMenuId).toBe(counterMenu);
     expect(sessionStorage.getItem("waitron.lastMenu")).toBe(storedPreference);
   });
 
@@ -496,7 +494,7 @@ describe("till-app table ordering: the table's menus", () => {
     host.removeChild(el);
     emit(wrapper, "menu-selected", { id: "menu-lunch" });
 
-    expect((el as unknown as { tableSelectedCatalogueId: string }).tableSelectedCatalogueId).toBe(
+    expect((el as unknown as { tableSelectedMenuId: string }).tableSelectedMenuId).toBe(
       "menu-dinner",
     );
   });
@@ -541,7 +539,7 @@ describe("till-app table ordering: the table's menus", () => {
     let rejectA!: (reason: unknown) => void;
     const listZoneOffers = vi.fn((zoneId: string) =>
       zoneId === "zone-a"
-        ? new Promise<ZoneOfferCatalogue>((_resolve, reject) => (rejectA = reject))
+        ? new Promise<ZoneOffers>((_resolve, reject) => (rejectA = reject))
         : Promise.resolve(diningOffers),
     );
     const { el } = await mountApp({
@@ -1539,7 +1537,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
 
 describe("till-app table ordering: changing and cancelling a sent line", () => {
   const sent = "2026-08-17T09:59:00.000Z";
-  const burgerOffers: ZoneOfferCatalogue = (() => {
+  const burgerOffers: ZoneOffers = (() => {
     const offers = zoneOffers(
       {
         menus: diningMenus,
@@ -1550,7 +1548,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
             menuItemId: "menu-item-burger",
             name: "Burger",
             unitPrice: "9.50",
-            catalogueId: "menu-dinner",
+            menuId: "menu-dinner",
           },
         ],
       },
@@ -1859,7 +1857,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     screen.draftStore!.addProduct(
       {
         id: "water",
-        catalogueId: "menu-dinner",
+        menuId: "menu-dinner",
         menuItemId: "menu-item-water",
         name: "Water",
         pricingUnit: "each",
@@ -1956,7 +1954,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         products: [
           { ...coffee, id: "burger", menuItemId: "menu-item-burger", name: "Burger" },
           { ...coffee, id: "flan", menuItemId: "menu-item-flan", name: "Flan" },
-        ].map((product) => ({ ...product, catalogueId: "menu-dinner" })),
+        ].map((product) => ({ ...product, menuId: "menu-dinner" })),
       },
       null,
     );

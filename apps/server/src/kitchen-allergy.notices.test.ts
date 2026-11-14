@@ -380,7 +380,7 @@ describe("A669 notices", () => {
           .where(eq(products.id, v.productId("Burger")));
         const { defaultLanguage } = await readContentLanguages(tx, v.cfg.locale);
         const side = await createProduct(tx, {
-          catalogueId: parent!.catalogueId,
+          menuId: parent!.menuId,
           categoryId: null,
           name: "Side staff",
           customerName: { [defaultLanguage]: "Side customer" },

@@ -3,11 +3,11 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { menuItems, sectionMembers, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { racePair, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
+import { racePair, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { and } from "drizzle-orm";
 import { readMenuHome } from "./menu-home.js";
 import { requireMenuRoot } from "./menu-structure.js";
-import { createCatalogue, createProduct, updateMenuItem } from "./operations.js";
+import { createMenu, createProduct, updateMenuItem } from "./operations.js";
 import { loadSectionGraph, wouldCreateCycle } from "./section-graph.js";
 import {
   addMember,
@@ -23,18 +23,18 @@ import {
  * on `sections` and `section_members` tried with real offending writes, each beside an accepted
  * one. `racePair` (`test/fixtures.ts`) carries the mechanism, the measurement and the control.
  */
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 async function fixture() {
   await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Lunch menu" });
+    const menu = await createMenu(tx, { name: "Lunch menu" });
     const make = async (name: string) =>
       (
         await createProduct(tx, {
-          catalogueId: menu.id,
+          menuId: menu.id,
           categoryId: null,
           name: `${name} (staff)`,
           customerName: { en: `${name} (customer)` },
@@ -516,7 +516,7 @@ describe("moving and removing several members", () => {
       async (tx) =>
         (
           await createProduct(tx, {
-            catalogueId: other.ownerMenuId,
+            menuId: other.ownerMenuId,
             categoryId: null,
             name: "Cider (staff)",
             customerName: { en: "Cider (customer)" },

@@ -27,7 +27,7 @@ const unit: Unit = {
   abbreviation: { en: "kg", es: "kg", fr: "kg" },
   precision: 3,
 };
-class CatalogueFormsApp extends LitElement {
+class ProductFormsApp extends LitElement {
   readonly leave = new LeaveController(this);
   kind: "unit" | "category-color" = "unit";
   value: Unit | null = unit;
@@ -67,9 +67,9 @@ class CatalogueFormsApp extends LitElement {
     })}`;
   }
 }
-customElements.define("catalogue-forms-leave-test-app", CatalogueFormsApp);
-async function mount(props: Partial<CatalogueFormsApp> = {}) {
-  const { el: app } = await mountWidget<CatalogueFormsApp>("catalogue-forms-leave-test-app", props);
+customElements.define("product-forms-leave-test-app", ProductFormsApp);
+async function mount(props: Partial<ProductFormsApp> = {}) {
+  const { el: app } = await mountWidget<ProductFormsApp>("product-forms-leave-test-app", props);
   const form = app.shadowRoot!.querySelector("dashboard-unit-form")!;
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
@@ -83,7 +83,7 @@ async function edit(form: HTMLElement, name: string, value: string) {
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
   await (form as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
 }
-async function question(app: CatalogueFormsApp) {
+async function question(app: ProductFormsApp) {
   await app.updateComplete;
   const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await q.updateComplete;
@@ -238,7 +238,7 @@ it("Unit success commits submitted translations without clearing edits made duri
 });
 
 async function mountCategoryColor() {
-  const { el: app } = await mountWidget<CatalogueFormsApp>("catalogue-forms-leave-test-app", {
+  const { el: app } = await mountWidget<ProductFormsApp>("product-forms-leave-test-app", {
     kind: "category-color",
   });
   const category = app.shadowRoot!.querySelector("dashboard-category-color-form")!;

@@ -8,13 +8,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   listAvailableProducts,
 } from "@waitron/menu";
-import { catalogues, ticketItems, workingOrderLines } from "@waitron/db";
+import { menus, ticketItems, workingOrderLines } from "@waitron/db";
 import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -123,10 +123,10 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
 
   const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue));
   const { available, counter, tables } = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
@@ -134,14 +134,14 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
       vatClass: "general",
     });
     await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     return {
       available: (await listAvailableProducts(tx)).products,
       counter: await offerProducts(tx, cfg),
@@ -493,11 +493,11 @@ describe("a sent line is payable after archival; an archived unsent one is not",
     const deps = { db: suite.db, backend, clock };
     const { burgerId, beerId, offers, courseId } = await withTransaction(suite.db, async (tx) => {
       const [carta] = await tx
-        .select({ id: catalogues.id })
-        .from(catalogues)
-        .where(eq(catalogues.name, "Delicatessen"));
+        .select({ id: menus.id })
+        .from(menus)
+        .where(eq(menus.name, "Delicatessen"));
       const burger = await createProduct(tx, {
-        catalogueId: carta!.id,
+        menuId: carta!.id,
         categoryId: null,
         name: "Burger staff",
         customerName: { es: "Hamburguesa cliente" },
@@ -507,7 +507,7 @@ describe("a sent line is payable after archival; an archived unsent one is not",
         vatClass: "reduced",
       });
       const beer = await createProduct(tx, {
-        catalogueId: carta!.id,
+        menuId: carta!.id,
         categoryId: null,
         name: "Bottled beer staff",
         customerName: { es: "Cerveza cliente" },

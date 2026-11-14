@@ -13,7 +13,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import "./errors.js";
 
-// No built-in role holds `venue.configure` without `venue.view` or without `catalogue.manage`, so
+// No built-in role holds `venue.configure` without `venue.view` or without `menu.manage`, so
 // `authorizeManager` is wrapped to refuse whatever `gate.withheld` names.
 const gate = vi.hoisted(() => ({ withheld: null as string | null }));
 vi.mock("@waitron/identity", async (importOriginal) => {
@@ -127,8 +127,8 @@ describe("venue.view gates reading the venue defaults and venue.configure gates 
     expect(await answer.json()).toEqual(refusal("venue.view"));
   });
 
-  it("serves a read and a write to a session without catalogue.manage", async () => {
-    gate.withheld = "catalogue.manage";
+  it("serves a read and a write to a session without menu.manage", async () => {
+    gate.withheld = "menu.manage";
     expect((await read(managerCookie)).status).toBe(200);
     const saved = await write(managerCookie);
     expect(saved.status).toBe(200);

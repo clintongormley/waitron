@@ -142,7 +142,7 @@ const meResponse = {
   permissions: [
     "booking.manage",
     "venue.view",
-    "catalogue.manage",
+    "menu.manage",
     "hardware.manage",
     "system.manage",
     "person.manage",
@@ -235,8 +235,8 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listMyShifts: vi.fn().mockResolvedValue([]),
     listMySwaps: vi.fn().mockResolvedValue([]),
     listMyAbsences: vi.fn().mockResolvedValue([]),
-    listCatalogues: vi.fn().mockResolvedValue([]),
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    listMenus: vi.fn().mockResolvedValue([]),
+    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
@@ -384,7 +384,7 @@ function unsavedOnUnload(): boolean {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
+const menu = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-products-screen");
 const units = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-units-screen");
 const navUnits = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-units]");
@@ -416,8 +416,8 @@ const navSales = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-sales]");
 const navStaff = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-staff]");
-const navCatalogue = (el: DashboardApp) =>
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-catalogue]");
+const navProducts = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-products]");
 const navVenueSettings = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-venue-settings]");
 const navRoster = (el: DashboardApp) =>
@@ -441,7 +441,7 @@ const navItem = (el: DashboardApp, screen: string) =>
 const NAV_SCREENS = [
   "overview",
   "sales",
-  "catalogue",
+  "products",
   "menus",
   "bookings",
   "staff",
@@ -478,7 +478,7 @@ const SCREEN_TAGS = [
   "dashboard-overview-screen",
   "dashboard-sales-screen",
   "dashboard-staff-screen",
-  "dashboard-catalogue-screen",
+  "dashboard-products-screen",
   "dashboard-venue-settings-screen",
   "dashboard-approvals-screen",
   "dashboard-planned-actual-screen",
@@ -552,7 +552,7 @@ afterEach(() => {
 
 describe("dashboard-app", () => {
   it("waits for content languages before mounting an editable screen", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
+    history.replaceState(null, "", "/manage/products");
     let finish!: (config: { defaultLanguage: string; languages: string[] }) => void;
     const api = stubApi({
       getContentLanguages: vi.fn().mockImplementation(
@@ -564,19 +564,19 @@ describe("dashboard-app", () => {
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=content-language-loading]")).not.toBeNull();
     expect(logoutBtn(el)).not.toBeNull();
     expect(currentLocale()).toBe("es-ES");
     finish({ defaultLanguage: "fr", languages: ["fr", "es"] });
     await flush(el);
     expect(currentContentLanguages().defaultLanguage).toBe("fr");
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
     expect(currentLocale()).toBe("es-ES");
   });
 
   it("offers retry while failed initial content-language loading keeps screens unmounted", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
+    history.replaceState(null, "", "/manage/products");
     const getContentLanguages = vi
       .fn()
       .mockRejectedValueOnce({ code: "server.internal" })
@@ -585,12 +585,12 @@ describe("dashboard-app", () => {
       api: stubApi({ getContentLanguages }),
     });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=content-language-error]")).not.toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry-content-languages]")!.click();
     await flush(el);
     expect(currentContentLanguages().defaultLanguage).toBe("fr");
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=content-language-error]")).toBeNull();
   });
 
@@ -1122,7 +1122,7 @@ describe("dashboard-app", () => {
       [
         "overview",
         "sales",
-        "catalogue",
+        "products",
         "courses",
         "units",
         "venue-settings",
@@ -1138,11 +1138,7 @@ describe("dashboard-app", () => {
       ],
     ],
     ["nothing", [], ["my-schedule", "orders"]],
-    [
-      "catalogue.manage",
-      ["catalogue.manage"],
-      ["menus", "modifiers", "content-languages", "orders"],
-    ],
+    ["menu.manage", ["menu.manage"], ["menus", "modifiers", "content-languages", "orders"]],
   ])(
     "a person holding only %s signs in and sees permitted pages",
     async (_name, permissions, screens) => {
@@ -1164,7 +1160,7 @@ describe("dashboard-app", () => {
         item.getAttribute("data-test")!.replace("nav-", ""),
       );
       expect(shown.sort()).toEqual([...screens].sort());
-      if (permissions[0] === "catalogue.manage")
+      if (permissions[0] === "menu.manage")
         expect(el.shadowRoot!.querySelector("dashboard-menus-screen")).not.toBeNull();
       if (permissions.length === 0 || permissions[0] === "payment.take") {
         expect(mySchedule(el)).not.toBeNull();
@@ -1210,7 +1206,7 @@ describe("dashboard-app", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect(navStaff(el)).toBeNull();
-    expect(navCatalogue(el)).toBeNull();
+    expect(navProducts(el)).toBeNull();
     expect(navRoster(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=nav-orders]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=nav-my-schedule]")).not.toBeNull();
@@ -1293,24 +1289,24 @@ describe("dashboard-app", () => {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    navItem(el, "catalogue")!.click();
+    navItem(el, "products")!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
-    expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
+    expect(navItem(el, "products")!.getAttribute("aria-current")).toBe("page");
 
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
     await flush(el);
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     expect(modal.open).toBe(true);
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
-    expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
+    expect(navItem(el, "products")!.getAttribute("aria-current")).toBe("page");
     expect(new URL(location.href).pathname).toBe("/manage/profile");
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await flush(el);
     expect(modal.open).toBe(false);
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
-    await expect.poll(() => new URL(location.href).pathname).toBe("/manage/catalogue");
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
+    await expect.poll(() => new URL(location.href).pathname).toBe("/manage/products");
   });
 
   it("keeps the underlying screen after saving your profile — a save re-probes the session while the URL still says profile", async () => {
@@ -1341,9 +1337,9 @@ describe("dashboard-app", () => {
       }),
     });
     await flush(el);
-    navItem(el, "catalogue")!.click();
+    navItem(el, "products")!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
 
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
     await flush(el);
@@ -1365,8 +1361,8 @@ describe("dashboard-app", () => {
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
-    await expect.poll(() => new URL(location.href).pathname).toBe("/manage/catalogue");
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
+    await expect.poll(() => new URL(location.href).pathname).toBe("/manage/products");
   });
 
   const deviceProfile = {
@@ -1556,10 +1552,10 @@ describe("dashboard-app", () => {
     expect(name()?.value).toBe("Front counter");
   });
 
-  const catalogueProduct = {
+  const menuProduct = {
     id: "p1",
     modifiers: [],
-    catalogueId: "cat-a",
+    menuId: "cat-a",
     categoryId: null,
     primaryCategoryId: null,
     name: "Croquettes",
@@ -1613,17 +1609,17 @@ describe("dashboard-app", () => {
     dietaryDeclarations: [],
     courseId: null,
   };
-  async function mountOnCatalogue(overrides: Record<string, unknown> = {}) {
+  async function mountOnMenu(overrides: Record<string, unknown> = {}) {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi
           .fn()
           .mockResolvedValue({ ...meResponse, permissions: ["product.manage", "venue.view"] }),
         getProfile: vi.fn().mockResolvedValue(ownProfile),
-        listCatalogues: vi
+        listMenus: vi
           .fn()
           .mockResolvedValue([{ id: "cat-a", name: "Lunch", active: true, version: 1 }]),
-        listProducts: vi.fn().mockResolvedValue([catalogueProduct]),
+        listProducts: vi.fn().mockResolvedValue([menuProduct]),
         listUnits: vi.fn().mockResolvedValue([]),
         listExtraLists: vi.fn().mockResolvedValue([]),
         listOptionLists: vi.fn().mockResolvedValue([]),
@@ -1634,13 +1630,13 @@ describe("dashboard-app", () => {
     });
     await flush(el);
     const editor = () =>
-      catalogue(el)?.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      menu(el)?.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
         "dashboard-product-editor",
       );
     const price = () => editor()?.shadowRoot!.querySelector<WtInput>("[name=unit-price]");
     const fromBrowser = (type: string, detail: unknown) =>
-      catalogue(el)!
-        .shadowRoot!.querySelector("dashboard-catalogue-browser")!
+      menu(el)!
+        .shadowRoot!.querySelector("dashboard-product-browser")!
         .dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
     const reprice = async (value: string) => {
       price()!.dispatchEvent(
@@ -1660,8 +1656,8 @@ describe("dashboard-app", () => {
   }
 
   it("closing Your profile keeps the product editor it opened over, with its unsaved price", async () => {
-    history.replaceState(null, "", "/manage/catalogue/product/p1");
-    const { el, editor, price, reprice, passThroughYourProfile } = await mountOnCatalogue();
+    history.replaceState(null, "", "/manage/products/product/p1");
+    const { el, editor, price, reprice, passThroughYourProfile } = await mountOnMenu();
     await expect.poll(() => editor()?.open).toBe(true);
     await expect.poll(() => price()?.value).toBe("8.50");
     await reprice("9.25");
@@ -1670,18 +1666,17 @@ describe("dashboard-app", () => {
     await passThroughYourProfile();
 
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
-    expect(location.pathname).toBe("/manage/catalogue/product/p1");
+    expect(location.pathname).toBe("/manage/products/product/p1");
     expect(editor()?.open).toBe(true);
     expect(price()?.value).toBe("9.25");
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
 
   it("closing Your profile keeps a new product's editor, with its unsaved price", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
-    const { el, editor, price, fromBrowser, reprice, passThroughYourProfile } =
-      await mountOnCatalogue();
+    history.replaceState(null, "", "/manage/products");
+    const { el, editor, price, fromBrowser, reprice, passThroughYourProfile } = await mountOnMenu();
     await expect
-      .poll(() => catalogue(el)?.shadowRoot!.querySelector("dashboard-catalogue-browser"))
+      .poll(() => menu(el)?.shadowRoot!.querySelector("dashboard-product-browser"))
       .not.toBeNull();
     fromBrowser("add-product", { categoryId: null });
     await expect.poll(() => editor()?.open).toBe(true);
@@ -1692,28 +1687,28 @@ describe("dashboard-app", () => {
     await passThroughYourProfile();
 
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
-    expect(location.pathname).toBe("/manage/catalogue");
+    expect(location.pathname).toBe("/manage/products");
     expect(editor()?.open).toBe(true);
     expect(price()?.value).toBe("9.25");
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
 
   it.each([
-    ["/manage/catalogue", "/manage/catalogue/product/p1"],
-    ["/manage/catalogue/category/c1", "/manage/catalogue/product/p1/category/c1"],
+    ["/manage/products", "/manage/products/product/p1"],
+    ["/manage/products/category/c1", "/manage/products/product/p1/category/c1"],
   ])(
     "a product editor whose read lands while Your profile shows over %s is named in the address once the window closes",
     async (start, named) => {
       history.replaceState(null, "", start);
       let land!: () => void;
-      const { el, editor, price, fromBrowser } = await mountOnCatalogue({
+      const { el, editor, price, fromBrowser } = await mountOnMenu({
         getProductEditor: () =>
           new Promise((resolve) => {
             land = () => resolve(productEditorValue);
           }),
       });
       await expect
-        .poll(() => catalogue(el)?.shadowRoot!.querySelector("dashboard-catalogue-browser"))
+        .poll(() => menu(el)?.shadowRoot!.querySelector("dashboard-product-browser"))
         .not.toBeNull();
       fromBrowser("edit-product", { productId: "p1" });
       await expect.poll(() => land).toBeTypeOf("function");
@@ -2146,7 +2141,7 @@ describe("dashboard-app", () => {
     expect(logoutBtn(el)).toBeNull();
   });
 
-  it("opens a product's editor on the catalogue screen from the units in-use modal", async () => {
+  it("opens a product's editor on the menu screen from the units in-use modal", async () => {
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
       listUnits: vi.fn().mockResolvedValue([
@@ -2174,14 +2169,14 @@ describe("dashboard-app", () => {
       }),
     );
     await flush(el);
-    expect(catalogue(el)).toBeTruthy();
+    expect(menu(el)).toBeTruthy();
     expect(units(el)).toBeNull();
-    expect(location.pathname).toContain("/manage/catalogue/product/p1");
+    expect(location.pathname).toContain("/manage/products/product/p1");
   });
 
   // The jump is an ordinary screen change, so it clears the previous screen's `view` segment the
   // way every nav click does — otherwise a units URL reached by deep link carries its `view` into
-  // the catalogue URL, where it means something else entirely.
+  // the menu URL, where it means something else entirely.
   it("clears a stale view segment when opening a product's editor from the units modal", async () => {
     history.replaceState(null, "", "/manage/units/view/detail");
     const api = stubApi({
@@ -2212,19 +2207,19 @@ describe("dashboard-app", () => {
       }),
     );
     await flush(el);
-    expect(location.pathname).toBe("/manage/catalogue/product/p1");
+    expect(location.pathname).toBe("/manage/products/product/p1");
   });
 
-  it("navigates between the staff and catalogue screens", async () => {
+  it("navigates between the staff and menu screens", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
 
     expect(overview(el)).toBeTruthy();
     expect(staff(el)).toBeNull();
-    expect(catalogue(el)).toBeNull();
+    expect(menu(el)).toBeNull();
     expect(navStaff(el)).toBeTruthy();
-    expect(navCatalogue(el)).toBeTruthy();
+    expect(navProducts(el)).toBeTruthy();
 
     navStaff(el)!.click();
     await flush(el);
@@ -2232,15 +2227,15 @@ describe("dashboard-app", () => {
     expect((staff(el) as unknown as { currentPersonId: string }).currentPersonId).toBe("p1");
     expect(overview(el)).toBeNull();
 
-    navCatalogue(el)!.click();
+    navProducts(el)!.click();
     await flush(el);
-    expect(catalogue(el)).toBeTruthy();
+    expect(menu(el)).toBeTruthy();
     expect(staff(el)).toBeNull();
 
     navStaff(el)!.click();
     await flush(el);
     expect(staff(el)).toBeTruthy();
-    expect(catalogue(el)).toBeNull();
+    expect(menu(el)).toBeNull();
   });
 
   it("navigates to the sales screen and back to overview", async () => {
@@ -2784,7 +2779,7 @@ describe("dashboard-app", () => {
     expect(mountedScreens(el)).toEqual(["dashboard-overview-screen"]);
     expect(countH1(el)).toBe(1);
     expect(navStaff(el)).toBeTruthy();
-    expect(navCatalogue(el)).toBeTruthy();
+    expect(navProducts(el)).toBeTruthy();
     expect(navVenueSettings(el)).toBeTruthy();
 
     navStaff(el)!.click();
@@ -2799,10 +2794,10 @@ describe("dashboard-app", () => {
     expect(venueSettings(el)).toBeTruthy();
     expect(allH1(el.shadowRoot!)).toHaveLength(1);
 
-    navCatalogue(el)!.click();
+    navProducts(el)!.click();
     await flush(el);
-    expect(mountedScreens(el)).toEqual(["dashboard-catalogue-screen"]);
-    expect(catalogue(el)).toBeTruthy();
+    expect(mountedScreens(el)).toEqual(["dashboard-products-screen"]);
+    expect(menu(el)).toBeTruthy();
     expect(countH1(el)).toBe(1);
 
     navStaff(el)!.click();
@@ -2842,7 +2837,7 @@ describe("dashboard-app", () => {
     expect(navItem(el, "email"), "Prepare email settings are also in System").not.toBeNull();
     expect(navItem(el, "sections")).toBeNull();
     expect(navItem(el, "recipe")).toBeNull();
-    expect(navItem(el, "catalogue")!.textContent).toContain(t("nav.catalogue"));
+    expect(navItem(el, "products")!.textContent).toContain(t("nav.products"));
   });
 
   it("draws text on the page itself, outside the app, at the 14px body size", () => {
@@ -2880,7 +2875,7 @@ describe("dashboard-app", () => {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    expect(getComputedStyle(navItem(el, "catalogue")!).fontSize).toBe("14px");
+    expect(getComputedStyle(navItem(el, "products")!).fontSize).toBe("14px");
     expect(getComputedStyle(el.shadowRoot!.querySelector("button.nav-group")!).fontSize).toBe(
       "12px",
     );
@@ -2928,9 +2923,9 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(team.getAttribute("aria-expanded")).toBe("true");
     expect(menu.getAttribute("aria-expanded")).toBe("false");
-    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(false);
+    expect(navItem(el, "products")!.checkVisibility()).toBe(false);
 
-    navItem(el, "catalogue")!.click();
+    navItem(el, "products")!.click();
     await flush(el);
     expect(menu.getAttribute("aria-expanded")).toBe("true");
     expect(team.getAttribute("aria-expanded")).toBe("false");
@@ -2992,7 +2987,7 @@ describe("dashboard-app", () => {
         throw new Error("Missing navigation text");
       };
       const text = textRect(header);
-      const item = textRect(navItem(el, "catalogue")!);
+      const item = textRect(navItem(el, "products")!);
       const chevron = header.querySelector<HTMLElement>(".chevron")!;
       const arrow = chevron.getBoundingClientRect();
       expect(text.left).toBeCloseTo(item.left, 0);
@@ -3094,7 +3089,7 @@ describe("dashboard-app", () => {
   });
 
   it("starts with only the group holding the opened page expanded", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
+    history.replaceState(null, "", "/manage/products");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -3103,7 +3098,7 @@ describe("dashboard-app", () => {
       .filter((h) => h.getAttribute("aria-expanded") === "true")
       .map((h) => h.dataset.test);
     expect(expanded).toEqual(["nav-group-menu"]);
-    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
+    expect(navItem(el, "products")!.checkVisibility()).toBe(true);
   });
 
   it.each([
@@ -3181,7 +3176,7 @@ describe("dashboard-app", () => {
   });
 
   it("collapses the current page's group when its header is clicked, and opens it on a second click", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
+    history.replaceState(null, "", "/manage/products");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -3194,23 +3189,23 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(header.getAttribute("aria-expanded")).toBe("false");
     expect(panel.hidden).toBe(true);
-    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(false);
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(navItem(el, "products")!.checkVisibility()).toBe(false);
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
 
     header.click();
     await flush(el);
     expect(header.getAttribute("aria-expanded")).toBe("true");
     expect(panel.hidden).toBe(false);
-    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
+    expect(navItem(el, "products")!.checkVisibility()).toBe(true);
   });
 
   it.each(["Back", "query write"])(
     "keeps a manually opened nav group on a same-page %s",
     async (operation) => {
-      history.replaceState(null, "", "/manage/catalogue");
+      history.replaceState(null, "", "/manage/products");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
       await flush(el);
-      if (operation === "Back") history.pushState(null, "", "/manage/catalogue?review=1");
+      if (operation === "Back") history.pushState(null, "", "/manage/products?review=1");
       const team = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-team]")!;
       team.click();
       await flush(el);
@@ -3222,11 +3217,11 @@ describe("dashboard-app", () => {
         history.back();
         await back;
       } else {
-        await navigationGuardFor(window)!.write("/manage/catalogue?review=2");
+        await navigationGuardFor(window)!.write("/manage/products?review=2");
       }
       await flush(el);
-      expect(location.pathname).toBe("/manage/catalogue");
-      expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+      expect(location.pathname).toBe("/manage/products");
+      expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
       expect(team.getAttribute("aria-expanded")).toBe("true");
       expect(
         el.shadowRoot!.querySelector("[data-test=nav-group-menu]")!.getAttribute("aria-expanded"),
@@ -3244,9 +3239,9 @@ describe("dashboard-app", () => {
     const panel = el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-team")!;
     expect(header.getAttribute("aria-expanded")).toBe("true");
 
-    navItem(el, "catalogue")!.click();
+    navItem(el, "products")!.click();
     await flush(el);
-    expect(location.pathname).toBe("/manage/catalogue");
+    expect(location.pathname).toBe("/manage/products");
     expect(header.getAttribute("aria-expanded")).toBe("false");
     expect(panel.hidden).toBe(true);
 
@@ -3631,7 +3626,7 @@ describe("dashboard-app", () => {
       api: stubApi({
         getMe: vi
           .fn()
-          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", "catalogue.manage"] }),
+          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", "menu.manage"] }),
       }),
     });
     await flush(el);
@@ -3640,7 +3635,7 @@ describe("dashboard-app", () => {
     const panel = el.shadowRoot!.querySelector("#nav-group-panel-menu")!;
     const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
     expect(order).toEqual([
-      "nav-catalogue",
+      "nav-products",
       "nav-menus",
       "nav-modifiers",
       "nav-courses",
@@ -3651,7 +3646,7 @@ describe("dashboard-app", () => {
   it("hides Courses without venue.view", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["catalogue.manage"] }),
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["menu.manage"] }),
       }),
     });
     await flush(el);
@@ -3828,8 +3823,8 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    ["admin", ["catalogue.manage"]],
-    ["manager", ["catalogue.manage", "person.manage"]],
+    ["admin", ["menu.manage"]],
+    ["manager", ["menu.manage", "person.manage"]],
     ["supervisor", []],
     ["manager", ["person.manage"]],
   ])(
@@ -3843,7 +3838,7 @@ describe("dashboard-app", () => {
       });
       await flush(el);
       expect(navItem(el, "overview")).toBeTruthy();
-      expect(navItem(el, "catalogue-defaults")).toBeNull();
+      expect(navItem(el, "menu-defaults")).toBeNull();
       const panel = el.shadowRoot!.querySelector("#nav-group-panel-menu")!;
       const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map(
         (b) => b.dataset.test,
@@ -3853,12 +3848,12 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    ["manager", ["catalogue.manage"]],
+    ["manager", ["menu.manage"]],
     ["manager", ["person.manage"]],
   ])(
-    "opens /manage/catalogue-defaults as the default page for a %s session holding %j",
+    "opens /manage/menu-defaults as the default page for a %s session holding %j",
     async (role, permissions) => {
-      history.replaceState(null, "", "/manage/catalogue-defaults");
+      history.replaceState(null, "", "/manage/menu-defaults");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
@@ -3871,9 +3866,9 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("offers Content languages first in System to a session holding catalogue.manage and not venue.view, and opens its page", async () => {
+  it("offers Content languages first in System to a session holding menu.manage and not venue.view, and opens its page", async () => {
     const api = stubApi({
-      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["catalogue.manage"] }),
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["menu.manage"] }),
       listStaff: vi.fn().mockResolvedValue([]),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -3898,7 +3893,7 @@ describe("dashboard-app", () => {
     ["manager", ["booking.manage"]],
     ["manager", ["person.manage"]],
   ])(
-    "does not offer Content languages to a %s session without catalogue.manage",
+    "does not offer Content languages to a %s session without menu.manage",
     async (role, permissions) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
@@ -3913,16 +3908,11 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    [
-      "manager",
-      ["catalogue.manage"],
-      "dashboard-content-languages-screen",
-      "/manage/content-languages",
-    ],
+    ["manager", ["menu.manage"], "dashboard-content-languages-screen", "/manage/content-languages"],
     ["manager", ["person.manage"], "dashboard-overview-screen", "/manage/overview"],
     ["supervisor", [], "dashboard-overview-screen", "/manage/overview"],
   ])(
-    "opens /manage/content-languages for a %s session only when it holds catalogue.manage",
+    "opens /manage/content-languages for a %s session only when it holds menu.manage",
     async (role, permissions, tag, path) => {
       history.replaceState(null, "", "/manage/content-languages");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -4183,10 +4173,10 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(navItem(el, "overview")!.getAttribute("aria-current")).toBe("page");
 
-    navItem(el, "catalogue")!.click();
+    navItem(el, "products")!.click();
     await flush(el);
-    expect(catalogue(el)).toBeTruthy();
-    expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
+    expect(menu(el)).toBeTruthy();
+    expect(navItem(el, "products")!.getAttribute("aria-current")).toBe("page");
     expect(navItem(el, "overview")!.getAttribute("aria-current")).toBeNull();
   });
 
@@ -4198,7 +4188,7 @@ describe("dashboard-app", () => {
     host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
     host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
     expect(getComputedStyle(navItem(el, "overview")!).color).toBe("rgb(4, 5, 6)");
-    expect(getComputedStyle(navItem(el, "catalogue")!).color).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(navItem(el, "products")!).color).toBe("rgb(1, 2, 3)");
   });
 
   it("shows the gear icon on the System group header and the team icon on the Team header", async () => {
@@ -4237,11 +4227,11 @@ describe("dashboard-app", () => {
     expect(layout().classList.contains("drawer-open")).toBe(true);
     expect(el.shadowRoot!.querySelector(".scrim")).toBeTruthy();
 
-    navCatalogue(el)!.click();
+    navProducts(el)!.click();
     await flush(el);
     expect(layout().classList.contains("drawer-open")).toBe(false);
     expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
-    expect(catalogue(el)).toBeTruthy();
+    expect(menu(el)).toBeTruthy();
   });
 
   it("keeps the off-canvas drawer a fixed width, unaffected by which nav groups are expanded", async () => {
@@ -4473,24 +4463,24 @@ describe("dashboard-app", () => {
     expect(navOverview(el)).toBeNull();
     expect(navSales(el)).toBeNull();
     expect(navStaff(el)).toBeNull();
-    expect(navCatalogue(el)).toBeNull();
+    expect(navProducts(el)).toBeNull();
     expect(navVenueSettings(el)).toBeNull();
   });
 
-  // The nav is chrome, not a screen: logout works the same from the catalogue screen too.
-  it("logout from the catalogue screen ends the session and returns to login", async () => {
+  // The nav is chrome, not a screen: logout works the same from the menu screen too.
+  it("logout from the menu screen ends the session and returns to login", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
-    navCatalogue(el)!.click();
+    navProducts(el)!.click();
     await flush(el);
-    expect(catalogue(el)).toBeTruthy();
+    expect(menu(el)).toBeTruthy();
 
     logoutBtn(el)!.click();
     await flush(el);
     expect(api.logout).toHaveBeenCalledOnce();
     expect(login(el)).toBeTruthy();
-    expect(catalogue(el)).toBeNull();
+    expect(menu(el)).toBeNull();
   });
 
   it("logout: a FAILED logout still drops to login and never rejects", async () => {
@@ -5405,7 +5395,7 @@ describe("dashboard URL navigation", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
     await flush(el);
     expect(push).not.toHaveBeenCalled();
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-catalogue"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-products"]')!.click();
     await flush(el);
     const back = new Promise<void>((resolve) =>
       window.addEventListener("popstate", () => resolve(), { once: true }),
@@ -5420,7 +5410,7 @@ describe("dashboard URL navigation", () => {
     history.forward();
     await forward;
     await flush(el);
-    expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   });
 
   it.each([
@@ -7316,7 +7306,7 @@ describe("dashboard-app: session signals", () => {
 
   it("stays signed in when a request reports a code that is not about the session", async () => {
     const { el } = await signedIn();
-    sessionInvalid("catalogue.not_found");
+    sessionInvalid("menu.not_found");
     await flush(el);
     expect(overview(el)).not.toBeNull();
     expect(login(el)).toBeNull();
@@ -7972,7 +7962,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(getLocales).toHaveBeenCalledTimes(1);
   });
 
-  it("ignores a request to open a product's editor from a session that cannot see the catalogue", async () => {
+  it("ignores a request to open a product's editor from a session that cannot see the menu", async () => {
     const api = stubApi({
       getMe: vi
         .fn()
@@ -7988,7 +7978,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     emit(mySchedule(el)!, "wt-edit-product", { productId: "p1" });
     await flush(el);
     expect(mySchedule(el)).not.toBeNull();
-    expect(catalogue(el)).toBeNull();
+    expect(menu(el)).toBeNull();
     expect(location.href).toBe(before);
     // No navigation happened, so none is recorded on the diagnostics trail.
     expect(diag.snapshot().at(-1)).toEqual(lastTrailEntry);
@@ -8181,7 +8171,7 @@ describe("the nav search", () => {
     expect(shownHeaders(el)).toEqual(["nav-group-menu"]);
     expect(shownItems(el)).toEqual([
       "nav-menus",
-      "nav-catalogue",
+      "nav-products",
       "nav-modifiers",
       "nav-courses",
       "nav-units",
@@ -8230,7 +8220,7 @@ describe("the nav search", () => {
     );
     // "Menus" is a manager page; its group's name holds the term, so the group's other pages show.
     await search(el, "Menus");
-    expect(shownItems(el)).toEqual(["nav-catalogue", "nav-courses", "nav-units"]);
+    expect(shownItems(el)).toEqual(["nav-products", "nav-courses", "nav-units"]);
     await search(el, "Diagnostics");
     expect(shownItems(el)).toEqual([]);
     // Bookings is enabled for the venue, but this session lacks its permission.
@@ -8268,7 +8258,7 @@ describe("the nav search", () => {
   });
 
   it("opens the current page's group again when a search picks another page in it after it was collapsed", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
+    history.replaceState(null, "", "/manage/products");
     const el = await mountSession(sessionIn("en-GB"));
     const menu = () => el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!;
     menu().click();
@@ -8284,7 +8274,7 @@ describe("the nav search", () => {
   });
 
   it("opens the current page's collapsed group when a search picks that same page", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
+    history.replaceState(null, "", "/manage/products");
     const el = await mountSession(sessionIn("en-GB"));
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!.click();
     await flush(el);
@@ -8293,9 +8283,9 @@ describe("the nav search", () => {
     await search(el, "Products");
     await press(el, "Enter");
 
-    expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+    expect(new URL(location.href).pathname).toBe("/manage/products");
     expect(expandedHeaders(el)).toEqual(["nav-group-menu"]);
-    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
+    expect(navItem(el, "products")!.checkVisibility()).toBe(true);
   });
 
   it("opens Orders, chosen by a search, inside an expanded Reporting section", async () => {
@@ -8323,14 +8313,14 @@ describe("the nav search", () => {
   });
 
   it("does nothing on Enter in an empty or blank box", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
+    history.replaceState(null, "", "/manage/products");
     const el = await mountSession(sessionIn("en-GB"));
-    expect(catalogue(el)).toBeTruthy();
+    expect(menu(el)).toBeTruthy();
     await press(el, "Enter");
     await search(el, "   ");
     await press(el, "Enter");
-    expect(catalogue(el)).toBeTruthy();
-    expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+    expect(menu(el)).toBeTruthy();
+    expect(new URL(location.href).pathname).toBe("/manage/products");
   });
 
   it("clears the term and closes the drawer when a match is clicked", async () => {
@@ -8533,7 +8523,7 @@ describe("the Products screen in the shell", () => {
     primaryCategoryId: null,
     categoryId: null,
     active: true,
-    catalogueId: "cat-a",
+    menuId: "cat-a",
     modifiers: [],
     customerName: null,
     unitId: "u",
@@ -8561,7 +8551,7 @@ describe("the Products screen in the shell", () => {
   }));
   const productsApi = () => {
     const api = stubApi({
-      listCatalogues: vi
+      listMenus: vi
         .fn()
         .mockResolvedValue([{ id: "cat-a", name: "Lunch", active: true, version: 1 }]),
       listProducts: vi.fn().mockResolvedValue(listed),
@@ -8581,10 +8571,10 @@ describe("the Products screen in the shell", () => {
     // The page gives the app the viewport's height, as index.html does.
     host.style.height = `${height}px`;
     await flush(el);
-    navCatalogue(el)!.click();
+    navProducts(el)!.click();
     await flush(el);
-    const screen = catalogue(el)!;
-    const browser = screen.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
+    const screen = menu(el)!;
+    const browser = screen.shadowRoot!.querySelector("dashboard-product-browser")!;
     await vi.waitFor(() =>
       expect(browser.shadowRoot!.querySelector("dashboard-product-list")).not.toBeNull(),
     );
@@ -9051,7 +9041,7 @@ describe("inline translation application leave paths", () => {
       const api = stubApi({
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
-          permissions: ["person.manage", "catalogue.manage", "venue.view"],
+          permissions: ["person.manage", "menu.manage", "venue.view"],
         }),
         getContentLanguages: vi.fn().mockResolvedValue(config),
         getContentLanguageRules: vi
@@ -9141,7 +9131,7 @@ describe("inline translation application leave paths", () => {
       if (route === "navigation")
         await vi.waitFor(() => expect(location.pathname).toBe("/manage/staff"));
       else if (route === "editor")
-        await vi.waitFor(() => expect(location.pathname).toBe("/manage/catalogue/product/dish"));
+        await vi.waitFor(() => expect(location.pathname).toBe("/manage/products/product/dish"));
       else if (route === "locale") await vi.waitFor(() => expect(currentLocale()).toBe("en-GB"));
       else await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
     },

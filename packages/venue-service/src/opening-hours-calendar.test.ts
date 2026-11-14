@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { listVenueReadiness } from "./operations.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
+import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   settings as businessDaySettingsTable,
@@ -58,7 +58,7 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
   const suffix = existing.revision === 0 ? "" : ` ${randomUUID()}`;
 
   return run(async (tx) => {
-    const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
+    const menuId = (await createMenu(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     for (const [index, closed] of closedOn.entries()) {
@@ -283,7 +283,7 @@ describe("the Opening hours year read", () => {
 async function monthVenue() {
   await venue([]);
   return run(async (tx) => {
-    const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
+    const menuId = (await createMenu(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     const department = async (name: string) =>
@@ -871,7 +871,7 @@ describe("a past day's range around a start change", () => {
       ]);
     });
     return run(async (tx) => {
-      const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
+      const menuId = (await createMenu(tx, { name: `Menu ${randomUUID()}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
       const diningDepartment = (await createDepartment(tx, { name: "Dining", orderStart: "table" }))

@@ -26,7 +26,7 @@ function includedCandidate<T>(
     : { place, value: setting.value, source: { ...place, from: setting.source } };
 }
 export function combineOffer(input: CombineInput): CombinedOffer {
-  const { catalogue, placedInOwnSections, included } = input;
+  const { product, placedInOwnSections, included } = input;
   const candidates = <T>(value: T, read: (offer: CombinedOffer) => Setting<T>): Candidate<T>[] => [
     ...(placedInOwnSections
       ? [{ place: { kind: "own_sections" as const }, value, source: { kind: "product" as const } }]
@@ -35,7 +35,7 @@ export function combineOffer(input: CombineInput): CombinedOffer {
   ];
   const moneyEqual = (a: Decimal, b: Decimal) => compareDecimal(a, b) === 0;
   const otherwisePrice = resolve(
-    candidates(catalogue.price, (o) => o.price),
+    candidates(product.price, (o) => o.price),
     moneyEqual,
   );
   const price = own(input.own.price, otherwisePrice);
@@ -46,7 +46,7 @@ export function combineOffer(input: CombineInput): CombinedOffer {
     setting.state === "clash"
       ? setting
       : { state: "decided", value: setting.value, source: { kind: "parent" }, otherwise };
-  const variants = catalogue.variants.map((variant) => {
+  const variants = product.variants.map((variant) => {
     const override = input.own.variants.find((v) => v.variantId === variant.variantId);
     const variantCandidates: Candidate<Decimal>[] = [];
     if (placedInOwnSections && variant.price !== null)

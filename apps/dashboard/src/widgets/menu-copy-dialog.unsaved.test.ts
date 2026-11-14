@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import type { CatalogueSummary } from "../api/client.js";
+import type { MenuSummary } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import "./menu-copy-dialog.js";
@@ -14,7 +14,7 @@ const copied = { id: "copy", name: "Weekday lunch", active: true, version: 1 };
 class CopyLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   open = true;
-  api = { duplicateCatalogue: vi.fn(async () => copied) };
+  api = { duplicateMenu: vi.fn(async () => copied) };
   override render() {
     return html`<dashboard-menu-copy-dialog
         .open=${this.open}
@@ -73,7 +73,7 @@ it("keeps typed input on Keep editing, then discards it without copying", async 
   await choice(app, "discard");
   await expect.poll(() => form.open).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
-  expect(app.api.duplicateCatalogue).not.toHaveBeenCalled();
+  expect(app.api.duplicateMenu).not.toHaveBeenCalled();
 });
 it("Escape protects the name; reverting to empty cancels without a question", async () => {
   const { app, form } = await mount();
@@ -83,7 +83,7 @@ it("Escape protects the name; reverting to empty cancels without a question", as
   await edit(form, "");
   button(form, "cancel").click();
   await expect.poll(() => form.open).toBe(false);
-  expect(app.api.duplicateCatalogue).not.toHaveBeenCalled();
+  expect(app.api.duplicateMenu).not.toHaveBeenCalled();
 });
 it("a successful copy commits before its close and a failed refresh cannot restore the draft", async () => {
   const { app, form } = await mount();
@@ -99,7 +99,7 @@ it("a successful copy commits before its close and a failed refresh cannot resto
 });
 it("a refusal retains the draft and still asks before pressing Escape", async () => {
   const { app, form } = await mount();
-  app.api.duplicateCatalogue.mockRejectedValue({ code: "catalogue.not_found" });
+  app.api.duplicateMenu.mockRejectedValue({ code: "menu.not_found" });
   await edit(form);
   button(form, "copy").click();
   await expect.poll(() => form.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe("");
@@ -129,9 +129,9 @@ it.each([true, false])(
   "a departed copy reply (success=%s) leaves a new opening untouched",
   async (success) => {
     const { app, form } = await mount();
-    let resolve!: (value: CatalogueSummary) => void;
+    let resolve!: (value: MenuSummary) => void;
     let reject!: (reason: unknown) => void;
-    app.api.duplicateCatalogue.mockImplementationOnce(
+    app.api.duplicateMenu.mockImplementationOnce(
       () =>
         new Promise((yes, no) => {
           resolve = yes;

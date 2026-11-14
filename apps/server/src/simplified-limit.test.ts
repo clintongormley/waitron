@@ -13,12 +13,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedZone } from "@waitron/db/testing/seed.js";
-import {
-  assignCatalogueToVenue,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { writePartyAllergy } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { createTable } from "./testing/live-table.js";
@@ -50,7 +45,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     await inTx(venue, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Banquetes" });
+      const cat = await createMenu(tx, { name: "Banquetes" });
       const category = await createCategory(tx, { name: "Eventos" });
       for (const [name, unitPrice] of [
         ["Lote", "3000.00"],
@@ -59,7 +54,7 @@ useVenueDb({
         ["Gratis", "0.00"],
       ] as const) {
         const created = await createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: category.id,
           name,
           pricingUnit: "each",
@@ -68,7 +63,7 @@ useVenueDb({
         });
         product.set(name, created.id);
       }
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       const productIds = [...product.values()];
       counter = await offerProducts(tx, venue.cfg, { productIds });
       tables = await offerProducts(tx, venue.cfg, { zone: "tables", productIds });

@@ -19,7 +19,7 @@ describe("approved permission names preserve default holders", () => {
     ["venue.configure", [false, false, true, true]],
     ["schedule.manage", [false, false, true, true]],
     ["system.manage", [false, false, true, true]],
-    ["catalogue.manage", [false, false, true, true]],
+    ["menu.manage", [false, false, true, true]],
   ] as const) {
     it(`keeps the default holders of ${permission}`, () => {
       expect(PERMISSIONS).toContain(permission);
@@ -112,12 +112,12 @@ describe("roleHasPermission", () => {
       expect(roleHasPermission("supervisor", p)).toBe(false);
     }
   });
-  it("grants catalogue.manage to manager and admin only", () => {
-    expect(PERMISSIONS).toContain("catalogue.manage");
-    expect(roleHasPermission("manager", "catalogue.manage")).toBe(true);
-    expect(roleHasPermission("admin", "catalogue.manage")).toBe(true);
-    expect(roleHasPermission("supervisor", "catalogue.manage")).toBe(false);
-    expect(roleHasPermission("staff", "catalogue.manage")).toBe(false);
+  it("grants menu.manage to manager and admin only", () => {
+    expect(PERMISSIONS).toContain("menu.manage");
+    expect(roleHasPermission("manager", "menu.manage")).toBe(true);
+    expect(roleHasPermission("admin", "menu.manage")).toBe(true);
+    expect(roleHasPermission("supervisor", "menu.manage")).toBe(false);
+    expect(roleHasPermission("staff", "menu.manage")).toBe(false);
   });
   it("grants fiscal.view to manager and admin only", () => {
     expect(PERMISSIONS).toContain("fiscal.view");
@@ -256,7 +256,7 @@ it("grants hardware.manage for resending to manager and admin", () => {
 });
 
 describe("explicit permission declarations", () => {
-  it("exposes a read-only core catalogue", () => {
+  it("exposes a read-only core menu", () => {
     expectTypeOf(PERMISSIONS).toEqualTypeOf<readonly Permission[]>();
   });
   it("declares each core permission's default holders", () => {
@@ -275,7 +275,7 @@ describe("explicit permission declarations", () => {
       "report.view": supervisors,
       "venue.view": supervisors,
       "person.manage": ["manager"],
-      "catalogue.manage": ["manager"],
+      "menu.manage": ["manager"],
       "venue.configure": ["manager"],
       "system.manage": ["manager"],
       "schedule.manage": ["manager"],

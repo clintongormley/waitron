@@ -103,7 +103,7 @@ async function kitchenDish(tx: Transaction, venue: Venue): Promise<string> {
   const { defaultLanguage } = await readContentLanguages(tx, venue.cfg.locale);
   return (
     await createProduct(tx, {
-      catalogueId: venue.catalogueId,
+      menuId: venue.menuId,
       categoryId: venue.folders.food,
       name: "Salad",
       customerName: { [defaultLanguage]: "Garden salad" },

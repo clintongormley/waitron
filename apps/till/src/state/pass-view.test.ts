@@ -164,7 +164,7 @@ describe("A773 pass view", () => {
     });
   });
 
-  it("words each card's kind from the catalogue, and a held card's not at all", () => {
+  it("words each card's kind from the menu, and a held card's not at all", () => {
     setLocale("es");
     expect(onlyView("held", passCard({ kind: "held", items: [heldItem()] })).kindWord).toBeNull();
     expect(onlyView("toFire", passCard({ kind: "new_order" })).kindWord).toBe(

@@ -54,7 +54,7 @@ it("marks both missing kind groups and accepts null, none and valid declarations
   ).toEqual({});
 });
 
-it("marks invalid kinds through the catalogue validator", () => {
+it("marks invalid kinds through the menu validator", () => {
   setLocale("en");
   expect(nutritionErrors({ milk: { kinds: ["wheat"] } })).toEqual({
     allergens: "Choose a valid cereal or nut",

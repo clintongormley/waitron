@@ -25,8 +25,8 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   addProductToMenu,
   createProduct,
@@ -134,13 +134,13 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF, seed a catalogue and a staff
+ * Stand up a fresh chained venue + registered SIF, seed a menu and a staff
  * person with a known PIN, and read back the sellable products — one unit product
  * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(): Promise<{
   cfg: TradingContext;
-  catalogueId: string;
+  menuId: string;
   available: (AvailableProduct & { menuItemId: string })[];
   operatorId: string;
 }> {
@@ -181,15 +181,15 @@ async function setupVenue(): Promise<{
     departmentId: department!.id,
     receipt: { operationDescription: "Venta en establecimiento" },
   });
-  const { catalogueId, available, operatorId } = await withTransaction(suite.db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+  const { menuId, available, operatorId } = await withTransaction(suite.db, async (tx) => {
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const foodCategory = await createCategory(tx, { name: "Comida" });
     const drinkCategory = await createCategory(tx, { name: "Bebidas" });
     const seededUnits = await tx.execute<{ id: string; seed_key: string }>(sql`
       select id, seed_key from units where seed_key = 'kg'`);
     const kgId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
     const ham = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: foodCategory.id,
       name: "Jamón cortado",
       unitId: kgId,
@@ -197,14 +197,14 @@ async function setupVenue(): Promise<{
       vatClass: "reduced",
     });
     const water = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinkCategory.id,
       name: "Agua mineral",
       unitId: null, // Each (no unit).
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const hamMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: ham.id,
@@ -238,7 +238,7 @@ async function setupVenue(): Promise<{
       [water.id, waterMenuItem.id],
     ]);
     return {
-      catalogueId: cat.id,
+      menuId: cat.id,
       available: (await listAvailableProducts(tx)).products.map((product) => ({
         ...product,
         menuItemId: menuItems.get(product.id)!,
@@ -246,7 +246,7 @@ async function setupVenue(): Promise<{
       operatorId: person!.id,
     };
   });
-  return { cfg, catalogueId, available, operatorId };
+  return { cfg, menuId, available, operatorId };
 }
 
 /** The till API's deps for a provisioned venue: the suite's one database handle, the real fiscal
@@ -2587,7 +2587,7 @@ describe("handheld sales and device capability gates", () => {
 });
 
 it("files an extras pick and an options answer through cash checkout and reprints their saved facts", async () => {
-  const { cfg, catalogueId, available, operatorId } = await setupVenue();
+  const { cfg, menuId, available, operatorId } = await setupVenue();
   const product = available.find((item) => item.pricingUnit === "each")!;
   const { extraListId, cheeseId, optionListId, labelId } = await withTransaction(
     suite.db,
@@ -2595,7 +2595,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       // The extra is a PRODUCT of its own, taxed at its OWN class — `reduced`, where the dish is
       // `general`, so the filed VAT breakdown has to carry two bands.
       const cheese = await createProduct(tx, {
-        catalogueId,
+        menuId,
         categoryId: null,
         name: "Queso",
         pricingUnit: "each",
@@ -2633,7 +2633,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
         { kind: "options", id: options.id },
       ]);
 
-      await publishWorkingMenu(tx, catalogueId);
+      await publishWorkingMenu(tx, menuId);
       return {
         extraListId: extras.id,
         cheeseId: cheese.id,
@@ -2823,16 +2823,16 @@ it("files an extras pick and an options answer through cash checkout and reprint
     [2, both[1]],
   ]);
   // Rename the extra's product AFTER the sale: what a replay and a reprint read must be the names the
-  // sale froze, never the catalogue's current ones.
+  // sale froze, never the menu's current ones.
   await withTransaction(suite.db, async (tx) => {
     await updateProduct(tx, cheeseId, { name: "Manchego" });
   });
-  const catalogueNames = (
+  const menuNames = (
     await suite.db.execute<{ id: string; name: string }>(
       sql`select id, name from products where id in (${product.id}, ${cheeseId})`,
     )
   ).rows;
-  expect(Object.fromEntries(catalogueNames.map((row) => [row.id, row.name]))).toEqual({
+  expect(Object.fromEntries(menuNames.map((row) => [row.id, row.name]))).toEqual({
     [product.id]: "Agua mineral",
     [cheeseId]: "Manchego",
   });
@@ -3545,11 +3545,11 @@ describe("a sale cannot hand over settled extras or options", () => {
     ["/api/pay", "frozenExtras"],
     ["/api/pay", "frozenOptions"],
   ] as const)("%s refuses a line carrying %s and files nothing", async (path, key) => {
-    const { cfg, catalogueId, available, operatorId } = await setupVenue();
+    const { cfg, menuId, available, operatorId } = await setupVenue();
     const product = available.find((item) => item.pricingUnit === "each")!;
     const lists = await withTransaction(suite.db, async (tx) => {
       const cheese = await createProduct(tx, {
-        catalogueId,
+        menuId,
         categoryId: null,
         name: "Queso",
         pricingUnit: "each",
@@ -3585,7 +3585,7 @@ describe("a sale cannot hand over settled extras or options", () => {
         { kind: "extras", id: extras.id },
         { kind: "options", id: options.id },
       ]);
-      await publishWorkingMenu(tx, catalogueId);
+      await publishWorkingMenu(tx, menuId);
       return { cheese, extras, options };
     });
     // The list sells this cheese at 0.35, two at most.

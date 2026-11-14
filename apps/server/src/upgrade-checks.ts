@@ -1,7 +1,7 @@
 import { VENUE_FILE, NODE_FILE } from "@waitron/store";
 import { once } from "node:events";
 import { join } from "node:path";
-import { catalogues, lockVenueDatabase, openVenueDatabase, withTransaction } from "@waitron/db";
+import { menus, lockVenueDatabase, openVenueDatabase, withTransaction } from "@waitron/db";
 import { readMenuStructure } from "@waitron/menu";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertAppendOnlyIntact } from "./append-only-watch.js";
@@ -89,8 +89,8 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
         await backend.checkFilingIdentity?.(tx, node.nodeId);
         const integrity = await backend.checkIntegrity(tx, node.nodeId);
         if (!integrity.ok) throw new Error("Upgrade fiscal history check failed");
-        const menus = await tx.select({ id: catalogues.id }).from(catalogues);
-        for (const menu of menus) await readMenuStructure(tx, menu.id);
+        const menuRows = await tx.select({ id: menus.id }).from(menus);
+        for (const menu of menuRows) await readMenuStructure(tx, menu.id);
         const page = await listOrders(tx, {
           status: "all",
           dates: "any",
@@ -101,7 +101,7 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
         for (const row of page.rows) await readOrderDetail(tx, row.id, "all", false);
         return {
           mode: "trading",
-          menus: menus.length,
+          menus: menuRows.length,
           orders: page.rows.length,
           fiscalRecords: integrity.checked,
         };

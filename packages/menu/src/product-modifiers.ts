@@ -86,7 +86,7 @@ async function listExists(tx: Transaction, ref: ProductModifierRef): Promise<boo
  * `product_modifiers_product_fk` as a driver error. Every caller passes an id it created or has
  * already found: `saveProductEditor` (product-editor.ts), the product routes
  * (`apps/server/src/menu-api.ts`, the id `createProduct` returned or one `assertOwned`
- * resolved) and the demo seed (the ids `seedCatalogues` created).
+ * resolved) and the demo seed (the ids `seedMenus` created).
  */
 async function assertRefsExist(tx: Transaction, refs: ProductModifierRef[]): Promise<void> {
   const seen = new Set<string>();

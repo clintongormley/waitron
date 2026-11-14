@@ -418,7 +418,7 @@ import type {
   BillRevisions,
   MoveBillResult,
   TillZoneMenu,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
 import {
@@ -1844,23 +1844,20 @@ class ZoneOfferIndex {
   loaded = false;
   liveFields: string | undefined;
 
-  load(
-    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "liveFields">,
-    loaded = true,
-  ): void {
+  load(zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "liveFields">, loaded = true): void {
     this.selectable = new Set(
-      catalogue.menus.filter((menu) => menu.orderable).map((menu) => menu.id),
+      zoneOffers.menus.filter((menu) => menu.orderable).map((menu) => menu.id),
     );
     this.ended = new Map(
-      catalogue.menus.flatMap((menu) =>
+      zoneOffers.menus.flatMap((menu) =>
         menu.endedPeriodName === null ? [] : [[menu.id, menu.endedPeriodName] as const],
       ),
     );
-    this.#loaded = catalogue.offers;
+    this.#loaded = zoneOffers.offers;
     this.#unavailableKey = null;
-    this.#setLive(catalogue.offers);
-    this.versions = new Map(catalogue.menus.map((menu) => [menu.id, menu.versionId]));
-    this.liveFields = catalogue.liveFields;
+    this.#setLive(zoneOffers.offers);
+    this.versions = new Map(zoneOffers.menus.map((menu) => [menu.id, menu.versionId]));
+    this.liveFields = zoneOffers.liveFields;
     this.loaded = loaded;
   }
 
@@ -2452,7 +2449,7 @@ export class TillApp extends LitElement {
               this.#keepTransferLocalCopy(draft, this.orderParty?.displayName ?? "");
             this.#resetPartylessDraft();
             this.#forgetParty();
-            if (this.#tableCatalogueActive()) this.#returnToFloor();
+            if (this.#tableMenuActive()) this.#returnToFloor();
           }
           if (this.#store.persisted && this.#store.id === row.tabId) {
             if (this.#store.dirty || this.#basketPayload() !== this.#basketBaseline)
@@ -2486,7 +2483,7 @@ export class TillApp extends LitElement {
   }
 
   #currentTransferTabId(): string | undefined {
-    if (this.#tableCatalogueActive()) return undefined;
+    if (this.#tableMenuActive()) return undefined;
     const tab = this.#activeTab();
     const counterVisible = this.drill === undefined && tab === "counter";
     return counterVisible &&
@@ -3032,10 +3029,10 @@ export class TillApp extends LitElement {
   readonly #tableOffers = new ZoneOfferIndex();
   readonly #tableGridOffers = new ZoneOfferIndex();
   /** Each zone's latest offers read from {@link api}, numbered by when the read was sent. */
-  readonly #zoneCatalogues = new Map<string, { read: number; catalogue: ZoneOfferCatalogue }>();
+  readonly #zoneOffers = new Map<string, { read: number; zoneOffers: ZoneOffers }>();
   #zoneOfferReads = 0;
-  /** Moved on by each clear of {@link #zoneCatalogues}, so a read sent before it keeps nothing. */
-  #zoneCatalogueGeneration = 0;
+  /** Moved on by each clear of {@link #zoneOffers}, so a read sent before it keeps nothing. */
+  #zoneOffersGeneration = 0;
   /** The zone {@link tableProducts} came from, polled beside the counter's while it is set. */
   #tableZoneId?: string;
   /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
@@ -3255,7 +3252,7 @@ export class TillApp extends LitElement {
     return [
       ...new Set([
         this.counterServiceZoneId,
-        this.#tableCatalogueActive() ? (this.#tableZoneId ?? "") : "",
+        this.#tableMenuActive() ? (this.#tableZoneId ?? "") : "",
       ]),
     ].filter((id) => id !== "");
   }
@@ -3309,7 +3306,7 @@ export class TillApp extends LitElement {
     this.#pinScreenPoll.stop();
     this.pinClockNotice = undefined;
   }
-  @state() private tableSelectedCatalogueId = "";
+  @state() private tableSelectedMenuId = "";
   /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */
   #tableOfferRequest = 0;
   /** The {@link #tableOfferRequest} of the latest table open that has made its table the active one. */
@@ -3421,7 +3418,7 @@ export class TillApp extends LitElement {
   /** Per counter zone, the default menu its latest menu-state answer named. */
   readonly #polledDefaults = new Map<string, string | null>();
   #counterOfferRequest = 0;
-  @state() private selectedCatalogueId = "";
+  @state() private selectedMenuId = "";
   @state() private selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
   @state() private operatorName = "";
   /** The schedule screen leaves the operator out of the colleague picker. */
@@ -4722,7 +4719,7 @@ export class TillApp extends LitElement {
     if (this.#cancelItemRead !== undefined && !this.#cancellationCurrent(this.#cancelItemRead))
       this.#closeCancelItem();
     if (changed.has("api")) {
-      this.#forgetZoneCatalogues();
+      this.#forgetZoneOffers();
       if (changed.get("api") !== undefined && this.#draftSync !== undefined)
         this.#resumeOrderDraft();
       this.#cancelFindBillRead();
@@ -4811,7 +4808,7 @@ export class TillApp extends LitElement {
 
   /** `from`: the kind of screen a kitchen display showed when a press on it was refused. */
   async #boot(from?: KitchenScreenKind): Promise<void> {
-    this.#forgetZoneCatalogues();
+    this.#forgetZoneOffers();
     this.#stopClocking();
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
@@ -5885,13 +5882,13 @@ export class TillApp extends LitElement {
         if (handheld) this.profileServiceZones = [];
         this.counterServiceZoneId = "";
       } else {
-        const catalogue =
+        const zoneOffers =
           retainedZone === undefined
             ? await this.#keepZoneRead(this.api, (api) => api.listDefaultZoneOffers())
             : await this.#readZoneOffers(retainedZone);
         if (replaced()) return;
-        const { zones, context } = catalogue;
-        this.#loadCounterOffers(catalogue);
+        const { zones, context } = zoneOffers;
+        this.#loadCounterOffers(zoneOffers);
         if (this.formFactor !== "till") this.profileServiceZones = zones ?? [];
         this.counterServiceZoneId = context.zoneId;
         this.api.setServiceZone(context.zoneId);
@@ -6250,16 +6247,16 @@ export class TillApp extends LitElement {
 
   /** Menu selection filters the product grid without changing the working order or browser history. */
   #onMenuSelected(event: CustomEvent<{ id: string }>): void {
-    if (this.#tableCatalogueActive()) {
+    if (this.#tableMenuActive()) {
       this.#selectTableMenu(event.detail.id);
       return;
     }
     this.#selectMenu(event.detail.id);
-    if (this.selectedCatalogueId === event.detail.id)
+    if (this.selectedMenuId === event.detail.id)
       this.#rememberZoneMenu(this.counterServiceZoneId, this.counterService, event.detail.id);
   }
 
-  #tableCatalogueActive(): boolean {
+  #tableMenuActive(): boolean {
     return !this.tableOpening && this.#orderScreenShown();
   }
 
@@ -6296,7 +6293,7 @@ export class TillApp extends LitElement {
   #selectTableMenu(id: string): void {
     if (!this.isConnected) return;
     if (id !== "" && !this.tableMenus.some((menu) => menu.id === id && menu.orderable)) return;
-    this.tableSelectedCatalogueId = id;
+    this.tableSelectedMenuId = id;
     this.#rememberZoneMenu(this.#tableZoneId, this.tableService, id);
   }
 
@@ -6308,7 +6305,7 @@ export class TillApp extends LitElement {
   #selectMenu(id: string): void {
     if (!this.isConnected) return;
     if (id !== "" && !this.menus.some((menu) => menu.id === id && menu.orderable)) return;
-    this.selectedCatalogueId = id;
+    this.selectedMenuId = id;
   }
 
   async #onCounterZoneSelected(event: Event): Promise<void> {
@@ -6335,8 +6332,8 @@ export class TillApp extends LitElement {
     const request = ++this.#counterOfferRequest;
     const session = this.#operatorSession;
     try {
-      const catalogue = await this.#readZoneOffers(zoneId);
-      const { context } = catalogue;
+      const zoneOffers = await this.#readZoneOffers(zoneId);
+      const { context } = zoneOffers;
       if (
         request !== this.#counterOfferRequest ||
         session !== this.#operatorSession ||
@@ -6345,7 +6342,7 @@ export class TillApp extends LitElement {
         (this.formFactor === "till" && !this.#deviceNavigation()?.counterZoneIds.includes(zoneId))
       )
         return;
-      this.#loadCounterOffers(catalogue);
+      this.#loadCounterOffers(zoneOffers);
       this.#polledDefaults.delete(context.zoneId);
       this.#polledOccurrences.delete(context.zoneId);
       this.counterServiceZoneId = context.zoneId;
@@ -6365,27 +6362,27 @@ export class TillApp extends LitElement {
   }
 
   #loadCounterOffers(
-    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "service" | "liveFields"> &
-      Partial<Pick<ZoneOfferCatalogue, "context" | "defaultMenuId">>,
+    zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "service" | "liveFields"> &
+      Partial<Pick<ZoneOffers, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
     const deferGrid =
       loaded &&
       (this.#pendingCounterMenus !== undefined ||
         (this.#counterOffers.loaded &&
-          this.counterService?.periodOccurrenceKey !== catalogue.service.periodOccurrenceKey)) &&
+          this.counterService?.periodOccurrenceKey !== zoneOffers.service.periodOccurrenceKey)) &&
       (this.#store.lines.length > 0 || this.#requestsOut());
-    this.#counterOffers.load(catalogue, loaded);
+    this.#counterOffers.load(zoneOffers, loaded);
     this.#store.canSelectProduct = (product) =>
       this.#deviceZoneAllows(this.counterServiceZoneId) &&
-      this.#counterOffers.selectable.has(product.catalogueId ?? "") &&
+      this.#counterOffers.selectable.has(product.menuId ?? "") &&
       (this.#pendingCounterMenus === undefined ||
         (this.#counterOffers.byId.has(product.menuItemId ?? "") &&
-          this.#counterOffers.versions.get(product.catalogueId ?? "") === product.menuVersionId));
+          this.#counterOffers.versions.get(product.menuId ?? "") === product.menuVersionId));
     if (deferGrid) {
-      this.#pendingCounterMenus = catalogue.menus;
+      this.#pendingCounterMenus = zoneOffers.menus;
       this.menus = this.menus.map((menu) => {
-        const live = catalogue.menus.find((entry) => entry.id === menu.id);
+        const live = zoneOffers.menus.find((entry) => entry.id === menu.id);
         return {
           ...menu,
           orderable: live?.orderable ?? false,
@@ -6395,15 +6392,15 @@ export class TillApp extends LitElement {
       this.#counterMenuPending = true;
     } else {
       this.#pendingCounterMenus = undefined;
-      this.#counterGridOffers.load(catalogue, loaded);
-      this.menus = catalogue.menus;
+      this.#counterGridOffers.load(zoneOffers, loaded);
+      this.menus = zoneOffers.menus;
     }
     this.#counterDefaultMenuId =
-      catalogue.defaultMenuId === undefined
-        ? (catalogue.menus.find((menu) => menu.isDefault)?.id ?? null)
-        : catalogue.defaultMenuId;
-    this.counterService = loaded ? catalogue.service : null;
-    this.counterDepartmentName = loaded ? (catalogue.context?.departmentName ?? "") : "";
+      zoneOffers.defaultMenuId === undefined
+        ? (zoneOffers.menus.find((menu) => menu.isDefault)?.id ?? null)
+        : zoneOffers.defaultMenuId;
+    this.counterService = loaded ? zoneOffers.service : null;
+    this.counterDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
     this.#showCounterOffers();
   }
 
@@ -6419,8 +6416,8 @@ export class TillApp extends LitElement {
    */
   #loadTableOffers(
     zoneId: string | undefined,
-    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "service" | "liveFields"> &
-      Partial<Pick<ZoneOfferCatalogue, "context" | "defaultMenuId">>,
+    zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "service" | "liveFields"> &
+      Partial<Pick<ZoneOffers, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
     const before = this.#tableOffers.versions;
@@ -6429,14 +6426,14 @@ export class TillApp extends LitElement {
       zoneId === this.#tableZoneId &&
       (this.#pendingTableMenus !== undefined ||
         (this.#tableOffers.loaded &&
-          this.tableService?.periodOccurrenceKey !== catalogue.service.periodOccurrenceKey)) &&
+          this.tableService?.periodOccurrenceKey !== zoneOffers.service.periodOccurrenceKey)) &&
       this.#tableMenuBusy();
     this.#tableZoneId = zoneId;
-    this.#tableOffers.load(catalogue, loaded);
+    this.#tableOffers.load(zoneOffers, loaded);
     if (deferGrid) {
-      this.#pendingTableMenus = catalogue.menus;
+      this.#pendingTableMenus = zoneOffers.menus;
       this.tableMenus = this.tableMenus.map((menu) => {
-        const live = catalogue.menus.find((entry) => entry.id === menu.id);
+        const live = zoneOffers.menus.find((entry) => entry.id === menu.id);
         return {
           ...menu,
           orderable: live?.orderable ?? false,
@@ -6446,15 +6443,15 @@ export class TillApp extends LitElement {
       this.#tableMenuPending = true;
     } else {
       this.#pendingTableMenus = undefined;
-      this.#tableGridOffers.load(catalogue, loaded);
-      this.tableMenus = catalogue.menus;
+      this.#tableGridOffers.load(zoneOffers, loaded);
+      this.tableMenus = zoneOffers.menus;
     }
     this.#tableDefaultMenuId =
-      catalogue.defaultMenuId === undefined
-        ? (catalogue.menus.find((menu) => menu.isDefault)?.id ?? null)
-        : catalogue.defaultMenuId;
-    this.tableService = loaded ? catalogue.service : null;
-    this.tableDepartmentName = loaded ? (catalogue.context?.departmentName ?? "") : "";
+      zoneOffers.defaultMenuId === undefined
+        ? (zoneOffers.menus.find((menu) => menu.isDefault)?.id ?? null)
+        : zoneOffers.defaultMenuId;
+    this.tableService = loaded ? zoneOffers.service : null;
+    this.tableDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
     this.tableProducts = this.#tableGridOffers.products();
     if (!loaded) return;
     const { versions, byId } = this.#tableOffers;
@@ -6477,8 +6474,7 @@ export class TillApp extends LitElement {
   async #markUnsellable(round: WorkingOrderStore): Promise<void> {
     const zoneId = this.#tableZoneId;
     if (zoneId === undefined) return;
-    round.canSelectProduct = (product) =>
-      this.#tableOffers.selectable.has(product.catalogueId ?? "");
+    round.canSelectProduct = (product) => this.#tableOffers.selectable.has(product.menuId ?? "");
     this.#markedRounds.add(round);
     await this.#reloadTableOffers(zoneId);
   }
@@ -6735,7 +6731,7 @@ export class TillApp extends LitElement {
     this.#counterMenuPending =
       this.#counterOffersDue ||
       this.#pendingCounterMenus !== undefined ||
-      menuId !== this.selectedCatalogueId;
+      menuId !== this.selectedMenuId;
     if (this.#store.lines.length > 0 || this.#requestsOut()) return;
     this.#counterMenuPending = false;
     this.#selectMenu(menuId);
@@ -6755,10 +6751,10 @@ export class TillApp extends LitElement {
       this.#tableDefaultMenuId,
     );
     this.#tableMenuPending =
-      this.#pendingTableMenus !== undefined || menuId !== this.tableSelectedCatalogueId;
+      this.#pendingTableMenus !== undefined || menuId !== this.tableSelectedMenuId;
     if (this.#tableMenuBusy()) return;
     this.#tableMenuPending = false;
-    this.tableSelectedCatalogueId = menuId;
+    this.tableSelectedMenuId = menuId;
   }
 
   #tableMenuBusy(): boolean {
@@ -6774,7 +6770,7 @@ export class TillApp extends LitElement {
   readonly #tableProductSelectable = (product: TillProduct): boolean =>
     this.#pendingTableMenus === undefined ||
     (this.#tableOffers.byId.has(product.menuItemId ?? "") &&
-      this.#tableOffers.versions.get(product.catalogueId ?? "") === product.menuVersionId);
+      this.#tableOffers.versions.get(product.menuId ?? "") === product.menuVersionId);
 
   #clearBasket(): void {
     this.#store.clear();
@@ -6785,7 +6781,7 @@ export class TillApp extends LitElement {
     zoneId: string,
     options?: ReadOptions,
     api: TillApi = this.api,
-  ): Promise<ZoneOfferCatalogue> {
+  ): Promise<ZoneOffers> {
     return this.#keepZoneRead(
       api,
       (sent) =>
@@ -6796,29 +6792,29 @@ export class TillApp extends LitElement {
 
   async #keepZoneRead(
     api: TillApi,
-    send: (api: TillApi) => Promise<ZoneOfferCatalogue>,
+    send: (api: TillApi) => Promise<ZoneOffers>,
     zoneId?: string,
-  ): Promise<ZoneOfferCatalogue> {
+  ): Promise<ZoneOffers> {
     const read = ++this.#zoneOfferReads;
-    const generation = this.#zoneCatalogueGeneration;
-    const catalogue = await send(api);
-    if (api === this.api && generation === this.#zoneCatalogueGeneration)
-      this.#rememberZoneCatalogue(read, catalogue, zoneId);
-    return catalogue;
+    const generation = this.#zoneOffersGeneration;
+    const zoneOffers = await send(api);
+    if (api === this.api && generation === this.#zoneOffersGeneration)
+      this.#rememberZoneOffers(read, zoneOffers, zoneId);
+    return zoneOffers;
   }
 
-  #forgetZoneCatalogues(): void {
-    this.#zoneCatalogues.clear();
-    this.#zoneCatalogueGeneration++;
+  #forgetZoneOffers(): void {
+    this.#zoneOffers.clear();
+    this.#zoneOffersGeneration++;
   }
 
-  #rememberZoneCatalogue(
+  #rememberZoneOffers(
     read: number,
-    catalogue: ZoneOfferCatalogue,
-    zoneId = catalogue.context.zoneId,
+    zoneOffers: ZoneOffers,
+    zoneId = zoneOffers.context.zoneId,
   ): void {
-    if ((this.#zoneCatalogues.get(zoneId)?.read ?? 0) > read) return;
-    this.#zoneCatalogues.set(zoneId, { read, catalogue });
+    if ((this.#zoneOffers.get(zoneId)?.read ?? 0) > read) return;
+    this.#zoneOffers.set(zoneId, { read, zoneOffers });
   }
 
   /** Reloads the open table's offers; false when they could not be read or a table open overtook
@@ -6829,14 +6825,14 @@ export class TillApp extends LitElement {
     const read = new AbortController();
     const limit = setTimeout(() => read.abort(), TABLE_REQUEST_LIMIT_MS);
     try {
-      const catalogue = await this.#readZoneOffers(zoneId, { signal: read.signal });
+      const zoneOffers = await this.#readZoneOffers(zoneId, { signal: read.signal });
       if (
         request !== this.#tableRefreshRequest ||
         action !== this.#tableOfferRequest ||
         zoneId !== this.#tableZoneId
       )
         return false;
-      this.#loadTableOffers(zoneId, catalogue);
+      this.#loadTableOffers(zoneId, zoneOffers);
       this.#followTableMenu();
       return true;
     } catch {
@@ -6859,7 +6855,7 @@ export class TillApp extends LitElement {
       const action = this.#counterOfferRequest;
       const request = ++this.#counterRefreshRequest;
       try {
-        const catalogue = await this.#readZoneOffers(zoneId, undefined, api);
+        const zoneOffers = await this.#readZoneOffers(zoneId, undefined, api);
         if (
           !this.isConnected ||
           session !== this.#operatorSession ||
@@ -6869,7 +6865,7 @@ export class TillApp extends LitElement {
           zoneId !== this.counterServiceZoneId
         )
           return "failed";
-        this.#loadCounterOffers(catalogue);
+        this.#loadCounterOffers(zoneOffers);
       } catch {
         return "failed";
       }
@@ -6923,8 +6919,7 @@ export class TillApp extends LitElement {
     if (zoneId === undefined || !(await this.#reloadTableOffers(zoneId))) return "failed";
     if (round === this.#draftSync?.store) this.#draftRefreshDue = false;
     const outcome = this.#reconcileBasket(round, this.#tableOffers);
-    round.canSelectProduct = (product) =>
-      this.#tableOffers.selectable.has(product.catalogueId ?? "");
+    round.canSelectProduct = (product) => this.#tableOffers.selectable.has(product.menuId ?? "");
     this.#markedRounds.add(round);
     this.#markRounds(true);
     return outcome;
@@ -12076,15 +12071,15 @@ export class TillApp extends LitElement {
     key = tab;
     this.counterOrderList = null;
     this.#dismissStationChoices();
-    const wasShowingOrder = this.#tableCatalogueActive();
+    const wasShowingOrder = this.#tableMenuActive();
     const wasLoadingOrder = this.tableOpening && this.#orderScreenShown();
     this.#setActiveTab(key, replace, fromHistory);
     if (key === "counter") void this.#loadStations();
     if (fromHistory) this.#restoreDestination();
     else if (this.drill !== undefined) this.#popDrill();
-    const leftOrder = wasShowingOrder && !this.#tableCatalogueActive();
+    const leftOrder = wasShowingOrder && !this.#tableMenuActive();
     if (leftOrder || (wasLoadingOrder && !this.#orderScreenShown())) this.#orderVisit++;
-    if (!wasShowingOrder && this.#tableCatalogueActive()) this.#shownOnVisit = this.#orderVisit;
+    if (!wasShowingOrder && this.#tableMenuActive()) this.#shownOnVisit = this.#orderVisit;
     const session = this.#operatorSession;
     const flushed = leftOrder ? this.#flushDraft(true) : Promise.resolve();
     if (this.#tabNeedsFloorData(tab)) {
@@ -12393,12 +12388,11 @@ export class TillApp extends LitElement {
       const session = this.#operatorSession;
       const table = this.#openingFloor(fromBar).find((candidate) => candidate.id === tableId);
       const heldZone = this.#menuPoll.running ? (table?.zoneId ?? undefined) : undefined;
-      const held =
-        heldZone === undefined ? undefined : this.#zoneCatalogues.get(heldZone)?.catalogue;
+      const held = heldZone === undefined ? undefined : this.#zoneOffers.get(heldZone)?.zoneOffers;
       if (heldZone !== undefined && held !== undefined) {
         // Shown at once; the check's answer reaches #onMenuState, which reads again if it moved.
         this.#loadTableOffers(heldZone, held);
-        this.tableSelectedCatalogueId = this.#resolveZoneMenu(
+        this.tableSelectedMenuId = this.#resolveZoneMenu(
           heldZone,
           held.service.periodOccurrenceKey,
           held.menus,
@@ -12410,18 +12404,18 @@ export class TillApp extends LitElement {
         });
       } else if (table?.zoneId !== null && table?.zoneId !== undefined) {
         try {
-          const catalogue = await this.#readZoneOffers(table.zoneId);
+          const zoneOffers = await this.#readZoneOffers(table.zoneId);
           if (
             left() ||
             offerRequest !== this.#tableOfferRequest ||
             session !== this.#operatorSession
           )
             return;
-          this.#loadTableOffers(table.zoneId, catalogue);
-          this.tableSelectedCatalogueId = this.#resolveZoneMenu(
+          this.#loadTableOffers(table.zoneId, zoneOffers);
+          this.tableSelectedMenuId = this.#resolveZoneMenu(
             table.zoneId,
-            catalogue.service.periodOccurrenceKey,
-            catalogue.menus,
+            zoneOffers.service.periodOccurrenceKey,
+            zoneOffers.menus,
             this.#tableDefaultMenuId,
           );
         } catch {
@@ -12448,7 +12442,7 @@ export class TillApp extends LitElement {
             },
             false,
           );
-          this.tableSelectedCatalogueId = "";
+          this.tableSelectedMenuId = "";
           const late = this.#lateChangeShown();
           this.errorKey =
             late === undefined ? "table.error" : { lateChange: late, also: "table.error" };
@@ -12471,7 +12465,7 @@ export class TillApp extends LitElement {
           },
           false,
         );
-        this.tableSelectedCatalogueId = "";
+        this.tableSelectedMenuId = "";
       }
       this.activeTableId = tableId;
       this.#rememberFloorReturnZone();
@@ -13103,7 +13097,7 @@ export class TillApp extends LitElement {
     if (
       partyId === undefined ||
       partyId !== this.orderParty?.id ||
-      !this.#tableCatalogueActive() ||
+      !this.#tableMenuActive() ||
       this.operatorName === "" ||
       document.hidden
     )
@@ -13151,7 +13145,7 @@ export class TillApp extends LitElement {
     if (
       sync === undefined ||
       this.#billDraftReading === sync ||
-      !this.#tableCatalogueActive() ||
+      !this.#tableMenuActive() ||
       this.operatorName === "" ||
       document.hidden
     )
@@ -13602,12 +13596,12 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     const named = (error as { partyId?: unknown }).partyId;
     const before = this.tables;
-    const shown = this.#tableCatalogueActive() ? this.orderParty : null;
+    const shown = this.#tableMenuActive() ? this.orderParty : null;
     const was =
       typeof named === "string" && named !== shown?.id
         ? partyOf(before, named)
         : (shown ?? undefined);
-    if (this.#tableCatalogueActive()) await this.#reloadOrder();
+    if (this.#tableMenuActive()) await this.#reloadOrder();
     else await this.#reloadTables();
     if (!live()) return;
     say(
@@ -21306,7 +21300,7 @@ export class TillApp extends LitElement {
     // the till unlocked. The server logout is best-effort.
     this.#tableToResume =
       this.#inShell() &&
-      this.#tableCatalogueActive() &&
+      this.#tableMenuActive() &&
       this.activeTableId !== undefined &&
       this.orderParty !== null
         ? {
@@ -21487,7 +21481,7 @@ export class TillApp extends LitElement {
         .departmentName=${this.counterDepartmentName}
         .receiptEquipment=${this.deviceEquipment?.roles.find((role) => role.role === "receipt")?.resolved}
         .zoneName=${this.profileServiceZones.find((zone) => zone.id === this.counterServiceZoneId)?.name ?? ""}
-        .selectedMenuId=${this.selectedCatalogueId}
+        .selectedMenuId=${this.selectedMenuId}
         .menuSelectionRequired=${true}
         .serviceZones=${
           this.formFactor === "till"
@@ -21605,7 +21599,7 @@ export class TillApp extends LitElement {
       .departmentName=${this.tableDepartmentName}
       .receiptEquipment=${this.deviceEquipment?.roles.find((role) => role.role === "receipt")?.resolved}
       .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
-      .selectedMenuId=${this.tableSelectedCatalogueId}
+      .selectedMenuId=${this.tableSelectedMenuId}
       .menuSelectionRequired=${true}
       .selectedFilters=${this.selectedFilters}
       .courses=${this.courses}
@@ -21788,7 +21782,7 @@ export class TillApp extends LitElement {
           .departmentName=${this.tableDepartmentName}
           .receiptEquipment=${this.deviceEquipment?.roles.find((role) => role.role === "receipt")?.resolved}
           .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
-          .selectedMenuId=${this.tableSelectedCatalogueId}
+          .selectedMenuId=${this.tableSelectedMenuId}
           .menuSelectionRequired=${true}
           .selectedFilters=${this.selectedFilters}
           .courses=${this.courses}

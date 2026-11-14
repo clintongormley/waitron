@@ -9,8 +9,8 @@ import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   createProduct,
@@ -163,13 +163,13 @@ async function setupVenue(): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   });
   return inTx(async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: `Served menu` });
+    const menu = await createMenu(tx, { name: `Served menu` });
     const category = await createCategory(tx, { name: "Platos" });
     const productId = {} as Record<Dish, string>;
     for (const [dish, unitPrice] of Object.entries(DISHES) as [Dish, string][]) {
       productId[dish] = (
         await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: category.id,
           name: dish,
           pricingUnit: "each",
@@ -192,7 +192,7 @@ async function setupVenue(): Promise<Venue> {
       LOCALE,
     );
     await writeProductModifiers(tx, productId.steak, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToVenue(tx, catalogue.id);
+    await assignMenuToVenue(tx, menu.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
     await setRoutingCell(

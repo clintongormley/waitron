@@ -36,9 +36,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToVenue,
+  assignMenuToVenue,
   assignProductUnit,
-  createCatalogue,
+  createMenu,
   createCategory,
   createExtraList,
   createOptionList,
@@ -139,13 +139,13 @@ async function setupVenue(): Promise<Venue> {
     { id: SAM, displayName: "Sam" },
   ]);
   return inTx(async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: "Daily menu" });
+    const menu = await createMenu(tx, { name: "Daily menu" });
     const category = await createCategory(tx, { name: "Dishes" });
     const { id: courseId } = await createCourse(tx, { name: "Mains", displayOrder: 1 });
     const productId = {} as Record<Dish, string>;
     for (const [dish, names] of Object.entries(DISHES) as [Dish, (typeof DISHES)[Dish]][]) {
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: names.staff,
         customerName: { en: names.customer },
@@ -217,7 +217,7 @@ async function setupVenue(): Promise<Venue> {
       ],
       LOCALE,
     );
-    await assignCatalogueToVenue(tx, catalogue.id);
+    await assignMenuToVenue(tx, menu.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     await setMenuVariants(tx, offers.offerFor(productId.wine), [
       { variantId: glass!.id, price: "4.00" },

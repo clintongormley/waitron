@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
+import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   departmentDayRanges,
@@ -56,7 +56,7 @@ async function venue() {
       .id;
     await configureZone(tx, { zoneId: zone!.id, departmentId });
     const period = async (name: string) => {
-      const menuId = (await createCatalogue(tx, { name: `${name}` })).id;
+      const menuId = (await createMenu(tx, { name: `${name}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
       return (await saveMenuPeriod(tx, departmentId, { name, menuId, staffMenuIds: [] })).id;
@@ -615,7 +615,7 @@ describe("saveSeasonWeeks", () => {
     const more = await scoped(async (tx) => {
       const department = async (name: string) => {
         const id = (await createDepartment(tx, { name, orderStart: "table" })).id;
-        const menuId = (await createCatalogue(tx, { name: `${name}` })).id;
+        const menuId = (await createMenu(tx, { name: `${name}` })).id;
         const { document } = await buildMenuDocument(tx, menuId);
         await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
         const period = (await saveMenuPeriod(tx, id, { name, menuId, staffMenuIds: [] })).id;

@@ -57,7 +57,7 @@ import type {
   TillProduct,
   TillSaleResult,
   PartyBill,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 
 const zone: FloorZone = {
@@ -237,7 +237,7 @@ const till = {
   simplifiedInvoiceLimit: "3000.00" as string | null,
 };
 
-const offers: ZoneOfferCatalogue = {
+const offers: ZoneOffers = {
   service: {
     open: true,
     zoneOpen: true,
@@ -285,14 +285,14 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       ...offers,
       context: {
         ...offers.context,
-        ...(overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>),
+        ...(overrides.zonePolicy as Partial<ZoneOffers["context"]>),
       },
     }),
     listZoneOffers: vi.fn().mockResolvedValue({
       ...offers,
       context: {
         ...offers.context,
-        ...(overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>),
+        ...(overrides.zonePolicy as Partial<ZoneOffers["context"]>),
       },
     }),
     setServiceZone: vi.fn(),
@@ -4151,7 +4151,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
   const dish: TillProduct = {
     id: "flan",
     menuItemId: "flan",
-    catalogueId: "cat-default",
+    menuId: "cat-default",
     name: "Flan",
     pricingUnit: "each",
     unitPrice: "5.00",
@@ -5275,7 +5275,7 @@ describe("A803 action results: Move this bill", () => {
       {
         id: "flan",
         menuItemId: "flan",
-        catalogueId: "cat-default",
+        menuId: "cat-default",
         name: "Flan",
         pricingUnit: "each",
         unitPrice: "5.00",
@@ -6500,7 +6500,7 @@ describe("till-app: the order's groups", () => {
   const coffee: TillProduct = {
     id: "cafe",
     menuItemId: "menu-item-cafe",
-    catalogueId: "cat-default",
+    menuId: "cat-default",
     name: "Café",
     pricingUnit: "each",
     unitPrice: "1.50",
@@ -6545,7 +6545,7 @@ describe("till-app: the order's groups", () => {
   const roundDish = (menuItemId: string): TillProduct => ({
     id: menuItemId,
     menuItemId,
-    catalogueId: "cat-default",
+    menuId: "cat-default",
     name: menuItemId,
     pricingUnit: "each",
     unitPrice: "5.00",
@@ -8259,7 +8259,7 @@ describe("till-app: submitting the draft", () => {
   const dish = (id: string, name: string, courseId: string): TillProduct => ({
     id,
     menuItemId: `offer-${id}`,
-    catalogueId: "cat-default",
+    menuId: "cat-default",
     name,
     pricingUnit: "each",
     unitPrice: "5.00",

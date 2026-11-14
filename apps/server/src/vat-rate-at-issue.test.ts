@@ -11,8 +11,8 @@ import { diningTables, saleLines, sales, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createExtraList,
   createProduct,
   writeProductModifiers,
@@ -170,10 +170,10 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
   });
 
   const products = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: `Vat rate at issue menu ${cfg.nodeId}` });
+    const menu = await createMenu(tx, { name: `Vat rate at issue menu ${cfg.nodeId}` });
     const product = (name: string, unitPrice: string, vatClass: "reduced" | "general") =>
       createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name,
         pricingUnit: "each",
@@ -198,7 +198,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToVenue(tx, menu.id);
+    await assignMenuToVenue(tx, menu.id);
     return {
       beer: beer.id,
       burger: burger.id,

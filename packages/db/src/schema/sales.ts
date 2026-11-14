@@ -164,7 +164,7 @@ export const sales = table(
   ],
 );
 
-/** Snapshotted values, never catalogue keys (architecture §6). */
+/** Snapshotted values, never menu keys (architecture §6). */
 export const saleLines = table(
   "sale_lines",
   {
@@ -184,7 +184,7 @@ export const saleLines = table(
     variantKitchenName: label("variant_kitchen_name"),
     kitchenName: label("kitchen_name"),
     // The diner's answers to this dish's OPTIONS lists, copied by value — no id points back at a
-    // list or a label, so a later catalogue edit cannot rewrite a filed sale. EXTRAS are not in
+    // list or a label, so a later menu edit cannot rewrite a filed sale. EXTRAS are not in
     // here: an extras pick is filed as its own child line of the dish (`parent_line_id`).
     optionSnapshots: json<OptionSnapshot[]>("option_snapshots").notNull().default([]),
     // The printed unit label (the unit's abbreviation), frozen at add-time as one entry under the
@@ -196,7 +196,7 @@ export const saleLines = table(
     unitPrice: money("unit_price").notNull(),
     vatRate: rate("vat_rate").notNull(),
     lineTotal: money("line_total").notNull(),
-    // Snapshotted analytics label, NOT a category_id or a catalogue FK, so a later taxonomy edit
+    // Snapshotted analytics label, NOT a category_id or a menu FK, so a later taxonomy edit
     // can never reach back into a completed record.
     category: label("category"),
     // The dish line this line belongs to — a filed EXTRAS pick is a line of its own and points at
@@ -204,7 +204,7 @@ export const saleLines = table(
     // only.
     parentLineId: id("parent_line_id"),
     // What was sold and from which menu: values, never keys, so a filed line keeps no link to a
-    // catalogue row. A foreign key declared on `product_id` made drizzle-kit 0.31.10 generate a
+    // menu row. A foreign key declared on `product_id` made drizzle-kit 0.31.10 generate a
     // rebuild of this append-only table (copy into `__new_sale_lines`, `DROP TABLE`, rename), not an
     // `ALTER`; the command and output are in the commit message that added this comment. Null where
     // the filing path records none, as on every line filed before they existed; a variant line

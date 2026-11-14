@@ -61,8 +61,8 @@ import {
 import { permissionsForRole } from "@waitron/identity/src/permissions.js";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   addProductToMenu,
@@ -138,15 +138,15 @@ let anna: { id: string };
 // the value read back here, not a hardcoded one.
 let abel: { id: string };
 let venueTaxId: string;
-// The one product seeded into the venue's DEFAULT catalogue.
-let waterProduct: { id: string; catalogueId: string };
+// The one product seeded into the venue's DEFAULT menu.
+let waterProduct: { id: string; menuId: string };
 let eachUnit: {
   id: string;
   name: Record<string, string>;
   precision: number;
   hardwareUnit: string | null;
 };
-let beerProduct: { id: string; catalogueId: string };
+let beerProduct: { id: string; menuId: string };
 let counterZoneId: string;
 let waterOfferId: string;
 let hiddenWaterOfferId: string;
@@ -206,10 +206,10 @@ const suite = useVenueDb({
     const { water, beer, zoneId, offerId, hiddenOfferId, staffMenuId } = await withTransaction(
       db,
       async (tx) => {
-        const cat = await createCatalogue(tx, { name: "Daily menu" });
+        const cat = await createMenu(tx, { name: "Daily menu" });
         const drinksCategory = await createCategory(tx, { name: "Drinks" });
         const p = await createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: drinksCategory.id,
           name: "Agua mineral",
           pricingUnit: "each",
@@ -217,11 +217,11 @@ const suite = useVenueDb({
           vatClass: "general",
           allergens: { sulphites: {} },
         });
-        await assignCatalogueToVenue(tx, cat.id);
+        await assignMenuToVenue(tx, cat.id);
 
-        const cat2 = await createCatalogue(tx, { name: "Happy Hour" });
+        const cat2 = await createMenu(tx, { name: "Happy Hour" });
         const p2 = await createProduct(tx, {
-          catalogueId: cat2.id,
+          menuId: cat2.id,
           categoryId: drinksCategory.id,
           name: "Cerveza",
           pricingUnit: "each",
@@ -257,7 +257,7 @@ const suite = useVenueDb({
           { kind: "station", stationId: defaultStationId },
         );
 
-        const hiddenMenu = await createCatalogue(tx, { name: "Staff" });
+        const hiddenMenu = await createMenu(tx, { name: "Staff" });
         const hiddenOffer = await addProductToMenu(tx, {
           menuId: hiddenMenu.id,
           productId: p.id,
@@ -267,8 +267,8 @@ const suite = useVenueDb({
         await publishWorkingMenu(tx, hiddenMenu.id);
 
         return {
-          water: { ...p, catalogueId: cat.id },
-          beer: { ...p2, catalogueId: cat2.id },
+          water: { ...p, menuId: cat.id },
+          beer: { ...p2, menuId: cat2.id },
           zoneId: zone!.id,
           offerId: offer.id,
           hiddenOfferId: hiddenOffer.id,
@@ -276,8 +276,8 @@ const suite = useVenueDb({
         };
       },
     );
-    waterProduct = { id: water.id, catalogueId: water.catalogueId };
-    beerProduct = { id: beer.id, catalogueId: beer.catalogueId };
+    waterProduct = { id: water.id, menuId: water.menuId };
+    beerProduct = { id: beer.id, menuId: beer.menuId };
     eachUnit = { ...water.unit, hardwareUnit: null };
     counterZoneId = zoneId;
     waterOfferId = offerId;
@@ -1098,8 +1098,8 @@ describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => 
     expect(await res.json()).toMatchObject({ error: { code: "sale.number_reused" } });
   });
 
-  // A catalogue whose data breaks the reporting tree refuses the issuance pass: not the till's fault,
-  // and permanent until the catalogue is fixed.
+  // A menu whose data breaks the reporting tree refuses the issuance pass: not the till's fault,
+  // and permanent until the menu is fixed.
   it("answers sale_classification.invalid with 409, keeping its code", async () => {
     const app = new Hono();
     app.get("/refused", (c) =>
@@ -2047,9 +2047,9 @@ it("GET /api/till boots fixed till screens without a canvas for a cookieless req
   expect(body).not.toHaveProperty("canvas");
 });
 
-describe("zone-offer catalogue routes", () => {
+describe("zone-offer menu routes", () => {
   it.each(["absent", "invalid", "valid"])(
-    "does not serve the retired product catalogue with a %s session",
+    "does not serve the retired product menu with a %s session",
     async (session) => {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
@@ -2250,8 +2250,8 @@ describe("zone-offer catalogue routes", () => {
     expect(body.context).not.toHaveProperty("receiptPrintMode");
     expect(body).toMatchObject({
       context: { zoneId: counterZoneId, serviceMode: "prepay" },
-      defaultMenuId: waterProduct.catalogueId,
-      menus: [{ id: waterProduct.catalogueId, name: "Daily menu", isDefault: true }],
+      defaultMenuId: waterProduct.menuId,
+      menus: [{ id: waterProduct.menuId, name: "Daily menu", isDefault: true }],
       offers: [{ id: waterOfferId, productId: waterProduct.id, grossPrice: "1.75" }],
     });
   });
@@ -2267,7 +2267,7 @@ describe("zone-offer catalogue routes", () => {
       expect(res.status).toBe(200);
       return ((await res.json()) as { offers: { id: string }[] }).offers.map((offer) => offer.id);
     };
-    const menuId = waterProduct.catalogueId;
+    const menuId = waterProduct.menuId;
     const [held] = (
       await suite.db.execute<{
         sectionId: string;
@@ -2311,17 +2311,17 @@ describe("zone-offer catalogue routes", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // No cookie: the guard must refuse before any catalogue is read.
+    // No cookie: the guard must refuse before any menu is read.
     const res = await app.request("/api/default-service-zone/offers");
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("REJECTS (401 session.required) a NON-UUID cookie on the catalogue route", async () => {
+  it("REJECTS (401 session.required) a NON-UUID cookie on the menu route", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // Through the real route: a non-UUID cookie is refused by the guard as 401 before any catalogue
+    // Through the real route: a non-UUID cookie is refused by the guard as 401 before any menu
     // read. Weaker than its name: it does not pin `requireSession`'s `isUuid` screen, since the hashed
     // value matches no row either way.
     const res = await app.request("/api/default-service-zone/offers", {
@@ -2332,14 +2332,14 @@ describe("zone-offer catalogue routes", () => {
   });
 
   it("reads the venue's accessible menus and product values", async () => {
-    const catalogue = await withTransaction(suite.db, async (tx) => ({
+    const menu = await withTransaction(suite.db, async (tx) => ({
       menus: await venueMenus(tx),
       products: (await listAvailableProducts(tx)).products,
     }));
-    expect(catalogue).toEqual({
+    expect(menu).toEqual({
       menus: [
-        { id: waterProduct.catalogueId, name: "Daily menu", isDefault: true },
-        { id: beerProduct.catalogueId, name: "Happy Hour", isDefault: false },
+        { id: waterProduct.menuId, name: "Daily menu", isDefault: true },
+        { id: beerProduct.menuId, name: "Happy Hour", isDefault: false },
         { id: hiddenMenuId, name: "Staff", isDefault: false },
       ],
       products: [
@@ -2359,8 +2359,8 @@ describe("zone-offer catalogue routes", () => {
           dietOverride: null,
           dietaryDeclarations: [],
           courseId: null,
-          catalogueId: waterProduct.catalogueId,
-          catalogueName: "Daily menu",
+          menuId: waterProduct.menuId,
+          menuName: "Daily menu",
           // `offeredModifiers` is the extras-and-options walk the till draws from
           // (`readOfferedModifiers`), empty here because these seeded products attach nothing.
           offeredModifiers: [],
@@ -2380,8 +2380,8 @@ describe("zone-offer catalogue routes", () => {
           dietOverride: null,
           dietaryDeclarations: [],
           courseId: null,
-          catalogueId: beerProduct.catalogueId,
-          catalogueName: "Happy Hour",
+          menuId: beerProduct.menuId,
+          menuName: "Happy Hour",
           offeredModifiers: [],
         },
       ],
@@ -2984,7 +2984,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const id = randomUUID();
     const json = { "content-type": "application/json" };
-    // The guard runs FIRST on each route (before any body is read or catalogue touched), so an
+    // The guard runs FIRST on each route (before any body is read or menu touched), so an
     // unauthenticated park/list/retrieve/update/abandon/place/prep/collect/cancel all 401 with the one
     // code. (The station-operate routes have their own 401 guard test below.)
     const cases = [
@@ -3989,7 +3989,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     );
     await suite.db.execute(sql`update floor_zones set order_start = 'table' where id = ${zoneId}`);
     await withTransaction(suite.db, async (tx) => {
-      await offerMenuThroughZone(tx, zoneId, waterProduct.catalogueId, { makeDefault: true });
+      await offerMenuThroughZone(tx, zoneId, waterProduct.menuId, { makeDefault: true });
     });
 
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
@@ -4196,7 +4196,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
 });
 
 // HTTP serialization and deterministic pricing need no concurrency or privilege assertion here.
-// Each fixture owns a fresh product and offer so other catalogue expectations remain independent.
+// Each fixture owns a fresh product and offer so other menu expectations remain independent.
 // The suite shares one database and an Active product's staff name is unique, so each fixture's
 // products carry its own number.
 let modifierFixtures = 0;
@@ -4205,7 +4205,7 @@ async function modifierOfferFixture() {
   const data = await withTransaction(suite.db, async (tx) => {
     const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
     const product = await createProduct(tx, {
-      catalogueId: waterProduct.catalogueId,
+      menuId: waterProduct.menuId,
       categoryId: null,
       name: `Prueba de modificadores ${fixture}`,
       pricingUnit: "each",
@@ -4213,13 +4213,13 @@ async function modifierOfferFixture() {
       vatClass: "general",
     });
     const offer = await addProductToMenu(tx, {
-      menuId: waterProduct.catalogueId,
+      menuId: waterProduct.menuId,
       productId: product.id,
       grossPrice: "1.75",
     });
 
     const cheese = await createProduct(tx, {
-      catalogueId: waterProduct.catalogueId,
+      menuId: waterProduct.menuId,
       categoryId: null,
       name: `Cheese staff ${fixture}`,
       customerName: { [defaultLanguage]: "Queso customer" },
@@ -4285,7 +4285,7 @@ async function modifierOfferFixture() {
       { kind: "options", id: prepList.id },
     ]);
 
-    await publishWorkingMenu(tx, waterProduct.catalogueId);
+    await publishWorkingMenu(tx, waterProduct.menuId);
     return {
       product,
       offer,
@@ -4520,7 +4520,7 @@ describe("canonical modifier HTTP serialization", () => {
     );
     await suite.db.execute(sql`update floor_zones set order_start = 'table' where id = ${zoneId}`);
     await withTransaction(suite.db, async (tx) => {
-      await offerMenuThroughZone(tx, zoneId, waterProduct.catalogueId, { makeDefault: true });
+      await offerMenuThroughZone(tx, zoneId, waterProduct.menuId, { makeDefault: true });
     });
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
       createTable(tx, cfg, { label: "Modifiers", zoneId }),
@@ -4823,7 +4823,7 @@ describe("sale-policy order flow routes", () => {
         await tx.execute(
           sql`update floor_zones set order_start = null, paid_when = ${paidWhen} where id = ${zone.id}`,
         );
-        await offerMenuThroughZone(tx, zone.id, waterProduct.catalogueId, {
+        await offerMenuThroughZone(tx, zone.id, waterProduct.menuId, {
           makeDefault: true,
         });
         return zone.id;
@@ -4877,17 +4877,17 @@ describe("settling edit answers", () => {
         kind === "held"
           ? venue.offerFor("Red wine bottle")
           : await withTransaction(edits.db, async (tx) => {
-              const catalogue = await createCatalogue(tx, { name: "Weighed dishes" });
+              const menu = await createMenu(tx, { name: "Weighed dishes" });
               const category = await createCategory(tx, { name: "Fish dishes" });
               const product = await createProduct(tx, {
-                catalogueId: catalogue.id,
+                menuId: menu.id,
                 categoryId: category.id,
                 name: "Fish",
                 pricingUnit: "each",
                 unitPrice: "30.00",
                 vatClass: "general",
               });
-              await assignCatalogueToVenue(tx, catalogue.id);
+              await assignMenuToVenue(tx, menu.id);
               const offers = await offerProducts(tx, venue.cfg, {
                 zone: "tables",
                 productIds: [product.id],

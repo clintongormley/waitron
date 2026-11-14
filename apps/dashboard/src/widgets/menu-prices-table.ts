@@ -793,14 +793,14 @@ export class MenuPricesTable extends LitElement {
       label=${`${t("members.actions")}: ${this.#lineName(line)}`}
       ><a
         data-test=${`edit-product-${keyOf(line)}`}
-        href=${`/manage/catalogue/product/${encodeURIComponent(id)}`}
+        href=${`/manage/products/product/${encodeURIComponent(id)}`}
         @click=${(event: MouseEvent) => this.#openProduct(event, id)}
         >${t("product.edit")}</a
       ></wt-row-actions
     >`;
   }
 
-  /** A product opens in the dashboard's own catalogue screen; a held modifier key keeps the
+  /** A product opens in the dashboard's own menu screen; a held modifier key keeps the
    * browser's own handling, such as opening a new tab. */
   #openProduct(event: MouseEvent, productId: string): void {
     if (leftToBrowser(event)) return;

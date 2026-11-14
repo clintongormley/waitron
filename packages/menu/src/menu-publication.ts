@@ -28,7 +28,7 @@ import { readContentLanguages } from "./content-languages.js";
 import { applyMenuPatch, parseMenuPatch } from "./menu-patch.js";
 import type { LiveMenu, MenuPatchResult } from "./menu-patch-types.js";
 import { mediaImageExists } from "./sections.js";
-import { catalogueExists } from "./operations.js";
+import { menuExists } from "./operations.js";
 import type {
   MenuChangeBody,
   MenuDocument,
@@ -418,7 +418,7 @@ function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
 export async function previewMenu(tx: Transaction, menuId: string): Promise<MenuPreview> {
   const { graph, menus, sectionNames } = await buildMenuDocuments(tx, [menuId]);
   const mine = menus.get(menuId);
-  if (mine === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
+  if (mine === undefined) throw new AppError("menu.not_found", { menuId: menuId });
   const own = (await liveVersions(tx, [menuId], "document")).get(menuId);
   const ownDocument = own?.document ?? null;
   const entries = diffEntries(ownDocument, mine.document, mine.combined);
@@ -712,8 +712,7 @@ async function pointTo(
 }
 
 async function requireMenu(tx: Transaction, menuId: string): Promise<void> {
-  if (!(await catalogueExists(tx, menuId)))
-    throw new AppError("catalogue.not_found", { catalogueId: menuId });
+  if (!(await menuExists(tx, menuId))) throw new AppError("menu.not_found", { menuId: menuId });
 }
 
 /** The menu's version live at `at` and its document, or `null` when it has none. */

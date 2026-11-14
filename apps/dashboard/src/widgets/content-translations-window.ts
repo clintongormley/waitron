@@ -42,7 +42,7 @@ export function translationEditorHref(
   switch (row.kind) {
     case "product":
     case "variant":
-      return `/manage/catalogue/product/${id}`;
+      return `/manage/products/product/${id}`;
     case "option_list":
       return `/manage/modifiers/view/options/list/${id}`;
     case "option_label":

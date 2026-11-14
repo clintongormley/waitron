@@ -18,28 +18,28 @@ export * from "./units.js";
 // unique-name rule and are kept out of the package entry point.
 export {
   addProductToMenu,
-  assignCatalogueToVenue,
-  catalogueExists,
-  createCatalogue,
+  assignMenuToVenue,
+  menuExists,
+  createMenu,
   createProduct,
-  deactivateCatalogue,
+  deactivateMenu,
   deactivateProduct,
   listAvailableProducts,
-  listCatalogues,
+  listMenus,
   listMenuOffers,
   listProducts,
   menuPrices,
-  readDefaultCatalogueId,
+  readDefaultMenuId,
   readInvoiceLocales,
   readReceiptLanguage,
-  setVenueDefaultCatalogue,
+  setVenueDefaultMenu,
   updateMenuDetails,
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
 export type {
   AvailableProduct,
-  Catalogue,
+  Menu,
   CreateProductInput,
   ListedVariant,
   MenuItem,
@@ -109,10 +109,10 @@ export {
   SUGGESTION_REFUSALS,
 } from "@waitron/db";
 export type { SuggestionJobRow, SuggestionRow } from "@waitron/db";
-export { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
-export { CATALOGUE_PROVISIONING } from "./provisioning.js";
-export { CATALOGUE_TABLES } from "./classification.js";
-export { CATALOGUE_CHANGE_SOURCES } from "./classification.js";
+export { MENU_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
+export { MENU_PROVISIONING } from "./provisioning.js";
+export { MENU_TABLES } from "./classification.js";
+export { MENU_CHANGE_SOURCES } from "./classification.js";
 export * from "./categories.js";
 export type {
   SectionRole,
@@ -314,4 +314,4 @@ export type * from "./content-suggestion-types.js";
 
 export { assertProductWritable } from "./archive.js";
 
-export { CATALOGUE_BACKUP_VERIFICATION } from "./backup-verification.js";
+export { MENU_BACKUP_VERIFICATION } from "./backup-verification.js";

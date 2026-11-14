@@ -169,7 +169,7 @@ function offersOn(key: string, offered: TillProduct[]): TillProduct[] {
   return offered.map((each) => ({
     ...each,
     menuItemId: `mi-${key}-${each.id.slice(2)}`,
-    catalogueId: `menu-${key}`,
+    menuId: `menu-${key}`,
   }));
 }
 

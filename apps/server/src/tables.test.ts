@@ -22,12 +22,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  assignCatalogueToVenue,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { AppError, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 
@@ -395,10 +390,10 @@ async function setupTabVenue(): Promise<{
     simplifiedInvoiceLimit: null,
   };
   const { coffeeId, waterId, tableId, offers } = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Menu" });
+    const cat = await createMenu(tx, { name: "Menu" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const coffee = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Coffee",
       pricingUnit: "each",
@@ -406,14 +401,14 @@ async function setupTabVenue(): Promise<{
       vatClass: "general",
     });
     const water = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Water",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const table = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
     return { coffeeId: coffee.id, waterId: water.id, tableId: table.id, offers };

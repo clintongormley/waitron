@@ -1,12 +1,12 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { catalogues, sections, withTransaction, type Transaction } from "@waitron/db";
+import { menus, sections, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { useCatalogueDb } from "../test/fixtures.js";
-import { createCatalogue, listCatalogues, updateMenuDetails } from "./operations.js";
+import { useMenuDb } from "../test/fixtures.js";
+import { createMenu, listMenus, updateMenuDetails } from "./operations.js";
 import { readMenuStructure } from "./menu-structure.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 describe("menu names on creation and rename", () => {
@@ -18,47 +18,47 @@ describe("menu names on creation and rename", () => {
     "refuses $mode with the held name $name without changing either menu",
     async ({ name, mode }) => {
       await seedTaxpayer(fx.db);
-      const held = await app((tx) => createCatalogue(tx, { name: "Café" }));
-      const other = await app((tx) => createCatalogue(tx, { name: "Dinner" }));
-      await fx.db.update(catalogues).set({ active: false }).where(eq(catalogues.id, held.id));
-      const before = await app(listCatalogues);
+      const held = await app((tx) => createMenu(tx, { name: "Café" }));
+      const other = await app((tx) => createMenu(tx, { name: "Dinner" }));
+      await fx.db.update(menus).set({ active: false }).where(eq(menus.id, held.id));
+      const before = await app(listMenus);
       const structure = await app((tx) => readMenuStructure(tx, other.id));
       const write =
         mode === "create"
-          ? app((tx) => createCatalogue(tx, { name }))
+          ? app((tx) => createMenu(tx, { name }))
           : app((tx) => updateMenuDetails(tx, other.id, { name, names: { en: "Changed" } }));
       await expect(write).rejects.toMatchObject({
         code: "menu.name_taken",
         params: { field: "name" },
       });
-      expect(await app(listCatalogues)).toEqual(before);
+      expect(await app(listMenus)).toEqual(before);
       expect(await app((tx) => readMenuStructure(tx, other.id))).toEqual(structure);
     },
   );
 
   it("allows distinct accents and interior spacing, and excludes the renamed menu itself", async () => {
     await seedTaxpayer(fx.db);
-    const menu = await app((tx) => createCatalogue(tx, { name: "Café bar" }));
-    await app((tx) => createCatalogue(tx, { name: "Cafe bar" }));
-    await app((tx) => createCatalogue(tx, { name: "Café  bar" }));
+    const menu = await app((tx) => createMenu(tx, { name: "Café bar" }));
+    await app((tx) => createMenu(tx, { name: "Cafe bar" }));
+    await app((tx) => createMenu(tx, { name: "Café  bar" }));
     await app((tx) => updateMenuDetails(tx, menu.id, { name: "  CAFÉ BAR  " }));
-    const rows = await app(listCatalogues);
+    const rows = await app(listMenus);
     expect(rows.map((row) => row.name).sort()).toEqual(["CAFÉ BAR", "Cafe bar", "Café  bar"]);
     expect((await app((tx) => readMenuStructure(tx, menu.id))).root.internalName).toBe("CAFÉ BAR");
   });
 
   it("keeps existing duplicate names until renamed while allowing presentation-only saves", async () => {
     await seedTaxpayer(fx.db);
-    const first = await app((tx) => createCatalogue(tx, { name: "Lunch" }));
-    const second = await app((tx) => createCatalogue(tx, { name: "Dinner" }));
+    const first = await app((tx) => createMenu(tx, { name: "Lunch" }));
+    const second = await app((tx) => createMenu(tx, { name: "Dinner" }));
     const root = (await app((tx) => readMenuStructure(tx, second.id))).rootSectionId;
     await app(async (tx) => {
-      await tx.update(catalogues).set({ name: "Lunch" }).where(eq(catalogues.id, second.id));
+      await tx.update(menus).set({ name: "Lunch" }).where(eq(menus.id, second.id));
       await tx.update(sections).set({ internalName: "Lunch" }).where(eq(sections.id, root));
     });
     await app((tx) => updateMenuDetails(tx, second.id, { name: "Lunch", names: { en: "Midday" } }));
     await app((tx) => updateMenuDetails(tx, second.id, { color: "#112233" }));
-    expect((await app(listCatalogues)).map((row) => row.name)).toEqual(["Lunch", "Lunch"]);
+    expect((await app(listMenus)).map((row) => row.name)).toEqual(["Lunch", "Lunch"]);
     expect((await app((tx) => readMenuStructure(tx, second.id))).root).toMatchObject({
       internalName: "Lunch",
       names: { en: "Midday" },
@@ -71,7 +71,7 @@ describe("menu names on creation and rename", () => {
       params: { field: "name" },
     });
     await app((tx) => updateMenuDetails(tx, second.id, { name: "Evening" }));
-    const renamed = await app(listCatalogues);
+    const renamed = await app(listMenus);
     expect(renamed).toHaveLength(2);
     expect(renamed).toEqual(
       expect.arrayContaining([

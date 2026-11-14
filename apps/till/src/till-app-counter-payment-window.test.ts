@@ -23,7 +23,7 @@ import {
 const product = {
   id: "meal",
   menuItemId: "offer-meal",
-  catalogueId: "cat-default",
+  menuId: "cat-default",
   name: "Lunch",
   pricingUnit: "each" as const,
   unitPrice: "30.00",

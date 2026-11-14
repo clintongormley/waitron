@@ -6,8 +6,8 @@ import { saleLines, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   createProduct,
@@ -138,7 +138,7 @@ async function fileOneSale(db: Database) {
     simplifiedInvoiceLimit: null,
   });
   const seeded = await withTransaction(db, async (tx) => {
-    const menu = await createCatalogue(tx, {
+    const menu = await createMenu(tx, {
       name: `Issuance pass fiscal identity menu ${cfg.nodeId}`,
     });
     const bebidas = await createCategory(tx, { name: "Drinks" });
@@ -149,7 +149,7 @@ async function fileOneSale(db: Database) {
     const anadidos = await createCategory(tx, { name: "Extras" });
     const product = (name: string, categoryId: string, unitPrice: string) =>
       createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId,
         name: `${name} staff`,
         customerName: { es: `${name} cliente` },
@@ -174,7 +174,7 @@ async function fileOneSale(db: Database) {
       LOCALE,
     );
     await writeProductModifiers(tx, negroni.id, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToVenue(tx, menu.id);
+    await assignMenuToVenue(tx, menu.id);
     return { negroni: negroni.id, hielo: hielo.id, extrasListId: extras.id };
   });
   const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg));

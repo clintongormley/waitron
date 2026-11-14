@@ -10,7 +10,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
 import type { RoutingModel } from "@waitron/venue-service/routing";
-import type { CatalogueBrowser } from "./product-browser.js";
+import type { ProductBrowser } from "./product-browser.js";
 import "./product-browser.js";
 import { HOVER_OPEN_MS, ROOT_KEY } from "./product-list.js";
 registerIcons(DASHBOARD_ICONS);
@@ -42,7 +42,7 @@ const product = (
   primaryCategoryId,
   categoryId: primaryCategoryId,
   active,
-  catalogueId: "c",
+  menuId: "c",
   modifiers: [],
   customerName: null,
   unitId: "u",
@@ -76,10 +76,10 @@ export const PRODUCTS = [
   product("burger", "Burger", "f"),
   product("bread", "Bread", null),
 ];
-export async function mountBrowser(overrides: Partial<CatalogueBrowser> = {}) {
+export async function mountBrowser(overrides: Partial<ProductBrowser> = {}) {
   const api = {
-    moveCatalogueItems: vi.fn().mockResolvedValue(undefined),
-    deleteCatalogueItems: vi.fn().mockResolvedValue(undefined),
+    moveProductItems: vi.fn().mockResolvedValue(undefined),
+    deleteProductItems: vi.fn().mockResolvedValue(undefined),
     countProductMenus: vi.fn().mockResolvedValue(0),
     summariseFolders: vi
       .fn()
@@ -88,12 +88,12 @@ export async function mountBrowser(overrides: Partial<CatalogueBrowser> = {}) {
       ]),
     createCategory: vi.fn().mockResolvedValue(folder("new", "Juice", "d")),
     updateCategory: vi.fn().mockResolvedValue(folder("d", "Beverages", null)),
-    saveCatalogueDefaultColor: vi
+    saveMenuDefaultColor: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
   } as unknown as DashboardApi;
   return (
-    await mountWidget<CatalogueBrowser>("dashboard-catalogue-browser", {
+    await mountWidget<ProductBrowser>("dashboard-product-browser", {
       api,
       products: PRODUCTS,
       categories: CATEGORIES,
@@ -101,7 +101,7 @@ export async function mountBrowser(overrides: Partial<CatalogueBrowser> = {}) {
     })
   ).el;
 }
-export async function tableOf(el: CatalogueBrowser) {
+export async function tableOf(el: ProductBrowser) {
   await el.updateComplete;
   const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
   await list.updateComplete;
@@ -109,24 +109,24 @@ export async function tableOf(el: CatalogueBrowser) {
   await table.updateComplete;
   return table;
 }
-export async function rowKeys(el: CatalogueBrowser) {
+export async function rowKeys(el: ProductBrowser) {
   return [...(await tableOf(el)).shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")]
     .map((row) => row.dataset.rowKey)
     .filter((key) => key !== ROOT_KEY);
 }
 /** Opens or closes a category the way a click on its row does. */
-export async function toggleCategory(el: CatalogueBrowser, id: string) {
+export async function toggleCategory(el: ProductBrowser, id: string) {
   const table = await tableOf(el);
   table
     .shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="folder:${id}"] .row-activate`)!
     .click();
   await table.updateComplete;
 }
-async function menuAction(el: CatalogueBrowser, test: string) {
+async function menuAction(el: ProductBrowser, test: string) {
   (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!.click();
   await el.updateComplete;
 }
-async function nameBox(el: CatalogueBrowser) {
+async function nameBox(el: ProductBrowser) {
   const table = await tableOf(el);
   await vi.waitFor(() =>
     expect(table.shadowRoot!.activeElement?.getAttribute("name")).toBe("category-name"),
@@ -230,7 +230,7 @@ it("hands the courses to the products list", async () => {
 });
 
 /** The red asterisk on a category's row, or null when the row has none. */
-async function unroutedMarker(el: CatalogueBrowser, key: string) {
+async function unroutedMarker(el: ProductBrowser, key: string) {
   const row = (await tableOf(el)).shadowRoot!.querySelector(`tr[data-row-key="${key}"]`);
   expect(row).not.toBeNull();
   return row!.querySelector('[data-test="unrouted-folder"]');
@@ -327,7 +327,7 @@ it("marks no category while routing loads, and says so above the list when its r
   expect(await unroutedMarker(el, "folder:f")).toBeNull();
 });
 
-async function nameCell(el: CatalogueBrowser, key: string) {
+async function nameCell(el: ProductBrowser, key: string) {
   return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
     `tr[data-row-key="${key}"] [part~="${key.startsWith("folder:") ? "folder-cell" : "product-cell"}"]`,
   )!;
@@ -366,7 +366,7 @@ function capturedTouch(from: Element, type: string, over: Element) {
 }
 
 /** A mouse drag of `from` onto `to`'s row activator, then the click its release makes. */
-async function dragAndClick(el: CatalogueBrowser, from: string, to: string) {
+async function dragAndClick(el: ProductBrowser, from: string, to: string) {
   const table = await tableOf(el);
   const target = table.shadowRoot!.querySelector<HTMLElement>(
     `tr[data-row-key="${to}"] .row-activate`,
@@ -379,9 +379,9 @@ async function dragAndClick(el: CatalogueBrowser, from: string, to: string) {
   );
   await table.updateComplete;
 }
-const grips = async (el: CatalogueBrowser) =>
+const grips = async (el: ProductBrowser) =>
   (await tableOf(el)).shadowRoot!.querySelectorAll('.drag-grip, [part~="grip-space"]');
-const checkboxes = async (el: CatalogueBrowser) =>
+const checkboxes = async (el: ProductBrowser) =>
   (await tableOf(el)).shadowRoot!.querySelectorAll('tr[data-row-key] input[type="checkbox"]');
 
 it("draws no grip on mount, and a drag there moves nothing while its release opens the category as a click", async () => {
@@ -391,7 +391,7 @@ it("draws no grip on mount, and a drag there moves nothing while its release ope
   await dragAndClick(el, "bread", "folder:f");
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "burger", "bread"]);
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
 it("Select shows a grip and a checkbox on every category and product row, and a drag then moves", async () => {
   const el = await mountBrowser();
@@ -406,7 +406,7 @@ it("Select shows a grip and a checkbox on every category and product row, and a 
   }
   drag(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["bread"], categoryIds: [] },
       "f",
     ),
@@ -427,7 +427,7 @@ it("Done hides the grips and checkboxes, a drag moves nothing again, and focus r
   expect(select.shadowRoot!.activeElement).toBe(selectButton(el));
   await dragAndClick(el, "bread", "folder:f");
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
 it.each([
   ["en-GB", "Done"],
@@ -463,7 +463,7 @@ it("a dragged product stays in place, faded, under a lifted copy, and moves on t
   expect(getComputedStyle(bar).borderInlineStartStyle).toBe("solid");
   pointerEvent(destination, "pointerup");
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["bread"], categoryIds: [] },
       "f",
     ),
@@ -485,7 +485,7 @@ it("real pointer drag moves a product into a folder", async () => {
     { sourcePosition: { x: 4, y: 4 }, targetPosition: { x: 4, y: 4 } },
   );
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["bread"], categoryIds: [] },
       "f",
     ),
@@ -502,7 +502,7 @@ it("finds a folder under a captured touch pointer", async () => {
   expect(to.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(true);
   capturedTouch(grip, "pointerup", to);
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["bread"], categoryIds: [] },
       "f",
     ),
@@ -520,7 +520,7 @@ it("a click on a category's row opens it in place without starting a drag", asyn
   activator.click();
   await table.updateComplete;
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
 it("a small pointer movement stays a click rather than lifting the row", async () => {
   const el = await mountBrowser();
@@ -539,7 +539,7 @@ it("a small pointer movement stays a click rather than lifting the row", async (
   );
   expect(cell.closest("tr")!.part.contains("dragging")).toBe(false);
   pointerEvent(cell, "pointerup");
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
 it("a cancelled pointer over a valid folder does not move the product", async () => {
   const el = await mountBrowser();
@@ -550,7 +550,7 @@ it("a cancelled pointer over a valid folder does not move the product", async ()
   pointerEvent(to, "pointermove");
   expect(to.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(true);
   pointerEvent(to, "pointercancel");
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
 it("a drag that ends on a category's row does not also open it", async () => {
   const el = await mountBrowser();
@@ -582,7 +582,7 @@ it("drags the whole selected group and clears selection after moving", async () 
   await selectKeys(el, ["bread", "folder:d"]);
   drag(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
   await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
-  expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+  expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
     { productIds: ["bread"], categoryIds: ["d"] },
     "f",
   );
@@ -598,11 +598,11 @@ it("refuses a folder over itself or its descendants but highlights a sibling", a
     pointerEvent(target, "pointermove");
     expect(target.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(false);
   }
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
   const sibling = await nameCell(el, "folder:s");
   pointerEvent(sibling, "pointermove");
   expect(sibling.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(true);
-  pointerEvent(el.shadowRoot!.querySelector('[name="catalogue-search"]')!, "pointermove");
+  pointerEvent(el.shadowRoot!.querySelector('[name="menu-search"]')!, "pointermove");
   expect(sibling.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(false);
   pointerEvent(from, "pointercancel");
   pointerEvent(sibling, "pointermove");
@@ -618,7 +618,7 @@ it("moves a product to the top level by dropping it on All products", async () =
     root.querySelector(`tr[data-row-key="${ROOT_KEY}"] [part~="folder-cell"]`)!,
   );
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["cola"], categoryIds: [] },
       null,
     ),
@@ -626,7 +626,7 @@ it("moves a product to the top level by dropping it on All products", async () =
 });
 it("shows a refused drop at the bottom and keeps the selection for correction", async () => {
   const el = await mountBrowser();
-  vi.mocked(el.api.moveCatalogueItems).mockRejectedValue(
+  vi.mocked(el.api.moveProductItems).mockRejectedValue(
     Object.assign(new Error(), { code: "category.parent_cycle" }),
   );
   await selectKeys(el, ["bread"]);
@@ -711,7 +711,7 @@ it("dropping on a product files the dragged row into that product's category", a
   await toggleCategory(el, "d");
   drag(await nameCell(el, "bread"), await nameCell(el, "cola"));
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["bread"], categoryIds: [] },
       "d",
     ),
@@ -758,7 +758,7 @@ it("Esc cancels a drag with nothing moved, and the click that ends it opens noth
   );
   await table.updateComplete;
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
 
 it("a drop where the drag started moves nothing and is never marked", async () => {
@@ -771,7 +771,7 @@ it("a drop where the drag started moves nothing and is never marked", async () =
   pointerEvent(cell, "pointermove");
   expect(table.shadowRoot!.querySelector('[part~="drop-target"]')).toBeNull();
   pointerEvent(cell, "pointerup");
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
 
 it("a drop on the category the dragged row is already in moves nothing and is never marked", async () => {
@@ -789,7 +789,7 @@ it("a drop on the category the dragged row is already in moves nothing and is ne
   pointerEvent(await nameCell(el, "folder:d"), "pointerup");
   await el.updateComplete;
   expect(drops).not.toHaveBeenCalled();
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
 
 it("in Select mode, dragging a selected row moves every selected row, from two categories, in one drop", async () => {
@@ -812,7 +812,7 @@ it("in Select mode, dragging a selected row moves every selected row, from two c
   );
   pointerEvent(await nameCell(el, "folder:b"), "pointerup");
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["cola", "burger"], categoryIds: [] },
       "b",
     ),
@@ -838,7 +838,7 @@ it("in Select mode, a drop where the drag started moves nothing, even with rows 
   pointerEvent(cell, "pointerup");
   await el.updateComplete;
   expect(drops).not.toHaveBeenCalled();
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
 
 it("no dragged row stays marked inactive after a drop that moves, Esc, or a drop where the drag started", async () => {
@@ -877,7 +877,7 @@ it("no dragged row stays marked inactive after a drop that moves, Esc, or a drop
 
   await lift();
   pointerEvent(await nameCell(el, "folder:b"), "pointerup");
-  await vi.waitFor(() => expect(el.api.moveCatalogueItems).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(el.api.moveProductItems).toHaveBeenCalledOnce());
   await table.updateComplete;
   expect(inactive(), "after a drop that moves").toEqual([]);
 });
@@ -888,7 +888,7 @@ it("a selection holding a category and a product inside it moves the category al
   await selectKeys(el, ["folder:d", "cola"]);
   drag(await nameCell(el, "cola"), await nameCell(el, "folder:f"));
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["d"] },
       "f",
     ),
@@ -905,7 +905,7 @@ it("Move to… with a category and something inside it selected sends the catego
   await destination(el, "f");
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["bread"], categoryIds: ["d"] },
       "f",
     ),
@@ -918,7 +918,7 @@ it("dragging a row that is not selected moves only that row and keeps the select
   await selectKeys(el, ["cola"]);
   drag(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["bread"], categoryIds: [] },
       "f",
     ),
@@ -926,14 +926,14 @@ it("dragging a row that is not selected moves only that row and keeps the select
   await el.updateComplete;
   expect(count(el)).toBe("1 selected");
 });
-export async function typeSearch(el: CatalogueBrowser, value: string) {
-  el.shadowRoot!.querySelector('[name="catalogue-search"]')!.dispatchEvent(
+export async function typeSearch(el: ProductBrowser, value: string) {
+  el.shadowRoot!.querySelector('[name="menu-search"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
 }
 /** A list is every value ticked in a multi-select filter; a string is a single-choice filter's. */
-export async function chooseFilter(el: CatalogueBrowser, column: string, value: string | string[]) {
+export async function chooseFilter(el: ProductBrowser, column: string, value: string | string[]) {
   const table = await tableOf(el);
   const select = table.shadowRoot!.querySelector<HTMLElement>(
     `wt-combobox[data-filter="${column}"]`,
@@ -943,7 +943,7 @@ export async function chooseFilter(el: CatalogueBrowser, column: string, value: 
   await table.updateComplete;
 }
 /** Turns the Products list's Show archived switch on. */
-export async function showArchived(el: CatalogueBrowser) {
+export async function showArchived(el: ProductBrowser) {
   const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
   const toggle = list.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
   toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
@@ -1137,7 +1137,7 @@ it("a rename sends the name only, so renaming a category just dragged elsewhere 
     new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
   );
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["b"] },
       "f",
     ),
@@ -1182,7 +1182,7 @@ it.each([
   },
 );
 /** The category colour chooser, once it shows. */
-async function colorChooser(el: CatalogueBrowser) {
+async function colorChooser(el: ProductBrowser) {
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector("dashboard-category-color-form")!;
   await vi.waitFor(() => expect(form.open).toBe(true));
@@ -1190,33 +1190,33 @@ async function colorChooser(el: CatalogueBrowser) {
   await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return form;
 }
-function chooserCloseReported(el: CatalogueBrowser): Promise<unknown> {
+function chooserCloseReported(el: ProductBrowser): Promise<unknown> {
   return dialogClosed(
     el
       .shadowRoot!.querySelector("dashboard-category-color-form")!
       .shadowRoot!.querySelector("wt-modal")!,
   );
 }
-function chooserClosed(el: CatalogueBrowser) {
+function chooserClosed(el: ProductBrowser) {
   return !el.shadowRoot!.querySelector("dashboard-category-color-form")!.open;
 }
-async function choose(el: CatalogueBrowser, color: string) {
+async function choose(el: ProductBrowser, color: string) {
   (await colorChooser(el))
     .shadowRoot!.querySelector<HTMLElement>(`[data-color="${color}"]`)!
     .click();
   await el.updateComplete;
 }
-async function rowChip(el: CatalogueBrowser, id: string) {
+async function rowChip(el: ProductBrowser, id: string) {
   return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
     `[data-test="color-${id}"] [part~="color-swatch"]`,
   )!;
 }
-async function boxSquare(el: CatalogueBrowser) {
+async function boxSquare(el: ProductBrowser) {
   return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
     '[data-test="name-box-color"]',
   )!;
 }
-async function boxChip(el: CatalogueBrowser) {
+async function boxChip(el: ProductBrowser) {
   return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
     '[data-test="name-box-color"] [part~="color-swatch"]',
   )!;
@@ -1403,7 +1403,7 @@ it.each([
     setLocale(locale);
     const el = await mountBrowser({ defaultColor: "#b12525" });
     let finish!: (value: { defaultProductVatClass: "general"; defaultColor: string }) => void;
-    vi.mocked(el.api.saveCatalogueDefaultColor).mockImplementationOnce(
+    vi.mocked(el.api.saveMenuDefaultColor).mockImplementationOnce(
       () => new Promise((resolve) => (finish = resolve)),
     );
     await menuAction(el, "color-root");
@@ -1418,7 +1418,7 @@ it.each([
     // A second choice while the first is in flight is not sent.
     form.dispatchEvent(new CustomEvent("wt-choose", { detail: { color: "#25b125" } }));
     await el.updateComplete;
-    expect(vi.mocked(el.api.saveCatalogueDefaultColor).mock.calls).toStrictEqual([["#256bb1"]]);
+    expect(vi.mocked(el.api.saveMenuDefaultColor).mock.calls).toStrictEqual([["#256bb1"]]);
     expect(chooserClosed(el)).toBe(false);
     finish({ defaultProductVatClass: "general", defaultColor: "#256bb1" });
     await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
@@ -1430,11 +1430,11 @@ it("sends a null default when No colour is chosen from All products' square", as
   await menuAction(el, "color-root");
   await choose(el, "");
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
-  expect(vi.mocked(el.api.saveCatalogueDefaultColor).mock.calls).toStrictEqual([[null]]);
+  expect(vi.mocked(el.api.saveMenuDefaultColor).mock.calls).toStrictEqual([[null]]);
 });
 it("keeps a refused default colour in the chooser, under it, with the form's message in the footer", async () => {
   const el = await mountBrowser();
-  vi.mocked(el.api.saveCatalogueDefaultColor).mockRejectedValueOnce({
+  vi.mocked(el.api.saveMenuDefaultColor).mockRejectedValueOnce({
     code: "category.invalid",
     params: { field: "color" },
   });
@@ -1470,7 +1470,7 @@ it("keeps a move made while a category's colour chooser is open: the colour goes
     }),
   );
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["b"] },
       "f",
     ),
@@ -1678,9 +1678,7 @@ it.each(["en-GB", "es-ES"])(
       await el.updateComplete;
       const table = await tableOf(el);
       await vi.waitFor(() => expect(table.hasAttribute("stacked-search")).toBe(true));
-      const search = el
-        .shadowRoot!.querySelector('[name="catalogue-search"]')!
-        .getBoundingClientRect();
+      const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
       const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
       const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
       expect(search.left).toBeCloseTo(toolbar.left, 0);
@@ -1694,17 +1692,17 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
-const selectHost = (el: CatalogueBrowser) =>
+const selectHost = (el: ProductBrowser) =>
   el.shadowRoot!.querySelector('wt-icon-button[data-test="select"]')!;
-const selectButton = (el: CatalogueBrowser) => selectHost(el).shadowRoot!.querySelector("button")!;
+const selectButton = (el: ProductBrowser) => selectHost(el).shadowRoot!.querySelector("button")!;
 
-export async function press(el: CatalogueBrowser, action: string) {
+export async function press(el: ProductBrowser, action: string) {
   const button = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${action}"]`);
   expect(button, action).not.toBeNull();
   (action === "select" ? selectButton(el) : button)!.click();
   await el.updateComplete;
 }
-export async function selectKeys(el: CatalogueBrowser, keys: string[]) {
+export async function selectKeys(el: ProductBrowser, keys: string[]) {
   await press(el, "select");
   for (const key of keys) {
     const checkbox = (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>(
@@ -1715,10 +1713,10 @@ export async function selectKeys(el: CatalogueBrowser, keys: string[]) {
     await el.updateComplete;
   }
 }
-export const dialog = (el: CatalogueBrowser) => el.shadowRoot!.querySelector("wt-modal");
-const count = (el: CatalogueBrowser) =>
+export const dialog = (el: ProductBrowser) => el.shadowRoot!.querySelector("wt-modal");
+const count = (el: ProductBrowser) =>
   el.shadowRoot!.querySelector('[data-test="selected-count"]')?.textContent?.trim();
-export async function destination(el: CatalogueBrowser, value: string) {
+export async function destination(el: ProductBrowser, value: string) {
   el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value } }),
   );
@@ -1780,7 +1778,7 @@ it("leaves selection mode on Done and restores the ordinary toolbar with no sele
     )!.checked,
   ).toBe(false);
 });
-async function tableSentence(el: CatalogueBrowser) {
+async function tableSentence(el: ProductBrowser) {
   return (await tableOf(el)).shadowRoot!.querySelector(".empty .message")!.textContent;
 }
 it.each(["en-GB", "es"])(
@@ -1836,7 +1834,7 @@ it("requires a move destination, excludes selected folders and descendants, and 
   await destination(el, "f");
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledWith(
       { productIds: ["bread"], categoryIds: ["d"] },
       "f",
     ),
@@ -1877,7 +1875,7 @@ it.each([
     const el = await mountBrowser();
     let finish!: () => void;
     vi.mocked(
-      operation === "move" ? el.api.moveCatalogueItems : el.api.deleteCatalogueItems,
+      operation === "move" ? el.api.moveProductItems : el.api.deleteProductItems,
     ).mockReturnValueOnce(new Promise<void>((resolve) => (finish = resolve)));
     await selectKeys(el, ["folder:d"]);
     await press(el, operation);
@@ -1892,7 +1890,7 @@ it.each([
     await vi.waitFor(() => expect(confirm.loading).toBe(true));
     await vi.waitFor(() =>
       expect(
-        operation === "move" ? el.api.moveCatalogueItems : el.api.deleteCatalogueItems,
+        operation === "move" ? el.api.moveProductItems : el.api.deleteProductItems,
       ).toHaveBeenCalled(),
     );
     expect(confirm.variant).toBe(variant);
@@ -1923,7 +1921,7 @@ it("draws Delete quiet while its summary loads, then red", async () => {
   await vi.waitFor(() => expect(confirm.getAttribute("disabled")).toBeNull());
   expect(confirm.variant).toBe("danger");
 });
-const toolbarButton = (el: CatalogueBrowser, test: string) =>
+const toolbarButton = (el: ProductBrowser, test: string) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="${test}"]`)!;
 const buttonFill = (host: Element) =>
   getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
@@ -1972,12 +1970,12 @@ it("keeps the toolbar Delete red while the delete it started is being sent", asy
     { id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
   ]);
   let finish!: () => void;
-  vi.mocked(el.api.deleteCatalogueItems).mockReturnValueOnce(
+  vi.mocked(el.api.deleteProductItems).mockReturnValueOnce(
     new Promise<void>((resolve) => (finish = resolve)),
   );
   await selectKeys(el, ["folder:f"]);
   await press(el, "delete");
-  await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalled());
+  await vi.waitFor(() => expect(el.api.deleteProductItems).toHaveBeenCalled());
   const remove = toolbarButton(el, "delete");
   await remove.updateComplete;
   expect(remove.getAttribute("disabled")).not.toBeNull();
@@ -1988,7 +1986,7 @@ it("keeps the toolbar Delete red while the delete it started is being sent", asy
 });
 it("shows a move refused for a duplicate name in the move dialog, keeping the choice", async () => {
   const el = await mountBrowser();
-  vi.mocked(el.api.moveCatalogueItems).mockRejectedValueOnce({
+  vi.mocked(el.api.moveProductItems).mockRejectedValueOnce({
     code: "category.name_taken",
     params: { field: "name", name: "Beer" },
     status: 409,
@@ -2007,7 +2005,7 @@ it("shows a move refused for a duplicate name in the move dialog, keeping the ch
 });
 it("shows a delete refused because a moved-up category's name is taken in the delete dialog", async () => {
   const el = await mountBrowser();
-  vi.mocked(el.api.deleteCatalogueItems).mockRejectedValueOnce({
+  vi.mocked(el.api.deleteProductItems).mockRejectedValueOnce({
     code: "category.name_taken",
     params: { field: "name", name: "Food" },
     status: 409,
@@ -2138,7 +2136,7 @@ it("moves products to the explicitly chosen top level", async () => {
   await destination(el, "top");
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledWith(
       { productIds: ["bread"], categoryIds: [] },
       null,
     ),
@@ -2152,7 +2150,7 @@ it("deletes only completely summarised empty folders without asking", async () =
   await selectKeys(el, ["folder:f"]);
   await press(el, "delete");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["f"] },
       "move_up",
       [{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
@@ -2182,12 +2180,12 @@ it.each([
     await selectKeys(el, ["folder:f"]);
     await press(el, "delete");
     await vi.waitFor(() => expect(dialog(el)?.textContent).toContain(sentence));
-    expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+    expect(el.api.deleteProductItems).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
     expect(el.shadowRoot!.querySelector("input[name=contents]")).toBeNull();
     await press(el, "confirm");
     await vi.waitFor(() =>
-      expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
         { productIds: [], categoryIds: ["f"] },
         "move_up",
         [summary],
@@ -2235,7 +2233,7 @@ it.each(["network", "missing", "partial"])(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
     expect(confirm.getAttribute("disabled")).not.toBeNull();
     expect(confirm.variant).toBe("secondary");
-    expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+    expect(el.api.deleteProductItems).not.toHaveBeenCalled();
   },
 );
 it("shows folder contents and routes, defaults to moving up, and sends delete choice", async () => {
@@ -2252,7 +2250,7 @@ it("shows folder contents and routes, defaults to moving up, and sends delete ch
   await el.updateComplete;
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["d"] },
       "delete",
       [{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }],
@@ -2260,7 +2258,7 @@ it("shows folder contents and routes, defaults to moving up, and sends delete ch
   );
 });
 /** The two answers to "What happens to what is inside?", as their whole labels read. */
-function contentsLabels(el: CatalogueBrowser): [string, string] {
+function contentsLabels(el: ProductBrowser): [string, string] {
   const label = (value: string) =>
     el.shadowRoot!.querySelector(`input[value=${value}]`)!.parentElement!.textContent!.trim();
   return [label("move_up"), label("delete")];
@@ -2430,10 +2428,10 @@ it.each([
       .filter((paragraph) => paragraph !== (locale === "es" ? es : en)["folders.deleting"]);
     expect(text).toEqual(rules ? [rules] : []);
     expect(dialog(el)!.textContent).not.toMatch(disabledWord);
-    expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+    expect(el.api.deleteProductItems).not.toHaveBeenCalled();
     await press(el, "confirm");
     await vi.waitFor(() =>
-      expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
         { productIds: [], categoryIds: ["f"] },
         "move_up",
         [summary],
@@ -2528,7 +2526,7 @@ it("shows the new counts instead of deleting when only the category's own routin
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain("1 station routing rule names"),
   );
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
 });
 it.each([
   ["en-GB", ["Mains (2 of 3)", "Drinks › Beer"]],
@@ -2612,7 +2610,7 @@ it("asks before deleting a category holding only a disabled product, asking noth
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-spinner")).toBeNull());
   expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
   expect(dialog(el)!.textContent).not.toMatch(/disabl/i);
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
 });
 it.each([
   [
@@ -2709,11 +2707,11 @@ it("reads the contents again at Delete and, when they changed, shows the new cou
   );
   expect(el.shadowRoot!.textContent).toContain("2 categories and 3 products");
   expect(dialog(el)).not.toBeNull();
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
   expect(el.api.summariseFolders).toHaveBeenNthCalledWith(2, ["d"]);
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["d"] },
       "move_up",
       [{ id: "d", folders: 2, products: 3, activeProducts: 3, routes: 1, ownRoutes: 1 }],
@@ -2740,14 +2738,14 @@ it.each([
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
     await press(el, "confirm");
     await vi.waitFor(() => expect(el.api.summariseFolders).toHaveBeenCalledTimes(2));
-    if (deletes) await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalledOnce());
+    if (deletes) await vi.waitFor(() => expect(el.api.deleteProductItems).toHaveBeenCalledOnce());
     else {
       await vi.waitFor(() =>
         expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
           en["folders.summary_changed"],
         ),
       );
-      expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+      expect(el.api.deleteProductItems).not.toHaveBeenCalled();
     }
   },
 );
@@ -2762,7 +2760,7 @@ it("at Delete, sends the count of every product read then when only inactive pro
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["d"] },
       "move_up",
       [{ id: "d", folders: 1, products: 3, activeProducts: 2, routes: 1, ownRoutes: 1 }],
@@ -2781,7 +2779,7 @@ it("at Delete, a disabled product joining a category that held only routing rule
   expect(dialog(el)!.textContent).not.toMatch(/disabl/i);
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["f"] },
       "move_up",
       [changed],
@@ -2810,7 +2808,7 @@ it.each([
         en["folders.summary_changed"],
       ),
     );
-    expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+    expect(el.api.deleteProductItems).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("fieldset")).not.toBeNull();
   },
 );
@@ -2823,7 +2821,7 @@ it.each(["the read at Delete", "the server's refusal"])(
     vi.mocked(el.api.summariseFolders).mockResolvedValueOnce([full]);
     if (path === "the server's refusal") {
       vi.mocked(el.api.summariseFolders).mockResolvedValueOnce([full]);
-      vi.mocked(el.api.deleteCatalogueItems).mockRejectedValueOnce({
+      vi.mocked(el.api.deleteProductItems).mockRejectedValueOnce({
         code: "category.contents_changed",
         params: { categoryId: "f" },
         status: 409,
@@ -2841,10 +2839,10 @@ it.each(["the read at Delete", "the server's refusal"])(
     expect(dialog(el)?.textContent).toContain(
       "2 station routing rules name these categories and are removed.",
     );
-    vi.mocked(el.api.deleteCatalogueItems).mockClear();
+    vi.mocked(el.api.deleteProductItems).mockClear();
     await press(el, "confirm");
     await vi.waitFor(() =>
-      expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
         { productIds: [], categoryIds: ["f"] },
         "move_up",
         [rules],
@@ -2869,7 +2867,7 @@ it("deletes nothing when a category is gone by the time Delete is pressed", asyn
     ),
   );
   expect(dialog(el)).not.toBeNull();
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
 });
 it("deletes nothing when the second read leaves a category out", async () => {
   const el = await mountBrowser();
@@ -2888,7 +2886,7 @@ it("deletes nothing when the second read leaves a category out", async () => {
     ),
   );
   expect(dialog(el)).not.toBeNull();
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
 });
 it("deletes nothing when the second read fails without a code, and says the contents could not be read", async () => {
   const el = await mountBrowser();
@@ -2907,7 +2905,7 @@ it("deletes nothing when the second read fails without a code, and says the cont
     ),
   );
   expect(dialog(el)).not.toBeNull();
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
 });
 it("deletes nothing when the second read's reply is not a list, and says the contents could not be read", async () => {
   const el = await mountBrowser();
@@ -2926,7 +2924,7 @@ it("deletes nothing when the second read's reply is not a list, and says the con
     ),
   );
   expect(dialog(el)).not.toBeNull();
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
 });
 it("after a failed second read keeps Delete enabled, and pressing it again reads again and deletes", async () => {
   const el = await mountBrowser();
@@ -2950,9 +2948,9 @@ it("after a failed second read keeps Delete enabled, and pressing it again reads
     ).toBeNull(),
   );
   await press(el, "confirm");
-  await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(el.api.deleteProductItems).toHaveBeenCalledOnce());
   expect(el.api.summariseFolders).toHaveBeenCalledTimes(3);
-  expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+  expect(el.api.deleteProductItems).toHaveBeenCalledWith(
     { productIds: [], categoryIds: ["d"] },
     "move_up",
     [{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }],
@@ -2970,7 +2968,7 @@ it("sends the counts read before deleting with the delete, one entry per selecte
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["f", "b"] },
       "move_up",
       [
@@ -2988,7 +2986,7 @@ it("when the server refuses because the contents changed, shows the new counts, 
     .mockResolvedValueOnce([shown])
     .mockResolvedValueOnce([shown])
     .mockResolvedValue([changed]);
-  vi.mocked(el.api.deleteCatalogueItems).mockRejectedValueOnce({
+  vi.mocked(el.api.deleteProductItems).mockRejectedValueOnce({
     code: "category.contents_changed",
     params: { categoryId: "d" },
     status: 409,
@@ -3005,7 +3003,7 @@ it("when the server refuses because the contents changed, shows the new counts, 
   expect(el.shadowRoot!.textContent).toContain("2 categories and 3 products");
   expect(dialog(el)).not.toBeNull();
   expect(el.api.summariseFolders).toHaveBeenCalledTimes(3);
-  expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+  expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
     { productIds: [], categoryIds: ["d"] },
     "move_up",
     [{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }],
@@ -3016,8 +3014,8 @@ it("when the server refuses because the contents changed, shows the new counts, 
     ).toBeNull(),
   );
   await press(el, "confirm");
-  await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalledTimes(2));
-  expect(el.api.deleteCatalogueItems).toHaveBeenLastCalledWith(
+  await vi.waitFor(() => expect(el.api.deleteProductItems).toHaveBeenCalledTimes(2));
+  expect(el.api.deleteProductItems).toHaveBeenLastCalledWith(
     { productIds: [], categoryIds: ["d"] },
     "move_up",
     [{ id: "d", folders: 2, products: 3, activeProducts: 3, routes: 1, ownRoutes: 1 }],
@@ -3033,7 +3031,7 @@ it("when the server refuses an empty category's delete because it is no longer e
     .mockResolvedValue([
       { id: "f", folders: 0, products: 1, activeProducts: 1, routes: 0, ownRoutes: 0 },
     ]);
-  vi.mocked(el.api.deleteCatalogueItems).mockRejectedValueOnce({
+  vi.mocked(el.api.deleteProductItems).mockRejectedValueOnce({
     code: "category.contents_changed",
     params: { categoryId: "f" },
     status: 409,
@@ -3050,7 +3048,7 @@ it("when the server refuses an empty category's delete because it is no longer e
     "1 product moves to No category",
     "Also: archives 1 product. It moves to No category.",
   ]);
-  expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+  expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
     { productIds: [], categoryIds: ["f"] },
     "move_up",
     [{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
@@ -3065,7 +3063,7 @@ it("when the server refuses an empty category's delete because a disabled produc
     .mockResolvedValue([
       { id: "f", folders: 0, products: 1, activeProducts: 0, routes: 0, ownRoutes: 0 },
     ]);
-  vi.mocked(el.api.deleteCatalogueItems).mockRejectedValueOnce({
+  vi.mocked(el.api.deleteProductItems).mockRejectedValueOnce({
     code: "category.contents_changed",
     params: { categoryId: "f" },
     status: 409,
@@ -3087,7 +3085,7 @@ it("when the server refuses an empty category's delete because a disabled produc
   );
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenLastCalledWith(
+    expect(el.api.deleteProductItems).toHaveBeenLastCalledWith(
       { productIds: [], categoryIds: ["f"] },
       "move_up",
       [{ id: "f", folders: 0, products: 1, activeProducts: 0, routes: 0, ownRoutes: 0 }],
@@ -3110,7 +3108,7 @@ it.each([
       .mockResolvedValueOnce([shown])
       .mockResolvedValueOnce([shown])
       .mockResolvedValue([fresh]);
-    vi.mocked(el.api.deleteCatalogueItems).mockRejectedValueOnce({
+    vi.mocked(el.api.deleteProductItems).mockRejectedValueOnce({
       code: "category.contents_changed",
       params: { categoryId: "d" },
       status: 409,
@@ -3138,8 +3136,8 @@ it.each([
     );
     expect(shownText()).toBe(before);
     await press(el, "confirm");
-    await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalledTimes(2));
-    expect(el.api.deleteCatalogueItems).toHaveBeenLastCalledWith(
+    await vi.waitFor(() => expect(el.api.deleteProductItems).toHaveBeenCalledTimes(2));
+    expect(el.api.deleteProductItems).toHaveBeenLastCalledWith(
       { productIds: [], categoryIds: ["d"] },
       "move_up",
       [fresh],
@@ -3155,7 +3153,7 @@ it("deletes a folder through its own row action", async () => {
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["d"] },
       "move_up",
       [{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }],
@@ -3185,7 +3183,7 @@ it("deleting an empty category from its menu acts on that category alone, and le
   menu.show();
   menu.querySelector<HTMLElement>('[data-test="delete-folder-m1"]')!.click();
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["m1"] },
       "move_up",
       [{ id: "m1", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
@@ -3221,7 +3219,7 @@ it.each([1, 2])(
     );
     await press(el, "confirm");
     await vi.waitFor(() =>
-      expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+      expect(el.api.deleteProductItems).toHaveBeenCalledWith(
         { productIds: number === 1 ? ["bread"] : ["bread", "cola"], categoryIds: [] },
         "move_up",
         [],
@@ -3231,7 +3229,7 @@ it.each([1, 2])(
 );
 const ARCHIVE_PRODUCTS =
   "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept.";
-const archiveBody = (el: CatalogueBrowser) =>
+const archiveBody = (el: ProductBrowser) =>
   dialog(el)!.querySelector("form > p")!.textContent!.replace(/\s+/g, " ").trim();
 async function openArchiveProducts(keys: string[], menus: () => Promise<number>) {
   const el = await mountBrowser();
@@ -3276,7 +3274,7 @@ it("says every menu while the products' count loads and when it cannot be read, 
   expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledWith(
       { productIds: ["bread", "cola"], categoryIds: [] },
       "move_up",
       [],
@@ -3464,7 +3462,7 @@ it("keeps Archive for a selection mixing active and disabled products, and sends
   await press(el, "delete");
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledWith(
       { productIds: ["bread", "old"], categoryIds: [] },
       "move_up",
       [],
@@ -3489,7 +3487,7 @@ it.each(["move", "delete"])(
     const el = await mountBrowser();
     let reject!: (error: unknown) => void;
     vi.mocked(
-      action === "move" ? el.api.moveCatalogueItems : el.api.deleteCatalogueItems,
+      action === "move" ? el.api.moveProductItems : el.api.deleteProductItems,
     ).mockImplementation(
       () =>
         new Promise((_resolve, r) => {
@@ -3534,7 +3532,7 @@ it("counts overlapping selected folders once in the delete consent", async () =>
   expect(el.shadowRoot!.textContent).toContain("1 station routing rule names");
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["d", "b"] },
       "move_up",
       [
@@ -3566,7 +3564,7 @@ it("shows a spinner and blocks confirmation while summaries are pending", async 
   await press(el, "delete");
   expect(el.shadowRoot!.querySelector("wt-spinner")).not.toBeNull();
   expect(dialog(el)).toBeNull();
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
   resolve([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 0, ownRoutes: 0 }]);
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-spinner")).toBeNull());
   expect(el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled")).toBeNull();
@@ -3594,10 +3592,10 @@ it("keeps the captured Delete request when Done exits selection during the summa
   await press(el, "delete");
   await press(el, "cancel-selection");
   expect((await tableOf(el)).selectable).toBe(false);
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
   resolve([{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }]);
   await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["f"] },
       "move_up",
       [{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
@@ -3619,7 +3617,7 @@ it("can move after cancelling a failed delete summary", async () => {
   expect(el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled")).toBeNull();
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["d"] },
       "f",
     ),
@@ -3645,7 +3643,7 @@ it("never opens a confirmation while reading or deleting empty folders and block
       }),
   );
   let finish!: () => void;
-  vi.mocked(el.api.deleteCatalogueItems).mockImplementation(
+  vi.mocked(el.api.deleteProductItems).mockImplementation(
     () =>
       new Promise<void>((r) => {
         finish = r;
@@ -3657,7 +3655,7 @@ it("never opens a confirmation while reading or deleting empty folders and block
   await press(el, "delete");
   expect(el.api.summariseFolders).toHaveBeenCalledOnce();
   resolve([{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }]);
-  await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(el.api.deleteProductItems).toHaveBeenCalledOnce());
   expect(dialog(el)).toBeNull();
   finish();
   await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
@@ -3688,8 +3686,7 @@ it.each([
   "says category, never folder, in every Products-screen string (%s)",
   (_name, strings) => {
     const screen = Object.entries(strings).filter(
-      ([key]) =>
-        /^(folders|catalogue|categories)\./.test(key) || key === "product.filter_ordering_all",
+      ([key]) => /^(folders|menu|categories)\./.test(key) || key === "product.filter_ordering_all",
     );
     expect(screen.length).toBeGreaterThan(40);
     expect(screen.filter(([, text]) => /folder|carpeta/i.test(text))).toEqual([]);
@@ -3708,7 +3705,7 @@ it("Move to… on a category's menu opens the move dialog for that category alon
   await destination(el, "f");
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["d"] },
       "f",
     ),
@@ -3841,8 +3838,7 @@ it("Add category clears a typed search, so its name box shows", async () => {
   await menuAction(el, "add-category-d");
   await nameBox(el);
   expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="catalogue-search"]')!
-      .value,
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="menu-search"]')!.value,
   ).toBe("");
 });
 
@@ -3881,7 +3877,7 @@ it("A462 Customise follows Filters, Select and search on one toolbar line, in th
   try {
     const el = await mountBrowser();
     const table = await tableOf(el);
-    const search = el.shadowRoot!.querySelector<HTMLElement>('[name="catalogue-search"]')!;
+    const search = el.shadowRoot!.querySelector<HTMLElement>('[name="menu-search"]')!;
     const select = el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!;
     const toolbar = table.shadowRoot!.querySelector(".table-toolbar");
     expect(search.assignedSlot!.assignedSlot!.closest(".table-toolbar")).toBe(toolbar);
@@ -3966,8 +3962,7 @@ it("opens the Products table's Filters from the toolbar's start", async () => {
     const trigger = table.shadowRoot!.querySelector(".filters-trigger")!;
     expect(table.shadowRoot!.querySelector(".table-toolbar")!.firstElementChild).toBe(trigger);
     expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
-      el.shadowRoot!.querySelector('wt-input[name="catalogue-search"]')!.getBoundingClientRect()
-        .left,
+      el.shadowRoot!.querySelector('wt-input[name="menu-search"]')!.getBoundingClientRect().left,
     );
   } finally {
     await page.viewport(width, height);
@@ -4062,9 +4057,7 @@ it("at phone width puts Filters and Select above search and Customise", async ()
       expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
       expect(line[index]!.top, `item ${index}`).toBeLessThan(line[0]!.bottom);
     }
-    const search = el
-      .shadowRoot!.querySelector('[name="catalogue-search"]')!
-      .getBoundingClientRect();
+    const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
     expect(search.top).toBeGreaterThanOrEqual(Math.max(...line.map((box) => box.bottom)));
     const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
     const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
@@ -4074,7 +4067,7 @@ it("at phone width puts Filters and Select above search and Customise", async ()
     expect(toolbar.bottom).toBeCloseTo(Math.max(search.bottom, chooser.bottom), 0);
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.focus();
     await userEvent.tab();
-    expect(el.shadowRoot!.activeElement?.getAttribute("name")).toBe("catalogue-search");
+    expect(el.shadowRoot!.activeElement?.getAttribute("name")).toBe("menu-search");
   } finally {
     await page.viewport(width, height);
   }
@@ -4109,9 +4102,7 @@ it.each([
         expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
         expect(line[index]!.top, `item ${index}`).toBeLessThan(line[0]!.bottom);
       }
-      const search = el
-        .shadowRoot!.querySelector('[name="catalogue-search"]')!
-        .getBoundingClientRect();
+      const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
       expect(search.top).toBeGreaterThanOrEqual(Math.max(...line.map((box) => box.bottom)));
       const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
       const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
@@ -4140,7 +4131,7 @@ it("A462 Customise follows Filters, Select and search on one line in a Spanish l
     const boxes = [
       table.shadowRoot!.querySelector(".filters-trigger")!,
       el.shadowRoot!.querySelector('[data-test="select"]')!,
-      el.shadowRoot!.querySelector('[name="catalogue-search"]')!,
+      el.shadowRoot!.querySelector('[name="menu-search"]')!,
       table.shadowRoot!.querySelector(".columns-trigger")!,
     ].map((element) => element.getBoundingClientRect());
     for (let index = 1; index < boxes.length; index++) {
@@ -4174,9 +4165,7 @@ it("at phone width fits Select controls beneath the final search and Customise l
       expect(box.right).toBeLessThanOrEqual(table.getBoundingClientRect().right);
     }
     const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
-    const search = el
-      .shadowRoot!.querySelector('[name="catalogue-search"]')!
-      .getBoundingClientRect();
+    const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
     expect(search.right).toBeLessThan(chooser.left);
     expect(chooser.top).toBeLessThan(search.bottom);
     expect(chooser.right).toBeCloseTo(toolbar.right, 0);
@@ -4331,7 +4320,7 @@ it.each([390, 1280])(
     await page.viewport(width, 844);
     const el = await mountBrowser();
     await press(el, "select");
-    const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="catalogue-search"]')!;
+    const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="menu-search"]')!;
     const bar = el.shadowRoot!.querySelector<HTMLElement>('[data-test="selection-bar"]');
     expect(bar).not.toBeNull();
     expect(bar!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
@@ -4356,7 +4345,7 @@ it.each([390, 1280])(
   },
 );
 
-const routingLine = (el: CatalogueBrowser) =>
+const routingLine = (el: ProductBrowser) =>
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="routing-unavailable"]');
 
 it("says above the list that routing could not be read, when there are categories", async () => {
@@ -4370,7 +4359,7 @@ it("says above the list that routing could not be read, when there are categorie
     "Station routing unavailable: categories with no station are not marked. Try again later.",
   );
   expect(line!.getAttribute("role")).toBe("status");
-  const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="catalogue-search"]')!;
+  const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="menu-search"]')!;
   const head = table.shadowRoot!.querySelector("thead")!;
   expect(line!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
     search.getBoundingClientRect().bottom,
@@ -4426,9 +4415,8 @@ it.each(
   await new Promise<void>((resolve) =>
     requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
   );
-  const search = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    '[name="catalogue-search"]',
-  )!;
+  const search =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="menu-search"]')!;
   await search.updateComplete;
   const controls = [
     table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!,
@@ -4457,7 +4445,7 @@ it.each(["products", "category"])(
   "names products and menus after a %s archive refusal",
   async (selection) => {
     const el = await mountBrowser();
-    vi.mocked(el.api.deleteCatalogueItems).mockRejectedValue({
+    vi.mocked(el.api.deleteProductItems).mockRejectedValue({
       code: "product.on_live_menu",
       params: {
         products: [
@@ -4500,7 +4488,7 @@ it.each([
   async (locale, productsLabel, menusLabel) => {
     setLocale(locale!);
     const el = await mountBrowser();
-    vi.mocked(el.api.deleteCatalogueItems).mockRejectedValue({
+    vi.mocked(el.api.deleteProductItems).mockRejectedValue({
       code: "product.on_live_menu",
       params: {
         products: [{ id: "cola", name: "Cola" }],
@@ -4694,7 +4682,7 @@ it("A461 gathers Products ticks across searches and only selects shown rows", as
   await destination(el, "top");
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["iced", "cake"], categoryIds: [] },
       null,
     ),
@@ -4715,7 +4703,7 @@ it("A461 Products live narrowing keeps ticks but deletion trims the open operati
   await tableOf(el);
   expect(count(el)).toBe("0 selected");
   await vi.waitFor(() => expect(dialog(el)?.open ?? false).toBe(false));
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
 
 it("A461 Products trims deleted categories and products from Move and resets a lost destination", async () => {
@@ -4735,7 +4723,7 @@ it("A461 Products trims deleted categories and products from Move and resets a l
   await destination(el, "top");
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["d"] },
       null,
     ),
@@ -4765,7 +4753,7 @@ it("A461 deleting a selected category during its summary read keeps the operatio
   );
   await el.updateComplete;
   expect(dialog(el)?.open ?? false).toBe(false);
-  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
 });
 
 it.each([false, true])(
@@ -4790,9 +4778,9 @@ it.each([false, true])(
     const drops: unknown[] = [];
     list.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
     drag(await nameCell(el, "cake"), await nameCell(el, "folder:storage"));
-    await vi.waitFor(() => expect(el.api.moveCatalogueItems).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(el.api.moveProductItems).toHaveBeenCalledOnce());
     expect(drops).toEqual([{ keys: ["cake"], folderId: "storage" }]);
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["cake"], categoryIds: [] },
       "storage",
     );

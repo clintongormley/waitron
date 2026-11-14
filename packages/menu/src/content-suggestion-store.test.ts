@@ -700,7 +700,7 @@ it("a later run replaces more than one batch of an item's rows in one store", as
       .insert(products)
       .values(
         Array.from({ length: 600 }, (_, n) => ({
-          catalogueId: venue.menuId,
+          menuId: venue.menuId,
           name: `STAFF Racio ${n}`,
           kitchenName: `KITCHEN Racio ${n}`,
           customerName: { ca: `CLIENT-CA Racio ${n}` },

@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   diningTables,
   kitchenStations,
   products,
@@ -41,14 +41,11 @@ async function seedFiredOrder(
 ): Promise<string> {
   // Through the table definitions: every id is a `$defaultFn` generator, and `descriptions` is
   // encoded by the column's own write mapping.
-  const [catalogue] = await db
-    .insert(catalogues)
-    .values({ name: "Test catalogue" })
-    .returning({ id: catalogues.id });
+  const [menu] = await db.insert(menus).values({ name: "Test menu" }).returning({ id: menus.id });
   const [product] = await db
     .insert(products)
     .values({
-      catalogueId: catalogue!.id,
+      menuId: menu!.id,
       name: "Item",
       pricingUnit: "each",
       unitPrice: 100,

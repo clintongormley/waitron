@@ -55,7 +55,7 @@ import "../widgets/include-folder-form.js";
 import { ListWriteQueue } from "../widgets/section-writes.js";
 import { countOf } from "../widgets/count-text.js";
 import type {
-  CatalogueSummary,
+  MenuSummary,
   CategorySummary,
   DashboardApi,
   HomeDevice,
@@ -104,7 +104,7 @@ interface ListTarget {
 const NO_NAMES: ReadonlyMap<string, string> = new Map();
 
 /** A menu on the list with its publication state, or where that state's read stands. */
-interface MenuRow extends CatalogueSummary {
+interface MenuRow extends MenuSummary {
   status: MenuStatus | "loading" | "failed";
 }
 
@@ -625,7 +625,7 @@ export class MenusScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  @state() private menus: CatalogueSummary[] = [];
+  @state() private menus: MenuSummary[] = [];
   private get sections(): SectionDetails[] {
     const result: SectionDetails[] = [];
     const walk = (nodes: MenuStructureNode[]) => {
@@ -704,7 +704,7 @@ export class MenusScreen extends LitElement {
   @state() private previewResetRequired = false;
   /** The menus whose publish is out. Replaced, never mutated, so a change re-renders. */
   @state() private publishing: ReadonlySet<string> = new Set();
-  @state() private copyingMenu: CatalogueSummary | null = null;
+  @state() private copyingMenu: MenuSummary | null = null;
   /** From the probes' container queries: "narrow" at 30rem or less, where each status sits under
    * its menu's name; "wide" from 50rem, where the changes link has a column of its own; "middle"
    * between, where the link sits under the status. */
@@ -1038,7 +1038,7 @@ export class MenusScreen extends LitElement {
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
         }),
-        this.#queries.watch("getCatalogueSettings", [], (value) => {
+        this.#queries.watch("getMenuSettings", [], (value) => {
           this.defaultColor = value.defaultColor;
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
@@ -1055,7 +1055,7 @@ export class MenusScreen extends LitElement {
   }
 
   #watchMenus(): Promise<void> {
-    return this.#queries.watch("listCatalogues", [], (value) => {
+    return this.#queries.watch("listMenus", [], (value) => {
       this.menus = value;
     });
   }
@@ -1393,7 +1393,7 @@ export class MenusScreen extends LitElement {
   /** The Add menu that opened the create form, which the closing dialog hands focus back to. */
   #addOpener: HTMLElement | null = null;
 
-  async #openMenuForm(menu: CatalogueSummary | null): Promise<void> {
+  async #openMenuForm(menu: MenuSummary | null): Promise<void> {
     const generation = ++this.#menuFormGeneration;
     this.menuFormErrors = {};
     this.menuDetails = null;
@@ -1427,7 +1427,7 @@ export class MenusScreen extends LitElement {
     try {
       if (form.id === null) {
         const { internalName, ...details } = input;
-        await this.api.createCatalogue(internalName, details);
+        await this.api.createMenu(internalName, details);
       } else await this.api.updateMenuDetails(form.id, input);
     } catch (error) {
       const errors =
@@ -1511,7 +1511,7 @@ export class MenusScreen extends LitElement {
           return;
         }
         if (shown()) this.undoResult = change;
-        if (command.method === "renameCatalogue") await this.#watchMenus().catch(() => undefined);
+        if (command.method === "renameMenu") await this.#watchMenus().catch(() => undefined);
         await this.#refresh();
       } finally {
         this.busy = false;

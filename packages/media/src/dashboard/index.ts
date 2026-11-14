@@ -13,7 +13,7 @@ export const MEDIA_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
     id: "images",
     navLabelKey: "nav.images",
     group: "menu",
-    requiresPermission: "catalogue.manage",
+    requiresPermission: "menu.manage",
   },
   strings: MEDIA_STRINGS,
   create(ctx) {

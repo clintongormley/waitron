@@ -7,7 +7,7 @@ import { deviceZonesFixture } from "../test/device-zones.js";
 import { ServerRouter } from "./api/server-router.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
-import type { TillApi, ZoneOfferCatalogue } from "./api/client.js";
+import type { TillApi, ZoneOffers } from "./api/client.js";
 import type { TillShell } from "./widgets/till-shell.js";
 
 const originalLocale = currentLocale();
@@ -34,7 +34,7 @@ const counterTill = {
   servers: [],
 };
 
-const counterOffers: ZoneOfferCatalogue = {
+const counterOffers: ZoneOffers = {
   service: {
     open: true,
     zoneOpen: true,

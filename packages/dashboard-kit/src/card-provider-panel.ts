@@ -16,7 +16,7 @@ export interface CardProviderPanel {
   providerId: string;
   /** The i18n key for the provider's display name (registered by the panel's own strings). */
   displayNameKey: string;
-  /** The panel's own UI strings, merged into the shared catalogue when the screen mounts it. */
+  /** The panel's own UI strings, merged into the shared menu when the screen mounts it. */
   strings: { en: Record<string, string>; es: Record<string, string> };
   /** The connect form. On a successful connect it calls `onConnected` so the screen refreshes. */
   renderConnectForm(ctx: {

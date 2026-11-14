@@ -3,11 +3,11 @@ import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { addProductToMenu, createCatalogue, createCategory, createProduct } from "@waitron/menu";
+import { addProductToMenu, createMenu, createCategory, createProduct } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   floorZones,
-  catalogues,
+  menus,
   kitchenStations,
   withTransaction,
   type Transaction,
@@ -265,7 +265,7 @@ describe("season staffing", () => {
     const periodIds = new Map<string, string>();
     await inTx(async (tx) => {
       const menuId = randomUUID();
-      await tx.insert(catalogues).values({ id: menuId, name: "Guide menu" });
+      await tx.insert(menus).values({ id: menuId, name: "Guide menu" });
       for (const [departmentId, weekday, startsAt, endsAt] of [
         [v.departmentId, 3, "19:00:00", "23:30:00"],
         [closed!.id, 3, "10:00:00", "12:00:00"],
@@ -372,7 +372,7 @@ describe("special-day staffing", () => {
     const v = await venue();
     const periodId = await inTx(async (tx) => {
       const menuId = randomUUID();
-      await tx.insert(catalogues).values({ id: menuId, name: "Menu" });
+      await tx.insert(menus).values({ id: menuId, name: "Menu" });
       const [period] = await tx
         .insert(menuPeriods)
         .values({ departmentId: v.departmentId, menuId, name: "Service" })
@@ -432,7 +432,7 @@ describe("special-day staffing", () => {
     const v = await venue();
     const periodId = await inTx(async (tx) => {
       const menuId = randomUUID();
-      await tx.insert(catalogues).values({ id: menuId, name: "Menu" });
+      await tx.insert(menus).values({ id: menuId, name: "Menu" });
       const [period] = await tx
         .insert(menuPeriods)
         .values({ departmentId: v.departmentId, menuId, name: "Service" })
@@ -754,11 +754,11 @@ async function guideVenue() {
   const v = await venue();
   return inTx(async (tx) => {
     const cfg = {};
-    const menuId = (await createCatalogue(tx, { name: randomUUID() })).id;
+    const menuId = (await createMenu(tx, { name: randomUUID() })).id;
     const categoryId = (await createCategory(tx, { name: randomUUID() })).id;
     const productId = (
       await createProduct(tx, {
-        catalogueId: menuId,
+        menuId: menuId,
         name: randomUUID(),
         categoryId,
         unitPrice: "4",

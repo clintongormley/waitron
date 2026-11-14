@@ -328,7 +328,7 @@ describe("OpeningHoursApi", () => {
           "menu_periods",
           "menu_period_staff_menus",
           "departments",
-          "catalogues",
+          "menus",
           "settings.business_day",
           "settings.venue",
           "day_cutover_changes",
@@ -457,7 +457,7 @@ it.each([
   }
 });
 
-it.each(["sections", "section_members", "catalogues"])(
+it.each(["sections", "section_members", "menus"])(
   "refreshes worked-out station times when menu composition changes in %s",
   async (type) => {
     const live = new LiveData();

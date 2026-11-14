@@ -106,9 +106,7 @@ describe("the read-only exemption list", () => {
       expect(isReadOnlyExempt({ method: "POST", path: "/api/node/peer-status/x" }, box)).toBe(
         false,
       );
-      expect(isReadOnlyExempt({ method: "POST", path: "/management-api/catalogues" }, box)).toBe(
-        false,
-      );
+      expect(isReadOnlyExempt({ method: "POST", path: "/management-api/menus" }, box)).toBe(false);
     }
     expect(
       isReadOnlyExempt(
@@ -481,7 +479,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         // Listed for a fenced box only.
         retire: await post(base, "/api/box/retire"),
         restart: await post(base, "/api/box/restart"),
-        unlisted: await post(base, "/management-api/catalogues"),
+        unlisted: await post(base, "/management-api/menus"),
         startHandover: await post(base, "/management-api/handover"),
         // A GET: the gate never refuses it, and this box's own id finds this box's row.
         statusRead: await readStatus(base, MIRROR_OPERATION_ID),
@@ -667,7 +665,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
           `/api/node/handover/${MIRROR_OPERATION_ID}/preparation`,
         ),
         handoverActivate: await post(base, `/api/node/handover/${MIRROR_OPERATION_ID}/activate`),
-        unlisted: await post(base, "/management-api/catalogues"),
+        unlisted: await post(base, "/management-api/menus"),
         startHandover: await post(base, "/management-api/handover"),
       }).toEqual({
         retire: { status: 401, code: "management_session.required" },

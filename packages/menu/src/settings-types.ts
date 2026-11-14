@@ -1,6 +1,6 @@
 import type { VatClass } from "@waitron/shared";
 
-export interface CatalogueSettings {
+export interface MenuDefaults {
   defaultProductVatClass: VatClass;
   defaultColor: string | null;
 }

@@ -1,4 +1,4 @@
-// The price and quantity shapes a catalogue write refuses. Imports nothing, so the dashboard can
+// The price and quantity shapes a menu write refuses. Imports nothing, so the dashboard can
 // apply exactly the same checks in the browser and report a bad value beside its own field rather
 // than as a failed save.
 

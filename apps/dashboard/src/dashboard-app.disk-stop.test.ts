@@ -32,13 +32,7 @@ const meResponse = {
   sessionDefault: "es-ES",
   venueName: "Deli Test SL",
   onboardingIntent: "prepare",
-  permissions: [
-    "booking.manage",
-    "venue.view",
-    "catalogue.manage",
-    "hardware.manage",
-    "system.manage",
-  ],
+  permissions: ["booking.manage", "venue.view", "menu.manage", "hardware.manage", "system.manage"],
   modules: ["bookings"],
 };
 
@@ -71,8 +65,8 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listMyShifts: vi.fn().mockResolvedValue([]),
     listMySwaps: vi.fn().mockResolvedValue([]),
     listMyAbsences: vi.fn().mockResolvedValue([]),
-    listCatalogues: vi.fn().mockResolvedValue([]),
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    listMenus: vi.fn().mockResolvedValue([]),
+    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),

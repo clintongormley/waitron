@@ -12,7 +12,7 @@ import { eq, inArray, sql, and } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bookings, BOOKINGS_ROUTES, BOOKINGS_PERMISSIONS } from "@waitron/bookings";
 import {
-  catalogues,
+  menus,
   diningTables,
   floorPlanSets,
   floorPlanTables,
@@ -165,7 +165,7 @@ describe("real module floor deletion", () => {
       const standard = (await defaultLayout(tx, venue.cfg, f.zoneId)).setId;
 
       const dinner = await addFloorPlanSet(tx, { departmentId: f.departmentId, name: "Dinner" });
-      const [menu] = await tx.insert(catalogues).values({ name: "Menu" }).returning();
+      const [menu] = await tx.insert(menus).values({ name: "Menu" }).returning();
       await tx.insert(menuPeriods).values([
         { departmentId: f.departmentId, name: "Lunch", menuId: menu!.id, floorPlanSetId: standard },
         { departmentId: f.departmentId, name: "Dinner", menuId: menu!.id, floorPlanSetId: dinner },

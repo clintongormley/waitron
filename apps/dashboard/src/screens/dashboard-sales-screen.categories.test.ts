@@ -581,7 +581,7 @@ describe("dashboard-sales-screen — category report", () => {
     expect(codeMessage("sale_classification.invalid", "es")).toContain("momento de la venta");
   });
 
-  it("drops the refusal when a refresh after the catalogue is fixed succeeds", async () => {
+  it("drops the refusal when a refresh after the menu is fixed succeeds", async () => {
     const liveData = new LiveData();
     const api = Object.assign(
       stubApi({
@@ -635,7 +635,7 @@ describe("dashboard-sales-screen — category report", () => {
     await vi.waitFor(() => expect(rows(el)).toHaveLength(2));
   });
 
-  it("keeps the report at time of sale when the catalogue is edited, and refreshes today's", async () => {
+  it("keeps the report at time of sale when the menu is edited, and refreshes today's", async () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
     const el = await mount(api);

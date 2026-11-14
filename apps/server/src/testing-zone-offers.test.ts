@@ -20,8 +20,8 @@ import {
 } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   addProductToMenu,
@@ -47,7 +47,7 @@ const suite = useVenueDb({
 
 interface Venue {
   cfg: OriginConfig;
-  catalogueId: string;
+  menuId: string;
   coffee: string;
   toast: string;
   water: string;
@@ -72,13 +72,13 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   };
   return withTransaction(db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Main menu" });
-    await assignCatalogueToVenue(tx, menu.id);
+    const menu = await createMenu(tx, { name: "Main menu" });
+    await assignMenuToVenue(tx, menu.id);
     const drinks = await createCategory(tx, { name: "Drinks" });
     const food = await createCategory(tx, { name: "Food" });
     const product = (name: string, unitPrice: string, categoryId: string | null) =>
       createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId,
         name,
         pricingUnit: "each",
@@ -109,7 +109,7 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
     await writeProductModifiers(tx, coffee.id, [{ kind: "extras", id: list.id }]);
     return {
       cfg,
-      catalogueId: menu.id,
+      menuId: menu.id,
       coffee: coffee.id,
       toast: toast.id,
       water: water.id,
@@ -137,7 +137,7 @@ async function counts(db: Database) {
       (select count(*) from floor_zones) as zones,
       (select count(*) from floor_zones) as policies,
       (select count(*) from departments) as departments,
-      (select count(*) from catalogues) as menus,
+      (select count(*) from menus) as menus,
       (select count(*) from menu_periods) as periods,
       (select count(*) from menu_period_staff_menus) as staff_menus,
       (select count(*) from department_days) as timetables,
@@ -157,12 +157,12 @@ describe("offerProducts", () => {
       );
       const offers = await offerProducts(tx, venue.cfg);
       await addProductToMenu(tx, {
-        menuId: venue.catalogueId,
+        menuId: venue.menuId,
         productId: venue.coffee,
         grossPrice: "2.50",
       });
-      await publishWorkingMenu(tx, venue.catalogueId);
-      await offerMenuThroughZone(tx, offers.zoneId, venue.catalogueId, {
+      await publishWorkingMenu(tx, venue.menuId);
+      await offerMenuThroughZone(tx, offers.zoneId, venue.menuId, {
         makeDefault: true,
       });
       return offers;
@@ -179,7 +179,7 @@ describe("offerProducts", () => {
           at: new Date(`2026-10-08T${hour}:00:00Z`),
         }),
       );
-      expect(served.defaultMenuId).toBe(venue.catalogueId);
+      expect(served.defaultMenuId).toBe(venue.menuId);
       expect(served.service).toEqual({
         open: true,
         zoneOpen: true,
@@ -196,7 +196,7 @@ describe("offerProducts", () => {
       expect(
         served.menus.map(({ id, orderable, audience }) => ({ id, orderable, audience })),
       ).toEqual([
-        { id: venue.catalogueId, orderable: true, audience: "customer" },
+        { id: venue.menuId, orderable: true, audience: "customer" },
         { id: first.menuId, orderable: true, audience: "staff" },
       ]);
     }
@@ -267,11 +267,11 @@ describe("offerProducts", () => {
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     await withTransaction(suite.db, async (tx) => {
       await addProductToMenu(tx, {
-        menuId: venue.catalogueId,
+        menuId: venue.menuId,
         productId: venue.coffee,
         grossPrice: "2.50",
       });
-      await offerMenuThroughZone(tx, offers.zoneId, venue.catalogueId);
+      await offerMenuThroughZone(tx, offers.zoneId, venue.menuId);
     });
 
     const id = randomUUID();
@@ -404,7 +404,7 @@ describe("offerProducts", () => {
 
     const bread = await withTransaction(suite.db, (tx) =>
       createProduct(tx, {
-        catalogueId: venue.catalogueId,
+        menuId: venue.menuId,
         categoryId: null,
         name: "Bread",
         pricingUnit: "each",

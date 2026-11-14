@@ -99,7 +99,7 @@ changing enforcement, keeping each legitimate mutation path.
 | `bookings`               | `DELETE`             | [packages/bookings/src/classification.ts](../../packages/bookings/src/classification.ts)                 |
 | `cadenas`                | `DELETE`             | [packages/fiscal-verifactu/src/classification.ts](../../packages/fiscal-verifactu/src/classification.ts) |
 | `card_readers`           | `DELETE`             | [packages/payments/src/classification.ts](../../packages/payments/src/classification.ts)                 |
-| `catalogues`             | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
+| `menus`             | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `change_log`             | `UPDATE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `content_languages`      | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `convenio_config`        | `DELETE`             | [packages/workforce-es/src/classification.ts](../../packages/workforce-es/src/classification.ts)         |
@@ -116,7 +116,7 @@ changing enforcement, keeping each legitimate mutation path.
 | `invoice_series`         | `UPDATE`, `DELETE`   | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `join_requests`          | `UPDATE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `kitchen_stations`       | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
-| `location_catalogues`    | `UPDATE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
+| `location_menus`    | `UPDATE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `locations`              | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `management_sessions`    | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 | `menu_items`             | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |

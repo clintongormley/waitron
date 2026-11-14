@@ -14,7 +14,7 @@ import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
-import { catalogues, products } from "./menus.js";
+import { menus, products } from "./menus.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -43,7 +43,7 @@ afterEach(async () => {
     await tx.execute(sql`delete from working_order_lines`);
     await tx.execute(sql`delete from working_orders`);
     await tx.execute(sql`delete from products`);
-    await tx.execute(sql`delete from catalogues`);
+    await tx.execute(sql`delete from menus`);
     await tx.execute(sql`delete from nodes`);
     await tx.execute(sql`delete from ${devices}`);
     await tx.execute(sql`delete from ${deviceProfiles}`);
@@ -76,14 +76,11 @@ async function seed(db: Database): Promise<void> {
     operationDescription: "Hostelería",
   });
   DASHBOARD_ORDER = { source: "dashboard", deviceId: null };
-  const [catA] = await db
-    .insert(catalogues)
-    .values({ name: "Deli A" })
-    .returning({ id: catalogues.id });
+  const [catA] = await db.insert(menus).values({ name: "Deli A" }).returning({ id: menus.id });
   const [prodA] = await db
     .insert(products)
     .values({
-      catalogueId: catA.id,
+      menuId: catA.id,
       name: "Café solo",
       pricingUnit: "each",
       unitPrice: 130,
@@ -582,15 +579,15 @@ describe("working_order_lines", () => {
     expect(line.descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
   });
 
-  it("carries only product_id and extra_list_id as catalogue-shaped identifiers", async () => {
-    // Reads column NAMES only, so a catalogue reference under an unrelated name passes.
+  it("carries only product_id and extra_list_id as menu-shaped identifiers", async () => {
+    // Reads column NAMES only, so a menu reference under an unrelated name passes.
     const cols = await rows<{ name: string }>(
       db,
       sql`select name from pragma_table_info('working_order_lines')`,
     );
     const references = cols
       .map((c) => c.name)
-      .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant|category|list)_id$/i.test(n))
+      .filter((n) => /(product|item|menu|catalog|menu|sku|variant|category|list)_id$/i.test(n))
       .sort();
     expect(references).toEqual(["extra_list_id", "product_id"]);
   });
@@ -766,7 +763,7 @@ describe("working_order_lines — the draft line's links", () => {
     const [spare] = await db
       .insert(products)
       .values({
-        catalogueId: (await db.select({ id: catalogues.id }).from(catalogues))[0]!.id,
+        menuId: (await db.select({ id: menus.id }).from(menus))[0]!.id,
         name: "Café solo",
         pricingUnit: "each",
         unitPrice: 130,

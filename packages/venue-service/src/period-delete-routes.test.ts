@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
+import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   departmentDayRanges,
@@ -77,7 +77,7 @@ async function routed() {
       seasons.find((entry) => entry.name === starterSeasonName(name, "es"))!.id;
     const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     const deli = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
-    const menu = (await createCatalogue(tx, { name: "Menu" })).id;
+    const menu = (await createMenu(tx, { name: "Menu" })).id;
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (departmentId: string, name: string) =>

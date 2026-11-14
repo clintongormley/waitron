@@ -160,11 +160,11 @@ describe("attendance boot with permanent workforce", () => {
         expect(started.error).toBeNull();
         server = started.server!;
         await awaitListening(httpPort());
-        const catalogue = await fetch(`http://127.0.0.1:${httpPort()}/management-api/modules`, {
+        const menu = await fetch(`http://127.0.0.1:${httpPort()}/management-api/modules`, {
           headers: { cookie: f.managementCookie },
         });
-        expect(catalogue.status).toBe(200);
-        const moduleRows = (await catalogue.json()) as { id: string; enabled: boolean }[];
+        expect(menu.status).toBe(200);
+        const moduleRows = (await menu.json()) as { id: string; enabled: boolean }[];
         expect(moduleRows.find((row) => row.id === "workforce")).toBeUndefined();
         expect(loopSpy).toHaveBeenCalledTimes(1);
         expect(mailSpy).toHaveBeenCalledTimes(1);

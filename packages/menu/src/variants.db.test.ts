@@ -15,7 +15,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { racePair } from "../test/fixtures.js";
-import { createCatalogue, createProduct, addProductToMenu } from "./operations.js";
+import { createMenu, createProduct, addProductToMenu } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import {
   listMenuVariants,
@@ -58,8 +58,8 @@ const wine = (
 async function fixture() {
   await seedTaxpayer(suite.db);
   return app(async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Bar" });
-    const terrace = await createCatalogue(tx, { name: "Terrace" });
+    const menu = await createMenu(tx, { name: "Bar" });
+    const terrace = await createMenu(tx, { name: "Terrace" });
     const glass = await createUnit(
       tx,
       {
@@ -72,7 +72,7 @@ async function fixture() {
       "en",
     );
     const parent = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Wine by the glass",
       customerName: { en: "House wine" },
@@ -83,7 +83,7 @@ async function fixture() {
       vatClass: "reduced",
     });
     const other = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Cider",
       unitId: glass.id,
@@ -96,7 +96,7 @@ async function fixture() {
       grossPrice: "4.50",
     });
     return {
-      catalogueId: menu.id,
+      menuId: menu.id,
       terraceId: terrace.id,
       parentId: parent.id,
       otherId: other.id,
@@ -108,7 +108,7 @@ async function fixture() {
 /** The variant rows of `parentId` as the table stores them, flags as the 0/1 this engine keeps. */
 async function storedVariants(parentId: string) {
   const { rows } = await suite.db.execute<Record<string, unknown>>(sql`
-    select id, parent_id, catalogue_id, variant_order, active, available, ordering, unit_price,
+    select id, parent_id, menu_id, variant_order, active, available, ordering, unit_price,
       vat_class, pricing_unit, dietary_declarations, diet, description, category_id,
       course_id, image, allergens, manual_allergens,
       diet_override
@@ -143,7 +143,7 @@ describe("setProductVariants stores each variant as a product under its parent",
     ]);
     const common = {
       parent_id: f.parentId,
-      catalogue_id: f.catalogueId,
+      menu_id: f.menuId,
       active: 1,
       available: 1,
       ordering: "public",
@@ -425,7 +425,7 @@ describe("the product editor", () => {
       { id: w175!.id, active: false },
     ]);
 
-    await app((tx) => saveProductEditor(tx, f.parentId, f.catalogueId, value, "en"));
+    await app((tx) => saveProductEditor(tx, f.parentId, f.menuId, value, "en"));
     expect((await storedVariants(f.parentId)).map(({ id, active }) => ({ id, active }))).toEqual([
       { id: w125!.id, active: 1 },
       { id: w175!.id, active: 0 },
@@ -457,7 +457,7 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
         saveProductEditor(
           tx,
           f.variantId,
-          f.catalogueId,
+          f.menuId,
           { ...parent, unitId: null, vatClass: "general", variants: [] },
           "en",
         ),
@@ -466,12 +466,12 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
     expect((await storedVariants(f.parentId))[0]).toMatchObject({ vat_class: null });
     await expect(
       app((tx) =>
-        saveProductEditor(tx, f.variantId, f.catalogueId, { ...value, vatClass: "general" }, "en"),
+        saveProductEditor(tx, f.variantId, f.menuId, { ...value, vatClass: "general" }, "en"),
       ),
     ).resolves.toMatchObject({ id: f.variantId, vatClass: "general" });
     expect((await storedVariants(f.parentId))[0]).toMatchObject({ vat_class: "general" });
     await expect(
-      app((tx) => saveProductEditor(tx, f.parentId, f.catalogueId, parent, "en")),
+      app((tx) => saveProductEditor(tx, f.parentId, f.menuId, parent, "en")),
     ).resolves.toMatchObject({ id: f.parentId });
   });
 
@@ -542,7 +542,7 @@ describe("a variant's per-menu settings", () => {
     expect(await stored()).toEqual([
       { menuItemId: f.offerId, productId: f.parentId, variantId: v!.id, price: 250 },
     ]);
-    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.catalogueId))).toEqual([
+    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.menuId))).toEqual([
       { variantId: v!.id, price: "2.50" },
     ]);
     await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: v!.id, price: null }]));
@@ -568,7 +568,7 @@ describe("a variant's per-menu settings", () => {
       ),
     );
     await app((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en"));
-    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.catalogueId))).toEqual([
+    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.menuId))).toEqual([
       { variantId: w125!.id, price: null },
       { variantId: w175!.id, price: null },
     ]);
@@ -576,13 +576,13 @@ describe("a variant's per-menu settings", () => {
 
   it("lists nothing for an offer whose product has no Active variant", async () => {
     const f = await fixture();
-    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.catalogueId))).toEqual([]);
+    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.menuId))).toEqual([]);
     const [w125] = await app((tx) =>
       setProductVariants(tx, f.parentId, [wine("125 ml", null)], "en"),
     );
     await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: "6.00" }]));
     await app((tx) => setProductVariants(tx, f.parentId, [], "en"));
-    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.catalogueId))).toEqual([]);
+    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.menuId))).toEqual([]);
   });
 
   it("stores a row only while it sets a price, and a null price deletes it", async () => {
@@ -709,8 +709,8 @@ describe("a variant's per-menu settings", () => {
       setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     await app((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: "6.00" }]));
-    await app((tx) => setMenuVariantPrice(tx, f.offerId, w125!.id, "4.20", f.catalogueId));
-    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.catalogueId))).toEqual([
+    await app((tx) => setMenuVariantPrice(tx, f.offerId, w125!.id, "4.20", f.menuId));
+    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.menuId))).toEqual([
       { variantId: w125!.id, price: "4.20" },
       { variantId: w175!.id, price: "6.00" },
     ]);

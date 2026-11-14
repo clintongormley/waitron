@@ -4,9 +4,9 @@ import type { OptionSnapshot, SaleLineClassification } from "@waitron/shared";
  * browser consumer can name the type without its program gaining that file's database imports. */
 export interface RecordSaleLine {
   lineNo: number;
-  /** The staff-facing product name, frozen onto the line at add time. Never a catalogue reference. */
+  /** The staff-facing product name, frozen onto the line at add time. Never a menu reference. */
   name: string;
-  /** locale -> text, snapshotted at line-add time. Never a catalogue reference. */
+  /** locale -> text, snapshotted at line-add time. Never a menu reference. */
   descriptions: Record<string, string>;
   /** Unit label and accepted precision frozen when the item was selected. */
   unitName?: Record<string, string> | null;
@@ -21,7 +21,7 @@ export interface RecordSaleLine {
   /** The line's tax-exclusive base, so `buildVatBreakdown` derives the tax by plain
    * multiplication rather than reversing it out of a gross price. */
   lineTotal: string;
-  /** Snapshotted analytics label, copied onto `sale_lines.category`; never a catalogue reference. */
+  /** Snapshotted analytics label, copied onto `sale_lines.category`; never a menu reference. */
   category?: string | null;
   /** The `lineNo` of this line's parent dish; `null` for a top-level line. Presentation only,
    * never hashed. */

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
+import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   floorPlanSets,
@@ -137,7 +137,7 @@ async function casaMarina() {
       [counter, ["B1"]],
     ] as const)
       for (const label of labels) await tx.insert(floorPlanTables).values({ zoneId, label });
-    const menu = (await createCatalogue(tx, { name: "Menu" })).id;
+    const menu = (await createMenu(tx, { name: "Menu" })).id;
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (name: string, colour: "grey" | "blue") =>

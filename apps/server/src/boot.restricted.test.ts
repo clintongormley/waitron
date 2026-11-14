@@ -315,7 +315,7 @@ describe("a box holding a handover restriction starts restricted", () => {
     const { port, venue } = start();
     const probes: [string, string][] = [
       ["GET", "/management-api/alerts"],
-      ["GET", "/management-api/catalogue-settings"],
+      ["GET", "/management-api/menu-settings"],
       ["DELETE", "/api/session"],
       ["GET", "/api/device/active-profile"],
       ["POST", "/api/device/enrol"],

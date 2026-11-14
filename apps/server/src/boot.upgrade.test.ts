@@ -213,7 +213,7 @@ describe("contained upgrade data checks", () => {
       paymentsOff: false,
       name: "a menu with missing structure",
       sql: "delete from menu_details",
-      code: "catalogue.not_found",
+      code: "menu.not_found",
     },
     {
       paymentsOff: true,

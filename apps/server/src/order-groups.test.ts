@@ -47,8 +47,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   createOptionList,
@@ -181,7 +181,7 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
   return inTx(async (tx) => {
     if (countryCourses) await VENUE_SERVICE_PROVISIONING.seed!.run(tx, { nodeId });
     const seededCourses = countryCourses ? await tx.select().from(kitchenCourses) : [];
-    const catalogue = await createCatalogue(tx, { name: "Carta" });
+    const menu = await createMenu(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Platos" });
     const courseIds: Record<string, string> = {};
     let displayOrder = 1;
@@ -196,7 +196,7 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
     const productId = {} as Record<Dish, string>;
     for (const [dish, names] of Object.entries(DISHES) as [Dish, (typeof DISHES)[Dish]][]) {
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: names.staff,
         customerName: { en: names.customer },
@@ -222,7 +222,7 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
       LOCALE,
     );
     await writeProductModifiers(tx, productId.steak, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToVenue(tx, catalogue.id);
+    await assignMenuToVenue(tx, menu.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
     await setRoutingCell(
@@ -4362,7 +4362,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     const v = await setupVenue();
     const sold = await inTx(async (tx) => {
       const [steak] = await tx
-        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .select({ menuId: products.menuId, categoryId: products.categoryId })
         .from(products)
         .where(eq(products.id, v.productId.steak));
       // As the venue seed makes it (`packages/menu/src/provisioning.ts`): whole grams only.
@@ -4522,7 +4522,7 @@ describe("advance HOLD tickets (Task 6)", () => {
   async function tunaWithDoneness(v: Venue) {
     return inTx(async (tx) => {
       const [steak] = await tx
-        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .select({ menuId: products.menuId, categoryId: products.categoryId })
         .from(products)
         .where(eq(products.id, v.productId.steak));
       const tuna = await createProduct(tx, {

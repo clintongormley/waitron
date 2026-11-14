@@ -19,11 +19,11 @@ import { VENUE_SERVICE } from "./modules.js";
 import { AppError } from "@waitron/shared";
 import * as orderWrites from "./working-order.js";
 import {
-  createCatalogue,
+  createMenu,
   createCategory,
   createProduct,
   createExtraList,
-  assignCatalogueToVenue,
+  assignMenuToVenue,
   writeProductModifiers,
 } from "@waitron/menu";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -553,15 +553,15 @@ describe("A669 atomic submit", () => {
   it("assigns direct parents before output when extra rows and reversed insert results separate them", async () => {
     const p = await party();
     const products = await inTx(v, async (tx) => {
-      const cat = await createCatalogue(tx, {
-        name: `Extra catalogue ${randomUUID().slice(0, 8)}`,
+      const cat = await createMenu(tx, {
+        name: `Extra menu ${randomUUID().slice(0, 8)}`,
       });
       const category = await createCategory(tx, {
         name: `Extra category ${randomUUID().slice(0, 8)}`,
       });
       const make = (name: string) =>
         createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: category.id,
           name,
           customerName: { es: `${name} customer` },
@@ -586,7 +586,7 @@ describe("A669 atomic submit", () => {
         "es-ES",
       );
       await writeProductModifiers(tx, dish.id, [{ kind: "extras", id: list.id }]);
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       const offers = await offerProducts(tx, v.cfg, {
         zone: { zoneId: v.tables.zoneId },
         orderStart: "table",

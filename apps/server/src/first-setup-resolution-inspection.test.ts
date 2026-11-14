@@ -447,9 +447,9 @@ it.each(["file", "directory"])(
   },
 );
 
-it("refuses empty-only restart with retained catalogue rows and no taxpayer or venue", async () => {
-  const { catalogues } = await import("@waitron/db");
-  await suite.db.insert(catalogues).values({ name: "Restaurant retained menu" });
+it("refuses empty-only restart with retained menu rows and no taxpayer or venue", async () => {
+  const { menus } = await import("@waitron/db");
+  await suite.db.insert(menus).values({ name: "Restaurant retained menu" });
   const f = await actionsFixture();
   const unchanged = await startAgainUnchanged(f);
   const inspection = await f.service.inspectFirstSetupResolution();
@@ -485,9 +485,9 @@ it("requires the configured module schema for empty-only restart", async () => {
   ).rejects.toMatchObject({ code: "setup.not_ready" });
 });
 
-it("does not call a database with retained catalogue rows empty", async () => {
-  const { catalogues } = await import("@waitron/db");
-  await suite.db.insert(catalogues).values({ name: "Restaurant retained menu" });
+it("does not call a database with retained menu rows empty", async () => {
+  const { menus } = await import("@waitron/db");
+  await suite.db.insert(menus).values({ name: "Restaurant retained menu" });
   const f = await fixture();
   const inspection = await f.service.inspectFirstSetupResolution();
   expect(inspection.database).toBe("no-venue-rows");
@@ -501,8 +501,8 @@ it.each(["missing-table", "missing-column", "short-journal", "foreign-journal"])
     const f = await actionsFixture();
     const connection = new DatabaseSync(join(f.venueDir, "venue.db"));
     try {
-      if (kind === "missing-table") connection.exec('drop table "catalogues"');
-      if (kind === "missing-column") connection.exec('alter table "catalogues" drop column "name"');
+      if (kind === "missing-table") connection.exec('drop table "menus"');
+      if (kind === "missing-column") connection.exec('alter table "menus" drop column "name"');
       if (kind === "short-journal")
         connection.exec('delete from "__drizzle_migrations_db" where rowid = 1');
       if (kind === "foreign-journal")

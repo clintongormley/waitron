@@ -4,8 +4,8 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   listAvailableProducts,
@@ -14,16 +14,16 @@ import type { ProductAllergens } from "@waitron/menu";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(
-    manifestSets().filter((set) => ["core", "catalogue"].includes(set.name)),
+    manifestSets().filter((set) => ["core", "menu"].includes(set.name)),
     null,
   ),
 });
 
-describe("catalogue allergen workflows", () => {
+describe("menu allergen workflows", () => {
   it("keeps unreviewed, reviewed-none and specific allergen kinds distinct in the till read", async () => {
     await seedVenue(suite.db, { timeZone: "Europe/Madrid", invoiceLocales: ["en-GB"] });
     await withTransaction(suite.db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Deli" });
+      const menu = await createMenu(tx, { name: "Deli" });
       const food = await createCategory(tx, { name: "Food" });
       const desserts = await createCategory(tx, { name: "Desserts" });
       const samples: {
@@ -49,13 +49,13 @@ describe("catalogue allergen workflows", () => {
       ];
       for (const sample of samples) {
         await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           pricingUnit: "each",
           vatClass: "reduced",
           ...sample,
         });
       }
-      await assignCatalogueToVenue(tx, catalogue.id);
+      await assignMenuToVenue(tx, menu.id);
     });
     const available = await withTransaction(suite.db, (tx) => listAvailableProducts(tx));
     expect(

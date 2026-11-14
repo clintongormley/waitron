@@ -10,7 +10,7 @@ import type { serve } from "@hono/node-server";
 import { eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { catalogues } from "@waitron/db";
+import { menus } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartServerSeams, StartedServer } from "./boot.js";
@@ -153,8 +153,8 @@ async function answerOf(response: Response) {
   }
 }
 
-function catalogueNamed(name: string) {
-  return suite.db.select().from(catalogues).where(eq(catalogues.name, name)).all();
+function menuNamed(name: string) {
+  return suite.db.select().from(menus).where(eq(menus.name, name)).all();
 }
 
 describe("a management change in the running server", () => {
@@ -170,7 +170,7 @@ describe("a management change in the running server", () => {
         ["/api/box/clock-set", "{}"],
         ["/api/box/clock-confirm", "{}"],
         ["/api/box/screen", JSON.stringify({ start: "till" })],
-        ["/management-api/catalogues", JSON.stringify({ name: "From another page" })],
+        ["/management-api/menus", JSON.stringify({ name: "From another page" })],
         ["/print-api/agent/jobs", undefined],
       ];
       const answers: Record<string, unknown> = {};
@@ -191,7 +191,7 @@ describe("a management change in the running server", () => {
       expect(answers).toEqual(
         Object.fromEntries(sends.map(([path]) => [`POST ${path}`, { status: 403, body: REFUSED }])),
       );
-      expect(catalogueNamed("From another page")).toEqual([]);
+      expect(menuNamed("From another page")).toEqual([]);
       expect(host.screenSet).toHaveBeenCalledTimes(0);
       expect(restart).not.toHaveBeenCalled();
     });
@@ -209,7 +209,7 @@ describe("a management change in the running server", () => {
       ];
       const answers: Record<string, number> = {};
       for (const [name, headers] of rows) {
-        const response = await fetch(url("/management-api/catalogues"), {
+        const response = await fetch(url("/management-api/menus"), {
           method: "POST",
           headers: { cookie: venue.managerCookie, "content-type": "application/json", ...headers },
           body: JSON.stringify({ name }),
@@ -218,7 +218,7 @@ describe("a management change in the running server", () => {
         answers[name] = response.status;
       }
       expect(answers).toEqual(Object.fromEntries(rows.map(([name]) => [name, 201])));
-      for (const [name] of rows) expect(catalogueNamed(name)).toHaveLength(1);
+      for (const [name] of rows) expect(menuNamed(name)).toHaveLength(1);
     });
   });
 
@@ -270,7 +270,7 @@ describe("a management change in the running server", () => {
       ];
       expect(writes).toEqual(
         expect.arrayContaining([
-          "POST /management-api/catalogues",
+          "POST /management-api/menus",
           "POST /api/box/free-space",
           "POST /api/box/screen",
         ]),

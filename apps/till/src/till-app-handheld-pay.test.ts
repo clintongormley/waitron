@@ -6585,7 +6585,7 @@ describe("a parked counter bill from Find a bill, on a device with no counter sc
   const draughtBeer = {
     id: "cana",
     menuItemId: "offer-cana",
-    catalogueId: "cat-default",
+    menuId: "cat-default",
     name: "Caña",
     pricingUnit: "each" as const,
     unitPrice: "9.90",

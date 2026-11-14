@@ -101,7 +101,7 @@ describe("CORE_CHANGE_SOURCES", () => {
   });
 });
 
-/** The append-only tables core took in from catalogue, venue-service, adjustments and handover. */
+/** The append-only tables core took in from menu, venue-service, adjustments and handover. */
 const FOLDED_APPEND_ONLY = [
   "menu_versions",
   "menu_version_images",

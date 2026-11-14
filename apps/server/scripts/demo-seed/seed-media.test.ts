@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedCatalogues } from "./seed-menus.js";
+import { seedMenus } from "./seed-menus.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, readImageBytes } from "@waitron/media";
 import { seedMedia, demoMediaPath } from "./seed-media.js";
@@ -36,7 +36,7 @@ describe("seedMedia", () => {
     await provisionVenue();
 
     const { productsByImage, images } = await withTransaction(suite.db, async (tx) => {
-      const { productsByImage } = await seedCatalogues(tx, {
+      const { productsByImage } = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -95,7 +95,7 @@ describe("seedMedia", () => {
   it("reuses existing image bytes when the media step runs twice", async () => {
     await provisionVenue();
     await withTransaction(suite.db, async (tx) => {
-      const { productsByImage } = await seedCatalogues(tx, {
+      const { productsByImage } = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });

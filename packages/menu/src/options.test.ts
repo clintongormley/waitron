@@ -4,10 +4,10 @@ import { captureError, CORE_CLASSIFICATION, CORE_MIGRATIONS, withTransaction } f
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
+import { createMenu, addProductToMenu, createProduct } from "./operations.js";
 import { writeProductModifiers } from "./product-modifiers.js";
-import { CATALOGUE_TABLES } from "./classification.js";
-import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
+import { MENU_TABLES } from "./classification.js";
+import { MENU_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import {
   createOptionList,
   deleteOptionList,
@@ -23,8 +23,8 @@ import {
 // falls back to the language passed in. The tests that create products seed the taxpayer row
 // themselves.
 /** This module's share of core's classification, which holds its tables. */
-const CATALOGUE_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
-  (CATALOGUE_TABLES as readonly string[]).includes(table),
+const MENU_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (MENU_TABLES as readonly string[]).includes(table),
 );
 
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
@@ -543,11 +543,11 @@ describe("option list CRUD", () => {
     const idle = await run((tx) => createOptionList(tx, { ...cookedList(), name: "Idle" }, "en"));
     await seedTaxpayer(fx.db);
     await run(async (tx) => {
-      const lunch = await createCatalogue(tx, { name: "Lunch" });
-      const dinner = await createCatalogue(tx, { name: "Dinner" });
+      const lunch = await createMenu(tx, { name: "Lunch" });
+      const dinner = await createMenu(tx, { name: "Dinner" });
       for (const name of ["steak", "burger", "chips"]) {
         const product = await createProduct(tx, {
-          catalogueId: lunch.id,
+          menuId: lunch.id,
           categoryId: null,
           name,
           unitId: null,
@@ -580,11 +580,11 @@ describe("option list CRUD", () => {
     const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
     await seedTaxpayer(fx.db);
     const dishes = await run(async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Deli" });
+      const menu = await createMenu(tx, { name: "Deli" });
       const made: Record<string, string> = {};
       for (const name of ["steak", "burger", "chips"]) {
         const product = await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: null,
           name,
           unitId: null,
@@ -600,7 +600,7 @@ describe("option list CRUD", () => {
       for (const name of ["steak", "chips"])
         made[`${name}Offer`] = (
           await addProductToMenu(tx, {
-            menuId: catalogue.id,
+            menuId: menu.id,
             productId: made[name]!,
             grossPrice: "12.00",
           })
@@ -757,7 +757,7 @@ describe("reading the named option lists", () => {
         ('22222222-2222-4222-8222-222222222222', ${third}, 'First label', 0)`);
   };
 
-  it("returns only the named lists, in the catalogue's own order", async () => {
+  it("returns only the named lists, in the menu's own order", async () => {
     await seedLists();
 
     const lists = await run((tx) => readOptionListsByIds(tx, [late, third]));
@@ -806,8 +806,8 @@ describe("reading the named option lists", () => {
   });
 });
 
-describe("option lists in the catalogue's configuration transfer", () => {
-  const transferred = CATALOGUE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+describe("option lists in the menu's configuration transfer", () => {
+  const transferred = MENU_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
 
   it("copies a list before the labels that point at it", () => {
     expect(transferred).toContain("option_lists");
@@ -816,10 +816,10 @@ describe("option lists in the catalogue's configuration transfer", () => {
     expect(transferred.indexOf("option_lists")).toBeLessThan(transferred.indexOf("option_labels"));
   });
 
-  // Not "the same tables": a package may transfer a SUBSET of what it classifies, and a catalogue
+  // Not "the same tables": a package may transfer a SUBSET of what it classifies, and a menu
   // table deliberately kept out of a standby copy would fail an equality for the wrong reason.
-  it("transfers only tables the catalogue classifies", () => {
-    const classified = new Set(CATALOGUE_CLASSIFICATION.map(({ table }) => table));
+  it("transfers only tables the menu classifies", () => {
+    const classified = new Set(MENU_CLASSIFICATION.map(({ table }) => table));
 
     expect(transferred.filter((table) => !classified.has(table))).toEqual([]);
   });

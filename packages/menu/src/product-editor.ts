@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { catalogues, now, products, productUnits, type Transaction } from "@waitron/db";
+import { menus, now, products, productUnits, type Transaction } from "@waitron/db";
 import { AppError, validateDietaryDeclarations } from "@waitron/shared";
 import { readCategory } from "./categories.js";
 import { readContentLanguages } from "./content-languages.js";
@@ -115,7 +115,7 @@ export async function readProductEditor(
 export async function saveProductEditor(
   tx: Transaction,
   productId: string | null,
-  catalogueId: string,
+  menuId: string,
   input: unknown,
   fallbackLanguage: string,
 ): Promise<ProductEditorValue> {
@@ -163,11 +163,8 @@ export async function saveProductEditor(
       Record<string, string> | null | undefined,
   }));
   if (productId === null) {
-    const [catalogue] = await tx
-      .select({ id: catalogues.id })
-      .from(catalogues)
-      .where(eq(catalogues.id, catalogueId));
-    if (!catalogue) throw new AppError("catalogue.not_found", { catalogueId });
+    const [menu] = await tx.select({ id: menus.id }).from(menus).where(eq(menus.id, menuId));
+    if (!menu) throw new AppError("menu.not_found", { menuId });
   }
   // A variant's own save changes one row, which `updateProduct` checks. A product's save is checked
   // here, whole, before anything is written, and the writes below skip their own row-by-row check.
@@ -180,7 +177,7 @@ export async function saveProductEditor(
     );
   if (productId === null) {
     const created = await createProductSkippingNameCheck(tx, {
-      catalogueId,
+      menuId,
       categoryId: null,
       name: value.name,
       customerName: value.customerName,

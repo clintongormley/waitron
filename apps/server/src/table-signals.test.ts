@@ -7,9 +7,9 @@ import { and, eq, isNotNull, isNull, sql, inArray } from "drizzle-orm";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
-  assignCatalogueToVenue,
+  assignMenuToVenue,
   assignProductUnit,
-  createCatalogue,
+  createMenu,
   createCategory,
   createProduct,
   updateProduct,
@@ -625,10 +625,10 @@ describe("the floor's attention signals", () => {
     const bar = await withBar(v);
     const kitchen = await kitchenStationId(v);
     const octopusMenuItemId = await inTx(v, async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Pesados" });
+      const menu = await createMenu(tx, { name: "Pesados" });
       const category = await createCategory(tx, { name: "Raciones" });
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: "Pulpo",
         customerName: { "es-ES": "Pulpo a la gallega" },
@@ -637,7 +637,7 @@ describe("the floor's attention signals", () => {
         unitPrice: "40.00",
         vatClass: "general",
       });
-      await assignCatalogueToVenue(tx, menu.id);
+      await assignMenuToVenue(tx, menu.id);
       return (await offerProducts(tx, v.cfg, { zone: "tables" })).offerFor(product.id);
     });
     const table2 = await v.table("Mesa 2");

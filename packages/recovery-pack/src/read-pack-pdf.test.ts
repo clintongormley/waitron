@@ -98,7 +98,7 @@ describe("reading the pack file out of a pack PDF", () => {
   });
 
   it("refuses a second embedded file, whatever its name", async () => {
-    // pdfkit also lists every file in the catalogue's /AF; dropping it leaves the name tree's
+    // pdfkit also lists every file in the menu's /AF; dropping it leaves the name tree's
     // own one-file check as the only thing that can refuse.
     const twoFiles = async (entries: [string, Uint8Array][]) => {
       const pdf = await PDFDocument.load(await carrier(entries));
@@ -186,7 +186,7 @@ describe("reading the pack file out of a pack PDF", () => {
     expect(await reason(await pdf.save())).toBe("carrier");
   });
 
-  it("accepts a nested name tree and the catalogue's one association with the file", async () => {
+  it("accepts a nested name tree and the menu's one association with the file", async () => {
     const pdf = await PDFDocument.load(await carrier([[PACK_ATTACHMENT, fileBytes]]));
     const { root, list } = embedded(pdf);
     root.delete(PDFName.of("Names"));

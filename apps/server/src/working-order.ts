@@ -1036,7 +1036,7 @@ export async function priceOrderLines(
         ? {}
         : { priceQuantity: stringToThousandths(line.priceQuantity) }),
       // The gross unit price LOCKED at add time: a retrieved order is filed from it without a
-      // re-price, so a later catalogue price change never moves the filed total. Never derived as
+      // re-price, so a later menu price change never moves the filed total. Never derived as
       // `line_total ÷ quantity`, which drifts for a weighed line.
       unitPriceGross: decimalToCents(line.grossUnitPrice),
       vatClass: line.vatClass,
@@ -1124,7 +1124,7 @@ type StoredLineRow = {
 
 /**
  * Read a persisted order's STORED lines, snapshotted at add time, so every path that files a
- * persisted order files the same locked composition and a later catalogue price or VAT change never
+ * persisted order files the same locked composition and a later menu price or VAT change never
  * moves the filed total. Bound portions come back grouped into the row their round was priced as
  * (`projectPortionSale`); an order holding no bound line is returned line for line, ungrouped.
  *
@@ -5061,8 +5061,8 @@ export interface HeldOrder {
       category: string | null;
       allergens: Readonly<ProductAllergens> | null;
       courseId: string | null;
-      catalogueId: string;
-      catalogueName: string;
+      menuId: string;
+      menuName: string;
       diet: unknown;
       dietOverride: unknown;
     };
@@ -5273,8 +5273,8 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
             category: context.categoryName,
             allergens: context.allergens,
             courseId: line.courseId,
-            catalogueId: context.menuId,
-            catalogueName: context.menuName,
+            menuId: context.menuId,
+            menuName: context.menuName,
             diet: context.diet,
             dietOverride: context.dietOverride,
           },

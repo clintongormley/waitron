@@ -85,17 +85,17 @@ export function namedRows(
     from extra_lists l where ${filter("extra_list", sql`l.id`)}
     union all select 'menu', s.id, s.internal_name, s.names, null, s.owner_menu_id, c.name,
       null, null, null, s.role, 1, coalesce(c.active, 0), (d.root_section_id = s.id), null, 1, null
-    from sections s left join catalogues c on c.id = s.owner_menu_id
+    from sections s left join menus c on c.id = s.owner_menu_id
       left join menu_details d on d.menu_id = s.owner_menu_id where ${filter("menu", sql`s.id`)}
     union all select 'section', s.id, s.internal_name, s.names, null, s.owner_menu_id, c.name,
       null, null, null, s.role, 1, coalesce(c.active, 0), (c.id is not null), null, 1, null
-    from sections s left join catalogues c on c.id = s.owner_menu_id where ${filter("section", sql`s.id`)}
+    from sections s left join menus c on c.id = s.owner_menu_id where ${filter("section", sql`s.id`)}
     union all select 'included_menu', m.id, s.internal_name, json_extract(m.folder_overrides, '$.names'),
       s.names, l.owner_menu_id, c.name, m.section_id, m.child_section_id, s.owner_menu_id,
       s.role, 1, coalesce(c.active, 0), (d.root_section_id = s.id), l.role, coalesce(a.active, 0), null
     from section_members m left join sections s on s.id = m.child_section_id
-      left join sections l on l.id = m.section_id left join catalogues c on c.id = l.owner_menu_id
-      left join catalogues a on a.id = s.owner_menu_id left join menu_details d on d.menu_id = s.owner_menu_id
+      left join sections l on l.id = m.section_id left join menus c on c.id = l.owner_menu_id
+      left join menus a on a.id = s.owner_menu_id left join menu_details d on d.menu_id = s.owner_menu_id
     where ${filter("included_menu", sql`m.id`)}
     union all select 'unit', u.id, u.staff_name, u.name, null, null, null,
       null, null, null, null, 1, 1, 1, null, 1, u.abbreviation

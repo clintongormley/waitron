@@ -151,7 +151,7 @@ it("stops the lunch dishes, without treating its priced shell as kitchen work, o
     const [sample] = await tx.select().from(products).where(eq(products.name, "Tarta"));
     const [drink] = await tx.select().from(products).where(eq(products.name, "Caña"));
     const lunch = await createProduct(tx, {
-      catalogueId: sample!.catalogueId,
+      menuId: sample!.menuId,
       categoryId: null,
       name: "House lunch departure",
       customerName: { "es-ES": "Table lunch" },

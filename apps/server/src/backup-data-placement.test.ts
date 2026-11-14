@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { taxpayer, nodes, invoiceSeries, catalogues } from "@waitron/db";
+import { taxpayer, nodes, invoiceSeries, menus } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
@@ -46,7 +46,7 @@ async function syncs(run: () => Promise<unknown>): Promise<string[]> {
   return synced;
 }
 
-const modules = ALL_MODULES.filter((m) => ["core", "catalogue"].includes(m.name));
+const modules = ALL_MODULES.filter((m) => ["core", "menu"].includes(m.name));
 const sets = orderedMigrationSets(modules);
 // The backup's database stands one core step behind the code that places it: its own last
 // step drops the two columns the code's next step adds back.
@@ -58,7 +58,7 @@ const withCursor = {
   tag: "9999_content_suggestion_collect_cursor",
   sql: "ALTER TABLE `content_suggestion_jobs` ADD `collect_cursor` integer;--> statement-breakpoint\nALTER TABLE `content_suggestion_jobs` ADD `collected_refs` text DEFAULT '[]' NOT NULL;",
 };
-const scratchRoot = mkdtempSync(join(tmpdir(), "a850-catalogue-predecessor-"));
+const scratchRoot = mkdtempSync(join(tmpdir(), "a850-menu-predecessor-"));
 afterAll(() => rmSync(scratchRoot, { recursive: true, force: true }));
 const olderRoot = migrationsRootWith(join(scratchRoot, "older"), { core: [withoutCursor] });
 const codeRoot = migrationsRootWith(join(scratchRoot, "code"), {
@@ -87,7 +87,7 @@ const suite = useVenueDb({
       nextNumber: 37,
     });
     await db
-      .insert(catalogues)
+      .insert(menus)
       .values({ id: "40000000-0000-4000-8000-000000000004", name: "Captured menu" });
     await db.run(sql`insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
       values ('version-one', '40000000-0000-4000-8000-000000000004', 1, '{"original":true}', 'captured-hash', ${capturedAt}, 'operator-one')`);
@@ -132,7 +132,7 @@ async function fixture() {
           : `private-${name}`,
       ),
     })),
-    { name: "secrets/module-evidence/catalogue/probe.json", bytes: Buffer.from('{"kept":true}') },
+    { name: "secrets/module-evidence/menu/probe.json", bytes: Buffer.from('{"kept":true}') },
     {
       name: "secrets/backup.env",
       bytes: Buffer.from(
@@ -164,10 +164,10 @@ async function fixture() {
           ...m.backup!.verification!,
           entries: [
             ...m.backup!.verification!.entries,
-            ...(m.name === "catalogue"
+            ...(m.name === "menu"
               ? [
                   {
-                    name: "secrets/module-evidence/catalogue/probe.json",
+                    name: "secrets/module-evidence/menu/probe.json",
                     presence: "optional" as const,
                   },
                 ]
@@ -242,10 +242,10 @@ it("places real data and private declared material without hooks, series settlem
     for (const entry of f.entries.filter(
       (e) => e.name.startsWith("secrets/") && e.name !== "secrets/backup.env",
     )) {
-      const history = entry.name === "secrets/module-evidence/catalogue/probe.json";
+      const history = entry.name === "secrets/module-evidence/menu/probe.json";
       const path = join(
         f.stateDir,
-        history ? "module-records/catalogue.json" : entry.name.slice("secrets/".length),
+        history ? "module-records/menu.json" : entry.name.slice("secrets/".length),
       );
       if (history)
         expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
@@ -269,7 +269,7 @@ it("places real data and private declared material without hooks, series settlem
   }
   expect(await readdir(f.stagingDir)).toEqual([]);
 });
-it("migrates the populated catalogue predecessor and preserves every original column and reference", async () => {
+it("migrates the populated menu predecessor and preserves every original column and reference", async () => {
   const f = await fixture();
   const before = readDatabase(f.source);
   expect(before.jobs).toHaveLength(1);

@@ -16,10 +16,10 @@ import {
 } from "@waitron/adjustments";
 import { NODE_CLASSIFICATION } from "@waitron/node-db";
 import {
-  CATALOGUE_BACKUP_VERIFICATION,
-  CATALOGUE_CHANGE_SOURCES,
-  CATALOGUE_CONFIGURATION_TRANSFER,
-  CATALOGUE_PROVISIONING,
+  MENU_BACKUP_VERIFICATION,
+  MENU_CHANGE_SOURCES,
+  MENU_CONFIGURATION_TRANSFER,
+  MENU_PROVISIONING,
   GUEST_MENU_SETTINGS,
   MENU_SETTINGS,
 } from "@waitron/menu";
@@ -189,22 +189,22 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     configurationTransfer: { kind: "none" },
   },
   {
-    name: "catalogue",
+    name: "menu",
     version: "0.0.0",
     tier: "mandatory",
     requires: { core: "*" },
     tablesIn: "core",
-    backup: { verification: CATALOGUE_BACKUP_VERIFICATION },
-    changes: CATALOGUE_CHANGE_SOURCES,
-    configurationTransfer: CATALOGUE_CONFIGURATION_TRANSFER,
-    provisioning: CATALOGUE_PROVISIONING,
+    backup: { verification: MENU_BACKUP_VERIFICATION },
+    changes: MENU_CHANGE_SOURCES,
+    configurationTransfer: MENU_CONFIGURATION_TRANSFER,
+    provisioning: MENU_PROVISIONING,
     settings: [GUEST_MENU_SETTINGS, MENU_SETTINGS],
   },
   {
     name: "venue-service",
     version: "0.0.0",
     tier: "mandatory",
-    requires: { core: "*", modules: { catalogue: "*" } },
+    requires: { core: "*", modules: { menu: "*" } },
     tablesIn: "core",
     backup: { verification: VENUE_SERVICE_BACKUP_VERIFICATION },
     changes: VENUE_SERVICE_CHANGE_SOURCES,

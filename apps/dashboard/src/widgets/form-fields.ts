@@ -86,7 +86,7 @@ export const nonBlankNames = (value: Record<string, string>) =>
   Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));
 
 /** {@link nonBlankNames} as an optional translated map: null when nothing was entered at all, which
- * is the shape the catalogue's contracts read an optional customer name as. */
+ * is the shape the menu's contracts read an optional customer name as. */
 export function translations(value: Record<string, string>): Record<string, string> | null {
   const named = nonBlankNames(value);
   return Object.keys(named).length ? named : null;

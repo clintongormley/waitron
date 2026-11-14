@@ -10,8 +10,8 @@ export type MenuUndoApi = Pick<DashboardApi, MenuUndoCommand["method"]>;
 /** Sends the command's one write; its display names stay behind. */
 export async function sendMenuUndo(api: MenuUndoApi, command: MenuUndoCommand): Promise<void> {
   switch (command.method) {
-    case "renameCatalogue":
-      return api.renameCatalogue(command.menuId, command.name);
+    case "renameMenu":
+      return api.renameMenu(command.menuId, command.name);
     case "updateMenuItem":
       return api.updateMenuItem(command.menuId, command.menuItemId, command.input);
     case "setMenuVariantPrice":
@@ -51,10 +51,10 @@ function refusalSentence(
   field: string,
 ): { key: StringKey; values: Record<string, string> } | null {
   switch (command.method) {
-    case "renameCatalogue":
+    case "renameMenu":
       if (code === "menu.name_taken")
         return { key: "menu_preview.undo_name_taken", values: { name: command.name } };
-      if (code === "catalogue.not_found") return { key: "menu_preview.undo_menu_gone", values: {} };
+      if (code === "menu.not_found") return { key: "menu_preview.undo_menu_gone", values: {} };
       return null;
     case "updateMenuItem":
     case "setMenuVariantPrice":
@@ -67,7 +67,7 @@ function refusalSentence(
       return key ? { key, values: { name: command.name } } : null;
     }
     case "setHomeDisplay":
-      if (code === "catalogue.not_found") return { key: "menu_preview.undo_menu_gone", values: {} };
+      if (code === "menu.not_found") return { key: "menu_preview.undo_menu_gone", values: {} };
       if (code === "menu.home_display_invalid")
         return {
           key: "menu_preview.undo_display_invalid",

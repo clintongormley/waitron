@@ -479,7 +479,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       // The read-only gate has lifted, so a write route mounted on the mirror answers its own
       // refusal; the agent routes boot left unmounted on the mirror stay absent until a restart.
       const base = `http://127.0.0.1:${httpPort()}`;
-      const write = await fetch(`${base}/management-api/catalogues`, {
+      const write = await fetch(`${base}/management-api/menus`, {
         method: "POST",
         body: "{}",
       });
@@ -558,7 +558,7 @@ describe("a mirror's promotion whose role write is lost", () => {
   }
 
   async function writeStatus(): Promise<number> {
-    const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/catalogues`, {
+    const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/menus`, {
       method: "POST",
       body: "{}",
     });

@@ -58,12 +58,12 @@ useVenueDb({
     venue = await provisionAdjustmentVenue(db);
     await inTx(venue, async (tx) => {
       const [burger] = await tx
-        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .select({ menuId: products.menuId, categoryId: products.categoryId })
         .from(products)
         .where(eq(products.name, "Burger"));
       const product = (name: string, customer: string, kitchen: string, price: string) =>
         createProduct(tx, {
-          catalogueId: burger!.catalogueId,
+          menuId: burger!.menuId,
           categoryId: burger!.categoryId!,
           name,
           customerName: { [venue.cfg.locale]: customer },
@@ -586,7 +586,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
         printerId: printer.id,
       });
       const [burger] = await tx
-        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .select({ menuId: products.menuId, categoryId: products.categoryId })
         .from(products)
         .where(eq(products.name, "Burger"));
       const ids: string[] = [];
@@ -595,7 +595,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
         ["SCRB", screenId],
       ] as const) {
         const product = await createProduct(tx, {
-          catalogueId: burger!.catalogueId,
+          menuId: burger!.menuId,
           categoryId: burger!.categoryId!,
           name: `${kitchenName} ${randomUUID()}`,
           customerName: { [venue.cfg.locale]: kitchenName },

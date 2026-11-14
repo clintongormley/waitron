@@ -25,8 +25,8 @@ import {
   writeContentLanguages,
   updateProduct,
   createProduct,
-  createCatalogue,
-  assignCatalogueToVenue,
+  createMenu,
+  assignMenuToVenue,
 } from "@waitron/menu";
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups } from "./order-groups.js";
@@ -271,9 +271,9 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
   const v = await provisionBillVenue(suite.db);
   const cfg = { ...v.cfg, locale: "de-DE" };
   const offers = await inTx(v, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Boundary menu" });
+    const cat = await createMenu(tx, { name: "Boundary menu" });
     const product = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: null,
       name: "Boundary dish",
       kitchenName: "Pass boundary",
@@ -282,7 +282,7 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
       unitPrice: "1234.56",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const offered = await offerProducts(tx, cfg);
     return { zoneId: offered.zoneId, menuItemId: offered.offerFor(product.id) };
   });

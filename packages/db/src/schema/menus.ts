@@ -5,8 +5,8 @@ import type { AllergenMap, ProductOrdering } from "@waitron/shared";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
 
-export const catalogues = table(
-  "catalogues",
+export const menus = table(
+  "menus",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     name: label("name").notNull(),
@@ -17,14 +17,14 @@ export const catalogues = table(
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   (t) => [
-    uniqueIndex("catalogues_one_default_uq")
+    uniqueIndex("menus_one_default_uq")
       .on(t.isDefault)
       .where(sql`${t.isDefault} = 1`),
   ],
 );
 
-/** The analytics taxonomy ("Food", "Drinks"). Orthogonal to catalogue; snapshotted onto
- * the sale line as a label so a roll-up sums one canonical bucket across catalogues. */
+/** The analytics taxonomy ("Food", "Drinks"). Orthogonal to menu; snapshotted onto
+ * the sale line as a label so a roll-up sums one canonical bucket across menus. */
 export const categories = table("categories", {
   id: id("id").primaryKey().$defaultFn(newId),
   name: label("name").notNull(),
@@ -38,14 +38,14 @@ export const products = table(
   "products",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    catalogueId: id("catalogue_id")
+    menuId: id("menu_id")
       .notNull()
       /* v8 ignore start */
-      .references(() => catalogues.id),
+      .references(() => menus.id),
     /* v8 ignore stop */
     // Set only on a VARIANT: the product it is a variant of. One level only, fixed when the row is
     // created, and the row's `id` never changes either — all enforced by triggers, which cannot be
-    // declared here (`triggers/core.sql`). Same catalogue as the parent: the composite key
+    // declared here (`triggers/core.sql`). Same menu as the parent: the composite key
     // below.
     parentId: id("parent_id"),
     // A variant's position among its parent's variants; unused with no parent.
@@ -113,15 +113,15 @@ export const products = table(
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   (t) => [
-    index("products_catalogue_id_idx").on(t.catalogueId),
+    index("products_menu_id_idx").on(t.menuId),
     index("products_name_key_idx").on(t.nameKey),
     index("products_course_idx").on(t.courseId),
-    unique("products_id_catalogue_key").on(t.id, t.catalogueId),
-    // Target of catalogue's `menu_item_variant_overrides` key `(product_id, variant_id)`.
+    unique("products_id_menu_key").on(t.id, t.menuId),
+    // Target of menu's `menu_item_variant_overrides` key `(product_id, variant_id)`.
     unique("products_parent_id_key").on(t.parentId, t.id),
     foreignKey({
-      columns: [t.parentId, t.catalogueId],
-      foreignColumns: [t.id, t.catalogueId],
+      columns: [t.parentId, t.menuId],
+      foreignColumns: [t.id, t.menuId],
     }).onDelete("restrict"),
     // A product with no parent owns every value a variant may inherit.
     check(

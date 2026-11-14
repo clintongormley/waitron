@@ -22,7 +22,7 @@ import type {
   Station,
   StationQueue,
   TillApi,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 
 // Move to station on a paid counter order waiting to be handed over: one request naming, at most 100
@@ -47,7 +47,7 @@ const till = {
   servers: [],
 };
 
-const offers: ZoneOfferCatalogue = {
+const offers: ZoneOffers = {
   service: {
     open: true,
     zoneOpen: true,

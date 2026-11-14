@@ -5269,7 +5269,7 @@ describe("A773 held column", () => {
     expect(row.querySelector("[data-overview-held]")!.textContent!.trim()).toBe("+1");
   });
 
-  it("in Spanish, Held's heading and the Waiting for the pass note and marker read the catalogue", async () => {
+  it("in Spanish, Held's heading and the Waiting for the pass note and marker read the menu", async () => {
     const previousLocale = currentLocale();
     setLocale("es");
     try {
@@ -5437,7 +5437,7 @@ describe("A773 held column", () => {
     expect(flat(queued.querySelector("[data-column-count]")!)).toBe("3");
   });
 
-  it("in Spanish, the Held part and Waiting's title read the catalogue", async () => {
+  it("in Spanish, the Held part and Waiting's title read the menu", async () => {
     const previousLocale = currentLocale();
     setLocale("es");
     try {

@@ -4,6 +4,6 @@ defineZoneProcessMatrix([
   "bill-payment",
   "core-only",
   "scripts",
-  "catalogue-allergens",
+  "menu-allergens",
   "recorded-reporting",
 ]);

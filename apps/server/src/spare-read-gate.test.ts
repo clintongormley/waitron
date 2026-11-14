@@ -29,7 +29,7 @@ it.each(["GET", "HEAD", "OPTIONS"])(
   "refuses every private %s even with a management cookie",
   async (method) => {
     for (const path of [
-      "/management-api/catalogues",
+      "/management-api/menus",
       "/management-api/staff/person/personal-data/export",
       "/media/images/image",
       "/api/working-orders",
@@ -74,7 +74,7 @@ it("keeps public role and signed handover status reachable without opening sibli
 it("keeps reads closed after promotion opens the original write gate until restart", async () => {
   const app = fixture();
   expect((await app.request("/management-api/promote", { method: "POST" })).status).toBe(200);
-  expect((await app.request("/management-api/catalogues")).status).toBe(403);
+  expect((await app.request("/management-api/menus")).status).toBe(403);
 });
 
 it("preserves the read-only write refusals and the existing mirror POST exemptions", async () => {
@@ -89,7 +89,7 @@ it("preserves the read-only write refusals and the existing mirror POST exemptio
   ]) {
     expect((await app.request(path, { method: "POST" })).status).toBe(200);
   }
-  for (const path of ["/api/box/retire", "/api/sales", "/management-api/catalogues"]) {
+  for (const path of ["/api/box/retire", "/api/sales", "/management-api/menus"]) {
     const response = await app.request(path, { method: "POST" });
     expect([response.status, await response.json()]).toEqual([
       403,
@@ -113,7 +113,7 @@ it.each(["en-GB", "es-ES"] as const)(
       expect(body).toContain(SPARE_WORDS[locale].status);
       expect(body).not.toContain("<script");
     }
-    const response = await app.request("/management-api/catalogues", {
+    const response = await app.request("/management-api/menus", {
       headers: { "accept-language": locale },
     });
     expect((await response.json()).error.message).toContain(SPARE_WORDS[locale].body);

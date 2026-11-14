@@ -10,7 +10,7 @@ describe("agreement and staffing backup registration", () => {
     ["staffing", STAFFING_BACKUP_VERIFICATION],
   ] as const)("registers the complete %s owner", (name, contribution) => {
     expect(ALL_MODULES.find((m) => m.name === name)?.backup?.verification).toBe(contribution);
-    const names = ["core", "catalogue", "venue-service", "identity", "workforce", name];
+    const names = ["core", "menu", "venue-service", "identity", "workforce", name];
     const inventory = backupVerificationInventory(
       ALL_MODULES.filter((m) => names.includes(m.name)),
     );

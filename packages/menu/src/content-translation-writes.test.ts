@@ -17,7 +17,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { createMenu, createProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import { setProductVariants } from "./variants.js";
 import { createOptionList, getOptionList, updateOptionList } from "./options.js";
@@ -50,9 +50,9 @@ async function resolveItem(
 
 async function fixture(tx: Transaction) {
   await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
-  const menu = await createCatalogue(tx, { name: "Lunch" });
+  const menu = await createMenu(tx, { name: "Lunch" });
   const product = await createProduct(tx, {
-    catalogueId: menu.id,
+    menuId: menu.id,
     categoryId: null,
     unitId: null,
     name: "STAFF Bread",
@@ -106,7 +106,7 @@ async function fixture(tx: Transaction) {
     "es",
   );
   const extraProduct = await createProduct(tx, {
-    catalogueId: menu.id,
+    menuId: menu.id,
     categoryId: null,
     unitId: null,
     name: "STAFF Butter",
@@ -468,7 +468,7 @@ describe("menu translation writes", () => {
       await seedTaxpayer(suite.db);
       const ids = await withTransaction(suite.db, async (tx) => {
         const shared = await fixture(tx);
-        const child = await createCatalogue(tx, { name: "STAFF Drinks" });
+        const child = await createMenu(tx, { name: "STAFF Drinks" });
         const details = await tx.select().from(menuDetails);
         const root = details.find((row) => row.menuId === shared.menuId)!.rootSectionId;
         const childRoot = details.find((row) => row.menuId === child.id)!.rootSectionId;

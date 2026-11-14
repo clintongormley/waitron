@@ -120,7 +120,7 @@ it("keeps the per-mount snapshot when its caller mutates it and resets expansion
   const el = await mount(document);
   await toggle(el, "drinks");
   await toggle(el, "drinks/beer");
-  document.offers.mi!.name = "Later catalogue name";
+  document.offers.mi!.name = "Later menu name";
   document.root.members.pop();
   el.view = { kind: "customer", language: "en" };
   await settle(el);

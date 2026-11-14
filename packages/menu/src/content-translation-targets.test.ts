@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   extraLists,
   menuDetails,
   optionLabels,
@@ -17,7 +17,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { createMenu, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { setProductVariants } from "./variants.js";
 import { addMember } from "./sections.js";
@@ -34,8 +34,8 @@ const context = { fallbackLanguage: "es", required: ["es"] };
 
 async function fixture(tx: Transaction) {
   await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
-  const menu = await createCatalogue(tx, { name: "STAFF Lunch", names: { es: "CLIENT Almuerzo" } });
-  const child = await createCatalogue(tx, {
+  const menu = await createMenu(tx, { name: "STAFF Lunch", names: { es: "CLIENT Almuerzo" } });
+  const child = await createMenu(tx, {
     name: "STAFF Drinks",
     names: { es: "CLIENT Bebidas", en: "Drinks" },
   });
@@ -43,7 +43,7 @@ async function fixture(tx: Transaction) {
   const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
   const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
   const product = await createProduct(tx, {
-    catalogueId: menu.id,
+    menuId: menu.id,
     categoryId: null,
     name: "STAFF Bread",
     customerName: null,
@@ -383,7 +383,7 @@ describe("inline translation targets", () => {
       const ids = await fixture(tx);
       const refs = [{ kind: "included_menu" as const, id: ids.included_menu }];
       for (const id of [ids.childMenuId, ids.menuId]) {
-        await tx.update(catalogues).set({ active: false }).where(eq(catalogues.id, id));
+        await tx.update(menus).set({ active: false }).where(eq(menus.id, id));
         const resolved = await resolveTranslationTargets(tx, "en", refs, context);
         expect(resolved.targets[0]!.target).toMatchObject({
           eligible: false,
@@ -392,7 +392,7 @@ describe("inline translation targets", () => {
         expect(
           (await listTranslationTargets(tx, "en", {}, context)).rows.map((row) => row.id),
         ).not.toContain(ids.included_menu);
-        await tx.update(catalogues).set({ active: true }).where(eq(catalogues.id, id));
+        await tx.update(menus).set({ active: true }).where(eq(menus.id, id));
       }
       expect(
         (await resolveTranslationTargets(tx, "en", refs, context)).targets[0]!.target.eligible,

@@ -167,7 +167,7 @@ export { invoiceCorrectionRefunds } from "./schema/invoice-correction-refunds.js
 export { kitchenPrintJobLines } from "./schema/kitchen-print-job-lines.js";
 export { kitchenPrintJobs } from "./schema/kitchen-print-jobs.js";
 export { ticketItemMoves } from "./schema/ticket-item-moves.js";
-export { catalogues, categories, products } from "./schema/menus.js";
+export { menus, categories, products } from "./schema/menus.js";
 export type { AllergenMap } from "@waitron/shared";
 export {
   purchaseInvoiceVat,

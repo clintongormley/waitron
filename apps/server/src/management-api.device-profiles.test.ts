@@ -13,7 +13,7 @@ import {
   printers,
   withTransaction,
 } from "@waitron/db";
-import { createCatalogue } from "@waitron/menu";
+import { createMenu } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedZone } from "@waitron/db/testing/seed.js";
@@ -2092,7 +2092,7 @@ describe("Management API — a device profile's home layouts", () => {
     const profile = ((await created.json()) as ProfileRow).id;
     const menuId = await withTransaction(
       suite.db,
-      async (tx) => (await createCatalogue(tx, { name: uniqueName("Menu") })).id,
+      async (tx) => (await createMenu(tx, { name: uniqueName("Menu") })).id,
     );
     const path = `/management-api/device-profiles/${profile}/home-layouts`;
     const listed = await app.request(path, { headers: { cookie } });

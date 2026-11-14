@@ -15,12 +15,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  assignCatalogueToVenue,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import {
   createPrinter,
   updatePrinter,
@@ -120,12 +115,12 @@ async function setupVenue(): Promise<Venue> {
   } satisfies TradingContext);
   return inTx(async (tx) => {
     const { id: barStationId } = await createStation(tx, { name: "Bar" });
-    const catalogue = await createCatalogue(tx, { name: "Menu" });
+    const menu = await createMenu(tx, { name: "Menu" });
     const category = await createCategory(tx, { name: "Dishes" });
     const productId = {} as Record<Dish, string>;
     for (const [dish, names] of Object.entries(DISHES) as [Dish, (typeof DISHES)[Dish]][]) {
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: names.staff,
         customerName: { en: names.customer },
@@ -137,7 +132,7 @@ async function setupVenue(): Promise<Venue> {
       productId[dish] = product.id;
     }
     await routeProductTo(tx, productId.beer, barStationId);
-    await assignCatalogueToVenue(tx, catalogue.id);
+    await assignMenuToVenue(tx, menu.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const printer = async (name: string) =>
       (await createPrinter(tx, { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` }))

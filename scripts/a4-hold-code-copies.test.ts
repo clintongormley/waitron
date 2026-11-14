@@ -32,10 +32,10 @@ function constArrayCodes(file: string, name: string): string[] {
   return [...list[1]!.matchAll(/"([^"]+)"/g)].map((match) => match[1]!);
 }
 
-/** The codes a till catalogue words, read from its `invoice.delivery_hold_<code>` keys. */
-function tillHoldWords(catalogue: Record<string, string>): string[] {
+/** The codes a till menu words, read from its `invoice.delivery_hold_<code>` keys. */
+function tillHoldWords(menu: Record<string, string>): string[] {
   const prefix = "invoice.delivery_hold_";
-  return Object.keys(catalogue)
+  return Object.keys(menu)
     .filter((key) => key.startsWith(prefix))
     .map((key) => key.slice(prefix.length));
 }

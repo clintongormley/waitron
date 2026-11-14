@@ -1,7 +1,7 @@
 import { inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  catalogues,
+  menus,
   CORE_MIGRATIONS,
   products,
   productUnits,
@@ -32,20 +32,17 @@ const app = <T>(action: (tx: Parameters<typeof getUnit>[0]) => Promise<T>) =>
   withTransaction(suite.db, action);
 
 /**
- * One product on its own catalogue. Both rows go through their drizzle tables, because `id`,
+ * One product on its own menu. Both rows go through their drizzle tables, because `id`,
  * `created_at` and `updated_at` come from each table's `$defaultFn` rather than from a SQL default.
  * `id` is supplied only where a test needs the rows' key order to be predictable.
  */
 async function product(id: string | null = null): Promise<string> {
-  const [menu] = await suite.db
-    .insert(catalogues)
-    .values({ name: "Menu" })
-    .returning({ id: catalogues.id });
+  const [menu] = await suite.db.insert(menus).values({ name: "Menu" }).returning({ id: menus.id });
   const [row] = await suite.db
     .insert(products)
     .values({
       ...(id === null ? {} : { id }),
-      catalogueId: menu!.id,
+      menuId: menu!.id,
       name: "Soup",
       pricingUnit: "each",
       unitPrice: 1,
@@ -344,12 +341,12 @@ it("reassigning to null returns the products to each-priced and leaves products 
 /** A variant of `parent`, with no unit row of its own. */
 async function variantOf(parent: string): Promise<string> {
   const [parentRow] = await suite.db
-    .select({ catalogueId: products.catalogueId })
+    .select({ menuId: products.menuId })
     .from(products)
     .where(inArray(products.id, [parent]));
   const [variantRow] = await suite.db
     .insert(products)
-    .values({ catalogueId: parentRow!.catalogueId, parentId: parent, name: "Small" })
+    .values({ menuId: parentRow!.menuId, parentId: parent, name: "Small" })
     .returning({ id: products.id });
   return variantRow!.id;
 }

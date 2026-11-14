@@ -10,7 +10,7 @@ import { demoPlainText, type DemoDataSet } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 
 export interface SeedOptionListsInput {
-  /** image basename -> product id, from `seedCatalogues`. */
+  /** image basename -> product id, from `seedMenus`. */
   productsByImage: Map<string, string>;
   /** The `fallbackLanguage` `createOptionList` checks the names against. */
   locale: SeedLocale;

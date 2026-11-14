@@ -901,7 +901,7 @@ export function batteryAlertSource(deps: {
 export function contentSuggestionsAlertSource(): AlertSource {
   return {
     area: "content",
-    permission: "catalogue.manage",
+    permission: "menu.manage",
     async read({ tx }): Promise<readonly OngoingAlert[]> {
       const run = await readSuggestionRun(tx);
       if (run === null || run.opened || run.waiting === 0 || (await readActiveSuggestionJob(tx)))

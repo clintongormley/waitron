@@ -47,7 +47,7 @@ const products: TillProduct[] = [
   {
     id: "cafe",
     menuItemId: "offer-cafe",
-    catalogueId: "menu-carta",
+    menuId: "menu-carta",
     name: "Café",
     customerName: { es: "Café para el cliente" },
     pricingUnit: "each",

@@ -492,8 +492,8 @@ export function combinedFixture(
   price: string,
   variants: { variantId: string; price: string | null }[] = [],
   ownPrice: string | null = null,
-  cataloguePrice = price,
-  catalogueVariants: Record<string, string | null> = {},
+  productPrice = price,
+  productVariants: Record<string, string | null> = {},
 ): import("@waitron/shared").CombinedOffer {
   type Decimal = import("@waitron/shared").Decimal;
   type Setting<T> = import("@waitron/shared").Setting<T>;
@@ -502,24 +502,25 @@ export function combinedFixture(
     kind: "own" | "product" | "parent" = "product",
     otherwise: Setting<T> | null = null,
   ): Setting<T> => ({ state: "decided", value, source: { kind }, otherwise });
-  const product = decided(cataloguePrice as Decimal);
-  const productPrice = ownPrice === null ? product : decided(price as Decimal, "own", product);
+  const product = decided(productPrice as Decimal);
+  const effectivePrice = ownPrice === null ? product : decided(price as Decimal, "own", product);
   return {
     productId,
-    price: productPrice,
+    price: effectivePrice,
     variants: variants.map((v) => {
-      const catalogue = catalogueVariants[v.variantId] ?? null;
+      const productVariantPrice = productVariants[v.variantId] ?? null;
       const parent = decided(
         price as Decimal,
         "parent",
-        ownPrice === null ? null : decided(cataloguePrice as Decimal, "parent"),
+        ownPrice === null ? null : decided(productPrice as Decimal, "parent"),
       );
-      const fallback = catalogue === null ? parent : decided(catalogue as Decimal);
+      const fallback =
+        productVariantPrice === null ? parent : decided(productVariantPrice as Decimal);
       return {
         variantId: v.variantId,
         price: {
           ...(v.price === null ? fallback : decided(v.price as Decimal, "own", fallback)),
-          level: v.price !== null || catalogue !== null ? "variant" : "product",
+          level: v.price !== null || productVariantPrice !== null ? "variant" : "product",
         },
       };
     }),

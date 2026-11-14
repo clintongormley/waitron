@@ -17,12 +17,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { billPayments, sales, tenders, withTransaction, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import {
-  assignCatalogueToVenue,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -175,12 +170,12 @@ export async function provisionBillVenue(
       .insert(departmentReceipts)
       .values({ departmentId: department.id, receipt: { operationDescription: "Restaurante" } });
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Bill menu ${cfg.nodeId}` });
+    const cat = await createMenu(tx, { name: `Bill menu ${cfg.nodeId}` });
     const platos = await createCategory(tx, { name: "Platos" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: platos.id,
         name: item.name,
         customerName: { [LOCALE]: item.customer },
@@ -191,7 +186,7 @@ export async function provisionBillVenue(
       });
       productIds.set(item.name, product.id);
     }
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [person] = await seedPersons(tx, {
       displayName: "Anna",

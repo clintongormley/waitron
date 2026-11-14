@@ -6,8 +6,8 @@ import { withTransaction, workingOrderLines } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createProduct,
   patchLiveMenu,
   readLiveMenu,
@@ -81,16 +81,16 @@ async function setupVenue() {
   });
 
   const beer = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Drinks" });
+    const menu = await createMenu(tx, { name: "Drinks" });
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Beer",
       pricingUnit: "each",
       unitPrice: "2.50",
       vatClass: "reduced",
     });
-    await assignCatalogueToVenue(tx, menu.id);
+    await assignMenuToVenue(tx, menu.id);
     return product.id;
   });
   const counter = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));

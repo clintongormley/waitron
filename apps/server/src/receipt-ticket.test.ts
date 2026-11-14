@@ -1188,7 +1188,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       }),
     );
     // The es-ES-less line degrades to its only description; the empty-map line prints nothing but
-    // does not throw (a catalogue defect must never block the paper).
+    // does not throw (a menu defect must never block the paper).
     expect(s).toContain("Fallback only");
     expect(s).toContain("VERI*FACTU");
   });

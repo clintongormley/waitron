@@ -5,8 +5,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import {
-  CATALOGUE_CONFIGURATION_TRANSFER,
-  validateCatalogueConfiguration,
+  MENU_CONFIGURATION_TRANSFER,
+  validateMenuConfiguration,
 } from "./configuration-transfer.js";
 
 const geography = { country: "ES", area: "Barcelona" };
@@ -18,8 +18,8 @@ const check = (
   contentLanguages: unknown,
   place: { country: string; area: string | null } = geography,
 ) =>
-  validateCatalogueConfiguration({}, { ...place, contentLanguages } as Parameters<
-    typeof validateCatalogueConfiguration
+  validateMenuConfiguration({}, { ...place, contentLanguages } as Parameters<
+    typeof validateMenuConfiguration
   >[1]);
 const invalid = expect.objectContaining({ code: "content.languages_invalid", params: {} });
 
@@ -32,8 +32,8 @@ it("keeps Catalan enabled on import while allowing English as the default", () =
 
 it("requires geography for a saved-language policy", () => {
   expect(() =>
-    validateCatalogueConfiguration({}, { contentLanguages: setting(["en"]) } as Parameters<
-      typeof validateCatalogueConfiguration
+    validateMenuConfiguration({}, { contentLanguages: setting(["en"]) } as Parameters<
+      typeof validateMenuConfiguration
     >[1]),
   ).toThrowError(
     expect.objectContaining({ code: "setup.request_invalid", params: { field: "venue" } }),
@@ -56,7 +56,7 @@ describe("destination language requirements", () => {
   it("refuses a destination with no taxpayer before importing its language setting", async () => {
     await expect(
       withTransaction(suite.db, (tx) =>
-        CATALOGUE_CONFIGURATION_TRANSFER.beforeImport(tx, {}, imported(["en", "es", "ca"])),
+        MENU_CONFIGURATION_TRANSFER.beforeImport(tx, {}, imported(["en", "es", "ca"])),
       ),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "venue" } });
   });
@@ -64,15 +64,15 @@ describe("destination language requirements", () => {
     await seedVenue(suite.db, { province: "Barcelona" });
     await expect(
       withTransaction(suite.db, (tx) =>
-        CATALOGUE_CONFIGURATION_TRANSFER.beforeImport(tx, {}, imported(["en", "es"])),
+        MENU_CONFIGURATION_TRANSFER.beforeImport(tx, {}, imported(["en", "es"])),
       ),
     ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
     await withTransaction(suite.db, (tx) =>
-      CATALOGUE_CONFIGURATION_TRANSFER.beforeImport(tx, {}, imported(["en", "es", "ca"])),
+      MENU_CONFIGURATION_TRANSFER.beforeImport(tx, {}, imported(["en", "es", "ca"])),
     );
     await withTransaction(suite.db, (tx) => tx.execute(sql`update taxpayer set country = 'GB'`));
     await withTransaction(suite.db, (tx) =>
-      CATALOGUE_CONFIGURATION_TRANSFER.beforeImport(tx, {}, imported(["en"])),
+      MENU_CONFIGURATION_TRANSFER.beforeImport(tx, {}, imported(["en"])),
     );
     expect((await readVenueSettings(suite.db)).doc.contentLanguages).toBeNull();
   });

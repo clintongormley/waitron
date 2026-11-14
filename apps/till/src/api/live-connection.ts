@@ -27,7 +27,7 @@ const MENU_TYPES = [
   "products",
   "product_units",
   "units",
-  "catalogues",
+  "menus",
   "menu_items",
   "menu_item_variant_overrides",
   "menu_publications",

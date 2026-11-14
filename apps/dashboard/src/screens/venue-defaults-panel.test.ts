@@ -1089,12 +1089,12 @@ it("a VAT refusal and its value survive a live read", async () => {
   saveButton(el).click();
   await expect
     .poll(() => combo(el, "defaultProductVatClass")!.error)
-    .toBe(t("catalogue_settings.invalid"));
+    .toBe(t("menu_settings.invalid"));
   r.liveData.invalidate([{ type: "settings.menu" }]);
   await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(2);
   await flush(el);
   expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");
-  expect(combo(el, "defaultProductVatClass")!.error).toBe(t("catalogue_settings.invalid"));
+  expect(combo(el, "defaultProductVatClass")!.error).toBe(t("menu_settings.invalid"));
   expect(bottom(el)).toBe(t("form.fix_fields"));
   expect(saveButton(el).disabled).toBe(false);
 });

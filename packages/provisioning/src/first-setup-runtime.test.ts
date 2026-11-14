@@ -224,7 +224,7 @@ it("refuses facts after the selected module version changes", async () => {
 it("refuses facts when another enabled module's frozen version changes", async () => {
   const f = await fixture();
   const changed = f.args.modules.map((module) =>
-    module.name === "catalogue" ? { ...module, version: "99.0.0" } : module,
+    module.name === "menu" ? { ...module, version: "99.0.0" } : module,
   );
   createFirstSetupModuleHost({ ...f.args, modules: changed });
   await expect(f.read()).rejects.toMatchObject({ code: "setup.attempt_conflict" });

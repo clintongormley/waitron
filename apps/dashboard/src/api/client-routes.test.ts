@@ -324,7 +324,7 @@ describe("DashboardApi routes", () => {
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/products/prod-9/editor", "GET", undefined],
-      ["/management-api/catalogues/cat-1/product-editor", "POST", input],
+      ["/management-api/menus/cat-1/product-editor", "POST", input],
       ["/management-api/products/prod-9/editor", "PUT", input],
     ]);
   });
@@ -1096,7 +1096,7 @@ describe("DashboardApi routes", () => {
     );
     expect(headers).toEqual(["1", null]);
   });
-  it("maps the menu's internal name to the catalogue wire name and sends its presentation fields", async () => {
+  it("maps the menu's internal name to the menu wire name and sends its presentation fields", async () => {
     const saved = { id: "c1", name: "Lunch", active: true, version: 1 };
     const fetchImpl = vi
       .fn()
@@ -1108,13 +1108,13 @@ describe("DashboardApi routes", () => {
       image: "lunch.png",
       color: "#aa3300",
     };
-    await expect(api.createCatalogue("Lunch", details)).resolves.toEqual(saved);
+    await expect(api.createMenu("Lunch", details)).resolves.toEqual(saved);
     await expect(
       api.updateMenuDetails("c1", { internalName: "Weekday lunch", ...details }),
     ).resolves.toBeUndefined();
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/catalogues", "POST", { name: "Lunch", ...details }],
-      ["/management-api/catalogues/c1", "PATCH", { name: "Weekday lunch", ...details }],
+      ["/management-api/menus", "POST", { name: "Lunch", ...details }],
+      ["/management-api/menus/c1", "PATCH", { name: "Weekday lunch", ...details }],
     ]);
   });
 
@@ -1122,9 +1122,9 @@ describe("DashboardApi routes", () => {
     const copy = { id: "c9", name: "Lunch (copy)", active: true, version: 1 };
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(copy));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.duplicateCatalogue("c1", "Lunch (copy)")).resolves.toEqual(copy);
+    await expect(api.duplicateMenu("c1", "Lunch (copy)")).resolves.toEqual(copy);
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/catalogues/c1/duplicate", "POST", { name: "Lunch (copy)" }],
+      ["/management-api/menus/c1/duplicate", "POST", { name: "Lunch (copy)" }],
     ]);
   });
 
@@ -1233,9 +1233,9 @@ describe("DashboardApi routes", () => {
     await expect(api.setMenuVariantPrice("c1", "mi1", "v1", "2.20")).resolves.toBeUndefined();
 
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/catalogues/c1/prices", "GET", undefined],
-      ["/management-api/catalogues/c1/items/mi1", "PATCH", { grossPrice: null }],
-      ["/management-api/catalogues/c1/items/mi1/variants/v1", "PATCH", { price: "2.20" }],
+      ["/management-api/menus/c1/prices", "GET", undefined],
+      ["/management-api/menus/c1/items/mi1", "PATCH", { grossPrice: null }],
+      ["/management-api/menus/c1/items/mi1/variants/v1", "PATCH", { price: "2.20" }],
     ]);
   });
 
@@ -1275,12 +1275,12 @@ describe("DashboardApi routes", () => {
     ).resolves.toBeUndefined();
 
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/catalogues/c1/home", "GET", undefined],
-      ["/management-api/catalogues/c1/home/shortcuts", "POST", { ref }],
-      ["/management-api/catalogues/c1/home/shortcuts/t1", "DELETE", undefined],
-      ["/management-api/catalogues/c1/home/shortcuts/t2/position", "PUT", { to: 0 }],
+      ["/management-api/menus/c1/home", "GET", undefined],
+      ["/management-api/menus/c1/home/shortcuts", "POST", { ref }],
+      ["/management-api/menus/c1/home/shortcuts/t1", "DELETE", undefined],
+      ["/management-api/menus/c1/home/shortcuts/t2/position", "PUT", { to: 0 }],
       [
-        "/management-api/catalogues/c1/home-display",
+        "/management-api/menus/c1/home-display",
         "PATCH",
         { device: "till", columns: 8, order: "menu_first" },
       ],
@@ -1331,11 +1331,11 @@ describe("DashboardApi routes", () => {
     });
 
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/catalogues/status", "GET", undefined],
-      ["/management-api/catalogues/c1/status", "GET", undefined],
-      ["/management-api/catalogues/c1/preview", "GET", undefined],
-      ["/management-api/catalogues/c1/publish", "POST", { expectedHash: preview.hash }],
-      ["/management-api/catalogues/c1/publish", "POST", { expectedHash: "stale" }],
+      ["/management-api/menus/status", "GET", undefined],
+      ["/management-api/menus/c1/status", "GET", undefined],
+      ["/management-api/menus/c1/preview", "GET", undefined],
+      ["/management-api/menus/c1/publish", "POST", { expectedHash: preview.hash }],
+      ["/management-api/menus/c1/publish", "POST", { expectedHash: "stale" }],
     ]);
   });
 
@@ -1365,10 +1365,10 @@ describe("DashboardApi routes", () => {
     });
 
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/catalogues/c1/live", "GET", undefined],
-      ["/management-api/catalogues/c2/live", "GET", undefined],
-      ["/management-api/catalogues/c1/patch", "POST", { baseVersionId: "v3", changes }],
-      ["/management-api/catalogues/c1/patch", "POST", { baseVersionId: "v2", changes }],
+      ["/management-api/menus/c1/live", "GET", undefined],
+      ["/management-api/menus/c2/live", "GET", undefined],
+      ["/management-api/menus/c1/patch", "POST", { baseVersionId: "v3", changes }],
+      ["/management-api/menus/c1/patch", "POST", { baseVersionId: "v2", changes }],
     ]);
   });
 
@@ -1661,24 +1661,24 @@ it("reads /legal/about passively", async () => {
   expect(new Headers(fetchImpl.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
 });
 
-it("reads the new-product default through the catalogue settings route", async () => {
+it("reads the new-product default through the menu settings route", async () => {
   const config = { defaultProductVatClass: "reduced" as const, defaultColor: null };
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(config));
   const api = new DashboardApi("", fetchImpl);
-  expect(typeof api.getCatalogueSettings).toBe("function");
-  expect(await api.getCatalogueSettings()).toEqual(config);
-  expect(callsOf(fetchImpl)).toEqual([["/management-api/catalogue-settings", "GET", undefined]]);
+  expect(typeof api.getMenuSettings).toBe("function");
+  expect(await api.getMenuSettings()).toEqual(config);
+  expect(callsOf(fetchImpl)).toEqual([["/management-api/menu-settings", "GET", undefined]]);
 });
 
-it("saves the venue default colour through its own catalogue settings route", async () => {
+it("saves the venue default colour through its own menu settings route", async () => {
   const config = { defaultProductVatClass: "reduced" as const, defaultColor: "#b12525" };
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(config));
   const api = new DashboardApi("", fetchImpl);
-  expect(await api.saveCatalogueDefaultColor("#b12525")).toEqual(config);
-  expect(await api.saveCatalogueDefaultColor(null)).toEqual(config);
+  expect(await api.saveMenuDefaultColor("#b12525")).toEqual(config);
+  expect(await api.saveMenuDefaultColor(null)).toEqual(config);
   expect(callsOf(fetchImpl)).toEqual([
-    ["/management-api/catalogue-settings/default-color", "PUT", { color: "#b12525" }],
-    ["/management-api/catalogue-settings/default-color", "PUT", { color: null }],
+    ["/management-api/menu-settings/default-color", "PUT", { color: "#b12525" }],
+    ["/management-api/menu-settings/default-color", "PUT", { color: null }],
   ]);
 });
 

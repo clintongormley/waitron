@@ -111,13 +111,13 @@ useVenueDb({
     v = await setupPartyVenue(db);
     extras = await inTx(v, async (tx) => {
       const [burger] = await tx
-        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .select({ menuId: products.menuId, categoryId: products.categoryId })
         .from(products)
         .where(eq(products.id, v.productId("Burger")));
       const product = async (name: string, unitPrice: string) =>
         (
           await createProduct(tx, {
-            catalogueId: burger!.catalogueId,
+            menuId: burger!.menuId,
             categoryId: burger!.categoryId,
             name,
             customerName: { [v.cfg.locale]: name },

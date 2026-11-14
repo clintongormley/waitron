@@ -9,7 +9,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, type MenusFixture } from "../test/menus-fixture.js";
 import { readContentLanguages, writeContentLanguages } from "./content-languages.js";
 import type { MenuChange, MenuPreview } from "@waitron/shared";
@@ -23,14 +23,14 @@ import { createSectionIn, updateSection } from "./sections.js";
 import { setMenuVariantPrice, setProductVariants } from "./variants.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 beforeEach(() => seedLibraryImages(fx.db, "large.jpg"));
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
-/** Each command through the catalogue function its route calls. */
+/** Each command through the menu function its route calls. */
 function run(tx: Transaction, command: MenuUndoCommand): Promise<unknown> {
   switch (command.method) {
-    case "renameCatalogue":
+    case "renameMenu":
       return updateMenuDetails(tx, command.menuId, { name: command.name });
     case "updateMenuItem":
       return updateMenuItem(tx, command.menuId, command.menuItemId, command.input);
@@ -141,7 +141,7 @@ describe("menu rename Undo", () => {
 
     const command = await undoAndCheck(f.dinner, f.lunch, isRename);
 
-    expect(command).toEqual({ method: "renameCatalogue", menuId: f.dinner, name: "Dinner Menu" });
+    expect(command).toEqual({ method: "renameMenu", menuId: f.dinner, name: "Dinner Menu" });
     expect(await sectionRow(root)).toEqual({ ...rootBefore, internalName: "Dinner Menu" });
   });
 

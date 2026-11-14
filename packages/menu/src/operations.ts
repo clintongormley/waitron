@@ -21,7 +21,7 @@ import {
   type DietaryLabel,
 } from "@waitron/shared";
 import {
-  catalogues,
+  menus,
   categories,
   menuItems,
   menuItemVariantOverrides,
@@ -36,7 +36,7 @@ import { readCategory } from "./categories.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
-import "./errors.js"; // load the code registry for the `catalogue.*`/`product.*`/`menu_*` codes thrown below
+import "./errors.js"; // load the code registry for the `menu.*`/`product.*`/`menu_*` codes thrown below
 import { publishedAllergens } from "./derivation.js";
 import type {
   PricingUnit,
@@ -105,7 +105,7 @@ export type { ListedVariant, Product } from "@waitron/shared";
  * snapshots.
  */
 
-export interface Catalogue {
+export interface Menu {
   id: string;
   name: string;
   active: boolean;
@@ -114,7 +114,7 @@ export interface Catalogue {
 }
 
 export interface CreateProductInput {
-  catalogueId: string;
+  menuId: string;
   categoryId: string | null;
   name: string;
   /** Customer-facing translated name; omitted or null falls back to `name`. */
@@ -176,18 +176,18 @@ export interface UpdateProductInput {
   dietaryDeclarations?: DietaryLabel[] | null;
 }
 
-const CATALOGUE_COLUMNS = {
-  id: catalogues.id,
-  name: catalogues.name,
-  active: catalogues.active,
-  version: catalogues.version,
+const MENU_COLUMNS = {
+  id: menus.id,
+  name: menus.name,
+  active: menus.active,
+  version: menus.version,
 };
 
 /** A product's own identity and names, and its EFFECTIVE inherited values: a query selecting these
  * has `.leftJoin(parentProducts, parentJoin)` (`variant-fallback.ts`). */
 const PRODUCT_BASE_COLUMNS = {
   id: products.id,
-  catalogueId: products.catalogueId,
+  menuId: products.menuId,
   categoryId: effective.categoryId,
   color: effective.color,
   name: products.name,
@@ -223,7 +223,7 @@ const PRODUCT_COLUMNS = {
 
 interface RawProduct {
   id: string;
-  catalogueId: string;
+  menuId: string;
   categoryId: string | null;
   color: string | null;
   name: string;
@@ -331,7 +331,7 @@ function legacyPricingUnit(unit: SellableUnit): PricingUnit {
 }
 
 /** A new menu, with the root and Device Home Page section it owns (`createMenuShell`). */
-export async function createCatalogue(
+export async function createMenu(
   tx: Transaction,
   input: {
     name: string;
@@ -339,27 +339,27 @@ export async function createCatalogue(
     image?: string | null;
     color?: string | null;
   },
-): Promise<Catalogue> {
+): Promise<Menu> {
   const presentation = await sectionPatchValues(tx, {
     internalName: input.name,
     names: input.names,
     image: input.image,
     color: input.color,
   });
-  const row = await insertCatalogue(tx, presentation.internalName!);
+  const row = await insertMenu(tx, presentation.internalName!);
   await createMenuShell(tx, row.id, row.name, presentation);
   return row;
 }
 
 /** The menu's own row alone; the caller writes its root and home sections and its `menu_details` row. */
-export async function insertCatalogue(tx: Transaction, name: string): Promise<Catalogue> {
+export async function insertMenu(tx: Transaction, name: string): Promise<Menu> {
   await assertMenuNameFree(tx, name);
-  const [row] = await tx.insert(catalogues).values({ name }).returning(CATALOGUE_COLUMNS);
+  const [row] = await tx.insert(menus).values({ name }).returning(MENU_COLUMNS);
   return row!;
 }
 
-export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
-  return tx.select(CATALOGUE_COLUMNS).from(catalogues).orderBy(catalogues.createdAt, catalogues.id);
+export async function listMenus(tx: Transaction): Promise<Menu[]> {
+  return tx.select(MENU_COLUMNS).from(menus).orderBy(menus.createdAt, menus.id);
 }
 
 const MENU_ITEM_COLUMNS = {
@@ -560,7 +560,7 @@ async function offerRowsOn(
           grossPrice: menuItems.grossPrice,
           productPrice: products.unitPrice,
           categoryId: products.categoryId,
-          menuName: catalogues.name,
+          menuName: menus.name,
           name: products.name,
           customerName: products.customerName,
           kitchenName: products.kitchenName,
@@ -570,7 +570,7 @@ async function offerRowsOn(
           ...offerLineColumns,
         })
         .from(menuItems)
-        .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
+        .innerJoin(menus, eq(menus.id, menuItems.menuId))
         .innerJoin(products, eq(products.id, menuItems.productId))
         .leftJoin(parentProducts, parentJoin)
         .leftJoin(productUnits, unitOwnerJoin)
@@ -580,7 +580,7 @@ async function offerRowsOn(
           and(
             inArray(menuItems.menuId, menuIds),
             inArray(menuItems.productId, batch),
-            eq(catalogues.active, true),
+            eq(menus.active, true),
             isTopLevelProduct,
             eq(products.active, true),
           ),
@@ -591,10 +591,10 @@ async function offerRowsOn(
     roots.size > 1 && offered.length > 1
       ? (
           await tx
-            .select({ id: catalogues.id })
-            .from(catalogues)
-            .where(inArray(catalogues.id, menuIds))
-            .orderBy(catalogues.name, catalogues.id)
+            .select({ id: menus.id })
+            .from(menus)
+            .where(inArray(menus.id, menuIds))
+            .orderBy(menus.name, menus.id)
         ).map((row, index) => [row.id, index])
       : menuIds.map((id) => [id, 0]),
   );
@@ -688,9 +688,9 @@ async function offersOn(
       if (!places.own && included.length === 0) continue;
       const combined = combineOffer({
         productId: offer.productId,
-        catalogue: {
+        product: {
           price: centsToDecimal(row.productPrice!),
-          variants: offer.variants.map((v) => ({ variantId: v.id, price: v.cataloguePrice })),
+          variants: offer.variants.map((v) => ({ variantId: v.id, price: v.productPrice })),
         },
         own: {
           price: offer.grossPrice as Decimal | null,
@@ -714,14 +714,14 @@ async function offersOn(
           combined.price.state === "decided"
             ? combined.price.value
             : centsToDecimal(row.productPrice!),
-        variants: offer.variants.map(({ cataloguePrice, ...variant }) => {
+        variants: offer.variants.map(({ productPrice: variantProductPrice, ...variant }) => {
           const decision = combined.variants.find((v) => v.variantId === variant.id)!;
           return {
             ...variant,
             unitPrice:
               decision.price.state === "decided"
                 ? decision.price.value
-                : (cataloguePrice ?? centsToDecimal(row.productPrice!)),
+                : (variantProductPrice ?? centsToDecimal(row.productPrice!)),
           };
         }),
       });
@@ -777,7 +777,7 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
 async function readOfferVariants(
   tx: Transaction,
   menuItemIds: readonly string[],
-): Promise<Map<string, (MenuOfferVariant & { cataloguePrice: Decimal | null })[]>> {
+): Promise<Map<string, (MenuOfferVariant & { productPrice: Decimal | null })[]>> {
   const rows = await tx
     .select({
       menuItemId: menuItems.id,
@@ -809,7 +809,7 @@ async function readOfferVariants(
     )
     .where(and(inArray(menuItems.id, [...menuItemIds]), eq(products.active, true)))
     .orderBy(menuItems.id, products.variantOrder, products.id);
-  const grouped = new Map<string, (MenuOfferVariant & { cataloguePrice: Decimal | null })[]>();
+  const grouped = new Map<string, (MenuOfferVariant & { productPrice: Decimal | null })[]>();
   for (const row of rows) {
     const held = grouped.get(row.menuItemId) ?? [];
     held.push({
@@ -825,7 +825,7 @@ async function readOfferVariants(
         // The parent of a variant is top-level, so `products_top_level_owns_ck` sets its price.
         parentPrice: centsToDecimal(row.parentPrice!),
       }),
-      cataloguePrice: priceOrNull(row.ownPrice) as Decimal | null,
+      productPrice: priceOrNull(row.ownPrice) as Decimal | null,
       menuPrice: priceOrNull(row.menuPrice),
       available: row.available,
       ...offerLineValues(row),
@@ -835,17 +835,14 @@ async function readOfferVariants(
   return grouped;
 }
 
-export async function catalogueExists(tx: Transaction, catalogueId: string): Promise<boolean> {
-  const [row] = await tx
-    .select({ id: catalogues.id })
-    .from(catalogues)
-    .where(eq(catalogues.id, catalogueId));
+export async function menuExists(tx: Transaction, menuId: string): Promise<boolean> {
+  const [row] = await tx.select({ id: menus.id }).from(menus).where(eq(menus.id, menuId));
   return row !== undefined;
 }
 
 export async function updateMenuDetails(
   tx: Transaction,
-  catalogueId: string,
+  menuId: string,
   patch: {
     name?: string;
     names?: Record<string, string>;
@@ -853,7 +850,7 @@ export async function updateMenuDetails(
     color?: string | null;
   },
 ): Promise<void> {
-  const rootSectionId = await requireMenuRoot(tx, catalogueId);
+  const rootSectionId = await requireMenuRoot(tx, menuId);
   const [stored] =
     patch.names === undefined
       ? []
@@ -873,18 +870,18 @@ export async function updateMenuDetails(
     stored?.names,
   );
   if (presentation.internalName !== undefined) {
-    await assertMenuNameFree(tx, presentation.internalName, catalogueId);
+    await assertMenuNameFree(tx, presentation.internalName, menuId);
     await tx
-      .update(catalogues)
+      .update(menus)
       .set({ name: presentation.internalName, updatedAt: now() })
-      .where(eq(catalogues.id, catalogueId));
+      .where(eq(menus.id, menuId));
   }
   if (Object.keys(presentation).length > 0)
     await tx.update(sections).set(presentation).where(eq(sections.id, rootSectionId));
 }
 
-export async function deactivateCatalogue(tx: Transaction, id: string): Promise<void> {
-  await tx.update(catalogues).set({ active: false, updatedAt: now() }).where(eq(catalogues.id, id));
+export async function deactivateMenu(tx: Transaction, id: string): Promise<void> {
+  await tx.update(menus).set({ active: false, updatedAt: now() }).where(eq(menus.id, id));
 }
 
 async function republishOverlays(
@@ -923,26 +920,26 @@ async function republishOverlays(
 }
 
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
-  return insertProduct(tx, input, { checkNames: true, checkCatalogue: true });
+  return insertProduct(tx, input, { checkNames: true, checkMenu: true });
 }
 
 /**
- * {@link createProduct} without the unique-name check or the catalogue check, for
+ * {@link createProduct} without the unique-name check or the menu check, for
  * `saveProductEditor`, which checks every name its whole save leaves before writing any of it, and
- * has already read its path's catalogue in the same transaction. Left out of the package's exports
+ * has already read its path's menu in the same transaction. Left out of the package's exports
  * (`index.ts`).
  */
 export async function createProductSkippingNameCheck(
   tx: Transaction,
   input: CreateProductInput,
 ): Promise<Product> {
-  return insertProduct(tx, input, { checkNames: false, checkCatalogue: false });
+  return insertProduct(tx, input, { checkNames: false, checkMenu: false });
 }
 
 async function insertProduct(
   tx: Transaction,
   input: CreateProductInput,
-  { checkNames, checkCatalogue }: { checkNames: boolean; checkCatalogue: boolean },
+  { checkNames, checkMenu }: { checkNames: boolean; checkMenu: boolean },
 ): Promise<Product> {
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("product.invalid", { field: "unitId" });
@@ -964,7 +961,7 @@ async function insertProduct(
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
   const values = {
-    catalogueId: input.catalogueId,
+    menuId: input.menuId,
     categoryId: input.categoryId,
     ...nameColumns(input.name),
     customerName: input.customerName ?? null,
@@ -984,7 +981,7 @@ async function insertProduct(
     diet: overlayDietProfile(UNDECLARED_DIET, dietOverride),
     image: input.image ?? null,
   };
-  if (checkCatalogue) await assertCatalogueExists(tx, input.catalogueId);
+  if (checkMenu) await assertMenuExists(tx, input.menuId);
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
   if (checkNames)
     await assertFamilyNamesFree(tx, null, { name: input.name, active: values.active }, []);
@@ -1000,19 +997,14 @@ async function insertProduct(
   return toProduct(created!);
 }
 
-export async function listProducts(tx: Transaction, catalogueId?: string): Promise<Product[]> {
+export async function listProducts(tx: Transaction, menuId?: string): Promise<Product[]> {
   const rows = await tx
     .select(PRODUCT_COLUMNS)
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
-    .where(
-      and(
-        isTopLevelProduct,
-        catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId),
-      ),
-    )
+    .where(and(isTopLevelProduct, menuId === undefined ? undefined : eq(products.menuId, menuId)))
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
   const modifiers = await readProductModifiers(
@@ -1211,30 +1203,23 @@ export async function deactivateProduct(tx: Transaction, id: string): Promise<vo
   await archiveProducts(tx, [id]);
 }
 
-export async function readDefaultCatalogueId(tx: Transaction): Promise<string | null> {
-  const [row] = await tx
-    .select({ id: catalogues.id })
-    .from(catalogues)
-    .where(eq(catalogues.isDefault, true));
+export async function readDefaultMenuId(tx: Transaction): Promise<string | null> {
+  const [row] = await tx.select({ id: menus.id }).from(menus).where(eq(menus.isDefault, true));
   return row?.id ?? null;
 }
 
-export async function assignCatalogueToVenue(tx: Transaction, catalogueId: string): Promise<void> {
-  await tx.update(catalogues).set({ isDefault: false }).where(eq(catalogues.isDefault, true));
-  await tx.update(catalogues).set({ isDefault: true }).where(eq(catalogues.id, catalogueId));
+export async function assignMenuToVenue(tx: Transaction, menuId: string): Promise<void> {
+  await tx.update(menus).set({ isDefault: false }).where(eq(menus.isDefault, true));
+  await tx.update(menus).set({ isDefault: true }).where(eq(menus.id, menuId));
 }
 
-export async function setVenueDefaultCatalogue(
-  tx: Transaction,
-  catalogueId: string,
-): Promise<void> {
-  await assertCatalogueExists(tx, catalogueId);
-  await assignCatalogueToVenue(tx, catalogueId);
+export async function setVenueDefaultMenu(tx: Transaction, menuId: string): Promise<void> {
+  await assertMenuExists(tx, menuId);
+  await assignMenuToVenue(tx, menuId);
 }
 
-async function assertCatalogueExists(tx: Transaction, catalogueId: string): Promise<void> {
-  if (!(await catalogueExists(tx, catalogueId)))
-    throw new AppError("catalogue.not_found", { catalogueId });
+async function assertMenuExists(tx: Transaction, menuId: string): Promise<void> {
+  if (!(await menuExists(tx, menuId))) throw new AppError("menu.not_found", { menuId });
 }
 
 export async function readInvoiceLocales(tx: Transaction): Promise<string[]> {
@@ -1279,19 +1264,19 @@ export async function listAvailableProducts(
       dietOverride: effective.dietOverride,
       dietaryDeclarations: effective.dietaryDeclarations,
       courseId: effective.courseId,
-      catalogueId: catalogues.id,
-      catalogueName: catalogues.name,
+      menuId: menus.id,
+      menuName: menus.name,
       unitMeasure: units.measure,
     })
     .from(products)
-    .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
+    .innerJoin(menus, eq(menus.id, products.menuId))
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .leftJoin(categories, eq(categories.id, effective.categoryId))
     .where(
       and(
-        eq(catalogues.active, true),
+        eq(menus.active, true),
         eq(products.active, true),
         eq(products.available, true),
         // A variant is sold only through its parent's menu offer, never as a product in its own
@@ -1299,7 +1284,7 @@ export async function listAvailableProducts(
         isTopLevelProduct,
       ),
     )
-    .orderBy(catalogues.name, products.createdAt, products.id);
+    .orderBy(menus.name, products.createdAt, products.id);
 
   // No menu offer is in this read at all, so each extras list is the one the product itself
   // carries, priced without an offer's overrides (the chain minus the menu step).
@@ -1331,8 +1316,8 @@ export async function listAvailableProducts(
     dietOverride: row.dietOverride as DietOverride | null,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     courseId: row.courseId,
-    catalogueId: row.catalogueId,
-    catalogueName: row.catalogueName,
+    menuId: row.menuId,
+    menuName: row.menuName,
     offeredModifiers: offeredByProduct.get(row.id) ?? [],
   }));
   return { products: available, invoiceLocales };

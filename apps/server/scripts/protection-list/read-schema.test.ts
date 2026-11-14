@@ -62,7 +62,7 @@ describe("readSchema", () => {
     db?.close();
   });
 
-  it("lists every table, view, index and trigger, leaving out the catalogue itself", () => {
+  it("lists every table, view, index and trigger, leaving out the menu itself", () => {
     expect(list.tables.map((table) => table.name)).toEqual([
       "cells",
       "child table",
@@ -327,7 +327,7 @@ describe("readSchema", () => {
     expect(byName(readSchema(db).triggers, "aaa_late").creationOrder).toBe(3);
   });
 
-  it("carries each object's stored SQL and catalogue rowid", () => {
+  it("carries each object's stored SQL and menu rowid", () => {
     const stored = new Map(
       db
         .prepare("SELECT name, sql, rowid FROM sqlite_schema")

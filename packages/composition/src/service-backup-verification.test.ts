@@ -11,7 +11,7 @@ describe("service and adjustment backup registration", () => {
   ] as const)("registers the complete %s owner", (name, contribution) => {
     expect(ALL_MODULES.find((m) => m.name === name)?.backup?.verification).toBe(contribution);
     const inventory = backupVerificationInventory(
-      ALL_MODULES.filter((m) => ["core", "catalogue", name].includes(m.name)),
+      ALL_MODULES.filter((m) => ["core", "menu", name].includes(m.name)),
     );
     // A module without a set of its own is covered by the entry of the set holding its tables.
     const entry = inventory.find(

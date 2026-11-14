@@ -22,12 +22,7 @@ import {
   writeContentLanguages,
 } from "./content-languages.js";
 import { listTranslationGapReport } from "./content-translation-report.js";
-import {
-  createCatalogue,
-  createProduct,
-  deactivateCatalogue,
-  deactivateProduct,
-} from "./operations.js";
+import { createMenu, createProduct, deactivateMenu, deactivateProduct } from "./operations.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember, createSectionIn } from "./sections.js";
 import { setProductVariants } from "./variants.js";
@@ -43,7 +38,7 @@ const CATALAN_DEFAULT: ContentLanguages = { defaultLanguage: "ca", languages: ["
 async function venue(tx: Transaction, config: ContentLanguages = SPANISH_DEFAULT) {
   await writeContentLanguages(tx, config);
   // A menu's customer names are its root's; complete here, so only what a case adds is missing.
-  return createCatalogue(tx, {
+  return createMenu(tx, {
     name: "Lunch",
     names: { es: "CLIENT-ES Almuerzo", ca: "CLIENT-CA Dinar", en: "CLIENT-EN Lunch" },
   });
@@ -53,11 +48,11 @@ async function venue(tx: Transaction, config: ContentLanguages = SPANISH_DEFAULT
  * name belongs fails. */
 async function bread(
   tx: Transaction,
-  catalogueId: string,
+  menuId: string,
   customerName: Record<string, string> | null = { es: "CLIENT-ES Pan con tomate" },
 ) {
   return createProduct(tx, {
-    catalogueId,
+    menuId,
     categoryId: null,
     name: "STAFF Pan",
     customerName,
@@ -83,7 +78,7 @@ async function lunchIncludingDrinks(tx: Transaction, lunchId: string) {
         .from(menuDetails)
         .where(eq(menuDetails.menuId, menuId))
     )[0]!.root;
-  const drinks = await createCatalogue(tx, {
+  const drinks = await createMenu(tx, {
     name: "STAFF Drinks",
     names: { es: "CLIENT-ES Bebidas", ca: "CLIENT-CA Begudes", en: "CLIENT-EN Drinks" },
   });
@@ -577,7 +572,7 @@ describe("the missing-translations report", () => {
           .set({ folderOverrides: { names: { es: "FOLDER-ES Barra", ca: "" } } })
           .where(eq(sectionMembers.id, member));
         expect((await report(tx))("ca")).toHaveLength(1);
-        await deactivateCatalogue(tx, lunch.id);
+        await deactivateMenu(tx, lunch.id);
         expect((await report(tx))("ca")).toEqual([]);
         expect(await listContentTranslationGaps(tx, "ca")).toEqual([]);
         await writeContentLanguages(tx, CATALAN_DEFAULT);
@@ -601,7 +596,7 @@ describe("the missing-translations report", () => {
           .where(eq(menuDetails.menuId, menu.id));
         await tx.update(sections).set({ names: {} }).where(eq(sections.id, details!.root));
         expect((await report(tx))("ca")).toHaveLength(3);
-        await deactivateCatalogue(tx, menu.id);
+        await deactivateMenu(tx, menu.id);
         expect((await report(tx))("ca")).toEqual([]);
         expect(await listContentTranslationGaps(tx, "ca")).toEqual([]);
         await writeContentLanguages(tx, CATALAN_DEFAULT);

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { catalogues } from "../menus.js";
+import { menus } from "../menus.js";
 import { count, enumCheck, enumType, id, label, newId, table } from "../columns.js";
 import { floorPlanSets } from "../floor-plans.js";
 import { CALENDAR_COLOURS } from "@waitron/shared";
@@ -34,7 +34,7 @@ export const menuPeriods = table(
     }),
     foreignKey({
       columns: [t.menuId],
-      foreignColumns: [catalogues.id],
+      foreignColumns: [menus.id],
       name: "menu_periods_menu_fk",
     }),
     uniqueIndex("menu_periods_department_name_key").on(t.departmentId, t.name),
@@ -61,7 +61,7 @@ export const menuPeriodStaffMenus = table(
     }).onDelete("cascade"),
     foreignKey({
       columns: [t.menuId],
-      foreignColumns: [catalogues.id],
+      foreignColumns: [menus.id],
       name: "menu_period_staff_menus_menu_fk",
     }),
   ],

@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   departments,
   floorZones,
   menuPeriods,
@@ -43,7 +43,7 @@ async function fixture() {
       name: "Live zone",
       departmentId: live.id,
     });
-    const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
+    const [menu] = await tx.insert(menus).values({ name: randomUUID() }).returning();
     const period = await service.saveMenuPeriod(tx, gone.id, {
       name: "Lunch",
       menuId: menu!.id,

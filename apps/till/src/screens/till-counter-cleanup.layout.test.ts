@@ -18,7 +18,7 @@ const dish: TillProduct = {
   id: "soup",
   name: "Staff soup",
   menuItemId: "mi-soup",
-  catalogueId: "lunch",
+  menuId: "lunch",
   available: true,
   unitPrice: "5.00",
   pricingUnit: "each",

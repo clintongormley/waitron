@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
-  catalogues,
+  menus,
   persons,
   settings,
   readVenueSettings,
@@ -26,7 +26,7 @@ import {
   listContentTranslationGaps,
 } from "./content-languages.js";
 import { setIncludeFolder } from "./include-folder.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { createMenu, createProduct } from "./operations.js";
 import { addMember } from "./sections.js";
 import { setProductVariants } from "./variants.js";
 import { createUnit } from "./units.js";
@@ -61,7 +61,7 @@ describe("site content languages", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const catalogue = await createCatalogue(tx, {
+      const menu = await createMenu(tx, {
         name: "Bar",
         names: { en: "CLIENT Bar", fr: "CLIENT Bar FR" },
       });
@@ -77,7 +77,7 @@ describe("site content languages", () => {
         "en",
       );
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Coffee",
         customerName: { en: "CLIENT Coffee", fr: "CLIENT ES coffee" },
@@ -121,12 +121,12 @@ describe("site content languages", () => {
     await seedTaxpayer(suite.db);
     const { productId, kept } = await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const catalogue = await createCatalogue(tx, {
+      const menu = await createMenu(tx, {
         name: "Bar",
         names: { en: "CLIENT Bar", fr: "CLIENT Bar FR" },
       });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Coffee",
         customerName: { en: "CLIENT Coffee", fr: "CLIENT ES coffee" },
@@ -179,7 +179,7 @@ describe("site content languages", () => {
   it("counts partial and absent customer names as gaps without copying fallback", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Bar" });
+      const menu = await createMenu(tx, { name: "Bar" });
       const unit = await createUnit(
         tx,
         {
@@ -192,7 +192,7 @@ describe("site content languages", () => {
         "en",
       );
       const base = {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         unitId: unit.id,
         vatClass: "reduced" as const,
@@ -311,7 +311,7 @@ describe("site content languages", () => {
 
   it("reports partial and empty section maps, leaving out an unmatched menu root", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Lunch" });
+      const menu = await createMenu(tx, { name: "Lunch" });
       const section = async (
         names: Record<string, string>,
         role: "section" | "menu_root" = "section",
@@ -370,11 +370,11 @@ describe("site content languages", () => {
      * folder's fixed ones are three different texts. */
     async function lunchIncludingDrinks(tx: Transaction, drinksNames: Record<string, string>) {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
-      const lunch = await createCatalogue(tx, {
+      const lunch = await createMenu(tx, {
         name: "STAFF Lunch",
         names: { en: "CLIENT-EN Lunch", es: "CLIENT-ES Almuerzo" },
       });
-      const drinks = await rootOf(tx, (await createCatalogue(tx, { name: "STAFF Drinks" })).id);
+      const drinks = await rootOf(tx, (await createMenu(tx, { name: "STAFF Drinks" })).id);
       await tx.update(sections).set({ names: drinksNames }).where(eq(sections.id, drinks));
       const lunchRoot = await rootOf(tx, lunch.id);
       const member = await addMember(tx, lunchRoot, { kind: "section", sectionId: drinks });
@@ -497,12 +497,9 @@ describe("site content languages", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const [menu] = await tx
-        .insert(catalogues)
-        .values({ name: "Lunch" })
-        .returning({ id: catalogues.id });
+      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id });
       await tx.insert(products).values({
-        catalogueId: menu!.id,
+        menuId: menu!.id,
         name: "Bread",
         customerName: { en: "Bread", "fr-FR": "Pain" },
         pricingUnit: "each",
@@ -554,12 +551,9 @@ describe("site content languages", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const [menu] = await tx
-        .insert(catalogues)
-        .values({ name: "Lunch" })
-        .returning({ id: catalogues.id });
+      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id });
       await tx.insert(products).values({
-        catalogueId: menu!.id,
+        menuId: menu!.id,
         name: "Bread",
         customerName: { en: "Bread" },
         pricingUnit: "each",

@@ -29,7 +29,7 @@ import type {
   TillApi,
   TillMenuOffer,
   TillSaleResult,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
@@ -143,7 +143,7 @@ function burgerOffer(cheesePrice = "1.00"): TillMenuOffer {
   });
 }
 
-function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue {
+function menu(version: string, offers: TillMenuOffer[]): ZoneOffers {
   return {
     service: {
       open: true,
@@ -187,7 +187,7 @@ function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue
   };
 }
 
-const V1 = catalogue("v1", [offer("offer-lemonade", "Lemonade", "3.00"), burgerOffer()]);
+const V1 = menu("v1", [offer("offer-lemonade", "Lemonade", "3.00"), burgerOffer()]);
 
 const NOTHING: MenuUnavailable = { products: [], optionLabels: [] };
 
@@ -484,7 +484,7 @@ describe("a basket that spans a publish", () => {
       listZoneOffers: vi
         .fn()
         .mockResolvedValue(
-          catalogue("v2", [offer("offer-lemonade", "Lemonade", "3.00"), burgerOffer("1.20")]),
+          menu("v2", [offer("offer-lemonade", "Lemonade", "3.00"), burgerOffer("1.20")]),
         ),
     });
     await toCounter(el);
@@ -509,7 +509,7 @@ describe("a basket that spans a publish", () => {
       listZoneOffers: vi
         .fn()
         .mockResolvedValue(
-          catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
+          menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
         ),
     });
     await toCounter(el);
@@ -549,10 +549,7 @@ describe("a basket that spans a publish", () => {
       listZoneOffers: vi
         .fn()
         .mockResolvedValue(
-          catalogue("v2", [
-            offer("offer-lemonade", "Lemonade", "3.00", { unit: kg }),
-            burgerOffer(),
-          ]),
+          menu("v2", [offer("offer-lemonade", "Lemonade", "3.00", { unit: kg }), burgerOffer()]),
         ),
     });
     await toCounter(el);
@@ -576,7 +573,7 @@ describe("a basket that spans a publish", () => {
       listZoneOffers: vi
         .fn()
         .mockResolvedValue(
-          catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
+          menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
         ),
     });
     await toCounter(el);
@@ -603,7 +600,7 @@ describe("a basket that spans a publish", () => {
 
   it("blocks a line v2 removed until it is removed, the rest re-priced on confirm", async () => {
     const { el } = await mountApp({
-      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", [burgerOffer()])),
+      listZoneOffers: vi.fn().mockResolvedValue(menu("v2", [burgerOffer()])),
     });
     await toCounter(el);
     add(el, "Burger");
@@ -631,7 +628,7 @@ describe("a basket that spans a publish", () => {
       listZoneOffers: vi
         .fn()
         .mockResolvedValue(
-          catalogue("v2", [offer("offer-lemonade", "Lemonade", "3.00"), soldOutCheese]),
+          menu("v2", [offer("offer-lemonade", "Lemonade", "3.00"), soldOutCheese]),
         ),
     });
     await toCounter(el);
@@ -667,9 +664,7 @@ describe("a basket that spans a publish", () => {
     const { el } = await mountApp({
       listZoneOffers: vi
         .fn()
-        .mockResolvedValue(
-          catalogue("v2", [offer("offer-lemonade", "Lemonade", "3.00"), measured]),
-        ),
+        .mockResolvedValue(menu("v2", [offer("offer-lemonade", "Lemonade", "3.00"), measured])),
     });
     await toCounter(el);
     add(el, "Burger", {
@@ -712,7 +707,7 @@ describe("a pay refused because the menu changed", () => {
 
   it("runs the refresh flow, and after a silent adoption retries the pay once, asserting v2", async () => {
     const { el } = await mountApp({
-      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", V1.offers)),
+      listZoneOffers: vi.fn().mockResolvedValue(menu("v2", V1.offers)),
       recordSale: vi.fn().mockRejectedValueOnce(refusal).mockResolvedValueOnce(saleResult),
     });
     await toCounter(el);
@@ -729,7 +724,7 @@ describe("a pay refused because the menu changed", () => {
 
   it("retries only once: a second refusal is shown in the menu-change words", async () => {
     const { el } = await mountApp({
-      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", V1.offers)),
+      listZoneOffers: vi.fn().mockResolvedValue(menu("v2", V1.offers)),
       recordSale: vi.fn().mockRejectedValue(refusal),
     });
     await toCounter(el);
@@ -746,7 +741,7 @@ describe("a pay refused because the menu changed", () => {
       listZoneOffers: vi
         .fn()
         .mockResolvedValue(
-          catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
+          menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
         ),
       recordSale: vi.fn().mockRejectedValue(refusal),
     });
@@ -761,7 +756,7 @@ describe("a pay refused because the menu changed", () => {
 
   it("runs the same flow when a hold is refused", async () => {
     const { el } = await mountApp({
-      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", V1.offers)),
+      listZoneOffers: vi.fn().mockResolvedValue(menu("v2", V1.offers)),
       parkOrder: vi
         .fn()
         .mockRejectedValueOnce(refusal)
@@ -785,7 +780,7 @@ describe("the other counter requests refused because the menu changed", () => {
 
   it("retries a card payment once after a silent adoption", async () => {
     const { el } = await mountApp({
-      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", V1.offers)),
+      listZoneOffers: vi.fn().mockResolvedValue(menu("v2", V1.offers)),
       pay: vi
         .fn()
         .mockRejectedValueOnce(refusal)
@@ -808,7 +803,7 @@ describe("the other counter requests refused because the menu changed", () => {
         cardProvider: "stripe_terminal",
         capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
       }),
-      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", V1.offers)),
+      listZoneOffers: vi.fn().mockResolvedValue(menu("v2", V1.offers)),
       pay: vi
         .fn()
         .mockRejectedValueOnce(refusal)
@@ -840,7 +835,7 @@ describe("the other counter requests refused because the menu changed", () => {
         ...V1,
         context: { ...V1.context, serviceMode: "ticket_then_pay" },
       }),
-      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", V1.offers)),
+      listZoneOffers: vi.fn().mockResolvedValue(menu("v2", V1.offers)),
       parkOrder: vi
         .fn()
         .mockRejectedValueOnce(refusal)
@@ -877,7 +872,7 @@ describe("the other counter requests refused because the menu changed", () => {
       listZoneOffers: vi
         .fn()
         .mockResolvedValue(
-          catalogue("v2", [
+          menu("v2", [
             offer("offer-lemonade", "Lemonade", "3.00", { ordering: "not_sold_separately" }),
             burgerOffer(),
           ]),
@@ -905,7 +900,7 @@ describe("the other counter requests refused because the menu changed", () => {
 
   it("confirming a dialog whose every line is gone re-prices nothing and keeps Pay shut", async () => {
     const { el } = await mountApp({
-      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", [burgerOffer()])),
+      listZoneOffers: vi.fn().mockResolvedValue(menu("v2", [burgerOffer()])),
     });
     await toCounter(el);
     add(el, "Lemonade");
@@ -922,9 +917,9 @@ describe("the other counter requests refused because the menu changed", () => {
 
 describe("a refresh overtaken by a change of service area", () => {
   it("does not let the old zone's reloaded offers replace the new zone's", async () => {
-    let answerRefresh!: (value: ZoneOfferCatalogue) => void;
+    let answerRefresh!: (value: ZoneOffers) => void;
     const terrace = {
-      ...catalogue("t1", [offer("offer-terrace-water", "Water", "2.00")]),
+      ...menu("t1", [offer("offer-terrace-water", "Water", "2.00")]),
       context: {
         departmentName: "Restaurant",
         zoneId: "zone-terrace",
@@ -934,7 +929,7 @@ describe("a refresh overtaken by a change of service area", () => {
     };
     const listZoneOffers = vi.fn((zoneId: string) =>
       zoneId === "zone-counter"
-        ? new Promise<ZoneOfferCatalogue>((resolve) => (answerRefresh = resolve))
+        ? new Promise<ZoneOffers>((resolve) => (answerRefresh = resolve))
         : Promise.resolve(terrace),
     );
     const zone = (id: string) => ({
@@ -960,7 +955,7 @@ describe("a refresh overtaken by a change of service area", () => {
 
     emit(counter(el), "counter-zone-selected", { zoneId: "zone-terrace" });
     await flush(el);
-    answerRefresh(catalogue("v2", V1.offers));
+    answerRefresh(menu("v2", V1.offers));
     await flush(el);
 
     expect(counter(el).products.map((product) => product.productId)).toEqual(["Water"]);
@@ -975,10 +970,10 @@ describe("an offers load", () => {
     emit(counter(el), "logout");
     await flush(el);
     api.listDefaultZoneOffers.mockResolvedValue(
-      catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
+      menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
     );
     api.listZoneOffers.mockResolvedValue(
-      catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
+      menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
     );
     await toCounter(el);
     expect(dialogText(el)).toContain("Lemonade €3.00 → €2.50");
@@ -1072,10 +1067,7 @@ const tabLemonade = {
 };
 
 /** Table-service stubs; `diningOffers` answers every read of the table's zone after the first. */
-function tableStubs(
-  diningOffers: ZoneOfferCatalogue = DINING,
-  overrides: Record<string, unknown> = {},
-) {
+function tableStubs(diningOffers: ZoneOffers = DINING, overrides: Record<string, unknown> = {}) {
   return {
     getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
     listZoneOffers: vi.fn((zoneId: string) =>
@@ -1116,7 +1108,7 @@ async function toTable(el: TillApp): Promise<void> {
   emit(floorScreen, "open-table", { tableId: "t2", seated: true });
   await flush(el);
   // After the open, every read of the dining zone answers the republished offers.
-  const dining = api._dining as unknown as ZoneOfferCatalogue;
+  const dining = api._dining as unknown as ZoneOffers;
   api.listZoneOffers.mockImplementation((zoneId: string) =>
     Promise.resolve(zoneId === "zone-dining" ? dining : V1),
   );
@@ -1146,7 +1138,7 @@ const versionRefusal = {
 describe("a table round refused because the menu changed", () => {
   it("re-sends the round once, asserting v2, when nothing in it changed", async () => {
     const { el } = await mountApp(
-      tableStubs(catalogue("v2", V1.offers), {
+      tableStubs(menu("v2", V1.offers), {
         submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(versionRefusal),
       }),
     );
@@ -1168,7 +1160,7 @@ describe("a table round refused because the menu changed", () => {
       offer("offer-water", "Water", "2.00", { courseId: "starters" }),
     ];
     const dining = (version: string) => ({
-      ...catalogue(version, offers),
+      ...menu(version, offers),
       context: DINING.context,
     });
     const { el } = await mountApp(
@@ -1218,7 +1210,7 @@ describe("a table round refused because the menu changed", () => {
     api.listZoneOffers.mockImplementation((zoneId: string) =>
       Promise.resolve(
         zoneId === "zone-dining"
-          ? { ...catalogue(versions.shift() ?? "v3", V1.offers), context: DINING.context }
+          ? { ...menu(versions.shift() ?? "v3", V1.offers), context: DINING.context }
           : V1,
       ),
     );
@@ -1234,7 +1226,7 @@ describe("a table round refused because the menu changed", () => {
 
   it("keeps the round and shows the dialog when a price in it changed, sending nothing more", async () => {
     const { el } = await mountApp(
-      tableStubs(catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]), {
+      tableStubs(menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]), {
         submitDraft: vi.fn().mockRejectedValue(versionRefusal),
       }),
     );
@@ -1253,7 +1245,7 @@ describe("a table round refused because the menu changed", () => {
 
   it("keeps a round whose line the new version removed, marked, and sends nothing", async () => {
     const { el } = await mountApp(
-      tableStubs(catalogue("v2", [burgerOffer()]), {
+      tableStubs(menu("v2", [burgerOffer()]), {
         submitDraft: vi.fn().mockRejectedValue(versionRefusal),
       }),
     );
@@ -1330,9 +1322,9 @@ describe("the poll's own costs", () => {
   });
 
   it("does not discard a change of service area that a poll's reload overlaps", async () => {
-    let answerSwitch!: (value: ZoneOfferCatalogue) => void;
+    let answerSwitch!: (value: ZoneOffers) => void;
     const terrace = {
-      ...catalogue("t1", [offer("offer-terrace-water", "Water", "2.00")]),
+      ...menu("t1", [offer("offer-terrace-water", "Water", "2.00")]),
       context: {
         departmentName: "Restaurant",
         zoneId: "zone-terrace",
@@ -1356,8 +1348,8 @@ describe("the poll's own costs", () => {
         .mockResolvedValue({ ...V1, zones: [zone("zone-counter"), zone("zone-terrace")] }),
       listZoneOffers: vi.fn((zoneId: string) =>
         zoneId === "zone-terrace"
-          ? new Promise<ZoneOfferCatalogue>((resolve) => (answerSwitch = resolve))
-          : Promise.resolve(catalogue("v2", V1.offers)),
+          ? new Promise<ZoneOffers>((resolve) => (answerSwitch = resolve))
+          : Promise.resolve(menu("v2", V1.offers)),
       ),
     });
     await toCounter(el);
@@ -1427,7 +1419,7 @@ describe("a table round while it is being sent", () => {
   });
 
   it("takes no removal while a refusal's reload is out, so the re-send is what the screen shows", async () => {
-    let answerReload!: (value: ZoneOfferCatalogue) => void;
+    let answerReload!: (value: ZoneOffers) => void;
     const { el } = await mountApp(
       tableStubs(DINING, {
         submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(versionRefusal),
@@ -1436,7 +1428,7 @@ describe("a table round while it is being sent", () => {
     await toTable(el);
     api.listZoneOffers.mockImplementation((zoneId: string) =>
       zoneId === "zone-dining"
-        ? new Promise<ZoneOfferCatalogue>((resolve) => (answerReload = resolve))
+        ? new Promise<ZoneOffers>((resolve) => (answerReload = resolve))
         : Promise.resolve(V1),
     );
     await sendLemonadeRound(el);
@@ -1446,7 +1438,7 @@ describe("a table round while it is being sent", () => {
     await flush(el);
     expect(round.lineCount).toBe(1);
 
-    answerReload(catalogue("v2", V1.offers));
+    answerReload(menu("v2", V1.offers));
     await flush(el);
     expect(api.submitDraft).toHaveBeenCalledTimes(2);
     expect(round.lineCount).toBe(0);
@@ -1516,7 +1508,7 @@ describe("a table round refused for another reason", () => {
 
 describe("a round line's mark", () => {
   it("clears when the table's zone shows the dish can be sold again", async () => {
-    const soldOut = catalogue("v2", [
+    const soldOut = menu("v2", [
       offer("offer-lemonade", "Lemonade", "3.00", { available: false }),
       burgerOffer(),
     ]);
@@ -1749,7 +1741,7 @@ describe("a round refused sold out whose offers could not be read again", () => 
     expect(roundStore(el).lines[0]!.blocked).toBeUndefined();
 
     const soldOutV2 = {
-      ...catalogue("v2", [
+      ...menu("v2", [
         offer("offer-lemonade", "Lemonade", "3.00", { available: false }),
         burgerOffer(),
       ]),
@@ -2171,11 +2163,11 @@ describe("a round that got no answer while its tab moved to another table", () =
   });
 });
 
-type Shortcuts = ZoneOfferCatalogue["menus"][number]["home"]["shortcuts"];
+type Shortcuts = ZoneOffers["menus"][number]["home"]["shortcuts"];
 
 /** Lunch at `version`, offering V1's dishes, with these shortcuts on its Device Home Page. */
-function withShortcuts(version: string, shortcuts: Shortcuts): ZoneOfferCatalogue {
-  const source = catalogue(version, V1.offers);
+function withShortcuts(version: string, shortcuts: Shortcuts): ZoneOffers {
+  const source = menu(version, V1.offers);
   return {
     ...source,
     menus: source.menus.map((menu) => ({ ...menu, home: { ...menu.home, shortcuts } })),
@@ -2190,7 +2182,7 @@ const shortcuts = (el: TillApp) =>
 
 describe("the menu's Device Home Page", () => {
   it("keeps the home block it shows until it has read the version a poll names", async () => {
-    let answer!: (value: ZoneOfferCatalogue) => void;
+    let answer!: (value: ZoneOffers) => void;
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue(withShortcuts("v1", [])),
       listZoneOffers: vi.fn(() => new Promise((resolve) => (answer = resolve))),
@@ -2233,9 +2225,9 @@ describe("a device behind the live version (§9)", () => {
   const burger = { kind: "product" as const, menuItemId: "offer-burger", productId: "Burger" };
 
   it("shows the new version as soon as it has read it, while the basket's changes wait for review", async () => {
-    const v1 = catalogue("v1", V1.offers);
+    const v1 = menu("v1", V1.offers);
     v1.menus[0] = { ...v1.menus[0]!, structure: { members: [drinks, burger] } };
-    const v2 = catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]);
+    const v2 = menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]);
     const { el } = await mountApp({
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(v1)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(v1),
@@ -2272,7 +2264,7 @@ const zoneKeepOpen = (zoneId: string, closesAt: string, extendedUntil: string | 
 type ZoneWidget = HTMLElement & {
   api: TillApi;
   zoneId: string;
-  zoneKeepOpen: ZoneOfferCatalogue["service"]["zoneKeepOpen"];
+  zoneKeepOpen: ZoneOffers["service"]["zoneKeepOpen"];
 };
 describe("keep-open changes refresh the order screen", () => {
   const initialService = {
@@ -2299,7 +2291,7 @@ describe("keep-open changes refresh the order screen", () => {
   const zoneWidget = (screen: HTMLElement) =>
     screen.shadowRoot!.querySelector<ZoneWidget>("till-keep-open");
   it("redraws the counter after a poll changes only the period's end", async () => {
-    let service = initialService as ZoneOfferCatalogue["service"];
+    let service = initialService as ZoneOffers["service"];
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue({ ...V1, service: initialService }),
       listZoneOffers: vi.fn(() => Promise.resolve({ ...V1, service })),
@@ -2340,7 +2332,7 @@ describe("keep-open changes refresh the order screen", () => {
     expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-counter"]);
   });
   it("redraws the embedded Order screen after a poll changes only the period's end", async () => {
-    let service = initialService as ZoneOfferCatalogue["service"];
+    let service = initialService as ZoneOffers["service"];
     const { el } = await mountApp(
       tableStubs(DINING, {
         listZoneOffers: vi.fn((zone: string) =>
@@ -2486,7 +2478,7 @@ describe("zone-only menu-state changes", () => {
 
 for (const kind of ["counter", "table"] as const) {
   it(`redraws the ${kind} zone control after a poll changes only its closing time`, async () => {
-    const initialService: ZoneOfferCatalogue["service"] = {
+    const initialService: ZoneOffers["service"] = {
       open: true,
       zoneOpen: true,
       periodName: "Lunch",
@@ -2514,7 +2506,7 @@ for (const kind of ["counter", "table"] as const) {
     const screen = () => (kind === "counter" ? counter(el) : tableScreen(el));
     const widget = () =>
       screen().shadowRoot!.querySelector<
-        HTMLElement & { zoneKeepOpen: ZoneOfferCatalogue["service"]["zoneKeepOpen"] }
+        HTMLElement & { zoneKeepOpen: ZoneOffers["service"]["zoneKeepOpen"] }
       >("till-keep-open");
     expect(widget()).not.toBeNull();
     expect(widget()!.zoneKeepOpen!.closesAt).toBe("14:00");
@@ -2533,7 +2525,7 @@ for (const kind of ["counter", "table"] as const) {
 it.each(["counter", "table"] as const)(
   "A461 search section tap changes %s menu through the app without changing basket",
   async (kind) => {
-    const source = catalogue("v1", V1.offers);
+    const source = menu("v1", V1.offers);
     const otherOffer = {
       ...offer("offer-other", "Other dish", "7.00"),
       menuId: "other",
@@ -2651,7 +2643,7 @@ it.each(["counter", "table"] as const)(
         }),
       ),
     }));
-    const service: ZoneOfferCatalogue["service"] = {
+    const service: ZoneOffers["service"] = {
       open: true,
       zoneOpen: true,
       periodName: "Lunch",
@@ -2772,7 +2764,7 @@ it.each([
         },
       ];
     const { el } = await mountApp({
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("v1", [dish])),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu("v1", [dish])),
       getTill: vi
         .fn()
         .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-orders"] }),

@@ -3,7 +3,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
+import { createMenu, addProductToMenu, createProduct } from "./operations.js";
 import { createExtraList, updateExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
@@ -43,10 +43,10 @@ const offers = { burger: "", pizza: "" };
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
   await run(async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Deli" });
+    const menu = await createMenu(tx, { name: "Deli" });
     for (const [key, unitPrice] of Object.entries(unitPrices)) {
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: key,
         unitId: null,
@@ -110,7 +110,7 @@ describe("what a product's own extras lists offer", () => {
         "en",
       );
       const weighted = await createProduct(tx, {
-        catalogueId: (await createCatalogue(tx, { name: "Weight" })).id,
+        menuId: (await createMenu(tx, { name: "Weight" })).id,
         categoryId: null,
         name: "Olives by weight",
         unitId: kg.id,

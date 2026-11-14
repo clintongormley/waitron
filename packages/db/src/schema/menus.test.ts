@@ -10,14 +10,14 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { catalogues } from "./menus.js";
+import { menus } from "./menus.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(async () => {
   await suite.db.execute(sql`delete from products`);
-  await suite.db.execute(sql`delete from catalogues`);
+  await suite.db.execute(sql`delete from menus`);
   await suite.db.execute(sql`delete from taxpayer`);
 });
 
@@ -39,22 +39,22 @@ async function columnsOf(db: Database, table: string): Promise<ColumnRow[]> {
 it("a second default menu is refused, while two non-default menus are allowed", async () => {
   const insert = (id: string, isDefault: number) =>
     suite.db.run(sql`
-    insert into catalogues (id, name, is_default, created_at, updated_at)
+    insert into menus (id, name, is_default, created_at, updated_at)
     values (${id}, ${id}, ${isDefault}, ${AT}, ${AT})`);
   await insert("house", 1);
   await insert("day", 0);
   await insert("evening", 0);
   const error = await captureError(() => insert("duplicate", 1));
   expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
-  expect(engineErrorMessage(error)).toBe("UNIQUE constraint failed: catalogues.is_default");
-  expect(suite.db.all(sql`select id, is_default from catalogues order by id`)).toEqual([
+  expect(engineErrorMessage(error)).toBe("UNIQUE constraint failed: menus.is_default");
+  expect(suite.db.all(sql`select id, is_default from menus order by id`)).toEqual([
     { id: "day", is_default: 0 },
     { id: "evening", is_default: 0 },
     { id: "house", is_default: 1 },
   ]);
 });
 
-describe("catalogue — menu, taxonomy and priced items", () => {
+describe("menu — menu, taxonomy and priced items", () => {
   let db: Database;
 
   beforeEach(async () => {
@@ -68,15 +68,12 @@ describe("catalogue — menu, taxonomy and priced items", () => {
 
   it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {
     // A real parent row, so the INSERTs below reach the CHECKs rather than the foreign key.
-    const [catalogue] = await db
-      .insert(catalogues)
-      .values({ name: "Deli" })
-      .returning({ id: catalogues.id });
+    const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
 
     // `id` and the timestamps are named because their defaults are `$defaultFn` generators a raw
     // insert never reaches; raw SQL because the TypeScript type rejects the values under test.
     const insertProduct = (pricingUnit: string, vatClass: string): ReturnType<typeof sql> =>
-      sql`insert into products (id, catalogue_id, name, pricing_unit, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, ${catalogue.id}, 'Fixture', ${pricingUnit}, 100, ${vatClass}, ${AT}, ${AT})`;
+      sql`insert into products (id, menu_id, name, pricing_unit, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, ${menu.id}, 'Fixture', ${pricingUnit}, 100, ${vatClass}, ${AT}, ${AT})`;
 
     // Bad pricing_unit, VALID vat_class → only products_pricing_unit_ck can fire.
     const pricingError = await captureError(() => db.execute(insertProduct("bogus", "general")));

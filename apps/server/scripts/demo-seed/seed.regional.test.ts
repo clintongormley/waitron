@@ -104,7 +104,7 @@ for (const [province, postalCode, invoiceLocale] of [
         ca: expected.sausage.customer.ca,
         en: "House Catalan sausage with white beans",
       });
-      const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from catalogues`);
+      const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from menus`);
       const drinks = menus.find((m) => m.name === selection.dataSet.menus.drinksName[locale])!;
       expect(drinks).toBeDefined();
       const doc = await withTransaction(suite.db, (tx) => buildMenuDocument(tx, drinks.id));
@@ -281,7 +281,7 @@ for (const locale of ["en", "es"] as const)
       es: VALENCIA_DEMO_TEXT.dishCustomer,
       en: "House eel and potato stew",
     });
-    const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from catalogues`);
+    const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from menus`);
     for (const name of [
       selection.dataSet.menus.drinksName[locale],
       selection.dataSet.menus.restaurant.name[locale],
@@ -516,7 +516,7 @@ for (const locale of ["en", "es"] as const)
       es: GALICIA_DEMO_TEXT.dishCustomerEs,
       en: "House Galician savoury pie",
     });
-    const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from catalogues`);
+    const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from menus`);
     for (const name of [
       selection.dataSet.menus.drinksName[locale],
       selection.dataSet.menus.restaurant.name[locale],

@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { captureError, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import type { SaleLineClassification } from "@waitron/shared";
-import { plantStoredCategory, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
+import { createMenu, createProduct } from "./operations.js";
 import { createCategory } from "./categories.js";
 import { setProductVariants } from "./variants.js";
 import {
@@ -13,7 +13,7 @@ import {
   type LoadedClassification,
 } from "./sale-classification.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 /**
@@ -28,7 +28,7 @@ async function fixture() {
   await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Bar" });
+    const menu = await createMenu(tx, { name: "Bar" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const alcoholic = await createCategory(tx, {
       name: "Alcoholic drinks",
@@ -41,7 +41,7 @@ async function fixture() {
     const extras = await createCategory(tx, { name: "Extras" });
     const product = (name: string, categoryId: string | null) =>
       createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId,
         name,
         pricingUnit: "each",

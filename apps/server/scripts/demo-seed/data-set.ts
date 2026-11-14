@@ -9,7 +9,7 @@ import type {
   CountryDemoData,
   CountryDemoProduct,
   CountryDemoCategory,
-  CountryDemoCatalogue,
+  CountryDemoMenu,
   CountryDemoReason,
   CountryDemoPerson,
   CountryDemoProductOptionLists,
@@ -49,10 +49,9 @@ export type SeedCategory<L extends string = string> = Omit<
   readonly station: "kitchen" | "bar" | "deli" | null;
   readonly products: readonly SeedProduct<L>[];
 };
-export type SeedCatalogue<L extends string = string> = Omit<
-  CountryDemoCatalogue<L>,
-  "categories"
-> & { readonly categories: readonly SeedCategory<L>[] };
+export type SeedMenu<L extends string = string> = Omit<CountryDemoMenu<L>, "categories"> & {
+  readonly categories: readonly SeedCategory<L>[];
+};
 export type SeedProductOptionLists<L extends string = string> = CountryDemoProductOptionLists<L>;
 export type SeedProductExtraLists<L extends string = string> = CountryDemoProductExtraLists<L>;
 export type SeedPerson = Omit<CountryDemoPerson, "role"> & { readonly role: BuiltInRoleKey };
@@ -65,9 +64,9 @@ export type StrictCountryDemoData<L extends string = string> = Omit<
   "menus" | "floor" | "staff" | "adjustmentReasons"
 > & {
   readonly menus: {
-    readonly restaurant: SeedCatalogue<L>;
-    readonly deli: SeedCatalogue<L>;
-    readonly lunch: SeedCatalogue<L>;
+    readonly restaurant: SeedMenu<L>;
+    readonly deli: SeedMenu<L>;
+    readonly lunch: SeedMenu<L>;
     readonly drinksName: StaffText;
     readonly drinksCustomerName: CountryDemoData<L>["menus"]["drinksCustomerName"];
   };

@@ -223,7 +223,7 @@ it.each([
 
 // The library's live read (listImages) names neither; only the delete dialog's one-off
 // getImage does, and it is not refreshed live.
-it.each(["menu_versions", "catalogues"])(
+it.each(["menu_versions", "menus"])(
   "does not refresh the library when %s changes",
   async (type) => {
     const liveData = new LiveData();
@@ -638,7 +638,7 @@ it("shows usage links and blocks a delete when the server reports uses", async (
       {
         kind: "product",
         id: "product-1",
-        catalogueId: "menu",
+        menuId: "menu",
         name: "Breakfast",
         active: true,
       },
@@ -648,7 +648,7 @@ it("shows usage links and blocks a delete when the server reports uses", async (
   click("[data-test=delete-one]");
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Breakfast"));
   expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-    "/manage/catalogue/product/product-1",
+    "/manage/products/product/product-1",
   );
   expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
   expect(client.deleteImage).not.toHaveBeenCalled();
@@ -662,7 +662,7 @@ it("links a blocking variant use to the variant's own product page, not its pare
       {
         kind: "variant",
         id: "variant-1",
-        catalogueId: "menu",
+        menuId: "menu",
         name: "Large",
         active: true,
       },
@@ -672,7 +672,7 @@ it("links a blocking variant use to the variant's own product page, not its pare
   click("[data-test=delete-one]");
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Large"));
   expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-    "/manage/catalogue/product/variant-1",
+    "/manage/products/product/variant-1",
   );
   expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
 });
@@ -681,7 +681,7 @@ it("handles a new use between confirmation and deletion", async () => {
   const client = api();
   client.deleteImage.mockResolvedValue({
     deleted: false,
-    uses: [{ kind: "product", id: "p", catalogueId: "menu", name: "Toast", active: true }],
+    uses: [{ kind: "product", id: "p", menuId: "menu", name: "Toast", active: true }],
   });
   await mount(client);
   click("[data-test=delete-one]");
@@ -1323,8 +1323,8 @@ it.each([
   client.getImage.mockResolvedValue({
     image: { ...image, usageCount: 2 },
     uses: [
-      { kind: "product", id: "toast", catalogueId: "menu", name: "Toast", active: true },
-      { kind: "product", id: "old", catalogueId: "menu", name: "Old toast", active: false },
+      { kind: "product", id: "toast", menuId: "menu", name: "Toast", active: true },
+      { kind: "product", id: "old", menuId: "menu", name: "Old toast", active: false },
     ],
   });
   await mount(client);
@@ -1783,12 +1783,12 @@ const usesShown = () =>
     link.getAttribute("href"),
   ]);
 const everyKindOfUse: ImageUsage[] = [
-  { kind: "product", id: "toast", catalogueId: "menu", name: "Toast", active: true },
-  { kind: "product", id: "old", catalogueId: "menu", name: "Old toast", active: false },
+  { kind: "product", id: "toast", menuId: "menu", name: "Toast", active: true },
+  { kind: "product", id: "old", menuId: "menu", name: "Old toast", active: false },
   {
     kind: "variant",
     id: "large",
-    catalogueId: "menu",
+    menuId: "menu",
     name: "Large toast",
     active: true,
   },
@@ -1852,9 +1852,9 @@ it("lists every place the image is used under a heading, each linked to the plac
   const modal = await openedViewer();
   await vi.waitFor(() => expect(usesShown()).toHaveLength(5));
   expect(usesShown()).toEqual([
-    ["Toast", "/manage/catalogue/product/toast"],
-    ["Old toast (Archived product)", "/manage/catalogue/product/old"],
-    ["Large toast", "/manage/catalogue/product/large"],
+    ["Toast", "/manage/products/product/toast"],
+    ["Old toast (Archived product)", "/manage/products/product/old"],
+    ["Large toast", "/manage/products/product/large"],
     ["Drinks (internal)", "/manage/menus/menu/drinks-menu/view/structure"],
     ["Lunch Menu (Published menu)", "/manage/menus/menu/lunch"],
   ]);
@@ -1887,7 +1887,7 @@ it("shows that the uses are being looked up until the answer arrives", async () 
   expect(modal.querySelector("[data-test=no-uses]")).toBeNull();
   lookup.resolve({ image, uses: everyKindOfUse.slice(0, 1) });
   await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/manage/catalogue/product/toast"]]),
+    expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]),
   );
   expect(modal.querySelector(".uses [role=status]")).toBeNull();
 });
@@ -1908,7 +1908,7 @@ it("reports a failed lookup in the preview and shows the uses after Try again", 
   expect(usesShown()).toEqual([]);
   modal.querySelector<HTMLElement>("[data-test=retry-uses]")!.click();
   await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/manage/catalogue/product/toast"]]),
+    expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]),
   );
   expect(client.getImage).toHaveBeenCalledTimes(2);
   expect(client.getImage).toHaveBeenLastCalledWith("one");
@@ -1961,7 +1961,7 @@ it("shows the uses of the image opened last when an earlier image's lookup answe
   thumbnail("two").click();
   await openedViewer();
   await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/manage/catalogue/product/toast"]]),
+    expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]),
   );
   first.resolve({ image, uses: everyKindOfUse.slice(3, 4) });
   await new Promise((resolve) => setTimeout(resolve, 20));
@@ -1970,7 +1970,7 @@ it("shows the uses of the image opened last when an earlier image's lookup answe
   expect(viewer()!.querySelector<HTMLImageElement>("img")!.getAttribute("src")).toBe(
     `/media/${mediaTestReference("two.jpg")}`,
   );
-  expect(usesShown()).toEqual([["Toast", "/manage/catalogue/product/toast"]]);
+  expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]);
 });
 
 it("does not reopen a closed preview when its lookup answers late, or fails late", async () => {

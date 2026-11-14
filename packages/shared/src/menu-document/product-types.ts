@@ -6,7 +6,7 @@ import type { DietaryLabel } from "./dietary-declarations.js";
 import type { ProductOrdering } from "./product-ordering.js";
 
 /**
- * The product wire shapes — the JSON the catalogue read/write paths hand across the HTTP boundary, so
+ * The product wire shapes — the JSON the menu read/write paths hand across the HTTP boundary, so
  * the dashboard (and any browser client) can import ONE authoritative copy instead of re-declaring
  * them by hand. This is a LEAF: type definitions only, no running code, and every type it imports is
  * itself browser-safe (nothing here reaches `@waitron/db`, drizzle or a `node:` builtin). The guard is
@@ -16,10 +16,10 @@ import type { ProductOrdering } from "./product-ordering.js";
 /**
  * One entry in a product's ordered attachment list: an extras list or an options list, never both.
  * The `id` is the LIST's id, not the attachment row's — the row's own key is a surrogate nothing
- * outside catalogue's `product-modifiers.ts` names.
+ * outside menu's `product-modifiers.ts` names.
  *
  * It lives HERE rather than beside the read/write code because the dashboard's product editor sends
- * and receives it, and this file is the one the browser may import: catalogue's `product-modifiers.ts` imports
+ * and receives it, and this file is the one the browser may import: menu's `product-modifiers.ts` imports
  * drizzle and `@waitron/db`.
  */
 export interface ProductModifierRef {
@@ -89,8 +89,8 @@ export interface ListedVariant extends ProductVariant {
 }
 
 /**
- * The slice of one product row the dashboard reads out of `GET /management-api/catalogues/:id/products`
- * — the whole `Product` catalogue's `operations.ts` returns. `unitPrice` is a GROSS (VAT-inclusive)
+ * The slice of one product row the dashboard reads out of `GET /management-api/menus/:id/products`
+ * — the whole `Product` menu's `operations.ts` returns. `unitPrice` is a GROSS (VAT-inclusive)
  * two-place decimal STRING, never a number; `image` holds the photo's original hash filename as a
  * stable reference, or null. Media resolves the current picture separately.
  */
@@ -98,7 +98,7 @@ export interface Product {
   id: string;
   /** The ordered extras and options lists attached to this product. */
   modifiers: ProductModifierRef[];
-  catalogueId: string;
+  menuId: string;
   /** The main reporting category, or null for Uncategorised. `primaryCategoryId` is the same value. */
   categoryId: string | null;
   primaryCategoryId: string | null;

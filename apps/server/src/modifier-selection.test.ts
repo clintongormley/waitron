@@ -550,7 +550,7 @@ describe("editLineOptions", () => {
     expect(editLineOptions([sauce, cooked], requested, stored, "en")).toBeNull();
   });
 
-  it("keeps an answer rebuilt from a catalogue with three customer languages equal to the stored one", () => {
+  it("keeps an answer rebuilt from a menu with three customer languages equal to the stored one", () => {
     const trilingual: OptionList = {
       ...cooked,
       customerName: { ca: "Punt client", en: "How cooked? diner", es: "Punto cliente" },
@@ -561,7 +561,7 @@ describe("editLineOptions", () => {
         },
       ],
     };
-    // The row a line priced earlier from the same catalogue holds.
+    // The row a line priced earlier from the same menu holds.
     const stored = [
       {
         listName: { es: "Cooked staff" },

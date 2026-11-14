@@ -290,7 +290,7 @@ export interface TillSaleLine {
   /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else `null`/absent.
    *  Presentation only: it groups already-filed lines and is no fiscal figure. */
   parentLineNo?: number | null;
-  /** The diner's answers to this dish's OPTIONS lists, copied by value so a later catalogue edit
+  /** The diner's answers to this dish's OPTIONS lists, copied by value so a later menu edit
    *  cannot rewrite what a completed sale says was ordered. An extras pick is a child line instead. */
   optionSnapshots?: OptionSnapshot[];
 }
@@ -543,7 +543,7 @@ export async function readBillTenderLines(
  *  - WALK-UP (no `working_orders` row for `id`): `lines` is the unpriced basket; the server prices it
  *    (`createOpenOrder`), creates the order OPEN with those lines, and files that price.
  *  - RETRIEVED order (the row exists): `lines` is IGNORED. The order files its STORED
- *    `working_order_lines`, whose gross was locked at add-time, so a catalogue price change between
+ *    `working_order_lines`, whose gross was locked at add-time, so a menu price change between
  *    park and pay never moves the filed total.
  */
 export interface PayWorkingOrderRequest {

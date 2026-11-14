@@ -7,8 +7,8 @@ import { products, withTransaction, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createExtraList,
   createProduct,
   setProductVariants,
@@ -35,8 +35,8 @@ async function arrange() {
   return withTransaction(venue.db, async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es", "fr"] });
     await seedVenueSettings(tx, { invoiceLocales: ["es-ES", "en-GB"] });
-    const catalogue = await createCatalogue(tx, { name: "Fallback catalogue" });
-    await assignCatalogueToVenue(tx, catalogue.id);
+    const menu = await createMenu(tx, { name: "Fallback menu" });
+    await assignMenuToVenue(tx, menu.id);
     const [unit] = await tx
       .insert(units)
       .values({
@@ -49,7 +49,7 @@ async function arrange() {
       })
       .returning();
     const dish = await createProduct(tx, {
-      catalogueId: catalogue.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Staff dish",
       customerName: { fr: "Other dish" },
@@ -59,7 +59,7 @@ async function arrange() {
       vatClass: "general",
     });
     const parent = await createProduct(tx, {
-      catalogueId: catalogue.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Staff topping",
       customerName: { en: "Published English topping" },

@@ -17,7 +17,7 @@ import {
 } from "@waitron/db";
 import {
   addProductToMenu,
-  createCatalogue,
+  createMenu,
   createProduct,
   customerPresentationText,
   listMenuOffers,
@@ -704,9 +704,9 @@ describe("a variant line is filed at its own effective VAT rate", () => {
   // `apps/server/src/working-order.ts`): from what `selectMenuVariant` resolves for the chosen
   // variant — its names, price and effective selling values.
   async function wineOffer(tx: Transaction) {
-    const menu = await createCatalogue(tx, { name: "Barra" });
+    const menu = await createMenu(tx, { name: "Barra" });
     const parent = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Wine by the glass",
       customerName: { "es-ES": "Vino de la casa" },

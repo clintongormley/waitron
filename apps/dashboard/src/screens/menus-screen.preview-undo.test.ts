@@ -104,7 +104,7 @@ function fakeApi(writes: Partial<DashboardApi>) {
     shortcuts: [],
     ...structuredClone(HOME_DISPLAY_DEFAULTS),
   };
-  const listCatalogues = vi.fn(async () => [
+  const listMenus = vi.fn(async () => [
     { id: MENU, name: state.menuName, active: true, version: 2 },
     { id: DINNER, name: "Dinner", active: true, version: 1 },
   ]);
@@ -119,10 +119,10 @@ function fakeApi(writes: Partial<DashboardApi>) {
     ),
   );
   const api = {
-    listCatalogues,
+    listMenus,
     listLibraryProducts: async () => [],
     listCategories: async () => [],
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: state.languages }),
     getMenuStructure: async () => structure,
     getMenuHome: async () => home,
@@ -132,7 +132,7 @@ function fakeApi(writes: Partial<DashboardApi>) {
     getMenuRead,
     ...writes,
   } as unknown as DashboardApi;
-  return { api, state, listCatalogues, getMenuRead };
+  return { api, state, listMenus, getMenuRead };
 }
 
 async function mount(api: DashboardApi) {
@@ -189,21 +189,21 @@ function askUndo(panel: MenuPreviewPanel, changeId: string): void {
 const settle = () => new Promise((resolve) => setTimeout(resolve));
 
 it("undoes a rename with the live name, previews again, says what was undone and reads the menus again", async () => {
-  const renameCatalogue = vi.fn(async (_id: string, name: string) => {
+  const renameMenu = vi.fn(async (_id: string, name: string) => {
     fake.state.menuName = name;
     fake.state.preview = previewOf([recolour]);
   });
-  const fake = fakeApi({ renameCatalogue } as Partial<DashboardApi>);
+  const fake = fakeApi({ renameMenu } as Partial<DashboardApi>);
   const { panel } = await mount(fake.api);
   const bullet = words(panel(), "own-rename");
-  const menuReads = fake.listCatalogues.mock.calls.length;
+  const menuReads = fake.listMenus.mock.calls.length;
   await userEvent.click(undoButton(panel(), "own-rename")!);
   await vi.waitFor(() =>
     expect(panel().shadowRoot!.querySelector('[data-change-row="own-rename"]')).toBeNull(),
   );
-  expect(renameCatalogue.mock.calls).toEqual([[MENU, "Lunch"]]);
+  expect(renameMenu.mock.calls).toEqual([[MENU, "Lunch"]]);
   await vi.waitFor(() => expect(text(resultLine(panel()))).toBe(`Undone: ${bullet}.`));
-  expect(fake.listCatalogues.mock.calls.length).toBeGreaterThan(menuReads);
+  expect(fake.listMenus.mock.calls.length).toBeGreaterThan(menuReads);
   expect(undoButton(panel(), "mains-colour")!.getAttribute("aria-disabled")).toBeNull();
 });
 
@@ -228,10 +228,10 @@ it("keeps a refused change listed with its sentence beside it, and says nothing 
 });
 
 it("reports a failed read after a stored Undo as a load failure, keeping the success line", async () => {
-  const renameCatalogue = vi.fn(async () => {
+  const renameMenu = vi.fn(async () => {
     fake.state.readFails = true;
   });
-  const fake = fakeApi({ renameCatalogue } as Partial<DashboardApi>);
+  const fake = fakeApi({ renameMenu } as Partial<DashboardApi>);
   const { el, panel } = await mount(fake.api);
   const bullet = words(panel(), "own-rename");
   await userEvent.click(undoButton(panel(), "own-rename")!);
@@ -245,22 +245,22 @@ it("reports a failed read after a stored Undo as a load failure, keeping the suc
 
 it("sends one write for two quick clicks", async () => {
   let answer!: () => void;
-  const renameCatalogue = vi.fn(
+  const renameMenu = vi.fn(
     () =>
       new Promise<void>((resolve) => {
         answer = resolve;
       }),
   );
-  const fake = fakeApi({ renameCatalogue } as Partial<DashboardApi>);
+  const fake = fakeApi({ renameMenu } as Partial<DashboardApi>);
   const { panel } = await mount(fake.api);
   const button = undoButton(panel(), "own-rename")!;
   // Both clicks land before the Preview redraws, so only the screen can refuse the second.
   button.click();
   button.click();
-  await vi.waitFor(() => expect(renameCatalogue).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(renameMenu).toHaveBeenCalledTimes(1));
   answer();
   await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
-  expect(renameCatalogue).toHaveBeenCalledTimes(1);
+  expect(renameMenu).toHaveBeenCalledTimes(1);
 });
 
 it("names a refused Undo beside the list as not undone once the person has left the Preview", async () => {
@@ -375,11 +375,11 @@ it("sends no Undo while a publish of this menu is out", async () => {
 });
 
 it("sends no Undo while the preview's read has failed", async () => {
-  const renameCatalogue = vi.fn(async () => {
+  const renameMenu = vi.fn(async () => {
     fake.state.readFails = true;
   });
   const updateSection = vi.fn(async () => {});
-  const fake = fakeApi({ renameCatalogue, updateSection } as unknown as Partial<DashboardApi>);
+  const fake = fakeApi({ renameMenu, updateSection } as unknown as Partial<DashboardApi>);
   const { panel } = await mount(fake.api);
   const recolourWords = words(panel(), "mains-colour");
   await userEvent.click(undoButton(panel(), "own-rename")!);
@@ -588,8 +588,8 @@ it("forgets a shown refusal and success line once the person leaves the Preview 
   const updateSection = vi.fn(async () => {
     throw { code: "menu_section.invalid", params: { field: "color" } };
   });
-  const renameCatalogue = vi.fn(async () => {});
-  const fake = fakeApi({ updateSection, renameCatalogue } as unknown as Partial<DashboardApi>);
+  const renameMenu = vi.fn(async () => {});
+  const fake = fakeApi({ updateSection, renameMenu } as unknown as Partial<DashboardApi>);
   const { el, panel } = await mount(fake.api);
   await userEvent.click(undoButton(panel(), "mains-colour")!);
   await vi.waitFor(() => expect(refusalIn(panel(), "mains-colour")).not.toBeNull());
@@ -646,8 +646,8 @@ it("shows another menu none of the refusals and success line said on the menu le
   const updateSection = vi.fn(async () => {
     throw { code: "menu_section.invalid", params: { field: "color" } };
   });
-  const renameCatalogue = vi.fn(async () => {});
-  const fake = fakeApi({ updateSection, renameCatalogue } as unknown as Partial<DashboardApi>);
+  const renameMenu = vi.fn(async () => {});
+  const fake = fakeApi({ updateSection, renameMenu } as unknown as Partial<DashboardApi>);
   const { el, panel } = await mount(fake.api);
   await userEvent.click(undoButton(panel(), "mains-colour")!);
   await vi.waitFor(() => expect(refusalIn(panel(), "mains-colour")).not.toBeNull());
@@ -665,12 +665,12 @@ it("shows another menu none of the refusals and success line said on the menu le
 });
 
 it("drops the success line when the menu is published", async () => {
-  const renameCatalogue = vi.fn(async () => {
+  const renameMenu = vi.fn(async () => {
     fake.state.preview = previewOf([recolour]);
   });
   const publishing = held<{ number: number }>();
   const publishMenu = vi.fn(() => publishing.promise);
-  const fake = fakeApi({ renameCatalogue, publishMenu } as unknown as Partial<DashboardApi>);
+  const fake = fakeApi({ renameMenu, publishMenu } as unknown as Partial<DashboardApi>);
   const { panel } = await mount(fake.api);
   await userEvent.click(undoButton(panel(), "own-rename")!);
   await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
@@ -694,7 +694,7 @@ it("keeps a refusal shown when a live snapshot of the menu arrives", async () =>
   const before = panel().preview;
   fake.state.preview = { ...fake.state.preview };
   const reads = fake.getMenuRead.mock.calls.length;
-  live.invalidate([{ type: "catalogues" }]);
+  live.invalidate([{ type: "menus" }]);
   await vi.waitFor(() => expect(fake.getMenuRead.mock.calls.length).toBeGreaterThan(reads));
   await vi.waitFor(() => expect(panel().preview).not.toBe(before));
   await settle();
@@ -712,12 +712,12 @@ it("forgets a refusal once a fresh preview no longer lists its change", async ()
   await vi.waitFor(() => expect(refusalIn(panel(), "mains-colour")).not.toBeNull());
 
   fake.state.preview = previewOf([rename]);
-  live.invalidate([{ type: "catalogues" }]);
+  live.invalidate([{ type: "menus" }]);
   await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).toBeNull());
 
   // The same change is made again: it is listed afresh, with nothing said about it.
   fake.state.preview = previewOf([rename, recolour]);
-  live.invalidate([{ type: "catalogues" }]);
+  live.invalidate([{ type: "menus" }]);
   await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).not.toBeNull());
   await settle();
   expect(refusalIn(panel(), "mains-colour")).toBeNull();
@@ -725,20 +725,20 @@ it("forgets a refusal once a fresh preview no longer lists its change", async ()
 
 it("forgets a refusal once a fresh preview still lists its change but no longer offers Undo", async () => {
   const live = new LiveData();
-  const renameCatalogue = vi.fn(async () => {
+  const renameMenu = vi.fn(async () => {
     throw { code: "menu.name_taken" };
   });
-  const fake = fakeApi({ renameCatalogue, liveData: live } as unknown as Partial<DashboardApi>);
+  const fake = fakeApi({ renameMenu, liveData: live } as unknown as Partial<DashboardApi>);
   const { panel } = await mount(fake.api);
   await userEvent.click(undoButton(panel(), "own-rename")!);
   await vi.waitFor(() => expect(refusalIn(panel(), "own-rename")).not.toBeNull());
 
   fake.state.preview = { ...previewOf([rename, recolour]), live: null };
-  live.invalidate([{ type: "catalogues" }]);
+  live.invalidate([{ type: "menus" }]);
   await vi.waitFor(() => expect(undoButton(panel(), "own-rename")).toBeNull());
 
   fake.state.preview = previewOf([rename, recolour]);
-  live.invalidate([{ type: "catalogues" }]);
+  live.invalidate([{ type: "menus" }]);
   await vi.waitFor(() => expect(undoButton(panel(), "own-rename")).not.toBeNull());
   await settle();
   expect(refusalIn(panel(), "own-rename")).toBeNull();
@@ -807,7 +807,7 @@ it("names a refused Undo beside the list when a fresh preview stopped listing it
   await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
 
   fake.state.preview = previewOf([rename]);
-  live.invalidate([{ type: "catalogues" }]);
+  live.invalidate([{ type: "menus" }]);
   await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).toBeNull());
 
   write.refuse({ code: "menu_section.not_found" });
@@ -843,15 +843,15 @@ it("names a refused Undo beside the list when its change was hidden while it was
 it("names a refused Undo beside the list when a fresh preview still lists its change but offers no Undo", async () => {
   const live = new LiveData();
   const write = held();
-  const renameCatalogue = vi.fn(() => write.promise);
-  const fake = fakeApi({ renameCatalogue, liveData: live } as unknown as Partial<DashboardApi>);
+  const renameMenu = vi.fn(() => write.promise);
+  const fake = fakeApi({ renameMenu, liveData: live } as unknown as Partial<DashboardApi>);
   const { el, panel } = await mount(fake.api);
   const bullet = words(panel(), "own-rename");
   await userEvent.click(undoButton(panel(), "own-rename")!);
-  await vi.waitFor(() => expect(renameCatalogue).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(renameMenu).toHaveBeenCalledTimes(1));
 
   fake.state.preview = { ...previewOf([rename, recolour]), live: null };
-  live.invalidate([{ type: "catalogues" }]);
+  live.invalidate([{ type: "menus" }]);
   await vi.waitFor(() => expect(panel().preview?.live).toBeNull());
   await panel().updateComplete;
   expect(panel().shadowRoot!.querySelector('[data-change-row="own-rename"]')).not.toBeNull();
@@ -873,10 +873,10 @@ it("names the menu the refused Undo was sent from by its name now, or by the nam
     { id: MENU, name: "Lunch Menu", active: true, version: 2 },
     { id: DINNER, name: "Dinner", active: true, version: 1 },
   ];
-  const listCatalogues = vi.fn(async () => menus.map((menu) => ({ ...menu })));
+  const listMenus = vi.fn(async () => menus.map((menu) => ({ ...menu })));
   const fake = fakeApi({
     updateSection,
-    listCatalogues,
+    listMenus,
     liveData: live,
   } as unknown as Partial<DashboardApi>);
   const { el, panel } = await mount(fake.api);
@@ -888,9 +888,9 @@ it("names the menu the refused Undo was sent from by its name now, or by the nam
   await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
 
   menus[0]!.name = "Brunch";
-  let reads = listCatalogues.mock.calls.length;
-  live.invalidate([{ type: "catalogues" }]);
-  await vi.waitFor(() => expect(listCatalogues.mock.calls.length).toBeGreaterThan(reads));
+  let reads = listMenus.mock.calls.length;
+  live.invalidate([{ type: "menus" }]);
+  await vi.waitFor(() => expect(listMenus.mock.calls.length).toBeGreaterThan(reads));
   await settle();
   write.refuse({ code: "menu_section.not_found" });
   await vi.waitFor(() =>
@@ -911,9 +911,9 @@ it("names the menu the refused Undo was sent from by its name now, or by the nam
   await vi.waitFor(() => expect(heading(el)).toBe("Dinner"));
   expect(memberError(el)).toBe("");
   menus.splice(0, 1);
-  reads = listCatalogues.mock.calls.length;
-  live.invalidate([{ type: "catalogues" }]);
-  await vi.waitFor(() => expect(listCatalogues.mock.calls.length).toBeGreaterThan(reads));
+  reads = listMenus.mock.calls.length;
+  live.invalidate([{ type: "menus" }]);
+  await vi.waitFor(() => expect(listMenus.mock.calls.length).toBeGreaterThan(reads));
   await settle();
   second.refuse({ code: "menu_section.not_found" });
   await vi.waitFor(() =>

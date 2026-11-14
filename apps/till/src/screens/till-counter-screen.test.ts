@@ -14,7 +14,7 @@ import type { ServiceZoneSummary, TillApi, TillProduct, TillZoneMenu } from "../
 
 const coffee: TillProduct = {
   id: "p1",
-  catalogueId: "cat-default",
+  menuId: "cat-default",
   name: "Café",
   customerName: { es: "Café para el cliente" },
   pricingUnit: "each",

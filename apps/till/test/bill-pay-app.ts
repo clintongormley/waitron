@@ -29,7 +29,7 @@ import type {
   TableState,
   TillApi,
   TillSaleResult,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "../src/api/client.js";
 import { deviceZonesFixture } from "./device-zones.js";
 
@@ -257,7 +257,7 @@ export const till = {
   servers: [],
 };
 
-export const offers: ZoneOfferCatalogue = {
+export const offers: ZoneOffers = {
   service: {
     open: true,
     zoneOpen: true,

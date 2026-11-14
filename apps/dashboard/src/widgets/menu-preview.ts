@@ -863,7 +863,7 @@ export class MenuPreviewPanel extends LitElement {
         return html`<a
           data-own-click
           data-edit-change=${change.id}
-          href=${`/manage/catalogue/product/${encodeURIComponent(action.productId)}`}
+          href=${`/manage/products/product/${encodeURIComponent(action.productId)}`}
           @click=${(event: MouseEvent) => openProduct(event, action.productId)}
           >${t("product.edit")}</a
         >`;

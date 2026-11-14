@@ -393,8 +393,8 @@ Consulta [Reutiliza las mismas elecciones en todos tus productos](modifiers.md) 
 contiene cada tipo, sus valores predeterminados y límites, y los precios de los extras.
 
 Cuando aparcas o completas un pedido, Waitron guarda los nombres del producto y la variante elegidos,
-el nombre de estación de preparación, los precios y las respuestas de los modificadores. Los cambios posteriores en el
-catálogo se aplican a las selecciones nuevas. El pedido aparcado, la comanda de estación, el ticket y la
+el nombre de estación de preparación, los precios y las respuestas de los modificadores. Los cambios posteriores en la
+carta se aplican a las selecciones nuevas. El pedido aparcado, la comanda de estación, el ticket y la
 reimpresión siguen mostrando los datos guardados con ese pedido.
 
 Cuando preparas una demostración de Madrid en español, los nombres del personal y de estación están en

@@ -1,6 +1,6 @@
 import { venueMenus } from "../../src/testing/venue-menus.js";
 /**
- * `seedCatalogues`: the demo menus, each category routed to its preparation station, the
+ * `seedMenus`: the demo menus, each category routed to its preparation station, the
  * default menu, and the image→product map the media and sales steps read.
  */
 
@@ -19,7 +19,7 @@ import {
   listTranslationGapReport,
   readMenuStructure,
 } from "@waitron/menu";
-import { seedCatalogues } from "./seed-menus.js";
+import { seedMenus } from "./seed-menus.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 
 import type { SeedLocale } from "./locale.js";
@@ -38,11 +38,11 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
   staffLanguage: LOCALE,
 });
 
-describe("seedCatalogues", () => {
+describe("seedMenus", () => {
   it("stores a distinct colour on every top-level demo category", async () => {
     await provisionVenue();
     const rows = await withTransaction(suite.db, async (tx) => {
-      await seedCatalogues(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
+      await seedMenus(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
       return (
         await tx.execute<{ name: string; color: string | null }>(sql`
         select c.name, d.color from categories c
@@ -76,7 +76,7 @@ describe("seedCatalogues", () => {
       await tx
         .insert(kitchenStations)
         .values({ name: "Galley", colour: "blue", isDefault: true, active: true });
-      await seedCatalogues(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
+      await seedMenus(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
       return (
         await tx.execute<{ name: string; is_default: number }>(sql`
         select name, is_default from kitchen_stations
@@ -93,7 +93,7 @@ describe("seedCatalogues", () => {
   it("includes Drinks as a folder in both restaurant menus", async () => {
     await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
-      const { menuIds } = await seedCatalogues(tx, {
+      const { menuIds } = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -116,7 +116,7 @@ describe("seedCatalogues", () => {
   it("charges Drinks' beer price through the restaurant menu with its inherited source", async () => {
     await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
-      const { menuIds, productsByImage } = await seedCatalogues(tx, {
+      const { menuIds, productsByImage } = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -143,7 +143,7 @@ describe("seedCatalogues", () => {
   it("keeps each menu's own sections beside its included Drinks folder", async () => {
     await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
-      const { menuIds, productsByImage } = await seedCatalogues(tx, {
+      const { menuIds, productsByImage } = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -190,7 +190,7 @@ describe("seedCatalogues", () => {
   it("seeds no two categories with one parent, and no two Active products, sharing a name", async () => {
     await provisionVenue();
     const { categories, products } = await withTransaction(suite.db, async (tx) => {
-      await seedCatalogues(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
+      await seedMenus(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
       const categories = await tx.execute<{ parent: string | null; name: string }>(sql`
         select d.parent_id as parent, c.name from categories c
         left join category_details d on d.category_id = c.id`);
@@ -211,14 +211,14 @@ describe("seedCatalogues", () => {
   it("names each menu's top level after the menu, the provisioned one included", async () => {
     await provisionVenue();
     const named = await withTransaction(suite.db, async (tx) => {
-      const { menuIds } = await seedCatalogues(tx, {
+      const { menuIds } = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
       const { rows } = await tx.execute<{ menu: string; root: string }>(sql`
         select c.name as menu, s.internal_name as root
         from menu_details d
-        join catalogues c on c.id = d.menu_id
+        join menus c on c.id = d.menu_id
         join sections s on s.id = d.root_section_id
         where d.menu_id in (${menuIds.restaurant}, ${menuIds.lunch}, ${menuIds.deli})
         order by c.name`);
@@ -235,7 +235,7 @@ describe("seedCatalogues", () => {
     await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
-      const out = await seedCatalogues(tx, {
+      const out = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -367,7 +367,7 @@ describe("seedCatalogues", () => {
     });
 
     expect(res.products.length).toBeGreaterThan(35);
-    const menuNames = new Set(res.products.map((p) => p.catalogueName));
+    const menuNames = new Set(res.products.map((p) => p.menuName));
     expect(menuNames).toEqual(new Set(["Casa Delgado", "Set lunch", "Deli takeaway", "Drinks"]));
 
     expect(res.products.some((p) => p.name === "Iberian ham")).toBe(true);
@@ -436,7 +436,7 @@ describe("seedCatalogues", () => {
 it("seeds every dish and pricing unit with Spanish text for a Spanish demo", async () => {
   await provisionVenue();
   const read = await withTransaction(suite.db, async (tx) => {
-    const seeded = await seedCatalogues(tx, { locale: "es", dataSet: CASA_DELGADO_ES });
+    const seeded = await seedMenus(tx, { locale: "es", dataSet: CASA_DELGADO_ES });
     const { rows } = await tx.execute<{ id: string; name: string; customer_es: string | null }>(sql`
       select id, name, customer_name->>'es' as customer_es from products`);
     const { rows: units } = await tx.execute<{

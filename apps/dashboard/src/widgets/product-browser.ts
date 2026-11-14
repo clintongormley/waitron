@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-icon.js";
 import type {
   ExtraList,
   CategorySummary,
-  CatalogueSelection,
+  ProductSelection,
   Course,
   FolderContents,
   FolderSummary,
@@ -27,7 +27,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
-import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
+import { acceptsMenuDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
 import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
@@ -41,8 +41,8 @@ interface OperationDraft {
   contents: FolderContents;
 }
 
-@customElement("dashboard-catalogue-browser")
-export class CatalogueBrowser extends LitElement {
+@customElement("dashboard-product-browser")
+export class ProductBrowser extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
@@ -123,7 +123,7 @@ export class CatalogueBrowser extends LitElement {
   @state() private selecting = false;
   @state() private selected: string[] = [];
   @state() private operation: "move" | "delete" | null = null;
-  @state() private operationSelection: CatalogueSelection = { productIds: [], categoryIds: [] };
+  @state() private operationSelection: ProductSelection = { productIds: [], categoryIds: [] };
   @state() private destination = "";
   @state() private contents: FolderContents = "move_up";
   @state() private summaries: FolderSummary[] = [];
@@ -182,13 +182,13 @@ export class CatalogueBrowser extends LitElement {
     if (
       this.operationBusy ||
       this.summaryLoading ||
-      !acceptsCatalogueDrop(keys, folderId, this.categories)
+      !acceptsMenuDrop(keys, folderId, this.categories)
     )
       return;
     this.operationBusy = true;
     this.dropError = "";
     try {
-      await this.api.moveCatalogueItems(this.#outermost(this.#selection(keys)), folderId);
+      await this.api.moveProductItems(this.#outermost(this.#selection(keys)), folderId);
       this.selected = this.selected.filter((key) => !keys.includes(key));
     } catch (error) {
       this.dropError = codeMessage(codeOf(error));
@@ -290,7 +290,7 @@ export class CatalogueBrowser extends LitElement {
       this.destination = "";
   }
 
-  #selection(keys = this.selected): CatalogueSelection {
+  #selection(keys = this.selected): ProductSelection {
     return {
       productIds: keys.filter((key) => !key.startsWith("folder:")),
       categoryIds: keys.filter((key) => key.startsWith("folder:")).map((key) => key.slice(7)),
@@ -298,7 +298,7 @@ export class CatalogueBrowser extends LitElement {
   }
   /** A row inside a category that moves goes with it; listed as well, the server would re-file it
    * at the destination and pull it out of its category. */
-  #outermost(selection: CatalogueSelection): CatalogueSelection {
+  #outermost(selection: ProductSelection): ProductSelection {
     const under = (categoryId: string | null, self?: string) =>
       categoryId !== null &&
       selection.categoryIds.some(
@@ -389,7 +389,7 @@ export class CatalogueBrowser extends LitElement {
     this.operationError = "";
     try {
       if (operation === "move")
-        await this.api.moveCatalogueItems(
+        await this.api.moveProductItems(
           this.operationSelection,
           this.destination === "top" ? null : this.destination,
         );
@@ -397,7 +397,7 @@ export class CatalogueBrowser extends LitElement {
         if (fromDialog && this.operationSelection.categoryIds.length && !(await this.#unchanged()))
           return;
         try {
-          await this.api.deleteCatalogueItems(
+          await this.api.deleteProductItems(
             this.operationSelection,
             this.#contentsChoice(),
             this.summaries.map(({ id, folders, products, activeProducts, routes, ownRoutes }) => ({
@@ -781,14 +781,14 @@ export class CatalogueBrowser extends LitElement {
     </wt-modal>`;
   }
 
-  #deleteLabel(selection: CatalogueSelection): string {
+  #deleteLabel(selection: ProductSelection): string {
     return t(
       selection.productIds.length && !selection.categoryIds.length
         ? "product.archive"
         : "action.delete",
     );
   }
-  #allDisabled({ productIds, categoryIds }: CatalogueSelection): boolean {
+  #allDisabled({ productIds, categoryIds }: ProductSelection): boolean {
     if (!productIds.length || categoryIds.length) return false;
     const disabled = new Set(this.products.filter(({ active }) => !active).map(({ id }) => id));
     return productIds.every((id) => disabled.has(id));
@@ -841,7 +841,7 @@ export class CatalogueBrowser extends LitElement {
     this.colorBusy = true;
     this.colorErrors = {};
     try {
-      if (target.kind === "default") await this.api.saveCatalogueDefaultColor(color);
+      if (target.kind === "default") await this.api.saveMenuDefaultColor(color);
       else await this.api.updateCategory(target.category.id, { color });
       if (this.colorTarget === target) this.colorTarget = null;
     } catch (error) {
@@ -962,7 +962,7 @@ export class CatalogueBrowser extends LitElement {
         ></wt-icon-button>
         <wt-input
           slot="toolbar-search"
-          name="catalogue-search"
+          name="menu-search"
           type="search"
           label=${t("folders.search")}
           .value=${this.search}
@@ -1058,6 +1058,6 @@ export class CatalogueBrowser extends LitElement {
 }
 declare global {
   interface HTMLElementTagNameMap {
-    "dashboard-catalogue-browser": CatalogueBrowser;
+    "dashboard-product-browser": ProductBrowser;
   }
 }

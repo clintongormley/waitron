@@ -1,7 +1,7 @@
 import { readBusinessDayScheduleRevision } from "../business-day-schedule.js";
 import { and, asc, eq } from "drizzle-orm";
 import {
-  catalogues,
+  menus,
   menuPeriods,
   menuPeriodStaffMenus,
   readVenueClock,
@@ -18,11 +18,8 @@ export async function offerMenuThroughZone(
   menuId: string,
   options: { displayOrder?: number; makeDefault?: boolean } = {},
 ): Promise<void> {
-  const [menu] = await tx
-    .select({ id: catalogues.id })
-    .from(catalogues)
-    .where(eq(catalogues.id, menuId));
-  if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
+  const [menu] = await tx.select({ id: menus.id }).from(menus).where(eq(menus.id, menuId));
+  if (menu === undefined) throw new AppError("menu.not_found", { menuId: menuId });
   const [policy] = await tx
     .select({ departmentId: floorZones.departmentId })
     .from(floorZones)

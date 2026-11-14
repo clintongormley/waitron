@@ -10,7 +10,7 @@ import {
 } from "@waitron/ui/src/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
 import type {
-  CatalogueSummary,
+  MenuSummary,
   DashboardApi,
   ExtraList,
   ExtraListDependants,
@@ -52,7 +52,7 @@ function product(overrides: Partial<Product> = {}): Product {
   return {
     id: BREAD,
     modifiers: [],
-    catalogueId: "cat-1",
+    menuId: "cat-1",
     categoryId: "category-1",
     primaryCategoryId: "category-1",
     name: "White bread",
@@ -96,7 +96,7 @@ const products: Product[] = [
   }),
 ];
 
-const catalogues: CatalogueSummary[] = [{ id: "cat-1", name: "Main", active: true, version: 1 }];
+const menus: MenuSummary[] = [{ id: "cat-1", name: "Main", active: true, version: 1 }];
 
 /** Staff name, customer-facing name and kitchen name all read differently (CLAUDE.md §3). */
 const optionList: OptionListRow = {
@@ -147,7 +147,7 @@ function api(overrides: Partial<DashboardApi> = {}) {
   return {
     listOptionLists: vi.fn().mockResolvedValue([optionList]),
     listExtraLists: vi.fn().mockResolvedValue([extraList]),
-    listCatalogues: vi.fn().mockResolvedValue(catalogues),
+    listMenus: vi.fn().mockResolvedValue(menus),
     listProducts: vi.fn().mockResolvedValue(products),
     getContentLanguages: vi
       .fn()
@@ -1145,7 +1145,7 @@ it("opens a row's own list in the matching editor", async () => {
 it("hands the extras form the products the screen loaded", async () => {
   const client = api();
   const el = await mount(client);
-  expect(client.listCatalogues).toHaveBeenCalled();
+  expect(client.listMenus).toHaveBeenCalled();
   expect(client.listProducts).toHaveBeenCalledWith("cat-1");
   expect(extraForm(el).products).toEqual(products);
 });
@@ -2037,9 +2037,9 @@ it("switches back to the Extras tab from Options", async () => {
 // ---------------------------------------------------------------------------
 // Products for the extras form
 
-it("offers the extras form no products once the venue has no catalogue left", async () => {
+it("offers the extras form no products once the venue has no menu left", async () => {
   const client = api({
-    listCatalogues: vi.fn().mockResolvedValueOnce(catalogues).mockResolvedValue([]),
+    listMenus: vi.fn().mockResolvedValueOnce(menus).mockResolvedValue([]),
   });
   const el = await mount(client);
   await vi.waitFor(() => expect(extraForm(el).products).toEqual(products));
@@ -2053,7 +2053,7 @@ it("offers the extras form no products once the venue has no catalogue left", as
       composed: true,
     }),
   );
-  await vi.waitFor(() => expect(client.listCatalogues).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(client.listMenus).toHaveBeenCalledTimes(2));
   await vi.waitFor(() => expect(extraForm(el).products).toEqual([]));
   expect(client.listProducts).toHaveBeenCalledTimes(1);
 });

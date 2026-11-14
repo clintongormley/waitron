@@ -102,7 +102,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   });
 
   it("print_agent_pairing_codes no longer exists (join-and-accept replaced the pairing code)", () => {
-    // Read the catalogue rather than catch a failing select: `no such table` carries the generic
+    // Read the menu rather than catch a failing select: `no such table` carries the generic
     // result code every other statement error shares, so the catch would pass for any reason.
     const found = suite.db.all<{ name: string }>(
       sql`select name from sqlite_master where name = 'print_agent_pairing_codes'`,

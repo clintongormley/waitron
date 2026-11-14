@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   extraLists,
   menuDetails,
   optionLabels,
@@ -18,7 +18,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { createCatalogue, createProduct, updateMenuDetails } from "./operations.js";
+import { createMenu, createProduct, updateMenuDetails } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import {
   listTranslationTargets,
@@ -51,11 +51,11 @@ async function fixture() {
   await seedVenueSettings(suite.db);
   return app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
-    const menu = await createCatalogue(tx, {
+    const menu = await createMenu(tx, {
       name: "STAFF Lunch",
       names: { es: "CLIENT Almuerzo" },
     });
-    const child = await createCatalogue(tx, {
+    const child = await createMenu(tx, {
       name: "STAFF Drinks",
       names: { es: "CLIENT ES drinks" },
     });
@@ -63,7 +63,7 @@ async function fixture() {
     const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
     const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       unitId: null,
       name: "STAFF Bread",
@@ -186,7 +186,7 @@ async function snapshot(tx: Transaction) {
     sections: await tx.select().from(sections).orderBy(sections.id),
     members: await tx.select().from(sectionMembers).orderBy(sectionMembers.id),
     units: await tx.select().from(units).orderBy(units.id),
-    menus: await tx.select().from(catalogues).orderBy(catalogues.id),
+    menus: await tx.select().from(menus).orderBy(menus.id),
     details: await tx.select().from(menuDetails).orderBy(menuDetails.menuId),
   };
 }
@@ -426,10 +426,7 @@ describe("atomic content translations", () => {
             .where(eq(sectionMembers.id, ids.included_menu));
           break;
         case "child activity":
-          await tx
-            .update(catalogues)
-            .set({ active: false })
-            .where(eq(catalogues.id, ids.childMenuId));
+          await tx.update(menus).set({ active: false }).where(eq(menus.id, ids.childMenuId));
           break;
         case "root ownership":
           await tx
@@ -1026,7 +1023,7 @@ it.each(["option_list", "extra_list", "menu"] as const)(
         await tx.update(optionLists).set({ active: false }).where(eq(optionLists.id, ids[kind]));
       else if (kind === "extra_list")
         await tx.update(extraLists).set({ active: false }).where(eq(extraLists.id, ids[kind]));
-      else await tx.update(catalogues).set({ active: false }).where(eq(catalogues.id, ids.menuId));
+      else await tx.update(menus).set({ active: false }).where(eq(menus.id, ids.menuId));
     });
     const before = await app(snapshot);
     const request = await batch(ids, [kind]);

@@ -33,7 +33,7 @@ const run = createErrorBoundary(
     "content.translation_stale": 409,
     "content.translation_unavailable": 409,
   },
-  "catalogue.failed",
+  "menu.failed",
 );
 
 function invalidQuery(): never {

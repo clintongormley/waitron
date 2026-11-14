@@ -24,7 +24,7 @@ import { invoiceSeries } from "./series.js";
  *    that can issue DDL (`packages/store/src/append-only.ts`).
  *  - a money column's WIDTH: `pragma table_info` reports only the declared word, so the money case
  *    shows an integer rather than a decimal, not how wide the integer is.
- *  - a catalogue foreign key's NAME on `sale_lines`: SQLite stores none, so the catalogue case
+ *  - a menu foreign key's NAME on `sale_lines`: SQLite stores none, so the menu case
  *    matches the key's column.
  */
 
@@ -546,22 +546,22 @@ describe("sales — immutability", () => {
     expect(engineErrorMessage(remove)).toBe("sales is append-only");
   });
 
-  it("records what was sold as plain ids, never as a live catalogue link", () => {
+  it("records what was sold as plain ids, never as a live menu link", () => {
     // These ids record what was sold and from which menu (sales classification spec §3). They are
-    // values: no foreign key may point any of them at the catalogue. `menu_version_id` is one of
+    // values: no foreign key may point any of them at the menu. `menu_version_id` is one of
     // them too, but its name falls outside the pattern.
-    const catalogueShapedIds = columnsOf(suite.db, "sale_lines")
+    const menuShapedIds = columnsOf(suite.db, "sale_lines")
       .map((c) => c.name)
-      .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant)_id$/i.test(n));
-    expect(catalogueShapedIds.sort()).toEqual(["menu_id", "parent_product_id", "product_id"]);
+      .filter((n) => /(product|item|menu|catalog|menu|sku|variant)_id$/i.test(n));
+    expect(menuShapedIds.sort()).toEqual(["menu_id", "parent_product_id", "product_id"]);
 
     const foreignKeys = suite.db.all<{ from: string }>(
       sql.raw(`select "from" from pragma_foreign_key_list('sale_lines')`),
     );
-    const catalogueForeignKeys = foreignKeys.filter((key) =>
-      /(product|item|catalogue|catalog|menu|sku|variant)_id$/i.test(key.from),
+    const menuForeignKeys = foreignKeys.filter((key) =>
+      /(product|item|menu|catalog|menu|sku|variant)_id$/i.test(key.from),
     );
-    expect(catalogueForeignKeys).toEqual([]);
+    expect(menuForeignKeys).toEqual([]);
     // Whatever a new column is named, the only keys are the line's own sale, its parent line and
     // the invoice line it corrects.
     expect(foreignKeys.map((key) => key.from).sort()).toEqual([

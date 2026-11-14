@@ -7,7 +7,7 @@ import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAvailableProducts, listOptionLists, readProductModifiers } from "@waitron/menu";
-import { seedCatalogues } from "./seed-menus.js";
+import { seedMenus } from "./seed-menus.js";
 import { seedOptionLists } from "./seed-option-lists.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 
@@ -34,7 +34,7 @@ describe("seedOptionLists", () => {
     const { lists, steakId, coffeeId, attachments, available } = await withTransaction(
       suite.db,
       async (tx) => {
-        const { productsByImage } = await seedCatalogues(tx, {
+        const { productsByImage } = await seedMenus(tx, {
           locale: LOCALE,
           dataSet: CASA_DELGADO_ES,
         });
@@ -56,7 +56,7 @@ describe("seedOptionLists", () => {
       },
     );
 
-    // ONE options list in the demo catalogue, and it is the cooking question.
+    // ONE options list in the demo menu, and it is the cooking question.
     expect(lists.map((list) => list.name)).toEqual(["Doneness"]);
     const cooked = lists[0]!;
     expect(cooked).toMatchObject({

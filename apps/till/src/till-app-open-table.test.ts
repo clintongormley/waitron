@@ -24,7 +24,7 @@ import type {
   TabLine,
   TillApi,
   TillMenuOffer,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { ServerRouter } from "./api/server-router.js";
@@ -71,11 +71,11 @@ function offer(id: string, name: string, courseId: string | null = null): TillMe
   } satisfies TillMenuOffer;
 }
 
-function catalogue(
+function menu(
   version: string,
   prices: Record<string, string> = {},
   liveFields = "lf-1",
-): ZoneOfferCatalogue {
+): ZoneOffers {
   const offers = [
     offer("offer-beer", "Beer", "drinks"),
     offer("offer-steak", "Steak", "mains"),
@@ -255,10 +255,10 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
-      ...catalogue("v1"),
-      context: { ...catalogue("v1").context, zoneId: "zc" },
+      ...menu("v1"),
+      context: { ...menu("v1").context, zoneId: "zc" },
     }),
-    listZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
+    listZoneOffers: vi.fn().mockResolvedValue(menu("v1")),
     menuState: vi.fn(async () => state("v1")),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
@@ -408,7 +408,7 @@ describe("A768 a moved course or category is read again", () => {
     const { el } = await mountApp();
     await openTable(el);
     const before = zoneReads();
-    const moved = catalogue("v1", {}, "lf-2");
+    const moved = menu("v1", {}, "lf-2");
     moved.offers = moved.offers.map((each) =>
       each.name === "Beer" ? { ...each, courseId: "mains" } : each,
     );
@@ -461,7 +461,7 @@ describe("A768 a held zone's menu", () => {
     await openTable(el);
     await back(el);
     api.listZoneOffers.mockClear();
-    api.listZoneOffers.mockResolvedValue(catalogue("v2", { Beer: "6.00" }));
+    api.listZoneOffers.mockResolvedValue(menu("v2", { Beer: "6.00" }));
     api.menuState.mockImplementation(async () => state("v2"));
     await reopen(el, "t7");
     await flush(el);
@@ -494,14 +494,14 @@ describe("A768 a held zone's menu", () => {
     await signIn(el);
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
-    let answerOld!: (value: ZoneOfferCatalogue) => void;
+    let answerOld!: (value: ZoneOffers) => void;
     api.listZoneOffers.mockImplementationOnce(
-      () => new Promise<ZoneOfferCatalogue>((resolve) => (answerOld = resolve)),
+      () => new Promise<ZoneOffers>((resolve) => (answerOld = resolve)),
     );
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
     await switchServer();
-    answerOld(catalogue("v1", { Beer: "9.99" }));
+    answerOld(menu("v1", { Beer: "9.99" }));
     await flush(el);
     api.listZoneOffers.mockClear();
     await openTable(el, "t7");
@@ -545,8 +545,8 @@ describe("A768 a held zone's menu follows the server", () => {
 
   const beer = (el: TillApp) => tableOrder(el)!.products.find((p) => p.name === "Beer");
 
-  function twoMenus(defaultMenuId: string): ZoneOfferCatalogue {
-    const base = catalogue("v1");
+  function twoMenus(defaultMenuId: string): ZoneOffers {
+    const base = menu("v1");
     const lunch = base.menus[0]!;
     return {
       ...base,
@@ -592,10 +592,10 @@ describe("A768 a held zone's menu follows the server", () => {
     api.menuState.mockImplementationOnce(() => check.promise);
     await reopen(el, "t7");
     await back(el);
-    const z2 = later<ZoneOfferCatalogue>();
+    const z2 = later<ZoneOffers>();
     api.listZoneOffers.mockClear();
     api.listZoneOffers.mockImplementation((zoneId: string) =>
-      zoneId === "z2" ? z2.promise : Promise.resolve(catalogue("v2", { Beer: "6.00" })),
+      zoneId === "z2" ? z2.promise : Promise.resolve(menu("v2", { Beer: "6.00" })),
     );
     emit(floor(el)!, "open-table", { tableId: "t9", seated: true });
     await flush(el);
@@ -603,8 +603,8 @@ describe("A768 a held zone's menu follows the server", () => {
     await flush(el);
     expect(api.listZoneOffers.mock.calls.map(([zoneId]) => zoneId)).toEqual(["z2"]);
     z2.resolve({
-      ...catalogue("v1", { Beer: "8.00" }),
-      context: { ...catalogue("v1").context, zoneId: "z2" },
+      ...menu("v1", { Beer: "8.00" }),
+      context: { ...menu("v1").context, zoneId: "z2" },
     });
     await flush(el);
     expect(beer(el)!.unitPrice).toBe("8.00");
@@ -639,17 +639,17 @@ describe("A768 a held zone's menu follows the server", () => {
     await signIn(el);
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
-    const older = later<ZoneOfferCatalogue>();
-    const newer = later<ZoneOfferCatalogue>();
+    const older = later<ZoneOffers>();
+    const newer = later<ZoneOffers>();
     api.listZoneOffers.mockImplementationOnce(() => older.promise);
     api.listZoneOffers.mockImplementationOnce(() => newer.promise);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
-    newer.resolve(catalogue("v1", { Beer: "7.00" }));
+    newer.resolve(menu("v1", { Beer: "7.00" }));
     await flush(el);
-    older.resolve(catalogue("v1", { Beer: "6.00" }));
+    older.resolve(menu("v1", { Beer: "6.00" }));
     await flush(el);
     expect(beer(el)!.unitPrice).toBe("7.00");
     await back(el);
@@ -1015,9 +1015,9 @@ describe("A768 the left draft saves in the background", () => {
       getTablesState: vi.fn().mockResolvedValue([table4, { ...table7, zoneId: "z2" }, table9]),
       listZoneOffers: vi
         .fn()
-        .mockResolvedValueOnce(catalogue("v1"))
+        .mockResolvedValueOnce(menu("v1"))
         .mockRejectedValueOnce(new TypeError("Failed to fetch menu"))
-        .mockResolvedValue(catalogue("v1")),
+        .mockResolvedValue(menu("v1")),
     });
     await openTable(el);
     await tap(el, "Beer");
@@ -1688,7 +1688,7 @@ describe("A768 the order screen shows at once", () => {
 
   it("a second open during the first's loading shows only the second table", async () => {
     const table4Lines = deferred<{ lines: never[]; revision: number }>();
-    const z2Offers = deferred<ZoneOfferCatalogue>();
+    const z2Offers = deferred<ZoneOffers>();
     const { el } = await mountApp();
     await openTable(el, "t7");
     await back(el);
@@ -1696,13 +1696,13 @@ describe("A768 the order screen shows at once", () => {
       tabId === "wo-4" ? table4Lines.promise : { lines: [], revision: 0 },
     );
     api.listZoneOffers.mockImplementation(async (zoneId: string) =>
-      zoneId === "z2" ? z2Offers.promise : catalogue("v1"),
+      zoneId === "z2" ? z2Offers.promise : menu("v1"),
     );
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
     emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: true });
     await flush(el);
-    const z2 = catalogue("v1", { Beer: "7.00" });
+    const z2 = menu("v1", { Beer: "7.00" });
     z2Offers.resolve({ ...z2, context: { ...z2.context, zoneId: "z2" } });
     await flush(el);
     table4Lines.resolve({ lines: [], revision: 0 });
@@ -1714,7 +1714,7 @@ describe("A768 the order screen shows at once", () => {
 
   it("a first open's reads answering while a second table's menu is read keep the second loading", async () => {
     const table4Lines = deferred<{ lines: never[]; revision: number }>();
-    const z2Offers = deferred<ZoneOfferCatalogue>();
+    const z2Offers = deferred<ZoneOffers>();
     const { el } = await mountApp();
     await openTable(el, "t7");
     await back(el);
@@ -1722,7 +1722,7 @@ describe("A768 the order screen shows at once", () => {
       tabId === "wo-4" ? table4Lines.promise : { lines: [], revision: 0 },
     );
     api.listZoneOffers.mockImplementation(async (zoneId: string) =>
-      zoneId === "z2" ? z2Offers.promise : catalogue("v1"),
+      zoneId === "z2" ? z2Offers.promise : menu("v1"),
     );
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
@@ -1734,7 +1734,7 @@ describe("A768 the order screen shows at once", () => {
     await flush(el, 6);
     expect(tableOrder(el)!.loading).toBe(true);
     expect(loadingLine(el)).not.toBeNull();
-    const z2 = catalogue("v1", { Beer: "7.00" });
+    const z2 = menu("v1", { Beer: "7.00" });
     z2Offers.resolve({ ...z2, context: { ...z2.context, zoneId: "z2" } });
     await flush(el, 6);
     expect(tableOrder(el)!.loading).toBe(false);
@@ -1831,7 +1831,7 @@ describe("A768 the order screen shows at once", () => {
     api.listZoneOffers.mockImplementation(async (zoneId: string) =>
       zoneId === "z2"
         ? new Promise((_, reject) => (fail = () => reject(new TypeError("Failed to fetch"))))
-        : catalogue("v1"),
+        : menu("v1"),
     );
     await onFloor(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: true });
@@ -1886,7 +1886,7 @@ describe("A768 the order screen shows at once", () => {
   });
 
   it("a bill opened from Find a bill shows no loading line, and Back during its read stops it", async () => {
-    const offers = deferred<ZoneOfferCatalogue>();
+    const offers = deferred<ZoneOffers>();
     const { el } = await mountApp({
       findBillOptions: vi.fn().mockResolvedValue(billOptions),
       listInvoiceCorrections: vi.fn().mockResolvedValue([]),
@@ -1907,7 +1907,7 @@ describe("A768 the order screen shows at once", () => {
     await vi.waitFor(() => expect(api.listZoneOffers).toHaveBeenCalledTimes(1));
     emit(findBill()!, "find-bill-back");
     await flush(el);
-    offers.resolve(catalogue("v1"));
+    offers.resolve(menu("v1"));
     await flush(el);
     expect(tableOrder(el)).toBeNull();
     expect(loadingLine(el)).toBeNull();
@@ -2001,7 +2001,7 @@ describe("A768 the order screen shows at once", () => {
   });
 
   it("Back while loading returns to the floor and the late answers do not bring the order back", async () => {
-    const offers = deferred<ZoneOfferCatalogue>();
+    const offers = deferred<ZoneOffers>();
     const { el } = await mountApp({ listZoneOffers: vi.fn(() => offers.promise) });
     await onFloor(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
@@ -2009,7 +2009,7 @@ describe("A768 the order screen shows at once", () => {
     expect(loadingLine(el)).not.toBeNull();
     await back(el);
     expect(tableOrder(el)).toBeNull();
-    offers.resolve(catalogue("v1"));
+    offers.resolve(menu("v1"));
     await flush(el, 6);
     expect(tableOrder(el)).toBeNull();
     expect(floor(el)).not.toBeNull();
@@ -2019,7 +2019,7 @@ describe("A768 the order screen shows at once", () => {
   });
 
   it("leaving the loading order tab for another tab abandons the open", async () => {
-    const offers = deferred<ZoneOfferCatalogue>();
+    const offers = deferred<ZoneOffers>();
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       listZoneOffers: vi.fn(() => offers.promise),
@@ -2030,7 +2030,7 @@ describe("A768 the order screen shows at once", () => {
     expect(tableOrder(el)!.loading).toBe(true);
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
-    offers.resolve(catalogue("v1"));
+    offers.resolve(menu("v1"));
     await flush(el, 6);
     expect(tableOrder(el)).toBeNull();
     expect(floor(el)).not.toBeNull();

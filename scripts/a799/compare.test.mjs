@@ -6,7 +6,7 @@ import * as comparison from "./compare.mjs";
 const int = (n) => ({ kind: "integer", decimal: String(n) });
 const txt = (s) => ({ kind: "text", base64: Buffer.from(s).toString("base64") });
 const row = (table, id, fields) => ({ table, key: [txt(id)], fields: { id: txt(id), ...fields } });
-const object = (name, module = "catalogue", protection = "ordinary") => ({
+const object = (name, module = "menu", protection = "ordinary") => ({
   kind: "table",
   name,
   table: name,
@@ -161,7 +161,7 @@ const cell = () => ({
   sourceEpoch: "post-reset",
   sourceSha: "1".repeat(40),
   candidateSha: "2".repeat(40),
-  migrations: [{ hash: "3".repeat(64), module: "catalogue" }],
+  migrations: [{ hash: "3".repeat(64), module: "menu" }],
   disabledModules: ["bookings"],
 });
 const mapping = (overrides = {}) => ({
@@ -170,7 +170,7 @@ const mapping = (overrides = {}) => ({
   sourceSha: "1".repeat(40),
   candidateSha: "2".repeat(40),
   migrationHash: "3".repeat(64),
-  module: "catalogue",
+  module: "menu",
   object: { subject: "rows", key: "products" },
   field: "label",
   before: null,
@@ -553,7 +553,7 @@ describe("exact reviewed transformations", () => {
       kind: "view",
       name: "notes_b",
       table: "notes_b",
-      module: "catalogue",
+      module: "menu",
       protection: "ordinary",
       rawSql: "CREATE VIEW notes_b AS SELECT * FROM notes",
       body: "SELECT * FROM notes",
@@ -716,7 +716,7 @@ describe("exact reviewed transformations", () => {
   });
   it("refuses mappings when a module is disabled or a target has no historical rows", () => {
     const context = cell();
-    context.disabledModules.push("catalogue");
+    context.disabledModules.push("menu");
     expect(() => comparison.validateMappings([mapping()], context)).toThrow("history.mapping");
     const old = make();
     old.rows = old.rows.filter((r) => r.table !== "products");

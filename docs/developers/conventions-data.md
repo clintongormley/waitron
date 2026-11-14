@@ -513,7 +513,7 @@ had to be respelled for the storage switch: the generated SQLite baselines quote
 name no schema, so the old `REFERENCES "public"."extra_l` pattern matches nothing at all now. Run
 ``grep -rn 'REFERENCES `extra_l' --include='*.sql' packages`` — two lines on 2026-11-09,
 `packages/db/drizzle/0000_baseline.sql:1966` and `:1994`, both naming `extra_lists`, the PARENT (three
-on 2026-09-22, then in catalogue's own baseline). None names `extra_list_items`, so the condition
+on 2026-09-22, then in menu's own baseline). None names `extra_list_items`, so the condition
 still holds; the count does not stand on its own, because the
 pattern matches the parent's name as well. Scope it to `packages` rather than `packages apps`:
 `apps/server/dist/drizzle` holds built copies of the same baselines, and it is git-ignored build
@@ -545,10 +545,10 @@ started without it report `true`.
 delete-then-insert turns it red has not been re-taken on this engine. `writeItems`'s own header says
 the same thing at the site.
 
-## Resolve shared catalogue data once before a basket's line loop
+## Resolve shared menu data once before a basket's line loop
 
 The Products review found that each basket line called `resolveZoneOffer`, which reloaded the whole
-zone offer catalogue, then performed separate product-variant and menu-variant reads. Repeated items
+zone offer menu, then performed separate product-variant and menu-variant reads. Repeated items
 therefore repeated the same sequential database work. `priceOrderLines` now reads one zone snapshot
 before its in-memory line loop; the variants come from the offers it holds (`LiveOffer.variants`).
 `working-order.test.ts` spies on `listZoneOffers` and checks that a basket repeating one offer calls
@@ -734,7 +734,7 @@ Pricing reads static period membership, without resolving ranges, dates or the c
 clock cannot be read, timetable resolution leaves the department's period menus orderable.
 
 Provisioning places the first department's starter period (named "Open" in the staff language)
-at 09:00–17:00 Monday to Friday when there is a catalogue and no existing period. Setup's
+at 09:00–17:00 Monday to Friday when there is a menu and no existing period. Setup's
 completion screen shows those normal-week hours, with a link to Opening hours' Year, only when its
 saved schedule matches them; the check finds that period by "Open" or any name the starter file
 gives it (`STARTER_OPEN_PERIOD_NAMES`, `menu-timetable.ts`).
@@ -1060,7 +1060,7 @@ A read turns the stored count into the exact `Decimal` that `packages/shared/src
 already works in; a write turns it back; both happen at the row. Above that line nothing moved —
 the arithmetic, the HTTP contract both single-page apps consume, the receipt strings and the
 literals a fiscal record hashes. The alternative, cents as the in-memory type through core,
-catalogue, payments, reporting and `apps/server`, reaches the same storage with a far larger
+menu, payments, reporting and `apps/server`, reaches the same storage with a far larger
 change and a live risk of rounding drift in the arithmetic the hash chain depends on.
 
 The converters live alone in `packages/shared/src/cents.ts` (which also uses
@@ -1803,18 +1803,18 @@ history on 2026-11-07 (A1422); read one with
 `drizzle/0001_image_references.sql` carries eight triggers standing in for two foreign keys, and four
 of them sit on tables another set owns: `products`, created by core in
 `packages/db/drizzle/0000_baseline.sql` and rebuilt by core's
-`0003_variant_inherited_nullable.sql`, and `category_details`, created by catalogue (catalogue
+`0003_variant_inherited_nullable.sql`, and `category_details`, created by menu (menu
 `0013` and media `0004` have since dropped the two on `category_details`).
 `drizzle/0002_section_image_references.sql` adds four more of the same shape for `sections.image`,
-two of them on catalogue's `sections`. `drizzle/0003_published_image_references.sql` adds three for
-`menu_version_images.filename`: one on catalogue's `menu_version_images`, and two on `media_images`
-whose bodies read catalogue's `menu_version_images` and `menu_publications` — edges
+two of them on menu's `sections`. `drizzle/0003_published_image_references.sql` adds three for
+`menu_version_images.filename`: one on menu's `menu_version_images`, and two on `media_images`
+whose bodies read menu's `menu_version_images` and `menu_publications` — edges
 `scripts/module-graph-honesty.test.ts` now reads from their trigger bodies.
 `drizzle/0008_queued_edition_image_references.sql` re-creates those two so their bodies also read
-catalogue's `menu_scheduled_publications`, keeping a photo a queued edition names.
+menu's `menu_scheduled_publications`, keeping a photo a queued edition names.
 `drizzle/0009_include_folder_image_references.sql` adds four for the photo an include's folder
-names (`section_members.folder_overrides`, key `image`): two ON catalogue's `section_members`, and
-two on `media_images` whose bodies read `section_members`. A catalogue rebuild of any catalogue
+names (`section_members.folder_overrides`, key `image`): two ON menu's `section_members`, and
+two on `media_images` whose bodies read `section_members`. A menu rebuild of any menu
 table these bodies read — `sections`, `section_members`, `menu_version_images`,
 `menu_publications` or `menu_scheduled_publications` — is the trigger-body shape described below,
 which fails on an upgrade. Measured 2026-10-07 on `node:sqlite` (Node v26.7.0), with media's `0009`
@@ -1826,8 +1826,8 @@ committed and the two triggers ON `section_members` were gone afterwards, with n
 rebuild of `menu_version_images` that got past that, by removing media's two body triggers first,
 would also drop the insert trigger ON it with no error — inferred from the
 `products` measurement below, not measured on this table. Media's two edges, to core and to
-catalogue, are both declared — media's descriptor reads
-`requires: { core: "*", modules: { catalogue: "*" } }` (`packages/media/src/module.ts`) — and for
+menu, are both declared — media's descriptor reads
+`requires: { core: "*", modules: { menu: "*" } }` (`packages/media/src/module.ts`) — and for
 the triggers ON another set's tables that declaration is what the guard checks; the guard's job is
 the case where such an edge is NOT declared. Core's own triggers, in its migration files under
 `packages/db/drizzle/`, sit on core tables and name only core tables, and so are not edges at all.
@@ -1836,7 +1836,7 @@ behaviour is exercised by `packages/db/src/change-feed.test.ts`.
 
 2026-10-10 receipt-slice update: the media descriptor also requires venue-service for its
 department-logo usage reads. Composition and the migration manifest now put venue-service
-before media. The earlier trigger measurements above still describe the core/catalogue edges.
+before media. The earlier trigger measurements above still describe the core/menu edges.
 
 **A core rebuild of a table that another set's trigger BODY names applies fresh and fails on an
 upgrade; a trigger ON the rebuilt table is dropped with it, silently.** Core's
@@ -1870,7 +1870,7 @@ were deleted with the frozen history; read one with
 `core/0003_variant_inherited_nullable.sql`, #511) cascade-deleted `product_categories`
 on a venue without the media triggers (measured 2026-09-23 by a review of #511's plan, through
 `applyMigrations` on a scratch copy of `packages/db`). Task 4's rebuild of `menu_items`
-(`catalogue/0003_menu_price_nullable.sql`, #532), measured 2026-09-23 through
+(`menu/0003_menu_price_nullable.sql`, #532), measured 2026-09-23 through
 `applyMigrations`, emptied `menu_item_extra_lists`, `menu_item_extra_items` and
 `menu_item_variant_overrides` while reporting success, and failed with
 `FOREIGN KEY constraint failed` when a `working_line_contexts` row named the offer. A paid order
@@ -1960,7 +1960,7 @@ and the station's own minutes joined the copy), A756 PR 8 (format 8, 2026-10-24,
 dropped `service_settings`) and A980 S1a2 (format 9, 2026-10-26, when the copy gained the venue's
 privacy contact as the required top-level `privacyContact` key) moved the format for the same
 reason. A1301 S17 (format 10) made the venue's setup fields `venue`'s own keys, moved
-the default menu to the top-level `defaultCatalogueId` and dropped the location's `id` and
+the default menu to the top-level `defaultMenuId` and dropped the location's `id` and
 `fireControl`; a format-9 export is refused as outdated. `configuration-transfer.test.ts` pins
 the current format, and older files are refused as `setup.configuration_outdated`.
 A1308 slice 1b-ii (format 11) moves the comp limit from `adjustment_settings` to the
@@ -1969,13 +1969,13 @@ A1308 slice 4a-i (format 12) removes the recipe tables and derivation columns;
 a format-11 export is refused as outdated.
 
 **2026-11-10, A1308 slice 4a-ii:** format 15 removes the venue's extra-menu list
-(`location_catalogues`) from configuration exports; a format-14 export is refused as
+(`location_menus`) from configuration exports; a format-14 export is refused as
 `setup.configuration_outdated`.
 
 **2026-11-10, A1308 slice 4b:** format 17 removes `payment_policy`; the payments module
 transfers no configuration tables. A format-16 export is refused as `setup.configuration_outdated`.
 
-**2026-11-12, A1308 slice 5e:** format 19 removes the remaining transferred `location_id` columns and top-level `defaultCatalogueId`; the default menu travels as `catalogues.is_default`. Format-18 exports are refused as `setup.configuration_outdated`.
+**2026-11-12, A1308 slice 5e:** format 19 removes the remaining transferred `location_id` columns and top-level `defaultMenuId`; the default menu travels as `menus.is_default`. Format-18 exports are refused as `setup.configuration_outdated`.
 
 **2026-11-11, A739 cut 7(c):** format 18 removes `receipt_print_mode` from department and zone sale policies; format-17 exports are refused as `setup.configuration_outdated`.
 
@@ -1996,7 +1996,7 @@ not a setup field lives outside `venue`'s own keys; the privacy contact and cont
 travel as top-level fields
 (`packages/provisioning/src/configuration-transfer.ts`). Cost: from #1752 to A980 S1a2 every Live
 setup from an export on a production box was refused at the claim, because the setup app, which
-dropped only the location's `id`, copied its `fireControl` and `catalogueId` into it (probes 2 to 4
+dropped only the location's `id`, copied its `fireControl` and `menuId` into it (probes 2 to 4
 of the
 [S1a2 plan](../superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md#what-was-run-while-writing-this-plan));
 the tests that set up a production box from an export
@@ -2082,7 +2082,7 @@ number the same as its own, as when it names none and the parent has no primary 
 `ModuleConfigurationTransfer.validate` (`packages/module/src/module.ts`) takes an optional second
 argument, `{ createdAt, timeZone, dayCutover }`, which `validateConfigurationBundle`
 (`apps/server/src/configuration-transfer.ts`) fills from the bundle and passes to every module's
-`validate` before the import writes anything. Core, catalogue and media take only the tables.
+`validate` before the import writes anything. Core, menu and media take only the tables.
 Venue-service's `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`)
 checks ranges against the exported day changeover, and uses the bundle's time zone to refuse
 special-day paint at a time the clocks skip, a repeating date at its next occurrence from the
@@ -3956,9 +3956,9 @@ keep its name),
 `media/0007_recreate_product_image_triggers.sql`,
 `media/0008_queued_edition_image_references.sql`,
 `media/0009_include_folder_image_references.sql`,
-`catalogue/0013_drop_category_image_triggers.sql`,
-`catalogue/0018_sections_owned_prepare.sql` and
-`catalogue/0021_sections_owned_restore.sql`) each carry their own
+`menu/0013_drop_category_image_triggers.sql`,
+`menu/0018_sections_owned_prepare.sql` and
+`menu/0021_sections_owned_restore.sql`) each carry their own
 `meta/000N_snapshot.json`, so they are not snapshot-less; but on 2026-09-26 (2026-09-27 for
 `0024_bill_payment_triggers.sql`, 2026-09-28 for `0027_line_vat_class_triggers.sql`,
 `0033_line_served_exception.sql` and `0038_main_bill_release.sql`, 2026-09-29 for
@@ -3969,7 +3969,7 @@ keep its name),
 `0059_drop_product_triggers_before_rebuild.sql`, `0061_recreate_product_triggers.sql` and
 `0064_line_locale_triggers_text_only.sql`, media `0004_drop_category_image_triggers.sql`,
 `0006_recreate_section_image_triggers.sql` and `0007_recreate_product_image_triggers.sql`, and
-catalogue `0013_drop_category_image_triggers.sql`, `0018_sections_owned_prepare.sql` and
+menu `0013_drop_category_image_triggers.sql`, `0018_sections_owned_prepare.sql` and
 `0021_sections_owned_restore.sql`, and 2026-10-04 for core `0066`, `0072`, `0080`, `0082`, `0083`,
 `0086`, `0089` and `0091`, and 2026-10-07 for media `0008_queued_edition_image_references.sql` and
 `0009_include_folder_image_references.sql`, and 2026-10-09 for core `0119`, `0122` and `0124`, and
@@ -4090,7 +4090,7 @@ being the strong state rather than an unfinished one.
 Guard: `scripts/journal-monotonic.test.ts`, and what it can prove today is worth knowing. A ONE-entry
 journal cannot be out of order, so a per-set case over one such set is true by construction and is not
 evidence that any `when` in the tree is right. The sets that carry more than one entry are the ones
-whose case compares something — seven of fourteen when counted on 2026-10-03 (`db`, `catalogue`,
+whose case compares something — seven of fourteen when counted on 2026-10-03 (`db`, `menu`,
 `venue-service`, `media`, `identity`, `adjustments` and `payments`); count again rather than trusting
 that list. `outOfOrder` itself is pinned by a synthetic negative control, plus the anti-vacuity anchor
 that every journal is on disk.
@@ -5238,7 +5238,7 @@ schema and empty-data checks; it is not a substitute for a missing callback. Use
 query handle instead of opening a writable connection inside an owner.
 
 The trusted Cloud parent must still validate the complete result against the request, the actual
-child and pinned image, its current claim and deadline, and its own cleanup before catalogue
+child and pinned image, its current claim and deadline, and its own cleanup before menu
 admission. Keep snapshots unavailable until the joint release checks pass. The
 [verifier release procedure](../operations/backup-verifier-release.md) records the protocol vectors,
 local checks and joint release gates. The current host setup caller uses recovery version 1;
@@ -6524,3 +6524,12 @@ The source guard is weaker than its name: it sees literal `app.get` and `app.pos
 in server source, in the listed namespaces only. Other method calls, router variable names,
 template-literal or computed paths and new namespaces are outside it. Within the mounts it
 names, the mounted test checks every registered method and path against the shared inventory.
+
+
+### Menu names and configuration format 32 (2026-11-14, A1308 mn3)
+
+Your new export names the `menus` table and `products.menu_id` and uses format 32. A format-31
+export is refused as outdated. The previous format is pinned by the pre-menu-rename case in
+`apps/server/src/configuration-import.test.ts`; the writer and parser are in
+`packages/provisioning/src/configuration-transfer.ts`. Guest sharing uses `settings.guest_menu`;
+menu defaults retain `settings.menu`.

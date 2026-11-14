@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, catalogues, products, settings, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, menus, products, settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import * as catalogue from "./index.js";
+import * as menuModule from "./index.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 describe("the venue's new-product defaults", () => {
   it("saves product defaults in the menu document with advancing revisions", async () => {
     await withTransaction(suite.db, (tx) =>
-      catalogue.saveCatalogueSettings(tx, { defaultProductVatClass: "reduced" }),
+      menuModule.saveMenuSettings(tx, { defaultProductVatClass: "reduced" }),
     );
     expect(
       await suite.db
@@ -29,7 +29,7 @@ describe("the venue's new-product defaults", () => {
         doc: { defaultProductVatClass: "reduced", defaultColor: null, starterUnitsCreated: false },
       },
     ]);
-    await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, "#abcdef"));
+    await withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, "#abcdef"));
     expect(
       await suite.db.select({ revision: settings.revision, doc: settings.doc }).from(settings),
     ).toEqual([
@@ -45,7 +45,7 @@ describe("the venue's new-product defaults", () => {
   });
 
   it("uses general before provisioning has stored a preset", async () => {
-    expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+    expect(await menuModule.readMenuSettings(suite.db)).toEqual({
       defaultProductVatClass: "general",
       defaultColor: null,
     });
@@ -55,11 +55,11 @@ describe("the venue's new-product defaults", () => {
     "saves and reloads %s without changing an existing product",
     async (defaultProductVatClass) => {
       await seedTaxpayer(suite.db);
-      const [menu] = await suite.db.insert(catalogues).values({ name: "Lunch" }).returning();
+      const [menu] = await suite.db.insert(menus).values({ name: "Lunch" }).returning();
       const [product] = await suite.db
         .insert(products)
         .values({
-          catalogueId: menu!.id,
+          menuId: menu!.id,
           name: "Lemonade",
           pricingUnit: "each",
           unitPrice: 100,
@@ -67,9 +67,9 @@ describe("the venue's new-product defaults", () => {
         })
         .returning();
       await withTransaction(suite.db, (tx) =>
-        catalogue.saveCatalogueSettings(tx, { defaultProductVatClass }),
+        menuModule.saveMenuSettings(tx, { defaultProductVatClass }),
       );
-      expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+      expect(await menuModule.readMenuSettings(suite.db)).toEqual({
         defaultProductVatClass,
         defaultColor: null,
       });
@@ -86,17 +86,17 @@ describe("the venue's new-product defaults", () => {
     "refuses an invalid default %j without changing the stored setting",
     async (value) => {
       await withTransaction(suite.db, (tx) =>
-        catalogue.saveCatalogueSettings(tx, { defaultProductVatClass: "zero" }),
+        menuModule.saveMenuSettings(tx, { defaultProductVatClass: "zero" }),
       );
       await expect(
         withTransaction(suite.db, (tx) =>
-          catalogue.saveCatalogueSettings(tx, { defaultProductVatClass: value }),
+          menuModule.saveMenuSettings(tx, { defaultProductVatClass: value }),
         ),
       ).rejects.toMatchObject({
         code: "product.invalid",
         params: { field: "defaultProductVatClass" },
       });
-      expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+      expect(await menuModule.readMenuSettings(suite.db)).toEqual({
         defaultProductVatClass: "zero",
         defaultColor: null,
       });
@@ -107,34 +107,34 @@ describe("the venue's new-product defaults", () => {
 describe("the venue's default colour", () => {
   it("keeps the VAT default and the colour apart, whichever is saved last", async () => {
     expect(
-      await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, "#b12525")),
+      await withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, "#b12525")),
     ).toEqual({ defaultProductVatClass: "general", defaultColor: "#b12525" });
-    expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+    expect(await menuModule.readMenuSettings(suite.db)).toEqual({
       defaultProductVatClass: "general",
       defaultColor: "#b12525",
     });
 
     expect(
       await withTransaction(suite.db, (tx) =>
-        catalogue.saveCatalogueSettings(tx, { defaultProductVatClass: "zero" }),
+        menuModule.saveMenuSettings(tx, { defaultProductVatClass: "zero" }),
       ),
     ).toEqual({ defaultProductVatClass: "zero", defaultColor: "#b12525" });
-    expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+    expect(await menuModule.readMenuSettings(suite.db)).toEqual({
       defaultProductVatClass: "zero",
       defaultColor: "#b12525",
     });
 
-    await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, "#25b125"));
-    expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+    await withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, "#25b125"));
+    expect(await menuModule.readMenuSettings(suite.db)).toEqual({
       defaultProductVatClass: "zero",
       defaultColor: "#25b125",
     });
   });
 
   it("clears the colour when saved as null", async () => {
-    await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, "#b12525"));
-    await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, null));
-    expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+    await withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, "#b12525"));
+    await withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, null));
+    expect(await menuModule.readMenuSettings(suite.db)).toEqual({
       defaultProductVatClass: "general",
       defaultColor: null,
     });
@@ -143,11 +143,11 @@ describe("the venue's default colour", () => {
   it.each(["#ABCDEF", "#abc", "red", 123, {}, undefined])(
     "refuses %j without changing the stored colour",
     async (value) => {
-      await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, "#b12525"));
+      await withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, "#b12525"));
       await expect(
-        withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, value)),
+        withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, value)),
       ).rejects.toMatchObject({ code: "category.invalid", params: { field: "color" } });
-      expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+      expect(await menuModule.readMenuSettings(suite.db)).toEqual({
         defaultProductVatClass: "general",
         defaultColor: "#b12525",
       });
@@ -170,7 +170,7 @@ it.each([
   [{ ...menuDoc, starterUnitsCreated: 1 }, "starterUnitsCreated"],
   [{ ...menuDoc, x: true }, "x"],
 ])("names the bad menu document field in %j", (doc, field) => {
-  expect(catalogue.MENU_SETTINGS.parse(doc)).toEqual({ ok: false, field });
+  expect(menuModule.MENU_SETTINGS.parse(doc)).toEqual({ ok: false, field });
 });
 it("accepts a complete menu document", () => {
   const doc = {
@@ -178,5 +178,5 @@ it("accepts a complete menu document", () => {
     defaultColor: "#abcdef",
     starterUnitsCreated: true,
   };
-  expect(catalogue.MENU_SETTINGS.parse(doc)).toEqual({ ok: true, doc });
+  expect(menuModule.MENU_SETTINGS.parse(doc)).toEqual({ ok: true, doc });
 });

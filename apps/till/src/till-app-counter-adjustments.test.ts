@@ -29,7 +29,7 @@ import type {
   TabLines,
   TillApi,
   TillProduct,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 
 // Comp…, Comp the bill and Cancel on a stored counter order, through the app: the dialog is the
@@ -53,7 +53,7 @@ const till = {
   servers: [],
 };
 
-const offers: ZoneOfferCatalogue = {
+const offers: ZoneOffers = {
   service: {
     open: true,
     zoneOpen: true,
@@ -76,7 +76,7 @@ const offers: ZoneOfferCatalogue = {
 const product = (id: string, name: string, unitPrice: string): TillProduct => ({
   id,
   menuItemId: `mi-${id}`,
-  catalogueId: "cat-default",
+  menuId: "cat-default",
   name,
   pricingUnit: "each",
   unitPrice,
@@ -330,14 +330,14 @@ async function placeCounter(overrides: Record<string, unknown> = {}): Promise<Ti
     const item = line.product!;
     return {
       ...menuOffer(item.menuItemId!, item.name),
-      menuId: item.catalogueId!,
+      menuId: item.menuId!,
       productId: item.id,
       unitPrice: item.unitPrice,
       grossPrice: item.unitPrice,
       unit: productUnit(item),
     };
   });
-  const catalogue: ZoneOfferCatalogue = {
+  const menu: ZoneOffers = {
     ...offers,
     context: { ...offers.context, serviceMode: "ticket_then_pay" },
     menus: servedMenus(
@@ -348,8 +348,8 @@ async function placeCounter(overrides: Record<string, unknown> = {}): Promise<Ti
   };
   return retrieved({
     getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-    listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
-    listZoneOffers: vi.fn().mockResolvedValue(catalogue),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
+    listZoneOffers: vi.fn().mockResolvedValue(menu),
     ...overrides,
   });
 }

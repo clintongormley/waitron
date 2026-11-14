@@ -12,7 +12,7 @@ function recordingApi() {
       calls.push({ method, args });
     };
   const api = {
-    renameCatalogue: record("renameCatalogue"),
+    renameMenu: record("renameMenu"),
     updateMenuItem: record("updateMenuItem"),
     setMenuVariantPrice: record("setMenuVariantPrice"),
     updateSection: record("updateSection"),
@@ -21,7 +21,7 @@ function recordingApi() {
   return { api, calls };
 }
 
-const rename: MenuUndoCommand = { method: "renameCatalogue", menuId: "m1", name: "Dinner" };
+const rename: MenuUndoCommand = { method: "renameMenu", menuId: "m1", name: "Dinner" };
 const dishPrice: MenuUndoCommand = {
   method: "updateMenuItem",
   menuId: "m1",
@@ -52,7 +52,7 @@ const display: MenuUndoCommand = {
 
 describe("sendMenuUndo", () => {
   it.each([
-    [rename, "renameCatalogue", ["m1", "Dinner"]],
+    [rename, "renameMenu", ["m1", "Dinner"]],
     [dishPrice, "updateMenuItem", ["m1", "i1", { grossPrice: null }]],
     [variantPrice, "setMenuVariantPrice", ["m1", "i1", "v1", "0.00"]],
     [section, "updateSection", ["s1", { color: null }]],
@@ -69,7 +69,7 @@ describe("sendMenuUndo", () => {
   it("passes a refusal on to the caller", async () => {
     const refusal = { code: "menu.name_taken" };
     const api = {
-      renameCatalogue: vi.fn(async () => {
+      renameMenu: vi.fn(async () => {
         throw refusal;
       }),
     } as unknown as MenuUndoApi;
@@ -88,8 +88,8 @@ describe("undoRefusalText", () => {
 
   it.each([
     ["menu.name_taken", rename, "Another menu called Dinner already exists."],
-    ["catalogue.not_found", rename, "This menu has been deleted, so there is nothing to undo."],
-    ["catalogue.not_found", display, "This menu has been deleted, so there is nothing to undo."],
+    ["menu.not_found", rename, "This menu has been deleted, so there is nothing to undo."],
+    ["menu.not_found", display, "This menu has been deleted, so there is nothing to undo."],
     ["menu_item.not_found", dishPrice, "Burger is no longer on this menu."],
     ["menu_item.not_found", variantPrice, "Lemonade is no longer on this menu."],
     [

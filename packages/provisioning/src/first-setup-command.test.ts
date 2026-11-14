@@ -346,7 +346,7 @@ it("rejects changed module versions even on an already imported request", async 
     stateDir: join(f.root, "state"),
     venueDir: join(f.root, "venue"),
     modules: ALL_MODULES.map((module) =>
-      module.name === "catalogue" ? { ...module, version: "99.0.0" } : module,
+      module.name === "menu" ? { ...module, version: "99.0.0" } : module,
     ),
     database: () => venue.db,
   });
@@ -414,7 +414,7 @@ it("refuses a corrected box clock while the operator is answering", async () => 
 function twoCommandModules() {
   const base = ALL_MODULES.find((module) => module.name === MODULE)!.provisioning!.initialSetup!;
   return ALL_MODULES.map((module) => {
-    if (![MODULE, "catalogue"].includes(module.name)) return module;
+    if (![MODULE, "menu"].includes(module.name)) return module;
     const seat: InitialSetupContribution = {
       ...base,
       configure: undefined,
@@ -438,7 +438,7 @@ it("selects every contributing module before importing any activation input", as
   expect(result.status).toBe("ready");
   expect(result.state.status).toBe("consumption-intent");
   expect(result.state.inputs).toEqual({
-    catalogue: { choice: "catalogue" },
+    menu: { choice: "menu" },
     [MODULE]: { choice: MODULE },
   });
   expect(result.state.history.map((event) => event.kind)).toEqual([
@@ -520,7 +520,7 @@ it("refuses module selection drift before a command can return cancellation", as
     stateDir: join(f.root, "state"),
     venueDir: join(f.root, "venue"),
     modules: modules.map((module) =>
-      module.name === "catalogue" ? { ...module, version: "99.0.0" } : module,
+      module.name === "menu" ? { ...module, version: "99.0.0" } : module,
     ),
     database: () => venue.db,
   });

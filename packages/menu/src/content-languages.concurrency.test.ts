@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS, catalogues, products, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, menus, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
@@ -17,10 +17,7 @@ async function configuredTaxpayer() {
   await withTransaction(suite.db, (tx) =>
     writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }),
   );
-  const [menu] = await suite.db
-    .insert(catalogues)
-    .values({ name: "Lunch" })
-    .returning({ id: catalogues.id });
+  const [menu] = await suite.db.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id });
   return { menuId: menu!.id };
 }
 
@@ -32,7 +29,7 @@ it("a default switch waits for an authoring transaction and keeps its incomplete
     async (tx) => {
       await validateContentTranslations(tx, { en: "Bread" }, "es");
       await tx.insert(products).values({
-        catalogueId: menuId,
+        menuId: menuId,
         name: "Bread",
         customerName: { en: "Bread" },
         pricingUnit: "each",

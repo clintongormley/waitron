@@ -13,7 +13,7 @@ import {
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { createMenu, createProduct } from "./operations.js";
 import { addMember } from "./sections.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 import {
@@ -338,11 +338,11 @@ describe("translation peer baseline projection", () => {
       await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
-        const parent = await createCatalogue(tx, {
+        const parent = await createMenu(tx, {
           name: "STAFF Parent",
           names: { es: "CLIENT CA breaddre" },
         });
-        const child = await createCatalogue(tx, {
+        const child = await createMenu(tx, {
           name: "STAFF Child",
           names: { es: "CLIENT Antes", en: "CLIENT Before", ca: "CLIENT Abans" },
         });
@@ -365,7 +365,7 @@ describe("translation peer baseline projection", () => {
           })
           .returning();
         const product = await createProduct(tx, {
-          catalogueId: parent.id,
+          menuId: parent.id,
           categoryId: null,
           name: "STAFF Bread",
           kitchenName: "KITCHEN Bread",

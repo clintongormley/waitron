@@ -44,7 +44,7 @@ interface CountryDemoCategoryFields<L extends string = string> {
   products: CountryDemoProduct<L>[];
 }
 
-interface CountryDemoCatalogueFields<L extends string = string> {
+interface CountryDemoMenuFields<L extends string = string> {
   name: DemoPlainText<L>;
   customerName: DemoText<L>;
   categories: CountryDemoCategory<L>[];
@@ -107,9 +107,9 @@ interface CountryDemoDataFields<L extends string = string> {
 
   readonly contentLanguages: readonly L[];
   readonly menus: {
-    readonly restaurant: CountryDemoCatalogue<L>;
-    readonly deli: CountryDemoCatalogue<L>;
-    readonly lunch: CountryDemoCatalogue<L>;
+    readonly restaurant: CountryDemoMenu<L>;
+    readonly deli: CountryDemoMenu<L>;
+    readonly lunch: CountryDemoMenu<L>;
     readonly drinksName: DemoPlainText<L>;
     readonly drinksCustomerName: DemoText<L>;
   };
@@ -138,9 +138,7 @@ export type CountryDemoCategory<L extends string = string> = ReadonlyDemo<
   CountryDemoCategoryFields<L>
 >;
 
-export type CountryDemoCatalogue<L extends string = string> = ReadonlyDemo<
-  CountryDemoCatalogueFields<L>
->;
+export type CountryDemoMenu<L extends string = string> = ReadonlyDemo<CountryDemoMenuFields<L>>;
 
 export type CountryDemoOptionLabel<L extends string = string> = ReadonlyDemo<
   CountryDemoOptionLabelFields<L>

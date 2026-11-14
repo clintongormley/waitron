@@ -44,7 +44,7 @@ function entryOf(sql: string, overrides: Partial<SchemaListEntry> = {}): SchemaL
       composition: "fiscal-verifactu",
       phase: "post-runtime",
       database: "venue",
-      setOrder: ["core", "catalogue"],
+      setOrder: ["core", "menu"],
       journals: { core: { entries: [{ idx: 0, tag: "0000_core" }] } },
       bookkeepingRows: { core: 1 },
       owningSet: { "table sales": "core" },
@@ -115,7 +115,7 @@ describe("compareSchemaLists accepts", () => {
     const movedFirst = `CREATE TABLE notes (body TEXT);\n${variant("CREATE TABLE notes (body TEXT);", "")}`;
     const after = fileOf(
       entryOf(movedFirst, {
-        setOrder: ["catalogue", "core"],
+        setOrder: ["menu", "core"],
         journals: { merged: { entries: [] } },
         bookkeepingRows: { merged: 8 },
         owningSet: { "table sales": "merged" },

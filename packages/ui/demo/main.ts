@@ -282,9 +282,9 @@ const panel = (theme: "light" | "dark") => `
         </div>
         <wt-data-table class="demo-table" aria-label="Team"></wt-data-table>
       </section>
-      <section slot="catalogue">
-        <h3>Catalogue</h3>
-        <wt-data-table class="demo-search-table" aria-label="Catalogue" searchable></wt-data-table>
+      <section slot="menu">
+        <h3>Menu</h3>
+        <wt-data-table class="demo-search-table" aria-label="Menu" searchable></wt-data-table>
       </section>
     </wt-tabs>
     <div class="row" style="margin-top:16px">
@@ -403,7 +403,7 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   tabs.items = [
     { key: "status", label: "Status" },
     { key: "team", label: "Team" },
-    { key: "catalogue", label: "Catalogue" },
+    { key: "menu", label: "Menu" },
   ];
   tabs.value = "team";
   const table = el.querySelector<WtDataTable<{ name: string; role: string }>>("wt-data-table")!;
@@ -467,8 +467,8 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
     el.querySelector<WtDataTable<{ name: string; category: string; price: number }>>(
       ".demo-search-table",
     )!;
-  searchTable.searchLabel = "Search catalogue";
-  searchTable.viewKey = `demo-catalogue-view-${el.dataset.theme}`;
+  searchTable.searchLabel = "Search menu";
+  searchTable.viewKey = `demo-menu-view-${el.dataset.theme}`;
   searchTable.sortKey = "name";
   searchTable.sortDirection = "ascending";
   searchTable.rows = [

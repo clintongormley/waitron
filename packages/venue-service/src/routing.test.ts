@@ -1581,7 +1581,7 @@ describe("changeReach", () => {
     routedProductId,
     categoryId,
   });
-  const catalogue: readonly ProductFacts[] = [
+  const menu: readonly ProductFacts[] = [
     facts("p1", "a1x"),
     facts("p2", "a1"),
     facts("p3", "a2"),
@@ -1599,7 +1599,7 @@ describe("changeReach", () => {
     all,
     { kind: "no_category" },
     ...[...tree.keys()].map(category),
-    ...catalogue.filter((p) => p.productId === p.routedProductId).map((p) => product(p.productId)),
+    ...menu.filter((p) => p.productId === p.routedProductId).map((p) => product(p.productId)),
   ];
   const addresses: CellAddress[] = rows.flatMap((row) =>
     [...zones, null].flatMap((zoneId) =>
@@ -1667,7 +1667,7 @@ describe("changeReach", () => {
           const after = withChange(before, address, target);
           for (const zoneId of columns) {
             const choices = new Map(
-              catalogue.map((p) => [
+              menu.map((p) => [
                 p.productId,
                 {
                   before: chooseMaker(before, p, zoneId, null),
@@ -1675,7 +1675,7 @@ describe("changeReach", () => {
                 },
               ]),
             );
-            for (const p of catalogue) {
+            for (const p of menu) {
               const choice = choices.get(p.productId)!;
               if (sameChoice(choice.before, choice.after)) continue;
               dishMoves++;
@@ -1692,8 +1692,8 @@ describe("changeReach", () => {
                 true,
               ]);
             }
-            for (const dish of catalogue)
-              for (const extra of catalogue) {
+            for (const dish of menu)
+              for (const extra of menu) {
                 const dishChoice = choices.get(dish.productId)!;
                 if (
                   placement(before, dishChoice.before, extra, zoneId) ===
@@ -1719,23 +1719,15 @@ describe("changeReach", () => {
 
   it("does not reach a sibling product, another zone, or another branch of the tree", () => {
     const p1InZ1 = changeReach(tree, { row: product("p1"), zoneId: "z1" });
-    expect(catalogue.filter((p) => p1InZ1.covers(p)).map((p) => p.productId)).toEqual(["p1", "v1"]);
+    expect(menu.filter((p) => p1InZ1.covers(p)).map((p) => p.productId)).toEqual(["p1", "v1"]);
     expect(columns.filter((zoneId) => p1InZ1.reachesZone(zoneId))).toEqual(["z1"]);
     const a1 = changeReach(tree, { row: category("a1"), zoneId: null });
-    expect(catalogue.filter((p) => a1.covers(p)).map((p) => p.productId)).toEqual([
-      "p1",
-      "p2",
-      "v1",
-    ]);
+    expect(menu.filter((p) => a1.covers(p)).map((p) => p.productId)).toEqual(["p1", "p2", "v1"]);
     expect(columns.filter((zoneId) => a1.reachesZone(zoneId))).toEqual(columns);
     const loose = changeReach(tree, { row: { kind: "no_category" }, zoneId: "z2" });
-    expect(catalogue.filter((p) => loose.covers(p)).map((p) => p.productId)).toEqual([
-      "p6",
-      "p7",
-      "v6",
-    ]);
+    expect(menu.filter((p) => loose.covers(p)).map((p) => p.productId)).toEqual(["p6", "p7", "v6"]);
     const everything = changeReach(tree, { row: all, zoneId: "z3" });
-    expect(catalogue.every((p) => everything.covers(p))).toBe(true);
+    expect(menu.every((p) => everything.covers(p))).toBe(true);
     expect(columns.filter((zoneId) => everything.reachesZone(zoneId))).toEqual(["z3"]);
   });
 });

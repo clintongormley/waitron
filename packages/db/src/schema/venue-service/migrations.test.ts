@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   captureError,
-  catalogues,
+  menus,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   departments,
@@ -260,7 +260,7 @@ describe("the venue-service tables carry no taxpayer column", () => {
       menu_period_staff_menus: {
         primaryKey: ["period_id", "menu_id"],
         foreignKeys: [
-          "(menu_id) -> catalogues(id)",
+          "(menu_id) -> menus(id)",
           "(period_id, department_id) -> menu_periods(id, department_id) on delete cascade",
         ],
       },
@@ -438,7 +438,7 @@ describe("the venue-service tables carry no taxpayer column", () => {
 
 /** A menu's own row: the foreign keys below need nothing else of it. */
 async function insertMenu(name: string): Promise<{ id: string }> {
-  const [menu] = await db.insert(catalogues).values({ name }).returning({ id: catalogues.id });
+  const [menu] = await db.insert(menus).values({ name }).returning({ id: menus.id });
   return menu!;
 }
 
@@ -699,7 +699,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     expect(rows.rows).toEqual([]);
   });
 
-  it("links a period directly to an existing catalogue without a separate membership row", async () => {
+  it("links a period directly to an existing menu without a separate membership row", async () => {
     const v = await venue();
     const periodId = randomUUID();
     await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
@@ -740,7 +740,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     ).toEqual([]);
   });
 
-  it("ties a staff menu to its period's department and an existing catalogue", async () => {
+  it("ties a staff menu to its period's department and an existing menu", async () => {
     const v = await venue();
     const other = await venue();
     const periodId = randomUUID();

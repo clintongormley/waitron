@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
+import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   settings as businessDaySettingsTable,
@@ -51,7 +51,7 @@ async function routed() {
   const made = await scoped(async (tx) => {
     const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     await configureZone(tx, { zoneId: zone!.id, departmentId: restaurant });
-    const menuId = (await createCatalogue(tx, { name: `Dinner` })).id;
+    const menuId = (await createMenu(tx, { name: `Dinner` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     const dinner = (

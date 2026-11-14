@@ -8,8 +8,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { savePartyAllergy, setRoutingCell } from "@waitron/venue-service";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   createProduct,
@@ -125,11 +125,11 @@ function view(partyId: string, target?: AllergySendTarget) {
 
 async function nutritionProducts() {
   return inTx(v, async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: `Nutrition ${randomUUID().slice(0, 8)}` });
+    const menu = await createMenu(tx, { name: `Nutrition ${randomUUID().slice(0, 8)}` });
     const category = await createCategory(tx, { name: `Dishes ${randomUUID().slice(0, 8)}` });
     const make = (name: string, allergens?: AllergenMap) =>
       createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: `${name} ${randomUUID().slice(0, 8)}`,
         customerName: { es: `${name} customer` },
@@ -178,7 +178,7 @@ async function nutritionProducts() {
       "es-ES",
     );
     await writeProductModifiers(tx, parent.id, [{ kind: "extras", id: list.id }]);
-    await assignCatalogueToVenue(tx, catalogue.id);
+    await assignMenuToVenue(tx, menu.id);
     const offers = await offerProducts(tx, v.cfg, {
       zone: { zoneId: v.tables.zoneId },
       orderStart: "table",

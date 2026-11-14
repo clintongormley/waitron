@@ -147,7 +147,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("device_profile_printers", "state", STATE),
   classify("printer_holders", "state", STATE),
   classify("invoice_series", "state", STATE),
-  classify("catalogues", "state", STATE),
+  classify("menus", "state", STATE),
   classify("categories", "state", STATE),
   classify("products", "state", STATE),
   classify("floor_zones", "state", STATE),
@@ -313,7 +313,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "accounted batch digests for an emergency takeover; copied with the venue",
   ),
 
-  // catalogue
+  // menu
   classify("category_details", "state", MENU_STATE),
   classify("units", "state", MENU_STATE),
   classify("product_units", "state", MENU_STATE),

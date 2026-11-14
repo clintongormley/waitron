@@ -56,8 +56,8 @@ it("reads the image schema from the configured copied migration folders", async 
 });
 it.each([
   [
-    "catalogue",
-    "insert into catalogues(id, name, created_at, updated_at) values ('menu', 'Retained', '2026-10-16', '2026-10-16')",
+    "menu",
+    "insert into menus(id, name, created_at, updated_at) values ('menu', 'Retained', '2026-10-16', '2026-10-16')",
   ],
   [
     "invoice series",
@@ -84,7 +84,7 @@ it.each([
   ["missing module table", 'drop table "scheduled_runs"'],
   ["missing module column", 'alter table "scheduled_runs" drop column "summary"'],
   ["missing module journal", 'drop table "__drizzle_migrations_bookings"'],
-  ["view", 'create view "retained_view" as select * from catalogues'],
+  ["view", 'create view "retained_view" as select * from menus'],
 ])("refuses a %s instead of certifying an incomplete or unknown schema", async (_name, edit) => {
   expect(await inspect((connection) => connection.exec(edit))).toBe(false);
 });

@@ -18,7 +18,7 @@ const layout = { paperWidth: "80mm", resolution: "180dpi" } as const;
 const firedAt = new Date(2026, 9, 29, 13, 24);
 const item = { qty: "2.000", name: "Pass roast", group: 3 };
 
-describe("A964 frame catalogue", () => {
+describe("A964 frame menu", () => {
   it.each(["HOLD", "FIRE"] as const)("translates Spanish %s, group and reprint markers", (mark) => {
     const lines = printedLines(
       formatKitchenTicket(

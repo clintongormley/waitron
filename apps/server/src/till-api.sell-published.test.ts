@@ -27,17 +27,17 @@ import {
   removeMember,
   addShortcut,
   addProducts,
-  assignCatalogueToVenue,
+  assignMenuToVenue,
   assignProductUnit,
   buildMenuDocument,
-  createCatalogue,
+  createMenu,
   createCategory,
   createExtraList,
   createOptionList,
   createProduct,
   createSectionIn,
   createUnit,
-  deactivateCatalogue,
+  deactivateMenu,
   menuDocumentHash,
   menuStatus,
   menuVersions,
@@ -195,11 +195,11 @@ async function setupLunch(): Promise<Lunch> {
         receipt: { operationDescription: "Venta en establecimiento" },
       });
 
-    const lunch = await createCatalogue(tx, { name: "Lunch" });
+    const lunch = await createMenu(tx, { name: "Lunch" });
     const category = await createCategory(tx, { name: "Carta" });
     const product = (name: string, unitPrice: string, vatClass: "general" | "reduced") =>
       createProduct(tx, {
-        catalogueId: lunch.id,
+        menuId: lunch.id,
         categoryId: category.id,
         name,
         pricingUnit: "each",
@@ -240,7 +240,7 @@ async function setupLunch(): Promise<Lunch> {
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "options", id: punto.id }]);
-    await assignCatalogueToVenue(tx, lunch.id);
+    await assignMenuToVenue(tx, lunch.id);
     const lemonadeOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: lemonade.id });
     const burgerOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: burger.id });
 
@@ -468,7 +468,7 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
     const v = await setupLunch();
     await publish(v.menuId);
     const brunch = await withTransaction(suite.db, async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Brunch" });
+      const menu = await createMenu(tx, { name: "Brunch" });
       await addProductToMenu(tx, { menuId: menu.id, productId: v.burger.productId });
       await offerMenuThroughZone(tx, v.zoneId, menu.id, { displayOrder: 1 });
       return publishWorkingMenu(tx, menu.id);
@@ -580,7 +580,7 @@ describe("a menu deactivated after it was published", () => {
   it("is no longer offered, and a sale from it is refused with no sale, fiscal record or order written", async () => {
     const v = await setupLunch();
     const v1 = await publish(v.menuId);
-    await withTransaction(suite.db, (tx) => deactivateCatalogue(tx, v.menuId));
+    await withTransaction(suite.db, (tx) => deactivateMenu(tx, v.menuId));
 
     const offers = await send(v, "GET", `/api/service-zones/${v.zoneId}/offers`);
     expect(offers.status).toBe(200);
@@ -774,7 +774,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
         .from(products)
         .where(eq(products.id, v.burger.productId));
       const bacon = await createProduct(tx, {
-        catalogueId: v.menuId,
+        menuId: v.menuId,
         categoryId,
         name: "Bacon",
         customerName: { [LOCALE]: "Beicon crujiente" },
@@ -1241,7 +1241,7 @@ describe("the Device Home Page each menu serves", () => {
 it("sells a product reached only through an included menu at that menu's price", async () => {
   const v = await setupLunch();
   await withTransaction(suite.db, async (tx) => {
-    const child = await createCatalogue(tx, { name: "Drinks" });
+    const child = await createMenu(tx, { name: "Drinks" });
     const childRoot = await requireMenuRoot(tx, child.id);
     const parentRoot = await requireMenuRoot(tx, v.menuId);
     const members = await tx.execute<{ id: string }>(

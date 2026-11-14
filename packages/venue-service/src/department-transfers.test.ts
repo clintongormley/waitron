@@ -4,7 +4,7 @@ import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addProductToMenu, createCatalogue, createProduct, units } from "@waitron/menu";
+import { addProductToMenu, createMenu, createProduct, units } from "@waitron/menu";
 import {
   departments,
   departmentTransferRequests,
@@ -906,9 +906,9 @@ describe("departmental tab transfers", () => {
           seedKey: "each",
         })
         .returning();
-      const menu = await createCatalogue(tx, { name: "Source menu" });
+      const menu = await createMenu(tx, { name: "Source menu" });
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Soup",
         pricingUnit: "each",

@@ -33,7 +33,7 @@ export interface MenuUndoInput {
 /** One write that puts a change back, named for the dashboard client method it maps to, with that
  * method's arguments and the display names a refusal sentence needs. */
 export type MenuUndoCommand =
-  | { method: "renameCatalogue"; menuId: string; name: string }
+  | { method: "renameMenu"; menuId: string; name: string }
   | {
       method: "updateMenuItem";
       menuId: string;
@@ -149,7 +149,7 @@ function thisMenuAction(plan: Plan, change: MenuChange): MenuChangeAction {
   const now = plan.input.preview.document;
   switch (change.kind) {
     case "menu_renamed":
-      return undo({ method: "renameCatalogue", menuId: now.menuId, name: change.from });
+      return undo({ method: "renameMenu", menuId: now.menuId, name: change.from });
     case "home_display_changed":
       return homeDisplayUndo(plan.live.document, now, change.device);
     case "section_changed":

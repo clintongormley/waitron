@@ -50,7 +50,7 @@ import {
  * **Reading `sqlite_master` is not enough, and most of this file is the other half.** A trigger
  * SQLite RECORDS is not a trigger SQLite ENFORCES: a `WHEN` clause that is never true, a body
  * whose condition is inverted, or a set comparison that only works in one direction all leave the
- * name in the catalogue. So every refusing trigger has a real offending write with its message
+ * name in the menu. So every refusing trigger has a real offending write with its message
  * asserted, and each has an ACCEPTING control in the other direction — without the control, a
  * trigger that refused EVERY write would pass the refusal cases.
  *
@@ -1556,12 +1556,12 @@ describe("device_profile_form_factor_locked", () => {
 
 /**
  * A product row. Foreign keys and checks are off in this file (see `seed`), so a variant needs no
- * catalogue row and may leave every inherited column null.
+ * menu row and may leave every inherited column null.
  */
 function product(id, parentId = null) {
   const parent = parentId === null ? "null" : `'${parentId}'`;
   return (
-    `insert into products (id, catalogue_id, parent_id, name, created_at, updated_at) ` +
+    `insert into products (id, menu_id, parent_id, name, created_at, updated_at) ` +
     `values ('${id}', 'cat', ${parent}, '${id}', '${STAMP}', '${STAMP}')`
   );
 }
@@ -1708,7 +1708,7 @@ describe("products_id_fixed_update", () => {
 /** A top-level product row carrying `ordering`, spelled into the statement as given. */
 function productOrdered(id, ordering) {
   return (
-    `insert into products (id, catalogue_id, name, ordering, created_at, updated_at) ` +
+    `insert into products (id, menu_id, name, ordering, created_at, updated_at) ` +
     `values ('${id}', 'cat', '${id}', '${ordering}', '${STAMP}', '${STAMP}')`
   );
 }
