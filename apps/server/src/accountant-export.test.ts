@@ -85,6 +85,7 @@ describe("accountant workbook", () => {
               {
                 id: "payment-1",
                 workingOrderId: "bill-1",
+                orderNumber: 77,
                 saleId: "sale-1",
                 invoiceNumber: "A/1",
                 nodeId: "box-1",
@@ -101,8 +102,15 @@ describe("accountant workbook", () => {
           language,
         ),
       );
-      expect(files["xl/worksheets/sheet3.xml"]).toBeDefined();
-      const xml = strFromU8(files["xl/worksheets/sheet3.xml"]!);
+      const sheetName = language === "en" ? "Other card machines" : "Otros terminales";
+      const relationshipId = strFromU8(files["xl/workbook.xml"]!).match(
+        new RegExp(`<sheet name="${sheetName}"[^>]*r:id="([^"]+)"`),
+      )?.[1];
+      const target = strFromU8(files["xl/_rels/workbook.xml.rels"]!).match(
+        new RegExp(`<Relationship Id="${relationshipId}"[^>]*Target="([^"]+)"`),
+      )?.[1];
+      expect(files[`xl/${target}`]).toBeDefined();
+      const xml = strFromU8(files[`xl/${target}`]!);
       expect(row(xml, 2)).toEqual([
         "payment-1",
         "bill-1",
@@ -111,7 +119,7 @@ describe("accountant workbook", () => {
         "box-1",
         "2026-11-03T12:00:00.000Z",
         "12.34",
-        language === "en" ? "Paid outside Waitron" : "Pagado fuera de Waitron",
+        language === "en" ? "Paid outside Waitron" : "Cobrado fuera de Waitron",
         "=Backup &amp; 001",
         "00042",
         language === "en" ? "Partially refunded" : "Reembolsado parcialmente",

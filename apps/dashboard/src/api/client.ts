@@ -1564,6 +1564,7 @@ export interface OverdueOrder {
 export interface OutsidePaymentDto {
   id: string;
   workingOrderId: string;
+  orderNumber: number;
   saleId: string | null;
   invoiceNumber: string | null;
   nodeId: string | null;
@@ -1584,6 +1585,7 @@ export interface OutsidePaymentDto {
 }
 
 export interface DailyCloseDto {
+  timeZone: string;
   outsidePayments: OutsidePaymentDto[];
   businessDay: string;
   vat: VatSummaryDto;

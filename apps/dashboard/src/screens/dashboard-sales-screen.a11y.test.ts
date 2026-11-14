@@ -12,10 +12,12 @@ import { today } from "../date-utils.js";
 import { t } from "../i18n/t.js";
 
 const close: DailyCloseDto = {
+  timeZone: "Europe/Madrid",
   outsidePayments: [
     {
       id: "p1",
       workingOrderId: "bill-1",
+      orderNumber: 77,
       saleId: null,
       invoiceNumber: null,
       nodeId: "box-1",

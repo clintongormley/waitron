@@ -7,6 +7,7 @@ import type { PaymentState } from "@waitron/payments";
 export interface OutsidePayment {
   id: string;
   workingOrderId: string;
+  orderNumber: number;
   saleId: string | null;
   invoiceNumber: string | null;
   nodeId: string | null;
@@ -33,16 +34,14 @@ export async function listOutsidePayments(
       number: number | null;
     }
   >(sql`
-    select p.id, p.working_order_id as workingOrderId, p.sale_id as saleId,
+    select p.id, p.working_order_id as workingOrderId, wo.order_number as orderNumber, p.sale_id as saleId,
       p.node_id as nodeId, p.settled_at as settledAt, cast(p.amount as text) as amount,
       p.external_provider as externalProvider, p.external_machine as externalMachine,
       p.external_ref as externalRef, p.state, s.invoice_number as number, series.code,
-      cast(coalesce(r.total, 0) as text) as refunded
+      cast((select coalesce(sum(r.amount), 0) from payment_refunds r
+        where r.payment_id = p.id and r.state = 'succeeded') as text) as refunded
     from payments p
-    left join (
-      select payment_id, sum(amount) as total from payment_refunds
-      where state = 'succeeded' group by payment_id
-    ) r on r.payment_id = p.id
+    join working_orders wo on wo.id = p.working_order_id
     left join sales s on s.id = p.sale_id
     left join invoice_series series on series.id = s.series_id
     where p.provider = 'manual' and ${window(sql`p.settled_at`)}

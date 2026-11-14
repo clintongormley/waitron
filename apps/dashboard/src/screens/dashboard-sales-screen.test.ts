@@ -14,6 +14,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const close: DailyCloseDto = {
   outsidePayments: [],
+  timeZone: "Europe/Madrid",
   businessDay: "2026-08-29",
   vat: {
     byRate: [
@@ -138,6 +139,7 @@ describe("dashboard-sales-screen", () => {
               {
                 id: "p1",
                 workingOrderId: "bill-1",
+                orderNumber: 77,
                 saleId: "sale-1",
                 invoiceNumber: "A/1",
                 nodeId: "box-1",
@@ -158,11 +160,13 @@ describe("dashboard-sales-screen", () => {
       const details = root.querySelector('[data-test="outside-payments"]');
       expect(details).not.toBeNull();
       const text = details!.textContent!;
-      for (const value of ["bill-1", "A/1", "Backup 001", "00042", "12.34", "3.03"]) {
+      for (const value of ["#77", "A/1", "Backup 001", "00042", "12.34", "3.03"]) {
         expect(text.replaceAll(",", ".")).toContain(value);
       }
+      expect(text).toContain("13:00");
+      expect(details!.querySelector("th[scope=row]")!.getAttribute("title")).toBe("bill-1");
       expect(text).toContain(
-        locale === "en-GB" ? "Paid outside Waitron" : "Pagado fuera de Waitron",
+        locale === "en-GB" ? "Paid outside Waitron" : "Cobrado fuera de Waitron",
       );
       expect(text).toContain(
         locale === "en-GB" ? "Partially refunded" : "Reembolsado parcialmente",

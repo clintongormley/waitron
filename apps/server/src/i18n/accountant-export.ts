@@ -1,7 +1,7 @@
 export const ACCOUNTANT_EXPORT_WORDS = {
   en: {
     outsideSheet: "Other card machines",
-    outsideSources: { connected_account: "This connected account", other: "Paid outside Waitron" },
+    outsideSources: { connected_account: "This SumUp account", other: "Paid outside Waitron" },
     paymentStates: {
       attempting: "Attempting",
       initiated: "Initiated",
@@ -81,8 +81,8 @@ export const ACCOUNTANT_EXPORT_WORDS = {
   es: {
     outsideSheet: "Otros terminales",
     outsideSources: {
-      connected_account: "Esta cuenta conectada",
-      other: "Pagado fuera de Waitron",
+      connected_account: "Esta cuenta de SumUp",
+      other: "Cobrado fuera de Waitron",
     },
     paymentStates: {
       attempting: "En curso",

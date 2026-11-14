@@ -63,7 +63,7 @@ un datáfono de reserva, elige **Efectivo**.
 Puedes consultar estos datos en **Ventas y cobros** al seleccionar un solo día. **Otros terminales**
 muestra el estado actual del pago y los reembolsos completados, aunque hayan cambiado después.
 **Descargar para la asesoría (XLSX)** incluye una hoja separada de estos pagos, seleccionados por
-fecha del calendario y no por el cambio de día de negocio. El CSV de pagos aplazados solo incluye facturas.
+fecha del calendario y no por el cambio de día de negocio.
 
 ## Elegir documentos después de cobrar {#settlement-document}
 

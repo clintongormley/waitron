@@ -793,21 +793,25 @@ export class SalesScreen extends LitElement {
           <thead>
             <tr>
               <th scope="col">${t("sales.outside_bill")}</th>
-              <th scope="col">${t("sales.outside_time")}</th>
+              <th scope="col">${fill("sales.outside_time", { zone: close.timeZone })}</th>
               <th scope="col">${t("sales.outside_source")}</th>
               <th scope="col">${t("sales.outside_machine")}</th>
               <th scope="col">${t("sales.outside_operation")}</th>
               <th scope="col">${t("sales.amount")}</th>
               <th scope="col">${t("sales.outside_state")}</th>
-              <th scope="col">${t("sales.outside_refunded")}</th>
+              <th scope="col">${t("sales.outside_refund_total")}</th>
             </tr>
           </thead>
           <tbody>
             ${close.outsidePayments.map(
               (payment) =>
                 html`<tr>
-                  <th scope="row">${payment.workingOrderId}<br />${payment.invoiceNumber ?? ""}</th>
-                  <td>${payment.settledAt}</td>
+                  <th scope="row" title=${payment.workingOrderId}>
+                    #${payment.orderNumber}<br />${payment.invoiceNumber ?? ""}
+                  </th>
+                  <td>
+                    ${new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium", timeStyle: "short", timeZone: close.timeZone }).format(new Date(payment.settledAt))}
+                  </td>
                   <td>
                     ${payment.externalProvider === null ? "—" : t(`sales.outside_${payment.externalProvider}`)}
                   </td>

@@ -404,6 +404,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           vat: close.vat,
           cash,
           outsidePayments,
+          timeZone: clock.timeZone,
           closureSummary,
           departmentTakings: close.departmentTakings,
           counts: close.counts,

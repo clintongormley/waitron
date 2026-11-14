@@ -43,7 +43,11 @@ beforeEach(async () => {
 });
 
 async function payment(at: string, extra: Partial<typeof payments.$inferInsert> = {}) {
-  const order = await seedWorkingOrder(suite.db, { source: "device", deviceId: venue.deviceId });
+  const order = await seedWorkingOrder(suite.db, {
+    source: "device",
+    deviceId: venue.deviceId,
+    orderNumber: 77,
+  });
   const [row] = await suite.db
     .insert(payments)
     .values({
@@ -107,10 +111,12 @@ it("lists each manual payment once on its box's business day, with current state
   });
   expect(response.status).toBe(200);
   const data = await response.json();
+  expect(data.timeZone).toBe("Europe/Madrid");
   expect(data.outsidePayments).toEqual([
     {
       id: older.id,
       workingOrderId: older.workingOrderId,
+      orderNumber: 77,
       saleId: null,
       invoiceNumber: null,
       nodeId: venue.nodeId,
@@ -125,6 +131,7 @@ it("lists each manual payment once on its box's business day, with current state
     {
       id: included.id,
       workingOrderId: included.workingOrderId,
+      orderNumber: 77,
       saleId,
       invoiceNumber: "A/1",
       nodeId: venue.nodeId,
