@@ -187,6 +187,8 @@ it.each([
     const native =
       button?.shadowRoot?.querySelector<HTMLElement>("button") ??
       control.shadowRoot!.querySelector<HTMLElement>("input,textarea,button")!;
+    // A keyboard user: a button shows focus, and so its mark, only after a key.
+    await userEvent.keyboard("{Shift}");
     native.focus();
     await expect
       .poll(() => receiptRoot(el).querySelector(`[data-mark=${mark}]`)?.hasAttribute("data-active"))
@@ -200,6 +202,52 @@ it.each([
     expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
   },
 );
+it("adding a logo with the pointer leaves focus on the logo control and draws no ring on the preview", async () => {
+  const api = receiptApi();
+  api.previewReceiptDraft.mockResolvedValue({
+    ...preview("Printed content"),
+    marks: { ...preview().marks, logo: { start: 0, end: 1 } },
+  });
+  const { el } = await mountReceiptEditor(api);
+  await expect.poll(() => receiptRoot(el).querySelector("[data-mark=logo]")).toBeTruthy();
+  const upload =
+    receiptRoot(el).querySelector<HTMLElementTagNameMap["dashboard-image-upload"]>(
+      "dashboard-image-upload",
+    )!;
+  await upload.updateComplete;
+  await userEvent.click(
+    page.elementLocator(upload.shadowRoot!.querySelector("[data-test=choose-image]")!),
+  );
+  await expect.poll(() => upload.shadowRoot!.querySelector("media-image-picker")).toBeTruthy();
+  upload.shadowRoot!.querySelector("media-image-picker")!.dispatchEvent(
+    new CustomEvent("select-image", {
+      detail: { filename: "logo.png", names: {} },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect.poll(() => upload.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+  const control = upload.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!;
+  await expect.poll(() => upload.shadowRoot!.activeElement).toBe(control);
+  await el.updateComplete;
+  const preview_ = receiptRoot(el).querySelector<HTMLElement>("section.preview")!;
+  expect(composedContains(preview_, deepActiveElement())).toBe(false);
+  expect(receiptRoot(el).querySelector("[data-mark=logo]")!.hasAttribute("data-active")).toBe(
+    false,
+  );
+  expect(preview_.tabIndex).toBe(-1);
+  expect(preview_.querySelector("[tabindex]:not([tabindex='-1']), a[href], button")).toBeNull();
+});
+function deepActiveElement(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
+function composedContains(container: Node, node: Node | null): boolean {
+  for (let at = node; at; at = at.parentNode ?? (at as ShadowRoot).host ?? null)
+    if (at === container) return true;
+  return false;
+}
 it("renders chosen paper dimensions and preserves the old paper after a width refusal", async () => {
   const api = receiptApi();
   api.previewReceiptDraft.mockImplementation(async (input) => {

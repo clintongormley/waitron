@@ -660,14 +660,19 @@ export class DepartmentReceiptEditor extends LitElement {
                 class="fields"
                 @keydown=${(event: KeyboardEvent) => submitOnEnter(event, receiptButton(this))}
                 @focusin=${(event: FocusEvent) => {
-                  this.focusedField =
-                    (
-                      event
-                        .composedPath()
-                        .find(
-                          (node) => node instanceof HTMLElement && node.hasAttribute("name"),
-                        ) as HTMLElement | undefined
-                    )?.getAttribute("name") ?? "";
+                  const focused = event.composedPath()[0];
+                  // The preview's mark answers the control's focus ring, so it shows only with it.
+                  this.focusedField = !(
+                    focused instanceof Element && focused.matches(":focus-visible")
+                  )
+                    ? ""
+                    : ((
+                        event
+                          .composedPath()
+                          .find(
+                            (node) => node instanceof HTMLElement && node.hasAttribute("name"),
+                          ) as HTMLElement | undefined
+                      )?.getAttribute("name") ?? "");
                 }}
                 @focusout=${() => {
                   this.focusedField = "";
