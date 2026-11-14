@@ -1,7 +1,7 @@
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
@@ -26,6 +26,12 @@ import { createPasswordThrottle } from "./password-throttle.js";
 import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
+import { encryptArtifact } from "./artifact-cipher.js";
+import { packArchive } from "./backup-archive.js";
+import { buildManifest } from "./backup-manifest.js";
+import { nodeDumpEntry } from "./testing/node-copy.js";
+import { placeFirstCopy } from "./spare-copy-placement.js";
+import { readNodeIdentityKey } from "./node-identity.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { mintBoxAuthority, startBoxServer } from "./testing/box-authority.js";
 import {
@@ -145,8 +151,9 @@ function service(
       `${origin}/api/node/handover/emergency/${step}`,
       {
         method: "POST",
-        headers: { "content-type": "application/json", origin },
-        body: JSON.stringify(body),
+        headers:
+          body instanceof FormData ? { origin } : { "content-type": "application/json", origin },
+        body: body instanceof FormData ? body : JSON.stringify(body),
       },
       https ? { incoming: { socket } } : {},
     );
@@ -173,6 +180,117 @@ function service(
   };
   return { post, emergency, log };
 }
+
+const backupKey = "synthetic-selected-backup-key";
+const upload = (payload: unknown, artifact: Uint8Array = new Uint8Array([1])) => {
+  const body = new FormData();
+  body.append("request", JSON.stringify(payload));
+  body.append("artifact", new Blob([new Uint8Array(artifact)]), "venue.enc");
+  return body;
+};
+
+it("uploads a checked archive, waits for restart, then signs its provenance and refuses a changed source id", async () => {
+  await seedWorkingOrder(mainBox.db, { openedAt: "2026-10-16T10:30:00Z" });
+  const path = join(root, "archive.db");
+  await mainBox.db.archiveTo(path);
+  const manifest = await buildManifest({
+    db: mainBox.db,
+    node: mainBox.node,
+    modules: fiscalModules,
+    environment: "preproduction",
+    now: new Date(),
+  });
+  const artifact = encryptArtifact(
+    packArchive([
+      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+      { name: "db.dump", bytes: await readFile(path) },
+      await nodeDumpEntry(mainBox.node, root),
+    ]),
+    backupKey,
+  );
+  const restart = vi.fn();
+  const s = service("https://spare.example", {
+    backup: {
+      readRecoveryKey: async () => backupKey,
+      environment: "preproduction",
+      migrationsRoot: null,
+      restart,
+    },
+  });
+  expect(
+    (await s.post(upload({ signIn: request.signIn }, artifact), true, "backup")).body,
+  ).toMatchObject({ restarting: true });
+  await vi.waitFor(() => expect(restart).toHaveBeenCalledOnce());
+  expect((await s.post({ signIn: request.signIn }, true, "preview")).body.error?.code).toBe(
+    "handover.copy_mismatch",
+  );
+  expect((await s.post()).body.error?.code).toBe("handover.copy_mismatch");
+  await placed.close();
+  expect(
+    await placeFirstCopy({
+      stateDir: dirs().spareState,
+      venueDir: dirs().spareVenue,
+      nodeId: standby.nodeId,
+      log: () => {},
+    }),
+  ).toBe(true);
+  placed = await openVenueDatabase(dirs().spareVenue);
+  expect(await readNodeIdentityKey(placed.node, ring, standby.nodeId)).toBe(spareKey);
+  const resumed = service();
+  const shown = await resumed.post({ signIn: request.signIn }, true, "preview");
+  expect(shown.body.copy).toMatchObject({ source: "selected-backup" });
+  expect(shown.body.copy?.lastChangeAtMs).toBe(Date.parse("2026-10-16T10:30:00Z"));
+  const declared = await resumed.post({ ...request, expectedCopy: shown.body.copy });
+  expect(declared.status).toBe(200);
+  expect(declared.body.declaration?.body.lastCopy).toEqual(shown.body.copy);
+  expect(
+    verifyEnvelope(declared.body.declaration, "declaration", () => nodeSigningPublicKey(spareKey))
+      .valid,
+  ).toBe(true);
+  const other = { ...shown.body.copy, sourceId: "b".repeat(64) };
+  expect((await resumed.post({ ...request, expectedCopy: other })).body.error?.code).toBe(
+    "handover.request_invalid",
+  );
+});
+
+it.each(["https", "password", "operation", "source"])(
+  "refuses a backup at the %s boundary without staging",
+  async (boundary) => {
+    const s = service();
+    if (boundary === "operation")
+      await beginHandover(
+        { node: placed.node, nodeId: standby.nodeId },
+        {
+          operationId: OPERATION,
+          scenario: "controlled",
+          venue: { country: "ES", taxId: "89890001K", environment: "preproduction" },
+          sourceNodeId: primary.nodeId,
+          destinationNodeId: standby.nodeId,
+          membership: { term: 1, digest: "a".repeat(64) },
+        },
+        "destination",
+      );
+    if (boundary === "source") external.fault = "CERT_HAS_EXPIRED";
+    const answer = await s.post(
+      upload({
+        signIn: boundary === "password" ? { ...request.signIn, password: "wrong" } : request.signIn,
+      }),
+      boundary !== "https",
+      "backup",
+    );
+    expect(answer.body.error?.code).toBe(
+      {
+        https: "authorization.not_permitted",
+        password: "password.invalid",
+        operation: "handover.controlled_unresolved",
+        source: "handover.source_not_established",
+      }[boundary],
+    );
+    await expect(
+      readFile(join(dirs().spareState, "pair-copy", "ready.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
 
 it("previews the checked spare copy without recording a declaration", async () => {
   const s = service();

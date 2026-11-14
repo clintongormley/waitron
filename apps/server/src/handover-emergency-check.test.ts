@@ -1,5 +1,5 @@
 import { dirname } from "node:path";
-import { writeFile, mkdtemp, rm } from "node:fs/promises";
+import { writeFile, mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -46,6 +46,35 @@ it("checks an empty copy and records no dated activity", async () => {
     identifier: "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
     lastChangeAtMs: null,
   });
+});
+
+it("keeps selected-archive provenance while binding the current copy, and refuses before placement", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "selected-copy-check-"));
+  try {
+    await mkdir(join(stateDir, "pair-copy"));
+    await writeFile(
+      join(stateDir, "pair-copy", "ready.json"),
+      JSON.stringify({ source: "selected-backup", sourceId: "a".repeat(64) }),
+    );
+    const deps = { venueDir: venueDir(), stateDir, modules: [] };
+    const first = await checkEmergencyCopy(deps);
+    expect(first).toEqual({
+      source: "selected-backup",
+      sourceId: "a".repeat(64),
+      identifier: "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      lastChangeAtMs: null,
+    });
+    await seedWorkingOrder(venue.db, { openedAt: "2026-11-14T01:00:00Z" });
+    expect((await checkEmergencyCopy(deps)).lastChangeAtMs).toBe(
+      Date.parse("2026-11-14T01:00:00Z"),
+    );
+    await writeFile(join(stateDir, "pair-copy", "venue.db"), "awaits restart");
+    await expect(checkEmergencyCopy(deps)).rejects.toMatchObject({
+      code: "handover.copy_mismatch",
+    });
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
 });
 
 it.each(["openedAt", "settledAt", "collectedAt", "paymentAttemptAt"] as const)(

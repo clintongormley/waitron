@@ -87,6 +87,7 @@ import { endRestoreFlow, publishRestoreFlow } from "./restore-flow.js";
 import { ARCHIVE_VALIDATE_PREFIX, RESTORE_ADMISSION_PREFIX } from "./restore-staging-dirs.js";
 import { unpackStateFiles } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
+import { clearSelectedCopy } from "./handover-copy-selection.js";
 import { type StagedSecrets, stageSecrets } from "./restore-secrets.js";
 import "./errors.js";
 import { currentBackupVerificationTarget } from "./backup-verification-target.js";
@@ -613,6 +614,7 @@ export async function restoreDatabase(args: {
   fs?: PlacementFs;
 }): Promise<string> {
   await deleteBackupRoomNote(args.stateDir);
+  await clearSelectedCopy(args.stateDir);
   const fs: PlacementFs = args.fs ?? { rename, rm, rmdir };
   // The restore may be the first thing that ever writes here. An existing directory's permissions
   // belong to the operator and are not changed by mkdir.

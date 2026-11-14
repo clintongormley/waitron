@@ -671,7 +671,9 @@ declaration that the box is off, and only if the Cloud owner agreed in advance.
 Design approved 2026-10-29: administrators by default, and other roles once A1002 lets a venue
 give them the permission; printers and drawers wait for A1175's Android app, while card readers
 follow, being reached over the internet (owner, 2026-10-29).
-Building waits for A947's strip and Cloud's half:
+Local selected-backup placement preserves an admitted spare's identity and records its archive
+source in the emergency declaration. Fiscal joining still waits for A947 3b-F. Cloud placement,
+the emergency services card and the hosted start still wait for A947's strip and Cloud's half:
 [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
 
 ## A947 3b must make the held chart vouch for a joined box's key, or the main box can never check its answer and waits at every start.

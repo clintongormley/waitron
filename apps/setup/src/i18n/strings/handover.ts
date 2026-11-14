@@ -32,6 +32,20 @@ export const handoverEn = {
   "handover.emergency.saved":
     "This declaration is saved and cannot be undone. Stop leaves this page; it does not cancel the declaration.",
   "handover.emergency.copy": "Copy held on this spare",
+  "handover.emergency.selected_backup": "Selected backup",
+  "handover.emergency.backup_intro":
+    "To use an encrypted backup instead, choose its file. This replaces the copy on this spare and restarts it before you review and declare.",
+  "handover.emergency.backup_file": "Encrypted backup file",
+  "handover.emergency.backup_key": "Backup recovery key, if this box has none",
+  "handover.emergency.use_backup": "Use this backup",
+  "handover.emergency.backup_restarting":
+    "Placing the selected backup. Keep this page open while this box restarts.",
+  "handover.emergency.backup_too_old":
+    "This backup does not admit this spare under its current main box. Choose a backup made after this spare joined that main box.",
+  "handover.emergency.backup_key_missing":
+    "This box has no usable recovery key. If no key is saved on it, enter the backup's recovery key and try again.",
+  "handover.emergency.backup_invalid":
+    "The backup could not be opened. Check the encrypted file and its recovery key, then try again.",
   "handover.emergency.copy_changed":
     "The copy changed while you were reading. Review its latest activity and confirm all three statements again.",
   "handover.emergency.latest_activity": "Latest dated activity:",
@@ -77,6 +91,20 @@ export const handoverEn = {
     "This step could not finish. Check this copy again before trying to continue.",
 } as const;
 export const handoverEs: Record<keyof typeof handoverEn, string> = {
+  "handover.emergency.selected_backup": "Copia de seguridad seleccionada",
+  "handover.emergency.backup_intro":
+    "Para usar una copia de seguridad cifrada, elige su archivo. Sustituye la copia de este servidor de reserva y lo reinicia antes de que la revises y hagas la declaración.",
+  "handover.emergency.backup_file": "Archivo de copia de seguridad cifrada",
+  "handover.emergency.backup_key": "Clave de recuperación, si este servidor no tiene una",
+  "handover.emergency.use_backup": "Usar esta copia de seguridad",
+  "handover.emergency.backup_restarting":
+    "Colocando la copia seleccionada. Mantén esta página abierta mientras se reinicia el servidor.",
+  "handover.emergency.backup_too_old":
+    "Esta copia no admite este servidor de reserva bajo su servidor principal actual. Elige una copia hecha después de que este servidor se uniera al principal.",
+  "handover.emergency.backup_key_missing":
+    "Este servidor no tiene una clave de recuperación utilizable. Si no tiene ninguna guardada, introduce la clave de la copia y vuelve a intentarlo.",
+  "handover.emergency.backup_invalid":
+    "No se ha podido abrir la copia. Comprueba el archivo cifrado y su clave de recuperación y vuelve a intentarlo.",
   "handover.heading": "Traspasar el local",
   "handover.loading": "Consultando el progreso del traspaso…",
   "handover.copy":

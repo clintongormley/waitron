@@ -269,6 +269,8 @@ declare module "@waitron/shared" {
     "handover.copy_mismatch": Record<string, never>;
     /** The copy fails the database's own integrity check. */
     "handover.copy_damaged": Record<string, never>;
+    "handover.copy_predates_destination": Record<string, never>;
+    "handover.backup_key_missing": Record<string, never>;
     /** A declaration got an answer, or activation got no restriction naming this successor. */
     "handover.source_still_answering": { sourceServersUrl?: string };
     /** Neither a verified answer nor one of the allowed silence reasons was obtained. */

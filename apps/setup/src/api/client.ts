@@ -304,12 +304,15 @@ export interface EmergencyHandoverPreview {
   sourceNodeId: string;
   destinationNodeId: string;
   sourceServersUrl: string;
-  copy: { source: "mirror-copy"; identifier: string; lastChangeAtMs: number | null };
+  copy: ({ source: "mirror-copy" } | { source: "selected-backup"; sourceId: string }) & {
+    identifier: string;
+    lastChangeAtMs: number | null;
+  };
   operation: { operationId: string; reason: string | null; declaredAtMs: number | null } | null;
 }
 export interface EmergencyHandoverDeclaration {
   operationId: string;
-  expectedCopy: Pick<EmergencyHandoverPreview["copy"], "identifier" | "lastChangeAtMs">;
+  expectedCopy: EmergencyHandoverPreview["copy"];
   signIn: HandoverSignIn;
   statements: { sourceSwitchedOff: true; noParallelRecovery: true; missingTailAccepted: true };
   reason: string;
@@ -346,6 +349,26 @@ export class SetupApi {
 
   previewEmergencyHandover(signIn: HandoverSignIn): Promise<EmergencyHandoverPreview> {
     return this.#request("/api/node/handover/emergency/preview", "POST", { signIn });
+  }
+
+  async selectEmergencyBackup(
+    artifact: File,
+    signIn: HandoverSignIn,
+    recoveryKey?: string,
+  ): Promise<void> {
+    const body = new FormData();
+    body.append(
+      "request",
+      JSON.stringify({ signIn, ...(recoveryKey === undefined ? {} : { recoveryKey }) }),
+    );
+    body.append("artifact", artifact);
+    const fetchImpl = this.#fetchImpl;
+    const response = await fetchImpl(this.#baseUrl + "/api/node/handover/emergency/backup", {
+      method: "POST",
+      credentials: "include",
+      body,
+    });
+    if (!response.ok) throw await apiError(response);
   }
 
   declareEmergencyHandover(request: EmergencyHandoverDeclaration): Promise<unknown> {

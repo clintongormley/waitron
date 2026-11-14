@@ -67,6 +67,9 @@ async function mount(
     statusUnavailable?: boolean;
     lostBeforeWrite?: boolean;
     changeBeforeDeclare?: boolean;
+    backup?: boolean;
+    backupRefusal?: string;
+    theme?: "light" | "dark";
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
@@ -75,6 +78,7 @@ async function mount(
   let rejected = false;
   let attemptedActivation = false;
   let copyChanged = false;
+  let backupSelected = false;
   const api = new SetupApi("", async (input, init) => {
     const path = String(input);
     if (init?.method === "GET" && options.statusUnavailable)
@@ -89,8 +93,24 @@ async function mount(
           },
         }),
       );
-    const body = JSON.parse(init!.body as string) as Record<string, unknown>;
+    const body =
+      init?.body instanceof FormData
+        ? (JSON.parse(String(init.body.get("request"))) as Record<string, unknown>)
+        : (JSON.parse(init!.body as string) as Record<string, unknown>);
     posts.push({ path, body });
+    if (path.endsWith("/emergency/backup")) {
+      expect(init!.body).toBeInstanceOf(FormData);
+      expect((init!.body as FormData).get("artifact")).toBeInstanceOf(File);
+      if (options.backupRefusal || body.recoveryKey === undefined)
+        return new Response(
+          JSON.stringify({
+            error: { code: options.backupRefusal ?? "handover.backup_key_missing" },
+          }),
+          { status: 409 },
+        );
+      backupSelected = true;
+      return new Response(JSON.stringify({ restarting: true }));
+    }
     if (path.endsWith("/emergency/preview")) {
       if (options.activationMismatch && attemptedActivation)
         return new Response(JSON.stringify({ error: { code: "handover.copy_mismatch" } }), {
@@ -114,7 +134,11 @@ async function mount(
       return new Response(
         JSON.stringify({
           ...preview,
-          copy: { ...preview.copy, lastChangeAtMs: copyChanged ? 1792152000000 : null },
+          copy: {
+            ...preview.copy,
+            ...(backupSelected ? { source: "selected-backup", sourceId: "b".repeat(64) } : {}),
+            lastChangeAtMs: copyChanged ? 1792152000000 : null,
+          },
           operation: recorded ? saved : null,
         }),
       );
@@ -185,10 +209,14 @@ async function mount(
       ),
     );
   });
-  const { el, host } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
-    api,
-    emergency: true,
-  });
+  const { el, host } = await mountWidget<SetupHandoverScreen>(
+    "setup-handover-screen",
+    {
+      api,
+      emergency: true,
+    },
+    options.theme,
+  );
   await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
   return { el, host, posts };
 }
@@ -228,6 +256,93 @@ afterEach(() => {
   saved.operationId = "emergency-one";
 });
 
+it.each(
+  ["en-GB", "es-ES"].flatMap((locale) =>
+    ["light", "dark"].map((theme) => ({ locale, theme: theme as "light" | "dark" })),
+  ),
+)(
+  "selects an archive with a missing key, resumes its preview, and declares that source ($locale, $theme)",
+  async ({ locale, theme }) => {
+    setLocale(locale);
+    const { el, posts } = await mount({ backup: true, theme });
+    await authenticate(el);
+    const input = q<HTMLInputElement>(el, 'input[name="handover-backup"]');
+    expect(input).not.toBeNull();
+    const files = new DataTransfer();
+    files.items.add(new File(["archive"], "venue.enc"));
+    input.files = files.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await el.updateComplete;
+    q(el, "[data-test=emergency-backup]").click();
+    await vi.waitFor(() => expect(q(el, '[name="handover-backup-key"]')).not.toBeNull());
+    if (import.meta.env.VITE_A1188_VISUAL === "1") {
+      const { page } = await import("vitest/browser");
+      try {
+        for (const width of [390, 1280]) {
+          await page.viewport(width, 1400);
+          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+          await page.screenshot({
+            path: `__screenshots__/a1188-key-${locale}-${theme}-${width}.png`,
+          });
+        }
+      } finally {
+        await page.viewport(1280, 720);
+      }
+    }
+    await edit(el, "handover-backup-key", "synthetic-recovery-key");
+    q(el, "[data-test=emergency-backup]").click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
+        t("handover.emergency.selected_backup"),
+      ),
+    );
+    expect(posts.filter(({ path }) => path.endsWith("/backup")).map(({ body }) => body)).toEqual([
+      { signIn },
+      { signIn, recoveryKey: "synthetic-recovery-key" },
+    ]);
+    await edit(el, "emergency-reason", saved.reason);
+    for (const field of el.shadowRoot!.querySelectorAll<HTMLInputElement>(
+      'input[type="checkbox"]',
+    )) {
+      field.checked = true;
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    await el.updateComplete;
+    q(el, "[data-test=emergency-declare]").click();
+    await vi.waitFor(() => expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(true));
+    expect(posts.find(({ path }) => path.endsWith("/declare"))!.body.expectedCopy).toEqual({
+      ...preview.copy,
+      source: "selected-backup",
+      sourceId: "b".repeat(64),
+    });
+  },
+);
+
+it("keeps the archive choice after admission is refused", async () => {
+  const { el, posts } = await mount({
+    backup: true,
+    backupRefusal: "handover.copy_predates_destination",
+  });
+  await authenticate(el);
+  const input = q<HTMLInputElement>(el, 'input[name="handover-backup"]');
+  expect(input).not.toBeNull();
+  const files = new DataTransfer();
+  files.items.add(new File(["archive"], "venue.enc"));
+  input.files = files.files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await el.updateComplete;
+  q(el, "[data-test=emergency-backup]").click();
+  await vi.waitFor(() =>
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+      t("handover.emergency.backup_too_old"),
+    ),
+  );
+  expect(q<HTMLInputElement>(el, 'input[name="handover-backup"]').files?.[0]?.name).toBe(
+    "venue.enc",
+  );
+  expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
+});
+
 it.each(["en-GB", "es-ES"])(
   "requires all emergency declarations and explains the one-way choice in %s",
   async (locale) => {
@@ -259,7 +374,7 @@ it.each(["en-GB", "es-ES"])(
     const declaration = posts.find(({ path }) => path.endsWith("/declare"))!;
     expect(declaration.body).toEqual({
       operationId: expect.any(String),
-      expectedCopy: { identifier: preview.copy.identifier, lastChangeAtMs: null },
+      expectedCopy: { ...preview.copy },
       signIn,
       statements: { sourceSwitchedOff: true, noParallelRecovery: true, missingTailAccepted: true },
       reason: saved.reason,
@@ -458,8 +573,8 @@ it("shows a fresh copy and asks for confirmation again when it changed before de
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   const declarations = posts.filter(({ path }) => path.endsWith("/declare"));
   expect(declarations.map(({ body }) => body.expectedCopy)).toEqual([
-    { identifier: preview.copy.identifier, lastChangeAtMs: null },
-    { identifier: preview.copy.identifier, lastChangeAtMs: 1792152000000 },
+    { ...preview.copy, lastChangeAtMs: null },
+    { ...preview.copy, lastChangeAtMs: 1792152000000 },
   ]);
 });
 

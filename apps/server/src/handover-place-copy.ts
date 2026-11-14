@@ -11,6 +11,7 @@ import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { NODE_FILE, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
+import { clearSelectedCopy } from "./handover-copy-selection.js";
 import { errnoOf } from "./errno.js";
 import { acceptedCopyPath } from "./handover-acceptance.js";
 import { digestFileIfPresent } from "./handover-capture.js";
@@ -284,6 +285,7 @@ export async function placeAcceptedCopyAtStart(args: {
         .flatMap((row) => row.revisions!),
     );
     await deleteBackupRoomNote(stateDir);
+    await clearSelectedCopy(stateDir);
     await swapIn(steps, accepted, venueDir);
     // `copy_placed` is recorded next: it must never reach the disk ahead of the swap it reports.
     await steps.reachDisk(venueDir);

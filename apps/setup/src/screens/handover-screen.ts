@@ -70,6 +70,10 @@ export class SetupHandoverScreen extends LitElement {
   @property() operationId = "";
   @property({ type: Boolean }) emergency = false;
   @state() private copyPreview?: EmergencyHandoverPreview;
+  @state() private backup?: File;
+  @state() private backupKey = "";
+  @state() private needsBackupKey = false;
+  @state() private backupRestarting = false;
   @state() private reason = "";
   @state() private statements = {
     sourceSwitchedOff: false,
@@ -124,6 +128,7 @@ export class SetupHandoverScreen extends LitElement {
     const controller = new AbortController();
     this.#controller = controller;
     if (this.operationId) void this.#poll(controller);
+    else if (this.backupRestarting) void this.#waitForBackup(controller);
   }
   override disconnectedCallback(): void {
     window.removeEventListener("pagehide", this.#leavePage);
@@ -136,6 +141,9 @@ export class SetupHandoverScreen extends LitElement {
     clearTimeout(this.#timer);
     this.#resetSelection();
     this.password = this.code = "";
+    this.backup = undefined;
+    this.backupKey = "";
+    this.backupRestarting = this.restarting = false;
     this.#signInChecked = false;
     this.copyPreview = undefined;
     this.declarationSaved = false;
@@ -319,6 +327,16 @@ export class SetupHandoverScreen extends LitElement {
     if (code === "authorization.not_permitted") return t("handover.emergency.permission");
     if (code === "handover.source_still_answering") return t("handover.emergency.source_answered");
     if (code === "handover.controlled_unresolved") return t("handover.emergency.controlled");
+    if (code === "handover.copy_predates_destination")
+      return t("handover.emergency.backup_too_old");
+    if (code === "handover.backup_key_missing" || code === "backup.recovery_key_too_short")
+      return t("handover.emergency.backup_key_missing");
+    if (
+      ["recovery.passphrase_invalid", "backup.artifact_invalid", "backup.archive_invalid"].includes(
+        code ?? "",
+      )
+    )
+      return t("handover.emergency.backup_invalid");
     if (this.copyRefused) return t("handover.emergency.copy_failed");
     if (
       ["node.read_only", "handover.source_no_longer_main", "handover.step_out_of_order"].includes(
@@ -377,6 +395,53 @@ export class SetupHandoverScreen extends LitElement {
       this.busy = false;
     }
   }
+  async #waitForBackup(controller: AbortController): Promise<void> {
+    try {
+      await this.#readPreview();
+      if (controller.signal.aborted) return;
+      if (this.copyPreview?.copy.source !== "selected-backup")
+        throw new TypeError("copy not placed");
+      this.backupRestarting = this.restarting = this.busy = false;
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      const code = (cause as { code?: string }).code;
+      if (code && code !== "handover.copy_mismatch") {
+        this.actionError = this.#emergencyError(cause);
+        this.backupRestarting = this.restarting = this.busy = false;
+        return;
+      }
+      this.#timer = setTimeout(() => void this.#waitForBackup(controller), 2000);
+    }
+  }
+  async #selectBackup(): Promise<void> {
+    if (this.busy || !this.backup || !this.#valid() || (this.needsBackupKey && !this.backupKey))
+      return;
+    this.busy = true;
+    this.actionError = "";
+    try {
+      await this.api.selectEmergencyBackup(
+        this.backup,
+        this.#signIn(),
+        this.backupKey || undefined,
+      );
+      this.backup = undefined;
+      this.backupKey = "";
+      this.copyPreview = undefined;
+      this.#pendingDeclaration = undefined;
+      this.statements = {
+        sourceSwitchedOff: false,
+        noParallelRecovery: false,
+        missingTailAccepted: false,
+      };
+      this.backupRestarting = this.restarting = true;
+      this.#restartPolling();
+    } catch (cause) {
+      const code = (cause as { code?: string }).code;
+      if (code === "handover.backup_key_missing") this.needsBackupKey = true;
+      this.actionError = this.#emergencyError(cause);
+      this.busy = false;
+    }
+  }
   #validDeclaration(): boolean {
     return (
       this.#valid() &&
@@ -396,10 +461,7 @@ export class SetupHandoverScreen extends LitElement {
       }
       this.#pendingDeclaration ??= {
         operationId: makeSetupId(),
-        expectedCopy: {
-          identifier: this.copyPreview!.copy.identifier,
-          lastChangeAtMs: this.copyPreview!.copy.lastChangeAtMs,
-        },
+        expectedCopy: this.copyPreview!.copy,
         reason: this.reason,
         locale: currentLocale().startsWith("es") ? "es" : "en",
         statements: {
@@ -456,7 +518,9 @@ export class SetupHandoverScreen extends LitElement {
     if (!preview) return nothing;
     const date = preview.copy.lastChangeAtMs;
     return html`<section data-test="emergency-copy" data-wording-version="a1018-emergency-v1">
-      <h2>${t("handover.emergency.copy")}</h2>
+      <h2>
+        ${t(preview.copy.source === "selected-backup" ? "handover.emergency.selected_backup" : "handover.emergency.copy")}
+      </h2>
       <p>${preview.copy.identifier}</p>
       <p>
         ${date === null ? t("handover.emergency.no_date") : html`${t("handover.emergency.latest_activity")} ${new Date(date).toLocaleString(currentLocale())}`}
@@ -543,6 +607,40 @@ export class SetupHandoverScreen extends LitElement {
       ></wt-input>`;
     return html`<p>${t(this.#isEmergency ? "handover.emergency.sign_in" : "handover.sign_in")}</p>
       ${field("email", "handover.email")}${field("password", "handover.password")}${field("code", "handover.code")}
+      ${
+        this.#isEmergency && !this.#declared && !this.copyPreview?.operation
+          ? html`
+              <p>${t("handover.emergency.backup_intro")}</p>
+              <label
+                >${t("handover.emergency.backup_file")}
+                <input
+                  name="handover-backup"
+                  type="file"
+                  ?disabled=${this.busy}
+                  @change=${(event: Event) => {
+                    this.backup = (event.currentTarget as HTMLInputElement).files?.[0];
+                    this.actionError = "";
+                  }}
+              /></label>
+              ${
+                this.needsBackupKey
+                  ? html`<wt-input
+                      name="handover-backup-key"
+                      type="password"
+                      label=${t("handover.emergency.backup_key")}
+                      required
+                      .value=${this.backupKey}
+                      ?disabled=${this.busy}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        this.backupKey = event.detail.value;
+                        this.actionError = "";
+                      }}
+                    ></wt-input>`
+                  : nothing
+              }
+            `
+          : nothing
+      }
       ${this.#isEmergency ? this.#emergencyContent() : nothing}
       ${
         this.entry
@@ -554,6 +652,7 @@ export class SetupHandoverScreen extends LitElement {
       <wt-form-actions
         .error=${this.actionError ? this.actionError : this.reason.length > 500 || (this.attempted && !this.#valid()) ? t("handover.fix") : ""}
       >
+        ${this.backup && !this.#declared ? html`<wt-button data-test="emergency-backup" .disabled=${this.busy || !this.#valid() || (this.needsBackupKey && !this.backupKey)} variant=${this.#valid() && (!this.needsBackupKey || this.backupKey) ? "primary" : "secondary"} @click=${() => void this.#selectBackup()}>${t("handover.emergency.use_backup")}</wt-button>` : nothing}
         ${
           this.#isEmergency && !this.copyPreview
             ? html`<wt-button
@@ -612,7 +711,9 @@ export class SetupHandoverScreen extends LitElement {
           : closed(status)
             ? html`<p role="status">${t("handover.closed")}</p>`
             : this.restarting
-              ? html`<p role="status">${t("handover.restarting")}</p>`
+              ? html`<p role="status">
+                  ${t(this.backupRestarting ? "handover.emergency.backup_restarting" : "handover.restarting")}
+                </p>`
               : this.#isEmergency ||
                   (status?.role === "destination" &&
                     status.copyPlaced &&
