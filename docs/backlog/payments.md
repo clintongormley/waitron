@@ -7,9 +7,8 @@ their full text.
 
 `reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()`
 idempotency key on every call and writes `payment_refunds` only after the call returns, so a
-crash between the two leaves no record, and a repeat would send a new key. SumUp's refund sends
-no key at all. Its only product caller is the reconciler's reversal of an abandoned order's
-capture (`packages/payments-stripe/src/reconciler.ts`); refunding a bill's card payment before
+crash between the two leaves no record, and a repeat would send a new key. Its product caller
+is the Stripe reconciler's reversal of an abandoned order's capture (`packages/payments-stripe/src/reconciler.ts`); refunding a bill's card payment before
 its invoice goes through the separate durable path of Task 14 (design §6b). **Next action:**
 give the reconciler's reversal the same durable-attempt rule.
 Post-invoice returns use the durable `tender_refunds` path (A737 Part 2): the server records
@@ -153,8 +152,8 @@ source, machine and operation number, current payment state and successful refun
 ## The SumUp reconciler
 
 **A949, owner 2026-10-21:** build after the reference experiments establish the matching inputs.
-Include the backup-machine contract above and W44's durable reversal attempts: write an attempt
-before the provider call, then recover an uncertain outcome without a fresh blind refund. The
+The backup-machine software and SumUp abandoned-order refunds are built; hardware qualification
+and Stripe's W44 durable reversal work remain. The
 [November
 session](../research/2026-09-10-sumup-solo-experiments.md#10-a949-solo-session-2026-11-05)
 establishes supplied-reference acceptance and lookup after payment, duplicate creation, separate
@@ -174,11 +173,11 @@ that fallback is not live-qualified. A lost fallback reply has no supplied refer
 Recovery records the gross capture and identified completed refunds together. Uncertain refund
 evidence stays attempting for another check; a failed refund alone leaves the charge. A partly
 refunded unfiled charge keeps the order held. Retaining and allocating the remaining charge after
-a partial refund is still unavailable. Bank-payout audit, orphan self-heal, durable reversal attempts
+a partial refund is still unavailable. Bank-payout audit, Stripe durable reversal attempts
 and backup-machine hardware qualification remain open, along with signature handling.
 
 The daily gross-charge audit and read-only refund comparison do not establish bank arrival.
-Bank-payout audit and orphan self-heal remain to build. The original transaction can stay
+Bank-payout audit remains to build. The original transaction can stay
 `SUCCESSFUL` while identified `REFUND` events in `events` and `transaction_events` show money
 returned; its status alone cannot establish what remains collected.
 
@@ -414,6 +413,13 @@ Remaining Stripe qualification and maintenance.
   [Detail](payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
 
 ## Decisions and deliberate limits
+
+- **SumUp abandoned-order refunds** (owner, 2026-11-14 09:52, relayed in Lane F questions.md):
+  send one full refund only with an exact saved Waitron reference, matching amount and no prior refund.
+  The existing orphan marker commits before sending and forbids any resend, including a crash before HTTP.
+  Unconfirmed marked payments stay visible in Card payments for a manager to check in SumUp.
+  [Plan and authority](../superpowers/plans/2026-11-13-a949-orphan-self-heal.md).
+
 
 - **Money moving does not stop kitchen and course work** (owner, 2026-11-12, R7-1: asked whether
   staff may still "do everything that does not change what the bill charges", he answered "Yes,

@@ -1233,7 +1233,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   held alert comes back at midnight UTC, and smaller choices from the plan, the browser look and the review. Each stays open until the owner
   answers it. [Detail](backlog/payments.md#a846s-points-for-the-owner-at-land-held-card-payments)
 
-- **The reconciler's card reversal records only after the provider call, with a fresh key each time.**
+- **Stripe's reconciler reversal records only after the provider call, with a fresh key each time.**
   Next: give the reconciler's reversal the same durable-attempt rule.
   [Detail](backlog/payments.md#the-reconcilers-card-reversal-records-only-after-the-provider-call-with-a-fresh-key-each-time)
 
@@ -1259,12 +1259,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   same moment (an accepted race); Stripe's reader list is one page; status never refreshes by
   itself, and polling must go through the passive-session controller.
 
-- **The SumUp reconciler** — bank-payout audit and orphan self-heal. A949 also includes
-  durable reversal attempts (W44) and the owner's backup-machine matching contract. The November
+- **The SumUp reconciler** — bank-payout audit, backup-machine hardware qualification and
+  retained-money allocation after a partial refund. Stripe's durable reversal work (W44) stays separate. The November
   results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
   and unpaid cancellation. The first recovery slice supplies Waitron's partner key and records
-  identified refunds. Retained-money allocation after a partial refund, bank-payout audit, orphan self-heal,
-  durable reversals remain to build.
+  identified refunds.
   Backup payment entry now records optional source, machine and operation details, including
   Other card machine on a counter with a configured reader. The day report and accountant workbook
   carry those details, current payment state and successful-refund totals. Physical second-Solo,

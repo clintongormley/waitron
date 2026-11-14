@@ -114,6 +114,7 @@ async function mount(kind: string, overrides: Partial<DashboardApi> = {}) {
       ],
       attestStuckTenderRefund: async () => ({ outcome: "completed" }),
       listStuckBillRefunds: async () => [REFUND],
+      listAbandonedRefunds: vi.fn().mockResolvedValue([]),
       listHeldPayments: async () => [],
       attestStuckBillPayment: async () => ({ outcome: "received" }),
       attestStuckBillRefund: async () => ({ outcome: "completed" }),

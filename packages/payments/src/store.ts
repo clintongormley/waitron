@@ -229,7 +229,7 @@ export async function recordVoid(tx: Transaction, params: Key): Promise<PaymentR
  * `payment.refund_exceeds_capture` if the running total of refunds would exceed the capture. */
 export async function recordRefund(
   tx: Transaction,
-  params: Key & { amount: Decimal; authorizedBy?: string; providerRefundRef?: string },
+  params: Key & { amount: Decimal; authorizedBy?: string; providerRefundRef?: string; at?: Date },
 ): Promise<PaymentRow> {
   const row = await requireRow(tx, params);
   if (row.state !== "captured" && row.state !== "partially_refunded") {
@@ -261,6 +261,7 @@ export async function recordRefund(
     state: "succeeded",
     authorizedBy: params.authorizedBy ?? null,
     providerRefundRef: params.providerRefundRef ?? null,
+    ...(params.at === undefined ? {} : { createdAt: params.at.toISOString() }),
   });
   const state: PaymentState =
     compareDecimal(afterThis, captured) === 0 ? "refunded" : "partially_refunded";
@@ -727,6 +728,26 @@ export async function listReconcilable(
   });
 }
 
+export async function listAbandonedRefundOutcomes(tx: Transaction, provider: string) {
+  const rows = await tx
+    .select({
+      paymentRef: payments.paymentRef,
+      workingOrderId: payments.workingOrderId,
+      externalRef: payments.externalRef,
+      amount: payments.amount,
+      claimedAt: payments.reconcileRemediatedAt,
+      settledAt: payments.settledAt,
+      state: payments.state,
+    })
+    .from(payments)
+    .where(and(eq(payments.provider, provider), isNotNull(payments.reconcileRemediatedAt)))
+    .orderBy(payments.reconcileRemediatedAt, payments.paymentRef);
+  return rows.map(({ state, ...row }) => ({
+    ...withDecimalAmount(row),
+    outcome: state === "refunded" ? ("confirmed" as const) : ("unconfirmed" as const),
+  }));
+}
+
 export async function listAuditCandidates(
   tx: Transaction,
   provider: string,
@@ -913,6 +934,55 @@ export async function existingReferences(
     for (const row of rows) found.add(row.externalRef as string);
   }
   return found;
+}
+
+export async function claimAbandonedCapture(
+  tx: Transaction,
+  params: Key & { amount: Decimal; externalRef: string; settledAt: Date; at: Date },
+): Promise<ReconcilableRow | undefined> {
+  const [row] = await tx
+    .update(payments)
+    .set({
+      state: "captured",
+      externalRef: params.externalRef,
+      settledAt: params.settledAt.toISOString(),
+      reconcileRemediatedAt: params.at.toISOString(),
+      updatedAt: nowIso(),
+    })
+    .where(
+      and(
+        keyWhere(params),
+        inArray(payments.state, ["failed", "captured"]),
+        eq(payments.amount, decimalToCents(params.amount)),
+        isNull(payments.saleId),
+        isNull(payments.billPaymentId),
+        isNull(payments.reconcileRemediatedAt),
+        sql`exists (select 1 from ${workingOrders} where ${workingOrders.id} = ${payments.workingOrderId} and ${workingOrders.status} = 'abandoned')`,
+        sql`not exists (select 1 from ${paymentRefunds} where ${paymentRefunds.paymentId} = ${payments.id})`,
+        sql`not exists (select 1 from ${paymentHolds} where ${paymentHolds.paymentId} = ${payments.id})`,
+      ),
+    )
+    .returning({
+      paymentId: payments.id,
+      paymentRef: payments.paymentRef,
+      state: payments.state,
+      amount: payments.amount,
+      externalRef: payments.externalRef,
+      saleId: payments.saleId,
+      settledAt: payments.settledAt,
+      createdAt: payments.createdAt,
+      workingOrderId: payments.workingOrderId,
+      reconcileRemediatedAt: payments.reconcileRemediatedAt,
+    });
+  return row === undefined
+    ? undefined
+    : {
+        ...withDecimalAmount(row),
+        auditedAt: row.settledAt!,
+        workingOrderStatus: "abandoned",
+        held: false,
+        holdResolved: false,
+      };
 }
 
 /**

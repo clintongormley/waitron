@@ -36,6 +36,7 @@ import {
   t as tRaw,
 } from "@waitron/dashboard-kit";
 import type {
+  AbandonedRefundOutcome,
   AvailableReader,
   BillRecoveryOutcome,
   DashboardApi,
@@ -467,6 +468,16 @@ export class PaymentsScreen extends LitElement {
     },
   );
 
+  @state() private abandonedRefunds: AbandonedRefundOutcome[] = [];
+  @state() private abandonedRefundError = "";
+  readonly #abandonedQuery = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.abandonedRefundError = codeOf(error);
+    },
+  );
+
   readonly #heldQuery = new DashboardQueries(
     this,
     () => this.api,
@@ -600,6 +611,17 @@ export class PaymentsScreen extends LitElement {
         this.billRefunds = rows;
         this.billRefundLoadError = null;
       })
+      .catch(() => undefined);
+    void this.#abandonedQuery
+      .watch(
+        "listAbandonedRefunds",
+        [],
+        (rows) => {
+          this.abandonedRefunds = rows;
+          this.abandonedRefundError = "";
+        },
+        { passive: true },
+      )
       .catch(() => undefined);
     void this.#heldQuery
       .watch("listHeldPayments", [], (rows) => {
@@ -2585,6 +2607,30 @@ export class PaymentsScreen extends LitElement {
           : nothing
       }
       ${this.#renderStuck()} ${this.#renderBillRecovery()}
+      ${this.abandonedRefundError ? html`<p role="alert">${codeMessage(this.abandonedRefundError)}</p>` : nothing}
+      ${
+        this.abandonedRefunds.length
+          ? html`<section data-test="abandoned-refunds">
+              <h2>${t("payments.abandoned.title")}</h2>
+              <ul class="stuck-list">
+                ${this.abandonedRefunds.map(
+                  (row) =>
+                    html`<li class="stuck">
+                      ${row.settledAt ? html`<time datetime=${row.settledAt}>${formatAlertTime(row.settledAt)}</time>` : nothing}
+                      <p>
+                        ${row.paymentRef} · ${row.externalRef ?? ""} ·
+                        ${formatMoney(row.amount, currentLocale())}
+                      </p>
+                      <p>
+                        ${t(row.outcome === "confirmed" ? "payments.abandoned.confirmed" : "payments.abandoned.unconfirmed")}
+                      </p>
+                    </li>`,
+                )}
+              </ul>
+            </section>`
+          : nothing
+      }
+
       <wt-button
         variant="secondary"
         @click=${() => {

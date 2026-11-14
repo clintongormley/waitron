@@ -1,3 +1,4 @@
+import { recordIncidentOnce } from "@waitron/core";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -46,6 +47,7 @@ import {
 import {
   decimal,
   deviceOrigin,
+  jobOrigin,
   workingOrderId as brandWorkingOrderId,
   AppError,
   type DeleteImpact,
@@ -3385,3 +3387,48 @@ it.each(["sumup", "manual"])(
     expect(await suite.db.select().from(scheduledRuns)).toHaveLength(provider === "manual" ? 3 : 2);
   },
 );
+
+describe("abandoned-refund outcome read", () => {
+  it("requires manager access and shows a claimed payment despite an occupied orphan alert", async () => {
+    const venue = await seedVenueWithStaff();
+    const order = await seedWorkingOrder(suite.db, { source: "dashboard", status: "abandoned" });
+    await suite.db.insert(payments).values({
+      workingOrderId: order.id,
+      nodeId: await seedNode(suite.db),
+      source: "device",
+      deviceId: await seedDevice(),
+      provider: "sumup",
+      paymentRef: "abandoned-order-charge",
+      externalRef: "sumup-charge",
+      amount: 1050,
+      state: "captured",
+      settledAt: "2026-11-14T10:00:00.000Z",
+      reconcileRemediatedAt: "2026-11-14T10:01:00.000Z",
+    });
+    await withTransaction(suite.db, (tx) =>
+      recordIncidentOnce(tx, {
+        origin: jobOrigin("payment_check"),
+        error: new AppError("payment.reconcile_orphan", { payments: [], count: 1 }),
+        severity: "error",
+        detectedAt: new Date("2026-11-13T10:00:00Z"),
+      }),
+    );
+    const app = mountApp(venue);
+    const path = "/management-api/payments/abandoned-refunds";
+    expect((await send(app, "GET", path)).status).toBe(401);
+    expect((await send(app, "GET", path, { cookie: venue.staffCookie })).status).toBe(403);
+    const answer = await send(app, "GET", path, { cookie: venue.managerCookie });
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toEqual([
+      {
+        paymentRef: "abandoned-order-charge",
+        workingOrderId: order.id,
+        externalRef: "sumup-charge",
+        amount: "10.50",
+        claimedAt: "2026-11-14T10:01:00.000Z",
+        settledAt: "2026-11-14T10:00:00.000Z",
+        outcome: "unconfirmed",
+      },
+    ]);
+  });
+});

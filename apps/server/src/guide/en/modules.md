@@ -32,3 +32,12 @@ Your saved bookings stay on this box when Bookings is off.
 If the main box repeatedly fails to start, its recovery page offers **Switch Bookings off and start again**.
 Open the secure address and enter an active administrator's password, or choose **Stop** to leave it unchanged.
 An administrator without a password cannot use that recovery action.
+
+## Check abandoned-order refunds {#abandoned-refunds}
+
+If a customer leaves after a SumUp charge, open **Card payments** and check **Abandoned-order refunds**.
+Waitron attempts one full refund when SumUp identifies the payment as yours, the amount matches and no refund exists.
+A payment taken outside Waitron on the reader stays for you to check.
+
+**Refund confirmed** means SumUp lists the full amount returned. For an unconfirmed payment, use its charge date, reference and amount to check it in SumUp before refunding there, so you do not return the money twice.
+Check this list even if an earlier payment warning is still open in Alerts.

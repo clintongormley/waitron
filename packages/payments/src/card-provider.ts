@@ -1,6 +1,6 @@
 // Side-effect import: registers the `payment.*` codes this file throws.
 import "./errors.js";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import type { KeyRing, Purpose } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import type { PaymentProvider } from "./provider.js";
@@ -106,7 +106,13 @@ export interface ReaderStatus {
    * offline is paired. */
   pairingStatus?: "processing" | "paired";
 }
+export interface ReconcileMoneyGates {
+  paused(): Promise<boolean>;
+  admit(tx: Transaction): Promise<boolean>;
+}
+
 export interface CardProviderBuildDeps {
+  reconcileMoney?: ReconcileMoneyGates;
   db: Database;
   ring: KeyRing;
   environment: "preproduction" | "production";

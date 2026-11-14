@@ -74,6 +74,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listStuckBillPayments: async () => [],
       listStuckTenderRefunds: async () => [],
       listStuckBillRefunds: async () => [],
+      listAbandonedRefunds: vi.fn().mockResolvedValue([]),
       listHeldPayments: async () => [HELD],
       recordHeldOutcome: async () => ({ outcome: "kept" }),
       ...overrides,

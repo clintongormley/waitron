@@ -604,3 +604,394 @@ it("passes a retryable refund read failure to the scheduler", async () => {
   }).reconcile(period, now);
   expect(result.resweepAfter).toEqual(new Date("2026-07-26T00:00:00Z"));
 });
+
+describe("abandoned-order refunds", () => {
+  it("recovers a lost reply, commits its claim before sending, and confirms once on a later day despite history failure", async () => {
+    const seeded = await failedPayment("lost-orphan");
+    await suite.db.execute(
+      sql`update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`,
+    );
+    const before = suite.db.all(
+      sql`select id, node_id, amount, source, device_id, reader_id, working_order_id from payments`,
+    );
+    const client = new FakeSumUp();
+    const transaction = {
+      id: "orphan-charge",
+      foreignTransactionId: "lost-orphan",
+      status: "SUCCESSFUL",
+      amount: decimal("10.00"),
+      currency: "EUR",
+      timestamp: "2026-07-01T12:03:00.000Z",
+      refundEvents: [] as {
+        id: string;
+        status: string;
+        amount: ReturnType<typeof decimal>;
+        timestamp: string;
+      }[],
+    };
+    vi.spyOn(client, "findTransaction").mockImplementation(async () =>
+      structuredClone(transaction),
+    );
+    let marker: unknown;
+    vi.spyOn(client, "sendRefund").mockImplementation(async () => {
+      marker = suite.db.all(sql`select state, external_ref, reconcile_remediated_at from payments`);
+      return { httpStatus: 201 };
+    });
+    const audit = new SumUpReconciler({
+      db: suite.db,
+      resolveClient: async () => client,
+      incidents: captureAlerts.raise,
+      heldAlerts,
+    });
+    const result = await audit.reconcile(period, now);
+    expect(marker).toEqual([
+      {
+        state: "captured",
+        external_ref: "orphan-charge",
+        reconcile_remediated_at: now.toISOString(),
+      },
+    ]);
+    expect(result.checked).toBe(1);
+    expect(result.missingLocal).toEqual([]);
+    expect(result.orphan.map((row) => row.paymentRef)).toEqual(["lost-orphan"]);
+    expect(result.remediated).toBe(0);
+    expect(result.remediationUnconfirmed).toEqual(["lost-orphan"]);
+    expect(client.sendRefund).toHaveBeenCalledExactlyOnceWith({
+      transactionId: "orphan-charge",
+      amount: "10.00",
+    });
+    expect(
+      suite.db.all(
+        sql`select id, node_id, amount, source, device_id, reader_id, working_order_id from payments`,
+      ),
+    ).toEqual(before);
+    transaction.refundEvents.push({
+      id: "refund-1",
+      status: "REFUNDED",
+      amount: decimal("10.00"),
+      timestamp: "2026-07-26T13:00:00.000Z",
+    });
+    vi.spyOn(client, "historyPage").mockRejectedValue(new Error("history unavailable"));
+    const later = { from: new Date("2026-07-26T00:00:00Z"), to: new Date("2026-07-27T00:00:00Z") };
+    await expect(audit.reconcile(later, later.to)).rejects.toThrow("history unavailable");
+    await expect(audit.reconcile(later, later.to)).rejects.toThrow("history unavailable");
+    expect(client.sendRefund).toHaveBeenCalledTimes(1);
+    expect(suite.db.all(sql`select state, settled_at from payments`)).toEqual([
+      { state: "refunded", settled_at: "2026-07-01T12:03:00.000Z" },
+    ]);
+    expect(
+      suite.db.all(sql`select amount, provider_refund_ref, created_at from payment_refunds`),
+    ).toEqual([
+      { amount: 1000, provider_refund_ref: "refund-1", created_at: "2026-07-26T13:00:00.000Z" },
+    ]);
+  });
+});
+
+it.each([
+  { change: "no reference", allowed: false },
+  { change: "wrong reference", allowed: false },
+  { change: "different amount", allowed: false },
+  { change: "missing events", allowed: false },
+  { change: "pending refund", allowed: false },
+  { change: "partial refund", allowed: false },
+  { change: "failed refund", allowed: false },
+  { change: "invalid evidence", allowed: false },
+  { change: "closed clock", allowed: false },
+  { change: "refused transaction", allowed: false },
+  { change: "valid empty events", allowed: true },
+])("$change controls the abandoned refund before claiming", async ({ change, allowed }) => {
+  const seeded = await failedPayment("limits");
+  await suite.db.execute(
+    sql`update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`,
+  );
+  const client = new FakeSumUp();
+  const t = {
+    id: "limit-charge",
+    foreignTransactionId: "limits",
+    status: "SUCCESSFUL",
+    amount: decimal(change === "different amount" ? "9.00" : "10.00"),
+    currency: "EUR",
+    timestamp: "2026-07-01T12:00:00Z",
+    refundEvents: [] as {
+      id: string;
+      status: string;
+      amount: ReturnType<typeof decimal>;
+      timestamp: string;
+    }[],
+    refundEvidenceInvalid: change === "invalid evidence",
+  };
+  if (change === "no reference")
+    delete (t as { foreignTransactionId?: string }).foreignTransactionId;
+  if (change === "wrong reference") t.foreignTransactionId = "reader-outside";
+  if (change === "missing events") delete (t as { refundEvents?: unknown }).refundEvents;
+  if (["pending refund", "partial refund", "failed refund"].includes(change))
+    t.refundEvents.push({
+      id: "existing-refund",
+      status:
+        change === "pending refund"
+          ? "PENDING"
+          : change === "failed refund"
+            ? "FAILED"
+            : "REFUNDED",
+      amount: decimal("4.00"),
+      timestamp: "2026-07-02T12:00:00Z",
+    });
+  vi.spyOn(client, "findTransaction").mockImplementation(async () => structuredClone(t));
+  const result = await new SumUpReconciler({
+    db: suite.db,
+    resolveClient: async () => client,
+    incidents: captureAlerts.raise,
+    heldAlerts,
+    reconcileMoney: {
+      paused: async () => change === "closed clock",
+      admit: async () => change !== "refused transaction",
+    },
+  })
+    .reconcile(period, now)
+    .catch((error) => {
+      if (change !== "wrong reference") throw error;
+    });
+  if (change === "closed clock" || change === "refused transaction")
+    expect(result?.resweepAfter).toEqual(new Date("2026-07-26T00:00:00Z"));
+  expect(client.sendRefundCalls).toEqual(
+    allowed ? [{ transactionId: "limit-charge", amount: "10.00" }] : [],
+  );
+  expect(
+    suite.db.all<{ mark: string | null }>(
+      sql`select reconcile_remediated_at as mark from payments`,
+    )[0]!.mark,
+  ).toBe(allowed ? now.toISOString() : null);
+});
+
+it.each([
+  "missing events",
+  "pending refund",
+  "partial refund",
+  "failed refund",
+  "different currency",
+  "paused",
+  "transaction refused",
+  "timeout",
+  "server error",
+  "definite refusal",
+  "crash before send",
+])("keeps a claimed %s outcome visible without resending", async (change) => {
+  const seeded = await failedPayment("marked");
+  await suite.db.execute(
+    sql`update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`,
+  );
+  const client = new FakeSumUp();
+  let claimed = false;
+  let secondSweep = false;
+  let admitCalls = 0;
+  vi.spyOn(client, "findTransaction").mockImplementation(async () => {
+    const marker = suite.db.all<{ mark: string | null }>(
+      sql`select reconcile_remediated_at as mark from payments`,
+    )[0]!.mark;
+    claimed ||= marker !== null;
+    return {
+      id: "marked-charge",
+      foreignTransactionId: "marked",
+      status: "SUCCESSFUL",
+      amount: decimal("10.00"),
+      currency: claimed && change === "different currency" && !secondSweep ? "USD" : "EUR",
+      timestamp: "2026-07-01T12:00:00Z",
+      ...(claimed && change === "missing events"
+        ? {}
+        : {
+            refundEvents:
+              claimed && ["pending refund", "partial refund", "failed refund"].includes(change)
+                ? [
+                    {
+                      id: "r-pending",
+                      status:
+                        change === "pending refund"
+                          ? "PENDING"
+                          : change === "failed refund"
+                            ? "FAILED"
+                            : "REFUNDED",
+                      amount: decimal("4.00"),
+                      timestamp: "2026-07-25T10:00:00Z",
+                    },
+                  ]
+                : [],
+          }),
+    };
+  });
+  const send = vi.spyOn(client, "sendRefund").mockImplementation(async () => {
+    if (change === "timeout") throw new Error("timeout");
+    return {
+      httpStatus: change === "server error" ? 500 : change === "definite refusal" ? 400 : 201,
+    };
+  });
+  const audit = new SumUpReconciler({
+    db: suite.db,
+    resolveClient: async () => client,
+    incidents: captureAlerts.raise,
+    heldAlerts,
+    reconcileMoney: {
+      paused: async () => claimed && change === "paused",
+      admit: async () => {
+        admitCalls++;
+        if (admitCalls > 1 && change === "crash before send") throw new Error("crash");
+        return !(admitCalls > 1 && change === "transaction refused");
+      },
+    },
+  });
+  const result = await audit.reconcile(period, now);
+  const sends = ["timeout", "server error", "definite refusal"].includes(change) ? 1 : 0;
+  expect(send).toHaveBeenCalledTimes(sends);
+  expect(result.remediated).toBe(0);
+  if (change === "definite refusal" || change === "crash before send")
+    expect(result.remediationFailures).toEqual([{ paymentRef: "marked", reason: "unknown" }]);
+  else expect(result.remediationUnconfirmed).toEqual(["marked"]);
+  secondSweep = true;
+  await audit.reconcile(period, now);
+  expect(send).toHaveBeenCalledTimes(sends);
+  expect(suite.db.all(sql`select state from payments`)).toEqual([{ state: "captured" }]);
+});
+
+it("two sweeps claim a captured orphan once", async () => {
+  const seeded = await seedWorkingOrder(suite.db, freshNif());
+  await withTransaction(suite.db, (tx) =>
+    insertCapturedPayment(tx, {
+      provider: "sumup",
+      paymentRef: "race",
+      externalRef: "race-charge",
+      amount: decimal("10.00"),
+      settledAt: period.from,
+      workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
+      origin: deviceOrigin(seeded.deviceId),
+    }),
+  );
+  await suite.db.execute(
+    sql`update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`,
+  );
+  const client = new FakeSumUp();
+  vi.spyOn(client, "findTransaction").mockResolvedValue({
+    id: "race-charge",
+    foreignTransactionId: "race",
+    amount: decimal("10.00"),
+    status: "SUCCESSFUL",
+    currency: "EUR",
+    timestamp: period.from.toISOString(),
+    refundEvents: [],
+  });
+  const deps = {
+    db: suite.db,
+    resolveClient: async () => client,
+    incidents: captureAlerts.raise,
+    heldAlerts,
+  };
+  const results = await Promise.all([
+    new SumUpReconciler(deps).reconcile(period, now),
+    new SumUpReconciler(deps).reconcile(period, now),
+  ]);
+  expect(client.sendRefundCalls).toEqual([{ transactionId: "race-charge", amount: "10.00" }]);
+  expect(
+    results.reduce((total, result) => total + (result.remediationUnconfirmed?.length ?? 0), 0),
+  ).toBe(1);
+  expect(suite.db.all(sql`select state from payments`)).toEqual([{ state: "captured" }]);
+});
+
+it("records an already completed full refund without sending, and checks admission after its lookup", async () => {
+  const seeded = await failedPayment("already-returned");
+  await suite.db.execute(
+    sql`update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`,
+  );
+  const client = new FakeSumUp();
+  let permit = true;
+  let freezeAfterClaim = true;
+  vi.spyOn(client, "findTransaction").mockImplementation(async () => {
+    if (
+      freezeAfterClaim &&
+      suite.db.all<{ mark: string | null }>(
+        sql`select reconcile_remediated_at as mark from payments`,
+      )[0]!.mark !== null
+    )
+      permit = false;
+    return {
+      id: "returned-charge",
+      foreignTransactionId: "already-returned",
+      amount: decimal("10.00"),
+      status: "SUCCESSFUL",
+      currency: "EUR",
+      timestamp: period.from.toISOString(),
+      refundEvents: [
+        {
+          id: "r-complete",
+          status: "REFUNDED",
+          amount: decimal("10.00"),
+          timestamp: "2026-07-25T12:00:00Z",
+        },
+      ],
+    };
+  });
+  const audit = new SumUpReconciler({
+    db: suite.db,
+    resolveClient: async () => client,
+    incidents: captureAlerts.raise,
+    heldAlerts,
+    reconcileMoney: { paused: async () => false, admit: async () => permit },
+  });
+  const first = await audit.reconcile(period, now);
+  expect(first.remediationUnconfirmed).toEqual(["already-returned"]);
+  expect(suite.db.all(sql`select * from payment_refunds`)).toEqual([]);
+  freezeAfterClaim = false;
+  permit = true;
+  await audit.reconcile(period, now);
+  await audit.reconcile(period, now);
+  expect(suite.db.all(sql`select state from payments`)).toEqual([{ state: "refunded" }]);
+  expect(suite.db.all(sql`select provider_refund_ref from payment_refunds`)).toEqual([
+    { provider_refund_ref: "r-complete" },
+  ]);
+  expect(client.sendRefundCalls).toEqual([]);
+});
+
+it("leaves a captured orphan with an existing partial provider refund unclaimed", async () => {
+  const seeded = await seedWorkingOrder(suite.db, freshNif());
+  await withTransaction(suite.db, (tx) =>
+    insertCapturedPayment(tx, {
+      provider: "sumup",
+      paymentRef: "partial-orphan",
+      externalRef: "partial-charge",
+      amount: decimal("10.00"),
+      settledAt: period.from,
+      workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
+      origin: deviceOrigin(seeded.deviceId),
+    }),
+  );
+  await suite.db.execute(
+    sql`update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`,
+  );
+  const client = new FakeSumUp();
+  vi.spyOn(client, "findTransaction").mockResolvedValue({
+    id: "partial-charge",
+    foreignTransactionId: "partial-orphan",
+    amount: decimal("10.00"),
+    status: "SUCCESSFUL",
+    currency: "EUR",
+    timestamp: period.from.toISOString(),
+    refundEvents: [
+      {
+        id: "partial-r",
+        status: "REFUNDED",
+        amount: decimal("4.00"),
+        timestamp: "2026-07-02T12:00:00Z",
+      },
+    ],
+  });
+  const result = await new SumUpReconciler({
+    db: suite.db,
+    resolveClient: async () => client,
+    incidents: captureAlerts.raise,
+    heldAlerts,
+  }).reconcile(period, now);
+  expect(result.orphan.map((row) => row.paymentRef)).toEqual(["partial-orphan"]);
+  expect(suite.db.all(sql`select state, reconcile_remediated_at from payments`)).toEqual([
+    { state: "captured", reconcile_remediated_at: null },
+  ]);
+  expect(client.sendRefundCalls).toEqual([]);
+});

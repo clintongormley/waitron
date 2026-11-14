@@ -54,6 +54,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStuckBillPayments: vi.fn().mockResolvedValue([PAYMENT]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([REFUND]),
+    listAbandonedRefunds: vi.fn().mockResolvedValue([]),
     listHeldPayments: vi.fn().mockResolvedValue([]),
     resolveStuckBillPayment: vi.fn().mockResolvedValue({ outcome: "not_charged" }),
     resolveStuckBillRefund: vi.fn().mockResolvedValue({ outcome: "completed" }),

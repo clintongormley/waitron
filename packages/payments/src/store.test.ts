@@ -22,6 +22,7 @@ import {
   assertReversible,
   associatePaymentWithSale,
   captureAttempting,
+  claimAbandonedCapture,
   existingReferences,
   expireInitiated,
   failAttempting,
@@ -35,6 +36,7 @@ import {
   insertCapturedPayment,
   insertFailedPayment,
   insertInitiated,
+  listAbandonedRefundOutcomes,
   listAttempting,
   listAuditCandidates,
   listBackupPayments,
@@ -1875,4 +1877,124 @@ it("reads only the latest successful payment audit generation for each requested
       listPaymentAuditRuns(tx, "stripe", ["2026-06-01T00:00:00.000Z"]),
     ),
   ).toEqual([]);
+});
+
+describe("listAbandonedRefundOutcomes", () => {
+  it("keeps marked outcomes visible until the whole refund is recorded, excluding other providers and unclaimed payments", async () => {
+    const seeded = await seedTenant();
+    const confirmed = await capture(seeded, "refund-confirmed");
+    const unconfirmed = await capture(seeded, "refund-unconfirmed");
+    await capture(seeded, "not-claimed");
+    const at = new Date("2026-11-14T10:00:00Z");
+    await withTransaction(suite.db, async (tx) => {
+      await markReconcileRemediated(tx, { ...confirmed, at });
+      await markReconcileRemediated(tx, { ...unconfirmed, at });
+      await recordRefund(tx, {
+        ...confirmed,
+        amount: decimal("10.00"),
+        providerRefundRef: "provider-refund-1",
+      });
+      await recordFailedRefund(tx, { ...unconfirmed, amount: decimal("10.00") });
+    });
+    const read = (provider: string) =>
+      withTransaction(suite.db, (tx) => listAbandonedRefundOutcomes(tx, provider));
+    expect(await read("fake")).toEqual([
+      {
+        paymentRef: "refund-confirmed",
+        workingOrderId: seeded.workingOrderId,
+        externalRef: null,
+        amount: "10.00",
+        claimedAt: "2026-11-14T10:00:00.000Z",
+        settledAt: "2026-07-22T10:00:00.000Z",
+        outcome: "confirmed",
+      },
+      {
+        paymentRef: "refund-unconfirmed",
+        workingOrderId: seeded.workingOrderId,
+        externalRef: null,
+        amount: "10.00",
+        claimedAt: "2026-11-14T10:00:00.000Z",
+        settledAt: "2026-07-22T10:00:00.000Z",
+        outcome: "unconfirmed",
+      },
+    ]);
+    expect(await read("other-provider")).toEqual([]);
+    await withTransaction(suite.db, (tx) =>
+      recordRefund(tx, { ...unconfirmed, amount: decimal("4.00"), providerRefundRef: "partial" }),
+    );
+    expect((await read("fake"))[1]?.outcome).toBe("unconfirmed");
+  });
+});
+
+it.each([
+  "failed",
+  "captured",
+  "attempting",
+  "initiated",
+  "voided",
+  "open",
+  "placed",
+  "settled",
+  "marked",
+  "held",
+  "refunded",
+  "failed refund",
+  "wrong amount",
+  "bill",
+])("claims only an eligible abandoned capture: %s", async (state) => {
+  const seeded = await seedTenant();
+  await withTransaction(suite.db, async (tx) => {
+    await insertFailedPayment(tx, {
+      provider: "sumup",
+      paymentRef: "claim",
+      amount: decimal("10.00"),
+      origin: deviceOrigin(seeded.deviceId),
+      nodeId: seeded.nodeId,
+      workingOrderId: seeded.workingOrderId,
+    });
+    await tx.execute(
+      sql`update working_orders set status = ${["open", "placed", "settled"].includes(state) ? state : "abandoned"}, settled_at = ${state === "settled" ? SETTLED.toISOString() : null} where id = ${seeded.workingOrderId}`,
+    );
+    if (["captured", "attempting", "initiated", "voided"].includes(state))
+      await tx.execute(sql`update payments set state = ${state}`);
+    if (state === "marked")
+      await tx.execute(sql`update payments set reconcile_remediated_at = ${SETTLED.toISOString()}`);
+    if (state === "held")
+      await recordHold(tx, {
+        paymentId: (await getPaymentByRef(tx, { provider: "sumup", paymentRef: "claim" }))!.id,
+        providerAmount: decimal("11.00"),
+        foundAt: SETTLED,
+      });
+    if (state === "refunded" || state === "failed refund")
+      await tx.execute(
+        sql`insert into payment_refunds (id, payment_id, provider, payment_ref, amount, state, created_at) select 'existing', id, provider, payment_ref, 100, ${state === "refunded" ? "succeeded" : "failed"}, ${SETTLED.toISOString()} from payments`,
+      );
+    if (state === "bill") {
+      await tx.insert(billPayments).values({
+        id: "claim-bill",
+        workingOrderId: seeded.workingOrderId,
+        method: "card",
+        applied: 1000,
+        state: "pending",
+        requestedBy: "11111111-1111-1111-1111-111111111111",
+        source: "device",
+        deviceId: seeded.deviceId,
+        submissionId: "claim-bill",
+        fingerprint: "claim-bill",
+        kind: "contribution",
+      });
+      await tx.execute(sql`update payments set bill_payment_id = 'claim-bill'`);
+    }
+    const params = {
+      provider: "sumup",
+      paymentRef: "claim",
+      amount: decimal(state === "wrong amount" ? "9.00" : "10.00"),
+      externalRef: "transaction",
+      settledAt: SETTLED,
+      at: SETTLED,
+    };
+    const row = await claimAbandonedCapture(tx, params);
+    expect(row?.paymentRef).toBe(state === "failed" || state === "captured" ? "claim" : undefined);
+    expect(await claimAbandonedCapture(tx, params)).toBeUndefined();
+  });
 });

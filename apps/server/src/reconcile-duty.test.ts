@@ -1,3 +1,4 @@
+import { systemClock } from "./till-backend.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, workingOrders } from "@waitron/db";
@@ -17,8 +18,13 @@ import type {
 import { FakeReconciler } from "@waitron/payments/src/testing/fake-reconciler.js";
 import { FakeSettlementReport } from "@waitron/payments/src/testing/fake-settlement-report.js";
 import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
-import { decimal, deviceOrigin } from "@waitron/shared";
-import { NOTHING_TO_RECONCILE, reconcilePassFor, reconcilerAsDuty } from "./reconcile-duty.js";
+import { AppError, decimal, deviceOrigin } from "@waitron/shared";
+import {
+  NOTHING_TO_RECONCILE,
+  reconcilePassFor,
+  reconcilerAsDuty,
+  reconciliationMoneyGates,
+} from "./reconcile-duty.js";
 
 function emptyResult(period: RunPeriod): PaymentReconcileResult {
   return {
@@ -373,4 +379,63 @@ it("stores selected refund evidence as JSON without storing a disagreement", asy
     reconcilerReturning({ ...emptyResult(PERIOD), refundEvidence }),
   ).run(PERIOD, NOW);
   expect(JSON.parse(JSON.stringify(outcome.summary)).refundEvidence).toEqual(refundEvidence);
+});
+
+it("persists unconfirmed orphan references without counting them as refunds", async () => {
+  const outcome = await reconcilerAsDuty(
+    reconcilerReturning({ ...emptyResult(PERIOD), remediationUnconfirmed: ["lost"] }),
+  ).run(PERIOD, NOW);
+  expect(outcome.summary.remediationUnconfirmed).toEqual(["lost"]);
+  expect(outcome.summary.remediated).toBe(0);
+});
+
+it("gates reconciliation with the serving node, current role, clock and economic admission", async () => {
+  const { FakeFiscalBackend } = await import("@waitron/fiscal/src/testing/fake-backend.js");
+  const { testTradingAdmission } = await import("./testing/trading-admission.js");
+  const seeded = await seedWorkingOrder(suite.db);
+  const backend: import("@waitron/fiscal").FiscalBackend = new FakeFiscalBackend(suite.db);
+  const admission = testTradingAdmission();
+  let primary = true,
+    readOnly = false,
+    waiting = false;
+  const clock = systemClock();
+  const reading = { ...clock.now(), instant: NOW, offsetMinutes: 0 };
+  const seen: string[] = [];
+  backend.refuseNewRefund = async (_tx, nodeId) => {
+    seen.push(nodeId);
+  };
+  const gates = reconciliationMoneyGates({
+    db: suite.db,
+    backend,
+    admission,
+    cfg: { nodeId: seeded.nodeId } as import("./bill-refunds.js").BillRefundDeps["cfg"],
+    clock: { ...clock, now: () => reading },
+    clockUnconfirmed: () => waiting,
+    isPrimary: () => primary,
+    isReadOnly: () => readOnly,
+  });
+  expect(await gates.paused()).toBe(false);
+  expect(await withTransaction(suite.db, gates.admit)).toBe(true);
+  expect(seen).toEqual([seeded.nodeId, seeded.nodeId]);
+  primary = false;
+  expect(await gates.paused()).toBe(true);
+  expect(await withTransaction(suite.db, gates.admit)).toBe(false);
+  primary = true;
+  readOnly = true;
+  expect(await withTransaction(suite.db, gates.admit)).toBe(false);
+  readOnly = false;
+  waiting = true;
+  expect(await gates.paused()).toBe(true);
+  expect(await withTransaction(suite.db, gates.admit)).toBe(false);
+  waiting = false;
+  const assertRecordable = backend.assertRecordableAt;
+  backend.assertRecordableAt = () => {
+    throw new AppError("clock.unusable", { clockAt: NOW.toISOString(), offsetMinutes: 0 });
+  };
+  expect(await withTransaction(suite.db, gates.admit)).toBe(false);
+  backend.assertRecordableAt = assertRecordable;
+  admission.requireRestart();
+  await expect(withTransaction(suite.db, gates.admit)).rejects.toMatchObject({
+    code: "venue.time_zone_not_ready",
+  });
 });

@@ -52,7 +52,7 @@ export interface SettlementReportSource {
 
 /** Reverse one payment in full at the processor. Throws when the payment cannot be addressed at the
  * processor. */
-export type ReversalFn = (paymentRef: string) => Promise<void>;
+export type ReversalFn = (paymentRef: string) => Promise<void | "unconfirmed">;
 
 /**
  * Raise an incident, deduplicated per open `(source, device, code, sale)`, reporting whether it
@@ -140,6 +140,7 @@ export interface PaymentReconcileResult {
    * good.
    */
   remediationFailures: { paymentRef: string; reason: string }[];
+  remediationUnconfirmed?: string[];
 }
 
 /** One implementer per settlement identity (per `provider` id), never one per capture mechanism. */
@@ -237,6 +238,8 @@ export type ReconcileDeps = {
   incidents: IncidentSink;
   heldAlerts: HeldAlertSink;
   settlementLagMs: number;
+  /** When supplied, this adapter owns every orphan claim, under T2's write lock. */
+  prepareOrphans?: (tx: Transaction, records: SettlementRecord[]) => Promise<ReconcilableRow[]>;
 } & ({ mode: "audit-only"; reverse?: ReversalFn } | { mode?: "remediate"; reverse: ReversalFn });
 
 const CODE = {
@@ -309,11 +312,26 @@ export async function reconcilePayments(
   // sweep will reverse.
   const remediable: ReconcilableRow[] = [];
   await withTransaction(deps.db, async (tx) => {
+    const prepared = (await deps.prepareOrphans?.(tx, records)) ?? [];
+    remediable.push(...prepared);
+    result.checked += prepared.filter(
+      (row) => !rows.some((original) => original.paymentId === row.paymentId),
+    ).length;
+    const preparedIds = new Set(prepared.map((row) => row.paymentId));
     // An outcome recorded since T1 read these rows ends their checks just as one T1 saw would.
     const resolved = await resolvedHoldsAmong(tx, [
       ...new Set(classified.rows.map((entry) => entry.row.paymentId)),
     ]);
-    const findings = classified.rows.filter((entry) => !resolved.has(entry.row.paymentId));
+    const findings: ClassifiedRow[] = [
+      ...classified.rows.filter(
+        (entry) => !resolved.has(entry.row.paymentId) && !preparedIds.has(entry.row.paymentId),
+      ),
+      ...prepared.map((row) => ({
+        klass: "orphan" as const,
+        row,
+        settled: records.find((record) => record.references.includes(row.externalRef!)) ?? null,
+      })),
+    ];
     for (const entry of findings) result[entry.klass].push(mismatchOf(entry));
 
     // A drifting orphan is two independent entries over one row; this set joins them.
@@ -353,7 +371,11 @@ export async function reconcilePayments(
     for (const entry of findings) {
       if (entry.klass !== "orphan") continue;
       const ref = entry.row.paymentRef;
-      if (deps.mode === "audit-only") {
+      if (preparedIds.has(entry.row.paymentId)) {
+        remediation.set(ref, "claimed");
+        continue;
+      }
+      if (deps.mode === "audit-only" || deps.prepareOrphans !== undefined) {
         remediation.set(ref, "auditOnly");
         continue;
       }
@@ -422,7 +444,8 @@ export async function reconcilePayments(
   const failures: RemediationFailure[] = [];
   for (const row of remediable) {
     const reason = await remediate(deps.reverse!, row);
-    if (reason === null) result.remediated += 1;
+    if (reason === "unconfirmed") (result.remediationUnconfirmed ??= []).push(row.paymentRef);
+    else if (reason === null) result.remediated += 1;
     else {
       failures.push({ row, reason });
       result.remediationFailures.push({ paymentRef: row.paymentRef, reason });
@@ -579,12 +602,9 @@ function missingLocalMismatch(record: SettlementRecord): PaymentMismatch {
   };
 }
 
-/** Returns `null` when the money went back, else the refusal's `AppError` code or `"unknown"`. Never
- * retried: the marker was stamped in T2. */
 async function remediate(reverse: ReversalFn, row: ReconcilableRow): Promise<string | null> {
   try {
-    await reverse(row.paymentRef);
-    return null;
+    return (await reverse(row.paymentRef)) === "unconfirmed" ? "unconfirmed" : null;
   } catch (error) {
     return isAppError(error) ? error.code : "unknown";
   }
