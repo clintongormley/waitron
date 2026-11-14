@@ -2568,6 +2568,8 @@ the frames.
 
 **Guards that read the whole tree**
 
+For a guarded Back or Forward traversal, poll for the resulting screen state: Your profile’s device-editor retention test reproduced an intermediate address with the modal still open when the guard’s restoring `history.go(1)` was held for 200 ms.
+
 ## Source scanners check filesystem type as well as the filename suffix — select files, not just paths ending in `.ts`.
 
 Vitest stores failure screenshots in directories named `*.test.ts`; treating those directories as

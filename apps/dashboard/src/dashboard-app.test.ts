@@ -1396,11 +1396,10 @@ describe("dashboard-app", () => {
       await flush(el);
       expect(location.pathname).toBe("/manage/profile");
       close(el);
-      await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+      await expect.poll(() => el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
       await flush(el);
       await screen.updateComplete;
 
-      expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
       expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
       expect(name()?.value).toBe("Back counter");
       expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);

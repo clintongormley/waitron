@@ -9,10 +9,12 @@ The watcher requested this on 14 November 2026 at 10:46 in Lane D’s questions.
 
 **Reuse and scope:** keep the existing parameterized test, real navigation guard, shell, device editor, and its assertions on the retained name, destination and absent unsaved-changes question. Replace its pathname poll with a poll for the modal to close. Remove the later duplicate synchronous open assertion. No new helper, test case, product code, timeout or production navigation change. The hold stays a disposable diagnostic, not shipped test plumbing.
 
-**Files:** `apps/dashboard/src/dashboard-app.test.ts`; add the measured lesson to `docs/developers/testing-guide.md`. No backlog entry names this incident, so no open work is retired.
+**Files:** `apps/dashboard/src/dashboard-app.test.ts`; add one sentence to the existing observer-completion lesson in `docs/developers/testing-guide.md`. No backlog entry names this incident, so no open work is retired.
 
-- [ ] Replay the held-restoration red/green control and retain both outcomes; then remove the diagnostic hold.
+- [x] Replay the held-restoration red/green control and retain both outcomes; then remove the diagnostic hold. In a disposable candidate also remove Back handling and confirm the corrected test fails waiting for the modal to close (watcher 10:54).
 - [ ] Change only the completion wait in the existing two-case test. Run `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts`, including both close paths and its neighboring Back/Forward cases. Run a bounded repeated sample of the named Back case with a separate log per attempt.
 - [ ] Finish through the normal hook, Claude build review and current-head scoped CI; land under the campaign’s existing authorisation.
 
-**Expected size:** production +0/−0; tests +1/−2; support +0/−0; documentation approximately 10–15 lines beyond this plan. This plan is written by Codex; no owner design approval is claimed.
+**Expected size:** production +0/−0; tests +1/−2; support +0/−0; documentation one sentence beyond this plan. This plan is written by Codex; no owner design approval is claimed.
+
+Claude reviewed this plan (`receipts/profile-back-close/plan-review.md`); the watcher cleared the test-only fix at 10:54 on 14 November 2026 in Lane D’s questions.md. The guide addition is narrowed to one sentence as Claude recommended. The adjacent Forward case is outside this request and unchanged under the campaign’s loose-ends rule.
