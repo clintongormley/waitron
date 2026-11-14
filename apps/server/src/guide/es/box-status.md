@@ -245,8 +245,8 @@ Este dispositivo marca …**
   dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el servidor a
   internet para que corrija la hora.** y solo ofrece **Cerrar**. Por el tiempo que tarda la
   respuesta, dos horas separadas por algo menos de un minuto también pueden recibir este mensaje.
-  Mientras los cobros [esperan la hora del equipo](box-status.md#clock-waiting) y no responde la
-  parte del equipo que lee su hora de internet, dice en cambio que la hora del equipo no se puede
+  Mientras los cobros [esperan la hora del servidor](box-status.md#clock-waiting) y no responde la
+  parte del servidor que lee su hora de internet, dice en cambio que la hora del servidor no se puede
   corregir hasta que esa parte responda.
 
 Poner la hora puede cerrar tu sesión en el panel de gestión. Cuando el reloj se mueve más de media

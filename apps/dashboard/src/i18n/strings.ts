@@ -8316,18 +8316,18 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.waiting":
-    "Esperando a que se conecten dispositivos y coincidan con la hora del equipo ({agreed} de 2 por ahora): no se aceptan cobros. El reloj del equipo indica {boxAt}.",
+    "Esperando a que se conecten dispositivos y coincidan con la hora del servidor ({agreed} de 2 por ahora): no se aceptan cobros. El reloj del servidor indica {boxAt}.",
   "box_status.clock.waiting_host_silent":
-    "No puede ver su hora de internet porque la parte del equipo que la lee no responde, así que espera así en cada arranque.",
+    "No puede ver su hora de internet porque la parte del servidor que la lee no responde, así que espera así en cada arranque.",
   "box_status.clock.confirm": "La fecha y la hora son correctas",
   "box_status.clock.confirm_help":
     "Pulsa esto solo si la fecha y la hora de arriba coinciden con un reloj de confianza. Si no, usa «Comprobar con la hora de este dispositivo».",
   "box_status.clock.confirm_help_host_silent":
-    "Pulsa esto solo si la fecha y la hora de arriba coinciden con un reloj de confianza, o usa «Comprobar con la hora de este dispositivo» para compararlas. Si no coinciden, el equipo no puede corregir su reloj mientras no responda la parte que lee su hora de internet, así que los cobros siguen esperando.",
+    "Pulsa esto solo si la fecha y la hora de arriba coinciden con un reloj de confianza, o usa «Comprobar con la hora de este dispositivo» para compararlas. Si no coinciden, el servidor no puede corregir su reloj mientras no responda la parte que lee su hora de internet, así que los cobros siguen esperando.",
   "box_status.clock.confirm_refused_stale":
-    "El reloj del equipo ha cambiado mientras se enviaba. Vuelve a comprobar la fecha y la hora de arriba y pulsa el botón otra vez.",
+    "El reloj del servidor ha cambiado mientras se enviaba. Vuelve a comprobar la fecha y la hora de arriba y pulsa el botón otra vez.",
   "box_status.clock.admin.confirmed":
-    "Este dispositivo coincide, así que la hora del equipo queda confirmada.",
+    "Este dispositivo coincide, así que la hora del servidor queda confirmada.",
   "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
   "box_status.clock.admin.sign_in_hint":
     "Solo un administrador puede confirmar o corregir la fecha y la hora del servidor. Iniciar sesión como administrador cierra primero tu sesión aquí.",
