@@ -130,10 +130,11 @@ the internet, the page then shows the box's time and this device's: check that b
 choose **Confirm the time**.
 
 If a minute is unavailable, wait for the countdown. The page checks again every five seconds.
-When the wait ends, compare the clocks again. Check the selected identity, then choose **Switch
-identity** yourself. The countdown never switches it for you. Your existing orders, payments and
-history are kept. Existing filing results and cases stay unchanged. An invoice found by a lookup
-may be missing from this box's history.
+When the wait ends, compare the clocks again. If the box cannot check its time over the internet,
+the page asks you to confirm the time again: choose **Confirm the time**. Check the selected
+identity, then choose **Switch identity** yourself. The countdown never switches it for you. Your
+existing orders, payments and history are kept. Existing filing results and cases stay unchanged.
+An invoice found by a lookup may be missing from this box's history.
 
 If the answer is lost, the page checks the same attempt's result. An unconfirmed result is not a
 successful switch. Use **Check conflict** to check again with the current key. Choose **Start a new

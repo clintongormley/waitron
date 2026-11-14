@@ -20,7 +20,8 @@ the time**.
 
 The procedure compares clocks and waits for an available UTC minute using the same admission rules
 as recovery. Keep the page open during its countdown. Its automatic checks run no faster than once
-every five seconds; when the wait ends, compare clocks again. Review the selected identity and
+every five seconds; when the wait ends, compare clocks again. If the box cannot check its time over
+the internet, the page asks you to confirm the time again: press **Confirm the time**. Review the selected identity and
 choose **Switch identity** explicitly. No countdown or background task activates it for you.
 
 The request limit is shared by everyone using this box's recovery route: 60 admitted requests
@@ -123,8 +124,8 @@ does"). After **Proceed** the box asks its internet time service whether it is s
 compares its own clock with the clock of the device showing the page (AEAT's time is not read for
 it), and when the time service is synchronised the page asks the box for the invoice series, all by
 itself; when only the two clocks agree it shows both times and asks for the series once the person
-presses **Confirm the time**; nobody types a time (`recovery-hour.browser.test.ts`, "decodes the printed key and sends
-independent recovery declarations before selecting"). Changing or clearing the key, either
+presses **Confirm the time**; nobody types a time (`recovery-hour.browser.test.ts`, "when only this
+device agrees, Confirm the time compares again and selects with confirmed"). Changing or clearing the key, either
 statement or the details tick stops it, and putting it back sends nothing until **Proceed** is
 pressed again (the same file's "an edit to a declaration stops the wait, and putting it back sends
 nothing until Proceed" and "an edit to the details tick stops the wait, and putting it back sends

@@ -278,6 +278,7 @@ it("asks no last-hour question and offers no clock confirmation while the intern
   expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
   expect(el.shadowRoot!.querySelector('[name="setup-clock-confirmed"]')).toBeNull();
   expect(text(el)).not.toContain("UTC hour");
+  expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).toBeNull();
 });
 it("keeps the server wait and never imports or locally completes it", async () => {
   const { el, calls } = await mount({

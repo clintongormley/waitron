@@ -452,6 +452,12 @@ it("asks no last-hour question and offers no clock confirmation while the intern
   expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
   expect(el.shadowRoot!.querySelector('[name="recovery-clock-confirmed"]')).toBeNull();
   expect(text(el)).not.toContain("UTC hour");
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector("[data-test=selected-hour], [data-test=confirm-time]"),
+    ).not.toBeNull(),
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=confirm-time]")).toBeNull();
 });
 it("keeps the server's wait", async () => {
   const prepare = vi.fn(async (request: { proposal: unknown }) => {
