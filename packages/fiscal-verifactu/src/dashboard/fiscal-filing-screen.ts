@@ -44,8 +44,6 @@ import { t } from "./strings.js";
 
 const RECOVERY_PATH = "/manage/recovery/fiscal-conflict";
 const PAGE_SIZE = 50;
-/** AEAT's `TextMax500Type`. */
-const DESCRIPTION_MAX = 500;
 const CASE_CHANGED: ReadonlySet<string> = new Set([
   "fiscal.remedy_invalid",
   "filing_case.not_found",
@@ -419,8 +417,11 @@ export class FiscalFilingScreen extends LitElement {
         align-items: center;
         gap: var(--wt-space-2) var(--wt-space-3);
       }
-      .error {
+      .error,
+      .changed {
         margin-top: var(--wt-space-2);
+      }
+      .error {
         color: var(--wt-color-danger);
       }
       .box {
@@ -538,6 +539,7 @@ export class FiscalFilingScreen extends LitElement {
   @state() private attempted = false;
   @state() private sending = false;
   @state() private refusal = "";
+  @state() private caseChanged = false;
 
   #generation = 0;
   #unsubscribeLocale?: () => void;
@@ -564,6 +566,7 @@ export class FiscalFilingScreen extends LitElement {
 
   #open(row: FilingCaseView): void {
     this.#forget();
+    this.caseChanged = false;
     this.viewing = row;
     if (putRightFor(row).kind !== "record-correction") return;
     this.description = row.record.descripcionOperacion ?? "";
@@ -606,11 +609,9 @@ export class FiscalFilingScreen extends LitElement {
   #descriptionError(): string {
     if (!this.attempted) return "";
     if (this.description.trim() === "") return t("fiscal_filing.put_right.description_required");
-    if (this.description.length > DESCRIPTION_MAX)
-      return t("fiscal_filing.put_right.description_too_long");
-    return descriptionProblem(this.description) === "control_character"
-      ? t("fiscal_filing.put_right.description_control")
-      : "";
+    const problem = descriptionProblem(this.description);
+    if (problem === "too_long") return t("fiscal_filing.put_right.description_too_long");
+    return problem === "control_character" ? t("fiscal_filing.put_right.description_control") : "";
   }
 
   #bottom(): string {
@@ -664,16 +665,25 @@ export class FiscalFilingScreen extends LitElement {
         facts: { description: this.description },
       });
     } catch (error) {
+      const code = codeOf(error);
+      // An earlier send whose answer was lost may be what changed the case, so every retry would
+      // be refused again: the dialog closes rather than offering Send.
+      if (CASE_CHANGED.has(code)) {
+        void this.#read();
+        if (this.viewing !== found) return;
+        this.#close();
+        this.caseChanged = true;
+        return;
+      }
       if (this.viewing !== found) return;
       this.sending = false;
-      this.refusal = codeOf(error);
-      if (CASE_CHANGED.has(this.refusal)) void this.#read();
+      this.refusal = code;
       return;
     }
+    void this.#read();
     if (this.viewing !== found) return;
     this.#scope?.commit(this.description);
     this.#close();
-    void this.#read();
   }
 
   #putRight(found: FilingCaseView): TemplateResult {
@@ -700,7 +710,6 @@ export class FiscalFilingScreen extends LitElement {
         name="operationDescription"
         label=${t("fiscal_filing.put_right.description")}
         required
-        maxlength=${DESCRIPTION_MAX}
         .value=${this.description}
         .error=${error}
         ?invalid=${error !== ""}
@@ -948,6 +957,13 @@ export class FiscalFilingScreen extends LitElement {
         this.exportError === ""
           ? nothing
           : html`<p class="error" role="alert" data-test="export-error">${this.exportError}</p>`
+      }
+      ${
+        this.caseChanged
+          ? html`<p class="changed" role="status" data-test="case-changed">
+              ${t("fiscal_filing.refused.changed")}
+            </p>`
+          : nothing
       }
       ${overview === null ? nothing : this.#parts(overview)} ${this.#details()}`;
   }

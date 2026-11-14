@@ -34,12 +34,15 @@ export function putRightFor(view: FilingCaseView): PutRight {
   return NOT_YET;
 }
 
-/** `@waitron/verifactu`'s `validate` refuses these in `DescripcionOperacion` (`CONTROL_CHAR`);
- * ./put-right.test.ts compares this copy with its verdict. */
+/* `@waitron/verifactu`'s `validate` refuses these in `DescripcionOperacion` (`DESCRIPCION_LENGTH`,
+ * counted in code points, and `CONTROL_CHAR`); ./put-right.test.ts compares this copy with its
+ * verdict. */
+const DESCRIPTION_MAX = 500;
 // eslint-disable-next-line no-control-regex -- deliberately matching control characters
 const CONTROL_CHARACTER = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
 
 /** What the library's record check would refuse in an operation description, before it is sent. */
-export function descriptionProblem(description: string): "control_character" | null {
+export function descriptionProblem(description: string): "too_long" | "control_character" | null {
+  if ([...description].length > DESCRIPTION_MAX) return "too_long";
   return CONTROL_CHARACTER.test(description) ? "control_character" : null;
 }

@@ -253,7 +253,7 @@ const en = {
   "fiscal_filing.refused.not_main":
     "This server no longer files the venue's invoices. Open this page on the server that does.",
   "fiscal_filing.refused.changed":
-    "This case changed since the page was read, so nothing was sent. The page has been read again.",
+    "This case was already put right, or it changed; nothing more was sent.",
   "fiscal_filing.refused.not_sent": "Waitron could not send this correction. Nothing was sent.",
   "fiscal_filing.refused.disk_full":
     "The server's disk is full, so nothing was sent. Follow the disk alert, then send again.",
@@ -583,7 +583,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.not_main":
     "Este servidor ya no presenta las facturas del local. Abre esta página en el servidor que las presenta.",
   "fiscal_filing.refused.changed":
-    "Este caso ha cambiado desde que se leyó la página, así que no se ha enviado nada. La página se ha vuelto a leer.",
+    "Este caso ya se había corregido o ha cambiado; no se ha enviado nada más.",
   "fiscal_filing.refused.not_sent":
     "Waitron no ha podido enviar esta subsanación. No se ha enviado nada.",
   "fiscal_filing.refused.disk_full":

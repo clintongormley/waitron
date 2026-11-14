@@ -769,16 +769,78 @@ describe("putting a case right", () => {
     expect(remedyCalls(request)[1]![2]).toEqual(remedyCalls(request)[0]![2]);
   });
 
-  it("reads the page again when the case changed meanwhile", async () => {
-    const request = server(refusedCase(1100, NAMES_DESCRIPTION), async () => {
-      throw refusal("filing_case.already_resolved");
-    });
+  it.each([
+    "filing_case.already_resolved",
+    "fiscal.record_already_corrected",
+    "filing_case.action_mismatch",
+    "fiscal.remedy_invalid",
+    "filing_case.not_found",
+  ])(
+    "reads the page again and closes the case when the case changed meanwhile: %s",
+    async (code) => {
+      const request = server(refusedCase(1100, NAMES_DESCRIPTION), async () => {
+        throw refusal(code);
+      });
+      const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+      const details = await openDetails(screen);
+      await type(screen, details, "Servicio de restauración");
+      action(details).click();
+      await vi.waitFor(() => expect(request.mock.calls.length).toBe(3));
+      expect(request.mock.calls[2]![0]).toBe("/management-api/fiscal-filing");
+      await vi.waitFor(() => expect(details).toHaveProperty("open", false));
+      await screen.updateComplete;
+      expect(text(screen, "[data-test=case-changed]")).toBe(
+        "This case was already put right, or it changed; nothing more was sent.",
+      );
+    },
+  );
+
+  it("reads the page again when a send succeeds after its case was closed", async () => {
+    let answer!: (value: unknown) => void;
+    const request = server(
+      refusedCase(1100, NAMES_DESCRIPTION),
+      () => new Promise((resolve) => (answer = resolve)),
+    );
     const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
     const details = await openDetails(screen);
     await type(screen, details, "Servicio de restauración");
     action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    const closed = new Promise((resolve) =>
+      details.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await (
+      details as HTMLElement & { requestClose(reason: string): Promise<boolean> }
+    ).requestClose("cancel");
+    await closed;
+    await screen.updateComplete;
+    expect(request.mock.calls.length).toBe(2);
+    answer({});
     await vi.waitFor(() => expect(request.mock.calls.length).toBe(3));
     expect(request.mock.calls[2]![0]).toBe("/management-api/fiscal-filing");
+  });
+
+  it("counts the description in characters, as the library does, not in UTF-16 units", async () => {
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION));
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    const area = field(details).shadowRoot!.querySelector("textarea")!;
+    expect(area.hasAttribute("maxlength")).toBe(false);
+    await type(screen, details, "🍷".repeat(501));
+    action(details).click();
+    await screen.updateComplete;
+    expect((field(details) as unknown as { error: string }).error).toBe(
+      "Keep the description to 500 characters.",
+    );
+    expect(remedyCalls(request)).toHaveLength(0);
+
+    const exactly = "🍷".repeat(500);
+    expect(exactly.length).toBe(1000);
+    await type(screen, details, exactly);
+    expect((field(details) as unknown as { error: string }).error).toBe("");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    expect(remedyCalls(request)[0]![2]).toMatchObject({ facts: { description: exactly } });
   });
 
   it("words every refusal the remedy route can give, in English and in Spanish", () => {

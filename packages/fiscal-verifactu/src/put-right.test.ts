@@ -166,7 +166,7 @@ describe("putRightFor, cases no fix applies to", () => {
 
 describe("descriptionProblem, the case dialog's copy of the library's description checks", () => {
   /** The library's own verdict on a record carrying `description`, for the codes the copy repeats. */
-  function libraryRefuses(description: string): boolean {
+  function libraryRefuses(description: string): "too_long" | "control_character" | null {
     const at = new Date("2026-11-13T12:00:00.000Z");
     const record = buildAltaRecord({
       IDEmisorFactura: "89890001K",
@@ -201,9 +201,11 @@ describe("descriptionProblem, the case dialog's copy of the library's descriptio
       generadoEn: at,
       offsetMinutes: 60,
     });
-    return validate(record, { now: at }).some(
-      (issue) => issue.field === "DescripcionOperacion" && issue.code === "CONTROL_CHAR",
-    );
+    const codes = validate(record, { now: at })
+      .filter((issue) => issue.field === "DescripcionOperacion")
+      .map((issue) => issue.code);
+    if (codes.includes("DESCRIPCION_LENGTH")) return "too_long";
+    return codes.includes("CONTROL_CHAR") ? "control_character" : null;
   }
 
   const samples = [
@@ -215,15 +217,28 @@ describe("descriptionProblem, the case dialog's copy of the library's descriptio
     "\u2028",
     "\ufeff",
     "🍷".repeat(3),
+    "x".repeat(500),
+    "x".repeat(501),
+    "🍷".repeat(500),
+    "🍷".repeat(501),
+    `${"🍷".repeat(500)}\u000B`,
   ];
-  it.each(samples.map((sample) => [JSON.stringify(sample), sample]))(
+  const label = (sample: string) => {
+    const points = [...sample];
+    return points.length <= 40
+      ? JSON.stringify(sample)
+      : `${points.length} code points ending ${JSON.stringify(points.slice(-2).join(""))}`;
+  };
+  it.each(samples.map((sample) => [label(sample), sample]))(
     "agrees with the library on %s",
     (_name, sample) => {
-      expect(descriptionProblem(sample) === "control_character").toBe(libraryRefuses(sample));
+      expect(descriptionProblem(sample)).toBe(libraryRefuses(sample));
     },
   );
-  it("finds a control character the library refuses, so the samples can tell the two apart", () => {
-    expect(libraryRefuses("Servicio\u000Bde mesa")).toBe(true);
-    expect(libraryRefuses("Servicio\tde mesa")).toBe(false);
+  it("finds what the library refuses, so the samples can tell the answers apart", () => {
+    expect(libraryRefuses("Servicio\u000Bde mesa")).toBe("control_character");
+    expect(libraryRefuses("Servicio\tde mesa")).toBe(null);
+    expect(libraryRefuses("🍷".repeat(501))).toBe("too_long");
+    expect(libraryRefuses("🍷".repeat(500))).toBe(null);
   });
 });
