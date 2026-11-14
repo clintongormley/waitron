@@ -29,6 +29,7 @@ export class WtTabs extends LitElement {
       :host {
         display: block;
         min-width: 0;
+        scroll-margin-block-start: 0;
         --wt-tabs-sticky-height: 0px;
       }
       .tab-row {
@@ -91,6 +92,7 @@ export class WtTabs extends LitElement {
       }
       button {
         flex: 0 0 auto;
+        scroll-margin-block-start: 0;
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-4);

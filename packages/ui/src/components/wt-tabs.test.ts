@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, onTestFinished, test, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, host, mountInShadowRoot } from "../test-helpers.js";
 import { mountThemed } from "../a11y-helpers.js";
 import type { WtTabs } from "./wt-tabs.js";
@@ -53,6 +53,23 @@ async function setup(nested = false) {
   await el.updateComplete;
   return el;
 }
+
+test("sticky tab selection keeps the content's scroll position", async () => {
+  const tabs = await setup();
+  tabs.sticky = true;
+  tabs.style.height = "4000px";
+  const scroller = document.createElement("div");
+  scroller.style.cssText = "height:240px;overflow:auto";
+  host.append(scroller);
+  scroller.append(tabs);
+  await tabs.updateComplete;
+  buttons(tabs)[0]!.focus({ preventScroll: true });
+  scroller.scrollTop = 800;
+  await userEvent.keyboard("{ArrowRight}");
+  expect(scroller.scrollTop).toBe(800);
+  await userEvent.click(page.elementLocator(buttons(tabs)[2]!));
+  expect(scroller.scrollTop).toBe(800);
+});
 function buttons(el: WtTabs) {
   return [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
 }

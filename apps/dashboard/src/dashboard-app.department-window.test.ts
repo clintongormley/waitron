@@ -21,7 +21,7 @@ it.each([
   const viewport = { width: innerWidth, height: innerHeight };
   onTestFinished(() => page.viewport(viewport.width, viewport.height));
   await page.viewport(width, 844);
-  const { app, modal } = await mountReceiptTab({
+  const { app, modal, editor } = await mountReceiptTab({
     locale,
     departments: [
       { id: "bar", name: "Bar" },
@@ -47,6 +47,7 @@ it.each([
   ).toEqual([actions]);
   const controls = [...actions.querySelectorAll("wt-button")];
   expect(controls).toHaveLength(2);
+  expect(editor.shadowRoot!.querySelectorAll("wt-form-actions")).toHaveLength(0);
   for (const control of controls) {
     await control.updateComplete;
     const native = control.shadowRoot!.querySelector("button")!.getBoundingClientRect();
