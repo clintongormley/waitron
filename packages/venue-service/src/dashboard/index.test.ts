@@ -424,9 +424,9 @@ it("opens each declared prep-station search destination on its named tab", async
   const contribution = VENUE_SERVICE_DASHBOARD.moreScreens!.find(
     (x) => x.screen.id === "prep-stations",
   )!;
-  const destinations = VENUE_SERVICE_DASHBOARD.searchDestinations?.filter(
-    (x) => x.screen === "prep-stations",
-  );
+  const destinations = VENUE_SERVICE_DASHBOARD.searchDestinations
+    ?.filter((x) => x.kind !== "setting")
+    .filter((x) => x.screen === "prep-stations");
   expect(destinations?.map((x) => x.path)).toEqual([
     "/manage/prep-stations/view/stations",
     "/manage/prep-stations/view/routing",
@@ -449,9 +449,9 @@ it("opens each declared prep-station search destination on its named tab", async
 });
 
 it("declares the Calendar's Week as a search destination", async () => {
-  const destinations = VENUE_SERVICE_DASHBOARD.searchDestinations?.filter(
-    (x) => x.screen === "opening-hours",
-  );
+  const destinations = VENUE_SERVICE_DASHBOARD.searchDestinations
+    ?.filter((x) => x.kind !== "setting")
+    .filter((x) => x.screen === "opening-hours");
   expect(destinations?.map((x) => x.path)).toEqual([
     "/manage/opening-hours/view/year/window/seasons",
     "/manage/opening-hours/view/year/window/periods",
@@ -503,8 +503,8 @@ it("A725 puts Prep stations immediately after Departments and zones, before Cale
 
 it("A725 offers only Stations and Routes as Prep search destinations", () => {
   expect(
-    VENUE_SERVICE_DASHBOARD.searchDestinations!.filter((row) => row.screen === "prep-stations").map(
-      (row) => row.path,
-    ),
+    VENUE_SERVICE_DASHBOARD.searchDestinations!.filter((x) => x.kind !== "setting")
+      .filter((row) => row.screen === "prep-stations")
+      .map((row) => row.path),
   ).toEqual(["/manage/prep-stations/view/stations", "/manage/prep-stations/view/routing"]);
 });

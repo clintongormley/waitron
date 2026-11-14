@@ -83,12 +83,30 @@ export const CALENDAR_OWN_VIEW_IDS: readonly string[] = [
 
 /** A static destination inside a page. Its parent must be readable as well as any child gate. */
 export interface DashboardSearchDestination {
+  kind?: undefined;
   id: string;
   screen: string;
   labelKey: string;
   path: string;
   requiresPermission?: string;
   readPermission?: string;
+}
+
+export interface DashboardSettingCandidate {
+  id: string;
+  label: string;
+  path: string;
+}
+
+export interface DashboardSettingSearchDestination {
+  kind: "setting";
+  id: string;
+  screen: string;
+  labelKey: string;
+  locationKey: string;
+  requiresPermission?: string;
+  readPermission?: string;
+  resolve(ctx: DashboardModuleContext): Promise<readonly DashboardSettingCandidate[]>;
 }
 
 /** A view a module adds to the Calendar (the Opening hours screen) beside Opening hours. */
@@ -135,7 +153,7 @@ interface DashboardContributionBase {
   moreScreens?: readonly DashboardFurtherScreen[];
   settingsPanels?: readonly DashboardSettingsPanel[];
   calendarViews?: readonly DashboardCalendarView[];
-  searchDestinations?: readonly DashboardSearchDestination[];
+  searchDestinations?: readonly (DashboardSearchDestination | DashboardSettingSearchDestination)[];
   publicPages?: readonly {
     path: string;
     create(ctx: { request: DashboardRequest; locale: "en" | "es" }): DashboardScreenHandle;

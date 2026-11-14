@@ -145,3 +145,38 @@ it("searches card providers under Modules without offering the removed Card paym
     },
   ]);
 });
+
+it("collects localized setting locations without resolving rows and retains parent/child gates and duplicate validation", () => {
+  const setting = {
+    kind: "setting" as const,
+    id: "reminder",
+    screen: "prep-stations",
+    labelKey: "reminder",
+    locationKey: "service",
+    requiresPermission: "routing.manage",
+    resolve: async () => [],
+  };
+  const value = {
+    ...input(),
+    declarations: [setting],
+    label: (key: string) => ({ reminder: "Reminder", service: "Service" })[key] ?? key,
+  };
+  expect(collectSearchDestinations(value).find((x) => x.id === "reminder")).toBeUndefined();
+  value.permissions = ["routing.manage"];
+  expect(collectSearchDestinations(value).find((x) => x.id === "reminder")).toEqual({
+    id: "reminder",
+    screen: "prep-stations",
+    label: "Reminder",
+    location: "Service",
+    pageLabel: "Prep stations",
+    heading: "Operations",
+    setting,
+  });
+  expect(() => collectSearchDestinations({ ...value, declarations: [setting, setting] })).toThrow(
+    "repeats search destination",
+  );
+  expect(() =>
+    collectSearchDestinations({ ...value, declarations: [{ ...setting, screen: "absent" }] }),
+  ).toThrow("invalid screen");
+  expect(collectSearchDestinations({ ...value, pages: [] })).toEqual([]);
+});

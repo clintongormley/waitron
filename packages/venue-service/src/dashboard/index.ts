@@ -5,6 +5,7 @@ import { html } from "lit";
 import type { DashboardContribution, DashboardFurtherScreen } from "@waitron/dashboard-kit";
 import { PrepStationsApi } from "./routing-client.js";
 import "./prep-stations-screen.js";
+import { departmentSettingSearchDestinations } from "./department-setting-search.js";
 import { VenueServiceApi } from "./client.js";
 import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import "./venue-operations-screen.js";
@@ -22,6 +23,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
     requiresPermission: "venue.configure",
   },
   searchDestinations: [
+    ...departmentSettingSearchDestinations,
     {
       id: "venue-service:seasons",
       screen: "opening-hours",

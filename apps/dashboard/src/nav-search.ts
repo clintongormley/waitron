@@ -1,3 +1,4 @@
+import type { DashboardSettingSearchDestination } from "@waitron/dashboard-kit";
 import { foldForSearch, searchFor, textSearch } from "@waitron/shared";
 
 /** A group's pages for a nav search: those whose own label matches, closest first, then those that
@@ -29,14 +30,20 @@ export function navMatches<Page extends { label: string }>(
   return [...own, ...withHeading.map(({ page }) => page)];
 }
 
-export interface NavSearchDestination {
+interface NavSearchDestinationBase {
   id: string;
   screen: string;
   label: string;
   pageLabel: string;
   heading: string;
-  href: string;
+  location?: string;
 }
+
+export type NavSearchDestination = NavSearchDestinationBase &
+  (
+    | { href: string; setting?: undefined }
+    | { setting: DashboardSettingSearchDestination; href?: undefined }
+  );
 
 export function destinationMatches(
   query: string,
@@ -47,7 +54,7 @@ export function destinationMatches(
   const found = new Set(own.map((item) => item.id));
   const combined = items.map((item) => ({
     ...item,
-    label: `${item.label} ${item.pageLabel} ${item.heading}`,
+    label: `${item.label} ${item.pageLabel} ${item.heading} ${item.location ?? ""}`,
   }));
   const remaining = navMatches(query, combined, "").filter((item) => !found.has(item.id));
   const byId = new Map(items.map((item) => [item.id, item]));

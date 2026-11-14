@@ -4082,6 +4082,17 @@ unreadable parent or a denied child gate removes its destinations. Click and Ent
 complete address through the draft-change question. Keep editing retains the search and drawer;
 accepted navigation clears them. Enter opens an inner destination only when no page matches.
 
+Settings inside department Details, Service and Transfers add their tab to the location, for
+example **Remind to fire the next course after — in Departments and zones / Service**. One available
+department opens directly; several open a compact chooser, including the current department.
+Open stays quiet and disabled until you choose. Cancel keeps your search. A failed read offers
+Retry; no available window or a setting that has gone away explains why and offers Cancel.
+The chosen department is checked again before opening. Offered tabs in the same department keep
+your draft; another department uses the usual Keep editing/Discard question. Search finishes on
+the window and tab, without moving focus to a field. Declarations beside the department fields
+reuse their label keys and tab mapping; a mounted EN/ES check compares them with the controls
+in both directions.
+
 When nothing matches, the nav says **No pages
 match.** in a `role="status"` message. Enter opens the first result shown, in the order shown, and does
 nothing when nothing matches or the box is blank.

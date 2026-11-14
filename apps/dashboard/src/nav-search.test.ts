@@ -104,3 +104,34 @@ describe("destinationMatches", () => {
     ).toEqual(["routes", "staffing"]);
   });
 });
+
+it("matches a setting's localized tab as location after own-label matches", () => {
+  const items = [
+    {
+      id: "reminder",
+      screen: "venue-operations",
+      label: "Avisar para marchar el siguiente curso tras",
+      pageLabel: "Departamentos y zonas",
+      heading: "Operaciones",
+      location: "Servicio",
+      setting: {
+        kind: "setting" as const,
+        id: "reminder",
+        screen: "venue-operations",
+        labelKey: "reminder",
+        locationKey: "service",
+        resolve: async () => [],
+      },
+    },
+    {
+      id: "service",
+      screen: "other",
+      label: "Servicio",
+      pageLabel: "Otro",
+      heading: "",
+      href: "/manage/other",
+    },
+  ];
+  expect(destinationMatches("servicio", items).map((x) => x.id)).toEqual(["service", "reminder"]);
+  expect(destinationMatches("avisar departamentos", items).map((x) => x.id)).toEqual(["reminder"]);
+});
