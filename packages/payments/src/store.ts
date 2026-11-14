@@ -727,6 +727,25 @@ export async function listReconcilable(
   });
 }
 
+export async function listAbandonedRefundOutcomes(tx: Transaction, provider: string) {
+  const rows = await tx
+    .select({
+      paymentRef: payments.paymentRef,
+      workingOrderId: payments.workingOrderId,
+      externalRef: payments.externalRef,
+      amount: payments.amount,
+      claimedAt: payments.reconcileRemediatedAt,
+      state: payments.state,
+    })
+    .from(payments)
+    .where(and(eq(payments.provider, provider), isNotNull(payments.reconcileRemediatedAt)))
+    .orderBy(payments.reconcileRemediatedAt, payments.paymentRef);
+  return rows.map(({ state, ...row }) => ({
+    ...withDecimalAmount(row),
+    outcome: state === "refunded" ? ("confirmed" as const) : ("unconfirmed" as const),
+  }));
+}
+
 export async function listAuditCandidates(
   tx: Transaction,
   provider: string,

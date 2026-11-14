@@ -43,6 +43,7 @@ export {
   insertCapturedPayment,
   insertFailedPayment,
   insertInitiated,
+  listAbandonedRefundOutcomes,
   listAttempting,
   listReconcilable,
   listRefundAuditRows,

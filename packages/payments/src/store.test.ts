@@ -1876,3 +1876,48 @@ it("reads only the latest successful payment audit generation for each requested
     ),
   ).toEqual([]);
 });
+
+describe("listAbandonedRefundOutcomes", () => {
+  it("keeps marked outcomes visible until the whole refund is recorded, excluding other providers and unclaimed payments", async () => {
+    const seeded = await seedTenant();
+    const confirmed = await capture(seeded, "refund-confirmed");
+    const unconfirmed = await capture(seeded, "refund-unconfirmed");
+    await capture(seeded, "not-claimed");
+    const at = new Date("2026-11-14T10:00:00Z");
+    await withTransaction(suite.db, async (tx) => {
+      await markReconcileRemediated(tx, { ...confirmed, at });
+      await markReconcileRemediated(tx, { ...unconfirmed, at });
+      await recordRefund(tx, {
+        ...confirmed,
+        amount: decimal("10.00"),
+        providerRefundRef: "provider-refund-1",
+      });
+      await recordFailedRefund(tx, { ...unconfirmed, amount: decimal("10.00") });
+    });
+    const read = (provider: string) =>
+      withTransaction(suite.db, (tx) => listAbandonedRefundOutcomes(tx, provider));
+    expect(await read("fake")).toEqual([
+      {
+        paymentRef: "refund-confirmed",
+        workingOrderId: seeded.workingOrderId,
+        externalRef: null,
+        amount: "10.00",
+        claimedAt: "2026-11-14T10:00:00.000Z",
+        outcome: "confirmed",
+      },
+      {
+        paymentRef: "refund-unconfirmed",
+        workingOrderId: seeded.workingOrderId,
+        externalRef: null,
+        amount: "10.00",
+        claimedAt: "2026-11-14T10:00:00.000Z",
+        outcome: "unconfirmed",
+      },
+    ]);
+    expect(await read("other-provider")).toEqual([]);
+    await withTransaction(suite.db, (tx) =>
+      recordRefund(tx, { ...unconfirmed, amount: decimal("4.00"), providerRefundRef: "partial" }),
+    );
+    expect((await read("fake"))[1]?.outcome).toBe("unconfirmed");
+  });
+});
