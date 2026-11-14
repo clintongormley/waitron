@@ -26,22 +26,26 @@ export async function readFilingWarnings(
   tx: Transaction,
   scope: { limit: number | null },
 ): Promise<FilingWarnings> {
-  const listedQuery = tx
+  const ordered = tx
     .select({
       id: incidents.id,
       code: incidents.code,
       params: incidents.params,
       detectedAt: incidents.detectedAt,
+      saleId: incidents.saleId,
     })
     .from(incidents)
     .where(open)
     .orderBy(desc(incidents.detectedAt), asc(incidents.id));
-  const listed = await (scope.limit === null ? listedQuery : listedQuery.limit(scope.limit));
+  const listedQuery = scope.limit === null ? ordered : ordered.limit(scope.limit);
+  const listed = await listedQuery;
   const [counted] = await tx.select({ n: count() }).from(incidents).where(open);
 
-  // Repeats the listing above as `listed` rather than binding its ids, whose number grows with
-  // the data. A reply's records come from its `registroIds` in the order sent; a validation
-  // warning's candidates are every record of its sale.
+  // `listed` is the query above again, not its ids bound one by one, whose number grows with the
+  // data. A reply's records come from its `registroIds` in the order sent; a validation warning's
+  // candidates are every record of its sale. Each `cross join` keeps the listed alerts as the outer
+  // loop, so `registros_facturacion` is searched by its indexes rather than scanned: a box gathers
+  // no planner statistics, and without them SQLite chose to scan it.
   const candidates = await tx.execute<{
     incident_id: string;
     position: number | null;
@@ -51,28 +55,20 @@ export async function readFilingWarnings(
     generated: string;
     estado: string | null;
   }>(sql`
-    with listed as (
-      select i.id, i.code, i.params, i.sale_id from ${incidents} i
-      where i.code in (${sql.join(
-        CODES.map((code) => sql`${code}`),
-        sql`, `,
-      )}) and i.acknowledged_at is null
-      order by i.detected_at desc, i.id
-      limit ${scope.limit ?? -1}
-    ),
-    named as (
+    with listed as materialized (select * from ${listedQuery}),
+    named as materialized (
       select l.id as incident_id, j.value as registro_id, j.key as position
       from listed l, json_each(l.params, '$.registroIds') j
       where l.code = ${REPLY}
       union all
       select l.id, r.id, null
-      from listed l join ${registrosFacturacion} r on r.sale_id = l.sale_id
+      from listed l cross join ${registrosFacturacion} r on r.sale_id = l.sale_id
       where l.code <> ${REPLY}
     )
     select n.incident_id, n.position, r.num_serie_factura, r.fecha_expedicion_factura,
       r.tipo_registro, r.fecha_hora_huso_gen_registro as generated, e.estado
     from named n
-    join ${registrosFacturacion} r on r.id = n.registro_id
+    cross join ${registrosFacturacion} r on r.id = n.registro_id
     left join ${envios} e on e.registro_id = r.id
     order by n.incident_id, n.position
   `);

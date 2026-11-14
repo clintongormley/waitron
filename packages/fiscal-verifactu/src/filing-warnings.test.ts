@@ -1,11 +1,11 @@
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { markIncidentHandled, recordIncident } from "@waitron/core";
 import { incidents, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, jobOrigin } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
-import type { RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
+import type { RespuestaLinea, ValidationIssue, VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
@@ -15,7 +15,26 @@ import { readFilingWarnings } from "./filing-warnings.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
+// A totals warning cannot arise from a record Waitron builds, so the real `validate` runs and
+// this test's extra issues are appended to its answer, as in chain.validation-warnings.test.ts.
+const injected = vi.hoisted(() => ({ issues: [] as ValidationIssue[] }));
+
+vi.mock("@waitron/verifactu", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/verifactu")>();
+  return {
+    ...real,
+    validate: (...args: Parameters<typeof real.validate>) => [
+      ...real.validate(...args),
+      ...injected.issues,
+    ],
+  };
+});
+
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
+
+afterEach(() => {
+  injected.issues = [];
+});
 
 const SERVER_NOW = new Date("2026-07-21T00:00:00Z");
 const FIRST = new Date("2026-07-21T00:01:00Z");
@@ -108,6 +127,7 @@ function keySets(value: unknown, path = "", found = new Map<string, Set<string>>
 // Each with milliseconds, which the stored generation time does not keep.
 const AT_ONE = new Date("2026-07-20T17:20:01.400Z");
 const AT_TWO = new Date("2026-07-20T17:20:02.700Z");
+const AT_THREE = new Date("2026-07-20T17:20:03.100Z");
 // After the drain fixture's records, so the chain's clock-behind stop lets it through.
 const AFTER_SENT = new Date("2026-07-20T18:30:00.400Z");
 
@@ -123,7 +143,7 @@ describe("readFilingWarnings", () => {
     expect(warnings).toEqual({
       replyMismatches: [
         {
-          detectedAt: expect.any(String),
+          detectedAt: FIRST.toISOString(),
           csv: expect.any(String),
           sent: [
             { ...first, estado: "pendiente" },
@@ -166,6 +186,32 @@ describe("readFilingWarnings", () => {
           fields: ["Desglose[0].ClaveRegimen"],
           codes: ["CLAVE_REGIMEN_REQUIRED"],
           record: { ...(await recordOf(flagged)), estado: null },
+        },
+      ],
+      total: 1,
+    });
+  });
+
+  it("names the record whose totals disagree with its tax lines", async () => {
+    const node = await seedNode(suite.db);
+    const saleId = await seedSale(suite.db, node, 1);
+    injected.issues = [
+      { code: "CUOTA_TOTAL_MISMATCH", severity: "warning", field: "CuotaTotal", message: "x" },
+    ];
+    const disagreeing = await append(node, cleanAlta(node, saleId, 1, AT_ONE));
+    injected.issues = [];
+
+    const warnings = await inTx((tx) => readFilingWarnings(tx, { limit: 200 }));
+
+    expect(warnings).toEqual({
+      replyMismatches: [],
+      recordWarnings: [
+        {
+          detectedAt: AT_ONE.toISOString(),
+          kind: "totals",
+          fields: ["CuotaTotal"],
+          codes: ["CUOTA_TOTAL_MISMATCH"],
+          record: { ...(await recordOf(disagreeing)), estado: null },
         },
       ],
       total: 1,
@@ -227,18 +273,32 @@ describe("readFilingWarnings", () => {
     ]);
   });
 
-  it("lists the newest within the limit and counts every open one", async () => {
+  it("lists the newest open ones within the limit, with their records, and counts every open one", async () => {
     const node = await seedNode(suite.db);
     const older = await seedSale(suite.db, node, 1);
     await append(node, ipsiAlta(node, older, 1, AT_ONE));
     const newer = await seedSale(suite.db, node, 2);
-    await append(node, ipsiAlta(node, newer, 2, AT_TWO));
+    const newerRecord = await append(node, ipsiAlta(node, newer, 2, AT_TWO));
+    const newestSale = await seedSale(suite.db, node, 3);
+    await append(node, ipsiAlta(node, newestSale, 3, AT_THREE));
+    await inTx(async (tx) => {
+      const [newest] = await tx
+        .select({ id: incidents.id })
+        .from(incidents)
+        .where(eq(incidents.detectedAt, AT_THREE.toISOString()));
+      await markIncidentHandled(tx, { id: newest!.id, personId: null, handledAt: AT_THREE });
+    });
 
     const bounded = await inTx((tx) => readFilingWarnings(tx, { limit: 1 }));
     const unbounded = await inTx((tx) => readFilingWarnings(tx, { limit: null }));
 
     expect(bounded.total).toBe(2);
-    expect(bounded.recordWarnings.map((each) => each.detectedAt)).toEqual([AT_TWO.toISOString()]);
+    expect(bounded.recordWarnings).toEqual([
+      expect.objectContaining({
+        detectedAt: AT_TWO.toISOString(),
+        record: { ...(await recordOf(newerRecord)), estado: null },
+      }),
+    ]);
     expect(unbounded.recordWarnings.map((each) => each.detectedAt)).toEqual([
       AT_TWO.toISOString(),
       AT_ONE.toISOString(),
