@@ -2405,7 +2405,10 @@ export async function heldPaperStations(
       stationId: orderGroupHoldStations.stationId,
     })
     .from(orderGroupHoldStations)
-    .where(inArray(orderGroupHoldStations.groupId, [...new Set(groupIds)]));
+    // One bound value however many groups: `inArray` binds one each, past the statement's limit.
+    .where(
+      sql`${orderGroupHoldStations.groupId} in (select value from json_each(${JSON.stringify([...new Set(groupIds)])}))`,
+    );
   const byGroup = new Map<string, Set<string>>();
   for (const row of rows) {
     const stations = byGroup.get(row.groupId) ?? new Set<string>();

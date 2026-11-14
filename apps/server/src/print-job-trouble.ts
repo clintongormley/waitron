@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, lt, ne, not, or, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull, lt, min, ne, not, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { SQL } from "drizzle-orm";
 import {
@@ -86,11 +86,27 @@ export function printJobInTrouble(now: Date): SQL {
   )!;
 }
 
-const noLaterPrintedDocument = sql`not exists (select 1 from ${printJobs} as ${laterPrinted}
+// Unnamed, the planner took `print_jobs_printer_kind_idx` (node:26-slim, SQLite 3.54.0), reading
+// each troubled job's later documents until a printed one: quadratic while none has printed.
+const noLaterPrintedDocument = sql`not exists (select 1 from ${printJobs} as ${laterPrinted} indexed by print_jobs_pull_idx
   where ${laterPrinted.printerId} = ${printJobs.printerId}
   and ${laterPrinted.kind} = 'document'
   and ${laterPrinted.status} = 'done'
   and ${laterPrinted}.rowid > ${printJobs}.rowid)`;
+
+const standInSource = alias(printJobs, "trouble_stand_in_source");
+const standInLink = alias(kitchenPrintJobs, "trouble_stand_in_link");
+
+/**
+ * The job is a kitchen ticket, or a Printers-screen resend of one (which carries no links of its own)
+ * on the ticket's printer: a job whose links, or its chain's first job's, a till Reprint on this
+ * printer can cover. A resend sent to another printer is not one, since a Reprint covers only the
+ * printer it prints on.
+ */
+const reprintCanStandIn = sql`exists (select 1 from ${printJobs} as ${standInSource}
+  join ${kitchenPrintJobs} as ${standInLink} on ${standInLink.printJobId} = ${standInSource.id}
+  where ${standInSource.id} = coalesce(${printJobs.resendOf}, ${printJobs.id})
+  and ${standInSource.printerId} = ${printJobs.printerId})`;
 
 export interface PrinterInTrouble {
   readonly id: string;
@@ -107,33 +123,58 @@ export interface PrinterInTrouble {
 }
 
 /** Every active printer with a job in trouble at `now` ({@link printJobInTrouble}), leaving out jobs
- * an Unpair ended and kitchen tickets that leave nothing waiting there ({@link kitchenJobsNotWaiting}). */
+ * an Unpair ended and kitchen tickets that leave nothing waiting there ({@link kitchenJobsNotWaiting}).
+ * Only the jobs {@link reprintCanStandIn} selects are read one by one; the rest are counted in SQL. */
 export async function printersInTrouble(tx: Transaction, now: Date): Promise<PrinterInTrouble[]> {
-  const jobs = await tx
+  const counted = (kitchen: boolean) =>
+    and(
+      eq(printers.active, true),
+      printJobInTrouble(now),
+      // Ended on purpose by an Unpair, not a fault to fix.
+      or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
+      kitchen ? reprintCanStandIn : not(reprintCanStandIn),
+    );
+  const others = await tx
+    .select({
+      id: printers.id,
+      printer: printers.name,
+      n: count(),
+      oldest: min(printJobs.createdAt),
+      stuckSince: sql<
+        string | null
+      >`min(case when ${noLaterPrintedDocument} then ${printJobs.createdAt} end)`,
+    })
+    .from(printers)
+    .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
+    .where(counted(false))
+    .groupBy(printers.id, printers.name);
+  const tickets = await tx
     .select({
       id: printJobs.id,
       printerId: printers.id,
       printer: printers.name,
-      resendOf: printJobs.resendOf,
+      sourceId: sql<string>`coalesce(${printJobs.resendOf}, ${printJobs.id})`,
       createdAt: printJobs.createdAt,
       stuck: sql<number>`${noLaterPrintedDocument}`,
     })
     .from(printers)
     .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
-    .where(
-      and(
-        eq(printers.active, true),
-        printJobInTrouble(now),
-        // Ended on purpose by an Unpair, not a fault to fix.
-        or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
-      ),
-    );
-  const notWaiting = await kitchenJobsNotWaiting(tx, jobs);
-  const byPrinter = new Map<
-    string,
-    { id: string; printer: string; n: number; oldest: string; stuckSince: string | null }
-  >();
-  for (const job of jobs) {
+    .where(counted(true));
+  const notWaiting = await kitchenJobsNotWaiting(tx, tickets);
+  const byPrinter = new Map(
+    others.map((r) => [
+      r.id,
+      {
+        id: r.id,
+        printer: r.printer,
+        n: Number(r.n),
+        // A group only forms when a job matched, and `created_at` is notNull, so `oldest` is present.
+        oldest: r.oldest!,
+        stuckSince: r.stuckSince,
+      },
+    ]),
+  );
+  for (const job of tickets) {
     if (notWaiting.has(job.id)) continue;
     const row = byPrinter.get(job.printerId) ?? {
       id: job.printerId,
