@@ -54,7 +54,6 @@ async function fixture(): Promise<Fixture> {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     });
-
     const department = (name: string, isDefault = false) => ({
       name,
       tradingName: name,

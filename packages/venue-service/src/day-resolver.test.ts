@@ -66,7 +66,6 @@ async function venue(options: { oneSeason?: boolean } = {}) {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   });
-
   const departmentId = await scoped(
     async (tx) => (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id,
   );

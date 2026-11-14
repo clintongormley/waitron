@@ -151,6 +151,7 @@ const suite = useVenueDb({
     ({ deviceId } = await seedDevice(db));
     nodeId = await seedNode(db);
 
+    // The overview below aggregates the other node's sale while this node's daily close stays empty.
     secondNodeId = await seedNode(db);
     const [series] = await db
       .insert(invoiceSeries)

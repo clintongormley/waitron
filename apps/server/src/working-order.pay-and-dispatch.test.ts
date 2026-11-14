@@ -1230,6 +1230,7 @@ describe("cross-till end-to-end", () => {
   it("venue-wide reads: the by-id family (get/update/abandon) reaches a foreign-node order", async () => {
     const { cfg: nodeA, coffee, zoneId } = await setupVenue();
 
+    // By-id reads on node B reach node A's orders, so a promoted node serves the tabs it inherited.
     const nodeB = await addNode(nodeA);
 
     const orderId = randomUUID();

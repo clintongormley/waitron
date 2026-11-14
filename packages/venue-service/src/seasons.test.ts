@@ -105,7 +105,6 @@ describe("ensureDefaultSeasons", () => {
     expect(result).toEqual([{ id: own!.id, name: "All year", startsOn: "01-01", colour: "grey" }]);
     expect(await withTransaction(db, (tx) => readSeasons(tx))).toEqual(result);
   });
-
   const staffVenue = async (tenant: boolean, province: string | null, locale: string) => {
     const venue = {
       name: "Staff language",
@@ -209,7 +208,6 @@ async function autumnVenue() {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   });
-
   const zone = await seedZone(db, { name: "Terrace", displayOrder: 0 });
   const stored = await db
     .insert(seasons)

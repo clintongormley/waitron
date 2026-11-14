@@ -104,6 +104,8 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
 }
 
 describe("authenticateAgent", () => {
+  /** Mint an approved `print_agents` row directly (enrolment is join-and-accept, in apps/server) and
+   * return its bearer token — the `${agentId}.${secret}` shape `authenticateAgent` parses. */
   async function enrolled(): Promise<{ agentId: string; token: string }> {
     await setup();
     const secret = randomBytes(32).toString("base64url");

@@ -353,7 +353,6 @@ describe("Hours when the venue's clock changes", () => {
       const model = await routingModel(tx, at);
       return model.stationTimes.find((times) => times.stationId === fx.bar.id)!.status;
     });
-
   const model = (at: Date) => withTransaction(db, (tx) => readOpeningHoursYear(tx, 2026, at));
 
   it("moves the civil date with a new time zone, keeping special days without closing stations", async () => {

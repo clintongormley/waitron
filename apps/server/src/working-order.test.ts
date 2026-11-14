@@ -7857,6 +7857,8 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
   });
 });
 
+// The product default (`product.course_id`) is not re-screened: that would reject a legitimately
+// deactivated default. These cases exercise the shared resolver through `addTabRound`.
 describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
   async function openEmptyTab(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {

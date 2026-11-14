@@ -93,6 +93,7 @@ vi.mock("./promote-api.js", async (original) => {
 // `server-router.contract.test.ts` replays through the router — both sides read the one JSON, so a
 // wire-shape drift fails a `toEqual` here before the router contract runs.
 
+// Fixed ids keep `/api/node.nodeId` deterministic and matching the committed fixture.
 const NODE_A = "33333333-3333-4333-8333-333333333333";
 const NODE_B = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SERIES_A = "44444444-4444-4444-8444-444444444444";

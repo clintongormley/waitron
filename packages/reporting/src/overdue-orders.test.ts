@@ -209,6 +209,7 @@ describe("computeOverdueOrders", () => {
   });
 
   it("breaks a tied worst band (same age, different stations) by line_no, not by insertion/row-arrival order", async () => {
+    // `isDefault: false` avoids colliding with the beforeEach station's own default.
     const barStationId = await seedKitchenStation(suite.db, {
       name: "Counter",
       isDefault: false,
