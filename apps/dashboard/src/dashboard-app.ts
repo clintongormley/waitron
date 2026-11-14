@@ -29,7 +29,7 @@ import {
 } from "@waitron/ui";
 import { FALLBACK_LOCALE, resolveActiveLocale, type LegalAbout } from "@waitron/shared";
 import { navMatches, destinationMatches, type NavSearchDestination } from "./nav-search.js";
-import { collectSearchDestinations } from "./nav-destinations.js";
+import { collectSearchDestinations, validSearchDestinationPath } from "./nav-destinations.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -65,6 +65,8 @@ import {
   type DashboardCalendarView,
   type DashboardFurtherScreen,
   type DashboardRequest,
+  type DashboardModuleContext,
+  type DashboardSettingCandidate,
   type DashboardScreenHandle,
   type DashboardScreenPlacement,
   type DashboardSettingsPanel,
@@ -901,6 +903,14 @@ export class DashboardApp extends LitElement {
   @state() private drawerOpen = false;
 
   @state() private navSearch = "";
+  #moduleContexts = new Map<string, DashboardModuleContext>();
+  #settingSearchEpoch = 0;
+  @state() private settingSearch?: {
+    destination: NavSearchDestination;
+    status: "loading" | "choose" | "empty" | "unavailable" | "failed";
+    candidates: readonly DashboardSettingCandidate[];
+    selected: string;
+  };
 
   @state() private profileOpen = false;
   /** The address beneath Your profile, which its close button writes back so the screen beneath gets
@@ -1191,6 +1201,8 @@ export class DashboardApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#closeSettingSearch();
+    this.#moduleContexts.clear();
     this.sessionEpoch.advance();
     this.#permissionContinuation.disconnect();
     this.liveUpdates?.stop();
@@ -1586,6 +1598,8 @@ export class DashboardApp extends LitElement {
   }
 
   #suspendIdentity(): void {
+    this.#closeSettingSearch();
+    this.#moduleContexts.clear();
     setHelpMode(false);
     this.leave.forceReset();
     navigationGuardFor(window)?.reset();
@@ -1622,6 +1636,7 @@ export class DashboardApp extends LitElement {
    * throw rather than silently dropping or replacing a contribution.
    */
   #activate(enabled: readonly string[]): void {
+    this.#moduleContexts.clear();
     this.#enabledModules = [...enabled];
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
     const knownTabs = new Set<string>(VENUE_SETTINGS_TABS);
@@ -1666,6 +1681,7 @@ export class DashboardApp extends LitElement {
             : null,
         calendarViews,
       };
+      this.#moduleContexts.set(c.module, ctx);
       for (const contributed of screens) {
         const { screen } = contributed;
         this.#activeScreens.set(screen.id, {
@@ -2021,7 +2037,7 @@ export class DashboardApp extends LitElement {
             </div>
           </main>
         </div>
-        ${this.#renderProfileModal()}
+        ${this.#renderProfileModal()} ${this.#renderSettingSearch()}
       </div>
     `;
   }
@@ -2546,6 +2562,7 @@ export class DashboardApp extends LitElement {
   }
 
   readonly #onHistory = (): void => {
+    this.#closeSettingSearch();
     if (
       this.screen === "login" ||
       this.sessionPersonId === undefined ||
@@ -2633,19 +2650,141 @@ export class DashboardApp extends LitElement {
   }
 
   async #openSearchDestination(destination: NavSearchDestination): Promise<void> {
+    if (destination.setting) {
+      await this.#resolveSetting(destination);
+      return;
+    }
     const current = this.#searchDestinations().find(
       (item) => item.id === destination.id && item.href === destination.href,
     );
-    if (!current) return;
+    if (!current || current.setting) return;
+    await this.#navigateSearch(current, current.href);
+  }
+
+  async #navigateSearch(current: NavSearchDestination, path: string): Promise<void> {
     const guard = navigationGuardFor(window);
     const url = new URL(guard?.href ?? location.href);
-    url.pathname = current.href;
+    url.pathname = path;
     const outcome = await guard?.write(url);
     if (outcome === "proceeded" && this.isConnected && this.screen === current.screen) {
       this.#openGroupOf(current.screen);
       this.drawerOpen = false;
       this.navSearch = "";
     }
+  }
+
+  #closeSettingSearch(): void {
+    this.#settingSearchEpoch += 1;
+    this.settingSearch = undefined;
+  }
+
+  async #resolveSetting(destination: NavSearchDestination, selected?: string): Promise<void> {
+    const declaration = destination.setting;
+    if (!declaration) return;
+    const epoch = ++this.#settingSearchEpoch;
+    this.settingSearch = {
+      destination,
+      status: "loading",
+      candidates: [],
+      selected: selected ?? "",
+    };
+    const isCurrent = () => this.isConnected && epoch === this.#settingSearchEpoch;
+    const available = () => this.#searchDestinations().some((item) => item.setting === declaration);
+    const module = DASHBOARD_MODULES.find((c) => c.searchDestinations?.includes(declaration));
+    const ctx = module && this.#moduleContexts.get(module.module);
+    try {
+      if (!ctx || !available()) {
+        this.settingSearch = { ...this.settingSearch, status: "unavailable" };
+        return;
+      }
+      const candidates = await declaration.resolve(ctx);
+      if (!isCurrent()) return;
+      if (!available()) {
+        this.settingSearch = { ...this.settingSearch!, status: "unavailable" };
+        return;
+      }
+      const candidate =
+        selected === undefined
+          ? candidates.length === 1
+            ? candidates[0]
+            : undefined
+          : candidates.find((row) => row.id === selected);
+      if (candidate) {
+        if (!validSearchDestinationPath(declaration.screen, candidate.path)) {
+          this.settingSearch = { ...this.settingSearch!, status: "unavailable" };
+          return;
+        }
+        this.#closeSettingSearch();
+        await this.updateComplete;
+        await this.#navigateSearch(destination, candidate.path);
+      } else
+        this.settingSearch = {
+          destination,
+          candidates,
+          selected: "",
+          status:
+            selected !== undefined ? "unavailable" : candidates.length === 0 ? "empty" : "choose",
+        };
+    } catch {
+      if (isCurrent()) this.settingSearch = { ...this.settingSearch!, status: "failed" };
+    }
+  }
+
+  #renderSettingSearch(): TemplateResult | typeof nothing {
+    const state = this.settingSearch;
+    if (!state) return nothing;
+    return html`<wt-modal
+      data-test="setting-search"
+      size="compact"
+      .open=${true}
+      heading=${state.destination.label}
+      @wt-close=${(event: Event) => {
+        if (event.target === event.currentTarget) this.#closeSettingSearch();
+      }}
+    >
+      ${
+        state.status === "choose"
+          ? html`<wt-combobox
+              name="setting-row"
+              required
+              label=${t("nav.setting_choose")}
+              .options=${state.candidates.map((row) => ({ value: row.id, label: row.label }))}
+              .value=${state.selected}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                this.settingSearch = { ...state, selected: event.detail.value };
+              }}
+            ></wt-combobox>`
+          : html`<p role="status">
+              ${t(state.status === "loading" ? "nav.setting_loading" : state.status === "empty" ? "nav.setting_empty" : state.status === "failed" ? "nav.setting_failed" : "nav.setting_unavailable")}
+            </p>`
+      }
+      <wt-form-actions slot="footer">
+        <wt-button
+          slot="cancel"
+          data-test="setting-cancel"
+          @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("navigation")}
+          >${t("action.cancel")}</wt-button
+        >
+        ${
+          state.status === "choose"
+            ? html`<wt-button
+                data-test="setting-open"
+                variant=${state.selected ? "primary" : "secondary"}
+                ?disabled=${!state.selected}
+                @click=${() => void this.#resolveSetting(state.destination, state.selected)}
+                >${t("nav.setting_open")}</wt-button
+              >`
+            : state.status === "failed"
+              ? html`<wt-button
+                  data-test="setting-retry"
+                  variant="primary"
+                  @click=${() => void this.#resolveSetting(state.destination)}
+                  >${t("nav.setting_retry")}</wt-button
+                >`
+              : nothing
+        }
+      </wt-form-actions>
+    </wt-modal>`;
   }
 
   #folded(): boolean {
@@ -2923,7 +3062,7 @@ export class DashboardApp extends LitElement {
               data-search-destination=${destination.id}
               @click=${() => void this.#openSearchDestination(destination)}
             >
-              ${fill("nav.destination", { label: destination.label, page: destination.pageLabel })}
+              ${fill("nav.destination", { label: destination.label, page: destination.setting ? `${destination.pageLabel} / ${destination.location}` : destination.pageLabel })}
             </button>`,
         )}
         ${

@@ -1415,14 +1415,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 ### Users, sign-in and the dashboard shell
 
-- **A1527. "Search pages" finds the settings inside a window, not only the places (owner,
-  2026-11-14).** The owner could not find a department's "Remind to fire the next course after"
-  through the menu's search. The search finds pages, Venue settings tabs, calendar views and the
-  places modules declare (`apps/dashboard/src/nav-search.ts`, `#searchDestinations` in
-  `apps/dashboard/src/dashboard-app.ts`), but not a setting inside a window that opens for one row,
-  such as a department's tabs. It should find a setting by its label and open where it lives,
-  asking which department when there are several. Needs a design for how the list of settings is
-  kept from going stale. [All-window design](superpowers/specs/2026-11-14-a1527-setting-search-design.md), Claude-read and watcher-cleared; its seven required implementation PRs remain. The [first implementation plan](superpowers/plans/2026-11-14-a1527-search-settings-core.md) covers shared search and departments.
+- **A1527. Find settings inside the remaining windows through Search pages (owner,
+  2026-11-14).** Shared search/chooser and department Details, Service and Transfers are implemented.
+  Remaining required families: receipts, zone overrides, printers, devices, card readers and device
+  profiles. The last family also adds the EN/ES guide sentence on finding settings, as cleared by
+  the watcher on 14 November at 19:07. Each window needs its mounted two-way label/control check.
+  [All-window design](superpowers/specs/2026-11-14-a1527-setting-search-design.md), Claude-read and
+  watcher-cleared; [department plan](superpowers/plans/2026-11-14-a1527-search-settings-core.md).
 
 - **A1529. A Hardware section in the menu, and its screens brought into line (owner, 2026-11-14).**
   The owner reviewed mock-ups of the first three points and approved them. No migration. Not

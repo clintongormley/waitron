@@ -1078,6 +1078,15 @@ export const en = {
   "theme.device": "Follow device",
   "nav.search": "Search pages",
   "nav.destination": "{label} — in {page}",
+  "nav.setting_choose": "Choose where to open",
+  "nav.setting_loading": "Finding available windows…",
+  "nav.setting_empty": "No available window has this setting. Cancel to return to your search.",
+  "nav.setting_failed":
+    "The available windows could not be loaded. Retry to check again, or Cancel to return to your search.",
+  "nav.setting_unavailable":
+    "This setting is no longer available here. Cancel to return to your search.",
+  "nav.setting_open": "Open",
+  "nav.setting_retry": "Retry",
   "nav.no_matches": "No pages match.",
   "alerts.bell": "Alerts",
   "alerts.bell_count": "Alerts, {count} open",
@@ -5277,6 +5286,16 @@ export const es: Record<StringKey, string> = {
   "theme.device": "Según el dispositivo",
   "nav.search": "Buscar páginas",
   "nav.destination": "{label} — en {page}",
+  "nav.setting_choose": "Elige dónde abrir",
+  "nav.setting_loading": "Buscando ventanas disponibles…",
+  "nav.setting_empty":
+    "Ninguna ventana disponible tiene este ajuste. Cancela para volver a la búsqueda.",
+  "nav.setting_failed":
+    "No se han podido cargar las ventanas disponibles. Reintenta para comprobarlo de nuevo o cancela para volver a la búsqueda.",
+  "nav.setting_unavailable":
+    "Este ajuste ya no está disponible aquí. Cancela para volver a la búsqueda.",
+  "nav.setting_open": "Abrir",
+  "nav.setting_retry": "Reintentar",
   "nav.no_matches": "Ninguna página coincide.",
   "venue_details.address_notice":
     "Los recibos que se impriman a partir de ahora, incluidas las copias de ventas anteriores, usan la nueva dirección.",

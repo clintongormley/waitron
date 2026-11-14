@@ -89,6 +89,27 @@ const fieldTab: Record<Field, DepartmentTab> = {
   receivingProfileId: "transfers",
   destinationDepartmentIds: "transfers",
 };
+export const departmentSettingFields = (
+  [
+    ["name", "venue.name"],
+    ["tradingName", "venue.trading_name"],
+    ["operationDescription", "venue.operation_description"],
+    ["orderStart", "venue.order_start"],
+    ["paidWhen", "venue.counter_paid_when"],
+    ["collectionNumber", "venue.print_collection_ticket"],
+    ["releaseReminderMinutes", "venue.release_reminder"],
+    ["lateSendNeedsManager", "venue.late_send_needs_manager"],
+    ["needsClearing", "venue.needs_clearing"],
+    ["serviceSteps", "venue.service_steps"],
+    ["destinationDepartmentIds", "venue.transfer_destinations"],
+    ["receivingProfileId", "venue.receiving_profile"],
+  ] as const satisfies readonly (readonly [Field, Parameters<typeof t>[0]])[]
+).map(([name, labelKey]) => ({
+  name,
+  labelKey,
+  tab: fieldTab[name],
+  requiresDescription: name === "operationDescription",
+}));
 const copy = (value: DepartmentDraft): DepartmentDraft => ({
   ...value,
   serviceSteps: value.serviceSteps.map((step) => ({ ...step })),
