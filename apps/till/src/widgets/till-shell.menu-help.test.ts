@@ -246,6 +246,8 @@ describe("till-shell's menu badges", () => {
     await userEvent.keyboard("{Tab}");
     expect(deepActiveElement()).toBe(badgeButton(settings));
     await userEvent.keyboard("{Tab}");
+    expect(deepActiveElement()).toBe(inner(option(more, t("problem_report.title"))));
+    await userEvent.keyboard("{Tab}");
     expect(deepActiveElement()).toBe(inner(option(more, t("about.title"))));
   });
 
@@ -257,6 +259,8 @@ describe("till-shell's menu badges", () => {
     expect(await badged(more)).toEqual([]);
     const settings = option(more, t("device_zones.settings"));
     inner(settings).focus();
+    await userEvent.keyboard("{Tab}");
+    expect(deepActiveElement()).toBe(inner(option(more, t("problem_report.title"))));
     await userEvent.keyboard("{Tab}");
     expect(deepActiveElement()).toBe(inner(option(more, t("about.title"))));
   });

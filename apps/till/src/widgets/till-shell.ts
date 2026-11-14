@@ -1264,6 +1264,7 @@ export class TillShell extends LitElement {
     return reportAvailable()
       ? html`<wt-button
           data-report-problem
+          class="report-problem"
           variant="ghost"
           align="start"
           @click=${(event: Event) => {

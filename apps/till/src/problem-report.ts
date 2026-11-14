@@ -98,7 +98,7 @@ export class TillProblemReport extends LitElement {
     !this.leave ||
     !this.scope ||
     (await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} })) === "proceeded";
-  private close(): void {
+  close(): void {
     this.scope?.dispose();
     this.scope = undefined;
     this.leave = undefined;
@@ -153,7 +153,7 @@ export class TillProblemReport extends LitElement {
                 this.show(event.currentTarget as HTMLElement);
               }}
               ><wt-icon name="report-problem"></wt-icon
-              ><span class="trigger-label">${t("problem_report.title")}</span></wt-button
+              ><span>${t("problem_report.title")}</span></wt-button
             >`
           : nothing
       }
