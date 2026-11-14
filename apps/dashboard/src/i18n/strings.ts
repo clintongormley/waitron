@@ -1347,7 +1347,7 @@ export const en = {
   "profile.email_unconfigured":
     "The confirmation could not be sent because email is not set up. After email is set up, open Your details, re-enter the new address and save.",
   "profile.email_admin_help":
-    "Sign in as an administrator to open the inbox or change Email settings. Then sign back in to your account.",
+    "Sign in as an administrator to open the inbox or change Email settings. Doing so signs you out first.",
 
   "profile.reload": "Reload profile",
   "profile.change_password": "Change password",
@@ -2822,7 +2822,7 @@ export const en = {
   "sales.no_printers_manage":
     "No active printer at this venue. Add a receipt printer on Printers to print this report here.",
   "sales.no_printers_sign_in":
-    "No active printer at this venue. Sign in as an administrator to add a receipt printer on Printers, so this report can be printed here. Then sign back in to your account.",
+    "No active printer at this venue. Sign in as an administrator to add a receipt printer on Printers, so this report can be printed here. Doing so signs you out first.",
 
   // The leading space is deliberate: the call site appends this directly to the name.
 
@@ -5550,7 +5550,7 @@ export const es: Record<StringKey, string> = {
   "profile.email_unconfigured":
     "No se ha podido enviar la confirmación porque el correo no está configurado. Una vez configurado, abre Tus datos, vuelve a introducir la nueva dirección y guarda.",
   "profile.email_admin_help":
-    "Inicia sesión como administrador para abrir la bandeja o cambiar Correo. Después, vuelve a iniciar sesión en tu cuenta.",
+    "Inicia sesión como administrador para abrir la bandeja o cambiar Correo. Al hacerlo, primero se cierra tu sesión actual.",
 
   "profile.reload": "Volver a cargar el perfil",
   "profile.change_password": "Cambiar contraseña",
@@ -7055,7 +7055,7 @@ export const es: Record<StringKey, string> = {
   "sales.no_printers_manage":
     "No hay ninguna impresora activa en este local. Añade una impresora de recibos en Impresoras para imprimir aquí este informe.",
   "sales.no_printers_sign_in":
-    "No hay ninguna impresora activa en este local. Inicia sesión como administrador para añadir una impresora de recibos en Impresoras y poder imprimir aquí este informe. Después, vuelve a iniciar sesión en tu cuenta.",
+    "No hay ninguna impresora activa en este local. Inicia sesión como administrador para añadir una impresora de recibos en Impresoras y poder imprimir aquí este informe. Al hacerlo, primero se cierra tu sesión actual.",
 
   "device_profiles.title": "Perfiles de dispositivo",
   "device_profiles.create": "Añadir perfil",

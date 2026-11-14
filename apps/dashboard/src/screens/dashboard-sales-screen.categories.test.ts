@@ -776,7 +776,7 @@ describe("dashboard-sales-screen — printing the category report", () => {
       "No active printer at this venue. Add a receipt printer on Printers to print this report here.",
     );
     const link = q<HTMLAnchorElement>(el, "no-printers-link")!;
-    expect(link.getAttribute("href")).toBe("/manage/printers/view/printers");
+    expect(link.getAttribute("href")).toBe("/manage/printers");
     expect(link.textContent!.trim()).toBe("Printers");
     expect(q(el, "no-printers-sign-in")).toBeNull();
     const button = q<HTMLElement & { disabled: boolean }>(el, "print-categories")!;
@@ -795,19 +795,19 @@ describe("dashboard-sales-screen — printing the category report", () => {
       "No hay ninguna impresora activa en este local. Añade una impresora de recibos en Impresoras para imprimir aquí este informe.",
     );
     const link = q<HTMLAnchorElement>(el, "no-printers-link")!;
-    expect(link.getAttribute("href")).toBe("/manage/printers/view/printers");
+    expect(link.getAttribute("href")).toBe("/manage/printers");
     expect(link.textContent!.trim()).toBe("Impresoras");
   });
 
   it.each([
     [
       "en",
-      "No active printer at this venue. Sign in as an administrator to add a receipt printer on Printers, so this report can be printed here. Then sign back in to your account.",
+      "No active printer at this venue. Sign in as an administrator to add a receipt printer on Printers, so this report can be printed here. Doing so signs you out first.",
       "Sign in as an administrator",
     ],
     [
       "es",
-      "No hay ninguna impresora activa en este local. Inicia sesión como administrador para añadir una impresora de recibos en Impresoras y poder imprimir aquí este informe. Después, vuelve a iniciar sesión en tu cuenta.",
+      "No hay ninguna impresora activa en este local. Inicia sesión como administrador para añadir una impresora de recibos en Impresoras y poder imprimir aquí este informe. Al hacerlo, primero se cierra tu sesión actual.",
       "Iniciar sesión como administrador",
     ],
   ])(
