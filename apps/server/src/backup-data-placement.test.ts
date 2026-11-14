@@ -93,7 +93,7 @@ const suite = useVenueDb({
       values ('version-one', '40000000-0000-4000-8000-000000000004', 1, '{"original":true}', 'captured-hash', ${capturedAt}, 'operator-one')`);
     await db.run(sql`insert into content_suggestion_jobs
       (id, run_id, position, state, refusal, fits, failure, cloud_job_id, body, sent, run_total, total, done, failed, dropped, failed_refs, released, created_at, finished_at, opened_at)
-      values ('job-one', 'run-one', 4, 'partly_done', null, 1, 'provider', 'remote-one', '{"original":true}', '["one","two"]', 9, 8, 5, 2, 1, '["failed-one"]', 1, ${capturedAt}, '2026-10-20T08:01:00.000Z', '2026-10-20T08:02:00.000Z')`);
+      values ('job-one', 'run-one', 4, 'partly_done', null, 1, 'provider', 'remote-one', '{"original":true}', '["one","two"]', null, 8, 5, 2, 1, '["failed-one"]', 1, ${capturedAt}, '2026-10-20T08:01:00.000Z', '2026-10-20T08:02:00.000Z')`);
     await db.run(sql`insert into content_suggestions
       (id, job_id, kind, item_id, language, text, expected, placeholder, created_at)
       values ('suggestion-one', 'job-one', 'product', 'product-one', 'en', 'New name', 'Original name', 0, ${capturedAt})`);
