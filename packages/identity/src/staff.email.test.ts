@@ -27,7 +27,6 @@ async function fixture(own = false) {
       lastNames: "Last",
       telephone: null,
       email: "new@example.test",
-      role: own ? ("admin" as const) : ("staff" as const),
       status: "active" as const,
     },
   };

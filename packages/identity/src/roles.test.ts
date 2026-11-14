@@ -3,7 +3,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import * as identity from "./index.js";
-import { seedPerson } from "../test/fixtures.js";
+import { openFreshManagementSession, seedPerson } from "../test/fixtures.js";
 import { seedPersons } from "../test/person-rows.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -50,12 +50,23 @@ it("replaces only the built-in membership", async () => {
   await suite.db.execute(sql`insert into roles (id, name, name_folded, created_at)
     values ('accountant', 'Accountant', 'accountant', '2026-11-13T00:00:00Z')`);
   await suite.db.execute(sql`insert into person_roles values (${personId}, 'accountant')`);
-  await withTransaction(suite.db, (tx) => identity.setBuiltInMembership(tx, personId, "manager"));
-  expect(await identity.heldBuiltInKey(suite.db, personId)).toBe("manager");
+  const actor = await openFreshManagementSession(suite.db, "admin");
+  const builtIns = await withTransaction(suite.db, identity.ensureBuiltInRoles);
+  await withTransaction(suite.db, (tx) =>
+    identity.setPersonAccessRoles(tx, {
+      managementSessionId: actor.token,
+      personId,
+      roleIds: [builtIns.manager, "accountant"],
+      expectedRoleIds: [builtIns.staff, "accountant"],
+    }),
+  );
+  expect((await identity.readPersonAuthority(suite.db, personId)).roleIds).toContain(
+    builtIns.manager,
+  );
   const authority = await identity.readPersonAuthority(suite.db, personId);
   expect(authority.roleIds).toHaveLength(2);
   expect(authority.roleIds).toContain("accountant");
-  expect(await identity.heldBuiltInKey(suite.db, crypto.randomUUID())).toBeNull();
+  expect((await identity.readPersonAuthority(suite.db, crypto.randomUUID())).roleIds).toEqual([]);
 });
 
 it("normalises an imported custom role name instead of trusting its folded value", async () => {

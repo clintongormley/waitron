@@ -258,7 +258,7 @@ describe("management account actions", () => {
         lastNames: "Person",
         telephone: null,
         email: "replacement@x.com",
-        role: "manager",
+
         status: "active",
       }),
     );
