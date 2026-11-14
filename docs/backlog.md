@@ -463,6 +463,16 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
+- **A1522. One product, the right VAT eaten here or taken away (owner, 2026-11-14).** Each product
+  gets a second VAT class for takeaway, each department says whether it sells eaten in, taken away
+  or chosen on the till, and each order records which. One price either way. Fiscal: the owner lands it.
+  Design approved by the owner on 14 November; not yet planned.
+  [Design](superpowers/specs/2026-11-14-eat-in-takeaway-vat-design.md)
+
+- **A1523. A cover charge, and dearer seats on the terrace (owner, 2026-11-14).** Not supported
+  today. A cover charge applies only to orders eaten in (A1522's setting). The only way to charge
+  more on the terrace today is to make it a department of its own with its own menu. Not designed.
+
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
   the recommendations; mobile-data access to A670's published menu remains to build.
   The [cleared new-selection plan](superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
