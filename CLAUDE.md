@@ -246,9 +246,10 @@ called weaker than its name, the topic file lists what it does not see.
   A hint is the placeholder; short explanations are hints, not “?” buttons (owner, 2026-10-03; unguarded,
   A237). Inputs have semantic `name`s, never widget ids. Other dated decisions and the sign-in exception:
   [conventions-ui.md](docs/developers/conventions-ui.md).
-- **A screen does not draw its own form field**: a `<select>`, a `<textarea>` or a text `<input>`
-  comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Guard:
-  `scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals.
+- **A screen does not draw its own form field**: a `<select>`, a `<textarea>`, or a text or file
+  `<input>` comes from a field primitive; where none fits, add to one or add one (owner,
+  2026-10-01). Guard: `scripts/native-form-fields.test.ts`, weaker than its name — it reads string
+  literals.
 - **A form that asks for a postal address puts `wt-address-lookup` above its address fields**
   (the owner's ask, 2026-10-28, A1171); it stays hidden until the form is handed an address
   provider. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name: reads text, not

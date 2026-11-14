@@ -211,8 +211,9 @@ was open; restoring it kept the question deferred until after closing and the ne
 
 ## A screen does not draw its own form field
 
-A `<select>`, a `<textarea>` or an `<input>` that takes text is drawn by a field primitive
-(`wt-input`, `wt-textarea`, `wt-price-input`, `wt-number-stepper`, `wt-combobox`); where none fits,
+A `<select>`, a `<textarea>`, or an `<input>` that takes text or a file is drawn by a field
+primitive (`wt-input`, `wt-textarea`, `wt-price-input`, `wt-number-stepper`, `wt-combobox`,
+`wt-file-input`); where none fits,
 add to one or add one (owner, 2026-10-01, A178). Cost: a native `<select>`'s open list is drawn by
 the browser and cannot take the approved look, and fields a screen drew itself did not follow
 changes to the shared ones, so A178 moved the fields screens drew in the dashboard, setup, the till and

@@ -3421,8 +3421,8 @@ html`
 `;
 ```
 
-**A screen does not draw its own form field.** A `<select>`, a `<textarea>` or an `<input>` that
-takes text is drawn by a field primitive; where none fits, add to one or add one. Guard:
+**A screen does not draw its own form field.** A `<select>`, a `<textarea>`, or an `<input>` that
+takes text or a file is drawn by a field primitive; where none fits, add to one or add one. Guard:
 `scripts/native-form-fields.test.ts`, weaker than its name — it reads text, and only the literals
 of non-test `.ts` files under `apps/` and `packages/`, so a field made with
 `document.createElement`, from markup no single literal holds, or with its tag name split across a
