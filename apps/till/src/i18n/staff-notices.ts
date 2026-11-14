@@ -67,6 +67,14 @@ export function staffNoticeText(
       hint: t("staff_notice.since").replace("{time}", () => clockTime(Date.parse(since))),
     };
   }
+  if (notice.code === "printer.ticket_failed") {
+    const { printer } = notice.params;
+    if (typeof printer !== "string" || printer === "") return unknownText();
+    return {
+      main: t("staff_notice.printer.ticket_failed").replace("{printer}", () => printer),
+      hint: t("staff_notice.reprint"),
+    };
+  }
   if (notice.code === "fiscal.records_unsent") {
     const { count, held } = notice.params;
     if (typeof count !== "number" || !Number.isInteger(count) || count < 1) return unknownText();

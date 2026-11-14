@@ -107,7 +107,15 @@ describe("printersInTrouble", () => {
     await seedJob({ printerId: id, createdAt: minsAgo(3) });
 
     expect(await read()).toEqual([
-      { id, name: "Bar", count: 2, oldest: minsAgo(5), stuckSince: minsAgo(5), kitchen: false },
+      {
+        id,
+        name: "Bar",
+        count: 2,
+        oldest: minsAgo(5),
+        stuckSince: minsAgo(5),
+        givenUp: false,
+        kitchen: false,
+      },
     ]);
   });
 
@@ -143,6 +151,35 @@ describe("printersInTrouble", () => {
     await seedJob({ printerId: id, createdAt: minsAgo(5), status: "done" });
 
     expect(await read()).toMatchObject([{ count: 1, oldest: minsAgo(10), stuckSince: null }]);
+  });
+
+  it("says whether any of a printer's troubled jobs was given up, not one still being tried", async () => {
+    await prepareVenue();
+    const tried = await seedPrinter({ name: "Bar" });
+    const gaveUp = await seedPrinter({ name: "Kitchen" });
+    await seedJob({ printerId: tried, createdAt: minsAgo(10) });
+    await seedJob({
+      printerId: tried,
+      createdAt: minsAgo(9),
+      status: "failed",
+      attempts: MAX_DELIVERY_ATTEMPTS - 1,
+    });
+    await seedJob({ printerId: tried, createdAt: minsAgo(5), status: "done" });
+    await seedJob({ printerId: gaveUp, createdAt: minsAgo(10) });
+    await seedJob({ printerId: gaveUp, createdAt: minsAgo(9), ...exhausted });
+    await seedJob({ printerId: gaveUp, createdAt: minsAgo(5), status: "done" });
+
+    const rows = await read();
+    expect(rows.find((r) => r.id === tried)).toMatchObject({
+      count: 2,
+      stuckSince: null,
+      givenUp: false,
+    });
+    expect(rows.find((r) => r.id === gaveUp)).toMatchObject({
+      count: 2,
+      stuckSince: null,
+      givenUp: true,
+    });
   });
 
   it("a printer whose only printed document came before its stuck one stays stuck", async () => {
@@ -219,6 +256,7 @@ describe("printersInTrouble", () => {
         count: many,
         oldest: minsAgo(5),
         stuckSince: minsAgo(5),
+        givenUp: true,
         kitchen: true,
       },
     ]);

@@ -139,7 +139,10 @@ aviso de una impresora de cocina aparece en todas las cajas registradoras y todo
 camarero; el de cualquier otra impresora, solo en los que imprimen en ella sus recibos, sus
 justificantes de pago o sus facturas completas. Revisa el papel, la corriente y el cable de la
 impresora. El aviso desaparece cuando la impresora imprime algo que se le envió después de esa
-comanda; puede que haya que reimprimir la comanda desde la mesa o reenviarla desde **Impresoras**.
+comanda. Si el servidor dejó de intentar enviar alguna comanda, las cajas muestran entonces
+**Impresora «Cocina» no pudo imprimir un ticket · Vuelve a imprimirlo** en ámbar hasta que se
+imprima una reimpresión (una comanda desde la mesa, un recibo desde su venta) o un reenvío desde
+**Impresoras**.
 
 **El servidor necesita atención · Avisa al encargado** es un aviso para el que este terminal no tiene
 texto, quizá de una versión más reciente del servidor. Avisa al encargado para que revise el servidor.

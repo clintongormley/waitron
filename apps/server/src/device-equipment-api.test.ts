@@ -1795,13 +1795,21 @@ describe("GET /api/device/equipment's notices", () => {
       }
     });
 
-    it("a kitchen printer that printed a later ticket shows nothing, and the bell still names it", async () => {
+    it("a kitchen printer that printed a later ticket asks for the failed one to be reprinted, and the bell still names it", async () => {
       const id = await kitchenPrinter();
       await job(id, ago(10 * MINUTE), { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
       const done = await job(id, ago(5 * MINUTE), { status: "done" });
       const app = printerApp();
       for (const cookie of [venue.cookie, venue.cookie2]) {
-        expect(await printerNotices(app, cookie)).toEqual([]);
+        expect(await printerNotices(app, cookie)).toEqual([
+          {
+            owner: "printers",
+            key: `printer.ticket_failed:${id}`,
+            code: "printer.ticket_failed",
+            severity: "warning",
+            params: { printer: "Kitchen" },
+          },
+        ]);
       }
       const alerts = await inTx((tx) =>
         printingAlertSource().read({ tx, now: READING.instant } as never),
@@ -1813,6 +1821,20 @@ describe("GET /api/device/equipment's notices", () => {
         `printer.jobs_waiting:${id}`,
       ]);
     });
+
+    it.each(["queued", "failed"] as const)(
+      "a kitchen printer whose late %s ticket is still being tried shows nothing once a later ticket prints, and the bell still names it",
+      async (status) => {
+        const id = await kitchenPrinter();
+        await job(id, ago(3 * MINUTE), { status, attempts: 0 });
+        await job(id, ago(MINUTE), { status: "done" });
+        expect(await printerNotices(printerApp(), venue.cookie)).toEqual([]);
+        const alerts = await inTx((tx) =>
+          printingAlertSource().read({ tx, now: READING.instant } as never),
+        );
+        expect(alerts.map((alert) => alert.key)).toContain(`printer.jobs_waiting:${id}`);
+      },
+    );
 
     it("a receipt printer's notice shows only on the till whose receipts go to it, and on one whose slips do", async () => {
       expect((await choose(venue.cookie, "receipt", { id: fp }, "list")).status).toBe(200);
