@@ -1,13 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import {
-  chooseFiles,
-  cleanupWidgets,
-  fileControl,
-  fileError,
-  mountWidget,
-} from "../widgets/test-helpers.js";
+import { chooseFiles, chooseOption, fileControl, fileError } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./cert-screen.js";
 import type { WtFileInput } from "@waitron/ui";

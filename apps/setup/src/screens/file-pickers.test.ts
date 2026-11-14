@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import type { LitElement } from "lit";
 import { setLocale, t } from "../i18n/t.js";
-import { chooseFiles, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./cert-screen.js";
 import "./restore-screen.js";
 import "./restore-bucket-screen.js";

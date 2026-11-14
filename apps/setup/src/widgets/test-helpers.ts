@@ -83,10 +83,3 @@ export async function expectNoA11yViolations(context: Element): Promise<void> {
   const colourReadings = undecidedColourReadings(results.incomplete);
   expect(colourReadings, colourReadings.join("\n\n")).toEqual([]);
 }
-
-export {
-  chooseFiles,
-  drawnFileName,
-  fileControl,
-  fileError,
-} from "@waitron/ui/src/test-helpers.js";

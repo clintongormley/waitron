@@ -8,7 +8,8 @@ import type { SetupAdminScreen } from "./screens/admin-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
 import type { WtFileInput } from "@waitron/ui/src/components/wt-file-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { chooseFiles, cleanupWidgets, drawnFileName, mountWidget } from "./widgets/test-helpers.js";
+import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 
 afterEach(() => {

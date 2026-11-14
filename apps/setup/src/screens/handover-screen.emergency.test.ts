@@ -3,12 +3,8 @@ import type { LitElement } from "lit";
 import type { WtFileInput } from "@waitron/ui";
 import { SetupApi } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import {
-  chooseFiles,
-  cleanupWidgets,
-  drawnFileName,
-  mountWidget,
-} from "../widgets/test-helpers.js";
+import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupHandoverScreen } from "./handover-screen.js";
 
 const signIn = { email: "owner@example.com", password: "correct horse", totp: "123456" };
