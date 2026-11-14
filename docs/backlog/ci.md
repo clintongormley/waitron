@@ -415,6 +415,13 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
   [Detail](ci.md#the-stream-pause-tests-frozen-bucket-control-failed-once-in-ci).
 - **Three unexplained incidents, each seen once or twice; on recurrence retain the log before retrying**
   [Detail](ci.md#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying).
+- **Fiscal shard 2: the first-hour PDF assertion failed before the whole-shard deadline.**
+  [Run 43548232659, job 132304715811](https://github.com/clintongormley/waitron/actions/runs/43548232659/job/132304715811)
+  has no retained assertion trace. The PDF case passed five focused local runs unchanged.
+  `backup-verification-history.test.ts` took 323.1 s; `recovery-hour.browser.test.ts` was assigned
+  only 14.224 s before the 420 s shard deadline, so that report does not establish a recovery-hour hang.
+  Keep diagnostics on. On recurrence, retain the assertion trace and unfinished-file/process report
+  before retrying; locate the pending operation before changing test or product behaviour.
 - **The unexplained dashboard heading-order failure remains open** after #350. The
   `dashboard-app.a11y.test.ts` heading-order sighting is a different rule with no colour evidence,
   so nothing here explains it — treat it as still unexplained.
