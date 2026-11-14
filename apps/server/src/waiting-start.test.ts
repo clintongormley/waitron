@@ -616,6 +616,44 @@ describe("the waiting start", () => {
       expect(h.health.takesNoSales).toBe(false);
       expect(h.restart).not.toHaveBeenCalled();
     });
+
+    it("a second stepdown that begins while the first is awaited, both refused, lets the start go on", async () => {
+      await recordConflictingRestriction();
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      const pending = new Promise<StartPeerCheckOutcome>((done) => (answer = done));
+      const reads = holdingReads(suite.node);
+      let closeNow: () => void = () => {};
+      const closing = new Promise<void>((done) => (closeNow = done));
+      let app: Hono | undefined;
+      const h = harness(() => pending, {
+        node: reads.node,
+        intervalMs: 1,
+        listen: (bound) => {
+          app = bound;
+          return { close: () => closing };
+        },
+        routes: [stepRoute],
+      });
+      await new Promise((done) => setTimeout(done, 10));
+      answer(PROCEED);
+      await new Promise((done) => setTimeout(done, 10));
+      const first = Promise.resolve(app!.request("/step", { method: "POST" }));
+      await vi.waitFor(() => expect(reads.arrived()).toBe(1));
+      closeNow();
+      // The listeners have closed and the start is waiting on the first stepdown.
+      await new Promise((done) => setTimeout(done, 10));
+      const second = Promise.resolve(app!.request("/step", { method: "POST" }));
+      await vi.waitFor(() => expect(reads.arrived()).toBe(2));
+      reads.releaseNext();
+      expect(await (await first).json()).toEqual({ refused: "handover.restriction_conflict" });
+      await new Promise((done) => setTimeout(done, 10));
+      reads.releaseNext();
+      expect(await (await second).json()).toEqual({ refused: "handover.restriction_conflict" });
+      expect(await h.waiting.ended).toEqual({ kind: "checked", outcome: PROCEED });
+      expect(h.closeStore).not.toHaveBeenCalled();
+      expect(h.health.takesNoSales).toBe(false);
+      expect(h.restart).not.toHaveBeenCalled();
+    });
   });
 
   describe("carrying on as the main box", () => {
