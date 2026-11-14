@@ -746,22 +746,11 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 
 ## Bundle: Check everything at the offer, while the old box still sells
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A spare learns it has no room to place the copy only after the old box has stopped selling.**
   Left open by A1018 Slice 5 (Ruling R35).
   [Detail](replication-cloud.md#a-spare-learns-it-has-no-room-to-place-the-copy-only-after-the-old-box-has-stopped-selling)
-- **A spare needs the main box's backup settings, and nothing carries them yet.** The owner's answer
-  (2026-11-04): joining gives `backup.env`, later changes follow, and a spare that was off catches
-  up. Until then a venue with a recovery key is refused `handover.backup_settings_differ` at the
-  offer, the main box still selling. A947 3b's plan, Decision D18 (2026-11-08, revised
-  2026-11-10): built in 3b-6a, Task 6.3 (the joining spare's first copy reads its stream key from
-  it) and Tasks 6.3b and 6.3c (a main box with no recovery key refuses a join, and the setup app
-  says what to do); planned, not built, in 3b-6c, Tasks 6.5b and 6.5c (the main box sends it every
-  change from the spare's first full start on, and until a spare that was off answers), Task 6.5d
-  (words for the refusal that say what to do) and Task 6.9b (two boxes). The offer's
-  comparison stays the check before the main box stops selling. A1273's key ring stays under D7.
-  Ruling O3. [Plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)
 - **A different key under the same version passes the handover's comparison.** It compares ring
   versions only, so M2 places a copy whose sealed rows it cannot open, and filing then refuses (both
   run in a test). A real join copies the ring (`apps/server/src/adopt.ts`), so no real box reaches
@@ -1118,7 +1107,7 @@ asking the network, a spare listens on the venue's network, and what it serves t
 test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (the pair link: a spare joins with no Cloud relay,
 the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898); 3b-5b (a spare runs its store behind a listener
 that admits only its main box's client certificate, a venue with a standby refuses bucket-copy settings, and key ring
-rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining), 3b-6b (a test runs a main box and a spare together over the venue's network, and the Servers guide explains adding a spare) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email). 3b-6c itself to 3b-F and slices 3c onwards are still open;
+rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining), 3b-6b (a test runs a main box and a spare together over the venue's network, and the Servers guide explains adding a spare) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email) and 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off). The slices after 3b-6c to 3b-F and slices 3c onwards are still open;
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).

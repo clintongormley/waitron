@@ -12,7 +12,8 @@ export type HandoverKind =
   | "return-batch"
   | "return-receipt"
   | "return-clash-acceptance"
-  | "health";
+  | "health"
+  | "backup-settings";
 
 export type HandoverPurpose = `waitron.handover.${HandoverKind}.v1`;
 

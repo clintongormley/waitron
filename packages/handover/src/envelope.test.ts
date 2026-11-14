@@ -74,6 +74,7 @@ describe("signEnvelope", () => {
       "return-receipt",
       "return-clash-acceptance",
       "health",
+      "backup-settings",
     ]);
   });
 

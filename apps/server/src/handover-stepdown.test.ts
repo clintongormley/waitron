@@ -70,12 +70,18 @@ const LOOPS = [
 const STOPPERS = [
   "certificateDiagnosis",
   "boxEmails",
+  "spareSettings",
   "backupSupervisor",
   "handoverDestinationDuty",
   "chartPost",
   "spareStore",
 ] as const;
-const AT_STEPDOWN = ["certificateDiagnosis", "boxEmails", "handoverDestinationDuty"];
+const AT_STEPDOWN = [
+  "certificateDiagnosis",
+  "boxEmails",
+  "spareSettings",
+  "handoverDestinationDuty",
+];
 
 /** Stand-in duties that record, by table name, each stop or wait as it is called. */
 function fakeDuties(overrides: Partial<Record<string, unknown>> = {}) {
@@ -253,7 +259,11 @@ describe("a stepdown", () => {
   it("the early stops' source text sets the stop flag before the first await", async () => {
     // Reads the source as text: calling a stop inside the request is safe only while its first
     // effect comes before its first await, so a reordering of any of these fails here.
-    const files = ["fiscal-certificate-diagnosis-runner.ts", "box-alert-email.ts"];
+    const files = [
+      "fiscal-certificate-diagnosis-runner.ts",
+      "box-alert-email.ts",
+      "spare-settings.ts",
+    ];
     for (const file of files) {
       const text = await readFile(join(import.meta.dirname, file), "utf8");
       const starts = [...text.matchAll(/(async stop\(\) \{|stop: async \(\) => \{)\n/g)];
@@ -381,9 +391,10 @@ describe("a stepdown", () => {
     const r = rig(suite.node, { duties });
     const response = await r.app.request("/stepdown", { method: "POST" });
     expect(response.status).toBe(500);
-    expect(r.calls.slice(0, 3)).toEqual([
+    expect(r.calls.slice(0, 4)).toEqual([
       "certificateDiagnosis",
       "boxEmails",
+      "spareSettings",
       "handoverDestinationDuty",
     ]);
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));

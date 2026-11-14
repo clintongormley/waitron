@@ -93,6 +93,7 @@ import {
 import { placeFirstCopy } from "./spare-copy-placement.js";
 import { startStoreListener } from "./spare-pipe.js";
 import { startSpareJoin } from "./spare-join.js";
+import { runSpareSettings } from "./spare-settings.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import {
   recordSupersededAtStart,
@@ -254,6 +255,7 @@ import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import { mountSpareSettingsApi } from "./spare-settings-api.js";
 import { mountHandoverActivationApi, postChartToSource } from "./handover-activation.js";
 import { readTakenOverFrom } from "./handover-collection.js";
 import { mountHandoverPreparationApi } from "./handover-preparation.js";
@@ -1066,6 +1068,7 @@ export interface StartServerSeams {
   restart?: (kind: "restart" | "signal") => void;
   /** Awaited by the joining spare's first-copy job before each attempt. */
   spareCopy?: { hold?: Promise<void> };
+  spareSettings?: { checkMs?: number; retryMs?: number };
 }
 
 /**
@@ -2814,6 +2817,10 @@ async function bootServer(
     log,
     () => handoverDestinationDuty?.wake(),
   );
+  // The backup routes write `backup.env` in these turns too: two writes side by side would share its
+  // staging name.
+  const backupTurns = createTurns();
+  mountSpareSettingsApi(app, { ...peerDeps, stateDir: config.stateDir, turns: backupTurns }, log);
   mountNodeMembershipApi(
     app,
     {
@@ -3439,7 +3446,6 @@ async function bootServer(
     streamService(streamHost, () => holders.singletonRole.current === "primary"),
   );
   health.readStream = () => streamHost.status();
-  const backupTurns = createTurns();
   // Only the one main box records its spare.
   const spareJoin = acceptingSales
     ? startSpareJoin({
@@ -3455,6 +3461,25 @@ async function bootServer(
       })
     : undefined;
   undoOnFailure.push(async () => spareJoin?.stop());
+  // The settings carry the recovery key, so every send is checked under the venue authority.
+  const spareAuthority = acceptingSales ? await readVenueAuthority(config.stateDir) : undefined;
+  const spareSettings = acceptingSales
+    ? runSpareSettings({
+        db,
+        node: store.node,
+        ring,
+        nodeId: tradingContext.nodeId,
+        stateDir: config.stateDir,
+        exchange: {
+          timeoutMs: 5_000,
+          authorityOf: () => spareAuthority,
+          lookup: seams.boxLookup,
+        },
+        ...seams.spareSettings,
+        log,
+      })
+    : undefined;
+  undoOnFailure.push(async () => spareSettings?.stop());
 
   // Dashboard alerts, mounted after the backup supervisor exists because the backups source reads
   // it. The claims come from every module; the checks run only for the enabled set, whose tables are
@@ -4450,6 +4475,7 @@ async function bootServer(
     chartPost,
     spareStore,
     spareJoin,
+    spareSettings,
   });
   const started = makeStartedServer(
     server,

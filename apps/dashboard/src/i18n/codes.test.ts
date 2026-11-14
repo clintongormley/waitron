@@ -964,3 +964,12 @@ it("says a standby server cannot be switched on from another device, in English 
     "En esta versión, un servidor en espera no se puede activar desde otro dispositivo. No se ha cambiado nada.",
   );
 });
+
+it("the backup-settings refusal says this box keeps selling and to try again in a minute", () => {
+  expect(codeMessage("handover.backup_settings_differ", "en")).toBe(
+    "The spare does not hold this box's backup settings, so it did not accept the handover. This box keeps selling, and sends the spare its settings by itself. Try again in a minute.",
+  );
+  expect(codeMessage("handover.backup_settings_differ", "es")).toBe(
+    "El equipo de reserva no tiene los ajustes de copia de seguridad de este equipo, así que no ha aceptado el traspaso. Este equipo sigue vendiendo y le envía sus ajustes solo. Vuelve a intentarlo dentro de un minuto.",
+  );
+});

@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
@@ -304,6 +305,7 @@ const MIRROR_WRITES: Record<string, Answer> = {
   [`/api/node/handover/${MADE_UP}/activate`]: { status: 403, code: "authorization.not_permitted" },
   "/api/node/handover/emergency/declare": { status: 403, code: "authorization.not_permitted" },
   "/api/node/handover/emergency/preview": { status: 403, code: "authorization.not_permitted" },
+  "/api/node/backup-settings": { status: 400, code: "spare.settings_invalid" },
   "/setup-api/connection/repair": { status: 403, code: "connection.refused" },
   "/setup-api/connection/continue": { status: 403, code: "connection.refused" },
 };
@@ -398,6 +400,15 @@ describe("a spare's network surface", () => {
     try {
       await walk(app, mirrorExpected);
       expect(suite.node.all(sql`select * from node_handover_operations`)).toEqual([]);
+      const settings = await app.request(`${OWN_ORIGIN}/api/node/backup-settings`, {
+        method: "POST",
+        headers: { origin: OWN_ORIGIN, host: OWN_HOST },
+      });
+      expect([settings.status, await settings.json()]).toEqual([
+        400,
+        { error: { code: "spare.settings_invalid", params: { reason: "envelope" } } },
+      ]);
+      expect(existsSync(join(stateDir, "backup.env"))).toBe(false);
       for (const path of ["/", "/manage", "/manage/staff"])
         expect(await (await app.request(path)).text()).toContain(
           "Restaurant screens are closed here",

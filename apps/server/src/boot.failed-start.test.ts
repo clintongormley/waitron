@@ -23,6 +23,7 @@ import { appendOnlyTriggerFaults } from "@waitron/store";
 import { tamperWatchJob } from "./append-only-watch.js";
 import { freeSpaceJob } from "./free-space-watch.js";
 import { startBoxEmailDuty } from "./box-alert-email.js";
+import { runSpareSettings } from "./spare-settings.js";
 import { StreamHost } from "./stream-host.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
@@ -124,6 +125,11 @@ vi.mock("./free-space-watch.js", async (importOriginal) => {
 vi.mock("./box-alert-email.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./box-alert-email.js")>();
   return { ...actual, startBoxEmailDuty: vi.fn(actual.startBoxEmailDuty) };
+});
+
+vi.mock("./spare-settings.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./spare-settings.js")>();
+  return { ...actual, runSpareSettings: vi.fn(actual.runSpareSettings) };
 });
 
 vi.mock("./tender-refund-recovery.js", async (importOriginal) => {
@@ -247,6 +253,19 @@ async function spyOnBoxEmailDutyStop() {
     const duty = realStart(deps);
     stop.mockImplementation(() => duty.stop());
     return { stop, remember: duty.remember };
+  });
+  return stop;
+}
+
+/** Spies on the stop of the next spare-settings sender boot starts. */
+async function spyOnSpareSettingsStop() {
+  const { runSpareSettings: realStart } =
+    await vi.importActual<typeof import("./spare-settings.js")>("./spare-settings.js");
+  const stop = vi.fn<() => Promise<void>>();
+  vi.mocked(runSpareSettings).mockImplementationOnce((deps) => {
+    const duty = realStart(deps);
+    stop.mockImplementation(() => duty.stop());
+    return { stop };
   });
   return stop;
 }
@@ -867,6 +886,19 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
+  it("in trading mode, when a step after the listener is started throws, stopping the spare-settings sender", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state, { landing: true });
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    const stop = await spyOnSpareSettingsStop();
+
+    await expect(startServer(env)).rejects.toBe(failure);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
   it("aborts and awaits a started cloud worker when snapshot initialization throws", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir();
@@ -1324,6 +1356,20 @@ describe("closing a started server", () => {
     const state = await stateDir(undefined, { leaf: true });
     const env = await tradingEnv(venueDir, state);
     const stop = await spyOnBoxEmailDutyStop();
+    const server = await startServer(env);
+    await listening(Number(env.WAITRON_HTTP_PORT));
+    expect(stop).not.toHaveBeenCalled();
+
+    await server.close();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
+  it("stops the spare-settings sender", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state);
+    const stop = await spyOnSpareSettingsStop();
     const server = await startServer(env);
     await listening(Number(env.WAITRON_HTTP_PORT));
     expect(stop).not.toHaveBeenCalled();

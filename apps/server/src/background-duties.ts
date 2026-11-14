@@ -55,6 +55,7 @@ export interface BackgroundDutyHandles {
   chartPost: Stopper;
   spareStore: Stopper | undefined;
   spareJoin?: Stopper;
+  spareSettings: Stopper | undefined;
 }
 
 /** The first call's result, or its synchronous failure, is what every later call gets. */
@@ -141,6 +142,7 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     ...(h.spareJoin === undefined
       ? []
       : [{ name: "spareJoin", close: () => h.spareJoin!.stop(), atStepdown: true as const }]),
+    { name: "spareSettings", close: () => h.spareSettings?.stop(), atStepdown: true },
     {
       name: "liveEvents",
       close: () => h.liveEvents.close(),

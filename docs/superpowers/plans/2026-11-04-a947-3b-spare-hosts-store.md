@@ -995,6 +995,12 @@ the A1018 plan, not run.
     a spare that was off or unreachable is caught up within about 35 seconds of answering again (one
     retry wait and one check), and nobody acts on it. The confirmed digest lives in memory only, so
     every start of the main box sends once: no column, no migration.
+    **Changed 2026-11-14 after the pre-merge review:** the confirmed digest is also forgotten at any
+    failed send, the same settings are sent again every 5 minutes while nothing changes, the waits
+    run on a clock that only moves forward, and nothing is sent from a file holding no recovery key
+    or from a missing state folder. The route reads the chart only once the whole body has arrived,
+    writes in the same turns as the backup routes that write `backup.env`, and refuses a body over
+    64 KiB.
   - **(iv) Before the point of no return: the check already exists, so none is added.** It is the
     offer's comparison: the spare compares the two digests when the offer arrives
     (`handover-destination-api.ts:134-140`), and the main box steps down only after that answer
@@ -3117,6 +3123,9 @@ No word a person sees: the three codes are answered only to another box (Task 6.
   since this box started, at `warn` after. Its `stop` is written `stop: async () => {` with
   `stopped = true;` as its first line, before its first `await`: it is called inside the stepdown
   request, and that is the shape `handover-stepdown.test.ts`'s early-stops case reads (`:262-279`).
+
+**Changed 2026-11-14:** see D18 (ii)'s note. The duty also resends every 5 minutes, forgets a
+delivery when a send fails, and logs `sent` only for a newly delivered digest.
 
 Modify `boot.ts` (start it in the full start on the one main box, `isSingletonPrimary &&
 !fencedOrMirror` (`:2025`, `:1999`), beside Task 6.2's `runSpareJoin`, with the exchange Task G.1

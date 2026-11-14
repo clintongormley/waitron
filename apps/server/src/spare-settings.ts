@@ -1,0 +1,206 @@
+import { lstat, stat } from "node:fs/promises";
+import { join } from "node:path";
+import type { KeyRing } from "@waitron/credentials";
+import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
+import { readPairLink } from "@waitron/node-db";
+import { codeOf } from "@waitron/server-kit";
+import { BACKUP_ENV_FILE } from "@waitron/store";
+import { backupSettingsDigestOf, readBackupSettings } from "./backup-env-writer.js";
+import { boxRefusal, isRecord, postToBox, type AskPeerStatusDeps } from "./boot-peer-check.js";
+import { signAsThisBox } from "./handover-signing.js";
+import type { Logger } from "./logger.js";
+import { sleep } from "./spare-join.js";
+
+const CHECK_MS = 5_000;
+const RETRY_MS = 30_000;
+const RECONFIRM_MS = 5 * 60_000;
+
+/** The refusals the spare's settings route answers; any other code a peer sends is not logged. */
+const SPARE_REFUSALS: ReadonlySet<string> = new Set([
+  "spare.settings_invalid",
+  "spare.settings_sender_unknown",
+  "spare.settings_not_a_spare",
+]);
+
+export interface SpareSettingsExchange extends Pick<
+  AskPeerStatusDeps,
+  "fetch" | "authorityOf" | "lookup"
+> {
+  timeoutMs: number;
+}
+
+export interface SendBackupSettingsDeps {
+  node: NodeDatabase;
+  ring: KeyRing;
+  nodeId: string;
+  stateDir: string;
+  exchange: SpareSettingsExchange;
+}
+
+export type SendOutcome =
+  { delivered: true; digest: string | null } | { delivered: false; reason: string };
+
+/**
+ * Signs this box's `backup.env` for the spare and posts it to the spare's settings route. Without a
+ * fetch replacement only an https address is sent to: the settings carry the recovery key.
+ */
+export async function sendBackupSettings(
+  deps: SendBackupSettingsDeps,
+  to: { nodeId: string; contactUrl: string },
+): Promise<SendOutcome> {
+  const base = to.contactUrl.replace(/\/+$/, "");
+  if (deps.exchange.fetch === undefined && URL.parse(base)?.protocol !== "https:")
+    return { delivered: false, reason: "not_https" };
+  // A missing folder would read as no file, and sending `null` would remove the spare's settings.
+  const folder = await stat(deps.stateDir).catch(() => null);
+  if (folder === null || !folder.isDirectory()) return { delivered: false, reason: "unreadable" };
+  let settings: Record<string, string> | null;
+  try {
+    settings = await readBackupSettings(deps.stateDir);
+  } catch {
+    // Never `null` in its place: that would remove the spare's settings.
+    return { delivered: false, reason: "unreadable" };
+  }
+  // Every writer keeps a recovery key in the file, so one that is there without a key is damaged,
+  // and sending it would remove the spare's key.
+  if (
+    settings === null
+      ? await present(join(deps.stateDir, BACKUP_ENV_FILE))
+      : settings.WAITRON_BACKUP_RECOVERY_KEY === undefined
+  )
+    return { delivered: false, reason: "unreadable" };
+  const digest = backupSettingsDigestOf(settings);
+  const envelope = await signAsThisBox(deps, "backup-settings", { toNodeId: to.nodeId, settings });
+  let answer: { status: number; text: string };
+  try {
+    answer = await postToBox(
+      deps.exchange,
+      to.nodeId,
+      `${base}/api/node/backup-settings`,
+      JSON.stringify(envelope),
+    );
+  } catch {
+    return { delivered: false, reason: "unreachable" };
+  }
+  if (answer.status !== 200) {
+    const code = boxRefusal(answer.text)?.code;
+    return {
+      delivered: false,
+      reason: code !== undefined && SPARE_REFUSALS.has(code) ? code : String(answer.status),
+    };
+  }
+  let answered: unknown;
+  try {
+    answered = JSON.parse(answer.text);
+  } catch {
+    answered = undefined;
+  }
+  if (!isRecord(answered) || answered.backupSettings !== digest)
+    return { delivered: false, reason: "digest_differs" };
+  return { delivered: true, digest };
+}
+
+/** Only a file known to be absent is not there: sending `null` for it removes the spare's. */
+async function present(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ENOENT";
+  }
+}
+
+export interface SpareSettingsDeps extends SendBackupSettingsDeps {
+  db: Database;
+  checkMs?: number;
+  retryMs?: number;
+  /** How long a delivery is trusted before the same settings are sent again. */
+  reconfirmMs?: number;
+  /** A clock that only runs forward, for the waits between sends. */
+  monotonicNow?: () => number;
+  log: Logger;
+}
+
+/**
+ * On the main box, sends its backup settings to the spare its pair link streams to, again after each
+ * change, until the spare answers their digest, and again every `reconfirmMs` while they do not
+ * change. What was delivered is kept in memory only, and forgotten when a send fails, so every start
+ * sends once. Failures are logged at `info` until this box first delivers to that spare after it
+ * starts, because a spare answers only after its first full start, and at `warn` after that.
+ */
+export function runSpareSettings(deps: SpareSettingsDeps): { stop(): Promise<void> } {
+  const checkMs = deps.checkMs ?? CHECK_MS;
+  const retryMs = deps.retryMs ?? RETRY_MS;
+  const reconfirmMs = deps.reconfirmMs ?? RECONFIRM_MS;
+  const monotonicNow = deps.monotonicNow ?? (() => performance.now());
+  const stopping = new AbortController();
+  let stopped = false;
+  let delivered: { peerNodeId: string; digest: string | null; at: number } | undefined;
+  let failed: { peerNodeId: string; at: number } | undefined;
+  const reached = new Set<string>();
+
+  function failure(peerNodeId: string, reason: string): void {
+    // The spare may have written what this box sent even though no answer came back.
+    delivered = undefined;
+    if (failed?.peerNodeId !== peerNodeId)
+      deps.log(reached.has(peerNodeId) ? "warn" : "info", "spare-settings.send_failed", {
+        peerNodeId,
+        reason,
+      });
+    failed = { peerNodeId, at: monotonicNow() };
+  }
+
+  async function pass(): Promise<void> {
+    const link = await readPairLink(deps.node, deps.nodeId);
+    if (link?.role !== "streams" || link.state !== "streaming") return;
+    const { peerNodeId } = link;
+    const held = await readNodeMembership(deps.db);
+    const contactUrl = held?.body.nodes.find((n) => n.nodeId === peerNodeId)?.contactUrl;
+    if (contactUrl === undefined || contactUrl === "") return;
+    const digest = await readBackupSettings(deps.stateDir).then(backupSettingsDigestOf, () => {});
+    if (
+      delivered?.peerNodeId === peerNodeId &&
+      delivered.digest === digest &&
+      monotonicNow() - delivered.at < reconfirmMs
+    )
+      return;
+    if (failed?.peerNodeId === peerNodeId && monotonicNow() - failed.at < retryMs) return;
+    if (stopped) return;
+    let outcome: SendOutcome;
+    try {
+      outcome = await sendBackupSettings(deps, { nodeId: peerNodeId, contactUrl });
+    } catch (error) {
+      outcome = { delivered: false, reason: codeOf(error) };
+    }
+    if (!outcome.delivered) return failure(peerNodeId, outcome.reason);
+    const changed = delivered?.peerNodeId !== peerNodeId || delivered.digest !== outcome.digest;
+    delivered = { peerNodeId, digest: outcome.digest, at: monotonicNow() };
+    failed = undefined;
+    reached.add(peerNodeId);
+    if (changed) deps.log("info", "spare-settings.sent", { peerNodeId });
+  }
+
+  const running = (async () => {
+    // Logged once per run of failed checks, so a lasting fault does not fill the log.
+    let checkFailing = false;
+    while (!stopped) {
+      try {
+        await pass();
+        checkFailing = false;
+      } catch (error) {
+        if (!stopped && !checkFailing)
+          deps.log("warn", "spare-settings.check_failed", { errorCode: codeOf(error) });
+        checkFailing = true;
+      }
+      await sleep(checkMs, stopping.signal);
+    }
+  })();
+
+  return {
+    stop: async () => {
+      stopped = true;
+      stopping.abort();
+      await running;
+    },
+  };
+}

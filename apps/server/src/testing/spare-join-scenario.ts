@@ -1,9 +1,10 @@
 // A main box M and a spare S, both started in this process: M is provisioned as the stream loop
-// provisions its box, and S starts from an empty state folder, so it boots in setup mode.
+// provisions its box, but with no bucket copy or recovery key until the test switches them on while
+// M is down, and S starts from an empty state folder, so it boots in setup mode.
 // `spare-join.e2e.test.ts` runs it against versitygw.
 import { randomUUID, X509Certificate } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
@@ -30,6 +31,7 @@ import { readPairLink } from "@waitron/node-db";
 import { nodeId as brandNodeId, PERSON_HEADER } from "@waitron/shared";
 import type { VenueRequest } from "@waitron/provisioning";
 import { createS3ObjectStore, readPointer, type BucketConfig } from "@waitron/stream";
+import { backupSettingsDigestOf, readBackupSettings } from "../backup-env-writer.js";
 import { BOX_HOSTNAME, boxHostnameFor, ownContactUrl } from "../box-name.js";
 import { loadBoxEnv } from "../box-env.js";
 import { startServer, type StartServerSeams, type StartedServer } from "../boot.js";
@@ -58,6 +60,7 @@ import {
   boxDirs,
   copyMigrations,
   provisionStreamBox,
+  switchOnStreaming,
   type BoxDirs,
 } from "./stream-box.js";
 import { synchronisedBoxHost } from "./synchronised-box-host.js";
@@ -105,9 +108,10 @@ const SPARE_RESTARTS_AFTER_FIRST_COPY = 2;
 
 // A caller's timeout adds this sum (CLAUDE.md §4). BOOT_MS is per start; UNTIMED_MS, for
 // migrations, provisioning and closes, is a budget nothing here enforces; the health wait is
-// `fetchHealthOk`'s poll budget. S starts four times: setup, the latch start that takes the copy,
-// the start that places it and finishes joining, and the mirror's; M starts three times: first, in
-// the middle of S's join, and for the start check.
+// `fetchHealthOk`'s poll budget. S starts five times: setup, the latch start that takes the copy,
+// the start that places it and finishes joining, the mirror's, and once more after the test stops
+// it; M starts four times: first, once it has its bucket copy, in the middle of S's join, and for
+// the start check.
 const BOOT_MS = 30_000;
 const HEALTH_MS = POLL_TRIES * POLL_INTERVAL_MS;
 const UNTIMED_MS = 60_000;
@@ -116,10 +120,16 @@ const POINTER_WAIT_MS = 30_000;
 const LINK_WAIT_MS = 60_000;
 const COPY_WAIT_MS = 120_000;
 const MIRROR_WAIT_MS = 60_000;
+// The main box looks for changed backup settings every `SETTINGS_CHECK_MS`, and sends again
+// `SETTINGS_RETRY_MS` after a failed send.
+const SETTINGS_WAIT_MS = 10_000;
+const SETTINGS_CHECK_MS = 1_000;
+const SETTINGS_RETRY_MS = 2_000;
 const WAIT_POLL_MS = 250;
 export const SPARE_JOIN_SCENARIO_MS =
-  7 * BOOT_MS +
-  3 * HEALTH_MS +
+  9 * BOOT_MS +
+  4 * HEALTH_MS +
+  4 * SETTINGS_WAIT_MS +
   POINTER_WAIT_MS +
   LINK_WAIT_MS +
   COPY_WAIT_MS +
@@ -128,6 +138,7 @@ export const SPARE_JOIN_SCENARIO_MS =
 
 export const SPARE_JOIN_PHASES = [
   "probe",
+  "spare-refused-no-key",
   "spare-refused",
   "bucket-stopped",
   "spare-join",
@@ -135,6 +146,7 @@ export const SPARE_JOIN_PHASES = [
   "spare-copy",
   "start-check",
   "loopback-only",
+  "backup-settings",
 ] as const;
 export type SpareJoinPhase = (typeof SPARE_JOIN_PHASES)[number];
 export type SpareJoinEvent = StageEvent<SpareJoinPhase>;
@@ -269,6 +281,15 @@ export class TestBox {
 
   private closedWhileStarting(): ClosedWhileStarting {
     return new ClosedWhileStarting(`the box on port ${this.port} was closed while it started`);
+  }
+
+  /** Closes the server as a restart does, leaving the box to be started again with `start`. */
+  async stopForRestart(): Promise<void> {
+    await this.restarting;
+    this.restarts += 1;
+    const server = this.server;
+    this.server = undefined;
+    await server?.close();
   }
 
   /** Settles once this restart, and every one asked for before it, has finished. */
@@ -461,6 +482,23 @@ function saleOf(venueDir: string, workingOrderId: string): boolean {
   );
 }
 
+/** The digest a handover offer gives the `backup.env` in `stateDir`, or `null` without one. */
+async function backupSettingsDigestIn(stateDir: string): Promise<string | null> {
+  return backupSettingsDigestOf(await readBackupSettings(stateDir));
+}
+
+/**
+ * Every file under `dir`, sorted. Folders are left out: a refused adopt leaves its request store's
+ * empty folder behind.
+ */
+async function filesUnder(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => !entry.isDirectory())
+    .map((entry) => join(entry.parentPath, entry.name))
+    .sort();
+}
+
 /** The logger's JSON lines among `lines`. */
 function logLines(lines: readonly string[]): LogLine[] {
   return lines.flatMap((text) => {
@@ -536,8 +574,6 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     const m = await provisionStreamBox({
       dirs: dirsM,
       advertisedOrigin: `https://${BOX_HOSTNAME}:${portM}`,
-      bucket,
-      recoveryKey: RECOVERY_KEY,
       modulesJson: MODULES_M,
       venue: {
         request: VENUE_M,
@@ -548,6 +584,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     // The host's time service is synchronised, so M's start is not held for its time.
     const boxM = new TestBox(dirsM, portM, boxEnv(dirsM, portM), {
       boxHost: synchronisedBoxHost(),
+      spareSettings: { checkMs: SETTINGS_CHECK_MS, retryMs: SETTINGS_RETRY_MS },
     });
     boxes.push(boxM);
     const dirsS = await boxDirs(scratch, "box-s");
@@ -639,6 +676,22 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       return { status: adopted.status, body: (await adopted.json()) as unknown };
     };
 
+    clock.begin("spare-refused-no-key");
+    const beforeNoKey = await joinState(dirsM.venue, m.nodeId);
+    const filesBeforeNoKey = await filesUnder(dirsS.state);
+    const noKey = await adopt();
+    expect(noKey.status, JSON.stringify(noKey.body)).toBe(409);
+    expect(noKey.body).toEqual({ error: { code: "backup.recovery_key_missing", params: {} } });
+    expect(await joinState(dirsM.venue, m.nodeId)).toEqual(beforeNoKey);
+    expect(await filesUnder(dirsS.state)).toEqual(filesBeforeNoKey);
+
+    // M gets its key and its bucket copy while it is down: a real Save is refused against
+    // versitygw (`encryption_ignored`), and the join checks for a bucket copy before a key.
+    await boxM.stopForRestart();
+    await switchOnStreaming(dirsM, m.locationId, { bucket, recoveryKey: RECOVERY_KEY });
+    await boundedStart(boxM.start(), "M's start with its bucket copy");
+    await fetchHealthOk(`${urlM}/health`, viaM);
+
     clock.begin("spare-refused");
     const bucketStore = createS3ObjectStore(bucket);
     const pointer = await wait(
@@ -675,6 +728,35 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     });
     expect(proof.status, await proof.clone().text()).toBe(204);
     await proof.arrayBuffer();
+    const keys: string[] = [RECOVERY_KEY];
+    const rotate = async (): Promise<string> => {
+      const recoveryKey = `spare-join-rotated-${randomUUID()}`;
+      const rotated = await fetch(`${urlM}/api/backup/rotate`, {
+        ...viaM,
+        method: "POST",
+        headers: managing,
+        body: JSON.stringify({ recoveryKey }),
+      });
+      expect(rotated.status, await rotated.text()).toBe(200);
+      keys.push(recoveryKey);
+      const digest = await backupSettingsDigestIn(dirsM.state);
+      expect(digest).toEqual(expect.any(String));
+      return digest!;
+    };
+    /**
+     * Waits for S's `backup.env` to have `digest`, M's; a timeout says which of `keys` S holds, by
+     * its place in `keys`, never its text.
+     */
+    const spareHolds = (digest: string, when: string) =>
+      wait(`S's backup settings to match M's ${when}`, SETTINGS_WAIT_MS, async () =>
+        (await backupSettingsDigestIn(dirsS.state)) === digest ? true : undefined,
+      ).catch(async (error: unknown) => {
+        const held = (await readBackupSettings(dirsS.state))?.WAITRON_BACKUP_RECOVERY_KEY;
+        throw new Error(
+          `${String(error)}; S holds key ${held === undefined ? "none" : keys.indexOf(held)} of ${keys.length}`,
+          { cause: error },
+        );
+      });
     const stopped = await fetch(`${urlM}/api/backup/stream`, {
       ...viaM,
       method: "DELETE",
@@ -690,6 +772,8 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     const joined = await adopt();
     expect(joined.status, JSON.stringify(joined.body)).toBe(200);
     expect(joined.body).toMatchObject({ adopted: true, restarting: true });
+    // The key S's bundle carried is no longer M's.
+    const digestAtJoin = await rotate();
     const link = await readOutside(dirsM.venue, (reader) =>
       wait("M's pair link to reach streaming", LINK_WAIT_MS, async () => {
         const current = await readPairLink(reader.node, m.nodeId);
@@ -741,6 +825,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
         },
       );
     });
+    await spareHolds(digestAtJoin, "after the rotation at the join");
     const node = await fetch(`${urlS}/api/node`, viaM);
     expect(await node.json()).toMatchObject({ acceptingSales: false });
     for (const event of ["spare.first_copy_placed", "adoption.established"])
@@ -780,6 +865,21 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     console.log(`spare join: addresses reached ${JSON.stringify([...sockets.addresses])}`);
     expect([...sockets.addresses].filter((address) => !isLoopback(address))).toEqual([]);
     expect(sockets.addresses.size).toBeGreaterThan(0);
+
+    clock.begin("backup-settings");
+    await spareHolds(await rotate(), "after a rotation");
+    await boxS.stopForRestart();
+    const logAtStop = logSoFar().length;
+    const digestWhileStopped = await rotate();
+    // M must fail a send while S is down, or S's start could come before M's next check.
+    await wait("M to fail to send while S is stopped", SETTINGS_WAIT_MS, async () =>
+      linesSince(logAtStop).find((line) => line.event === "spare-settings.send_failed"),
+    );
+    await boundedStart(boxS.start(), "S's start after it was stopped");
+    await spareHolds(digestWhileStopped, "after a rotation while S was stopped");
+    const keyLines = log.filter((line) => keys.some((key) => line.includes(key)));
+    expect(keyLines).toEqual([]);
+    expect(keys).toHaveLength(4);
     clock.end("ok");
   } catch (error) {
     clock.end("failed");
