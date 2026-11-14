@@ -48,6 +48,40 @@ const DESCRIPTION = overview({
   totalCases: 1,
 });
 
+/** A simplified invoice AEAT refused for a future date, read today, which the dialog replaces. */
+const FUTURE_DATE = overview({
+  readAt: new Date().toISOString(),
+  cases: [
+    {
+      ...base,
+      cause: "fiscal.registro_rechazado",
+      evidence: { codigo: 1112, mensaje: "Fecha superior a la actual", csv: null },
+      submission: {
+        ...base.submission!,
+        codigoError: "1112",
+        mensajeError: "Fecha superior a la actual",
+      },
+      conflicts: [],
+    },
+  ],
+  totalCases: 1,
+});
+
+/** Opens the case and chooses a day after the invoice's, so the field shows its error. */
+async function confirmReplacement(screen: FiscalFilingScreen): Promise<HTMLElement> {
+  const details = await openDetails(screen);
+  const input = details
+    .querySelector("wt-input[name=operationDate]")!
+    .shadowRoot!.querySelector("input") as HTMLInputElement;
+  input.value = "2026-11-02";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await screen.updateComplete;
+  expect(details.querySelector("[data-test=replacement-confirmation]")!.textContent).toContain(
+    "VAT return",
+  );
+  return details;
+}
+
 function continuation(permissions: string[]): DashboardPermissionContinuation {
   return {
     snapshot: () => ({ accountGeneration: 1, authenticated: true, permissions }),
@@ -147,6 +181,21 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
     expect(details.querySelector("wt-textarea[name=operationDescription]")).not.toBeNull();
   });
 
+  it("draws the replacement's confirmation, then its day marked as after the invoice's", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(FUTURE_DATE, theme);
+    const details = await confirmReplacement(screen);
+    await expectNoA11yViolations(host);
+    const input = details
+      .querySelector("wt-input[name=operationDate]")!
+      .shadowRoot!.querySelector("input") as HTMLInputElement;
+    input.value = "2026-11-04";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await screen.updateComplete;
+    expect(details.querySelector("wt-input[name=operationDate]")).toHaveProperty("invalid", true);
+    await expectNoA11yViolations(host);
+  });
+
   it("draws the administrator's sign-in in place of Send", async () => {
     await page.viewport(1280, 1000);
     const screen = await show(DESCRIPTION, theme, ["report.export"]);
@@ -195,6 +244,14 @@ it("draws the description correction and its refusal at phone width", async () =
   await page.viewport(390, 1000);
   const screen = await show(DESCRIPTION, "light");
   const details = await refuseOnce(screen);
+  await expectNoA11yViolations(host);
+  expect(details.scrollWidth).toBeLessThanOrEqual(details.clientWidth);
+});
+
+it("draws the replacement's confirmation at phone width", async () => {
+  await page.viewport(390, 1000);
+  const screen = await show(FUTURE_DATE, "light");
+  const details = await confirmReplacement(screen);
   await expectNoA11yViolations(host);
   expect(details.scrollWidth).toBeLessThanOrEqual(details.clientWidth);
 });

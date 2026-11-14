@@ -14,6 +14,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import type { WtModal } from "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -23,6 +24,7 @@ import {
   codeMessage,
   codeOf,
   currentLocale,
+  dateTimeFormat,
   formatIsoMinute,
   subscribeLocale,
   type DashboardPermissionContinuation,
@@ -43,6 +45,7 @@ import type {
 } from "../filing-overview-types.js";
 import { descriptionProblem, putRightFor } from "../put-right.js";
 import type { FiscalFilingClient } from "./fiscal-filing-client.js";
+import { calendarDay } from "./dates.js";
 import { REFUSAL_WORDS, refusalKey } from "./put-right-words.js";
 import { t } from "./strings.js";
 
@@ -51,6 +54,7 @@ const PAGE_SIZE = 50;
 const CASE_CHANGED: ReadonlySet<string> = new Set(
   Object.keys(REFUSAL_WORDS).filter((code) => refusalKey(code) === "fiscal_filing.refused.changed"),
 );
+const DAY_REFUSED = "fiscal.operation_date_invalid";
 const NEEDS_ADMIN: ReadonlySet<string> = new Set([
   "authorization.not_permitted",
   "person.suspended",
@@ -70,6 +74,21 @@ const STATES: readonly EnvioState[] = [
 const count = (value: number): string => value.toLocaleString(currentLocale());
 const when = (iso: string | null): string =>
   iso === null ? t("fiscal_filing.none") : formatIsoMinute(iso);
+
+/** The calendar day `YYYY-MM-DD` of an instant, on this device's clock and in its time zone. */
+function localDay(instant: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${instant.getFullYear()}-${pad(instant.getMonth() + 1)}-${pad(instant.getDate())}`;
+}
+
+/** The month a `YYYY-MM-DD` day falls in, as "October 2026": the VAT return the sale counts in. */
+function vatPeriod(day: string): string {
+  return dateTimeFormat(currentLocale(), {
+    timeZone: "UTC",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(`${day}T00:00:00Z`));
+}
 
 function field(label: string, value: string | TemplateResult | null, test?: string) {
   return value === null || value === ""
@@ -515,8 +534,8 @@ function warnings({ replyMismatches, recordWarnings, total }: FilingWarnings): T
   </section>`;
 }
 
-/** Reads how this box's invoice records are being sent to AEAT, and sends a correction record for a
- * case `putRightFor` offers one. */
+/** Reads how this box's invoice records are being sent to AEAT, and sends the fix `putRightFor`
+ * offers for a case. */
 @customElement("vf-fiscal-filing-screen")
 export class FiscalFilingScreen extends LitElement {
   static override styles = [
@@ -635,6 +654,10 @@ export class FiscalFilingScreen extends LitElement {
       .put-right h3 {
         margin: 0;
       }
+      .confirmation {
+        display: grid;
+        gap: var(--wt-space-2);
+      }
       .put-right-none {
         margin-top: var(--wt-space-4);
       }
@@ -668,6 +691,7 @@ export class FiscalFilingScreen extends LitElement {
   @state() private page = 0;
   @state() private viewing: FilingCaseView | null = null;
   @state() private description = "";
+  @state() private operationDate = "";
   @state() private attempted = false;
   @state() private sending = false;
   @state() private refusal = "";
@@ -702,21 +726,27 @@ export class FiscalFilingScreen extends LitElement {
     this.#forget();
     this.caseChanged = false;
     this.viewing = row;
-    if (putRightFor(row).kind !== "record-correction") return;
+    const kind = putRightFor(row).kind;
+    if (kind === "none") return;
     this.description = row.record.descripcionOperacion ?? "";
+    // Never prefilled: a refused future date is wrong by definition, and a prefill could put the
+    // sale in the wrong VAT period with one click.
+    this.operationDate = "";
     this.#actionKey = crypto.randomUUID();
+    const describes = kind === "record-correction";
     const { scope, coordinator } = draftScopeFor(this, {
       id: {},
-      current: () => this.description,
+      current: () => (describes ? this.description : this.operationDate),
       snapshot: (value) => value,
       equal: (a, b) => a === b,
       restore: (value) => {
-        this.description = value;
+        if (describes) this.description = value;
+        else this.operationDate = value;
       },
     });
     this.#scope = scope;
     this.#leave = coordinator;
-    scope.commit(this.description);
+    scope.commit(describes ? this.description : this.operationDate);
   }
 
   #forget(): void {
@@ -748,10 +778,42 @@ export class FiscalFilingScreen extends LitElement {
     return problem === "control_character" ? t("fiscal_filing.put_right.description_control") : "";
   }
 
-  #bottom(): string {
-    const key = this.refusal === "" ? undefined : refusalKey(this.refusal);
-    const said = this.refusal === "" ? "" : key ? t(key) : codeMessage(this.refusal);
-    const fix = this.#descriptionError() === "" ? "" : t("fiscal_filing.put_right.fix_fields");
+  /** The server's day when the page was read, on this device's calendar. */
+  #serverDay(): string {
+    return localDay(new Date(this.overview?.readAt ?? Date.now()));
+  }
+
+  #daysDiffer(): boolean {
+    return this.#serverDay() !== localDay(new Date());
+  }
+
+  /** What is wrong with the chosen day, checked as the server checks it; empty while none is chosen. */
+  #dayProblem(found: FilingCaseView): string {
+    const day = this.operationDate;
+    if (day === "") return "";
+    if (day > this.#serverDay()) return t("fiscal_filing.put_right.replace.day_after_today");
+    const stamped = found.record.fechaExpedicionFactura;
+    return day > stamped
+      ? t("fiscal_filing.put_right.replace.day_after_invoice", { date: calendarDay(stamped) })
+      : "";
+  }
+
+  #dayError(found: FilingCaseView): string {
+    const problem = this.#dayProblem(found);
+    if (problem !== "") return problem;
+    return this.refusal === DAY_REFUSED ? t(REFUSAL_WORDS[DAY_REFUSED]) : "";
+  }
+
+  #bottom(found: FilingCaseView): string {
+    // A refused day is said under its field.
+    const unsaid = this.refusal === "" || this.refusal === DAY_REFUSED;
+    const key = unsaid ? undefined : refusalKey(this.refusal);
+    const said = unsaid ? "" : key ? t(key) : codeMessage(this.refusal);
+    const marked =
+      putRightFor(found).kind === "replacement-invoice"
+        ? this.#dayError(found)
+        : this.#descriptionError();
+    const fix = marked === "" ? "" : t("fiscal_filing.put_right.fix_fields");
     return [said, fix].filter((part) => part !== "").join(" ");
   }
 
@@ -783,8 +845,10 @@ export class FiscalFilingScreen extends LitElement {
 
   async #send(found: FilingCaseView): Promise<void> {
     if (this.sending || saveActionState(this.#scope).unchanged) return;
+    const replaces = putRightFor(found).kind === "replacement-invoice";
+    if (replaces && (this.#dayProblem(found) !== "" || this.#daysDiffer())) return;
     this.attempted = true;
-    if (this.#descriptionError() !== "") {
+    if (!replaces && this.#descriptionError() !== "") {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
@@ -793,14 +857,25 @@ export class FiscalFilingScreen extends LitElement {
     // Reopening a case shows the same case object, so its opening's action key tells them apart.
     const actionKey = this.#actionKey;
     const sameOpening = () => this.viewing === found && this.#actionKey === actionKey;
+    const sent = replaces ? this.operationDate : this.description;
     try {
-      await this.client.putRight({
-        kind: "record-correction",
-        registroId: found.registroId,
-        actionKey,
-        reason: `AEAT refused the record with code ${found.evidence.codigo}; its operation description is corrected.`,
-        facts: { description: this.description },
-      });
+      await this.client.putRight(
+        replaces
+          ? {
+              kind: "replacement-invoice",
+              registroId: found.registroId,
+              actionKey,
+              reason: `AEAT refused the invoice with code ${found.evidence.codigo}; a replacement corrective invoice replaces it.`,
+              operationDate: sent,
+            }
+          : {
+              kind: "record-correction",
+              registroId: found.registroId,
+              actionKey,
+              reason: `AEAT refused the record with code ${found.evidence.codigo}; its operation description is corrected.`,
+              facts: { description: sent },
+            },
+      );
     } catch (error) {
       const code = codeOf(error);
       // An earlier send whose answer was lost may be what changed the case, so every retry would
@@ -819,8 +894,65 @@ export class FiscalFilingScreen extends LitElement {
     }
     void this.#read();
     if (!sameOpening()) return;
-    this.#scope?.commit(this.description);
+    this.#scope?.commit(sent);
     this.#close();
+  }
+
+  #replacement(found: FilingCaseView): TemplateResult {
+    const { record } = found;
+    const error = this.#dayError(found);
+    const today = this.#serverDay();
+    const chosen = this.operationDate !== "" && this.#dayProblem(found) === "";
+    return html`<section class="put-right" aria-labelledby="fiscal-filing-put-right">
+      <h3 id="fiscal-filing-put-right" data-test="put-right-heading">
+        ${t("fiscal_filing.put_right.replace.heading")}
+      </h3>
+      <p>${t("fiscal_filing.put_right.replace.intro")}</p>
+      <wt-input
+        name="operationDate"
+        type="date"
+        label=${t("fiscal_filing.put_right.replace.day")}
+        required
+        .value=${this.operationDate}
+        .error=${error}
+        ?invalid=${error !== ""}
+        ?disabled=${this.sending}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.operationDate = event.detail.value;
+          if (this.refusal === DAY_REFUSED) this.refusal = "";
+          this.#scope?.changed();
+        }}
+      ></wt-input>
+      <div class="confirmation" data-test="replacement-confirmation">
+        <p>
+          ${t("fiscal_filing.put_right.replace.confirm", {
+            number: record.numSerieFactura,
+            date: calendarDay(record.fechaExpedicionFactura),
+            total: formatMoney(record.importeTotal ?? "0", currentLocale()),
+            today: calendarDay(today),
+          })}
+          ${
+            chosen
+              ? t("fiscal_filing.put_right.replace.period", {
+                  period: vatPeriod(this.operationDate),
+                })
+              : nothing
+          }
+        </p>
+        <p>${t("fiscal_filing.put_right.replace.order")}</p>
+      </div>
+      ${
+        this.#daysDiffer()
+          ? html`<p class="error" role="status" data-test="day-differs">
+              ${t("fiscal_filing.put_right.replace.day_differs", {
+                server: calendarDay(today),
+                device: calendarDay(localDay(new Date())),
+              })}
+            </p>`
+          : nothing
+      }
+    </section>`;
   }
 
   #putRight(found: FilingCaseView): TemplateResult {
@@ -829,6 +961,7 @@ export class FiscalFilingScreen extends LitElement {
       return html`<p class="put-right-none" data-test="put-right-none">
         ${t(`fiscal_filing.put_right.none.${fix.why}`)}
       </p>`;
+    if (fix.kind === "replacement-invoice") return this.#replacement(found);
     const said = aeatWords(found.submission?.mensajeError ?? found.evidence.mensaje);
     const error = this.#descriptionError();
     return html`<section class="put-right" aria-labelledby="fiscal-filing-put-right">
@@ -866,7 +999,11 @@ export class FiscalFilingScreen extends LitElement {
       void this.shadowRoot!.querySelector<WtModal>(
         "wt-modal[data-test=case-details]",
       )!.requestClose("cancel");
-    return html`<wt-form-actions slot="footer" .error=${this.#bottom()}>
+    const replaces = putRightFor(found).kind === "replacement-invoice";
+    const blocked = replaces
+      ? this.#dayProblem(found) !== "" || this.#daysDiffer()
+      : this.attempted && this.#descriptionError() !== "";
+    return html`<wt-form-actions slot="footer" .error=${this.#bottom(found)}>
       <wt-button
         slot="cancel"
         variant="secondary"
@@ -887,14 +1024,14 @@ export class FiscalFilingScreen extends LitElement {
           : html`<wt-button
               data-test="put-right"
               variant=${action.variant}
-              ?disabled=${
-                action.unchanged ||
-                this.sending ||
-                (this.attempted && this.#descriptionError() !== "")
-              }
+              ?disabled=${action.unchanged || this.sending || blocked}
               @click=${() => void this.#send(found)}
               >${t(
-                this.sending ? "fiscal_filing.put_right.sending" : "fiscal_filing.put_right.send",
+                this.sending
+                  ? "fiscal_filing.put_right.sending"
+                  : replaces
+                    ? "fiscal_filing.put_right.replace.send"
+                    : "fiscal_filing.put_right.send",
               )}</wt-button
             >`
       }
@@ -997,8 +1134,11 @@ export class FiscalFilingScreen extends LitElement {
       ${
         cases.length > 0
           ? html`<p class="muted" data-test="open-to-put-right">
-              ${t("fiscal_filing.cases.open_to_put_right")}
-            </p>`
+                ${t("fiscal_filing.cases.open_to_put_right")}
+              </p>
+              <p class="muted" data-test="future-date-fix">
+                ${t("fiscal_filing.cases.future_date")}
+              </p>`
           : nothing
       }
       <wt-data-table

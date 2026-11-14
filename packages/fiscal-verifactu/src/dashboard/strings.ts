@@ -233,6 +233,8 @@ const en = {
   "fiscal_filing.cases.none": "No case needs a decision.",
   "fiscal_filing.cases.bounded": "The newest {shown} of {total}",
   "fiscal_filing.cases.open_to_put_right": "Open a case to see whether Waitron can put it right.",
+  "fiscal_filing.cases.future_date":
+    "Waitron can put right a simplified invoice AEAT refused for a future date: you give the day the sale really happened.",
   "fiscal_filing.cases.range": "{from}–{to} of {total}",
   "fiscal_filing.cases.previous": "Previous page",
   "fiscal_filing.cases.next": "Next page",
@@ -258,6 +260,21 @@ const en = {
   "fiscal_filing.put_right.sending": "Sending…",
   "fiscal_filing.put_right.stop": "Stop",
   "fiscal_filing.put_right.sign_in": "Sign in as an administrator to put this right",
+  "fiscal_filing.put_right.replace.heading": "Put this right",
+  "fiscal_filing.put_right.replace.intro":
+    "AEAT refused this simplified invoice because its date was in the future. Give the day the sale really happened, and Waitron issues a replacement corrective invoice for it.",
+  "fiscal_filing.put_right.replace.day": "Day the sale really happened",
+  "fiscal_filing.put_right.replace.day_after_today": "Choose a day no later than today.",
+  "fiscal_filing.put_right.replace.day_after_invoice":
+    "Choose a day no later than the invoice's date, {date}.",
+  "fiscal_filing.put_right.replace.confirm":
+    "Waitron will issue a replacement corrective invoice for invoice {number} of {date}, total {total}, dated {today}.",
+  "fiscal_filing.put_right.replace.period": "The sale counts in the VAT return for {period}.",
+  "fiscal_filing.put_right.replace.order":
+    "It goes to AEAT after any earlier invoices AEAT is holding back. The refused invoice stays as it is.",
+  "fiscal_filing.put_right.replace.day_differs":
+    "The server's date, {server}, and this device's, {device}, differ. Check the time and confirm it on the Box status page, then choose Refresh.",
+  "fiscal_filing.put_right.replace.send": "Send the replacement",
   "fiscal_filing.put_right.none.not-yet":
     "Waitron cannot put this one right yet. The case stays open.",
   "fiscal_filing.put_right.none.full-invoice":
@@ -282,13 +299,23 @@ const en = {
   "fiscal_filing.refused.disk_full":
     "The server's disk is full, so nothing was sent. Follow the disk alert, then send again.",
   "fiscal_filing.refused.record_invalid":
-    "The correction record failed Waitron's own check, so nothing was sent. This is a fault in Waitron; the case stays open.",
+    "The record Waitron built failed its own check, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.fingerprint":
     "The fingerprint check of the server's invoice records failed, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.try_again":
     "The server could not add the correction to its invoice records this time, so nothing was sent. Send again.",
   "fiscal_filing.refused.setup":
     "The server found a problem with its own invoicing setup, so nothing was sent. This is a fault in Waitron; the case stays open.",
+  "fiscal_filing.refused.operation_date":
+    "The server refused this day: it cannot be after today or after the invoice's date. Choose another day, then send again.",
+  "fiscal_filing.refused.replacement_not_first":
+    "This invoice already has a corrective invoice, so Waitron cannot replace it, and nothing was sent. The case stays open, and Export includes it.",
+  "fiscal_filing.refused.correction_unsupported":
+    "AEAT already holds a version of this invoice, so a replacement would count the sale twice. Nothing was sent, and the case stays open.",
+  "fiscal_filing.refused.sale_not_recorded":
+    "Waitron found no invoice record of this sale to replace, so nothing was sent. This is a fault in Waitron; the case stays open.",
+  "fiscal_filing.refused.no_corrective_series":
+    "This server has no corrective invoice series, so nothing was sent. Waitron makes one when it sets up, restores or promotes a server, so this is a fault in Waitron; the case stays open.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Refused",
   "fiscal_filing.cause.fiscal.aceptado_con_errores": "Accepted with errors",
   "fiscal_filing.cause.fiscal.anulacion_retenida": "Cancellation set aside",
@@ -585,6 +612,8 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.cases.none": "Ningún caso necesita una decisión.",
   "fiscal_filing.cases.bounded": "Los {shown} más recientes de {total}",
   "fiscal_filing.cases.open_to_put_right": "Abre un caso para ver si Waitron puede corregirlo.",
+  "fiscal_filing.cases.future_date":
+    "Waitron puede corregir una factura simplificada que la AEAT rechazó por tener una fecha futura: tú indicas el día en que se hizo de verdad la venta.",
   "fiscal_filing.cases.range": "{from}–{to} de {total}",
   "fiscal_filing.cases.previous": "Página anterior",
   "fiscal_filing.cases.next": "Página siguiente",
@@ -611,6 +640,21 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.put_right.sending": "Enviando…",
   "fiscal_filing.put_right.stop": "Parar",
   "fiscal_filing.put_right.sign_in": "Inicia sesión como administrador para corregirlo",
+  "fiscal_filing.put_right.replace.heading": "Corregirlo",
+  "fiscal_filing.put_right.replace.intro":
+    "La AEAT rechazó esta factura simplificada porque su fecha era futura. Indica el día en que se hizo de verdad la venta y Waitron emite una factura rectificativa que la sustituye.",
+  "fiscal_filing.put_right.replace.day": "Día en que se hizo de verdad la venta",
+  "fiscal_filing.put_right.replace.day_after_today": "Elige un día que no sea posterior a hoy.",
+  "fiscal_filing.put_right.replace.day_after_invoice":
+    "Elige un día que no sea posterior a la fecha de la factura, {date}.",
+  "fiscal_filing.put_right.replace.confirm":
+    "Waitron emitirá una factura rectificativa que sustituye a la factura {number} del {date}, con un total de {total}, con fecha {today}.",
+  "fiscal_filing.put_right.replace.period": "La venta cuenta en la declaración de IVA de {period}.",
+  "fiscal_filing.put_right.replace.order":
+    "Se envía a la AEAT después de las facturas anteriores que la AEAT tenga detenidas. La factura rechazada se queda como está.",
+  "fiscal_filing.put_right.replace.day_differs":
+    "La fecha del servidor, {server}, y la de este dispositivo, {device}, no coinciden. Revisa la hora y confírmala en Estado del servidor; después elige Actualizar.",
+  "fiscal_filing.put_right.replace.send": "Enviar la rectificativa",
   "fiscal_filing.put_right.none.not-yet":
     "Waitron todavía no puede corregir este caso. El caso sigue abierto.",
   "fiscal_filing.put_right.none.full-invoice":
@@ -636,13 +680,23 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.disk_full":
     "El disco del servidor está lleno, así que no se ha enviado nada. Sigue el aviso del disco y envía de nuevo.",
   "fiscal_filing.refused.record_invalid":
-    "El registro de subsanación no ha pasado la comprobación de Waitron, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
+    "El registro que ha preparado Waitron no ha pasado su propia comprobación, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.refused.fingerprint":
     "Ha fallado la comprobación de la huella de los registros de facturación del servidor, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.refused.try_again":
     "El servidor no ha podido añadir la subsanación a sus registros de facturación esta vez, así que no se ha enviado nada. Envía de nuevo.",
   "fiscal_filing.refused.setup":
     "El servidor ha encontrado un problema en su propia configuración de facturación, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
+  "fiscal_filing.refused.operation_date":
+    "El servidor ha rechazado este día: no puede ser posterior a hoy ni a la fecha de la factura. Elige otro día y envía de nuevo.",
+  "fiscal_filing.refused.replacement_not_first":
+    "Esta factura ya tiene una factura rectificativa, así que Waitron no puede sustituirla y no se ha enviado nada. El caso sigue abierto y se incluye al exportar.",
+  "fiscal_filing.refused.correction_unsupported":
+    "La AEAT ya tiene una versión de esta factura, así que una sustitutiva contaría la venta dos veces. No se ha enviado nada y el caso sigue abierto.",
+  "fiscal_filing.refused.sale_not_recorded":
+    "Waitron no ha encontrado ningún registro de factura de esta venta que sustituir, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
+  "fiscal_filing.refused.no_corrective_series":
+    "Este servidor no tiene una serie de facturas rectificativas, así que no se ha enviado nada. Waitron la crea al configurar, restaurar o promocionar un servidor, así que es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Rechazado",
   "fiscal_filing.cause.fiscal.aceptado_con_errores": "Aceptado con errores",
   "fiscal_filing.cause.fiscal.anulacion_retenida": "Anulación apartada",
