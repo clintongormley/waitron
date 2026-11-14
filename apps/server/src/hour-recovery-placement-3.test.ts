@@ -1,23 +1,19 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { hashPassword } from "@waitron/identity";
 import {
   external,
   suite,
   node,
   binding,
-  scope,
   root,
   key,
   archiveHost,
   archiveCommand,
-  bucketCommand,
   agreeInternet,
-  restoreApp,
   recordedRecoveryRows,
   recoveryInvoices,
   managedHttp,
   interactiveHost,
   clock,
+  stageBucketRoute,
 } from "../test/hour-recovery-host.js";
 import { recoverySelectPastWaits, selectPastWaits } from "./testing/hour-test-clock.js";
 import { Agent } from "undici";
@@ -26,7 +22,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { freePorts } from "./testing/free-ports.js";
-import { copyFile, cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { invoiceSeries, nodes, openVenueDatabase } from "@waitron/db";
@@ -52,11 +48,10 @@ import { runRestore } from "./restore-command.js";
 import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { backupArchiveKey } from "./backup-keys.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
-import { runStagedRestore, stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
+import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { eq } from "drizzle-orm";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { encodeRecoveryKit } from "@waitron/stream";
 
 describe("selected-hour admission before archive placement", () => {
   it.each(["archive", "file"])(
@@ -628,46 +623,7 @@ describe("selected-hour admission before archive placement", () => {
 
   it("carries the bucket HTTP selection and isolation through the real staging adapter", async () => {
     const history = await recoveryInvoices();
-    await seedPersons(suite.db, {
-      displayName: "Backup administrator",
-      role: "admin",
-      passwordHash: hashPassword("fixture-restore-password"),
-    });
-    const { f, command, deps, kit } = await bucketCommand();
-    const operation = JSON.parse(await readFile(command.operationPath, "utf8"));
-    const context = {
-      selectedSourceId: `stream:${node.locationId}:gen-0-${node.nodeId}-20261016T124000Z`,
-      oldBoxGone: true,
-      soleRecovery: true,
-    };
-    const app = restoreApp({
-      stageBucketRestore: (input) =>
-        stageStreamRestore({
-          ...f.restore,
-          ...input,
-          kit,
-          litestreamBin: "/unused",
-          now: () => new Date(),
-          openStore: deps.openStore,
-          restoreGeneration: async ({ outPath }) => {
-            await copyFile(f.database, outPath);
-          },
-        }),
-    });
-    const response = await app.request("https://box.test/setup-api/restore-bucket", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kit: encodeRecoveryKit(kit),
-        environment: "preproduction",
-        oldBoxGone: true,
-        venueConfirmed: scope.taxpayerNif,
-        recoveryOperation: operation,
-        nodeRecoverySecret: key.secret,
-        recoveryContext: context,
-      }),
-    });
-    expect(response.status).toBe(202);
+    const { f, recoveryContext: context } = await stageBucketRoute();
     expect(
       JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8"))
         .request,

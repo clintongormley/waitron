@@ -4,6 +4,7 @@ import {
   missingHeldDatabase,
   startAgainMissing,
   stageFreshRestore,
+  hourAfterWipe,
   exists,
   type Held,
 } from "../test/start-again-held-fixture.js";
@@ -32,9 +33,6 @@ import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 
 import { foreignHotJournal } from "../test/foreign-journal.js";
-import { clock } from "../test/hour-recovery-host.js";
-import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
-import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { runStagedRestore } from "./restore-request.js";
 
 it("a held setup database: the summary answers and Start again deletes it with no password", async () => {
@@ -94,13 +92,7 @@ it("a held setup database, wiped, then the fresh-box restore writes into the usu
   const f = await heldSetup();
   const { ids, actions } = await withoutSignIn(f);
   await actions.startAgainFirstSetup(ids);
-  // The backup's hour is chosen after the wipe, as on a box: the wipe deletes an earlier choice.
-  const outcome = (await recoverySelectPastWaits(
-    clock,
-    createSelectedRecoveryPreparation(f.archive.options),
-    { onBox: false },
-  )) as { input: unknown };
-  await stageFreshRestore(f, { ...f.archive, outcome });
+  await stageFreshRestore(f, { ...f.archive, outcome: await hourAfterWipe(f) });
   await expect(runStagedRestore(f.archive.restore)).resolves.toBe(true);
   expect(await exists(join(f.roots.venueDir, "venue.db"))).toBe(true);
   expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(true);
@@ -118,11 +110,6 @@ it("control: the same fresh-box restore beside a held setup database that was no
   expect((await diskSnapshot(f.roots)).venue).toEqual(venue);
   expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(false);
 }, 180_000);
-
-const hourAfterWipe = async (f: Held) =>
-  (await recoverySelectPastWaits(clock, createSelectedRecoveryPreparation(f.archive.options), {
-    onBox: false,
-  })) as { input: unknown };
 
 it("a missing setup database, wiped, then the fresh-box restore writes into the usual folders", async () => {
   const f = await missingHeldDatabase();

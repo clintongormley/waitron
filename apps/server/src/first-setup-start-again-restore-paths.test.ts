@@ -2,31 +2,17 @@ import {
   withoutSignIn,
   missingHeldDatabase,
   startAgainMissing,
+  hourAfterWipe,
   seedResolutionRecord,
   exists,
   type Held,
 } from "../test/start-again-held-fixture.js";
 import { diskSnapshot } from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
-import {
-  agreeInternet,
-  bucketCommand,
-  clock,
-  key,
-  managedHttp,
-  restoreApp,
-  scope,
-  suite,
-} from "../test/hour-recovery-host.js";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { hashPassword } from "@waitron/identity";
-import { copyFile, readFile } from "node:fs/promises";
+import { agreeInternet, managedHttp, stageBucketRoute } from "../test/hour-recovery-host.js";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { encodeRecoveryKit } from "@waitron/stream";
-import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
-import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
-import { runStagedRestore, stageStreamRestore } from "./restore-request.js";
+import { runStagedRestore } from "./restore-request.js";
 
 const wipeHeld = async (f: Held) => {
   const { ids, actions } = await withoutSignIn(f);
@@ -37,56 +23,11 @@ async function withResolutionRecord(f: Held) {
   expect(await exists(await seedResolutionRecord(f))).toBe(true);
 }
 
-/** Stages the bucket restore through `/setup-api/restore-bucket` and the real stream staging. */
 async function stageBucket(held: Held) {
-  // Bucket staging refuses a backup with no administrator password to sign in with.
-  await seedPersons(suite.db, {
-    displayName: "Backup administrator",
-    role: "admin",
-    passwordHash: hashPassword("fixture-restore-password"),
-  });
-  const { f, command, deps, kit } = await bucketCommand(held.archive);
-  const app = restoreApp({
-    stageBucketRestore: (input) =>
-      stageStreamRestore({
-        ...f.restore,
-        ...input,
-        kit,
-        litestreamBin: "/unused",
-        now: () => new Date(),
-        openStore: deps.openStore,
-        restoreGeneration: async ({ outPath }) => {
-          await copyFile(f.database, outPath);
-        },
-      }),
-  });
-  const response = await app.request("https://box.test/setup-api/restore-bucket", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      kit: encodeRecoveryKit(kit),
-      environment: "preproduction",
-      oldBoxGone: true,
-      venueConfirmed: scope.taxpayerNif,
-      recoveryOperation: JSON.parse(await readFile(command.operationPath, "utf8")),
-      nodeRecoverySecret: key.secret,
-      recoveryContext: {
-        selectedSourceId: `stream:${f.options.node.locationId}:gen-0-${f.options.node.nodeId}-20261016T124000Z`,
-        oldBoxGone: true,
-        soleRecovery: true,
-      },
-    }),
-  });
-  expect(response.status, await response.clone().text()).toBe(202);
+  const { f } = await stageBucketRoute(held.archive);
   agreeInternet();
   return () => runStagedRestore(f.restore);
 }
-
-/** The backup's hour, chosen after the wipe as on a box: the wipe deletes an earlier choice. */
-const hourAfterWipe = async (f: Held) =>
-  (await recoverySelectPastWaits(clock, createSelectedRecoveryPreparation(f.archive.options), {
-    onBox: false,
-  })) as { input: unknown };
 
 /** Stages the Cloud restore through `/setup-api/cloud-recovery/restore`. */
 async function stageCloud(f: Held, archive: Held["archive"] = f.archive) {

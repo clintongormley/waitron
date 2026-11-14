@@ -22,8 +22,10 @@ import {
   noConfirmations,
   expectStartAgainRefused,
 } from "./start-again-deleted.js";
-import { agreeInternet, archiveForm, restoreApp } from "./hour-recovery-host.js";
+import { agreeInternet, archiveForm, clock, restoreApp } from "./hour-recovery-host.js";
 import { stageRestoreRequest } from "../src/restore-request.js";
+import { createSelectedRecoveryPreparation } from "../src/recovery-preparation.js";
+import { recoverySelectPastWaits } from "../src/testing/hour-test-clock.js";
 
 // Tables a test adds to a module's `startAgainDeletable`, as the holdings reader sees it.
 const extraDeletable = vi.hoisted(() => new Map<string, readonly string[]>());
@@ -214,6 +216,12 @@ async function stageFreshRestore(f: Held, archive: Held["archive"] = f.archive) 
   agreeInternet();
 }
 
+/** The backup's hour, chosen after the wipe as on a box: the wipe deletes an earlier choice. */
+const hourAfterWipe = async (f: Held) =>
+  (await recoverySelectPastWaits(clock, createSelectedRecoveryPreparation(f.archive.options), {
+    onBox: false,
+  })) as { input: unknown };
+
 /** A resolution record, with one step, in the layout Start again's deletion removes. */
 async function seedResolutionRecord(f: Pick<Held, "roots">): Promise<string> {
   const folder = join(f.roots.stateDir, "first-setup-resolutions");
@@ -325,6 +333,7 @@ export {
   missingHeldDatabase,
   startAgainMissing,
   stageFreshRestore,
+  hourAfterWipe,
   seedResolutionRecord,
   exists,
   venueDb,
