@@ -6396,3 +6396,18 @@ rule, guard and pointer.
 
 _2026-11-14 (Q37-FIX): production now enables the correction record, for rejected records only; its route asks the start's
 gate, and `boot.start-clock-gate.test.ts` sends one correction-record request through boot._
+
+## Bound peer requests before parsing them
+
+When you add a box-to-box or handover request route, set a finite incoming byte budget before its
+handler parses the body. Use `peerBodyLimit` in `apps/server/src/peer-route-limits.ts`; keep the
+emergency backup upload on `readUpload`'s larger budget. Keep the mirror's local-only promotion
+refusal ahead of body reading.
+
+Add the route to `apps/server/test/peer-route-inventory.ts`. Run
+`pnpm --filter @waitron/server exec vitest run src/peer-route-limits.test.ts` for the mounted
+limits and `pnpm exec vitest run scripts/peer-route-inventory.test.ts` for registration coverage.
+The source guard is weaker than its name: it sees literal `app.get` and `app.post` registrations
+in server source, in the listed namespaces only. Other method calls, router variable names,
+computed paths and new namespaces are outside it. The mounted test checks only the mounts it
+names; both checks share the same test-only inventory.

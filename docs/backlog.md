@@ -1848,7 +1848,6 @@ Not in any track until the standalone primary is done.
   stepdown to the full start's own handling once that is mounted (`apps/server/src/boot.ts`).
   Left open by WAITING-START-ENDS.
 
-
 - **Check everything at the offer, while the old box still sells** (bundle of 2, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-check-everything-at-the-offer-while-the-old-box-still-sells)
 
 
