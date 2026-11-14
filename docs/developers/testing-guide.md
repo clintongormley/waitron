@@ -4056,8 +4056,10 @@ lock**. A copy fifteen minutes behind (a copy to a paired spare: over 60 seconds
 its upload and the spare's apply delay) raises `backup.stream_behind`, unless a stopped, refused
 or unusable-settings alert already explains it (`apps/server/src/alert-sources.ts`). Guards, narrower
 than the rule: `apps/server/src/stream-pause.e2e.test.ts`,
-`apps/server/src/stream-loop.e2e.test.ts` (both skipped locally without their binaries) and the
-bucket-copy cases in `apps/server/src/health.test.ts`. Receipt:
+`apps/server/src/stream-loop.e2e.test.ts` (both skipped locally without their binaries), the
+bucket-copy cases in `apps/server/src/health.test.ts`, and the "raises backup.stream_behind at
+exactly fifteen minutes" and "warns only above sixty seconds of the worse upload/apply delay and
+recovers" cases in `apps/server/src/alert-sources.test.ts`. Receipt:
 [testing-guide.md](testing-guide.md#a-sale-can-wait-behind-litestreams-own-checkpoint).
 
 ### Dispatch events when testing a `composedPath()` guard.
