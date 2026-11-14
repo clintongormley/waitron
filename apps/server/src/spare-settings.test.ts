@@ -237,7 +237,8 @@ describe("runSpareSettings", () => {
     spareAnswers = "not-started";
     await start();
     await tick(RETRY_MS * 2);
-    expect(requests.length).toBeGreaterThan(1);
+    // One at the start, then one at each 30-second retry: never at the 5-second checks between.
+    expect(requests).toHaveLength(3);
     expect(events("spare-settings.send_failed")).toEqual([
       expect.objectContaining({ level: "info", peerNodeId: spareId, reason: "404" }),
     ]);
@@ -313,6 +314,61 @@ describe("runSpareSettings", () => {
     expect(events("spare-settings.send_failed")).toEqual([
       expect.objectContaining({ level: "info", reason: "unreadable" }),
     ]);
+  });
+
+  it("a file that exists but holds no settings sends nothing, and the spare keeps its settings", async () => {
+    await writeFile(join(mainDir, "backup.env"), "\0\u0001garbage-without-equals\n");
+    await link("streaming");
+    await start();
+    await tick(RETRY_MS * 2);
+    expect(requests).toEqual([]);
+    expect(await readFile(join(spareDir, "backup.env"), "utf8")).toBe(SPARES_OWN);
+    expect(events("spare-settings.send_failed")).toEqual([
+      expect.objectContaining({ level: "info", reason: "unreadable" }),
+    ]);
+  });
+
+  it("no file on this box removes the spare's settings", async () => {
+    await rm(join(mainDir, "backup.env"));
+    await link("streaming");
+    await start();
+    expect(requests).toHaveLength(1);
+    expect(await readBackupSettings(spareDir)).toBeNull();
+  });
+
+  it("a check that keeps failing is logged once per run of failures", async () => {
+    await link("streaming");
+    let broken = true;
+    const node = new Proxy(mainBox.node, {
+      get(target, property, receiver) {
+        if (broken) throw new Error("node.db is unreadable");
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    running.push(
+      runSpareSettings({
+        db: mainBox.db,
+        node,
+        ring: RING,
+        nodeId: MAIN.nodeId,
+        stateDir: mainDir,
+        exchange: { timeoutMs: 5_000, fetch: exchangeFetch },
+        checkMs: CHECK_MS,
+        retryMs: RETRY_MS,
+        log: logger(),
+      }),
+    );
+    await idle();
+    await tick(CHECK_MS * 6);
+    expect(events("spare-settings.check_failed")).toHaveLength(1);
+
+    broken = false;
+    await tick(CHECK_MS);
+    expect(requests).toHaveLength(1);
+    broken = true;
+    await tick(CHECK_MS * 6);
+    expect(events("spare-settings.check_failed")).toHaveLength(2);
   });
 
   it("a new start sends once even when nothing changed", async () => {

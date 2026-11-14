@@ -1,7 +1,10 @@
+import { lstat } from "node:fs/promises";
+import { join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
 import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
 import { readPairLink } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
+import { BACKUP_ENV_FILE } from "@waitron/store";
 import { backupSettingsDigestOf, readBackupSettings } from "./backup-env-writer.js";
 import { boxRefusal, isRecord, postToBox, type AskPeerStatusDeps } from "./boot-peer-check.js";
 import { signAsThisBox } from "./handover-signing.js";
@@ -47,6 +50,10 @@ export async function sendBackupSettings(
     // Never `null` in its place: that would remove the spare's settings.
     return { delivered: false, reason: "unreadable" };
   }
+  // Every writer keeps a recovery key in the file, so one that is there but reads as no settings is
+  // damaged, and sending `null` would remove the spare's.
+  if (settings === null && (await present(join(deps.stateDir, BACKUP_ENV_FILE))))
+    return { delivered: false, reason: "unreadable" };
   const digest = backupSettingsDigestOf(settings);
   const envelope = await signAsThisBox(deps, "backup-settings", { toNodeId: to.nodeId, settings });
   let answer: { status: number; text: string };
@@ -71,6 +78,16 @@ export async function sendBackupSettings(
   if (!isRecord(answered) || answered.backupSettings !== digest)
     return { delivered: false, reason: "digest_differs" };
   return { delivered: true, digest };
+}
+
+async function present(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 export interface SpareSettingsDeps extends SendBackupSettingsDeps {
@@ -129,11 +146,16 @@ export function runSpareSettings(deps: SpareSettingsDeps): { stop(): Promise<voi
   }
 
   const running = (async () => {
+    // Logged once per run of failed checks, so a lasting fault does not fill the log.
+    let checkFailing = false;
     while (!stopped) {
       try {
         await pass();
+        checkFailing = false;
       } catch (error) {
-        if (!stopped) deps.log("warn", "spare-settings.check_failed", { errorCode: codeOf(error) });
+        if (!stopped && !checkFailing)
+          deps.log("warn", "spare-settings.check_failed", { errorCode: codeOf(error) });
+        checkFailing = true;
       }
       await sleep(checkMs, stopping.signal);
     }
