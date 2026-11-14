@@ -2417,13 +2417,30 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(await removalRows()).toEqual([{ removed_node_id: standbyNodeId, term: seedTerm + 1 }]);
     });
 
-    it("refuses 409 mirror.standby_removed when the removal commits between a chart round's read and its write", async () => {
-      const { designated, adminPersonId } = await setupVenue();
+    // A Remove takes node.db's lock, so it waits for this request and cannot commit inside its
+    // round; the evicting chart is written directly, as a chart another writer signs would land.
+    it("refuses 409 mirror.standby_removed when a chart evicting the standby lands between a chart round's read and its write", async () => {
+      const { designated } = await setupVenue();
       const app = mountApp(designated);
       const standbyNodeId = crypto.randomUUID();
       const seedTerm = await holdChartWithStandby(designated, standbyNodeId);
       const counterBefore = await allocationSnapshot();
-      pause.beforeChartMint = removeDuringRequest(designated, adminPersonId, standbyNodeId);
+      pause.beforeChartMint = () =>
+        writeNodeMembership(
+          db,
+          signedMembershipDoc(seedTerm + 1, {
+            signerNodeId: designated.nodeId,
+            keyPair: primaryKeyPair,
+            nodes: [
+              {
+                nodeId: designated.nodeId,
+                contactUrl: "https://box.deli.test",
+                standing: "serving-primary",
+              },
+              { nodeId: standbyNodeId, contactUrl: "https://cloud.deli.test", standing: "evicted" },
+            ],
+          }),
+        );
 
       const res = await post(app, {
         email: ADMIN_EMAIL,
