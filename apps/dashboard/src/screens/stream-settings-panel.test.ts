@@ -576,6 +576,11 @@ describe("stream-settings-panel: the bucket form", () => {
     expect(field(el, "bucket-name").error).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(disabled(el, "save")).toBe(false);
+
+    await press(el, "save");
+    expect(field(el, "bucket-name").error).toBe(t("stream.field.bucket_characters"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(focusedName(el)).toBe("bucket-name");
   });
 
   it("leaves Save working after a refusal that names no field", async () => {
