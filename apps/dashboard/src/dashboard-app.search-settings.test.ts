@@ -10,6 +10,7 @@ import {
   settingChooser,
   searchSettings,
   chooseSettingRow,
+  cancelSettingSearch,
 } from "./testing/setting-search-fixture.js";
 const state = vi.hoisted(() => ({ resolve: vi.fn(), contexts: [] as unknown[] }));
 vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
@@ -120,7 +121,7 @@ it("no candidates explains, and Cancel retains query and address", async () => {
   await open(app);
   await expect.poll(() => settingChooser(app)?.textContent).toContain("No available");
   expect(settingChooser(app)!.querySelector("wt-combobox")).toBeNull();
-  await userEvent.click(action(app, "cancel"));
+  await cancelSettingSearch(app);
   await expect.poll(() => settingChooser(app)).toBeNull();
   expect(searchBox(app).value).toBe("reminder");
   expect(location.pathname).toBe("/manage/overview");
@@ -164,9 +165,9 @@ it.each(["cancel", "new activation", "session exit", "disconnect"])(
     const app = await mount();
     await open(app);
     await expect.poll(() => settingChooser(app)).toBeTruthy();
-    if (mode === "cancel") await userEvent.click(action(app, "cancel"));
+    if (mode === "cancel") await cancelSettingSearch(app);
     else if (mode === "new activation") {
-      await userEvent.click(action(app, "cancel"));
+      await cancelSettingSearch(app);
       await open(app);
       await expect.poll(() => settingChooser(app)?.textContent).toContain("No available");
     } else if (mode === "session exit")

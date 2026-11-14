@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { WtInput } from "@waitron/ui";
 import type { DashboardApp } from "../dashboard-app.js";
 
@@ -24,5 +25,15 @@ export async function chooseSettingRow(app: DashboardApp, value: string) {
   field.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
+  await app.updateComplete;
+}
+
+export async function cancelSettingSearch(app: DashboardApp) {
+  const modal = settingChooser(app)!;
+  const closed = new Promise<void>((resolve) =>
+    modal.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  await userEvent.click(modal.querySelector<HTMLElement>("[data-test=setting-cancel]")!);
+  await closed;
   await app.updateComplete;
 }
