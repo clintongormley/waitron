@@ -824,3 +824,12 @@ it("reads every active station through one dated planning batch", async () =>
       spy.mockRestore();
     }
   }));
+
+it("refuses an all-station request beyond six weeks", async () =>
+  tx(async (db) => {
+    await fixture(db);
+    await expect(stationsServiceTimes(db, "2030-11-01", "2030-12-13")).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "to" },
+    });
+  }));
