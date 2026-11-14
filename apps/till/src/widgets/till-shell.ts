@@ -1,4 +1,5 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
+import { menuOptionStyles } from "@waitron/ui/src/menu-popover.js";
 import { customElement, property, queryAssignedElements, state } from "lit/decorators.js";
 import {
   THEME_SELECTED_EVENT,
@@ -160,8 +161,6 @@ export class TillShell extends LitElement {
   #aboutOption(): TemplateResult {
     return html`<wt-button
       class="about"
-      variant="ghost"
-      align="start"
       @click=${(event: Event) =>
         this.#openAbout((event.currentTarget as HTMLElement).closest("wt-row-actions")!)}
       >${t("about.title")}</wt-button
@@ -180,6 +179,7 @@ export class TillShell extends LitElement {
 
   static override styles = [
     baseStyles,
+    menuOptionStyles,
     chooserStyles,
     themeChoicesStyles,
     edgeFadeStyles,
@@ -356,21 +356,6 @@ export class TillShell extends LitElement {
         display: flex;
         align-items: center;
         gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 0;
-        background: transparent;
-        color: var(--wt-color-text);
-        font: inherit;
-        cursor: pointer;
-        text-align: start;
-      }
-      [data-counter-zone]:hover {
-        background: var(--wt-color-surface-raised);
-      }
-      [data-counter-zone]:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
       }
       .zone-check {
         width: var(--wt-space-4);
@@ -1065,8 +1050,6 @@ export class TillShell extends LitElement {
         html`<wt-button
           class=${cls}
           ?data-open-transfers=${opensTransfers}
-          variant="ghost"
-          align="start"
           @click=${() => this.#emit(type)}
           >${label}</wt-button
         >`,
@@ -1144,7 +1127,6 @@ export class TillShell extends LitElement {
       html`<wt-button
         data-clock-action=${kind}
         variant=${disabled ? "secondary" : "primary"}
-        align="start"
         .disabled=${disabled}
         @click=${() => this.#emit("clock-action", { action: kind })}
         >${label}</wt-button
@@ -1157,8 +1139,6 @@ export class TillShell extends LitElement {
               state === null
                 ? html`<wt-button
                     data-clock-retry
-                    variant="secondary"
-                    align="start"
                     .disabled=${this.clockBusy}
                     @click=${() => this.#emit("retry-clock-read")}
                     >${t("clock.retry")}</wt-button
@@ -1170,8 +1150,6 @@ export class TillShell extends LitElement {
             }
             <wt-button
               data-my-hours
-              variant="secondary"
-              align="start"
               .disabled=${this.hoursBusy}
               @click=${() => this.#emit("my-hours")}
               >${t("hours.mine")}</wt-button
@@ -1179,8 +1157,6 @@ export class TillShell extends LitElement {
             ${this.#withHelp(
               html`<wt-button
                 data-fix-hours
-                variant="secondary"
-                align="start"
                 .disabled=${this.hoursBusy}
                 @click=${() => this.#emit("fix-my-hours")}
                 >${t("attendance.fix_hours")}</wt-button
@@ -1253,7 +1229,7 @@ export class TillShell extends LitElement {
       </div>
       <hr class="menu-rule" />
       ${this.#reportOption()}${this.#aboutOption()}
-      <wt-button class="logout" variant="ghost" align="start" @click=${() => this.#emit("logout")}
+      <wt-button class="logout" @click=${() => this.#emit("logout")}
         >${t("shell.logout")}</wt-button
       >
       ${this.#poweredBy()}
@@ -1265,8 +1241,6 @@ export class TillShell extends LitElement {
       ? html`<wt-button
           data-report-problem
           class="report-problem"
-          variant="ghost"
-          align="start"
           @click=${(event: Event) => {
             const menu = (event.currentTarget as HTMLElement).closest<WtRowActions>(
               "wt-row-actions",
@@ -1289,9 +1263,7 @@ export class TillShell extends LitElement {
   #tillMenu(): TemplateResult {
     const action = (cls: string, event: string, label: string, help?: HelpKey) =>
       this.#withHelp(
-        html`<wt-button class=${cls} variant="ghost" align="start" @click=${() => this.#emit(event)}
-          >${label}</wt-button
-        >`,
+        html`<wt-button class=${cls} @click=${() => this.#emit(event)}>${label}</wt-button>`,
         help,
         label,
       );
@@ -1410,6 +1382,7 @@ export class TillShell extends LitElement {
                     html`<button
                       type="button"
                       role="menuitemradio"
+                      class="option"
                       data-counter-zone=${zone.id}
                       aria-checked=${zone.id === this.selectedCounterZoneId ? "true" : "false"}
                       @click=${() => this.#emit("counter-zone-selected", { zoneId: zone.id })}

@@ -480,13 +480,12 @@ export class PaintGrid extends LitElement {
                 (periodId) =>
                   html`<wt-button
                     variant="secondary"
-                    align="start"
                     ?disabled=${periodId === paint.periodId}
                     @click=${() => this.#change(periodId)}
                     >${this.#name(periodId)}</wt-button
                   >`,
               )}
-              <wt-button variant="danger" align="start" @click=${() => this.#delete()}
+              <wt-button variant="danger" @click=${() => this.#delete()}
                 >${t("paint.delete")}</wt-button
               >`
       }

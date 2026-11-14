@@ -243,8 +243,10 @@ describe("servers screen list", () => {
       `${t("servers.actions")}: https://standby.venue.example:8443`,
     );
     expect(menuTrigger(el, STANDBY).getAttribute("aria-label")).toBe(menu.getAttribute("label"));
-    expect(menu.querySelector(`[data-test="remove-${STANDBY}"]`)!.getAttribute("align")).toBe(
-      "start",
+    const item = menu.querySelector("wt-button")!;
+    await item.updateComplete;
+    expect(getComputedStyle(item.shadowRoot!.querySelector("button")!).justifyContent).toBe(
+      "center",
     );
   });
 

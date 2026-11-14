@@ -652,7 +652,6 @@ export class OptionListForm extends LitElement {
       <td>
         <wt-row-actions align="end" label=${`${t("options.option_actions")}: ${label.name}`}
           ><wt-button
-            variant="secondary"
             data-test=${`edit-label-${index}`}
             .disabled=${this.busy}
             @click=${(event: Event) => {

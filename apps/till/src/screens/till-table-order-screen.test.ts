@@ -1209,6 +1209,23 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
     }
 
+    it("keeps a short new-order selection button from stretching across the basket", async () => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(1280, 844);
+      try {
+        const { el } = await mount({ courses: serviceCourses, products: menu });
+        await ring(el, [beer, "2"]);
+        await showView(el, "order", { ifShown: true });
+        const select = el.shadowRoot!.querySelector<HTMLElement>("[data-draft-select]")!;
+        const box = select.getBoundingClientRect();
+        const basket = select.parentElement!.getBoundingClientRect();
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.width).toBeLessThan(basket.width / 2);
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    });
+
     it("shows Fire now before new held groups, with no redundant course headings", async () => {
       const { el } = await mount({ courses: serviceCourses, products: menu });
       await ring(el, [steak, "1"], [beer, "1"], [bread, "1"], [croquettes, "1"]);

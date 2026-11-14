@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
 import { baseStyles } from "@waitron/ui";
+import { menuOptionStyles } from "@waitron/ui/src/menu-popover.js";
 import { t } from "../i18n/t.js";
 
 /**
@@ -21,6 +22,7 @@ export interface ReaderOption {
 export class TillReaderPicker extends LitElement {
   static override styles = [
     baseStyles,
+    menuOptionStyles,
     css`
       .list {
         display: flex;
@@ -33,25 +35,6 @@ export class TillReaderPicker extends LitElement {
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-2);
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: transparent;
-        color: var(--wt-color-text);
-        font: inherit;
-        font-weight: var(--wt-font-weight-bold);
-        text-align: start;
-        cursor: pointer;
-      }
-
-      .option:hover {
-        background: var(--wt-color-surface-raised);
-      }
-
-      .option[aria-checked="true"] {
-        border-color: var(--wt-color-text);
       }
 
       .status {

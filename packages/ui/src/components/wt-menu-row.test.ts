@@ -17,8 +17,8 @@ afterEach(() => {
 
 const MENU =
   '<wt-row-actions label="Actions" align="end">' +
-  '<wt-menu-row help="Edits it." help-label="Help: Edit"><wt-button variant="ghost" align="start">Edit</wt-button></wt-menu-row>' +
-  '<wt-button variant="ghost" align="start">Delete</wt-button>' +
+  '<wt-menu-row help="Edits it." help-label="Help: Edit"><wt-button variant="secondary">Edit</wt-button></wt-menu-row>' +
+  '<wt-button variant="secondary">Delete</wt-button>' +
   "</wt-row-actions>";
 
 async function mountMenu(help = "Edits it.") {

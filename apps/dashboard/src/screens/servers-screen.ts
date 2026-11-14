@@ -519,11 +519,9 @@ export class ServersScreen extends LitElement {
           return actions.length === 0 && !handover
             ? nothing
             : html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#rowName(row)}`}
-                >${handover ? html`<wt-button align="start" variant="ghost" data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${actions.map(
+                >${handover ? html`<wt-button data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${actions.map(
                   (action) =>
                     html`<wt-button
-                      align="start"
-                      variant="ghost"
                       data-test=${`${action}-${row.nodeId}`}
                       @click=${(event: Event) => this.#open(action, row, event)}
                       >${t(ACTION_KEYS[action].verb)}</wt-button

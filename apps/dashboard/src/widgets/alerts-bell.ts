@@ -199,7 +199,7 @@ export class AlertsBell extends LitElement {
               ${this.alerts.slice(0, PANEL_LIMIT).map((alert) => this.#item(alert))}
             </ul>`
       }
-      <wt-button variant="ghost" align="start" data-test="alerts-see-all" @click=${this.#onSeeAll}
+      <wt-button data-test="alerts-see-all" @click=${this.#onSeeAll}
         >${t("alerts.see_all")}</wt-button
       >
     </wt-row-actions>`;

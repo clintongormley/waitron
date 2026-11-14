@@ -262,7 +262,6 @@ export class DepartmentsList extends LitElement {
       ${actions.map(
         (action) =>
           html`<wt-button
-            variant="secondary"
             data-test=${action.key}
             ?disabled=${!department && this.moving.has(row.id)}
             @click=${() => {

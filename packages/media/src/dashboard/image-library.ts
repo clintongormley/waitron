@@ -1349,8 +1349,6 @@ export class ImageLibrary extends LitElement {
                 <wt-button
                   data-test=${`edit-${image.id}`}
                   ?disabled=${this.batchRunning}
-                  variant="secondary"
-                  align="start"
                   aria-label=${`${t("action.edit")}: ${name}`}
                   @click=${() => this.#edit(image)}
                   >${t("action.edit")}</wt-button
@@ -1358,8 +1356,6 @@ export class ImageLibrary extends LitElement {
                 <wt-button
                   data-test=${`delete-${image.id}`}
                   ?disabled=${this.batchRunning}
-                  variant="secondary"
-                  align="start"
                   aria-label=${`${t("image.delete")}: ${name}`}
                   @click=${() => void this.#inspectDeletion(image)}
                   >${t("image.delete")}</wt-button

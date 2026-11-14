@@ -335,9 +335,7 @@ export class ContentLanguagesScreen extends LitElement {
                 ? nothing
                 : html`
                     <wt-button
-                      align="start"
                       data-test=${`set-default-${code}`}
-                      variant="ghost"
                       ?disabled=${this.busy}
                       aria-label=${`${t("content_languages.set_default")}: ${name(code)}`}
                       @click=${() => void this.#save(code, config.languages)}
@@ -348,9 +346,7 @@ export class ContentLanguagesScreen extends LitElement {
                         ? nothing
                         : html`
                             <wt-button
-                              align="start"
                               data-test=${`remove-${code}`}
-                              variant="ghost"
                               ?disabled=${this.busy}
                               aria-label=${`${t("content_languages.remove")}: ${name(code)}`}
                               @click=${() =>
@@ -365,9 +361,7 @@ export class ContentLanguagesScreen extends LitElement {
                   `
             }
             <wt-button
-              align="start"
               data-test=${`edit-translations-${code}`}
-              variant="ghost"
               ?disabled=${this.busy}
               @click=${() => {
                 this.translationLanguage = code;

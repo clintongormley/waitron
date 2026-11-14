@@ -508,16 +508,12 @@ export class UnitsScreen extends LitElement {
         cell: (unit) => html`
           <wt-row-actions label=${`${t("units.actions")}: ${this.#unitText(unit).name}`}>
             <wt-button
-              align="start"
               data-test=${`edit-${unit.id}`}
-              variant="ghost"
               @click=${(event: Event) => this.#openEdit(unit, event)}
               >${t("action.edit")}</wt-button
             >
             <wt-button
-              align="start"
               data-test=${`delete-${unit.id}`}
-              variant="ghost"
               @click=${(event: Event) => this.#requestDelete(unit, event)}
               >${t("action.delete")}</wt-button
             >

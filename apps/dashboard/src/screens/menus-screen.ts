@@ -2394,21 +2394,11 @@ export class MenusScreen extends LitElement {
         pinned: "end",
         cell: (menu) =>
           html`<wt-row-actions label=${`${t("menus.actions")}: ${menu.name}`}
-            ><wt-button
-              align="start"
-              variant="ghost"
-              data-test=${`edit-${menu.id}`}
-              @click=${() => this.#open(menu.id)}
+            ><wt-button data-test=${`edit-${menu.id}`} @click=${() => this.#open(menu.id)}
               >${t("menus.open")}</wt-button
-            ><wt-button
-              align="start"
-              variant="ghost"
-              data-test=${`rename-${menu.id}`}
-              @click=${() => this.#openMenuForm(menu)}
+            ><wt-button data-test=${`rename-${menu.id}`} @click=${() => this.#openMenuForm(menu)}
               >${t("menus.rename")}</wt-button
             ><wt-button
-              align="start"
-              variant="ghost"
               data-test=${`duplicate-${menu.id}`}
               ?disabled=${this.copyingMenu?.id === menu.id}
               @click=${() => {

@@ -289,7 +289,10 @@ describe("dashboard-alerts-bell", () => {
     const seeAll = vi.fn();
     el.addEventListener("wt-alerts-see-all", seeAll);
     el.open();
-    await userEvent.click(q(el, "[data-test=alerts-see-all]")!);
+    const action = q(el, "[data-test=alerts-see-all]") as HTMLElementTagNameMap["wt-button"];
+    await action.updateComplete;
+    expect(action.variant).toBe("secondary");
+    await userEvent.click(action);
     expect(seeAll).toHaveBeenCalledOnce();
     expect(popup(el).matches(":popover-open")).toBe(false);
   });

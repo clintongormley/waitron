@@ -4130,3 +4130,37 @@ describe("field stays clear of its open list", () => {
     }
   });
 });
+
+test("grouped options add one indent and keep the same row spacing, including search", async () => {
+  const el = await mountWith('<wt-combobox label="Members" search="always"></wt-combobox>', [
+    { value: "all", label: "All" },
+    { value: "none", label: "None" },
+    { value: "ann", label: "Ann", group: "Staff" },
+    { value: "lewis", label: "Lewis", group: "Staff", depth: 1 },
+  ]);
+  host.style.setProperty("--wt-space-3", "11px");
+  host.style.setProperty("--wt-space-4", "19px");
+  await userEvent.click(fieldParts(el).trigger);
+  const rows = optionRows(el);
+  const heading = el.shadowRoot!.querySelector<HTMLElement>(".group-heading")!;
+  const boxes = rows.map((row) => row.getBoundingClientRect());
+  expect({
+    plainGap: boxes[1]!.top - boxes[0]!.bottom,
+    groupGap: boxes[3]!.top - boxes[2]!.bottom,
+    groupHeightDifference: boxes[2]!.height - boxes[0]!.height,
+    groupIndent:
+      parseFloat(getComputedStyle(rows[2]!).paddingInlineStart) -
+      parseFloat(getComputedStyle(heading).paddingInlineStart),
+    groupedDepthPadding: parseFloat(getComputedStyle(rows[3]!).paddingInlineStart),
+  }).toEqual({
+    plainGap: 0,
+    groupGap: 0,
+    groupHeightDifference: 0,
+    groupIndent: 19,
+    groupedDepthPadding: 49,
+  });
+  await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "Lewis");
+  await el.updateComplete;
+  expect(optionRows(el)).toHaveLength(1);
+  expect(parseFloat(getComputedStyle(optionRows(el)[0]!).paddingInlineStart)).toBe(30);
+});

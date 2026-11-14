@@ -258,7 +258,7 @@ const panel = (theme: "light" | "dark") => `
         <div class="row">
           <h3>Team</h3>
           <wt-row-actions label="Team actions">
-            <wt-button align="start" class="create-member">Add team member</wt-button>
+            <wt-button class="create-member">Add team member</wt-button>
           </wt-row-actions>
           <wt-help-switch></wt-help-switch>
           <span style="position: relative; padding-inline-end: var(--wt-help-badge-target)">
@@ -273,10 +273,10 @@ const panel = (theme: "light" | "dark") => `
           </span>
           <wt-row-actions label="Menu with help" align="end">
             <wt-menu-row help="Changes this person's name, role and PIN." help-label="Help: Edit">
-              <wt-button variant="ghost" align="start">Edit</wt-button>
+              <wt-button>Edit</wt-button>
             </wt-menu-row>
             <wt-menu-row help="Removes this person from the team." help-label="Help: Delete">
-              <wt-button variant="ghost" align="start">Delete</wt-button>
+              <wt-button>Delete</wt-button>
             </wt-menu-row>
           </wt-row-actions>
         </div>
@@ -449,9 +449,8 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
       pinned: "end",
       cell: (row: { name: string; role: string }) => html`
         <wt-row-actions label=${`Actions for ${row.name}`}>
-          <wt-button align="start" @click=${() => openMember(row)}>Edit</wt-button>
+          <wt-button @click=${() => openMember(row)}>Edit</wt-button>
           <wt-button
-            align="start"
             variant="danger"
             @click=${() => {
               table.rows = table.rows.filter((member) => member !== row);

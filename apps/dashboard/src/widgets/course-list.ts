@@ -523,16 +523,10 @@ export class CourseList extends LitElement {
   #actions(course: Course): TemplateResult {
     return html`<td class="actions-cell">
       <wt-row-actions align="end" label=${`${t("kitchen.course_actions")}: ${course.name}`}>
-        <wt-button
-          align="start"
-          variant="ghost"
-          data-action="rename"
-          @click=${() => void this.#open(course.id, course.name)}
+        <wt-button data-action="rename" @click=${() => void this.#open(course.id, course.name)}
           >${t("kitchen.rename_course")}</wt-button
         >
         <wt-button
-          align="start"
-          variant="ghost"
           data-action="delete"
           aria-label=${`${t("action.delete")}: ${course.name}`}
           data-test=${`remove-${course.id}`}

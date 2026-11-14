@@ -246,6 +246,12 @@ export class WtCombobox extends LitElement {
         cursor: pointer;
       }
 
+      .group-rows .option {
+        padding-inline-start: calc(
+          var(--wt-space-3) + (1 + var(--option-depth, 0)) * var(--wt-space-4)
+        );
+      }
+
       .option-label,
       .option-text {
         flex: 1;
@@ -967,7 +973,6 @@ export class WtCombobox extends LitElement {
   private renderOption(option: ComboboxOption, index: number) {
     const selected = this.isSelected(option);
     const rowId = `${this.listboxId}-${index}`;
-    // A search lists matches from every level, each shown by its full closed text, so none is indented.
     const depth = this.trimmedSearch ? 0 : (option.depth ?? 0);
     return html`
       <li

@@ -235,12 +235,7 @@ export class StaffRolesScreen extends LitElement {
   #rowMenu(staffRole: StaffRole, index: number) {
     const last = this.staffRoles!.length - 1;
     const item = (test: string, label: string, run: () => void) =>
-      html`<wt-button
-        variant="ghost"
-        align="start"
-        data-test=${`${test}-${staffRole.id}`}
-        ?disabled=${this.busy}
-        @click=${run}
+      html`<wt-button data-test=${`${test}-${staffRole.id}`} ?disabled=${this.busy} @click=${run}
         >${label}</wt-button
       >`;
     return html`<wt-row-actions label=${tf("staffing.role.actions", { name: staffRole.name })}>

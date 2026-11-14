@@ -267,22 +267,20 @@ export class FloorPlansScreen extends LitElement {
       label=${`${row.set.name}: ${t("venue.actions")}`}
       align="end"
     >
-      <wt-button variant="secondary" data-test="rename-set" @click=${() => this.edit("rename", set)}
+      <wt-button data-test="rename-set" @click=${() => this.edit("rename", set)}
         >${t("floor_plans.rename")}</wt-button
       >
-      <wt-button variant="secondary" data-test="copy-set" @click=${() => this.edit("copy", set)}
+      <wt-button data-test="copy-set" @click=${() => this.edit("copy", set)}
         >${t("floor_plans.copy")}</wt-button
       >
       ${
         row.set.isDefault
           ? nothing
           : html`<wt-button
-                variant="secondary"
                 data-test="make-default-set"
                 @click=${() => void this.makeDefault(set.id)}
                 >${t("floor_plans.make_default")}</wt-button
               ><wt-button
-                variant="secondary"
                 data-test="delete-set"
                 @click=${() => this.askDelete(row.department.id, set.id)}
                 >${t("floor_plans.delete")}</wt-button

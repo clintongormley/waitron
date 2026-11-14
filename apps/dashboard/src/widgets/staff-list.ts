@@ -112,8 +112,6 @@ export class StaffList extends LitElement {
         cell: (person) => html`
           <wt-row-actions label=${`${t("staff.actions")}: ${person.displayName}`}>
             <wt-button
-              variant="ghost"
-              align="start"
               data-test="edit-${person.personId}"
               @click=${(event: Event) => this.#edit(event, person.personId)}
               >${t("action.edit")}</wt-button
@@ -159,8 +157,6 @@ export class StaffList extends LitElement {
 
   #menuItem(test: string, disabled: boolean, label: string, name: string, detail: object) {
     return html`<wt-button
-      variant="ghost"
-      align="start"
       data-test=${test}
       ?disabled=${disabled}
       @click=${(event: Event) => {

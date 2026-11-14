@@ -2372,7 +2372,7 @@ describe("copying a menu from the list", () => {
       "duplicate-menu-lunch",
     ]);
     expect(text(items[2]!)).toBe(t("menus.copy"));
-    expect(items[2]!.variant).toBe("ghost");
+    expect(items[2]!.variant).toBe("secondary");
   });
   it("copies under the trimmed chosen name, stays on the list and lists the copy", async () => {
     const client = api({
