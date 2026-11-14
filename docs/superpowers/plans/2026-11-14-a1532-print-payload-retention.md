@@ -16,9 +16,9 @@ Do not exempt moved/unpaired jobs. Keep every queued/printing job, retryable fai
 undecided exhausted failure, and linked queued/sending/unknown invoice delivery.
 
 **Build and reuse.** Create `apps/server/src/housekeeping.ts` with `housekeepingJob`
-using jr7's existing deps (`db`, `isPrimary`, `readClock`, `jitterSeed`, `now`, `log`) and only
-this payload step. Use `nextFireMs` for 04:00 venue time, no startup sweep; wire the existing
-primary-only, stop-at-stepdown `housekeeping` seat in `boot.ts`. Reuse its catalogue, wording,
+using jr7's planned deps (`db`, `isPrimary`, `readClock`, `jitterSeed`, `now`, `log`) and only
+this payload step. Use `nextFireMs` for 04:00 venue time, no startup sweep; add new `boot.ts` registration for the existing
+primary-only, stop-at-stepdown `housekeeping` catalogue seat. Reuse its catalogue, wording,
 runner backoff and stop handling. Scan bounded rowid windows forward; recheck eligibility in
 each `withTransaction`, retain all other values, and yield a real event-loop turn/check the
 signal between batches. Choose the batch by the measurement below, not an invented bound.
@@ -29,9 +29,12 @@ side effects; reuse it early in `print-job-reprint.ts` before either printer pat
 Declare `print_job.sale_payload_expired` / `print_job.payload_expired` in server `errors.ts`;
 map them to 409 in `print-api.ts`, `till-api.ts` and `orders-api.ts`. Add English/Spanish
 wording in dashboard and till `src/i18n/codes.ts`: bytes were removed after a week; rebuild
-sale receipts/invoices from Orders; kitchen/refund/payment/report printouts cannot be reprinted.
+sale receipts/invoices from Orders. Other printouts cannot be reprinted; the till explicitly
+names kitchen tickets, refund receipts, payment slips and reports as examples.
 Use `saleId` to distinguish them. Keep existing reprint availability and request-error UI.
-Consumer trace includes resend, invoice retry/switch, alternate-printer layout, queue width,
+The queued policy says “Reprint of an emptied job answers with a refusal”; this includes
+alternate-printer sale layout. Orders rebuilds a fresh printout. Consumer trace includes
+resend, invoice retry/switch, alternate-printer layout, queue width,
 preview and practice preview; the latter already accepts empty bytes, so add no special filter.
 
 **Tests, failing first.** Server `housekeeping.test.ts` owns age boundaries, each terminal
