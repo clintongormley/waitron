@@ -2,6 +2,7 @@ import {
   withoutSignIn,
   missingHeldDatabase,
   startAgainMissing,
+  seedResolutionRecord,
   exists,
   type Held,
 } from "../test/start-again-held-fixture.js";
@@ -31,6 +32,10 @@ const wipeHeld = async (f: Held) => {
   const { ids, actions } = await withoutSignIn(f);
   await actions.startAgainFirstSetup(ids);
 };
+
+async function withResolutionRecord(f: Held) {
+  expect(await exists(await seedResolutionRecord(f))).toBe(true);
+}
 
 /** Stages the bucket restore through `/setup-api/restore-bucket` and the real stream staging. */
 async function stageBucket(held: Held) {
@@ -113,12 +118,14 @@ async function expectRefusedPlacingNothing(f: Held, place: () => Promise<boolean
 
 it("a held setup database, wiped, then the bucket restore writes into the usual folders", async () => {
   const f = await heldSetup();
+  await withResolutionRecord(f);
   await wipeHeld(f);
   await expectPlaced(f, await stageBucket(f));
 }, 180_000);
 
 it("a missing setup database, wiped, then the bucket restore writes into the usual folders", async () => {
   const f = await missingHeldDatabase();
+  await withResolutionRecord(f);
   await startAgainMissing(f);
   await expectPlaced(f, await stageBucket(f));
 }, 180_000);
@@ -130,12 +137,14 @@ it("control: the same bucket restore beside a held setup database that was not w
 
 it("a held setup database, wiped, then the Waitron Cloud restore writes into the usual folders", async () => {
   const f = await heldSetup();
+  await withResolutionRecord(f);
   await wipeHeld(f);
   await expectPlaced(f, await stageCloud(f, { ...f.archive, outcome: await hourAfterWipe(f) }));
 }, 180_000);
 
 it("a missing setup database, wiped, then the Waitron Cloud restore writes into the usual folders", async () => {
   const f = await missingHeldDatabase();
+  await withResolutionRecord(f);
   await startAgainMissing(f);
   await expectPlaced(f, await stageCloud(f, { ...f.archive, outcome: await hourAfterWipe(f) }));
 }, 180_000);

@@ -3,7 +3,8 @@ import { heldSetup } from "./held-setup-database.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { access, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getTableName } from "drizzle-orm";
@@ -213,6 +214,16 @@ async function stageFreshRestore(f: Held, archive: Held["archive"] = f.archive) 
   agreeInternet();
 }
 
+/** A resolution record, with one step, in the layout Start again's deletion removes. */
+async function seedResolutionRecord(f: Pick<Held, "roots">): Promise<string> {
+  const folder = join(f.roots.stateDir, "first-setup-resolutions");
+  const record = join(folder, randomUUID());
+  await mkdir(join(record, "step-000001"), { recursive: true });
+  await writeFile(join(record, "manifest.json"), "{}");
+  await writeFile(join(record, "step-000001", "manifest.json"), "{}");
+  return folder;
+}
+
 const exists = (path: string) =>
   access(path).then(
     () => true,
@@ -314,6 +325,7 @@ export {
   missingHeldDatabase,
   startAgainMissing,
   stageFreshRestore,
+  seedResolutionRecord,
   exists,
   venueDb,
   invoiceTable,
