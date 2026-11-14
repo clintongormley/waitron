@@ -3380,8 +3380,9 @@ dies leaves its file behind; the next holder overwrites it.
 that lock fails for another reason.** `freeSpaceAtStart` in the box's entry and `emptyScratch` in
 `bootServer` delete every entry in `<state>/scratch/`, keeping the root. Backup staging is
 `scratch/backup`; restore staging is `scratch/restore`. Stream restores, staged-restore entries,
-setup holdings copies and node copies also live below scratch, except a spare's first copy, which
-waits in `<state>/pair-copy/` across the restart that places it (`spare-copy.ts`). The root is never followed when
+setup holdings copies and node copies also live below scratch, except a spare's first copy and an
+admitted mirror's selected handover backup, which wait in `<state>/pair-copy/` across the restart
+that places them (`spare-copy.ts`, `handover-copy-from-backup.ts`). The root is never followed when
 it is a symbolic link. Both sweeps run before this process starts its backup supervisor.
 The staged-recovery
 folder is where the setup wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
