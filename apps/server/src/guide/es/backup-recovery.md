@@ -228,7 +228,7 @@ cada arranque siguiente la vuelve a ejecutar.
 
 ## Después de una recuperación {#after-recovery}
 
-Mantén el servidor antiguo apagado y desconectado de la red. Si se vuelve a encender, nada le impide
+Mantén el servidor antiguo apagado y desconectado de la red. Si se vuelve a encender, puede
 seguir vendiendo y emitiendo facturas con sus series antiguas.
 
 Abre **Informes → Remisión a la AEAT** y mira
@@ -238,9 +238,8 @@ servidor antiguo puede haber emitido facturas posteriores que la copia no tiene.
 
 Cuando el servidor tenga conexión, comprobará los registros de la AEAT. Las facturas que la AEAT
 tiene con las series antiguas y que este servidor no emitió aparecerán entonces en **Facturas que la
-AEAT tiene y este servidor no emitió**. No detienen las ventas, y el servidor sigue usando sus series
-nuevas. Elige **Exportar estos casos para tu asesor fiscal** y entrégale el archivo. No vuelvas a
-registrar esas ventas: la AEAT ya las tiene.
+AEAT tiene y este servidor no emitió**. Elige **Exportar estos casos para tu asesor fiscal** y
+entrégale el archivo. No vuelvas a registrar esas ventas: la AEAT ya las tiene.
 
 ## Un conflicto de facturación en un servidor en marcha {#invoice-conflict}
 

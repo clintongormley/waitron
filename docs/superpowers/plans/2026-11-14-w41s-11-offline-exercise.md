@@ -1,7 +1,8 @@
-# W41s-11: the old-backup, new-hardware exercise — re-mapped plan (draft)
+# W41s-11: the old-backup, new-hardware exercise — re-mapped plan
 
-**Status:** draft for the watcher, 2026-11-14, written on `main` at `a0dac8fea6`. No product code
-or test was written. What was run and what was only read is listed at the end.
+**Status:** built, 2026-11-14, narrowed by the watcher to the missing-history half; see
+[As built](#as-built-2026-11-14) at the end. The plan below is the draft written on `main` at
+`a0dac8fea6`, before anything was built.
 
 **Source.** [Task 11 of the approved W41s plan](2026-10-04-fiscal-prevention-and-offline-recovery.md#task-11-full-offline-exercise-and-operator-instructions),
 written 2026-10-04. Since then the paper/Cloud "allocation" and short-series vocabulary was replaced
@@ -97,8 +98,9 @@ About 25–40 production lines and 120–150 test lines.
 `apps/server/src/testing/staged-hour-crash.ts` (the backup holds one real invoice under `A-0CNNW`,
 counters at 123); no new harness. For `archive` and `stream`:
 
-- [ ] Stub `fetch` to reject (the harness's clock comparison is synthetic, so no internet-clock
-  stub is needed; `fetch` never being called is the evidence of no network). Run `f.run()` (`runStagedRestore`, what a start
+- [ ] Stub `fetch` to reject (`fetch` never being called is the evidence of no network), and
+  stand in for the start's internet time reading, which the restore's start checks (`resume` in
+  `packages/fiscal-verifactu/src/hosted-hour-recovery.ts`), as the harness's other users do. Run `f.run()` (`runStagedRestore`, what a start
   runs for a staged restore). Expect the original records unchanged and one new active identity.
 - [ ] Open the restored venue; seed an administrator and a management session as
   `device-after-offline-restore.test.ts:86-92` does; mount `mountFilingOverview`
@@ -170,8 +172,11 @@ Inside the lane's "small" item. Each task fits one implementer well under 100 to
   test lines plus harness work. Defer to its own item.
 - **Production TLS** and **live AEAT reconciliation**: need a real box or the owner's certificate
   session; keep as their own qualification entries.
-- **Fencing a returning one-box box**: A1418 part 1's work.
-- **A restore with no internet time** (14 November 2026): A restore through the restore page still needs the box's internet time at the start that places the backup; A1420 PR 3b1 and 3b2 (lane B) remove that, and once they land the end-to-end test drops its internet stand-in.
+- **Fencing the old box after a restore**: A1418 part 1's work.
+- **A restore with no internet time** (14 November 2026): a restore through the restore page
+  still needs the box's internet time at the start that places the backup;
+  [A1420 PR 3b1 and 3b2](2026-11-13-a1420-restore-series-check.md) remove that, and once they land
+  the end-to-end test drops its internet stand-in.
 - **Importing, matching or reconciling recovered history; any missing-history remedy**: Q41.
 - **`docs/operations/fiscal-recovery.md`, allocation exhaustion, subscription-free allocation, paper
   allocation evidence**: retired concepts or duplicated by the guide.
@@ -222,3 +227,28 @@ hand-inserted row under the retired series did show) and that a real restore bot
 retires (`allocated-lifecycle.ts:48-61` → `allocation.ts:437-440`, `:454-457`). Its corrections are
 folded in above: pair series to identity through the activation, keep the shared live-series reader
 unchanged, stamp the deployment, the fake AEAT's five fixes, the two new questions, the bucket check.
+
+## As built, 2026-11-14
+
+- **Watcher's answers.** 05:25: yes to all seven questions' defaults and to building the cut as one
+  PR. 06:16: land it as the missing-history half; the test is named
+  `apps/server/src/restore-missing-history.e2e.test.ts`, and the "no internet" part of the outcome
+  waits on [A1420 PR 3b1 and 3b2](2026-11-13-a1420-restore-series-check.md). No owner approval of
+  this cut is recorded.
+- **Outcome as built.** After a restore, once the box is online, **Reporting → Fiscal filing** lists
+  the invoices AEAT holds under the old series. A restore through the restore page with no internet
+  does not finish yet: the start that places the backup checks the box's internet time, and the
+  test stands in for that reading.
+- **Task 1's pairing.** A retired series is paired with the identity whose revocation time equals
+  its retirement time, which one activation stamps together (`allocation.ts`). The route through
+  the activation record was not built; pairing on the shared timestamp alone passes the
+  two-recoveries-in-a-row case in `reconcile.unheld.test.ts`.
+- **Fencing.** Wherever the draft says "one-box" (under "What the plan's words mean today", in the
+  Re-map table, Task 3, Deferred and question 7) it names the wrong boundary. A1342 stops a
+  returning old main box once a spare it vouched for has taken over; a box restored from backup
+  keeps the old box's id, so the old box is not fenced after a restore.
+- **Task 3's bucket check.** A restored box's first start takes the next term
+  (`apps/server/src/rebuild-first-start.ts`), so once it has written its pointer the old box's
+  backup copy stops with `pointer_newer_term` (`packages/stream/src/supervisor.ts`). That stops the
+  backup copy, not sales; before the restored box writes its pointer, what happens was not
+  established.

@@ -208,7 +208,7 @@ runs it; if it stops while writing the backup into place, every later start runs
 ## After a recovery {#after-recovery}
 
 Keep the old box switched off and disconnected from the network. If it is switched on again,
-nothing stops it selling and issuing invoices under its old series.
+it can go on selling and issuing invoices under its old series.
 
 Open **Reporting → Fiscal filing** and look at
 [Possibly missing history](fiscal-filing.md#missing-history). Under **Identity changes without a
@@ -216,9 +216,9 @@ handover**, the restore is listed with the last invoice the backup holds, if it 
 box may have issued later invoices that the backup does not have.
 
 Once the box is online, it checks AEAT's records. Invoices AEAT holds under the old series that this
-box did not issue then appear under **Invoices AEAT holds that this box did not issue**. They do not
-stop sales, and the box keeps using its new series. Choose **Export these cases for your tax
-adviser** and give them the file. Do not enter those sales again: AEAT already has them.
+box did not issue then appear under **Invoices AEAT holds that this box did not issue**. Choose
+**Export these cases for your tax adviser** and give them the file. Do not enter those sales again:
+AEAT already has them.
 
 ## An invoice conflict on a running box {#invoice-conflict}
 
