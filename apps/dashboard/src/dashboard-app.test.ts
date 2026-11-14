@@ -10311,7 +10311,6 @@ it.each([false, true])(
     expect(Boolean(screen)).toBe(allowed);
     if (screen) {
       expect(screen.viewerPermissions).toEqual(permissions);
-      expect(screen.viewerRoleIds).toEqual(meResponse.roleIds);
     }
     expect(Boolean(el.shadowRoot!.querySelector('[data-test="nav-access-roles"]'))).toBe(allowed);
   },

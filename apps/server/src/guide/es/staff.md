@@ -39,7 +39,7 @@ cuenta deshabilitada.
 
 Waitron te pide que vuelvas a identificarte antes de invitar a alguien, reenviar una invitación,
 restablecer su acceso, deshabilitar o volver a habilitar su cuenta, o cambiar un correo, rol o
-estado en **Usuarios**, incluido tu propio correo. Los nombres, el teléfono y el restablecimiento
+estado en **Usuarios**, incluido tu propio correo, o crear, copiar, editar o eliminar un rol de acceso. Los nombres, el teléfono y el restablecimiento
 del PIN no necesitan esta confirmación.
 También confirmas antes de cambiar las copias de seguridad, descargar archivos de recuperación,
 mostrar la clave de recuperación de las copias o exportar la configuración o los datos de otro

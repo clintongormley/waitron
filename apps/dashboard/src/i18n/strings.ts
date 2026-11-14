@@ -1,4 +1,6 @@
 export const en = {
+  "access_roles.reload": "Reload",
+  "access_roles.delete_one": "1 person holds {role}. Deleting it takes it away from them.",
   "permission.payments.providers.manage": "Manage payment providers",
   "access_roles.refresh": "Refresh",
   "nav.access_roles": "Access roles",
@@ -4040,6 +4042,8 @@ export type StringKey = keyof typeof en;
 
 // Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
+  "access_roles.reload": "Recargar",
+  "access_roles.delete_one": "1 persona tiene {role}. Al eliminarlo se le quita.",
   "permission.payments.providers.manage": "Gestionar proveedores de pago",
   "access_roles.refresh": "Actualizar",
   "nav.access_roles": "Roles de acceso",

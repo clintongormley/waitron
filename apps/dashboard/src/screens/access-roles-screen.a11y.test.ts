@@ -35,7 +35,6 @@ describe.each(["light", "dark"] as const)("Access roles accessibility (%s)", (th
       {
         api: { listAccessRoles: async () => structuredClone(roles) } as unknown as DashboardApi,
         viewerPermissions: permissions,
-        viewerRoleIds: ["admin"],
       },
       theme,
     );

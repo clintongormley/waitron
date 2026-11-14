@@ -84,7 +84,6 @@ export class AccessRolesScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) viewerPermissions: readonly string[] = [];
-  @property({ attribute: false }) viewerRoleIds: readonly string[] = [];
   @state() private roles: AccessRole[] = [];
   @state() private loaded = false;
   @state() private loadError = false;
@@ -100,6 +99,7 @@ export class AccessRolesScreen extends LitElement {
   @state() private copyError = "";
   @state() private copyAttempted = false;
   @state() private copyNameRefusal = "";
+  #confirmationFromList = false;
   #scope?: DraftScope<Draft>;
   #copyScope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
@@ -143,9 +143,23 @@ export class AccessRolesScreen extends LitElement {
     return typeof this.editing === "object" ? this.editing : null;
   }
   #canChange(role: AccessRole): boolean {
-    return role.builtInKey === "admin"
-      ? this.viewerRoleIds.includes(role.id)
-      : role.permissions.every((p) => this.viewerPermissions.includes(p));
+    return role.permissions.every((permission) => this.viewerPermissions.includes(permission));
+  }
+  async #reloadEditor(): Promise<void> {
+    const role = this.#role();
+    if (!role || this.busy) return;
+    const proceed = async () => {
+      this.busy = true;
+      try {
+        await this.#load();
+        const current = this.roles.find((item) => item.id === role.id);
+        if (!this.loadError && current) this.#open(current);
+      } finally {
+        this.busy = false;
+      }
+    };
+    if (this.#leave) await this.#leave.request({ scopes: [this], reason: "navigation", proceed });
+    else await proceed();
   }
   #open(role: AccessRole | "new"): void {
     this.editing = role === "new" ? "new" : structuredClone(role);
@@ -185,6 +199,7 @@ export class AccessRolesScreen extends LitElement {
   #toggle(permission: string, checked: boolean): void {
     if (
       !this.viewerPermissions.includes(permission) ||
+      (this.#role() !== null && !this.#canChange(this.#role()!)) ||
       this.#role()?.builtInKey === "admin" ||
       this.busy
     )
@@ -220,7 +235,6 @@ export class AccessRolesScreen extends LitElement {
         if (!role.builtInKey && submitted.name !== role.name) {
           await this.api.renameAccessRole(role.id, submitted.name, role.name!);
           role.name = submitted.name;
-          // The name and grants have separate endpoints; a refused grant write must not repeat a saved rename.
           this.#scope.commit({ name: submitted.name, permissions: [...role.permissions].sort() });
         }
         if (submitted.permissions.join("\n") !== [...role.permissions].sort().join("\n"))
@@ -239,7 +253,8 @@ export class AccessRolesScreen extends LitElement {
     }
     await this.#load();
   }
-  #ask(kind: "copy" | "delete"): void {
+  #ask(kind: "copy" | "delete", fromList = false): void {
+    this.#confirmationFromList = fromList;
     this.confirmation = kind;
     this.copyName = this.copyError = this.copyNameRefusal = "";
     this.copyAttempted = false;
@@ -261,6 +276,12 @@ export class AccessRolesScreen extends LitElement {
     return (await this.#leave.request({ scopes: ["copy"], reason, proceed() {} })) === "proceeded";
   };
   #clearConfirmation(): void {
+    if (this.#confirmationFromList) {
+      this.editing = null;
+      this.#scope?.dispose();
+      this.#scope = undefined;
+    }
+    this.#confirmationFromList = false;
     this.confirmation = null;
     this.#copyScope?.dispose();
     this.#copyScope = undefined;
@@ -328,7 +349,7 @@ export class AccessRolesScreen extends LitElement {
               ?disabled=${!this.#canChange(role)}
               @click=${() => {
                 this.#open(role);
-                this.#ask("copy");
+                this.#ask("copy", true);
               }}
               >${t("access_roles.copy")}</wt-button
             >
@@ -339,7 +360,7 @@ export class AccessRolesScreen extends LitElement {
                     ?disabled=${!this.#canChange(role)}
                     @click=${() => {
                       this.#open(role);
-                      this.#ask("delete");
+                      this.#ask("delete", true);
                     }}
                     >${t("action.delete")}</wt-button
                   >`
@@ -367,6 +388,7 @@ export class AccessRolesScreen extends LitElement {
           @click=${() => void this.#close()}
           >${t("action.back")}</wt-button
         >
+        ${role ? html`<wt-button data-test="reload" variant="secondary" ?disabled=${this.busy} @click=${() => void this.#reloadEditor()}>${t("access_roles.reload")}</wt-button>` : nothing}
         ${
           role
             ? html`<wt-button
@@ -405,7 +427,7 @@ export class AccessRolesScreen extends LitElement {
                       name=${p}
                       label=${PERMISSION_TEXT[p] ? t(PERMISSION_TEXT[p].label) : p}
                       .checked=${this.permissions.includes(p)}
-                      ?disabled=${admin || this.busy || !this.viewerPermissions.includes(p)}
+                      ?disabled=${admin || this.busy || !canChange || !this.viewerPermissions.includes(p)}
                       @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#toggle(p, e.detail.checked)}
                     ></wt-switch>`,
                 )}
@@ -472,7 +494,7 @@ export class AccessRolesScreen extends LitElement {
               }}
             ></wt-input>`
           : html`<p data-test="delete-message">
-              ${fill("access_roles.delete_message", { count: String(role.holderCount), role: accessRoleName(role) })}
+              ${fill(role.holderCount === 1 ? "access_roles.delete_one" : "access_roles.delete_message", { count: String(role.holderCount), role: accessRoleName(role) })}
             </p>`
       }
       <wt-form-actions

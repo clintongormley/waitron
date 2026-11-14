@@ -90,3 +90,89 @@ it("marks successful writes clean before leaving and restores an unsubmitted per
   await app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed });
   expect(proceed).toHaveBeenCalledTimes(2);
 });
+
+it("treats a saved name as clean when the refused permission edit is reverted", async () => {
+  setLocale("en-GB");
+  const account = {
+    id: "accounts",
+    builtInKey: null,
+    name: "Accountant",
+    permissions: [],
+    holderCount: 2,
+  };
+  const { el: app } = await mountWidget<RoleLeaveApp>("role-leave-test-app", {
+    api: {
+      listAccessRoles: async () => [
+        account,
+        {
+          id: "admin",
+          builtInKey: "admin",
+          name: null,
+          permissions: ["report.view"],
+          holderCount: 1,
+        },
+      ],
+      renameAccessRole: async () => undefined,
+      setAccessRolePermissions: async () => {
+        throw { code: "management.failed" };
+      },
+    } as unknown as DashboardApi,
+  });
+  const screen = app.shadowRoot!.querySelector("dashboard-access-roles-screen")!;
+  const q = (id: string) => screen.shadowRoot!.querySelector<HTMLElement>(`[data-test="${id}"]`)!;
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")?.rows.length).toBe(2);
+  screen.shadowRoot!.querySelector("wt-data-table")!.rowClick!(account);
+  await screen.updateComplete;
+  q("role-name").dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Books" } }));
+  q("permission-report.view").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: true } }),
+  );
+  await screen.updateComplete;
+  q("save").click();
+  await expect.poll(() => q("form-actions").getAttribute("error")).toBeTruthy();
+  q("permission-report.view").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: false } }),
+  );
+  await screen.updateComplete;
+  expect((q("save") as HTMLElementTagNameMap["wt-button"]).disabled).toBe(true);
+  const proceed = vi.fn();
+  await app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed });
+  expect(proceed).toHaveBeenCalledOnce();
+});
+it("keeps a draft when Reload is declined and reloads after explicit Discard", async () => {
+  setLocale("en-GB");
+  const account = {
+    id: "accounts",
+    builtInKey: null,
+    name: "Books",
+    permissions: [],
+    holderCount: 0,
+  };
+  const { el: app } = await mountWidget<RoleLeaveApp>("role-leave-test-app", {
+    api: {
+      listAccessRoles: async () => [
+        account,
+        {
+          id: "admin",
+          builtInKey: "admin",
+          name: null,
+          permissions: ["report.view"],
+          holderCount: 1,
+        },
+      ],
+    } as unknown as DashboardApi,
+  });
+  const screen = app.shadowRoot!.querySelector("dashboard-access-roles-screen")!;
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")?.rows.length).toBe(2);
+  screen.shadowRoot!.querySelector("wt-data-table")!.rowClick!(account);
+  await screen.updateComplete;
+  const field = screen.shadowRoot!.querySelector("wt-input")!;
+  field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Draft" } }));
+  await screen.updateComplete;
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=reload]")!.click();
+  await choose(app, "keep");
+  expect(field.value).toBe("Draft");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=reload]")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-input")?.value).toBe("Books");
+});

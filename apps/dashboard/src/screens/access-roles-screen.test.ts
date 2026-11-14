@@ -47,7 +47,6 @@ async function mount(overrides: Partial<DashboardApi> = {}, permissions = grants
   const { el, host } = await mountWidget<AccessRolesScreen>("dashboard-access-roles-screen", {
     api: api(overrides),
     viewerPermissions: permissions,
-    viewerRoleIds: ["admin"],
   });
   await expect.poll(() => el.shadowRoot!.querySelector("wt-data-table")?.rows.length).toBe(3);
   return { el, host };
@@ -90,6 +89,9 @@ it("shows labelled areas, disables unheld permissions and falls back to the modu
   );
   expect(q(el, "permission-payment.take").getAttribute("label")).toBe("Take payments");
   expect(q(el, "permission-future.inspect").getAttribute("label")).toBe("future.inspect");
+  expect(
+    q(el, "permission-future.inspect").closest("section")!.querySelector("h2")!.textContent,
+  ).toBe("Venue and system");
   expect([...el.shadowRoot!.querySelectorAll("h2")].map((h) => h.textContent)).toEqual([
     "Sales",
     "Reports and tax",
@@ -143,7 +145,7 @@ it("names the affected people in the only delete confirmation", async () => {
   await expect.poll(() => remove.mock.calls).toEqual([["accounts"]]);
   await expect.poll(() => q(el, "editor")).toBeNull();
 });
-it("keeps a stale permission draft and its expected snapshot for retry", async () => {
+it("keeps a refused permission draft and the original expected snapshot", async () => {
   const save = vi.fn().mockRejectedValue({ code: "role.changed" });
   const { el } = await mount({ setAccessRolePermissions: save });
   await edit(el, "accounts");
@@ -161,7 +163,10 @@ it("keeps a stale permission draft and its expected snapshot for retry", async (
 });
 it("retains a successful rename when the permission write is refused", async () => {
   const rename = vi.fn().mockResolvedValue(undefined);
-  const save = vi.fn().mockRejectedValueOnce({ code: "role.changed" }).mockResolvedValue(undefined);
+  const save = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "management.failed" })
+    .mockResolvedValue(undefined);
   const { el } = await mount({ renameAccessRole: rename, setAccessRolePermissions: save });
   await edit(el, "accounts");
   change(el, "role-name", "Books");
@@ -239,4 +244,88 @@ it("submits a named copy with Enter", async () => {
   await expect
     .poll(() => create.mock.calls)
     .toEqual([[{ name: "Books", permissions: ["report.view"], copiedFrom: "accounts" }]]);
+});
+
+it("locks every switch on a role whose full grant list the viewer lacks", async () => {
+  const { el } = await mount({}, ["person.admin", "report.view"]);
+  await edit(el, "staff");
+  const sw = q(el, "permission-report.view") as HTMLElementTagNameMap["wt-switch"];
+  await sw.updateComplete;
+  expect(sw.shadowRoot!.querySelector("input")!.disabled).toBe(true);
+  change(el, "permission-report.view", true);
+  await el.updateComplete;
+  expect(sw.checked).toBe(false);
+});
+it("offers Reload after a stale refusal and saves a new edit against the refreshed snapshot", async () => {
+  const refreshed = roles.map((r) =>
+    r.id === "accounts" ? { ...r, permissions: ["report.view", "node.manage"] } : r,
+  );
+  const list = vi.fn().mockResolvedValueOnce(roles).mockResolvedValue(refreshed);
+  const save = vi.fn().mockImplementation(async (_id, _next, expected) => {
+    if (!expected.includes("node.manage")) throw { code: "role.changed" };
+  });
+  const { el } = await mount({ listAccessRoles: list, setAccessRolePermissions: save });
+  await edit(el, "accounts");
+  change(el, "permission-payment.take", true);
+  await el.updateComplete;
+  q(el, "save").click();
+  await expect.poll(() => q(el, "form-actions")?.getAttribute("error")).toBeTruthy();
+  expect((q(el, "permission-payment.take") as HTMLElementTagNameMap["wt-switch"]).checked).toBe(
+    true,
+  );
+  expect(q(el, "reload")).not.toBeNull();
+  q(el, "reload").click();
+  await expect
+    .poll(() => (q(el, "permission-node.manage") as HTMLElementTagNameMap["wt-switch"]).checked)
+    .toBe(true);
+  change(el, "permission-payment.take", true);
+  await el.updateComplete;
+  q(el, "save").click();
+  await expect.poll(() => q(el, "editor")).toBeNull();
+  expect(save.mock.calls[1]).toEqual([
+    "accounts",
+    ["node.manage", "payment.take", "report.view"],
+    ["report.view", "node.manage"],
+  ]);
+});
+it("returns to the list after a list copy and a cancelled list delete", async () => {
+  const { el } = await mount({ createAccessRole: vi.fn().mockResolvedValue({ id: "copy" }) });
+  const action = async (label: string) => {
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await expect.poll(() => table.shadowRoot!.querySelectorAll("wt-row-actions").length).toBe(3);
+    const menu = table.shadowRoot!.querySelectorAll("wt-row-actions")[2]!;
+    [...menu.querySelectorAll("wt-button")].find((b) => b.textContent?.trim() === label)!.click();
+    await el.updateComplete;
+  };
+  await action("Copy role");
+  change(el, "copy-name", "Books");
+  await el.updateComplete;
+  q(el, "copy-confirm").click();
+  await expect.poll(() => q(el, "editor")).toBeNull();
+  await action("Delete");
+  const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+  const closed = new Promise<void>((resolve) =>
+    dialog.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  await dialog.requestClose("cancel");
+  await closed;
+  await expect.poll(() => q(el, "editor")).toBeNull();
+});
+it("allows copying Admin when the viewer holds every current declared permission through other roles", async () => {
+  const { el } = await mount();
+  await edit(el, "admin");
+  expect((q(el, "copy") as HTMLElementTagNameMap["wt-button"]).disabled).toBe(false);
+});
+it("uses the singular delete wording for one holder", async () => {
+  const { el } = await mount({
+    listAccessRoles: async () => roles.map((r) => ({ ...r, holderCount: 1 })),
+  });
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  table.rowClick!({ ...roles[2]!, holderCount: 1 });
+  await el.updateComplete;
+  q(el, "delete").click();
+  await el.updateComplete;
+  expect(q(el, "delete-message").textContent?.trim()).toBe(
+    "1 person holds Accountant. Deleting it takes it away from them.",
+  );
 });

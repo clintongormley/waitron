@@ -34,7 +34,7 @@ a new password. The acknowledgement is the same for every address; it does not c
 account exists or can sign in. Resetting a password does not enable a disabled account.
 
 Waitron asks you to sign in again before you invite someone, resend an invitation, reset their
-login, disable or re-enable their account, or change an email, role or account status in **Users**.
+login, disable or re-enable their account, or change an email, role or account status in **Users**, or create, copy, edit or delete an access role.
 This includes changing your own email there. Names, telephone numbers and PIN resets do not need
 this confirmation. You also confirm before you change backups, download recovery files, show the
 backup recovery key, or export configuration or another staff member's data. The same window

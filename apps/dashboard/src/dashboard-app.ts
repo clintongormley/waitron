@@ -3041,7 +3041,6 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-access-roles-screen
           .api=${this.api}
           .viewerPermissions=${this.#sessionPermissions}
-          .viewerRoleIds=${this.#sessionRoleIds}
         ></dashboard-access-roles-screen>`;
       case "staff":
         return html`<dashboard-staff-screen
