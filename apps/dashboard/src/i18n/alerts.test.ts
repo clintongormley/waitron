@@ -1041,6 +1041,65 @@ describe("refusals that name a way out the product already has", () => {
       expect(text).not.toMatch(elsewhere);
     },
   );
+
+  it.each([
+    [
+      "en",
+      /install|support|manager/i,
+      {
+        "chain.verification_failed":
+          "The new record was still written, and sales and sending to the tax agency (AEAT) carry on.",
+        "fiscal.respuesta_descuadrada":
+          "put each record back to be sent again, except any already on hold, which stayed on hold. The records sent and AEAT's lines are on Fiscal filing.",
+        "fiscal.record_flagged":
+          "It is sent to AEAT like any other record; the invoice and the fields involved are on Fiscal filing.",
+        "fiscal.record_totals_disagree": "The tax agency accepts it, but check that sale's prices.",
+        "fiscal.environment_mismatch":
+          "but this box sends to preproduction. That record and the later ones on its chain are kept on this box and not sent; sales carry on.",
+        "fiscal.environment_unknown":
+          "That record and the later ones on its chain are kept on this box and not sent; sales carry on.",
+        "fiscal.reconcile_no_trace":
+          "Waitron has already queued it to be sent once more, so it will not send it again by itself; it asks AEAT about it again every day.",
+        "fiscal.reconcile_drift_anulada":
+          "Waitron leaves its own record of the invoice as it is and asks AEAT about it again every day.",
+      },
+    ],
+    [
+      "es",
+      /instal|soporte|encargad|gerente/i,
+      {
+        "chain.verification_failed":
+          "El registro nuevo se ha escrito igualmente, y las ventas y los envíos a la AEAT continúan.",
+        "fiscal.respuesta_descuadrada":
+          "ha vuelto a dejar cada registro pendiente de enviar, salvo los que ya estaban detenidos, que siguen detenidos. Los registros enviados y las líneas de la AEAT están en Remisión a la AEAT.",
+        "fiscal.record_flagged":
+          "Se envía a la AEAT como cualquier otro; la factura y los campos afectados están en Remisión a la AEAT.",
+        "fiscal.record_totals_disagree": "La AEAT la acepta, pero revisa los precios de esa venta.",
+        "fiscal.environment_mismatch":
+          "pero este servidor envía a preproduction. Ese registro y los posteriores de su cadena se guardan en este servidor y no se envían; las ventas continúan.",
+        "fiscal.environment_unknown":
+          "Ese registro y los posteriores de su cadena se guardan en este servidor y no se envían; las ventas continúan.",
+        "fiscal.reconcile_no_trace":
+          "Waitron ya la ha vuelto a poner en cola para enviarla una vez más, así que no la volverá a enviar por su cuenta; cada día vuelve a consultarla a la AEAT.",
+        "fiscal.reconcile_drift_anulada":
+          "Waitron deja su propio registro de la factura tal como está y cada día vuelve a consultarla a la AEAT.",
+      },
+    ],
+  ] as const)(
+    "tells %s readers of each fiscal record alert what Waitron does with the record, and sends nobody elsewhere",
+    (lang, elsewhere, sentences) => {
+      const params = {
+        numSerieFactura: "T1/9",
+        recordEnvironment: "production",
+        hostEnvironment: "preproduction",
+      };
+      for (const [code, sentence] of Object.entries(sentences)) {
+        const text = alertMessage(code, params, lang);
+        expect(text, code).toContain(sentence);
+        expect(text, code).not.toMatch(elsewhere);
+      }
+    },
+  );
 });
 
 describe("a correction whose automatic filing was refused", () => {

@@ -3,6 +3,8 @@ import type {
   FilingOverviewAnswer,
   IdentityChangeView,
   NotIssuedHereView,
+  RecordWarningView,
+  ReplyMismatchView,
 } from "../src/filing-overview-types.js";
 
 export const OURS = "a".repeat(64);
@@ -79,6 +81,61 @@ export const IDENTITY_CHANGE: IdentityChangeView = {
   activatedAt: "2026-11-03T08:00:00.000Z",
 };
 
+export const REPLY_MISMATCH: ReplyMismatchView = {
+  detectedAt: "2026-11-09T18:20:00.000Z",
+  csv: "A-YZ3K7QW2",
+  sent: [
+    {
+      numSerieFactura: "T1/50",
+      fechaExpedicionFactura: "2026-11-09",
+      tipoRegistro: "alta",
+      estado: "pendiente",
+    },
+    {
+      numSerieFactura: "T1/51",
+      fechaExpedicionFactura: "2026-11-09",
+      tipoRegistro: "alta",
+      estado: "detenido",
+    },
+  ],
+  lines: [
+    {
+      numSerieFactura: "T1/50",
+      fechaExpedicionFactura: "09-11-2026",
+      tipoOperacion: "Alta",
+      estado: "Incorrecto",
+      codigo: 1100,
+      mensaje: "Valor o tipo incorrecto del campo.",
+    },
+  ],
+};
+
+export const TOTALS_WARNING: RecordWarningView = {
+  detectedAt: "2026-11-08T13:05:00.000Z",
+  kind: "totals",
+  fields: ["CuotaTotal", "ImporteTotal"],
+  codes: ["CUOTA_TOTAL_MISMATCH", "IMPORTE_TOTAL_MISMATCH"],
+  record: {
+    numSerieFactura: "T1/47",
+    fechaExpedicionFactura: "2026-11-08",
+    tipoRegistro: "alta",
+    estado: "aceptado",
+  },
+};
+
+export const FLAGGED_WARNING: RecordWarningView = {
+  detectedAt: "2026-11-07T20:40:00.000Z",
+  kind: "flagged",
+  fields: ["Desglose[0].ClaveRegimen"],
+  codes: ["CLAVE_REGIMEN_REQUIRED"],
+  record: {
+    numSerieFactura: "T1/44",
+    fechaExpedicionFactura: "2026-11-07",
+    tipoRegistro: "alta",
+    estado: "aceptado",
+  },
+};
+
 export function overview(over: Partial<FilingOverviewAnswer> = {}): FilingOverviewAnswer {
   return {
     readAt: "2026-11-10T09:30:00.000Z",
@@ -98,6 +155,11 @@ export function overview(over: Partial<FilingOverviewAnswer> = {}): FilingOvervi
     cases: [conflictCase("rec-1", "2026-11-03T11:02:00.000Z")],
     totalCases: 1,
     heldWithoutCase: 7,
+    warnings: {
+      replyMismatches: [REPLY_MISMATCH],
+      recordWarnings: [TOTALS_WARNING, FLAGGED_WARNING],
+      total: 3,
+    },
     activeConflicts: [
       {
         source: "record",

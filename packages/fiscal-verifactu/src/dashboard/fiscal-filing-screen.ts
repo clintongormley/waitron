@@ -33,9 +33,13 @@ import type {
   ActiveConflictView,
   FilingCaseView,
   FilingOverviewAnswer,
+  FilingWarnings,
   IdentityChangeView,
   MissingHistory,
   NotIssuedHereView,
+  RecordWarningView,
+  ReplyMismatchView,
+  WarnedRecordView,
 } from "../filing-overview-types.js";
 import { descriptionProblem, putRightFor } from "../put-right.js";
 import type { FiscalFilingClient } from "./fiscal-filing-client.js";
@@ -101,7 +105,9 @@ function total({ importeTotal, cuotaTotal }: FilingCaseView["record"]): string |
   });
 }
 
-function recordKind(record: FilingCaseView["record"]): string {
+function recordKind(
+  record: Pick<FilingCaseView["record"], "tipoRegistro" | "tipoFactura">,
+): string {
   if (record.tipoRegistro === "anulacion") return t("fiscal_filing.kind.anulacion");
   const type = record.tipoFactura ?? "";
   if (type === "F1" || type === "F2" || type === "F3") return t(`fiscal_filing.kind.${type}`);
@@ -109,7 +115,7 @@ function recordKind(record: FilingCaseView["record"]): string {
   return t("fiscal_filing.kind.other");
 }
 
-function recordState(submission: FilingCaseView["submission"]): string | null {
+function recordState(submission: { estado: string } | null): string | null {
   const state = STATES.find((known) => known === submission?.estado);
   return state === undefined ? null : t(`fiscal_filing.record_state.${state}`);
 }
@@ -379,6 +385,136 @@ function missingHistory({ notIssuedHere, identityChanges }: MissingHistory): Tem
   </section>`;
 }
 
+function sentRecord(record: WarnedRecordView): TemplateResult {
+  const state = record.estado === null ? null : recordState({ estado: record.estado });
+  const kind = recordKind({ tipoRegistro: record.tipoRegistro, tipoFactura: null });
+  return html`<li>
+    ${[record.numSerieFactura, record.fechaExpedicionFactura, state, kind]
+      .filter((part) => part !== null)
+      .join(" · ")}
+  </li>`;
+}
+
+function replyLine(line: ReplyMismatchView["lines"][number]): TemplateResult {
+  const said = [line.tipoOperacion, line.estado, line.codigo?.toString() ?? null]
+    .filter((part) => part !== null && part !== "")
+    .join(" ");
+  const message = aeatWords(line.mensaje);
+  return html`<li>
+    ${line.numSerieFactura} ·
+    ${storedDate(line.fechaExpedicionFactura)}${
+      said === "" ? nothing : html` · ${aeatWords(said)}`
+    }${message === null ? nothing : html` · ${message}`}
+  </li>`;
+}
+
+function replyMismatchLine(mismatch: ReplyMismatchView): TemplateResult {
+  return html`<li>
+    <span
+      >${t("fiscal_filing.warnings.reply.line", {
+        sent: count(mismatch.sent.length),
+        lines: count(mismatch.lines.length),
+      })}</span
+    >
+    <span class="muted"
+      >${t("fiscal_filing.warnings.reply.seen", { time: formatIsoMinute(mismatch.detectedAt) })}</span
+    >
+    <dl>${field(t("fiscal_filing.detail.now"), t("fiscal_filing.warnings.reply.now"))}</dl>
+    <wt-disclosure data-test="technical" heading=${t("fiscal_filing.technical")}>
+      <dl>
+        ${field(t("fiscal_filing.warnings.reply.csv"), mismatch.csv)}
+        ${field(
+          t("fiscal_filing.warnings.reply.sent"),
+          html`<ul>
+            ${mismatch.sent.map(sentRecord)}
+          </ul>`,
+        )}
+        ${field(
+          t("fiscal_filing.warnings.reply.lines"),
+          html`<ul>
+              ${mismatch.lines.map(replyLine)}
+            </ul>
+            <p class="muted">${t("fiscal_filing.warnings.reply.first")}</p>`,
+        )}
+      </dl>
+    </wt-disclosure>
+  </li>`;
+}
+
+function recordWarningLine(warning: RecordWarningView): TemplateResult {
+  const record = warning.record;
+  const said =
+    record === null
+      ? t(`fiscal_filing.warnings.record.${warning.kind}_unknown`, {
+          time: formatIsoMinute(warning.detectedAt),
+        })
+      : t(`fiscal_filing.warnings.record.${warning.kind}`, {
+          number: record.numSerieFactura,
+          date: record.fechaExpedicionFactura,
+        });
+  const state =
+    record === null || record.estado === null ? null : recordState({ estado: record.estado });
+  return html`<li>
+    <span>${said}</span>
+    ${state === null ? nothing : html`<span class="muted">${state}</span>`}
+    <wt-disclosure data-test="technical" heading=${t("fiscal_filing.technical")}>
+      <dl>
+        ${field(
+          t("fiscal_filing.warnings.record.fields"),
+          html`<ul>
+            ${warning.fields.map(
+              (name, index) => html`<li>${name} · ${warning.codes[index] ?? ""}</li>`,
+            )}
+          </ul>`,
+        )}
+      </dl>
+    </wt-disclosure>
+  </li>`;
+}
+
+function warnings({ replyMismatches, recordWarnings, total }: FilingWarnings): TemplateResult {
+  const shown = replyMismatches.length + recordWarnings.length;
+  return html`<section aria-labelledby="fiscal-filing-warnings" data-test="warnings">
+    <h2 id="fiscal-filing-warnings">${t("fiscal_filing.warnings")}</h2>
+    ${
+      total === 0
+        ? html`<p class="muted">${t("fiscal_filing.warnings.none")}</p>`
+        : html`${
+            total > shown
+              ? html`<p class="muted" data-test="bounded">
+                  ${t("fiscal_filing.warnings.bounded", {
+                    shown: count(shown),
+                    total: count(total),
+                  })}
+                </p>`
+              : nothing
+          }
+          ${
+            replyMismatches.length === 0
+              ? nothing
+              : historyList(
+                  t("fiscal_filing.warnings.reply"),
+                  "reply-mismatches",
+                  replyMismatches,
+                  replyMismatchLine,
+                  "",
+                )
+          }
+          ${
+            recordWarnings.length === 0
+              ? nothing
+              : historyList(
+                  t("fiscal_filing.warnings.record"),
+                  "record-warnings",
+                  recordWarnings,
+                  recordWarningLine,
+                  "",
+                )
+          }`
+    }
+  </section>`;
+}
+
 /** Reads how this box's invoice records are being sent to AEAT, and sends a correction record for a
  * case `putRightFor` offers one. */
 @customElement("vf-fiscal-filing-screen")
@@ -477,7 +613,7 @@ export class FiscalFilingScreen extends LitElement {
         margin: var(--wt-space-4) 0 var(--wt-space-2);
         font-size: var(--wt-font-size-sm);
       }
-      .history ul {
+      .history > ul {
         display: grid;
         gap: var(--wt-space-3);
         margin: 0;
@@ -1029,6 +1165,6 @@ export class FiscalFilingScreen extends LitElement {
               ${t("fiscal_filing.held_without_case", { count: count(overview.heldWithoutCase) })}
             </p>`
       }
-      ${missingHistory(overview.missingHistory)}`;
+      ${warnings(overview.warnings)} ${missingHistory(overview.missingHistory)}`;
   }
 }

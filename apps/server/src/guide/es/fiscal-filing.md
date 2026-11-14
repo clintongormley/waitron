@@ -1,8 +1,8 @@
 # Remisión a la AEAT
 
 **Remisión a la AEAT** muestra cómo se envían a la AEAT, la agencia tributaria, los registros de
-facturación de este servidor y cuáles necesitan una decisión. No envía nada por sí sola; un
-administrador puede enviar una subsanación desde un caso que la ofrezca.
+facturación de este servidor, cuáles necesitan una decisión y cuáles tienen una advertencia. No
+envía nada por sí sola; un administrador puede enviar una subsanación desde un caso que la ofrezca.
 
 ## Abre la página {#open}
 
@@ -46,6 +46,22 @@ el caso.
 
 La tabla muestra los 200 casos más recientes. Si hay más, indica cuántos; expórtalos para verlos
 todos.
+
+## Advertencias {#warnings}
+
+**Advertencias** muestra los avisos abiertos sobre registros que conviene revisar. Nada aquí cambia
+un registro.
+
+- **Respuestas de la AEAT que no cuadran con lo enviado**: la AEAT respondió a un grupo de registros
+  con otro número de líneas, así que Waitron no usó su respuesta: volvió a dejar cada registro
+  pendiente de enviar, salvo los que ya estaban detenidos, que siguieron detenidos. **Detalles
+  técnicos** muestra cada registro enviado, en qué punto está ahora y las líneas de la AEAT.
+- **Facturas con una advertencia de la comprobación de Waitron**: la AEAT acepta la factura, pero la
+  comprobación de Waitron encontró algo que la AEAT puede señalar, o totales que no cuadran con las
+  líneas de impuestos. Si son los totales, revisa los precios de esa venta.
+
+Una advertencia sale de la lista cuando su aviso se marca como resuelto en la campana o en la página
+**Avisos**. La exportación incluye todas las advertencias abiertas, no solo las de la pantalla.
 
 ## Exporta los casos {#export}
 

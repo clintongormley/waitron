@@ -189,13 +189,26 @@ that bundle's heading in the area's file: take a bundle as one pull request.
   The [inspection and caller-scope proposal](superpowers/specs/2026-10-29-a1089-fiscal-reconcile-recovery-design.md)
   and [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-reconcile-evidence.md)
   follow the owner's 29 October evidence-first decision. The owner retired its separate evidence
-  branch on 2026-11-10; its evidence belongs on Reporting → Fiscal filing. A local queue-reset
-  marker does not prove a repeat submission; persistent recovery remains open.
+  branch on 2026-11-10; its evidence belongs on Reporting → Fiscal filing. W41s-9 (2026-11-14)
+  reworded both alerts without a support referral; their evidence is not yet on Fiscal filing. A
+  local queue-reset marker does not prove a repeat submission; persistent recovery remains open.
 
 - **A1089: fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
   [Audit](backlog/self-service-refusals.md#fiscal-environment).
-  The owner retired this item's separate evidence screen on 2026-11-10: its evidence goes on
-  Reporting → Fiscal filing, with the reply-line and integrity evidence, as one small step. The
+  The owner retired this item's separate evidence screen on 2026-11-10. W41s-9's evidence step
+  (2026-11-14) added nothing for these two alerts on the watcher's choice (a) of 2026-11-14 03:20,
+  and reworded both so neither says "Contact support". The trace behind that choice, traced, not
+  run: a record's environment is the process's own (`apps/server/src/boot.ts:3240`) and the drain
+  compares it with the same value (`boot.ts:4260`, `drain.ts:698-711`); a start whose environment
+  differs from the database's stamp is refused (`apps/server/src/deployment-guard.ts:27-31`, called at
+  `boot.ts:1319`); and every path that creates a venue database stamps it before its first record:
+  first setup (`packages/provisioning/src/first-setup-command-deployment.ts:286`), provisioning
+  (`apps/server/src/provision.ts:144`) and adoption (`apps/server/src/adopt.ts:233`), while a
+  restore of a backup from the other environment is refused (`apps/server/src/restore-gate.ts:20`).
+  So a mismatch is unreachable only while every setup path stamps first; the start check over an
+  unstamped database does not cover the rest (a reviewer's throwaway test started a test box over
+  unstamped production records). `fiscal.environment_unknown` needs a record with no environment,
+  which only test fixtures write. The
   [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-environment-evidence.md) keeps the
   source audit. Persistent repair from the running dashboard remains open; the startup database
   guard also applies. A1501 supplies the wrong-environment failed-start Move/Stop route; it never
@@ -205,21 +218,27 @@ that bundle's heading in the area's file: take a bundle as one pull request.
   [Audit](backlog/self-service-refusals.md#fiscal-reply).
   The [inspection design](superpowers/specs/2026-10-28-a1089-fiscal-reply-recovery-design.md) and
   [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-reply-evidence.md) keep the source
-  audit. The owner retired this item's separate evidence screen on 2026-11-10: its evidence goes on
-  Reporting → Fiscal filing, with the environment and integrity evidence, as one small step. The
-  first retained warning may differ from the latest reply; persistent repair requires a separate
-  owner decision.
+  audit. The evidence is on **Reporting → Fiscal filing** under **Warnings** (W41s-9, 2026-11-14):
+  the records sent, their state now and AEAT's lines; the bell's alert opens the page and no longer
+  says "Contact support". The lines shown are the first kept while the alert is open, not
+  necessarily the latest reply. What remains is a persistent repair or decision route, which needs
+  its own owner decision.
 
 - **A1089: fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. Its one decision: for a sale AEAT refused with code 1100 whose message names the operation description, an administrator may send a correction record with a new description (Q37-FIX). Every other case still waits for the page to offer W41s-8's other remedies; until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
   [Audit](backlog/self-service-refusals.md#fiscal-cases).
 
 - **A1089: fiscal integrity and validation alerts need evidence-preserving next steps.** Replace support-only guidance without editing records or treating every warning as a proven Waitron bug. A substantial missing recovery workflow requires an owner decision.
   [Audit](backlog/self-service-refusals.md#fiscal-integrity).
-  The owner retired this item's separate evidence screen on 2026-11-10: its evidence goes on
-  Reporting → Fiscal filing, with the reply-line and environment evidence, as one small step. The
-  [proposal](superpowers/specs/2026-10-29-a1089-fiscal-integrity-recovery-design.md) retains the source audit.
-  Saved predecessor-check issues and local validation warnings
-  are distinct; persistent repair and whole-chain auditing remain open. Inspection does not establish AEAT acceptance.
+  Local validation warnings (`fiscal.record_flagged`, `fiscal.record_totals_disagree`) are on
+  **Reporting → Fiscal filing** under **Warnings** (W41s-9, 2026-11-14): the invoice, when exactly
+  one record of the sale was made in the warning's second, and its fields and check codes; the
+  bell's alerts open the page. `chain.verification_failed` has no section (watcher, 2026-11-14 03:20); its
+  alert was reworded to say what happened and that sales and filing carry on, without "Contact
+  support". `fiscal.fingerprint_mismatch` adds nothing to the page (no record, no params) and keeps
+  its alert. What remains is a persistent repair or decision route, which needs its own owner
+  decision, and whole-chain auditing. The
+  [proposal](superpowers/specs/2026-10-29-a1089-fiscal-integrity-recovery-design.md) retains the
+  source audit. Inspection does not establish AEAT acceptance.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 

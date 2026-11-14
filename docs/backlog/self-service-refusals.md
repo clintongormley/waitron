@@ -46,11 +46,11 @@ referrals, not completed recovery experiments.
 | [Sealed state](#backup-state) | The alert names the cause (A1089 B2): a full disk, missing own files, or another. Missing own files now says it is a fault (A1089, 2026-11-11), with no route planned; an unrecognised cause has no correction beyond a restart. |
 | [Backup preparation](#backup-preparation) | Referral reworked (A1089, 2026-11-11): missing own files and any other cause now say it is a fault; any other cause also says Waitron tries again at the next scheduled backup. Still open: a supported disk-recovery choice when no reclaimable files remain ([below](#backup-preparation)). |
 | [Restored first start](#restore-start) | Preserve the completion refusal and offer a specific correction when restart fails again. |
-| [Fiscal integrity](#fiscal-integrity) | Offer evidence inspection and a supported decision/recovery path without editing immutable records. An administrator referral does not provide that path. |
+| [Fiscal integrity](#fiscal-integrity) | Evidence on Fiscal filing → Warnings (2026-11-14, local validation warnings only); still open: a supported decision/recovery path without editing immutable records. An administrator referral does not provide that path. |
 | [Filing cases](#fiscal-cases) | Build the released filing-case decision path; waiting or finding another person does not resolve a held case. |
-| [Fiscal reply](#fiscal-reply) | Describe only exercised retry behavior, then offer evidence inspection and a decision for a persistent malformed reply. |
+| [Fiscal reply](#fiscal-reply) | Evidence on Fiscal filing → Warnings (2026-11-14); still open: describe only exercised retry behavior and a decision for a persistent malformed reply. |
 | [Fiscal environment](#fiscal-environment) | Offer safe host-configuration or evidence/recovery choices; never relabel records or promote test data. |
-| [Reconciliation](#fiscal-reconcile) | Establish the caller, then offer evidence and a decision path rather than sending the person to an administrator or adviser. |
+| [Reconciliation](#fiscal-reconcile) | The caller is the daily sweep (`packages/fiscal-verifactu/src/reconcile-sweep.ts`, built by `packages/fiscal-verifactu/src/reconcile-runtime.ts` and started by `apps/server/src/fiscal-reconciliation.ts` from `apps/server/src/boot.ts`); offer evidence and a decision path rather than sending the person to an administrator or adviser. |
 | [Payments](#payments) | Preserve confirmed-outcome requirements. Give a way to inspect provider evidence and resolve the held payment without depending on a conversation with provider staff. |
 | [Boot recovery](#boot-recovery) | Referral reworked (A1089, 2026-11-11): each row says plainly what happened and, where nothing at the box can fix it, that it is a fault, with the restart, retry, restore or reinstall choice it already named. `deployment.environment_mismatch` now offers Start again instead (A1501, #2829). No other row gains a way out; the owner's answer names none for these rows, and its Restart the box button (A1498) was built as a dashboard restart of Waitron's server only (watcher, 2026-11-11 10:31), so the held-database row still says to switch the box off and on. |
 
@@ -206,6 +206,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:137` and `apps/dashboard/src/i18n/alert-messages.ts:138`.
 
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the new invoice record was still written, that sales and sending to AEAT carry on, and to keep the box running and note when it appeared. No page shows this alert's evidence (watcher, 2026-11-14 03:20). Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `chain.verification_failed`.
+
 State: A fiscal backend returned stored-chain integrity issues during issuance. This proves an integrity failure was detected, not that a product bug is the only cause. Receipt: `packages/core/src/record-sale.ts:205`; `packages/core/src/record-correction.ts:240`; `packages/core/src/record-void.ts:55`; `packages/core/src/record-substitution.ts:163`.
 
 Route: Missing: preserve evidence and offer an administrator investigation/recovery route. Do not edit stored records, reset invoice numbers or promise a backup repairs the chain.
@@ -237,6 +239,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 | ES | La AEAT ha respondido a un envío con un número de líneas distinto del de registros de facturación que Waitron envió, así que Waitron no ha aplicado ninguna y volverá a enviar cada uno salvo que esté en espera un registro anterior de su cadena. Contacta con soporte. |
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:202` and `apps/dashboard/src/i18n/alert-messages.ts:203`.
+
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the records sent and AEAT's lines are on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.respuesta_descuadrada`.
 
 State: The resolved submission reply reports a line-count mismatch and records an incident. An external malformed reply can cause it. Receipt: `packages/fiscal-verifactu/src/drain.ts:1399`.
 
@@ -308,6 +312,8 @@ State: A record names a different environment from the sending host. This is a c
 
 Route: Existing at operator level: correct the host environment for this data. Missing: safe administrator wording that preserves separation of test and live data. Do not relabel the record or promote a test database.
 
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the record and the later ones on its chain are kept on this box and not sent, that sales carry on, and to keep the box running and note when it appeared. No page shows this alert's evidence (watcher, 2026-11-14 03:20). Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.environment_mismatch`.
+
 ### `fiscal.environment_unknown`
 
 Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-environment](#fiscal-environment).
@@ -323,6 +329,8 @@ State: A stored record has null environment metadata. The immutable row cannot b
 
 Route: Missing: an evidence-preserving recovery/decision procedure. Neither waiting nor editing the stored row is a remedy.
 
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the record and the later ones on its chain are kept on this box and not sent, that sales carry on, and to keep the box running and note when it appeared. No page shows this alert's evidence (watcher, 2026-11-14 03:20). Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.environment_unknown`.
+
 ### `fiscal.record_flagged`
 
 Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-integrity](#fiscal-integrity).
@@ -334,9 +342,11 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:234` and `apps/dashboard/src/i18n/alert-messages.ts:235`.
 
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the record is sent to AEAT like any other and the invoice and fields involved are on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.record_flagged`.
+
 State: Local validation returns non-total warnings and records them. Validation warnings alone do not establish a product bug. Receipt: `packages/fiscal-verifactu/src/chain.ts:231`.
 
-Route: Missing: name the relevant fields and a supported review action. Any actual change to the protected append path requires a separate owner ruling; this audit changes no fiscal code.
+Route: The fields and check codes are on Fiscal filing (W41s-9, 2026-11-14). Missing: a supported review action. Any actual change to the protected append path requires a separate owner ruling; this audit changes no fiscal code.
 
 ### `fiscal.reconcile_no_trace`
 
@@ -351,7 +361,9 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:238` and `apps/dashboard/src
 
 State: A reconciliation lookup still finds no authority copy after one resubmission. A lookup discrepancy is not proof of a Waitron bug. Receipt: `packages/fiscal-verifactu/src/reconcile.ts:166`.
 
-Route: The producer is the library reconciliation function; this audit has not established a user-facing invocation for it. Establish that caller before proposing a recovery screen or promising a periodic check.
+Route: Caller: the daily sweep (`packages/fiscal-verifactu/src/reconcile-sweep.ts`, built by `packages/fiscal-verifactu/src/reconcile-runtime.ts` and started by `apps/server/src/fiscal-reconciliation.ts` from `apps/server/src/boot.ts`). Missing: evidence inspection and a decision path.
+
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say Waitron has already queued the invoice to be sent once more and will not send it again by itself, that it asks AEAT again every day, and that the person should keep the box running and note when this appeared. Still missing: a page showing this alert's evidence. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.reconcile_no_trace`.
 
 ### `fiscal.reconcile_drift_anulada`
 
@@ -366,7 +378,9 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:246` and `apps/dashboard/src
 
 State: Reconciliation sees an authority cancellation not represented locally. The authority state is external; bug-only is not established. Receipt: `packages/fiscal-verifactu/src/reconcile.ts:75`; `packages/fiscal-verifactu/src/reconcile.ts:200`.
 
-Route: Same caller caveat as reconcile_no_trace. Missing: evidence inspection and an administrator/asesor decision path if this alert is surfaced.
+Route: Same caller as reconcile_no_trace. Missing: evidence inspection and an administrator/asesor decision path if this alert is surfaced.
+
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say Waitron leaves its own record of the invoice as it is and asks AEAT again every day, and that the person should keep the box running and note when this appeared. Still missing: evidence inspection and a decision path. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.reconcile_drift_anulada`.
 
 ### `fiscal.filing_cases_open`
 
@@ -929,6 +943,7 @@ The inventory above remains a record of its earlier tree.
 | Event association | `packages/core/src/record-sale.ts:203`, `packages/core/src/record-correction.ts:236`, `packages/core/src/record-void.ts:49` and `packages/core/src/record-substitution.ts:147` map the reported issues into an incident. The issue IDs name predecessors; the incident's sale link names the operation that detected them. These reports alone do not refuse the operation. Five focused core cases exercise continuation with a fake fiscal backend. |
 | Local validation | `packages/fiscal-verifactu/src/chain.ts:186` validates a newly built record at its generation instant. Errors and malformed fingerprint warnings refuse it; totals warnings are separate. Other warnings produce `fiscal.record_flagged` beside the appended record. The warning fixture injects most extra issues; its missing-IPSI-regime-code case exercises a real local warning. None proves an AEAT acceptance. |
 | Retained evidence | `packages/fiscal-verifactu/src/chain.ts:248` keeps field/code arrays paired by position, without field values or an exact fiscal-record ID. `packages/core/src/errors.ts:132` keeps chain issue facts but not the verifier's checked count. The first-open-incident key can suppress later evidence (`packages/db/src/schema/incidents.ts:69`). Do not guess a warning's record or label saved facts as a current or complete audit. |
+| 2026-11-14 (W41s-9) | Fiscal filing names a warning's record only when exactly one record of its sale was generated in the warning's second; otherwise it gives the time only. |
 | Existing actions | Core chain and fiscal claims require `fiscal.view`, without an inspection target. `apps/server/src/alerts-api.ts:129` authorises Mark handled; `packages/core/src/incidents.ts:307` acknowledges the incident. The alert screen offers that action and any supplied target. Acknowledgement does not repair records or establish agency acceptance. |
 
 Unchanged local commands run for this recheck:
@@ -941,8 +956,12 @@ Logs are in `/Users/clintongormley/waitron-campaign-e/receipts/a1089-fiscal-inte
 These local fixtures do not qualify live AEAT, a complete chain audit, persistent repair or a rendered
 inspection screen. The proposal separates saved evidence from fresh reads, offers sign-in at the
 action and a safe Stop, and grants no write or repair authority. The owner retired the separate
-evidence screen on 2026-11-10: its evidence goes on Reporting → Fiscal filing as one small step.
-The product referrals remain open.
+evidence screen on 2026-11-10. Since W41s-9's evidence step (2026-11-14), **Reporting → Fiscal
+filing** lists open local validation warnings under **Warnings**, with the invoice where exactly one
+record of the sale was made in the warning's second, and the bell's alerts open it. Saved
+predecessor-check issues have no section (watcher, 2026-11-14 03:20); their alert was reworded
+without a support referral. A persistent repair or decision route remains open and needs its own
+owner decision.
 
 ### fiscal-cases
 
@@ -981,9 +1000,11 @@ The logs report **23**, **56** and **20** passing cases respectively; the first 
 real XML client, not live AEAT, an end-to-end inspection journey or a persistent-repair qualification.
 No original assertion, fiscal record, guard or production source changes in this milestone.
 
-**Still open:** the owner retired the separate evidence screen on 2026-11-10: its evidence goes on
-Reporting → Fiscal filing as one small step; persistent response repair stays open. Keep the support
-wording in scope until an actual action exists. Inspection must distinguish the first retained
+**Still open:** the owner retired the separate evidence screen on 2026-11-10. Since W41s-9's
+evidence step (2026-11-14), **Reporting → Fiscal filing** lists open reply mismatches under
+**Warnings** with the records sent, their state now and AEAT's first-kept lines, the bell's alert
+opens it, and the alert no longer refers to support. Persistent response repair stays open and
+needs its own owner decision. Inspection must distinguish the first retained
 warning from freshly read submission state; it cannot reconstruct replies that were never kept.
 A malformed reply does not establish a Waitron bug or authorise a reset, altered chain, new invoice
 number, reordered batch or manual retry. W41s-8/W41s-9 retain their separate authority and gates.
@@ -1026,7 +1047,7 @@ assertion changes in this milestone.
 
 **Still open:** choose whether to plan running-dashboard evidence inspection first, leaving
 failed-start and persistent repair open, or design the complete authenticated configuration and
-failed-start remedy before a build. Keep both support messages in scope until a real action exists.
+failed-start remedy before a build. Both messages were reworded without a support referral on 2026-11-14; a real configuration or recovery action is still missing.
 Unknown or contradictory metadata must not be guessed, rewritten, promoted or treated as proof of
 a Waitron bug. Acknowledging the alert does not resolve its cause.
 
@@ -1042,9 +1063,9 @@ this audit. Read-only inspection and a decision route for persistent `reconcile_
 `reconcile_drift_anulada` findings remain separate work; a resubmission marker still does not prove
 that a second submission happened. The candidate still needs fiscal review and current-head CI.
 
-**Reconciliation alerts need a production caller and an evidence/decision route.** Do not
-promise a periodic fiscal check or offer another submission until that caller and its recovery
-choices are specified and exercised.
+**Reconciliation alerts need an evidence and decision route.** The caller is the daily sweep (see
+the note above). Do not offer another submission until a recovery choice is specified and
+exercised.
 
 **2026-10-26 caller audit**, against `bc6b9da96639cf055ec8dde15b88d442136b6343`:
 

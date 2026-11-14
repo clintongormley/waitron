@@ -1,8 +1,8 @@
 # Fiscal filing
 
-**Fiscal filing** shows how this box's invoice records are being sent to AEAT, the tax agency, and
-which records need a decision. It sends nothing by itself; an administrator can send a correction from
-a case that offers one.
+**Fiscal filing** shows how this box's invoice records are being sent to AEAT, the tax agency,
+which records need a decision, and which carry a warning. It sends nothing by itself; an
+administrator can send a correction from a case that offers one.
 
 ## Open the page {#open}
 
@@ -42,6 +42,22 @@ it; anyone else can sign in as one from the case.
 
 The table lists the newest 200 cases. When there are more, it says how many; export them to see
 every one.
+
+## Warnings {#warnings}
+
+**Warnings** lists the open alerts about records that deserve a look. Nothing here changes a
+record.
+
+- **AEAT answers that did not match what was sent**: AEAT answered a group of records with a
+  different number of lines, so Waitron used none of its answer: it put each record back to be sent
+  again, except any already on hold, which stayed on hold. **Technical details** shows each record
+  sent, where it stands now, and AEAT's lines.
+- **Invoices with a warning from Waitron's own check**: AEAT accepts the invoice, but Waitron's
+  check found something AEAT may point out, or totals that do not match the tax lines. For totals,
+  check that sale's prices.
+
+A warning leaves the list once its alert is marked handled in the bell or on the **Alerts** page.
+The export carries every open warning, not only those on screen.
 
 ## Export the cases {#export}
 

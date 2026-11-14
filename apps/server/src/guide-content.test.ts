@@ -111,6 +111,7 @@ describe("the user guides", () => {
       "conflict",
       "progress",
       "cases",
+      "warnings",
       "export",
       "missing-history",
     ]);

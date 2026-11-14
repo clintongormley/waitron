@@ -654,7 +654,7 @@ that records the original's refusal. The three-refusal brake does not see a set-
 neither breaks a run of refusals nor counts towards one.
 A record accepted with errors opens a filing case unless AEAT exempts the code (2004, 2009); a
 re-sent one AEAT answers as a duplicate (3000), and one the reconciliation sweep corrects
-(`reconcile`, no production caller yet), are judged by
+(`reconcile`, run by the daily reconciliation sweep), are judged by
 the stored copy's own error, read from the duplicate detail or AEAT's consulta. What
 still holds later records: the three-refusal brake and the wait behind an unknown answer.
 
