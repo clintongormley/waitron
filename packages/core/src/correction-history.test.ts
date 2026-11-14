@@ -30,6 +30,7 @@ import {
   readCorrectionAmountHistory,
 } from "./correction-history.js";
 import { recordCorrection, type RecordCorrectionInput } from "./record-correction.js";
+import { recordReplacement } from "./record-replacement.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
@@ -412,6 +413,30 @@ it("previews an admitted correction with the admission's filing and the lines to
     filing: "accepted",
     original: { number: "T1-1", issuedAt: "2027-03-14" },
     lines: [{ name: "Steak", lineTotal: "-5.00", lineGross: "-6.05", correctsLineId: ids[0] }],
+  });
+});
+
+it("previews a correction of a replaced invoice from its replacement's lines", async () => {
+  const { saleId } = await sellSteak();
+  const { saleId: replacementId } = await withTransaction(suite.db, (tx) =>
+    recordReplacement(tx, backend, {
+      origin: deviceOrigin(deviceId),
+      nodeId,
+      seriesId: rectSeriesId,
+      correctsSaleId: saleId,
+      authz: { sessionId },
+      clock,
+    }),
+  );
+  const [copy] = await suite.db
+    .select({ id: saleLines.id })
+    .from(saleLines)
+    .where(eq(saleLines.saleId, replacementId));
+
+  expect(await preview(saleId)).toMatchObject({
+    gross: "6.05",
+    vatBreakdown: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
+    lines: [{ lineTotal: "-5.00", lineGross: "-6.05", correctsLineId: copy!.id }],
   });
 });
 

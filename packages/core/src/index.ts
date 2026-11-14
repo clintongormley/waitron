@@ -8,6 +8,7 @@ export { recordVoid } from "./record-void.js";
 export { recordCorrection } from "./record-correction.js";
 export type { RecordCorrectionInput } from "./record-correction.js";
 export { recordReplacement } from "./record-replacement.js";
+export { correctionTargetFor } from "./correction-target.js";
 export type { RecordReplacementInput } from "./record-replacement.js";
 export { previewCorrectionAmounts, readCorrectableLines } from "./correction-history.js";
 export type { CorrectableLine, CorrectionPreview } from "./correction-history.js";

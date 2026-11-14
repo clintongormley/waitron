@@ -52,25 +52,32 @@ const ALLOWED: readonly { file: string; fragment: string; reason: string }[] = [
     reason: "a replacement is refused after ANY earlier corrective (sale.replacement_not_first)",
   },
   {
+    file: "packages/core/src/correction-target.ts",
+    fragment: "eq(sales.correctsSaleId, saleId), eq(sales.replacesOriginal, true)",
+    reason: "finds the replacement itself, the invoice a later correction is filed against",
+  },
+  {
     file: "packages/core/src/record-correction.ts",
     fragment: "select sum(c.total) from sales c where c.corrects_sale_id",
     reason:
-      "what is left to correct on the corrected invoice itself; Task 3f points it at the replacement",
+      "what is left on the correction target, which has no replacement (correctionTargetFor), so its own correctives are all that change it",
   },
   {
     file: "packages/core/src/record-correction.ts",
     fragment: "select count(*) from sales c where c.corrects_sale_id",
-    reason: "the corrected invoice's own earlier corrections; Task 3f points it at the replacement",
+    reason: "the correction target's own earlier corrections; it has no replacement",
   },
   {
     file: "packages/core/src/record-correction.ts",
-    fragment: "eq(sales.correctsSaleId, input.correctsSaleId)",
-    reason: "the partial-refund history of the corrected invoice itself (Task 3f)",
+    fragment: "eq(sales.correctsSaleId, correctsSaleId)",
+    reason:
+      "the partial-refund history of the correction target: corrections whose lines name its lines",
   },
   {
     file: "packages/core/src/correction-history.ts",
     fragment: "eq(sales.correctsSaleId, saleId)",
-    reason: "the partial-refund history of the corrected invoice itself (Task 3f)",
+    reason:
+      "the partial-refund history of the correction target: corrections whose lines name its lines",
   },
   {
     file: "packages/reporting/src/top-sellers.ts",

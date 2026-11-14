@@ -222,7 +222,7 @@ export class FakeFiscalBackend implements FiscalBackend {
   ): Promise<FiscalRecordRef> {
     const rows = await tx.execute<{ record_id: string }>(sql`
       select record_id from fake_fiscal_records
-      where sale_id = ${correction.correctsSaleId} and kind = 'sale'
+      where sale_id = ${correction.correctsSaleId} and (kind = 'sale' or replaces = 1)
       limit 1
     `);
     if (rows.rows[0] === undefined) {
