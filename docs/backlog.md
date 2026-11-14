@@ -1787,7 +1787,7 @@ Not in any track until the standalone primary is done.
 
 - **Size and attempt limits on box-to-box and handover routes** (bundle of 2, 2 important, size S). [Detail](backlog/replication-cloud.md#bundle-size-and-attempt-limits-on-box-to-box-and-handover-routes)
 
-- **Check everything at the offer, while the old box still sells** (bundle of 3, 1 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-check-everything-at-the-offer-while-the-old-box-still-sells)
+- **Check everything at the offer, while the old box still sells** (bundle of 2, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-check-everything-at-the-offer-while-the-old-box-still-sells)
 
 - **Which state files a handover carries; summary checks** (bundle of 2, 1 important, size S, waits for the A1308 table hold to lift). [Detail](backlog/replication-cloud.md#bundle-which-state-files-a-handover-carries-summary-checks)
 
@@ -1877,7 +1877,7 @@ outstanding on code that exists.
   plan is written (eleven pull requests; Q1 is the owner's); 3b-1, 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)),
   3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)), 3b-4 ([#2779](https://github.com/clintongormley/waitron/pull/2779))
   3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898); the pair link, and a spare joins with no Cloud relay)
-  and 3b-5b (a spare runs its store, which admits only its main box) landed, and so did 3b-G (a box trusts only the venue's authority when it asks another box at start and sets aside a spare still joining ([3b plan](superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's decision, which the owner may overrule); its chart check at start reaches a real box under the venue's authority, which still refuses it for want of a credential; and a box that lost its own record does not start selling or filing), and so did 3b-6a (the first copy and finishing joining), 3b-6b (a two-box test of joining, and the guide's Add a spare box) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email); 3b-6c itself and later slices are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
+  and 3b-5b (a spare runs its store, which admits only its main box) landed, and so did 3b-G (a box trusts only the venue's authority when it asks another box at start and sets aside a spare still joining ([3b plan](superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's decision, which the owner may overrule); its chart check at start reaches a real box under the venue's authority, which still refuses it for want of a credential; and a box that lost its own record does not start selling or filing), and so did 3b-6a (the first copy and finishing joining), 3b-6b (a two-box test of joining, and the guide's Add a spare box) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email), and so did 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off); later slices are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
   venue's network), one step **Hand over the venue** needs on real boxes. It is not live yet: a spare
   of a venue that does not file with Veri*Factu now receives a copy over the venue's network, puts
   it in place at its next start and finishes joining as a standby, but it cannot take over yet, and
