@@ -664,25 +664,20 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **A1528. Department window and the delete dialogs: the owner's review (owner, 2026-11-14).**
-  Same page as A1525; can land with it or after it.
-  - **Adding a receipt logo reloads the page a few seconds later, losing unsaved changes.** On the
-    Receipts tab, Chrome asked "Reload site? Changes that you made may not be saved", and Reload
-    throws away the window's unsaved edits. Nothing asked for a reload: the dashboard's own reload
-    calls all wait for a button. Not diagnosed; it may be the development stack only (the
-    dashboard's dev server reloading, or the server restarting on a file change). Find the cause
-    and stop it; where a reload cannot be avoided, the window's unsaved edits survive it.
-  - **After a logo is added, the receipt preview's logo takes focus and draws a blue outline.** The
-    preview is only to look at and never takes focus; focus stays on the logo controls
-    (`apps/dashboard/src/screens/department-receipt-editor.ts`).
+- **A1528. Department window: the owner's review (owner, 2026-11-14).** Parts 1, 2 and 5 landed
+  with A1525; part 1 was the development stack reloading the page when `main` moved under it, not
+  the product.
   - **"Invoice operation description" moves from the Receipts tab to the Details tab.** It prints
     on no receipt or invoice PDF; it is the description filed in each Veri\*Factu record. Its
-    label and hint say it goes to AEAT and does not print.
+    label and hint say it goes to AEAT and does not print. The Details tab's Save also sends the
+    receipt request the Receipts tab uses (same check); if that request fails, the field shows the
+    refusal and stays unsaved while the rest of the save stands (watcher, 2026-11-14 15:48).
   - **The title, tabs, Save and Cancel stay put; only the content between them scrolls**, on every
     tab. Save and Cancel go in `wt-modal`'s own footer slot, as other dialogs do
     (`department-dialogs.ts`); today `department-edit-dialog.ts` draws them inside the scrolling
     content, and the "Edit department: …" title and the Details / Service / Receipts / Transfers
-    tabs scroll away too.
+    tabs scroll away too. No dialog keeps its heading or tabs still today, so the shared
+    `wt-dialog` needs an opt-in for it (lane D).
 
 - **Department dialog** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 
