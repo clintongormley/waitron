@@ -58,6 +58,12 @@ export class WtFormActions extends LitElement {
         display: none;
       }
 
+      /* For the one call of the row's own scrollIntoView. Important, so a screen's own position
+         for the row does not hold it during that call. */
+      :host(:state(placing)) {
+        position: static !important;
+      }
+
       /* On the wrapper rather than the host, so the line drawn while held is the row's top edge.
          The border is always there, unpainted until held, so being held keeps the row's height. */
       .bar {
@@ -82,6 +88,12 @@ export class WtFormActions extends LitElement {
 
         .below {
           display: block;
+        }
+
+        /* In the row's own box for that call, so the scroll also brings in the padding a held row
+           stops above, and the row lands where it is held. */
+        :host(:state(placing)) .below {
+          position: static;
         }
       }
 
@@ -193,15 +205,15 @@ export class WtFormActions extends LitElement {
     });
   };
 
-  /** A held row is always on screen, so the browser would scroll nothing. This scrolls to where
-   * the row rests at the form's end instead, which brings what is said just above it into view. */
+  /** A held row is always on screen, so the browser would not scroll the scroller that holds it.
+   * This scrolls to where the row rests at the form's end instead; with `block: "nearest"` or
+   * `"end"`, what is said just above the row comes into view above it. */
   override scrollIntoView(arg?: boolean | ScrollIntoViewOptions): void {
-    const inline = this.style.position;
-    this.style.position = "static";
+    this.internals.states.add("placing");
     try {
       super.scrollIntoView(arg);
     } finally {
-      this.style.position = inline;
+      this.internals.states.delete("placing");
     }
   }
 

@@ -266,6 +266,23 @@ test("scrolled into view while held, brings its place at the form's end into vie
   expect(row.style.position).toBe("");
 });
 
+test("scrolled into view while a screen holds it with an important inline position, still scrolls, and keeps that position and its priority", async () => {
+  const scroller = (await mount(`<div style="height: 200px; overflow-y: auto">
+    <div style="height: 1000px">Fields</div>
+    <p data-said style="margin: 0; height: 30px">Refused</p>
+    <wt-form-actions style="position: sticky !important"><wt-button variant="primary">Save</wt-button></wt-form-actions>
+  </div>`)) as HTMLElement;
+  const row = scroller.querySelector<WtFormActions>("wt-form-actions")!;
+  await row.updateComplete;
+
+  row.scrollIntoView({ block: "nearest" });
+
+  const said = scroller.querySelector<HTMLElement>("[data-said]")!.getBoundingClientRect();
+  expect(said.bottom).toBe(row.getBoundingClientRect().top);
+  expect(row.style.position).toBe("sticky");
+  expect(row.style.getPropertyPriority("position")).toBe("important");
+});
+
 test("draws a line along its top edge only while it is held at the bottom", async () => {
   const { scroller, el } = await mountTallForm();
   const height = el.getBoundingClientRect().height;
@@ -766,6 +783,36 @@ test("while held, paints its scroller's bottom padding below it, so nothing show
     "nothing drawn below a row at rest",
   ).toBe(scroller);
 });
+
+test.each(["nearest", "end"] as const)(
+  "scrolled into view (block %s) while held over its scroller's padding, lands at the form's end with what is said just above it, and leaves no style on the row",
+  async (block) => {
+    const scroller =
+      (await mount(`<div style="height: 200px; overflow-y: auto; padding-bottom: 24px; box-sizing: border-box">
+    <div style="height: 1000px">Fields</div>
+    <p data-said style="margin: 0; height: 30px">Refused</p>
+    <wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>
+  </div>`)) as HTMLElement;
+    const row = scroller.querySelector<WtFormActions>("wt-form-actions")!;
+    await row.updateComplete;
+    await nextFrame();
+    const below = row.shadowRoot!.querySelector<HTMLElement>(".below")!;
+    expect(getComputedStyle(below).display, "the padding painted below the held row").toBe("block");
+    const end = scroller.scrollHeight - scroller.clientHeight;
+
+    row.scrollIntoView({ block });
+    await nextFrame();
+
+    expect(scroller.scrollTop, "at the form's end, and no further").toBe(end);
+    expect(scroller.scrollHeight - scroller.clientHeight, "the scrollable area unchanged").toBe(
+      end,
+    );
+    const said = scroller.querySelector<HTMLElement>("[data-said]")!.getBoundingClientRect();
+    expect(said.top).toBeGreaterThanOrEqual(scroller.getBoundingClientRect().top);
+    expect(said.bottom).toBe(row.getBoundingClientRect().top);
+    expect(row.hasAttribute("style")).toBe(false);
+  },
+);
 
 test("scrolls a field that focus reaches under the painted padding below the held row", async () => {
   const scroller = await mount(PADDED_SCROLLER);

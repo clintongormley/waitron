@@ -926,6 +926,12 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
       const box = control.getBoundingClientRect();
       return box.top >= 0 && box.bottom <= innerHeight;
     };
+    /** On screen and above the held Save row, not behind it. */
+    const refusalShown = (el: TillApp) => {
+      const box = q(el, "[data-split-refusal]")!.getBoundingClientRect();
+      const row = q(el, "[data-split-pick] wt-form-actions")!.getBoundingClientRect();
+      return box.top >= 0 && box.bottom <= row.top;
+    };
     const longRows = (partyRevision: number): SplitSources => ({
       partyRevision,
       bills: [
@@ -949,7 +955,9 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
       await press(el, "[data-split-confirm]");
       await flush(el);
       expect(rows.calls).toHaveLength(1);
-      await expect.poll(() => said(el) !== null && onScreen(splitButton(el)!)).toBe(true);
+      await expect
+        .poll(() => said(el) !== null && refusalShown(el) && onScreen(splitButton(el)!))
+        .toBe(true);
       return { el, rows };
     }
 
@@ -962,9 +970,7 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
       expect(q(el, "[data-split-pick]")!.getBoundingClientRect().height).toBeGreaterThan(
         innerHeight,
       );
-      await expect
-        .poll(() => onScreen(q(el, "[data-split-refusal]")!) && onScreen(splitButton(el)!))
-        .toBe(true);
+      await expect.poll(() => refusalShown(el) && onScreen(splitButton(el)!)).toBe(true);
     });
 
     it("is left where it is once the waiter has touched the screen", async () => {
@@ -978,7 +984,7 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
         innerHeight,
       );
       await flush(el);
-      // Not Split: the held row keeps Split on screen wherever the panel is scrolled.
+      // Not Split, which the held row keeps on screen while the panel's foot is below the window.
       expect(onScreen(q(el, "[data-split-refusal]")!)).toBe(false);
     });
   });

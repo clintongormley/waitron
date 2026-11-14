@@ -3371,9 +3371,9 @@ row covers, or that the padding it paints covers, by Tab or by a script, the row
 scrolls under it until the field sits above it. A field beside the row, rather than under it, or in
 a modal dialog or open popover the row is not in, is left where it is; the row watches focus only
 inside its own parent element. A held row is always on screen, so the browser's `scrollIntoView`
-on it would scroll nothing; the row's own `scrollIntoView` scrolls to where it rests at its form's
-end instead, so what is said just above it comes into view with it, as the till's Split refusals
-need. A row with no slotted element and no message to show takes no room,
+on it would not scroll the scroller that holds it; the row's own `scrollIntoView` scrolls to where
+it rests at its form's end instead. With `block: "nearest"` or `"end"`, what is said just above it
+then comes into view above it, as the till's Split refusals need. A row with no slotted element and no message to show takes no room,
 so a row kept only for a message covers nothing while the message is empty; a slotted element
 hidden after it arrives still counts. A row in a dialog's footer is left as it was, since the footer
 already stays in view: directly in its `footer` slot, including in browsers without style container queries, and inside an element placed

@@ -194,6 +194,15 @@ const splitButton = (el: TillApp) =>
   q<HTMLElementTagNameMap["wt-button"]>(el, "[data-split-confirm]")!;
 const bottom = (el: TillApp) =>
   q<HTMLElementTagNameMap["wt-form-actions"]>(el, "[data-split-pick] wt-form-actions")!;
+const onScreen = (control: HTMLElement) => {
+  const box = control.getBoundingClientRect();
+  return box.top >= 0 && box.bottom <= innerHeight;
+};
+/** On screen and above the held Save row, not behind it. */
+const shownAboveRow = (el: TillApp, said: HTMLElement) => {
+  const box = said.getBoundingClientRect();
+  return box.top >= 0 && box.bottom <= bottom(el).getBoundingClientRect().top;
+};
 
 function expectBlank(el: TillApp): void {
   expect(picker(el)).toBeNull();
@@ -2418,14 +2427,12 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           }),
         },
       );
-      const onScreen = (control: HTMLElement) => {
-        const box = control.getBoundingClientRect();
-        return box.top >= 0 && box.bottom <= innerHeight;
-      };
       expect(q(el, "[data-split-pick]")!.getBoundingClientRect().height).toBeGreaterThan(
         innerHeight,
       );
-      await expect.poll(() => onScreen(refusal(el)!) && onScreen(splitButton(el))).toBe(true);
+      await expect
+        .poll(() => shownAboveRow(el, refusal(el)!) && onScreen(splitButton(el)))
+        .toBe(true);
     });
 
     describe("what each row says and reads again", () => {
@@ -4753,12 +4760,12 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       row(el, "b2")!.scrollIntoView({ block: "nearest" });
       await taken(el);
       expect(footRefusal(el)).toBeDefined();
-      const onScreen = (control: HTMLElement) => {
-        const box = control.getBoundingClientRect();
-        return box.top >= 0 && box.bottom <= innerHeight;
-      };
       await expect
-        .poll(() => onScreen(q(el, "[data-split-take-over-refusal]")!) && onScreen(splitButton(el)))
+        .poll(
+          () =>
+            shownAboveRow(el, q(el, "[data-split-take-over-refusal]")!) &&
+            onScreen(splitButton(el)),
+        )
         .toBe(true);
     });
 
