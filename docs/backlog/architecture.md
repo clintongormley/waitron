@@ -794,7 +794,8 @@ the helper's constant status is not evidence of the write.
   `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff display names.
   The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
   Spanish staff-name samples remain in other local and shared `testing/` fixtures.
-  Logger personal-name samples use English names, except the deliberate accented `Àngel` cases;
+  Logger personal-name samples use English names, except the deliberate accented `Àngel` cases
+  and short-email `ana@bo.es` sample;
   made-here and till-table supervisor display samples use English names.
   Location and dish samples remain in the issuance-pass and list-unit-price fiscal-identity,
   served-at-huella, split-bill fiscal and tabs filing suites.
