@@ -14,6 +14,7 @@ import {
   products,
   sectionMembers,
   sections,
+  units,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -2343,3 +2344,32 @@ function changeBodies(changes: readonly MenuChange[]): MenuChangeBody[] {
     return body;
   });
 }
+
+it("a published offer's pricingUnit follows its unit for the offer and its variants", async () => {
+  const f = await menusFixture(fx.db);
+  const unit = await app((tx) =>
+    createUnit(
+      tx,
+      {
+        staffName: "Litre",
+        staffAbbreviation: "l",
+        name: { en: "litre" },
+        abbreviation: { en: "l" },
+        precision: 3,
+      },
+      "en",
+    ),
+  );
+  await app(async (tx) => {
+    await updateProduct(tx, f.lemonade, { unitId: unit.id });
+    await tx.update(units).set({ hardwareUnit: "kg" }).where(eq(units.id, unit.id));
+  });
+  const offerId = await app((tx) => offerOf(tx, f.dinner, f.lemonade));
+  const offer = (await build(f.dinner)).offers[offerId]!;
+  expect(offer).toMatchObject({ pricingUnit: "weight" });
+  expect(offer.variants.find((variant) => variant.id === f.large)!.pricingUnit).toBe("weight");
+  await app((tx) => tx.update(units).set({ hardwareUnit: null }).where(eq(units.id, unit.id)));
+  const each = (await build(f.dinner)).offers[offerId]!;
+  expect(each).toMatchObject({ pricingUnit: "each" });
+  expect(each.variants.find((variant) => variant.id === f.large)!.pricingUnit).toBe("each");
+});

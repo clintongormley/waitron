@@ -3,7 +3,11 @@ import { listStaffAdmittedTo } from "@waitron/identity";
 import { STARTER_JOB_ROLE_NAMES, DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import { madridWithRenamedTables } from "./testing/madrid-renamed-tables.js";
 import { madridWithFoldedTables } from "./testing/madrid-folded-tables.js";
-import { madridWithDocument, madridWithMenuSettings } from "./testing/madrid-documents.js";
+import {
+  madridWithDocument,
+  madridWithMenuSettings,
+  madridWithProductUnits,
+} from "./testing/madrid-documents.js";
 import { stable } from "./testing/madrid-semantics.js";
 import {
   madridWithDroppedColumns,
@@ -427,6 +431,33 @@ for (const locale of ["en", "es"] as const) {
       "before" | "provisioned" | "seeded",
       CanonicalMadridSemantics
     >;
+    // The checked added-row adapter consumes the frozen schema before the unit fold below.
+    historicalSeeded.tables.product_units = {
+      ...structuredClone(expected.seeded.tables.product_units!),
+      rows: {},
+    };
+    const historicalProducts = historicalSeeded.tables.products!;
+    historicalProducts.columns = historicalProducts.columns.map((column) =>
+      column.name === "unit_id" ? { ...column, name: "pricing_unit" } : column,
+    );
+    historicalProducts.foreignKeys = expected.seeded.tables.products!.foreignKeys;
+    for (const row of Object.values(historicalProducts.rows)) {
+      const unitId = row.unit_id;
+      const unit =
+        unitId === null ? undefined : historicalSeeded.tables.units!.rows[String(unitId)];
+      row.pricing_unit =
+        row.parent_id !== null ? null : unit?.hardware_unit == null ? "each" : "weight";
+      if (unitId !== null) {
+        const assignment = { product_id: row.id!, unit_id: unitId! };
+        historicalSeeded.tables.product_units.rows[stable(assignment)] = assignment;
+      }
+      delete row.unit_id;
+    }
+    historicalSeeded.tables.product_units.rows = Object.fromEntries(
+      Object.entries(historicalSeeded.tables.product_units.rows).sort(([a], [b]) =>
+        a.localeCompare(b),
+      ),
+    );
     const manifest = JSON.parse(
       await readFile(new URL("madrid-before-move.manifest.json", root), "utf8"),
     ) as {
@@ -1437,6 +1468,8 @@ for (const locale of ["en", "es"] as const) {
       phases[phase] = Object.fromEntries(
         Object.entries(phases[phase]!).sort(([a], [b]) => a.localeCompare(b)),
       );
+      expected[phase] = madridWithProductUnits(expected[phase]);
+      delete phases[phase]!.product_units;
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
       for (const [name, actual] of Object.entries(canonical[phase].tables)) {

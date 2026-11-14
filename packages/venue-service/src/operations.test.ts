@@ -984,7 +984,7 @@ describe("venue service routing", () => {
       const department = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
       await configureZone(tx, { zoneId: zone, departmentId: department.id });
       const menu = await createMenu(tx, { name: "Deli takeaway" });
-      // Deleting its product_units row makes the offer read resolve it to the synthetic Each unit.
+      // Clearing its stored unit makes the offer read resolve it to the synthetic Each unit.
       const sweets = await createProduct(tx, {
         menuId: menu.id,
         categoryId: null,
@@ -993,7 +993,7 @@ describe("venue service routing", () => {
         unitPrice: "0.00",
         vatClass: "general",
       });
-      await tx.execute(sql`delete from product_units where product_id = ${sweets.id}`);
+      await tx.execute(sql`update products set unit_id = null where id = ${sweets.id}`);
       const offer = await addProductToMenu(tx, {
         menuId: menu.id,
         productId: sweets.id,

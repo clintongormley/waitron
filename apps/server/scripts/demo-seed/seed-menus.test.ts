@@ -329,8 +329,7 @@ describe("seedMenus", () => {
         abbreviation: string;
       }>(sql`
         select u.precision, u.name, u.abbreviation from units u
-        join product_units pu on pu.unit_id = u.id
-        join products p on p.id = pu.product_id
+        join products p on p.unit_id = u.id
         where p.name = 'Salad'`);
       const customUnit = customUnitRaw.map((row) => ({
         precision: row.precision,

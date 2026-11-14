@@ -6,7 +6,7 @@ import { menus, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { createExtraList, productUnits } from "@waitron/menu";
+import { createExtraList } from "@waitron/menu";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -19,12 +19,10 @@ const log: Logger = () => {};
 let cookie: string;
 
 beforeEach(async () => {
-  // Child-to-parent order: product_units RESTRICTs deletes of the units and products it references.
   await suite.db.execute(sql`delete from extra_list_items`);
   await suite.db.execute(sql`delete from extra_lists`);
-  await suite.db.execute(sql`delete from product_units`);
-  await suite.db.execute(sql`delete from units`);
   await suite.db.execute(sql`delete from products`);
+  await suite.db.execute(sql`delete from units`);
   await suite.db.execute(sql`delete from menus`);
   await suite.db.execute(sql`delete from management_sessions`);
   await suite.db.execute(sql`delete from persons`);
@@ -56,9 +54,12 @@ async function seedProduct(
 ): Promise<string> {
   const [product] = await tx
     .insert(products)
-    .values({ menuId, name, pricingUnit: "each", unitPrice: 100, vatClass: "general" })
+    .values({ menuId, name, unitPrice: 100, vatClass: "general" })
     .returning({ id: products.id });
-  await tx.insert(productUnits).values({ productId: product!.id, unitId });
+  await tx
+    .update(products)
+    .set({ unitId })
+    .where(inArray(products.id, [product!.id]));
   return product!.id;
 }
 
@@ -581,7 +582,7 @@ it.each(["target", "each"])(
       const archived = await seedProduct(tx, menu, "Archived", source.id);
       await tx
         .update(products)
-        .set({ active: false, pricingUnit: "weight" })
+        .set({ active: false })
         .where(inArray(products.id, [archived]));
       return [active, archived];
     });
@@ -594,8 +595,8 @@ it.each(["target", "each"])(
       error: { code: "product.archived", params: { productId: archived } },
     });
     const rows = await suite.db
-      .select({ productId: productUnits.productId, unitId: productUnits.unitId })
-      .from(productUnits);
+      .select({ productId: products.id, unitId: products.unitId })
+      .from(products);
     expect(rows).toHaveLength(2);
     expect(Object.fromEntries(rows.map((row) => [row.productId, row.unitId]))).toEqual({
       [active!]: source.id,
@@ -604,11 +605,11 @@ it.each(["target", "each"])(
     expect(
       (
         await suite.db
-          .select({ pricingUnit: products.pricingUnit })
+          .select({ unitId: products.unitId })
           .from(products)
           .where(inArray(products.id, [archived!]))
-      )[0]?.pricingUnit,
-    ).toBe("weight");
+      )[0]?.unitId,
+    ).toBe(source.id);
   },
 );
 

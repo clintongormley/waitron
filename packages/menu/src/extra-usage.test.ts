@@ -1,5 +1,6 @@
+import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { productUnits, withTransaction, type Transaction } from "@waitron/db";
+import { products, withTransaction, type Transaction } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
 import { createExtraList } from "./extras.js";
@@ -107,7 +108,7 @@ it("still warns for a variant with a retained unit row when its parent's unit ch
       "en",
     );
     await assignProductUnit(tx, f.lemonade, unit.id);
-    await tx.insert(productUnits).values({ productId: f.large, unitId: unit.id });
+    await tx.update(products).set({ unitId: unit.id }).where(eq(products.id, f.large));
     const list = await createExtraList(
       tx,
       { name: "Sizes", items: [{ productId: f.large, portion: "0.055" }] },

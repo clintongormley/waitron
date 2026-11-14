@@ -230,7 +230,6 @@ async function draftSnapshot(): Promise<Record<string, string[]>> {
     "option_labels",
     "option_lists",
     "product_modifiers",
-    "product_units",
     "products",
     "section_members",
     "sections",

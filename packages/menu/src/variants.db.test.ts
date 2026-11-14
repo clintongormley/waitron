@@ -8,7 +8,6 @@ import {
   isRefusal,
   menuItemVariantOverrides,
   products,
-  productUnits,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -109,7 +108,7 @@ async function fixture() {
 async function storedVariants(parentId: string) {
   const { rows } = await suite.db.execute<Record<string, unknown>>(sql`
     select id, parent_id, menu_id, variant_order, active, available, ordering, unit_price,
-      vat_class, pricing_unit, dietary_declarations, diet, description, category_id,
+      vat_class, unit_id, dietary_declarations, diet, description, category_id,
       course_id, image, allergens, manual_allergens,
       diet_override
     from products where parent_id = ${parentId} order by variant_order`);
@@ -119,7 +118,7 @@ async function storedVariants(parentId: string) {
 /** Every inherited column, as the explicit NULL a new variant stores so it reads its parent's. */
 const INHERITING = {
   vat_class: null,
-  pricing_unit: null,
+  unit_id: null,
   dietary_declarations: null,
   diet: null,
   description: null,
@@ -156,8 +155,11 @@ describe("setProductVariants stores each variant as a product under its parent",
     // No unit row of their own: that is how a variant inherits its unit.
     const ids = saved.map((variant) => variant.id);
     expect(
-      await suite.db.select().from(productUnits).where(inArray(productUnits.productId, ids)),
-    ).toEqual([]);
+      await suite.db
+        .select({ unitId: products.unitId })
+        .from(products)
+        .where(inArray(products.id, ids)),
+    ).toEqual([{ unitId: null }, { unitId: null }]);
     expect(await app((tx) => listProductVariants(tx, f.parentId))).toEqual(saved);
 
     const reversed = await app((tx) =>

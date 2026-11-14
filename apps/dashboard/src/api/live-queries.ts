@@ -18,7 +18,6 @@ const MENU_PUBLICATION_READS = [
   "option_labels",
   "option_lists",
   "product_modifiers",
-  "product_units",
   "products",
   "section_members",
   "sections",
@@ -332,7 +331,6 @@ export const QUERY_DEPENDENCIES = {
     "extra_list_items",
     "option_lists",
     "option_labels",
-    "product_units",
     "units",
   ],
   // The tables `menuStatus` and `previewMenu` read (packages/menu/src/menu-publication.ts); a

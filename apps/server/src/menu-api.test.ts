@@ -2402,18 +2402,14 @@ describe("mountMenuApi — products", () => {
       ).rows[0]!.id;
       const plantUnit = async () => {
         await suite.db.execute(
-          sql`insert into product_units (product_id, unit_id) values (${seeded.variantId}, ${kgUnitId})`,
-        );
-        await suite.db.execute(
-          sql`update products set pricing_unit = 'weight' where id = ${seeded.variantId}`,
+          sql`update products set unit_id = ${kgUnitId} where id = ${seeded.variantId}`,
         );
       };
       await plantUnit();
       const storedUnit = async () =>
         (
-          await suite.db.execute<{ unit_id: string | null; pricing_unit: string | null }>(
-            sql`select product_units.unit_id, products.pricing_unit from products
-                left join product_units on product_units.product_id = products.id
+          await suite.db.execute<{ unit_id: string | null }>(
+            sql`select unit_id from products
                 where products.id = ${seeded.variantId}`,
           )
         ).rows[0]!;
@@ -2436,16 +2432,16 @@ describe("mountMenuApi — products", () => {
       const removed = await put(true);
       expect(removed.status).toBe(200);
       expect(await removed.json()).toMatchObject({ active: true, unitId: null });
-      expect(await storedUnit()).toEqual({ unit_id: null, pricing_unit: null });
+      expect(await storedUnit()).toEqual({ unit_id: null });
       expect((await put(false)).status).toBe(200);
       await plantUnit();
-      expect(await storedUnit()).toEqual({ unit_id: kgUnitId, pricing_unit: "weight" });
+      expect(await storedUnit()).toEqual({ unit_id: kgUnitId });
       const restored = await put(true);
       expect(restored.status).toBe(409);
       expect(await restored.json()).toEqual({
         error: { code: "product.archived", params: { productId: variantId } },
       });
-      expect(await storedUnit()).toEqual({ unit_id: kgUnitId, pricing_unit: "weight" });
+      expect(await storedUnit()).toEqual({ unit_id: kgUnitId });
     });
 
     it("refuses a save naming a unit of its own, and keeps the row as it was", async () => {
@@ -2461,7 +2457,7 @@ describe("mountMenuApi — products", () => {
       expect(await refused.json()).toMatchObject({
         error: { code: "product.invalid", params: { field: "unitId" } },
       });
-      expect(await storedUnit()).toEqual({ unit_id: kgUnitId, pricing_unit: "weight" });
+      expect(await storedUnit()).toEqual({ unit_id: kgUnitId });
     });
   });
 
@@ -4170,9 +4166,7 @@ describe("mountMenuApi — extras lists and products with variants", () => {
     const [each] = (
       await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
     ).rows;
-    await suite.db.execute(
-      sql`insert into product_units (product_id, unit_id) values (${variantId}, ${each!.id})`,
-    );
+    await suite.db.execute(sql`update products set unit_id = ${each!.id} where id = ${variantId}`);
     const after = await send(app, "GET", `/management-api/products/${parentId}/extra-usage`);
     expect(after.status).toBe(200);
     expect(await after.json()).toEqual([

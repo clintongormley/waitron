@@ -1,13 +1,6 @@
-import { inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  menus,
-  CORE_MIGRATIONS,
-  products,
-  productUnits,
-  units,
-  withTransaction,
-} from "@waitron/db";
+import { menus, CORE_MIGRATIONS, products, units, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
@@ -44,7 +37,6 @@ async function product(id: string | null = null): Promise<string> {
       ...(id === null ? {} : { id }),
       menuId: menu!.id,
       name: "Soup",
-      pricingUnit: "each",
       unitPrice: 1,
       vatClass: "general",
     })
@@ -311,31 +303,27 @@ it("reassigning to null returns the products to each-priced and leaves products 
       "en",
     ),
   );
-  // Put both products in the real "sold by weight" state: a unit row plus pricing_unit = 'weight'.
+  // Both products have stored units; only the source selection may change.
   await app(async (tx) => {
     await assignProductUnit(tx, onSource, sourceUnit.id);
     await assignProductUnit(tx, onOther, otherUnit.id);
   });
-  await suite.db
-    .update(products)
-    .set({ pricingUnit: "weight" })
-    .where(inArray(products.id, [onSource, onOther]));
 
   // onOther is in the list but on a different unit, so it stands in for a product already moved
   // elsewhere: scoped by the source unit, it must be skipped by both the delete and the update.
   await app((tx) => reassignProductsToUnit(tx, sourceUnit.id, [onSource, onOther], null));
 
   const pricing = await suite.db
-    .select({ id: products.id, pricingUnit: products.pricingUnit })
+    .select({ id: products.id, unitId: products.unitId })
     .from(products)
     .where(inArray(products.id, [onSource, onOther]));
-  const pricingById = Object.fromEntries(pricing.map((row) => [row.id, row.pricingUnit]));
+  const pricingById = Object.fromEntries(pricing.map((row) => [row.id, row.unitId]));
   // The reassigned top-level product loses its unit row AND returns to each-priced.
   expect(await app((tx) => storedUnitId(tx, onSource))).toBeNull();
-  expect(pricingById[onSource]).toBe("each");
+  expect(pricingById[onSource]).toBeNull();
   // The product on another unit keeps both its unit row and its weight pricing.
   expect(await app((tx) => storedUnitId(tx, onOther))).toBe(otherUnit.id);
-  expect(pricingById[onOther]).toBe("weight");
+  expect(pricingById[onOther]).toBe(otherUnit.id);
 });
 
 /** A variant of `parent`, with no unit row of its own. */
@@ -372,21 +360,17 @@ it("reassigning to null skips a variant's stored unit row, as it skips an id not
   const variant = await variantOf(parent);
   const sourceUnit = await kg();
   await app((tx) => assignProductUnit(tx, parent, sourceUnit.id));
-  await plantStoredUnit(suite.db, variant, sourceUnit.id, "weight");
-  await suite.db
-    .update(products)
-    .set({ pricingUnit: "weight" })
-    .where(inArray(products.id, [parent]));
+  await plantStoredUnit(suite.db, variant, sourceUnit.id);
 
   await app((tx) => reassignProductsToUnit(tx, sourceUnit.id, [parent, variant], null));
 
   const pricing = await suite.db
-    .select({ id: products.id, pricingUnit: products.pricingUnit })
+    .select({ id: products.id, unitId: products.unitId })
     .from(products)
     .where(inArray(products.id, [parent, variant]));
-  expect(Object.fromEntries(pricing.map((row) => [row.id, row.pricingUnit]))).toEqual({
-    [parent]: "each",
-    [variant]: "weight",
+  expect(Object.fromEntries(pricing.map((row) => [row.id, row.unitId]))).toEqual({
+    [parent]: null,
+    [variant]: sourceUnit.id,
   });
   expect(await app((tx) => storedUnitId(tx, parent))).toBeNull();
   expect(await app((tx) => storedUnitId(tx, variant))).toBe(sourceUnit.id);
@@ -410,7 +394,7 @@ describe("a variant's stored unit row, from before a variant always took its pro
     const variant = await variantOf(parent);
     const unit = await kg();
     await app((tx) => assignProductUnit(tx, parent, unit.id));
-    await plantStoredUnit(suite.db, variant, unit.id, "weight");
+    await plantStoredUnit(suite.db, variant, unit.id);
     expect(await app((tx) => productsUsingUnit(tx, unit.id))).toEqual([
       { id: parent, name: "Soup", active: true },
     ]);
@@ -421,7 +405,7 @@ describe("a variant's stored unit row, from before a variant always took its pro
     const parent = await product();
     const variant = await variantOf(parent);
     const unit = await kg();
-    await plantStoredUnit(suite.db, variant, unit.id, "weight");
+    await plantStoredUnit(suite.db, variant, unit.id);
     await app((tx) => deleteUnit(tx, unit.id));
     await expect(app((tx) => getUnit(tx, unit.id))).rejects.toMatchObject({
       code: "unit.not_found",
@@ -448,7 +432,7 @@ describe("a variant's stored unit row, from before a variant always took its pro
       ),
     );
     await app((tx) => assignProductUnit(tx, parent, source.id));
-    await plantStoredUnit(suite.db, variant, source.id, "weight");
+    await plantStoredUnit(suite.db, variant, source.id);
     await app((tx) => reassignProductsToUnit(tx, source.id, [parent, variant], target.id));
     expect(await app((tx) => storedUnitId(tx, parent))).toBe(target.id);
     expect(await app((tx) => storedUnitId(tx, variant))).toBe(source.id);
@@ -468,7 +452,7 @@ it.each(["target", "each"])(
       await assignProductUnit(tx, archived, source.id);
       await tx
         .update(products)
-        .set({ active: false, pricingUnit: "weight" })
+        .set({ active: false })
         .where(inArray(products.id, [archived]));
     });
     const reassignment = app((tx) =>
@@ -486,11 +470,11 @@ it.each(["target", "each"])(
     expect(
       (
         await suite.db
-          .select({ pricingUnit: products.pricingUnit })
+          .select({ unitId: products.unitId })
           .from(products)
           .where(inArray(products.id, [archived]))
-      )[0]?.pricingUnit,
-    ).toBe("weight");
+      )[0]?.unitId,
+    ).toBe(source.id);
   },
 );
 
@@ -554,7 +538,6 @@ it("retains an archived product's unit and refuses deletion or reassignment with
     app(async (tx) => ({
       products: await tx.select().from(products),
       units: await tx.select().from(units),
-      references: await tx.select().from(productUnits),
     }));
   const before = await snapshot();
   await expect(app((tx) => deleteUnit(tx, source.id))).rejects.toMatchObject({
@@ -573,4 +556,25 @@ it("retains an archived product's unit and refuses deletion or reassignment with
   }
   await app((tx) => deleteUnit(tx, target.id));
   expect(await app((tx) => listUnits(tx))).toEqual([source]);
+});
+
+it("stores the unit on the product and refuses deleting a unit in use", async () => {
+  await seedTaxpayer(suite.db);
+  const productId = await product();
+  const used = await kg();
+  const unused = await kg();
+  await app((tx) => assignProductUnit(tx, productId, used.id));
+  const columns = await suite.db.execute<{ name: string }>(sql`pragma table_info(products)`);
+  expect(columns.rows.map((column) => column.name)).toContain("unit_id");
+  expect(columns.rows.map((column) => column.name)).not.toContain("pricing_unit");
+  expect(
+    await app((tx) =>
+      tx.select({ unitId: products.unitId }).from(products).where(eq(products.id, productId)),
+    ),
+  ).toEqual([{ unitId: used.id }]);
+  await expect(
+    Promise.resolve().then(() => suite.db.execute(sql`delete from units where id = ${used.id}`)),
+  ).rejects.toThrow("FOREIGN KEY constraint failed");
+  await suite.db.execute(sql`delete from units where id = ${unused.id}`);
+  expect(await app((tx) => listUnits(tx))).toEqual([used]);
 });

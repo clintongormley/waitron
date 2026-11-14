@@ -1547,7 +1547,7 @@ describe("ordering extras and options — parent + child lines", () => {
           name: `${own.stem} staff`,
           customerName: { [v.defaultLanguage]: `${own.stem} customer` },
           kitchenName: `${own.stem} kitchen`,
-          pricingUnit: null,
+
           unitPrice: own.unitPrice,
           vatClass: own.vatClass,
           dietaryDeclarations: null,

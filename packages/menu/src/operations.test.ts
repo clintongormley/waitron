@@ -5,7 +5,7 @@ import { listProductVariants, setMenuVariants, setProductVariants } from "./vari
 import { applyLiveFields } from "./menu-document.js";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { menusFixture } from "../test/menus-fixture.js";
-import { menuItems, products, withTransaction } from "@waitron/db";
+import { menuItems, products, units, withTransaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
@@ -331,7 +331,7 @@ describe("menu operations", () => {
   it("reads a product with no unit as the synthetic Each unit", async () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
-      // Create a normal product, then remove its product_units row so the read exercises the
+      // Create a normal product, then clear its stored unit so the read exercises the
       // null-join branch of a product that has no stored unit at all.
       const product = await createProduct(tx, {
         menuId: cat.id,
@@ -341,7 +341,7 @@ describe("menu operations", () => {
         unitPrice: "0.00",
         vatClass: "general",
       });
-      await tx.execute(sql`delete from product_units where product_id = ${product.id}`);
+      await tx.execute(sql`update products set unit_id = null where id = ${product.id}`);
       const [seen] = await listProducts(tx, cat.id);
       // toEqual(EACH_UNIT) asserts the whole synthetic unit, hardwareUnit: null included.
       expect(seen!.unit).toEqual(EACH_UNIT);
@@ -382,10 +382,10 @@ describe("menu operations", () => {
       await updateProduct(tx, created.id, { unitId: null });
       expect(await storedUnitId(tx, created.id)).toBeNull();
       const [after] = await tx
-        .select({ p: products.pricingUnit })
+        .select({ p: products.unitId })
         .from(products)
         .where(eq(products.id, created.id));
-      expect(after!.p).toBe("each");
+      expect(after!.p).toBeNull();
     });
   });
 
@@ -570,8 +570,8 @@ describe("menu operations", () => {
         vatClass: "reduced",
       });
       const assignments = await tx.execute<{ unit_id: string }>(sql`
-        select unit_id from product_units
-        where product_id = ${ham.id}`);
+        select unit_id from products
+        where id = ${ham.id}`);
       expect(assignments.rows).toEqual([{ unit_id: kgUnitId }]);
       expect(ham.unit).toEqual({
         staffName: "Staff unit",
@@ -597,10 +597,10 @@ describe("menu operations", () => {
         vatClass: "reduced",
       });
       await updateProduct(tx, ham.id, { unitId: eachUnitId });
-      const stored = await tx.execute<{ pricing_unit: string }>(sql`
-        select pricing_unit from products
+      const stored = await tx.execute<{ unit_id: string }>(sql`
+        select unit_id from products
         where id = ${ham.id}`);
-      expect(stored.rows).toEqual([{ pricing_unit: "each" }]);
+      expect(stored.rows).toEqual([{ unit_id: eachUnitId }]);
       const [updated] = await listProducts(tx, menu.id);
       expect(updated).toMatchObject({
         unitId: eachUnitId,
@@ -623,8 +623,8 @@ describe("menu operations", () => {
       });
       await updateProduct(tx, product.id, { pricingUnit: "weight" });
       const assignments = await tx.execute<{ unit_id: string }>(sql`
-        select unit_id from product_units
-        where product_id = ${product.id}`);
+        select unit_id from products
+        where id = ${product.id}`);
       expect(assignments.rows).toEqual([{ unit_id: kgUnitId }]);
       const [updated] = await listProducts(tx, menu.id);
       expect(updated).toMatchObject({
@@ -1396,6 +1396,27 @@ describe("menu operations", () => {
     // A blank customer name falls back to the staff name for the snapshotted line text.
     expect(priceable.descriptions).toEqual({ en: "water" });
     expect(priceable.unitPrice).toBe("1.50");
+  });
+  it("works out pricingUnit from the unit on every product read", async () => {
+    await asVenue(async (tx) => {
+      const menu = await createMenu(tx, { name: "By measure" });
+      const product = await createProduct(tx, {
+        menuId: menu.id,
+        categoryId: null,
+        name: "Oil",
+        unitId: eachUnitId,
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      await tx.update(units).set({ hardwareUnit: "kg" }).where(eq(units.id, eachUnitId));
+      expect((await listProducts(tx, menu.id))[0]!.pricingUnit).toBe("weight");
+      expect(
+        (await listAvailableProducts(tx)).products.find((row) => row.id === product.id)!
+          .pricingUnit,
+      ).toBe("weight");
+      await tx.update(units).set({ hardwareUnit: null }).where(eq(units.id, eachUnitId));
+      expect((await listProducts(tx, menu.id))[0]!.pricingUnit).toBe("each");
+    });
   });
 });
 

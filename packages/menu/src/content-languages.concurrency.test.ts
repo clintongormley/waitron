@@ -32,7 +32,7 @@ it("a default switch waits for an authoring transaction and keeps its incomplete
         menuId: menuId,
         name: "Bread",
         customerName: { en: "Bread" },
-        pricingUnit: "each",
+
         unitPrice: 2,
         vatClass: "general",
       });

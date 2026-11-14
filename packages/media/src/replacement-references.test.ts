@@ -58,7 +58,7 @@ it("changes presentation without rewriting product, variant, section, folder, re
       menuId: menu.id,
       parentId: product.id,
       name: "Large",
-      pricingUnit: "each",
+
       unitPrice: 300,
       vatClass: "general",
       image: image.filename,

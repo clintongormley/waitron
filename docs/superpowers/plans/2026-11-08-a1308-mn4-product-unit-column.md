@@ -38,6 +38,8 @@ already derives `pricingUnit` from `selection.unit.hardwareUnit`. Read, not run.
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2)
 
+> **2026-11-15 correction, watcher 00:06:** Reassignment keeps skipping variants, including their stored unit; retain both existing assertions, ported to `products.unit_id`. Only deletion clears variants before the restrict key is reached. The editor keeps a variant's own unit null and its parent's in `inherited.unitId`. Port the additional order-groups, table-signals, find-bill-bills and till live-subscription consumers. Historical Madrid input names and `editor.pricing_unit` / `editor.change_pricing_unit` keys stay as exact scan exceptions. Recorded in Lane E questions.md.
+
 ## What it builds
 
 1. **`products.unit_id`**: text, null (Each), key to `units.id` `on delete restrict`, index

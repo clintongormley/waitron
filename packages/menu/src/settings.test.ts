@@ -61,7 +61,7 @@ describe("the venue's new-product defaults", () => {
         .values({
           menuId: menu!.id,
           name: "Lemonade",
-          pricingUnit: "each",
+
           unitPrice: 100,
           vatClass: "reduced",
         })

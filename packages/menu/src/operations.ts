@@ -27,7 +27,6 @@ import {
   menuItemVariantOverrides,
   now,
   products,
-  productUnits,
   readVenueInvoiceLocales,
   sections,
   units,
@@ -79,7 +78,6 @@ import {
   type SellableUnit,
 } from "./units.js";
 import {
-  clearedPricingUnit,
   effectiveProductColumns as effective,
   isTopLevelProduct,
   parentJoin,
@@ -119,7 +117,7 @@ export interface CreateProductInput {
   name: string;
   /** Customer-facing translated name; omitted or null falls back to `name`. */
   customerName?: Record<string, string> | null;
-  /** `null` = Each (no `product_units` row stored); a real id assigns that unit; omitted falls back
+  /** `null` = Each (no stored unit); a real id assigns that unit; omitted falls back
    * to the legacy `pricingUnit`. */
   unitId?: string | null;
   pricingUnit?: PricingUnit;
@@ -194,7 +192,6 @@ const PRODUCT_BASE_COLUMNS = {
   customerName: products.customerName,
   ordering: products.ordering,
   setLunch: products.setLunch,
-  pricingUnit: effective.pricingUnit,
   unitPrice: effective.unitPrice,
   vatClass: effective.vatClass,
   active: products.active,
@@ -239,7 +236,6 @@ interface RawProduct {
   description: Record<string, string> | null;
   kitchenName: string | null;
   dietaryDeclarations: string[];
-  pricingUnit: string;
   /** Cents, as the column stores it; `toProduct` is where it becomes the amount callers see. */
   unitPrice: number;
   vatClass: string;
@@ -262,8 +258,6 @@ interface RawProduct {
   courseId: string | null;
 }
 
-// `pricing_unit`/`vat_class` are constrained to their unions by a CHECK
-// (packages/db/src/schema/menus.ts), which makes the casts below safe.
 function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
   const {
     unitName,
@@ -292,7 +286,7 @@ function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
     modifiers: [],
     unit,
     unitId: unit.id,
-    pricingUnit: row.pricingUnit as PricingUnit,
+    pricingUnit: (row.hardwareUnit === null ? "each" : "weight") as PricingUnit,
     vatClass: row.vatClass as VatClass,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     dietOverride: row.dietOverride as DietOverride | null,
@@ -324,10 +318,6 @@ function sellableUnit(
   }
   // A product with no stored unit reads as Each (never stored).
   return EACH_UNIT;
-}
-
-function legacyPricingUnit(unit: SellableUnit): PricingUnit {
-  return unit.hardwareUnit === null ? "each" : "weight";
 }
 
 /** A new menu, with the root and Device Home Page section it owns (`createMenuShell`). */
@@ -430,8 +420,8 @@ async function writeMenuItemSettings(
 /**
  * What an offer and each of its variants both carry beyond their names and prices, as one column
  * set and one mapping, so a field added here reaches both. A query selecting these must
- * also have `.leftJoin(parentProducts, parentJoin)`, `.leftJoin(productUnits, unitOwnerJoin)`,
- * `.leftJoin(units, …)` and `.leftJoin(categories, …)`.
+ * also have `.leftJoin(parentProducts, parentJoin)`, `.leftJoin(units, unitOwnerJoin)`
+ * and `.leftJoin(categories, …)`.
  */
 const offerLineColumns = {
   unitId: units.id,
@@ -441,7 +431,6 @@ const offerLineColumns = {
   unitAbbreviation: units.abbreviation,
   unitPrecision: units.precision,
   hardwareUnit: units.hardwareUnit,
-  pricingUnit: effective.pricingUnit,
   vatClass: effective.vatClass,
   category: categories.name,
   allergens: effective.allergens,
@@ -464,7 +453,6 @@ interface OfferLineRow {
   unitAbbreviation: UnitRow["abbreviation"] | null;
   unitPrecision: UnitRow["precision"] | null;
   hardwareUnit: UnitRow["hardwareUnit"] | null;
-  pricingUnit: NonNullable<ProductRow["pricingUnit"]>;
   vatClass: NonNullable<ProductRow["vatClass"]>;
   category: (typeof categories.$inferSelect)["name"] | null;
   allergens: ProductRow["allergens"];
@@ -487,7 +475,7 @@ function offerLineValues(row: OfferLineRow) {
       row.unitStaffAbbreviation,
       row.unitMeasure,
     ),
-    pricingUnit: row.pricingUnit as PricingUnit,
+    pricingUnit: (row.hardwareUnit === null ? "each" : "weight") as PricingUnit,
     vatClass: row.vatClass as VatClass,
     category: row.category,
     allergens: row.allergens,
@@ -573,8 +561,7 @@ async function offerRowsOn(
         .innerJoin(menus, eq(menus.id, menuItems.menuId))
         .innerJoin(products, eq(products.id, menuItems.productId))
         .leftJoin(parentProducts, parentJoin)
-        .leftJoin(productUnits, unitOwnerJoin)
-        .leftJoin(units, eq(units.id, productUnits.unitId))
+        .leftJoin(units, unitOwnerJoin)
         .leftJoin(categories, eq(categories.id, effective.categoryId))
         .where(
           and(
@@ -797,8 +784,7 @@ async function readOfferVariants(
     .from(menuItems)
     .innerJoin(products, eq(products.parentId, menuItems.productId))
     .leftJoin(parentProducts, parentJoin)
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(units, unitOwnerJoin)
     .leftJoin(categories, eq(categories.id, effective.categoryId))
     .leftJoin(
       menuItemVariantOverrides,
@@ -968,7 +954,6 @@ async function insertProduct(
     description: input.description ?? null,
     kitchenName: input.kitchenName?.trim() || null,
     dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
-    pricingUnit: selectedUnit === null ? "each" : legacyPricingUnit(selectedUnit),
     unitPrice: stringToCents(input.unitPrice),
     vatClass: input.vatClass,
     active: input.active ?? true,
@@ -991,8 +976,7 @@ async function insertProduct(
     .select(PRODUCT_COLUMNS)
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(units, unitOwnerJoin)
     .where(eq(products.id, row!.id));
   return toProduct(created!);
 }
@@ -1002,8 +986,7 @@ export async function listProducts(tx: Transaction, menuId?: string): Promise<Pr
     .select(PRODUCT_COLUMNS)
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(units, unitOwnerJoin)
     .where(and(isTopLevelProduct, menuId === undefined ? undefined : eq(products.menuId, menuId)))
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
@@ -1173,14 +1156,6 @@ async function patchProduct(
       ...(unitPrice === undefined
         ? {}
         : { unitPrice: unitPrice === null ? null : stringToCents(unitPrice) }),
-      ...(unitAction.kind === "keep"
-        ? {}
-        : {
-            pricingUnit:
-              unitAction.kind === "clear"
-                ? clearedPricingUnit()
-                : legacyPricingUnit(unitAction.unit),
-          }),
       ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
       ...(dietOverride !== undefined ? { dietOverride } : {}),
       ...(directDietary === undefined ? {} : { dietaryDeclarations: directDietary }),
@@ -1255,7 +1230,6 @@ export async function listAvailableProducts(
       unitAbbreviation: units.abbreviation,
       unitPrecision: units.precision,
       hardwareUnit: units.hardwareUnit,
-      pricingUnit: effective.pricingUnit,
       unitPrice: effective.unitPrice,
       vatClass: effective.vatClass,
       category: categories.name,
@@ -1271,8 +1245,7 @@ export async function listAvailableProducts(
     .from(products)
     .innerJoin(menus, eq(menus.id, products.menuId))
     .leftJoin(parentProducts, parentJoin)
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(units, unitOwnerJoin)
     .leftJoin(categories, eq(categories.id, effective.categoryId))
     .where(
       and(
@@ -1307,7 +1280,7 @@ export async function listAvailableProducts(
       row.unitStaffAbbreviation,
       row.unitMeasure,
     ),
-    pricingUnit: row.pricingUnit as PricingUnit,
+    pricingUnit: (row.hardwareUnit === null ? "each" : "weight") as PricingUnit,
     unitPrice: centsToDecimal(row.unitPrice),
     vatClass: row.vatClass as VatClass,
     category: row.category,

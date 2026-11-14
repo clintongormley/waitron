@@ -704,7 +704,7 @@ it("a later run replaces more than one batch of an item's rows in one store", as
           name: `STAFF Racio ${n}`,
           kitchenName: `KITCHEN Racio ${n}`,
           customerName: { ca: `CLIENT-CA Racio ${n}` },
-          pricingUnit: "each" as const,
+
           unitPrice: 300,
           vatClass: "reduced" as const,
         })),

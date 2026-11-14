@@ -423,7 +423,7 @@ export async function seedFiredLine(
     .values({
       menuId: menu!.id,
       name: "Item",
-      pricingUnit: "each",
+
       unitPrice: stringToCents("1.00"),
       vatClass: "general",
     })

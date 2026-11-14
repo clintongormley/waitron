@@ -1,10 +1,9 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   settings,
   decodeSettingsRow,
   VENUE_SETTINGS,
   products,
-  productUnits,
   units,
   type Transaction,
 } from "@waitron/db";
@@ -18,7 +17,7 @@ import {
   validateOptionalTranslations,
 } from "./optional-translations.js";
 import { EACH_UNIT_ID, unitStaffText, validateUnitPrecision } from "./unit-validation.js";
-import { clearedPricingUnit, isTopLevelProduct, productWithId } from "./variant-fallback.js";
+import { isTopLevelProduct, productWithId } from "./variant-fallback.js";
 export {
   EACH_UNIT_ID,
   MAX_UNIT_PRECISION,
@@ -30,7 +29,7 @@ import type { Unit, SellableUnit } from "@waitron/shared";
 export type { Unit, SellableUnit } from "@waitron/shared";
 
 /** The unit a product reads as when it has NO stored unit. It is NEVER written to `units` or
- * `product_units`. */
+ * a product's unit column. */
 export const EACH_UNIT: SellableUnit = {
   id: EACH_UNIT_ID,
   staffName: "Each",
@@ -220,16 +219,13 @@ export async function assignProductUnit(
     .from(products)
     .where(productWithId(productId, "top-level"));
   if (product === undefined) throw new AppError("product.not_found", { productId });
-  await tx.insert(productUnits).values({ productId, unitId }).onConflictDoUpdate({
-    target: productUnits.productId,
-    set: { unitId },
-  });
+  await tx.update(products).set({ unitId }).where(eq(products.id, productId));
 }
 
 /** Move the listed products onto the target unit, scoped to the products still on `sourceUnitId`:
  * one another manager has already moved elsewhere is left where it is, and an id not currently on
  * `sourceUnitId` (an unknown id included), or a variant's, is skipped, never an error. A `null`
- * target instead deletes those rows, so the product becomes Each. */
+ * target clears the column, so the product becomes Each. */
 export async function reassignProductsToUnit(
   tx: Transaction,
   sourceUnitId: string,
@@ -237,51 +233,28 @@ export async function reassignProductsToUnit(
   targetUnitId: string | null,
 ): Promise<void> {
   const scope = and(
-    eq(productUnits.unitId, sourceUnitId),
-    inArray(
-      productUnits.productId,
-      tx
-        .select({ id: products.id })
-        .from(products)
-        .where(and(inArray(products.id, productIds), isTopLevelProduct)),
-    ),
+    eq(products.unitId, sourceUnitId),
+    inArray(products.id, productIds),
+    isTopLevelProduct,
   );
   const [archived] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(
-      and(
-        eq(products.active, false),
-        inArray(
-          products.id,
-          tx.select({ id: productUnits.productId }).from(productUnits).where(scope),
-        ),
-      ),
-    );
+    .where(and(eq(products.active, false), scope));
   if (archived !== undefined) throw new AppError("product.archived", { productId: archived.id });
-  if (targetUnitId === null) {
-    // The UPDATE runs BEFORE the DELETE so it can scope by the product_units rows still present.
-    await tx
-      .update(products)
-      .set({ pricingUnit: clearedPricingUnit() })
-      .where(
-        inArray(
-          products.id,
-          tx.select({ id: productUnits.productId }).from(productUnits).where(scope),
-        ),
-      );
-    await tx.delete(productUnits).where(scope);
-    return;
+  if (targetUnitId !== null) {
+    const [target] = await tx
+      .select({ id: units.id })
+      .from(units)
+      .where(eq(units.id, targetUnitId));
+    if (target === undefined) throw new AppError("unit.not_found", { unitId: targetUnitId });
   }
-  const [target] = await tx.select({ id: units.id }).from(units).where(eq(units.id, targetUnitId));
-  if (target === undefined) throw new AppError("unit.not_found", { unitId: targetUnitId });
-  await tx.update(productUnits).set({ unitId: targetUnitId }).where(scope);
+  await tx.update(products).set({ unitId: targetUnitId }).where(scope);
 }
 
-/** Remove a product's unit assignment: a top-level product then reads as Each. It leaves
- * `pricing_unit` alone, so the caller sets that. A no-op when there is no row. */
+/** Clear the stored assignment; a product without a unit reads as Each. */
 export async function clearProductUnit(tx: Transaction, productId: string): Promise<void> {
-  await tx.delete(productUnits).where(eq(productUnits.productId, productId));
+  await tx.update(products).set({ unitId: null }).where(eq(products.id, productId));
 }
 
 /** The products that assign this unit, ordered by product id. A row a variant still stores is not
@@ -292,9 +265,8 @@ export async function productsUsingUnit(
 ): Promise<ProductUsingUnit[]> {
   return tx
     .select({ id: products.id, name: products.name, active: products.active })
-    .from(productUnits)
-    .innerJoin(products, eq(products.id, productUnits.productId))
-    .where(and(eq(productUnits.unitId, unitId), isTopLevelProduct))
+    .from(products)
+    .where(and(eq(products.unitId, unitId), isTopLevelProduct))
     .orderBy(asc(products.id));
 }
 
@@ -305,7 +277,10 @@ export async function deleteUnit(tx: Transaction, unitId: string): Promise<void>
   if (references.length > 0) {
     throw new AppError("unit.in_use", { products: references });
   }
-  // Only variants' rows are left on the unit; its foreign key restricts.
-  await tx.delete(productUnits).where(eq(productUnits.unitId, unitId));
+  // Variants never read their own assignment, but its foreign key still restricts deletion.
+  await tx
+    .update(products)
+    .set({ unitId: null })
+    .where(and(eq(products.unitId, unitId), isNotNull(products.parentId)));
   await tx.delete(units).where(eq(units.id, unitId));
 }

@@ -48,8 +48,8 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
        from working_order_lines l
        left join line_service_cancellations cancelled on cancelled.line_id = l.id
        left join products product on product.id = l.product_id
-       left join product_units owned on owned.product_id = coalesce(product.parent_id, product.id)
-       left join units unit on unit.id = owned.unit_id
+       left join products parent on parent.id = product.parent_id
+       left join units unit on unit.id = case when product.parent_id is null then product.unit_id else parent.unit_id end
        where l.working_order_id = wo.id and l.parent_line_id is null) as item_count,
       coalesce(s.total, (select coalesce(sum(l.line_total),0) from working_order_lines l where l.working_order_id = wo.id)) as total_cents,
       coalesce((select sum(c.total) from sales c where ${correctivesOf(sql`c`, sql`s.id`)}),0) as corrections,

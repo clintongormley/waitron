@@ -6,7 +6,6 @@ import {
   categories,
   categoryDetails,
   invoiceSeries,
-  productUnits,
   products,
   units,
   withTransaction,
@@ -20,14 +19,10 @@ import { assignMenuToVenue, createMenu, createCategory, createProduct } from "..
 import { nameColumns } from "../src/product-names.js";
 import { createUnit } from "../src/units.js";
 
-/** The unit a product's OWN `product_units` row names, or null when it has none (a
- * top-level product then reads as Each). A variant reads its parent's unit whatever row it stores.
- * Throws when no such product exists, so a null always means "no unit row", never "wrong id". */
 export async function storedUnitId(tx: Transaction, productId: string): Promise<string | null> {
   const [row] = await tx
-    .select({ unitId: productUnits.unitId })
+    .select({ unitId: products.unitId })
     .from(products)
-    .leftJoin(productUnits, eq(productUnits.productId, products.id))
     .where(eq(products.id, productId));
   if (row === undefined) throw new Error(`storedUnitId: no product with id ${productId}`);
   return row.unitId;
@@ -43,17 +38,12 @@ export async function plantStoredCategory(
   await tx.update(products).set({ categoryId }).where(eq(products.id, productId));
 }
 
-/** Writes a `product_units` row and a `pricing_unit` straight into a product, past every product
- * path: how a test sets up a variant still holding a unit of its own, which a variant's save now
- * clears. */
 export async function plantStoredUnit(
   tx: Transaction,
   productId: string,
   unitId: string,
-  pricingUnit: "each" | "weight",
 ): Promise<void> {
-  await tx.insert(productUnits).values({ productId, unitId });
-  await tx.update(products).set({ pricingUnit }).where(eq(products.id, productId));
+  await tx.update(products).set({ unitId }).where(eq(products.id, productId));
 }
 
 /** Writes a category straight into its tables, past every category path: how a test sets up two
@@ -85,7 +75,7 @@ export async function plantStoredProduct(
       ...nameColumns(name),
       parentId,
       ...(parentId === null
-        ? { pricingUnit: "each", unitPrice: 200, vatClass: "general", dietaryDeclarations: [] }
+        ? { unitPrice: 200, vatClass: "general", dietaryDeclarations: [] }
         : { dietaryDeclarations: null }),
     })
     .returning({ id: products.id });

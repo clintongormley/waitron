@@ -4,7 +4,6 @@ import type { ChangeSource } from "@waitron/shared";
 export const MENU_TABLES = [
   "category_details",
   "units",
-  "product_units",
   "menu_items",
   "menu_item_variant_overrides",
   "option_lists",

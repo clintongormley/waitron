@@ -47,7 +47,7 @@ async function seedFiredOrder(
     .values({
       menuId: menu!.id,
       name: "Item",
-      pricingUnit: "each",
+
       unitPrice: 100,
       vatClass: "general",
     })

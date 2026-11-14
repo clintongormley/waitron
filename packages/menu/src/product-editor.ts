@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { menus, now, products, productUnits, type Transaction } from "@waitron/db";
+import { menus, now, products, type Transaction } from "@waitron/db";
 import { AppError, validateDietaryDeclarations } from "@waitron/shared";
 import { readCategory } from "./categories.js";
 import { readContentLanguages } from "./content-languages.js";
@@ -38,7 +38,7 @@ const columns = {
   allergens: products.manualAllergens,
   dietaryDeclarations: products.dietaryDeclarations,
   courseId: products.courseId,
-  unitId: productUnits.unitId,
+  unitId: products.unitId,
   primaryCategoryId: products.categoryId,
   color: products.color,
 };
@@ -47,7 +47,6 @@ async function readStored(tx: Transaction, productId: string) {
   const [row] = await tx
     .select({ ...columns, publishedAllergens: products.allergens })
     .from(products)
-    .leftJoin(productUnits, eq(productUnits.productId, products.id))
     .where(eq(products.id, productId));
   if (!row) throw new AppError("product.not_found", { productId });
   const { publishedAllergens, ...stored } = row;

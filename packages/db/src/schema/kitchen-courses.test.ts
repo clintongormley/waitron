@@ -40,7 +40,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       .values({
         menuId: cat!.id,
         name: "Espresso",
-        pricingUnit: "each",
+
         unitPrice: 100,
         vatClass: "general",
       })

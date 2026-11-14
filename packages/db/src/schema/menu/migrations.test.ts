@@ -15,7 +15,6 @@ import {
   menuItems,
   menuItemVariantOverrides,
   optionLabels,
-  productUnits,
   sections,
   units,
   categories as coreCategories,
@@ -43,7 +42,6 @@ const TABLES = [
   "menu_items",
   "category_details",
   "units",
-  "product_units",
   "menu_item_variant_overrides",
   "option_lists",
   "option_labels",
@@ -178,7 +176,6 @@ describe("the menu tables carry no taxpayer column", () => {
       menu_items: "id",
       category_details: "category_id",
       units: "id",
-      product_units: "product_id",
       menu_item_variant_overrides: "menu_item_id, variant_id",
       option_lists: "id",
       option_labels: "id",
@@ -211,8 +208,6 @@ describe("the menu tables carry no taxpayer column", () => {
       "product_modifiers(extra_list_id)": "extra_lists(id) on delete cascade",
       "product_modifiers(option_list_id)": "option_lists(id) on delete cascade",
       "product_modifiers(product_id)": "products(id) on delete cascade",
-      "product_units(product_id)": "products(id) on delete cascade",
-      "product_units(unit_id)": "units(id) on delete restrict",
       "section_members(child_section_id)": "sections(id) on delete cascade",
       "section_members(product_id)": "products(id) on delete cascade",
       "section_members(section_id)": "sections(id) on delete cascade",
@@ -285,7 +280,6 @@ describe("the menu tables carry no taxpayer column", () => {
       product_modifiers_product_extra_uq: { unique: true, columns: "product_id, extra_list_id" },
       product_modifiers_product_option_uq: { unique: true, columns: "product_id, option_list_id" },
       product_modifiers_product_sort_idx: { unique: false, columns: "product_id, sort" },
-      product_units_unit_idx: { unique: false, columns: "unit_id" },
       units_seed_key_key: { unique: true, columns: "seed_key" },
       sections_owner_menu_idx: { unique: false, columns: "owner_menu_id" },
       section_members_product_uq: { unique: true, columns: "section_id, product_id" },
@@ -368,7 +362,7 @@ describe("the menu foreign keys refuse a missing or mismatched target", () => {
           .values({
             menuId: menuId,
             name,
-            pricingUnit: "each",
+
             unitPrice: 1,
             vatClass: "general",
           })
@@ -522,16 +516,16 @@ describe("the menu foreign keys refuse a missing or mismatched target", () => {
     );
   });
 
-  it("refuses a unit assignment whose product or unit does not exist", async () => {
+  it("refuses a product's unit when that unit does not exist", async () => {
     const c = await menu();
-    await refusal(
-      () => db.insert(productUnits).values({ productId: missing, unitId: c.unitId }),
-      "product_units_product_fk",
+    const error = await captureError(() =>
+      db
+        .update(products)
+        .set({ unitId: missing })
+        .where(sql`${products.id} = ${c.productId}`),
     );
-    await refusal(
-      () => db.insert(productUnits).values({ productId: c.productId, unitId: missing }),
-      "product_units_unit_fk",
-    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
   });
 
   it("refuses a variant override whose offer or variant does not exist or does not match", async () => {

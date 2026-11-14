@@ -308,7 +308,6 @@ it.each([
       "extra_list_items",
       "option_lists",
       "option_labels",
-      "product_units",
       "units",
     ],
   ],

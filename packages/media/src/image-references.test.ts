@@ -70,7 +70,7 @@ async function fixture(db: Database): Promise<Fixture> {
     .values({
       menuId: menu!.id,
       name: "Bread",
-      pricingUnit: "each",
+
       unitPrice: 200,
       vatClass: "general",
     })
@@ -145,7 +145,7 @@ describe("a written image filename", () => {
     await suite.db.insert(products).values({
       menuId: ids.menuId,
       name: "Roll",
-      pricingUnit: "each",
+
       unitPrice: 100,
       vatClass: "general",
       image,

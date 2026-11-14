@@ -23,7 +23,13 @@ import {
   sql,
 } from "drizzle-orm";
 import type { Column, SQL } from "drizzle-orm";
-import { productUnits, staffPresentationName, unitOwnerJoin, units } from "@waitron/menu";
+import {
+  parentJoin,
+  parentProducts,
+  staffPresentationName,
+  unitOwnerJoin,
+  units,
+} from "@waitron/menu";
 import { countsWholePortions } from "./order-state-counts.js";
 import {
   devices,
@@ -1967,8 +1973,8 @@ export async function readHeldCounts(
     .innerJoin(parties, eq(parties.id, orderGroups.partyId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(units, unitOwnerJoin)
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .where(
       and(
@@ -2180,8 +2186,8 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(units, unitOwnerJoin)
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(and(inArray(workingOrders.partyId, family), onShownBill()))

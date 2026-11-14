@@ -1,36 +1,9 @@
 import { and, eq, isNull, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { products, productUnits } from "@waitron/db";
-
-/**
- * The one place a variant's blanks are read as its parent's (how variants work:
- * `docs/developers/products.md`, under _Variants_).
- *
- * A `products` row with a `parent_id` is a variant. Every field in the inherited set below that the
- * variant leaves NULL reads as its parent's value; one it sets reads as its own. The category, the
- * unit and the colour are the inherited fields a variant cannot override: each always reads as its
- * parent's, whatever the variant's own `category_id`, `pricing_unit`, `color` or `product_units` row
- * holds. The three names are never inherited — a blank customer or kitchen name falls back to the
- * variant's OWN staff name — nor is anything that says what the row is (`id`, `menu_id`,
- * `parent_id`, `variant_order`), whether it is sold (`active`, `available`, `ordering`), or when it
- * was written.
- *
- * The nullability of the four columns a variant may leave blank (`vat_class`, `pricing_unit`,
- * `unit_price`, `dietary_declarations`) stops here for reads that go through
- * `effectiveProductColumns`: their callers see non-null types. A variant's own price is read raw, and
- * may be blank, in the variant list (`ProductVariant.unitPrice`) and in the menu price chain
- * (`readOfferVariants`), and the product editor (`readProductEditor`) reads a variant's own price,
- * VAT class and dietary declarations raw, blanks included.
- */
+import { products, units } from "@waitron/db";
 
 /** A `products` row with no parent: a product in its own right, never a variant. */
 export const isTopLevelProduct = isNull(products.parentId);
-
-/** The `pricing_unit` to store when a row's unit is cleared: 'each' for a product with no parent,
- * blank for a variant, which always reads its parent's. */
-export function clearedPricingUnit(): SQL {
-  return sql`case when ${products.parentId} is null then 'each' end`;
-}
 
 /**
  * Which rows a read or write of ONE product by id may find. `"top-level"` finds only a product with
@@ -100,7 +73,6 @@ function parentsAlwaysOwned<C extends AnyColumn>(
 export const effectiveProductColumns = {
   description: inherited(products.description, parentProducts.description),
   vatClass: owned(products.vatClass, parentProducts.vatClass),
-  pricingUnit: parentsAlwaysOwned(products.pricingUnit, parentProducts.pricingUnit),
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
   categoryId: parentsAlways(products.categoryId, parentProducts.categoryId),
   color: parentsAlways(products.color, parentProducts.color),
@@ -118,12 +90,8 @@ export const INHERITED_KEYS = Object.keys(
   effectiveProductColumns,
 ) as readonly (keyof typeof effectiveProductColumns)[];
 
-/**
- * `.leftJoin(productUnits, unitOwnerJoin)`: the `product_units` row of the product whose unit
- * applies — a variant's parent's, never a row the variant stores; a product's own. A product with no
- * row reads as Each. Joined this way the read stays ONE query whatever the number of products.
- */
+/** Join units after the parent join: a variant always uses its parent's unit. */
 export const unitOwnerJoin = eq(
-  productUnits.productId,
-  sql<string>`coalesce(${products.parentId}, ${products.id})`,
+  units.id,
+  sql<string>`case when ${products.parentId} is null then ${products.unitId} else ${parentProducts.unitId} end`,
 );

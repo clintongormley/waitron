@@ -67,7 +67,7 @@ describe("park & retrieve schema", () => {
       .values({
         menuId: menu.id,
         name: "Café solo",
-        pricingUnit: "each",
+
         unitPrice: 100,
         vatClass: "general",
       })

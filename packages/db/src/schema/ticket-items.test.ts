@@ -39,7 +39,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       .values({
         menuId: catA!.id,
         name: "Black coffee",
-        pricingUnit: "each",
+
         unitPrice: 100,
         vatClass: "general",
       })

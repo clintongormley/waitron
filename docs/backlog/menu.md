@@ -498,19 +498,6 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   needs it (`grep -rln "clip: rect(0, 0, 0, 0)"`), where a shared one in
   `packages/ui-core/src/base-styles.ts` would be an optional tidy-up.
 
-## Two signals say whether a dish is sold by weight, and they can disagree in storage
-
-From **Units and the old `pricing_unit` (#342, #375, #382) — what is left open.**
-
-- **Two signals say whether a dish is sold by weight, and they can disagree in storage.** Since B4
-  the order path reads only the unit (`priceOrderLines`), so no sale reads `products.pricing_unit`;
-  `assignProductUnit` writes `product_units` without touching it, and reassigning a unit's products
-  to another real unit does not update it either. The column is still written, derived from whether
-  the unit has a scale mapping, which is lossy: a product sold by the litre records `each`. **Next
-  action:** keep it in step with the unit or drop it; its removal is listed under the #297
-  departments-and-menus row in A9, and whoever does it also cleans up the demo scripts and tests
-  that use `pricingUnit` to pick a product.
-
 ## `createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback
 
 From **Units and the old `pricing_unit` (#342, #375, #382) — what is left open.**

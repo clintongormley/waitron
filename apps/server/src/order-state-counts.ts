@@ -11,7 +11,7 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { menuItems, productUnits, unitOwnerJoin, units } from "@waitron/menu";
+import { parentJoin, parentProducts, menuItems, unitOwnerJoin, units } from "@waitron/menu";
 import { initiatedAt } from "./kitchen-phase.js";
 
 export interface OrderStateCounts {
@@ -137,8 +137,8 @@ export async function readOrderStateCounts(
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(units, unitOwnerJoin)
     .where(inArray(workingOrderLines.workingOrderId, [...orderIds]));
   const isDish = await serviceDishPredicate(tx, lines);
   const extras = new Map<string, KitchenPart[]>();
@@ -180,8 +180,8 @@ export async function readOrderStateCounts(
     .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
     .leftJoin(menuItems, eq(menuItems.id, orderDraftLines.menuItemId))
     .leftJoin(products, eq(products.id, menuItems.productId))
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(units, unitOwnerJoin)
     .where(and(inArray(orderDrafts.billId, [...orderIds]), eq(orderDrafts.state, "open")));
   for (const line of drafted) {
     const dish: CountedLine = {

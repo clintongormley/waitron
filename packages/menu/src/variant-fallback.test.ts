@@ -6,7 +6,6 @@ import {
   FOREIGN_KEY_VIOLATION,
   kitchenCourses,
   products,
-  productUnits,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -136,7 +135,7 @@ beforeEach(async () => {
         menuId: menu.id,
         parentId: parent.id,
         name: "125 ml",
-        pricingUnit: null,
+
         unitPrice: null,
         vatClass: null,
         dietaryDeclarations: null,
@@ -155,7 +154,7 @@ beforeEach(async () => {
         customerName: { en: "Large glass of house wine" },
         kitchenName: "W175",
         description: { en: "A sweet red from Toro" },
-        pricingUnit: "weight",
+
         unitPrice: 550,
         vatClass: "general",
         dietaryDeclarations: ["vegetarian"],
@@ -169,7 +168,7 @@ beforeEach(async () => {
         variantOrder: 1,
       })
       .returning({ id: products.id });
-    await tx.insert(productUnits).values({ productId: wine175!.id, unitId: largeGlass.id });
+    await tx.update(products).set({ unitId: largeGlass.id }).where(eq(products.id, wine175!.id));
     await assignMenuToVenue(tx, menu.id);
     return {
       menuId: menu.id,
@@ -391,7 +390,7 @@ describe("a variant's main category is always its parent's", () => {
           parentId: f.parentId,
           name: "250 ml",
           categoryId: null,
-          pricingUnit: null,
+
           unitPrice: null,
           vatClass: null,
           dietaryDeclarations: null,
@@ -428,7 +427,7 @@ describe("a variant's unit is always its product's", () => {
         .insert(products)
         .values({ menuId: f.menuId, parentId: parent.id, name: "Cider pint" })
         .returning({ id: products.id });
-      await plantStoredUnit(tx, variant!.id, f.largeGlass, "weight");
+      await plantStoredUnit(tx, variant!.id, f.largeGlass);
       await addProductToMenu(tx, { menuId: f.menuId, productId: parent.id, grossPrice: null });
       return { parentId: parent.id, variantId: variant!.id };
     });
@@ -588,7 +587,7 @@ describe("effectiveProductColumns, entry by entry", () => {
       expect(byId.get(f.wine125)![key], key).toEqual(parentRaw[key]);
       // The category, the pricing unit and the colour are the entries a variant cannot set: its
       // stored ones are ignored.
-      const parentsAlways = key === "categoryId" || key === "pricingUnit" || key === "color";
+      const parentsAlways = key === "categoryId" || key === "color";
       const own = parentsAlways ? parentRaw[key] : wine175Raw[key];
       expect(byId.get(f.wine175)![key], key).toEqual(own);
     }
@@ -655,7 +654,7 @@ describe("what the products table refuses", () => {
       fx.db.insert(products).values({
         menuId: f.menuId,
         name: "No VAT",
-        pricingUnit: "each",
+
         unitPrice: 100,
         vatClass: null,
       }),
@@ -670,7 +669,7 @@ describe("what the products table refuses", () => {
       fx.db.insert(products).values({
         menuId: f.menuId,
         name: "No price",
-        pricingUnit: "each",
+
         unitPrice: null,
         vatClass: "general",
       }),
@@ -680,14 +679,14 @@ describe("what the products table refuses", () => {
     });
   });
 
-  // Also pins that `products_vat_class_ck` and `products_pricing_unit_ck` let a NULL through.
+  // Also pins that `products_vat_class_ck` let a NULL through.
   it("accepts a variant with no VAT class, price or pricing unit", async () => {
     await expect(
       fx.db.insert(products).values({
         menuId: f.menuId,
         parentId: f.parentId,
         name: "Wine 500",
-        pricingUnit: null,
+
         unitPrice: null,
         vatClass: null,
       }),
@@ -746,7 +745,6 @@ describe("INHERITED_KEYS", () => {
         "dietaryDeclarations",
         "image",
         "manualAllergens",
-        "pricingUnit",
         "unitPrice",
         "vatClass",
       ].sort(),
