@@ -189,6 +189,8 @@ After A760, decide whether to remove the redundant column and read the provider 
   Since A737 Part 1 (#1778), `wt-data-table` takes `serverPaging` and emits `wt-query-change`
   (search text, sort and filters) and `wt-page-change`; only the till's find-bill screen
   (`apps/till/src/screens/till-find-bill-screen.ts`) uses them, and no dashboard table does yet.
+  The dashboard tables waiting on it (A1530, 2026-11-14): Orders and the handover screen's
+  returned invoices, both read a page at a time from the server.
 
 ## Typed values are only partly checked — a generic phone-format check landed, a country-specific one has not.
 
