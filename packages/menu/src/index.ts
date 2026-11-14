@@ -85,7 +85,6 @@ export {
 export * from "./invoice-descriptions.js";
 export * from "./media.js";
 export {
-  catalogueSettings,
   categoryDetails,
   contentSuggestionJobs,
   contentSuggestions,
@@ -105,7 +104,6 @@ export {
   sectionMembers,
   sections,
   units,
-  unitSeedStates,
   SUGGESTION_FAILURES,
   SUGGESTION_JOB_STATES,
   SUGGESTION_REFUSALS,

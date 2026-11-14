@@ -315,8 +315,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
 
   // catalogue
   classify("category_details", "state", MENU_STATE),
-  classify("catalogue_settings", "state", MENU_STATE),
-  classify("unit_seed_states", "state", MENU_STATE),
   classify("units", "state", MENU_STATE),
   classify("product_units", "state", MENU_STATE),
   classify("menu_items", "state", MENU_STATE),

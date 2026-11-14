@@ -825,7 +825,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<{ color?: unknown }>(c);
       if (body.color !== null && typeof body.color !== "string")
         throw new AppError("management.request_invalid", { field: "color" });
-      return c.json(await gated(c, sessionId, (tx) => saveCatalogueDefaultColor(tx, body.color)));
+      return c.json(
+        await gated(c, sessionId, (tx, personId) =>
+          saveCatalogueDefaultColor(tx, body.color, personId),
+        ),
+      );
     }),
   );
 

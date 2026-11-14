@@ -152,7 +152,7 @@ it("follows a live change to the stored defaults", async () => {
   const r = rig();
   const el = await mount(r.api);
   r.state.stored = { ...r.state.stored, defaultProductVatClass: "zero", receiptLanguage: "ca-ES" };
-  r.liveData.invalidate([{ type: "catalogue_settings" }]);
+  r.liveData.invalidate([{ type: "settings.menu" }]);
   await expect.poll(() => text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("Catalan");
   expect(text(q(el, "[data-test=saved-defaultProductVatClass]"))).toBe("No tax (0%)");
 });
@@ -423,7 +423,7 @@ it("a clean draft adopts a live change and a dirty one keeps its value", async (
   const el = await mount(r.api);
   await edit(el);
   r.state.stored = { ...r.state.stored, defaultProductVatClass: "general" };
-  r.liveData.invalidate([{ type: "catalogue_settings" }]);
+  r.liveData.invalidate([{ type: "settings.menu" }]);
   await expect.poll(() => combo(el, "defaultProductVatClass")!.value).toBe("general");
   expect(saveButton(el).disabled).toBe(true);
   await pick(el, "receiptLanguage", "gl-ES");
@@ -1090,7 +1090,7 @@ it("a VAT refusal and its value survive a live read", async () => {
   await expect
     .poll(() => combo(el, "defaultProductVatClass")!.error)
     .toBe(t("catalogue_settings.invalid"));
-  r.liveData.invalidate([{ type: "catalogue_settings" }]);
+  r.liveData.invalidate([{ type: "settings.menu" }]);
   await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(2);
   await flush(el);
   expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");

@@ -2,7 +2,7 @@ import { withTransaction, persons, deviceProfiles } from "@waitron/db";
 import { listStaffAdmittedTo } from "@waitron/identity";
 import { STARTER_JOB_ROLE_NAMES, DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import { madridWithFoldedTables } from "./testing/madrid-folded-tables.js";
-import { madridWithDocument } from "./testing/madrid-documents.js";
+import { madridWithDocument, madridWithMenuSettings } from "./testing/madrid-documents.js";
 import { stable } from "./testing/madrid-semantics.js";
 import {
   madridWithDroppedColumns,
@@ -518,14 +518,26 @@ for (const locale of ["en", "es"] as const) {
       phases[phase]!.day_cutover_changes = Object.keys(
         expected[phase].tables.day_cutover_changes!.rows,
       ).length;
-      phases[phase]!.settings = phase === "before" ? 0 : 2;
+      expected[phase] = madridWithMenuSettings(expected[phase], at);
+      delete phases[phase]!.catalogue_settings;
+      delete phases[phase]!.unit_seed_states;
+      const runTotalColumn = expected[phase].tables.content_suggestion_jobs!.columns.find(
+        ({ name }) => name === "run_total",
+      )!;
+      runTotalColumn.notnull = 0;
+      phases[phase]!.settings = phase === "before" ? 0 : 3;
       const revisions = phase === "before" ? [] : phase === "seeded" ? [1, 2, 3] : [1, 2];
       expected[phase].tables.activity_log = {
         ...structuredClone(canonical[phase].tables.activity_log!),
         rows: Object.fromEntries(
           [
             ...revisions.map((revision) => ({ revision, module: "venue" })),
-            ...(phase === "before" ? [] : [{ revision: 1, module: "business_day" }]),
+            ...(phase === "before"
+              ? []
+              : [
+                  { revision: 1, module: "business_day" },
+                  { revision: 1, module: "menu" },
+                ]),
           ].map(({ revision, module }) => {
             const id = `@activity_log:${stable(["settings.saved", module, at, JSON.stringify({ revision })])}`;
             return [
@@ -544,7 +556,7 @@ for (const locale of ["en", "es"] as const) {
           }),
         ),
       };
-      phases[phase]!.activity_log = revisions.length + (phase === "before" ? 0 : 1);
+      phases[phase]!.activity_log = revisions.length + (phase === "before" ? 0 : 2);
       for (const name of ADDED_TABLES) {
         const added = canonical[phase].tables[name];
         expect(added, `${phase}/${name}`).toBeDefined();

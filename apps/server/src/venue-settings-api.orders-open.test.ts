@@ -556,7 +556,7 @@ describe("a receipt-language change while orders are open", () => {
 describe("PUT /management-api/venue-defaults while orders are open", () => {
   const vatClass = () =>
     rows<{ default_product_vat_class: string }>(
-      sql`select default_product_vat_class from catalogue_settings where id = 1`,
+      sql`select json_extract(doc, '$.defaultProductVatClass') as default_product_vat_class from settings where module = 'menu'`,
     )[0]?.default_product_vat_class ?? "general";
 
   it("refuses a changed receipt language and writes neither it nor the VAT class beside it", async () => {

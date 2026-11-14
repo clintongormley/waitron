@@ -6702,6 +6702,14 @@ describe("catalogue settings routes", () => {
       expect(loaded.status).toBe(200);
       expect(await loaded.json()).toEqual({ defaultProductVatClass, defaultColor: null });
     }
+    expect(
+      (
+        await suite.db.execute(sql`
+      select s.updated_by, a.person_id from settings s join activity_log a on a.subject_id = s.module
+      where s.module = 'menu' and a.kind = 'settings.saved' order by a.rowid desc limit 1
+    `)
+      ).rows,
+    ).toEqual([{ updated_by: managerPersonId, person_id: managerPersonId }]);
   });
 
   it.each(["GET", "PUT"] as const)("refuses unauthenticated and staff %s", async (method) => {
@@ -6743,6 +6751,15 @@ describe("catalogue settings routes", () => {
       defaultProductVatClass: "reduced",
       defaultColor: "#b12525",
     });
+
+    expect(
+      (
+        await suite.db.execute(sql`
+      select s.updated_by, a.person_id from settings s join activity_log a on a.subject_id = s.module
+      where s.module = 'menu' and a.kind = 'settings.saved' order by a.rowid desc limit 1
+    `)
+      ).rows,
+    ).toEqual([{ updated_by: managerPersonId, person_id: managerPersonId }]);
     const cleared = await send(app, "PUT", "/management-api/catalogue-settings/default-color", {
       body: { color: null },
     });

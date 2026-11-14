@@ -2,7 +2,7 @@ import type { ResourceQuery } from "@waitron/dashboard-kit";
 import type { DashboardApi, MenuReadPart } from "./client.js";
 
 const MENU_PUBLICATION_READS = [
-  "catalogue_settings",
+  "settings.menu",
   "catalogues",
   "categories",
   "category_details",
@@ -87,7 +87,7 @@ const TRANSLATION_READS = [
 export const QUERY_DEPENDENCIES = {
   getZoneDeleteImpact: HIERARCHY_DELETE_READS,
   getDepartmentDeleteImpact: HIERARCHY_DELETE_READS,
-  getCatalogueSettings: ["catalogue_settings"],
+  getCatalogueSettings: ["settings.menu"],
   getContentLanguages: ["settings.venue"],
   getVenueTheme: ["custom_themes", "media_images"],
   listThemes: ["custom_themes"],
@@ -527,7 +527,7 @@ export const QUERY_DEPENDENCIES = {
     "day_cutover_changes",
   ],
   getReceiptLanguage: ["settings.business_day", "settings.venue"],
-  getVenueDefaults: ["settings.business_day", "settings.venue", "catalogue_settings"],
+  getVenueDefaults: ["settings.business_day", "settings.venue", "settings.menu"],
   getVenuePrivacy: ["tenants"],
   getProfile: ["persons", "webauthn_credentials"],
   // The venue's name; the language list itself is fixed.

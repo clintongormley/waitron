@@ -404,7 +404,6 @@ it("the last job's refusal wins over an earlier job's success", async () => {
         state: "submitting",
         body: "{}",
         sent: { "product:later": ["es"] },
-        runTotal: 4,
       })
       .returning();
     await recordSuggestionJobRefused(tx, second!.id, "limit", 0, later);
@@ -441,7 +440,6 @@ it("sums done and failed across a run's jobs, keeps the first job's total, and k
       state: "running",
       cloudJobId: randomUUID(),
       sent: { [`product:${other}`]: ["es"], [`unit:${other}`]: ["en"] },
-      runTotal: 9,
       done: 1,
       failed: 0,
     });

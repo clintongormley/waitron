@@ -486,6 +486,7 @@ it("chains the next job of the run, never including an item the run already sent
   expect(jobs[1]).toMatchObject({
     runId: job.runId,
     position: 2,
+    runTotal: null,
     state: "submitting",
     cloudJobId: null,
     createdAt: at.toISOString(),

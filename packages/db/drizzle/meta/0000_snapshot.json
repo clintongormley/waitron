@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4a2e7367-da59-4d7b-9d64-4599d51bb424",
+  "id": "09c5b136-ede6-430f-8ec5-ae3d51dacf72",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -12795,29 +12795,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "unit_seed_states": {
-      "name": "unit_seed_states",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "unit_seed_states_singleton_ck": {
-          "name": "unit_seed_states_singleton_ck",
-          "value": "\"unit_seed_states\".\"id\" = 1"
-        }
-      }
-    },
     "units": {
       "name": "units",
       "columns": {
@@ -14040,48 +14017,6 @@
         }
       }
     },
-    "catalogue_settings": {
-      "name": "catalogue_settings",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "default_product_vat_class": {
-          "name": "default_product_vat_class",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'general'"
-        },
-        "default_color": {
-          "name": "default_color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "catalogue_settings_singleton_ck": {
-          "name": "catalogue_settings_singleton_ck",
-          "value": "\"catalogue_settings\".\"id\" = 1"
-        },
-        "catalogue_settings_vat_class_ck": {
-          "name": "catalogue_settings_vat_class_ck",
-          "value": "\"catalogue_settings\".\"default_product_vat_class\" in ('general', 'reduced', 'super_reduced', 'zero')"
-        }
-      }
-    },
     "content_suggestion_jobs": {
       "name": "content_suggestion_jobs",
       "columns": {
@@ -14159,7 +14094,7 @@
           "name": "run_total",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "total": {
@@ -14260,6 +14195,10 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "content_suggestion_jobs_run_total_ck": {
+          "name": "content_suggestion_jobs_run_total_ck",
+          "value": "(\"content_suggestion_jobs\".\"position\" = 1) = (\"content_suggestion_jobs\".\"run_total\" is not null)"
+        },
         "content_suggestion_jobs_state_ck": {
           "name": "content_suggestion_jobs_state_ck",
           "value": "\"content_suggestion_jobs\".\"state\" in ('submitting', 'running', 'done', 'partly_done', 'failed', 'expired', 'refused')"

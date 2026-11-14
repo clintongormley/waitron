@@ -427,8 +427,8 @@ or on its Price overrides tab.
 That colour is worked out in order. It is the product's own colour (`products.color`) if it has
 one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
 nearest category above it that does (`category_details.color`). Otherwise it is the venue's
-default colour (`catalogue_settings.default_color`, which the catalogue's setup step sets to the
-pale blue `#abcced` when it creates the venue's settings row, `CATALOGUE_PROVISIONING` in `packages/menu/src/provisioning.ts`); with no default it has none, and each
+default colour (`settings.menu.defaultColor`, which the catalogue's setup step sets to the
+pale blue `#abcced` when it creates the menu settings document, `CATALOGUE_PROVISIONING` in `packages/menu/src/provisioning.ts`); with no default it has none, and each
 screen draws its usual neutral look. The rule lives in one place, `effectiveColor`, `categoryColor` and
 `categoryColorSource` (which also says which category the colour came from) in
 `packages/shared/src/menu-document/color-inheritance.ts`, which the server and the
@@ -449,8 +449,8 @@ included, as `product.invalid` with `field: "color"`; a default colour is refuse
 `packages/menu/src/settings.ts`). A configuration import refuses the whole
 bundle when a product's, a category's or a menu section's colour, or the default, is anything else,
 as `setup.request_invalid` with `field` set to `products.color`, `category_details.color`,
-`sections.color` or `catalogue_settings.default_color` (`validateCatalogueConfiguration`,
-`packages/menu/src/configuration-transfer.ts`). A category's colour is set from the colour
+`sections.color` (`validateCatalogueConfiguration`, `packages/menu/src/configuration-transfer.ts`)
+or `settings.menu.defaultColor` (`checkImportedSettings`, `packages/provisioning/src/settings-transfer.ts`). A category's colour is set from the colour
 square before its name in the Products tree, or from the one in the box that names or renames it
 ([product-categories.md](product-categories.md)). The default is set from the square before
 All products, the tree's first row, whose chooser is headed "Colour of All products"; at phone

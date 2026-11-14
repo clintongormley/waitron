@@ -3,8 +3,6 @@ import type { ChangeSource } from "@waitron/shared";
 /** The tables this module's code owns. They live in core's set, which classifies them. */
 export const CATALOGUE_TABLES = [
   "category_details",
-  "catalogue_settings",
-  "unit_seed_states",
   "units",
   "product_units",
   "menu_items",

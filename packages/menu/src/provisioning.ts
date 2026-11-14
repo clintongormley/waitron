@@ -1,11 +1,4 @@
-import {
-  catalogues,
-  catalogueSettings,
-  readTenant,
-  readVenue,
-  units,
-  unitSeedStates,
-} from "@waitron/db";
+import { catalogues, readTenant, readVenue, readSettings, saveSettings, units } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import {
   getCountryPack,
@@ -19,6 +12,7 @@ import { readSavedContentLanguages, writeContentLanguages } from "./content-lang
 import { createMenuShell } from "./menu-structure.js";
 import { assignCatalogueToVenue } from "./operations.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
+import { MENU_SETTINGS } from "./settings.js";
 import { readDefaultCatalogueId } from "./operations.js";
 
 /** The starter units, by their English staff names; their words in other languages are in
@@ -64,13 +58,15 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       const defaultProductVatClass =
         (country === undefined ? undefined : getCountryPack(country)?.defaultProductVatClass) ??
         "general";
-      await tx
-        .insert(catalogueSettings)
-        .values({
-          defaultProductVatClass: defaultProductVatClass as VatClass,
-          defaultColor: NEW_VENUE_DEFAULT_COLOR,
-        })
-        .onConflictDoNothing({ target: catalogueSettings.id });
+      const { doc: saved, revision } = await readSettings(tx, MENU_SETTINGS);
+      const doc =
+        revision === 0
+          ? {
+              ...saved,
+              defaultProductVatClass: defaultProductVatClass as VatClass,
+              defaultColor: NEW_VENUE_DEFAULT_COLOR,
+            }
+          : saved;
       const { defaultLanguage, languages } = resolveInstalledStartingContentLanguages({
         country,
         area,
@@ -81,21 +77,13 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       // null id and is refused.
       if ((await readSavedContentLanguages(tx)) === undefined)
         await writeContentLanguages(tx, { defaultLanguage, languages: [...languages] }, [], null);
-      // The id is stated rather than left out: this table's only column IS the key, and drizzle
-      // renders a values object with no columns in it as `insert into … () values ()`, which
-      // SQLite refuses. `1` is the value the column defaults to and the singleton check demands.
-      const claimed = await tx
-        .insert(unitSeedStates)
-        .values({ id: 1 })
-        .onConflictDoNothing({ target: unitSeedStates.id })
-        .returning({ id: unitSeedStates.id });
       const starter = resolveInstalledStarterLanguages({
         country,
         area,
         receiptLocale: venue.invoiceLocales[0],
         staffLanguage: options?.staffLanguage,
       });
-      if (claimed.length > 0) {
+      if (!doc.starterUnitsCreated) {
         await tx.insert(units).values(
           STARTER_UNITS.map(({ staffName: english, staffAbbreviation, ...unit }) => {
             const name = starterNames(STARTER_UNIT_NAMES, english, starter.languages);
@@ -112,6 +100,12 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
           }),
         );
       }
+      if (revision === 0 || !doc.starterUnitsCreated)
+        await saveSettings(tx, MENU_SETTINGS, {
+          doc: { ...doc, starterUnitsCreated: true },
+          expectedRevision: revision,
+          personId: null,
+        });
       let catalogueId = await readDefaultCatalogueId(tx);
       if (catalogueId === null) {
         const [created] = await tx

@@ -54,7 +54,7 @@ export const contentSuggestionJobs = table(
     cloudJobId: id("cloud_job_id"),
     body: label("body"),
     sent: json<Record<string, string[]>>("sent").notNull(),
-    runTotal: count("run_total").notNull(),
+    runTotal: count("run_total"),
     total: count("total").notNull().default(0),
     done: count("done").notNull().default(0),
     failed: count("failed").notNull().default(0),
@@ -72,6 +72,10 @@ export const contentSuggestionJobs = table(
   },
   (t) => [
     unique("content_suggestion_jobs_run_position_key").on(t.runId, t.position),
+    check(
+      "content_suggestion_jobs_run_total_ck",
+      sql`(${t.position} = 1) = (${t.runTotal} is not null)`,
+    ),
     check("content_suggestion_jobs_state_ck", enumCheck(t.state)),
     check("content_suggestion_jobs_refusal_ck", enumCheck(t.refusal)),
     check("content_suggestion_jobs_failure_ck", enumCheck(t.failure)),

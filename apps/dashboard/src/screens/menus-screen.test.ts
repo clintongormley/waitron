@@ -12322,7 +12322,7 @@ describe("colour swatches on the Structure tab", () => {
       defaultProductVatClass: "general",
       defaultColor: "#256bb1",
     });
-    live.invalidate([{ type: "catalogue_settings" }]);
+    live.invalidate([{ type: "settings.menu" }]);
     await vi.waitFor(async () => {
       await settleStructure(el);
       expect(getComputedStyle(burgerChip()).backgroundColor).toBe("rgb(37, 107, 177)");

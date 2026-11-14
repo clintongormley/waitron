@@ -6260,6 +6260,11 @@ repair saves that document through `saveSettings`. New input is checked by those
 rows reject updates; a daily close covering the preceding business day also prevents deletion.
 The editor retains the time-dependent history check that the database cannot make without a zone.
 
+**2026-11-14, A1308 mn2:** new-product VAT and colour defaults and the starter-unit marker share
+`settings.menu`. Provisioning creates starter units only while `starterUnitsCreated` is false,
+then saves the flag in the same transaction. The transferring document is checked on import;
+format 31 refuses earlier exports after the core reset.
+
 Declare a document with `defineSettingsDocument`, read it with `readSettings`, and save it through
 `saveSettings`, the only writer (`packages/db/src/settings.ts`). The checker returns the normalised
 value that is stored. A save names the revision you read; map `settings.out_of_date` to HTTP 409.

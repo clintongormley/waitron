@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, catalogues, products, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, catalogues, products, settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import * as catalogue from "./index.js";
@@ -8,6 +8,42 @@ import * as catalogue from "./index.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 describe("the venue's new-product defaults", () => {
+  it("saves product defaults in the menu document with advancing revisions", async () => {
+    await withTransaction(suite.db, (tx) =>
+      catalogue.saveCatalogueSettings(tx, { defaultProductVatClass: "reduced" }),
+    );
+    expect(
+      await suite.db
+        .select({
+          module: settings.module,
+          version: settings.version,
+          revision: settings.revision,
+          doc: settings.doc,
+        })
+        .from(settings),
+    ).toEqual([
+      {
+        module: "menu",
+        version: 1,
+        revision: 1,
+        doc: { defaultProductVatClass: "reduced", defaultColor: null, starterUnitsCreated: false },
+      },
+    ]);
+    await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, "#abcdef"));
+    expect(
+      await suite.db.select({ revision: settings.revision, doc: settings.doc }).from(settings),
+    ).toEqual([
+      {
+        revision: 2,
+        doc: {
+          defaultProductVatClass: "reduced",
+          defaultColor: "#abcdef",
+          starterUnitsCreated: false,
+        },
+      },
+    ]);
+  });
+
   it("uses general before provisioning has stored a preset", async () => {
     expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
       defaultProductVatClass: "general",
@@ -117,4 +153,30 @@ describe("the venue's default colour", () => {
       });
     },
   );
+});
+
+const menuDoc = {
+  defaultProductVatClass: "general",
+  defaultColor: null,
+  starterUnitsCreated: false,
+};
+it.each([
+  [null, "doc"],
+  [[], "doc"],
+  [{}, "defaultProductVatClass"],
+  [{ ...menuDoc, defaultProductVatClass: "standard" }, "defaultProductVatClass"],
+  [{ ...menuDoc, defaultColor: "red" }, "defaultColor"],
+  [{ ...menuDoc, defaultColor: "#ABCDEF" }, "defaultColor"],
+  [{ ...menuDoc, starterUnitsCreated: 1 }, "starterUnitsCreated"],
+  [{ ...menuDoc, x: true }, "x"],
+])("names the bad menu document field in %j", (doc, field) => {
+  expect(catalogue.MENU_SETTINGS.parse(doc)).toEqual({ ok: false, field });
+});
+it("accepts a complete menu document", () => {
+  const doc = {
+    defaultProductVatClass: "zero",
+    defaultColor: "#abcdef",
+    starterUnitsCreated: true,
+  };
+  expect(catalogue.MENU_SETTINGS.parse(doc)).toEqual({ ok: true, doc });
 });

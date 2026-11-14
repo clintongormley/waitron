@@ -558,7 +558,7 @@ describe("venue defaults", () => {
       sql`select json_extract(doc, '$.invoiceLocales') as invoice_locales from settings where module = 'venue'`,
     );
     const settings = await suite.db.execute<{ default_product_vat_class: string }>(
-      sql`select default_product_vat_class from catalogue_settings where id = 1`,
+      sql`select json_extract(doc, '$.defaultProductVatClass') as default_product_vat_class from settings where module = 'menu'`,
     );
     return {
       languages: JSON.parse(rows[0]!.invoice_locales) as string[],
@@ -580,7 +580,7 @@ describe("venue defaults", () => {
         sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES"]')) where module = 'venue'`,
       );
       await suite.db.execute(
-        sql`update catalogue_settings set default_product_vat_class = ${initialVatClass}`,
+        sql`update settings set doc = json_set(doc, '$.defaultProductVatClass', ${initialVatClass}) where module = 'menu'`,
       );
     }
   }
