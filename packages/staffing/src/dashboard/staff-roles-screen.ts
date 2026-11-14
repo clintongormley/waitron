@@ -53,6 +53,9 @@ export class StaffRolesScreen extends LitElement {
         justify-content: space-between;
         gap: var(--wt-space-3);
       }
+      a {
+        color: var(--wt-color-primary-text);
+      }
       h1 {
         margin: 0;
       }
@@ -336,6 +339,7 @@ export class StaffRolesScreen extends LitElement {
         }
       </div>
       <p class="intro">${t("staffing.role.intro")}</p>
+      <p><a href="/manage/access-roles">${t("staffing.role.access_roles")}</a></p>
       ${
         staffRoles && this.loadError
           ? html`<p class="alert" role="alert" data-test="load-alert">${this.loadError}</p>`

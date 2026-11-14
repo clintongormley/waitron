@@ -227,6 +227,7 @@ it.each(GUIDE_LANGUAGES)(
     expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
       "staff-details",
       "account-access",
+      "access-roles",
       "own-account",
       "own-data",
       "person-data",

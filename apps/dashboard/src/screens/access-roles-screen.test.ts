@@ -1,18 +1,65 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { registerIcons } from "@waitron/ui";
+import { registerIcons, setHelpMode } from "@waitron/ui";
 import type { DashboardApi, AccessRole } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
+import { PERMISSION_TEXT } from "../i18n/permissions.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { AccessRolesScreen } from "./access-roles-screen.js";
 import "./access-roles-screen.js";
 
 registerIcons(DASHBOARD_ICONS);
+it.each(["en-GB", "es-ES"])("offers permission help and role-page links (%s)", async (locale) => {
+  const permissions = Object.keys(PERMISSION_TEXT);
+  const { el } = await mount(
+    {
+      listAccessRoles: vi
+        .fn()
+        .mockResolvedValue([roles[0], { ...roles[1], permissions }, roles[2]]),
+    },
+    permissions,
+    locale,
+  );
+  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/manage/staff-roles"]');
+  expect(link?.textContent?.trim()).toBe(
+    locale === "es-ES"
+      ? es["access_roles.job_roles"]
+      : "Job roles put people on the rota and on devices; they grant no permissions.",
+  );
+  q(el, "create").click();
+  await el.updateComplete;
+  for (const [permission, text] of Object.entries(PERMISSION_TEXT)) {
+    const help = q(el, `permission-${permission}`).parentElement!.querySelector("wt-help-tooltip");
+    expect(help, permission).not.toBeNull();
+    expect(help!.getAttribute("mode")).toBe("help-mode");
+    expect(help!.textContent).toContain(t(text.help!));
+    await help!.updateComplete;
+    const guide = help!.shadowRoot!.querySelector<HTMLAnchorElement>("a");
+    expect(guide?.getAttribute("href")).toBe(
+      `/help/${locale === "es-ES" ? "es" : "en"}/staff#access-roles`,
+    );
+    expect(guide?.textContent?.trim()).toBe(
+      locale === "es-ES" ? es["access_roles.title"] : "Access roles",
+    );
+  }
+  const help = el.shadowRoot!.querySelector("wt-help-tooltip")!;
+  expect(getComputedStyle(help).display).toBe("none");
+  setHelpMode(true);
+  await help.updateComplete;
+  expect(getComputedStyle(help).display).not.toBe("none");
+  help.shadowRoot!.querySelector("button")!.click();
+  await expect.poll(() => help.shadowRoot!.querySelector(":popover-open")).not.toBeNull();
+  expect((q(el, "permission-payment.take") as HTMLElementTagNameMap["wt-switch"]).checked).toBe(
+    false,
+  );
+});
 const locale = currentLocale();
 afterEach(() => {
   cleanupWidgets();
   setLocale(locale);
+  setHelpMode(false);
 });
 const grants = ["payment.take", "report.view", "person.admin", "node.manage", "future.inspect"];
 const roles: AccessRole[] = [
@@ -42,8 +89,12 @@ function change(el: AccessRolesScreen, id: string, value: string | boolean) {
     }),
   );
 }
-async function mount(overrides: Partial<DashboardApi> = {}, permissions = grants) {
-  setLocale("en-GB");
+async function mount(
+  overrides: Partial<DashboardApi> = {},
+  permissions = grants,
+  locale = "en-GB",
+) {
+  setLocale(locale);
   const { el, host } = await mountWidget<AccessRolesScreen>("dashboard-access-roles-screen", {
     api: api(overrides),
     viewerPermissions: permissions,

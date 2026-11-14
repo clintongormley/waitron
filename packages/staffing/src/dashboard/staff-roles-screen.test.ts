@@ -16,6 +16,17 @@ import "./staff-roles-screen.js";
 
 const BASE = "/management-api/staffing/staff-roles";
 
+it.each(["en", "es"])("links job roles to access roles (%s)", async (locale) => {
+  setLocale(locale);
+  await mount(fakeRequest(() => [waiter]));
+  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/manage/access-roles"]');
+  expect(link?.textContent?.trim()).toBe(
+    locale === "es"
+      ? STAFFING_STRINGS.es["staffing.role.access_roles"]
+      : "Access roles decide what people may do.",
+  );
+});
+
 /** Counts describe the existing shifts and paint in each deletion fixture. */
 type Role = StaffRole & { blockCount: number; shiftCount: number };
 

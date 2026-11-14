@@ -44,18 +44,6 @@ change what deleting a person does.
 Review #559 also recorded no test reaching `management_session.required` in
 `packages/identity/src/profile.ts`'s `ownSession`; that coverage note has not been rechecked.
 
-## Roles the admin can edit (A7)
-
-**A1002 redesigned and approved 2026-11-11.** The [redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md)
-replaces the [7 November design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) where
-they differ (its §9 lists what was dropped and kept) and supersedes the unmerged cut 2 scope
-forecast. `fiscal.remedy` is Admin by default and assignable (owner 2026-11-09). Cut 1 (#2578) has
-landed. The [build plan](../superpowers/plans/2026-11-11-a1002-roles-redesign.md) starts with
-test-fixture preparation, now ready: ordinary server, package and device-profile fixtures use
-the shared helpers. Role storage now uses access-role memberships, with authority and Admin-holder reads inside identity. Permission declarations list their default
-holders; Managers can restart the box. Clock and mail-server changes use Box administration
-(Admin by default). Comp reasons and the bill limit now use Apply comps and Approve comps, without role lists; zero limits require approval. Job roles and their holders now live in core under identity; staffing and workforce are permanent. Used job roles can be hidden without losing shift names, memberships are logged, and each person’s editor saves job-role tags separately. Setup administrators now hold Team, imports give them the source administrator’s job roles or all visible imported roles, with Team when neither exists, and demo and shared fixture staff hold job roles. Device profiles now select visible job roles, with an empty selection admitting nobody; setup, demo, bench and imports retain sign-in. Job membership changes now refresh the till sign-in list, and deleting a job names profiles left with nobody. Permission checks and Admin-holder reads now go through identity. Dashboard pages follow permissions and signed-in state follows the person id; the staff editor now saves multiple access-role tags separately from details. Managers can manage sign-in and grant roles they cover, while changing another person’s email still needs its own permission. Custom-role creation, copying, renaming, permission editing and deletion now have server commands and HTTP routes with role-by-role grant checks; the Access roles page now provides these actions with grouped permission labels and holder counts. Role changes preserve invitation and reset links. Other people’s sign-in changes now require every permission they hold; changing an existing email also needs Change other people’s email addresses (Admin by default). Changes now retain an active Admin with a dashboard sign-in, and changing someone else’s email records the editor and notifies the old address. Identity now has a separate access-role membership command with role-by-role permission checks, changed-while-editing refusal, activity entries and email notices in the recipient’s language; the staff editor uses it, retains refused drafts and shows every held role. Permission help and links between the access-role and job-role pages remain open.
-
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
@@ -229,18 +217,6 @@ its pending-approval wording is superseded by the 2026-11-07 full approval recor
   than the permission deciding. Dashboard resends now use `hardware.manage`, held only by managers
   and admins; the copy follows the till copy's permission. The approved permission merges are
   implemented in cut 1; role storage and changed authority stay in cut 2.
-
-## Roles are something an admin can add and edit; the four built-ins are only defaults
-
-The owner decided editable roles on 2026-09-12 and restated it on 2026-09-28.
-**2026-10-28 qualification:** all four built-ins can never be renamed or deleted; Staff, Supervisor
-and Manager retain editable privileges. Admin retains every current/future grant and its protected
-usable active human anchor. The 2026-10-22 ~12:05 protection answer originally allowed Admin rename;
-the new names answer supersedes that allowance only.
-
-**2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
-and [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
-See [A7](#roles-the-admin-can-edit-a7) for the two implementation cuts and their remaining gates.
 
 ## Shared database-backed table paging, search and sorting
 
@@ -459,6 +435,19 @@ Shared form plumbing, an untraced dialog focus line and retiring the summary onc
   untried. Left open by A331 batch 3a (#1401).
 
 ## Decisions and deliberate limits
+
+### Roles are something an admin can add and edit; the four built-ins are only defaults
+
+The owner decided editable roles on 2026-09-12 and restated it on 2026-09-28.
+**2026-10-28 qualification:** all four built-ins can never be renamed or deleted; Staff, Supervisor
+and Manager retain editable privileges. Admin retains every current/future grant and its protected
+usable active human anchor. The 2026-10-22 ~12:05 protection answer originally allowed Admin rename;
+the new names answer supersedes that allowance only.
+
+**2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
+and [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
+**2026-11-14:** the [roles redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md) supersedes that build split; its access roles grant permissions, while job roles grant none.
+
 
 - **An unreadable authenticator secret is a sign-in refusal (C95, #930).**
   `manager-login.ts` reports an authenticator secret it cannot decrypt as a failed login
