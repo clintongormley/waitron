@@ -11,9 +11,7 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { venueLocationId } from "../venue.js";
 
-let LOCATION: string;
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 const AT = "2026-10-16T10:00:00.000Z";
 const REFUND = "dddddddd-0000-4000-8000-000000000001";
@@ -33,7 +31,6 @@ describe("settled-tender refund ledger", () => {
       invoiceLocales: ["es"],
       operationDescription: "Meals",
     });
-    LOCATION = await venueLocationId(db);
     nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));
     const [series] = await db
@@ -119,7 +116,6 @@ describe("settled-tender refund ledger", () => {
       source: "device",
       device_id: deviceId,
       node_id: nodeId,
-      location_id: LOCATION,
       method: "card",
       manual: 0,
       provider: "stripe",

@@ -15,7 +15,6 @@ import {
   printers,
   stationPrinterPairs,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
@@ -36,15 +35,14 @@ import { deletePrinter } from "./printer-delete.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function venue(): Promise<{ locationId: string; deviceId: string; profileId: string }> {
+async function venue(): Promise<{ deviceId: string; profileId: string }> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["en-GB"],
     operationDescription: "Restaurant sale",
   });
-  const venueId = await venueLocationId(suite.db);
   const { deviceId, profileId } = await seedDevice(suite.db, { label: "Counter" });
-  return { locationId: venueId, deviceId, profileId };
+  return { deviceId, profileId };
 }
 
 async function realPrinter(name: string): Promise<string> {

@@ -11,7 +11,7 @@ const selected = {
   nodeId: "d0000000-0000-4000-8000-000000000001",
   nodeRecoveryKeyName: "Amber Hill",
   taxpayer: { legalName: "Saved venue", taxId: "89890001K" },
-  venueName: "Saved location",
+  venueName: "Saved venue",
 };
 const send = (app: Hono, kind: string, body: unknown) =>
   app.request(

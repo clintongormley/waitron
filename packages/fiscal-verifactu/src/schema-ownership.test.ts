@@ -33,7 +33,7 @@ const OWNED = [
 /** Every table `packages/db` owns. None of these may ever appear in this package's output. */
 const CORE = [
   "invoice_series",
-  "locations",
+  "settings",
   "sale_lines",
   "sales",
   "tenants",

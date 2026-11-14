@@ -20,7 +20,7 @@ import {
   invoiceSeries,
   createVenueSettings,
   kitchenStations,
-  locations,
+  VENUE_SETTINGS,
   nextStationColour,
   nodes,
   tenants,
@@ -170,8 +170,8 @@ export async function applyVenue(
   if (seriesOwners.length > 1)
     throw new Error("applyVenue: only the filing module may own initial series");
   if (seriesOwners.some((module) => module.fiscal?.id !== filingModule)) {
-    const [existing] = await deps.db.select({ id: locations.id }).from(locations).limit(1);
-    if (existing !== undefined) throw new AppError("provisioning.second_venue", {});
+    const existing = await readSettings(deps.db, VENUE_SETTINGS);
+    if (existing.revision > 0) throw new AppError("provisioning.second_venue", {});
     throw new Error("applyVenue: only the filing module may own initial series");
   }
   const seriesOwner = seriesOwners[0];
@@ -187,7 +187,7 @@ export async function applyVenue(
 
   const run = async (tx: Transaction, prepared: ModuleOperations): Promise<VenueResult> => {
     await requireSavedZones(tx);
-    let locationId = "";
+    let venueCreated = false;
     let nodeId = "";
     let reusingVenue = false;
     let createdAdministrator: string | undefined;
@@ -259,19 +259,13 @@ export async function applyVenue(
           break;
         }
         case "seed-device-profiles":
-          if ((await tx.select({ id: locations.id }).from(locations).limit(1)).length === 0)
+          if ((await readSettings(tx, VENUE_SETTINGS)).revision === 0)
             await seedDeviceProfiles(tx, action.profiles);
           break;
         case "create-venue": {
-          const existing = await tx
-            .select({ id: locations.id })
-            .from(locations)
-            .orderBy(locations.id);
-          if (existing.length > 1) {
-            throw new AppError("provisioning.second_venue", {});
-          }
-          if (existing.length === 1) {
-            const row = { ...existing[0]!, ...(await readVenue(tx)) };
+          const existing = await readSettings(tx, VENUE_SETTINGS);
+          if (existing.revision > 0) {
+            const row = await readVenue(tx);
             const clock = await readVenueClock(tx);
             const currentCutover = cutoverForBusinessDay(clock, businessDayAt(clock, new Date()));
             const matches =
@@ -289,14 +283,11 @@ export async function applyVenue(
             if (!matches) {
               throw new AppError("provisioning.second_venue", {});
             }
-            locationId = row.id;
+            venueCreated = true;
             reusingVenue = true;
             break;
           }
-          locationId = randomUUID();
-          await tx.insert(locations).values({
-            id: locationId,
-          });
+          venueCreated = true;
           await createVenueSettings(
             tx,
             {
@@ -339,7 +330,7 @@ export async function applyVenue(
         case "create-node":
           // Ordering guards throw a plain Error, not an AppError: a malformed plan is a programming
           // bug, not operator input.
-          if (locationId === "") throw new Error("applyVenue: create-node before create-venue");
+          if (!venueCreated) throw new Error("applyVenue: create-node before create-venue");
           if (reusingVenue) {
             const existing = await tx
               .select({
@@ -527,8 +518,8 @@ export async function applyVenue(
     withTransaction(deps.db, (tx) => run(tx, prepared));
 
   if (collecting.length === 0) return transact(new Map());
-  const [existingVenue] = await deps.db.select({ id: locations.id }).from(locations).limit(1);
-  if (existingVenue !== undefined) return transact(new Map());
+  const existingVenue = await readSettings(deps.db, VENUE_SETTINGS);
+  if (existingVenue.revision > 0) return transact(new Map());
   const [existingAdministrator] = await listAdminHolders(deps.db);
   if (existingAdministrator !== undefined)
     throw new AppError("provisioning.initial_operator_required", {});

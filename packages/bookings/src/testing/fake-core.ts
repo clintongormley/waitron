@@ -28,7 +28,6 @@ declare module "@waitron/shared" {
 }
 
 export interface FakeCoreConfig {
-  locationId: string;
   nodeId: string;
 }
 

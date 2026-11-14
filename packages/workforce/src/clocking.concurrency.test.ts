@@ -14,7 +14,7 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { AppError, jobOrigin } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
-import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
+import { insertTimeEntry, seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 import { readChain } from "./chain.js";
 
 const suite = useVenueDb({
@@ -31,7 +31,7 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db, "Ana");
   otherPersonId = await seedPerson(suite.db, "Ben");
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
 });
 

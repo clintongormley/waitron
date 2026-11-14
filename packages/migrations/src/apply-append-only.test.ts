@@ -25,9 +25,9 @@ const APPEND_ONLY_TABLES = ["sales", "order_amendments", "time_entries"] as cons
  * `payments` is the sharp one: it is classified `ledger` and is deliberately NOT append-only,
  * because `packages/payments/src/store.ts` moves a card payment's row through its states. A wiring
  * that read the CLASS rather than the `appendOnly()` declaration would refuse those.
- * `locations` is an ordinary `state` table.
+ * `settings` is an ordinary `state` table.
  */
-const WRITABLE_TABLES = ["payments", "locations"] as const;
+const WRITABLE_TABLES = ["payments", "settings"] as const;
 
 const scratch: string[] = [];
 afterAll(() => {

@@ -11,7 +11,6 @@ import {
   tenants,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -38,8 +37,7 @@ async function fixture(tx: Transaction) {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });
-  const venueId = await venueLocationId(tx);
-  const cfg = { locationId: venueId };
+  const cfg = {};
   const stations = await tx
     .insert(kitchenStations)
     .values([

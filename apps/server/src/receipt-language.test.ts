@@ -22,7 +22,6 @@ import {
   withTransaction,
   workingOrders,
   type Database,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -153,7 +152,6 @@ async function venueWith(
     ),
     { db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(db);
   // Built the way boot builds it, from the variables the box sets.
   const cfg = await deviceRequestCfg(suite.db, {
     ...loadNodeIdentity({
@@ -168,7 +166,7 @@ async function venueWith(
       defaultContentLanguage: "es",
       contentLanguages: ["es", "ca", "gl"],
     });
-    const menu = await createCatalogue(tx, { name: `Receipt language menu ${venueId}` });
+    const menu = await createCatalogue(tx, { name: `Receipt language menu` });
     const category = await createCategory(tx, { name: "Tapas" });
     // The staff, customer-facing and kitchen names all differ (docs/developers/products.md).
     const product = await createProduct(tx, {
@@ -325,8 +323,8 @@ async function tillReceiptLanguages(v: Venue): Promise<string[] | undefined> {
 const startsWith = (lines: string[], label: string) =>
   lines.some((line) => line === label || line.startsWith(`${label} `));
 
-describe("a receipt follows its location's saved language when its order saves none", () => {
-  it("prints a Barcelona location saved as Catalan in Catalan", async () => {
+describe("a receipt follows its venue's saved language when its order saves none", () => {
+  it("prints a Barcelona venue saved as Catalan in Catalan", async () => {
     const v = await venueWith(suite.db, ["ca-ES"], BARCELONA);
     expect(v.cfg.locale).toBe("es-ES");
     expect(await tillInvoiceLocale(v)).toBe("ca-ES");
@@ -350,14 +348,12 @@ describe("a receipt follows its location's saved language when its order saves n
     expect(startsWith(receipt!, "Efectivo")).toBe(false);
   });
 
-  it("prints a Madrid location saved as Galician in Galician, on the sale and on a later reprint", async () => {
+  it("prints a Madrid venue saved as Galician in Galician, on the sale and on a later reprint", async () => {
     const v = await venueWith(suite.db, ["gl-ES"], MADRID);
     const sale = await sell(v, { method: "card", amount: "1.50" });
     expect(sale.status).toBe(200);
     expect(sale.body.locale).toBe("gl-ES");
 
-    // A reprint that names no language is in the language the sale was filed in, whatever the
-    // location says now.
     await withTransaction(suite.db, (tx) => seedVenueSettings(tx, { invoiceLocales: ["es-ES"] }));
     const reprint = await v.app.request(`/api/sales/${sale.id}/reprint`, {
       method: "POST",
@@ -390,7 +386,7 @@ describe("a receipt follows its location's saved language when its order saves n
     expect(dated).not.toContain("d’oct.");
   });
 
-  it("prints a location saved with two languages in the first, and files both", async () => {
+  it("prints a venue saved with two languages in the first, and files both", async () => {
     const v = await venueWith(suite.db, ["es-ES", "ca-ES"], BARCELONA);
     expect(await tillInvoiceLocale(v)).toBe("es-ES");
 
@@ -428,7 +424,6 @@ describe("a receipt follows its location's saved language when its order saves n
   );
 });
 
-/** A bill venue whose location is saved as Catalan while its configuration still says Spanish. */
 async function catalanBillVenue(): Promise<BillVenue> {
   const venue = await provisionBillVenue(suite.db);
   expect(venue.cfg.locale).toBe("es-ES");
@@ -443,7 +438,7 @@ async function takeReceipt(db: Database): Promise<string[]> {
   return receipts[0]!;
 }
 
-describe("a bill paid in parts and an unpaid invoice file the location's language when the order saves none", () => {
+describe("a bill paid in parts and an unpaid invoice file the venue's language when the order saves none", () => {
   function cashContribution(venue: BillVenue, billId: string, amount: string) {
     return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
       submissionId: randomUUID(),
@@ -504,7 +499,7 @@ describe("a bill paid in parts and an unpaid invoice file the location's languag
   });
 });
 
-describe("a card-reader sale files and prints in the location's language when the order saves none", () => {
+describe("a card-reader sale files and prints in the venue's language when the order saves none", () => {
   async function catalanCounter() {
     const venue = await catalanBillVenue();
     const { zoneId, offerFor } = await inTx(venue, async (tx) => {
@@ -728,7 +723,7 @@ describe("an issued receipt reprinted in another receipt language", () => {
     },
   );
 
-  it("offers the till the location's receipt language first, then the pack's receipt languages among the content languages", async () => {
+  it("offers the till the venue's receipt language first, then the pack's receipt languages among the content languages", async () => {
     const v = await venueWith(suite.db, ["ca-ES"], BARCELONA);
     expect(await tillReceiptLanguages(v)).toEqual(["ca-ES", "es-ES", "gl-ES"]);
   });
@@ -1001,7 +996,7 @@ describe("a sale prints its goods in the default content language its lines stor
     expectGoods(receipt!, "es");
   });
 
-  it("prints the default content language's dish name, stored under both keys, when a two-language location's Spanish is chosen", async () => {
+  it("prints the default content language's dish name, stored under both keys, when a two-language venue's Spanish is chosen", async () => {
     const v = await venueWith(suite.db, ["ca-ES", "es-ES"], BARCELONA);
     const id = randomUUID();
 
@@ -1784,7 +1779,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     });
   });
 
-  it("keeps a location's two languages as they are when the saved one is among them", async () => {
+  it("keeps a venue's two languages as they are when the saved one is among them", async () => {
     const venue = await barcelonaVenue(["ca-ES", "es-ES"]);
     const billId = await tabWith(venue, "Tarta");
     await choose(venue, billId, "es-ES");
@@ -1798,7 +1793,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     });
   });
 
-  it("files the location's own language, saved as the choice, as if nothing were saved", async () => {
+  it("files the venue's own language, saved as the choice, as if nothing were saved", async () => {
     const venue = await barcelonaVenue();
     const billId = await tabWith(venue, "Tarta");
     await choose(venue, billId, "ca-ES");
@@ -1812,7 +1807,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     });
   });
 
-  it("files the location's language, and logs one warning, when the saved one is no longer offered", async () => {
+  it("files the venue's language, and logs one warning, when the saved one is no longer offered", async () => {
     const venue = await barcelonaVenue();
     const billId = await tabWith(venue, "Tarta");
     await choose(venue, billId, "es-ES");
@@ -1851,7 +1846,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     ]);
   });
 
-  it("files a card the reader has charged in the location's language when the saved one is no longer offered", async () => {
+  it("files a card the reader has charged in the venue's language when the saved one is no longer offered", async () => {
     const venue = await barcelonaVenue();
     const { id } = await parkedTarta(venue);
     await choose(venue, id, "es-ES");
@@ -2433,7 +2428,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       });
     });
 
-    it("stores a language the location does not offer as sent, and files the sale in Catalan", async () => {
+    it("stores a language the venue does not offer as sent, and files the sale in Catalan", async () => {
       const venue = await barcelonaVenue();
       const id = randomUUID();
 

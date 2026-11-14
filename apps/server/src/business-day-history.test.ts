@@ -389,12 +389,11 @@ describe("dated business-day reporting through real storage", () => {
           suite.db.all<{
             id: string;
             bumpMode: string;
-            fireControl: string;
             catalogueId: string | null;
             timeZone: string;
             dayCutover: string;
           }>(
-            sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, (select id from catalogues where is_default) as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+            sql`select (select id from catalogues where is_default) as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from (select doc from settings where module = 'business_day') b join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
           ),
         )
       )[0]!.dayCutover,

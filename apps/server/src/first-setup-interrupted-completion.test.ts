@@ -41,7 +41,7 @@ function removeVenueRows(f: Pick<Held, "roots">) {
   const db = new DatabaseSync(venueDb(f));
   try {
     db.exec("pragma foreign_keys = off");
-    for (const table of ["tenants", "locations"]) {
+    for (const table of ["tenants", "settings"]) {
       const triggers = db
         .prepare("select name from sqlite_schema where type = 'trigger' and tbl_name = ?")
         .all(table) as { name: string }[];

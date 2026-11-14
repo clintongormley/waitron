@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
@@ -28,7 +29,6 @@ import {
   lineServiceCancellations,
   kitchenStations,
   kitchenCourses,
-  locations,
   orderGroupEvents,
   orderGroupHoldStations,
   orderGroups,
@@ -41,7 +41,6 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -61,7 +60,6 @@ import {
 import { createPrinter } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg, seedSessionDevice } from "./testing/session-device.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -152,7 +150,7 @@ const COURSE_OF: Record<Dish, keyof typeof COURSES> = {
 };
 
 interface Venue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   productId: Record<Dish, string>;
   printerId: string;
   /** The one kitchen station every routed dish goes to. */
@@ -172,16 +170,14 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
     invoiceLocales: [countryCourses ? "en-GB" : LOCALE],
     operationDescription: "Restaurante",
   });
-  const locationId = await venueLocationId(db);
   const stationId = await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies WithVenueRowId);
+  } satisfies TradingContext);
   return inTx(async (tx) => {
     if (countryCourses) await VENUE_SERVICE_PROVISIONING.seed!.run(tx, { nodeId });
     const seededCourses = countryCourses ? await tx.select().from(kitchenCourses) : [];
@@ -3638,10 +3634,10 @@ describe("credit (D5)", () => {
   // The directive is the assertion: typecheck reports an unused `@ts-expect-error` the moment a
   // save that may issue the bill's invoice types without naming who saves. Vitest does not typecheck.
   it("will not type a save that may issue the invoice without naming who saves", () => {
-    const cfg = {} as WithVenueRowId;
+    const cfg = {} as TradingContext;
     const issue = {
       fiscal: {} as TillSaleDeps,
-      saleCfg: {} as WithVenueRowId<DeviceRequestConfig>,
+      saleCfg: {} as DeviceRequestConfig,
     };
     const unnamed = { lines: [], revision: 0, expectedEdit: null };
     expectTypeOf(updateHeldOrder).toBeCallableWith(
@@ -5994,29 +5990,6 @@ describe("Fire now on one held dish", () => {
         answer,
       );
       expect(await snapshot(v, s.partyId)).toEqual(afterFirst);
-    },
-  );
-
-  it.each(["kitchen", "expo"] as const)(
-    "fires one held dish while legacy fire control is %s",
-    async (mode) => {
-      const { v, s, steak, fish } = await fixture(false);
-      await inTx(async (tx) => {
-        await tx
-          .update(locations)
-          .set({ fireControl: mode })
-          .where(eq(locations.id, v.cfg.locationId));
-        await setChangesAfterSending(tx, "never");
-      });
-      const command = await args(s.partyId);
-      await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
-      expect(await firedTicketLineIds(s.partyId)).toContain(steak.id);
-      expect(await firedTicketLineIds(s.partyId)).not.toContain(fish.id);
-      const [stored] = await db
-        .select({ fireControl: locations.fireControl })
-        .from(locations)
-        .where(eq(locations.id, v.cfg.locationId));
-      expect(stored!.fireControl).toBe(mode);
     },
   );
 

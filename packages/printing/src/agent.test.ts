@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, printAgents, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, printAgents, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -9,19 +9,16 @@ import { hashDeviceToken, hashSecret } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { authenticateAgent } from "./agent.js";
 import "./errors.js";
-type PrintAgentConfig = { locationId: string };
 
 const LOCALE = "es-ES";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function setup(): Promise<PrintAgentConfig> {
+async function setup(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: [LOCALE],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
-  return { locationId: venueId };
 }
 
 async function lastSeenAt(agentId: string): Promise<string | null> {
@@ -108,9 +105,9 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
 
 describe("authenticateAgent", () => {
   /** Mint an approved `print_agents` row directly (enrolment is join-and-accept, in apps/server) and
-   * return its config + bearer token — the `${agentId}.${secret}` shape `authenticateAgent` parses. */
-  async function enrolled(): Promise<{ cfg: PrintAgentConfig; agentId: string; token: string }> {
-    const cfg = await setup();
+   * return its bearer token — the `${agentId}.${secret}` shape `authenticateAgent` parses. */
+  async function enrolled(): Promise<{ agentId: string; token: string }> {
+    await setup();
     const secret = randomBytes(32).toString("base64url");
     const [row] = await suite.db
       .insert(printAgents)
@@ -121,7 +118,7 @@ describe("authenticateAgent", () => {
       })
       .returning({ id: printAgents.id });
     const id = row!.id;
-    return { cfg, agentId: id, token: `${id}.${secret}` };
+    return { agentId: id, token: `${id}.${secret}` };
   }
 
   const setActive = (agentId: string, active: boolean) =>

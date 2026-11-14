@@ -112,7 +112,6 @@ async function recordOn(venue: Venue): Promise<void> {
     sql`select id from registro_sif where node_id = ${venue.cfg.nodeId}`,
   );
   const ids = {
-    locationId: venue.cfg.locationId,
     nodeId: venue.cfg.nodeId,
     seriesId: venue.seriesId,
     saleId: randomUUID(),

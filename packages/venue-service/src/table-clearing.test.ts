@@ -7,7 +7,6 @@ import {
   diningTables,
   kitchenStations,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -29,12 +28,9 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, fn);
 }
 
-async function seedLocation(name: string): Promise<string> {
+async function seedFixtureVenue(name: string): Promise<void> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
   await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
-  return locationId;
 }
 
 async function switchOn(departmentId: string): Promise<void> {
@@ -55,7 +51,7 @@ async function departmentWithTable(name: string) {
 
 describe("readTablesNeedingClearing", () => {
   it("reads a table in a department with Needs clearing on, and not one in a department with it off", async () => {
-    await seedLocation("Clearing on and off");
+    await seedFixtureVenue("Clearing on and off");
     const a = await departmentWithTable("A");
     const b = await departmentWithTable("B");
     await switchOn(a.departmentId);
@@ -65,7 +61,7 @@ describe("readTablesNeedingClearing", () => {
   });
 
   it("leaves out a table whose zone is inactive", async () => {
-    await seedLocation("Clearing without department");
+    await seedFixtureVenue("Clearing without department");
     const a = await departmentWithTable("A");
     const zone = await seedZone(db, { name: "Inactive zone", active: false });
     const [table] = await db
@@ -88,7 +84,7 @@ describe("readTablesNeedingClearing", () => {
   });
 
   it("leaves out an id that is no table", async () => {
-    await seedLocation("Clearing unknown id");
+    await seedFixtureVenue("Clearing unknown id");
     const a = await departmentWithTable("A");
     await switchOn(a.departmentId);
     const unknown = randomUUID();
@@ -100,7 +96,7 @@ describe("readTablesNeedingClearing", () => {
 
 describe("listNeedsClearingDepartmentIds", () => {
   it("lists the active departments with Needs clearing on", async () => {
-    await seedLocation("Clearing list");
+    await seedFixtureVenue("Clearing list");
     const a = await departmentWithTable("A");
     await departmentWithTable("B");
     const c = await departmentWithTable("C");

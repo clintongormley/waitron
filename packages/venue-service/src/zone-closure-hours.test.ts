@@ -9,7 +9,6 @@ import {
   dayCutoverChanges,
   withTransaction,
   type Database,
-  venueLocationId,
   readVenueClock,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -41,8 +40,7 @@ async function venue() {
     operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
   });
-  const venueId = await venueLocationId(db);
-  const cfg = { locationId: venueId };
+  const cfg = {};
   await db.insert(kitchenStations).values({ name: "Kitchen", isDefault: true });
   const zone = await seedZone(db, { name: "Bar" });
   const barZone = zone!.id;

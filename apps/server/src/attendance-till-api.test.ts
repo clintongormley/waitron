@@ -217,7 +217,6 @@ describe("till attendance recorder admission", () => {
             tender: { method: "cash", amount: "20.00" },
             personId: "untrusted person",
             at: "2026-10-15T20:00:00Z",
-            locationId: "untrusted location",
           }),
         },
       );
@@ -249,7 +248,6 @@ describe("till attendance recorder admission", () => {
         lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
         personId: "untrusted person",
         at: "2026-10-15T20:00:00Z",
-        locationId: "untrusted location",
       }),
     });
     expect(paid.status).toBe(200);
@@ -283,7 +281,6 @@ describe("till attendance recorder admission", () => {
         tip: "0.00",
         personId: "untrusted person",
         at: "2026-10-15T20:00:00Z",
-        locationId: "untrusted location",
       }),
     });
     expect(paid.status).toBe(200);

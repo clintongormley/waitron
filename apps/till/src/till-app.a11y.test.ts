@@ -271,7 +271,6 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
         orderFlow: "prepay",
         courses: [],
         capabilities: [],
-        fireControl: "waiter",
         formFactor: floorFormFactor,
       }),
       listZoneOffers: base.listDefaultZoneOffers,

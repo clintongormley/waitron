@@ -138,7 +138,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "each row is one box's high-water mark of the venue-wide order-number sequence; copied to a standby, never drained back",
   ),
   classify("tenants", "state", STATE),
-  classify("locations", "state", STATE),
   classify("day_cutover_changes", "state", STATE),
   classify("nodes", "state", STATE),
   classify("devices", "state", STATE),

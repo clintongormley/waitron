@@ -8,7 +8,6 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   devices,
-  locations,
   pagePrinters,
   printers,
   withTransaction,
@@ -83,7 +82,6 @@ async function purgeProfiles(): Promise<void> {
 
 /** Through drizzle, for the `$defaultFn` reason `seedSession` states. */
 async function seedBoundDevice(profileId: string, active = true): Promise<string> {
-  await suite.db.insert(locations).values({});
   await seedVenueSettings(suite.db, {
     name: "Loc",
     invoiceLocales: ["es"],
@@ -1153,7 +1151,6 @@ describe("what can refuse a write to device_profiles", () => {
 
 describe("listDevices", () => {
   it("lists active, undeleted devices newest-enrolled first with their profile's form factor and retirement", async () => {
-    await suite.db.insert(locations).values({});
     const [till, kds] = await seedDeviceProfiles(suite.db, [
       { name: "Till", formFactor: "till", capabilities: [] },
       {

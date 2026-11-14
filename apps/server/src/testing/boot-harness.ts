@@ -8,14 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { Agent } from "undici";
-import {
-  locations,
-  nodes,
-  openVenueDatabase,
-  tenants,
-  type Database,
-  type VenueDatabase,
-} from "@waitron/db";
+import { nodes, openVenueDatabase, tenants, type Database, type VenueDatabase } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 /**
@@ -23,10 +16,6 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
  * those files mocks its own modules: `vi.mock` is hoisted per test file, so no mock lives here.
  */
 
-// The venue's fiscal identity. Boot's trading branch requires it, so every trading boot carries
-// these through `KEY_ENV`; `seedSharedVenue` seeds the tenant, location and node they name, which boot
-// reads at startup.
-export const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 export const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
@@ -43,16 +32,12 @@ export const KEY_ENV = {
   ...TILL_ENV,
 };
 
-/** Seeds the shared venue directory with the tenant, location and node `TILL_ENV` names. */
 export async function seedSharedVenue(db: Database): Promise<void> {
   await writeModuleConfig(db, { overrides: new Map([["fiscal-none", false]]) }, null);
   // A distinctive NIF (90M base) stays clear of every other seed generator.
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90000000K", legalName: "Boot Venue SL" });
-  await db.insert(locations).values({
-    id: TILL_LOCATION_ID,
-  });
   await seedVenueSettings(db, {
     name: "Barra",
     invoiceLocales: ["es-ES"],
@@ -323,16 +308,11 @@ export async function startFakeSmtp(onMessage?: () => void): Promise<{
   };
 }
 
-/** The tenant, location, node and till `KEY_ENV`'s ids name, seeded into `db` the way
- * `seedSharedVenue` seeds the shared directory. */
 export async function seedTradingVenue(db: Database): Promise<void> {
   await writeModuleConfig(db, { overrides: new Map([["fiscal-none", false]]) }, null);
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90000001R", legalName: "Route Wiring SL" });
-  await db.insert(locations).values({
-    id: TILL_LOCATION_ID,
-  });
   await seedVenueSettings(db, { name: "Barra", operationDescription: "Venta en establecimiento" });
   await seedBusinessDay(db, {});
   await db.insert(nodes).values({

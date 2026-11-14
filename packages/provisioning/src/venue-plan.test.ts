@@ -52,7 +52,7 @@ describe("planVenue", () => {
     });
   });
 
-  it("keeps the taxpayer's domicile separate from the venue location", () => {
+  it("keeps the taxpayer's domicile separate from the venue venueStep", () => {
     const actions = planVenue(
       { ...request(), taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid" },
       MODULES,
@@ -65,7 +65,7 @@ describe("planVenue", () => {
     });
   });
 
-  it("emits ensure-tenant → seed-admin → seed-device-profiles → location → node → three series → module seeds, in order, and no till", () => {
+  it("emits ensure-tenant → seed-admin → seed-device-profiles → venueStep → node → three series → module seeds, in order, and no till", () => {
     const actions = planVenue(request(), MODULES);
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-tenant",
@@ -156,9 +156,9 @@ describe("planVenue", () => {
     ["a venue given en-US receipts, which only the command line accepts", "Madrid", "en-US"],
   ])("names the station and profiles in Spanish for %s", (_title, province, receiptLocale) => {
     const actions = planVenue(request({ province, invoiceLocales: [receiptLocale] }), MODULES);
-    const location = actions.find((a) => a.kind === "create-venue");
+    const venueStep = actions.find((a) => a.kind === "create-venue");
     const profiles = actions.find((a) => a.kind === "seed-device-profiles");
-    expect(location?.kind === "create-venue" && location.stationName).toBe(
+    expect(venueStep?.kind === "create-venue" && venueStep.stationName).toBe(
       STARTER_STATION_NAMES.Kitchen.es,
     );
     expect(
@@ -200,9 +200,9 @@ describe("planVenue", () => {
         request({ invoiceLocales: [receiptLocale], staffLanguage }),
         MODULES,
       );
-      const location = actions.find((a) => a.kind === "create-venue");
+      const venueStep = actions.find((a) => a.kind === "create-venue");
       const profiles = actions.find((a) => a.kind === "seed-device-profiles");
-      expect(location?.kind === "create-venue" && location.stationName).toBe(stationName);
+      expect(venueStep?.kind === "create-venue" && venueStep.stationName).toBe(stationName);
       expect(
         profiles?.kind === "seed-device-profiles" && profiles.profiles.map((p) => p.name),
       ).toEqual(profileNames);

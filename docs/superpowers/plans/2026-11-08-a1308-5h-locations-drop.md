@@ -142,14 +142,30 @@ columns read by nothing (tables-venuebox §5).
 
 ### Task 1: The drop
 
-- [ ] **Step 1:** Base protection list (rules §3).
-- [ ] **Step 2:** Delete `locations`, `bumpMode`, `fireControlMode`; rebuild core. Items 2, 3.
-- [ ] **Step 3:** Item 1's tests; item 4's scripts.
-- [ ] **Step 4:** Item 5, test first. Run Finish line 2. Commit.
+- [x] **Step 1:** Base protection list (rules §3).
+- [x] **Step 2:** Delete `locations`, `bumpMode`, `fireControlMode`; rebuild core. Items 2, 3.
+- [x] **Step 3:** Item 1's tests; item 4's scripts.
+- [x] **Step 4:** Item 5, test first. Run Finish line 2. Commit.
 
 ### Task 2: Docs, done-check, finish
 
-- [ ] **Step 1:** Backlog, pointers, conventions-data.
-- [ ] **Step 2:** Finish line 3; fix or stop on each line.
-- [ ] **Step 3:** Protection list: compare, paste, mark.
+- [x] **Step 1:** Backlog, pointers, conventions-data.
+- [x] **Step 2:** Finish line 3; fix or stop on each line.
+- [x] **Step 3:** Protection list: compare, paste, mark.
 - [ ] **Step 4:** `pnpm format:check`; commit; `/finish-branch`.
+
+
+## Build notes, 2026-11-14
+
+The watcher cleared these implementation details in Lane E's local `questions.md`:
+
+- 11:54: use the existing Madrid removed-with-rows mode and permit historical input names only in its translation files. The exception covers `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`, `testing/madrid-dropped-columns.ts`, `testing/madrid-dropped-columns.test.ts`, `testing/madrid-documents.ts`, `testing/madrid-documents.test.ts` `testing/madrid-semantics.test.ts` and `testing/madrid-semantics.ts`, all under that demo-seed directory. The capture-presence checks stay.
+- 12:16: delete only obsolete location receipt/drawer route cases; port retained-state snapshots to settings and cutovers with their refusal codes and before/after checks intact.
+- 12:42: remove the unused shared `LocationId` type, constructor and exports, keeping the remaining id checks.
+- 12:47: delete the completed fk0/fk1 sweep transformers and their tests; keep the generic engine with neutral sample fields and unchanged assertions.
+- 12:52: leave the fiscal pair byte-identical. The comment at `packages/fiscal-verifactu/src/write-path.e2e.test.ts:514` is the sole non-Madrid exception to the whole-tree check.
+- 12:57: finish the removal without another size stop, with no new test behaviour or product change, and report additions and deletions separately in the PR. This supersedes the earlier size estimates.
+
+These are watcher clearances inside the existing request, not new owner approvals of this design. The old format-1 capture is retired with its removed schema; the outdated-format check uses a version-1 envelope. `parseConfigurationBundle` rejects the version before inspecting its fields (`packages/provisioning/src/configuration-transfer.ts`). The format-9 checks retain the same outdated refusal with the same version.
+
+The watcher cleared updating the english-only exact-count guard to 1152 at 14:07, because this slice deletes its old format-1 fixture. The owner's A1308 instruction, “build all of it as planned”, is recorded in [the build order](2026-11-08-a1308-build-order.md); the watcher pointed the reviews to that record at the same time.

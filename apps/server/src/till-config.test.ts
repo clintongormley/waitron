@@ -28,7 +28,7 @@ function captureThrow(fn: () => unknown): unknown {
 }
 
 describe("loadNodeIdentity", () => {
-  it("boots from the node without a location or cached series", () => {
+  it("boots from the node without a venue or cached series", () => {
     const identity = { ...base };
     const loaded = tryLoadNodeIdentity(identity);
     expect(loaded).toMatchObject({ nodeId: NODE });

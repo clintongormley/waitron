@@ -82,9 +82,7 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
   );
 }
 
-/** Seeds a second till device, node and open working order at the same location as `seeded`. */
-async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
-  const { locationId } = seeded;
+async function seedSecondTill(): Promise<Seeded> {
   // A raw insert runs no drizzle `$defaultFn`, so `id` and the timestamps are supplied by hand.
   const stamp = new Date().toISOString();
   const node2 = await suite.db.execute<{ id: string }>(sql`
@@ -95,7 +93,6 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
     insert into working_orders (id, source, device_id, order_number, opened_at)
     values (${randomUUID()}, 'device', ${deviceId}, 1, ${stamp}) returning id`);
   return {
-    locationId,
     deviceId,
     nodeId: brandNodeId(node2.rows[0].id),
     workingOrderId: wo2.rows[0].id,
@@ -227,7 +224,7 @@ describe("reconcilePayments", () => {
 
   it("aggregates per class across devices — payments on two devices make one incident", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
-    const second = await seedSecondTill(seeded);
+    const second = await seedSecondTill();
     await capture(seeded, "p1", "ext-1");
     await capture(second, "p2", "ext-2", "20.00");
     const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);

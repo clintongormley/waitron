@@ -130,11 +130,11 @@ describe("sameTarget", () => {
     expect(sameTarget({ table: "persons", columns: ["lower(email)", "id"] }, target)).toBe(false);
   });
 
-  // Column ORDER is part of the identity: `(location_id, label)` and `(label, location_id)` are two
+  // Column ORDER is part of the identity: `(node_id, label)` and `(label, node_id)` are two
   // different indexes, and the engine reports each in its own declared order.
   it("is false when the same columns arrive in the other order", () => {
-    const pair = { table: "devices", columns: ["location_id", "label"] } as const;
-    expect(sameTarget({ table: "devices", columns: ["label", "location_id"] }, pair)).toBe(false);
+    const pair = { table: "devices", columns: ["node_id", "label"] } as const;
+    expect(sameTarget({ table: "devices", columns: ["label", "node_id"] }, pair)).toBe(false);
   });
 
   it("is false when there is no target at all", () => {

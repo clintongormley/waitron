@@ -11,14 +11,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  locations,
-  nodes,
-  nowIso,
-  stampDeployment,
-  openVenueDatabase,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, nowIso, stampDeployment, openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations } from "@waitron/migrations";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
@@ -59,15 +52,11 @@ async function migratedNodeDump(parent: string) {
 
 it("previews a backup with an older venue schema by migrating only its private scratch copy", async () => {
   const nodeId = "d0000000-0000-4000-8000-000000000001";
-  const locationId = "d0000000-0000-4000-8000-000000000002";
   await stampDeployment(suite.db, "preproduction");
   await suite.db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
     values (1, 'ES', '89890001K', 'Earlier venue', ${nowIso()})`);
-  await suite.db.insert(locations).values({
-    id: locationId,
-  });
   await seedVenueSettings(suite.db, {
-    name: "Earlier location",
+    name: "Earlier venue",
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
@@ -131,7 +120,7 @@ it("previews a backup with an older venue schema by migrating only its private s
     });
     expect(preview.nodeRecoveryKeyName).toBeNull();
     expect(preview.taxpayer).toEqual({ legalName: "Earlier venue", taxId: "89890001K" });
-    expect(preview.venueName).toBe("Earlier location");
+    expect(preview.venueName).toBe("Earlier venue");
     expect(await readFile(source)).toEqual(sourceBytes);
     expect(suite.node.all(sql`pragma table_info(node_recovery_key)`)).toEqual([]);
     expect(await readdir(scratch)).toEqual(["source.db"]);
@@ -142,15 +131,12 @@ it("previews a backup with an older venue schema by migrating only its private s
 
 it("binds a bucket copy with an older venue schema before private preview migrations change its bytes", async () => {
   const nodeId = "d0000000-0000-4000-8000-000000000001";
-  const locationId = "d0000000-0000-4000-8000-000000000002";
+  const streamId = "d0000000-0000-4000-8000-000000000002";
   await stampDeployment(suite.db, "preproduction");
   await suite.db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
     values (1, 'ES', '89890001K', 'Earlier venue', ${nowIso()})`);
-  await suite.db.insert(locations).values({
-    id: locationId,
-  });
   await seedVenueSettings(suite.db, {
-    name: "Earlier location",
+    name: "Earlier venue",
     operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, {});
@@ -198,10 +184,10 @@ it("binds a bucket copy with an older venue schema before private preview migrat
     const generation = `gen-0-${nodeId}-20261001T080000Z`;
     await writePointer(
       store,
-      locationId,
+      streamId,
       signPointer(
         {
-          streamId: locationId,
+          streamId,
           term: 0,
           nodeId,
           generation,
@@ -214,7 +200,7 @@ it("binds a bucket copy with an older venue schema before private preview migrat
     const preview = await previewRecoveryStream({
       kit: {
         version: 2 as const,
-        streamId: locationId,
+        streamId,
         bucket: {
           region: "local",
           bucket: "copy",

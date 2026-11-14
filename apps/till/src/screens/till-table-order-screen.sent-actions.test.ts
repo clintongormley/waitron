@@ -67,26 +67,22 @@ async function openMore(el: TillTableOrderScreen) {
   return more;
 }
 
-it.each(["waiter", "kitchen", "expo"] as const)(
-  "fires one paid held dish through its native More menu under %s control",
-  async (fireControl) => {
-    const orders = structuredClone(current());
-    orders.groups[2]!.rows[0] = { ...orders.groups[2]!.rows[0]!, billStatus: "settled" };
-    const el = await openLine("held", {
-      currentOrders: orders,
-      bills: [bill("settled")],
-      ...{ fireControl },
-    });
-    const events = capture(el, "fire-held-line");
-    await openMore(el);
-    await userEvent.click(q(el, "[data-sent-line-fire]"));
-    await el.updateComplete;
-    expect(events.map((event) => [event.detail, event.bubbles, event.composed])).toEqual([
-      [{ lineId: "l-flan" }, true, true],
-    ]);
-    expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
-  },
-);
+it("fires one paid held dish through its native More menu", async () => {
+  const orders = structuredClone(current());
+  orders.groups[2]!.rows[0] = { ...orders.groups[2]!.rows[0]!, billStatus: "settled" };
+  const el = await openLine("held", {
+    currentOrders: orders,
+    bills: [bill("settled")],
+  });
+  const events = capture(el, "fire-held-line");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-fire]"));
+  await el.updateComplete;
+  expect(events.map((event) => [event.detail, event.bubbles, event.composed])).toEqual([
+    [{ lineId: "l-flan" }, true, true],
+  ]);
+  expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
+});
 
 it.each([
   "busy",

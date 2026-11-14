@@ -8,7 +8,6 @@ import { withTransaction } from "../tenancy.js";
 
 import { printerHolders } from "./printer-holders.js";
 import { printers } from "./printers.js";
-import { venueLocationId } from "../venue.js";
 
 describe("printer_holders", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -24,7 +23,6 @@ describe("printer_holders", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    const locationId = await venueLocationId(db);
     const [profile] = await seedDeviceProfiles(db, { name: "Profile", formFactor: "till" });
     ({ deviceId: deviceA } = await seedDevice(db, { profileId: profile!.id, label: "Till A" }));
     ({ deviceId: deviceB } = await seedDevice(db, { profileId: profile!.id, label: "Till B" }));
@@ -32,7 +30,6 @@ describe("printer_holders", () => {
       .insert(printers)
       .values(
         ["10.0.0.1", "10.0.0.2"].map((host) => ({
-          locationId,
           name: host,
           transport: "network_tcp" as const,
           host,

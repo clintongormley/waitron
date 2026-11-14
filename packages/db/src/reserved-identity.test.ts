@@ -38,7 +38,7 @@ describe("reserved-identity accessors", () => {
     await seedVenue(suite.db);
   });
 
-  it("stores a node without linking it to a location", async () => {
+  it("stores a node without linking it to a venue", async () => {
     await suite.db.run(sql`insert into nodes (id, name, created_at)
       values ('55555555-5555-4555-8555-555555555555', 'Independent node', '2026-11-12T08:00:00Z')`);
     expect(

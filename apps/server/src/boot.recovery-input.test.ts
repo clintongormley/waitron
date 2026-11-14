@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, nodes, stampDeployment, tenants } from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, stampDeployment, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encodeRecoveryKit } from "@waitron/stream";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -43,11 +43,8 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Old venue" });
-  await suite.db.insert(locations).values({
-    id: LOCATION,
-  });
   await seedVenueSettings(suite.db, {
-    name: "Old location",
+    name: "Old venue",
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
@@ -98,7 +95,7 @@ it.each(["archive", "bucket"])(
       entries,
       nodeId: NODE,
       generation: "generation",
-      venue: { legalName: "Old venue", taxId: "89890001K", venueName: "Old location" },
+      venue: { legalName: "Old venue", taxId: "89890001K", venueName: "Old venue" },
       discard: async () => {},
     });
     const operation = {

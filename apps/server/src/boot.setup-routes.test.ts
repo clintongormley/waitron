@@ -23,7 +23,6 @@ import {
   deviceProfiles,
   openVenueDatabase,
   stampDeployment,
-  venueLocationId,
   withTransaction,
   type Database,
   type VenueDatabase,
@@ -1000,7 +999,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         ...loadTillAppSettings(trading),
         simplifiedInvoiceLimit: null,
       };
-      const venueId = await venueLocationId(venue.store.venue);
       const [profile] = await venue.store.venue
         .select({ id: deviceProfiles.id })
         .from(deviceProfiles)
@@ -1015,7 +1013,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         .where(eq(persons.email, "admin@waitron.dev"));
       const offer = await withTransaction(venue.store.venue, async (tx) => {
         const catalogue = await createCatalogue(tx, {
-          name: `Boot setup routes menu ${venueId}`,
+          name: `Boot setup routes menu`,
         });
         const drinks = await createCategory(tx, { name: "Bebidas" });
         const water = await createProduct(tx, {
@@ -1027,7 +1025,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           vatClass: "general",
         });
         await assignCatalogueToVenue(tx, catalogue.id);
-        const offers = await offerProducts(tx, { locationId: venueId });
+        const offers = await offerProducts(tx, {});
         return offers.offerFor(water.id);
       });
 
@@ -2414,7 +2412,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       ).toEqual([{ code: "B-0CNNY" }, { code: "FB-0CNNY" }, { code: "RB-0CNNY" }]);
       expect(
         target.store.venue.all(
-          sql`select json_extract(settings.doc, '$.operationDescription') as operation_description, json_extract(doc, '$.invoiceLocales') as invoice_locales from locations cross join settings where settings.module = 'venue'`,
+          sql`select json_extract(settings.doc, '$.operationDescription') as operation_description, json_extract(doc, '$.invoiceLocales') as invoice_locales from settings where settings.module = 'venue'`,
         ),
       ).toEqual([{ operation_description: "Comida para llevar", invoice_locales: '["es-ES"]' }]);
       const imported = await withTransaction(target.store.venue, (tx) =>

@@ -11,7 +11,7 @@ import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
 import { readLatestLiveEntry } from "./record-reads.js";
 import { decideCorrectionGroup, requestCorrectionGroup } from "./corrections.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
+import { seedEmployment, seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 import { planningEveryStatement } from "../test/query-plans.js";
 
 const backend = new WorkforceBackend();
@@ -25,7 +25,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    await seedLocation(db);
+    await seedFixtureVenue(db);
     nodeId = await seedNode(db);
     const [row] = await seedPersons(db, {
       displayName: "Manager",

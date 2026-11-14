@@ -18,11 +18,11 @@ function read(
     versions?: Record<string, number>;
     recorded?: Record<string, number>;
     modules?: readonly WaitronModule[];
-    location?: typeof venue;
+    venueRequest?: typeof venue;
   } = {},
 ) {
   return recoveryFiscalSelection(
-    options.location ?? venue,
+    options.venueRequest ?? venue,
     { ...manifest, modules: options.versions ?? manifest.modules },
     options.text === undefined ? (options.config ?? configured) : options.text,
     options.modules ?? ALL_MODULES,
@@ -66,14 +66,14 @@ it("does not select a filing module with no migration set of its own", () => {
   expect(read({ modules })).toBeUndefined();
 });
 it("retains a valid recorded zone instead of replacing it with the country default", () => {
-  expect(read({ location: { ...venue, timeZone: "UTC" } })).toEqual({
+  expect(read({ venueRequest: { ...venue, timeZone: "UTC" } })).toEqual({
     ...venue,
     timeZone: "UTC",
     module: "fiscal-verifactu",
   });
 });
 it("does not normalise a noncanonical stored country into a different selection", () => {
-  expect(read({ location: { ...venue, country: " es " } })).toBeUndefined();
+  expect(read({ venueRequest: { ...venue, country: " es " } })).toBeUndefined();
 });
 
 const recordedVersionCases: Record<string, number>[] = [

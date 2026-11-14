@@ -152,7 +152,7 @@ describe("independent invoice email contact", () => {
   });
   it("uses designated fallback for null recorded department", async () => {
     const f = await fixture(true);
-    await authored(f.primary, { email: "wrong-location@example.com" });
+    await authored(f.primary, { email: "wrong-venue@example.com" });
     await authored(f.fallback, { email: "first-default@example.com" });
     expect(await read({ kind: "sale", saleId: f.saleId })).toEqual({
       email: "first-default@example.com",

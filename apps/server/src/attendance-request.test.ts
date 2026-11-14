@@ -4,7 +4,7 @@ import type { AttendanceCommand } from "@waitron/workforce/attendance-contract";
 
 const commandId = "1aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const questionId = "2bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const locationId = "3ccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const extraId = "3ccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const personId = "4ddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const itemId = "5eeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const revision = "r-opaque-revision";
@@ -82,7 +82,7 @@ it.each(
     "origin",
     "recordedAt",
     "personId",
-    "locationId",
+    "extra",
     "override",
     "unexpected",
   ]),
@@ -248,8 +248,8 @@ it("parses exact worker and manager day scopes with normalized identifiers", () 
     personId,
   });
   for (const [value, mode] of [
-    [`date=2026-02-28&locationId=${locationId}`, "worker"],
-    [`date=2026-02-28&locationId=${locationId}&personId=${personId}`, "manager"],
+    [`date=2026-02-28&extra=${extraId}`, "worker"],
+    [`date=2026-02-28&extra=${extraId}&personId=${personId}`, "manager"],
   ] as const) {
     expect(() => query(value, mode)).toThrow(
       expect.objectContaining({ code: "management.request_invalid" }),
@@ -261,11 +261,11 @@ it.each(
     "",
     "date=2026-02-30",
     "date=2026-2-8",
-    `date=2026-02-28&locationId=`,
-    `date=2026-02-28&locationId=nope`,
+    `date=2026-02-28&extra=`,
+    `date=2026-02-28&extra=nope`,
     `date=2026-02-28&personId=${personId}`,
     "date=2026-02-28&date=2026-02-28",
-    `date=2026-02-28&locationId=${locationId}&locationId=${locationId}`,
+    `date=2026-02-28&extra=${extraId}&extra=${extraId}`,
     `date=2026-02-28&nodeId=${personId}`,
   ]),
 )("refuses a malformed or widened worker day scope %#", (value) => {

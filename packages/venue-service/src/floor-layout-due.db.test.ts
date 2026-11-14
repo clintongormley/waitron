@@ -8,7 +8,6 @@ import {
   menuPeriods,
   withTransaction,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -31,7 +30,7 @@ const at = (time: string, date = FRIDAY) =>
 const key = (departmentId: string, day: string, periodId: string, startsAt: string) =>
   JSON.stringify([departmentId, day, periodId, startsAt]);
 
-async function newZone(tx: Transaction, _cfg: { locationId: string }, name: string) {
+async function newZone(tx: Transaction, name: string) {
   return (await seedZone(tx, { name })).id;
 }
 
@@ -49,14 +48,13 @@ async function fixture() {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     });
-    const venueId = await venueLocationId(tx);
-    const cfg = { locationId: venueId };
+    const cfg = {};
     const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     const bar = (await createDepartment(tx, { name: "Bar", orderStart: "table" })).id;
-    const dining = await newZone(tx, cfg, "Dining");
-    const terrace = await newZone(tx, cfg, "Terrace");
-    const garden = await newZone(tx, cfg, "Garden");
-    const counter = await newZone(tx, cfg, "Counter");
+    const dining = await newZone(tx, "Dining");
+    const terrace = await newZone(tx, "Terrace");
+    const garden = await newZone(tx, "Garden");
+    const counter = await newZone(tx, "Counter");
     const loose = (
       await seedZone(tx, { name: "Store room", departmentId: restaurant, active: false })
     ).id;
@@ -352,7 +350,7 @@ describe("which floor layout is due", () => {
           periodName: "Dinner",
         });
         const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
-        expect(sql.filter((q) => /from "(locations|seasons)"/.test(q))).toEqual([]);
+        expect(sql.filter((q) => /from "(settings|seasons)"/.test(q))).toEqual([]);
       } finally {
         spy.mockRestore();
       }

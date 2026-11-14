@@ -1,5 +1,7 @@
 # A1301 S18 — Contract and type cleanup — Implementation Plan
 
+> 2026-11-14: Built by A1308 slice 5, parts 5a–5h. See the [slice 5 plans](2026-11-08-a1308-5a-service-and-staff-location-columns.md). This document records the earlier design.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as

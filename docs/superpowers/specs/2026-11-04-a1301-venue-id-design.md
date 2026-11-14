@@ -1,5 +1,7 @@
 # A1301 — The venue's id towards the outside world (design)
 
+> 2026-11-14: Built by A1308 slice 5, parts 5a–5h. See the [slice 5 plans](../plans/2026-11-08-a1308-5a-service-and-staff-location-columns.md). This document records the earlier design.
+
 > **2026-11-12:** The current pairing and bucket formats are specified in
 > [A1308 slice 5g](../plans/2026-11-08-a1308-5g-cloud-venue-id.md): Cloud assigns the
 > venue id, bucket paths use the chosen prefix, and v2 recovery kits carry a stream id.

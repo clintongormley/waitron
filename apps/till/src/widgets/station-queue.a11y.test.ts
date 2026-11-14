@@ -781,7 +781,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
   it("the course-grouped board (headers and greyed held lines) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups: coursedGroups, stationId: "st-1", ...{ fireControl: "kitchen" } },
+      { groups: coursedGroups, stationId: "st-1", ...{} },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -869,7 +869,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
       {
         groups: partyGroups,
         stationId: "st-1",
-        ...{ fireControl: "kitchen" },
+        ...{},
         showReprint: true,
       },
       theme,

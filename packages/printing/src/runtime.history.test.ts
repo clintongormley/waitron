@@ -8,7 +8,6 @@ import {
   insertInChunks,
   printAgents,
   printJobs,
-  venueLocationId,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -26,7 +25,6 @@ async function fixture() {
     invoiceLocales: ["en-GB"],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
   return withTransaction(suite.db, async (tx) => {
     const [agent] = await tx
       .insert(printAgents)
@@ -42,14 +40,13 @@ async function fixture() {
       printJobs,
       Array.from({ length: 256 }, () => ({
         id: randomUUID(),
-        locationId: venueId,
         printerId: printer.id,
         payload: Buffer.alloc(20_000),
         status: "done" as const,
         createdAt: "2025-01-01T00:00:00.000Z",
       })),
     );
-    return { agentId: agent!.id, printerId: printer.id, venueId };
+    return { agentId: agent!.id, printerId: printer.id };
   });
 }
 

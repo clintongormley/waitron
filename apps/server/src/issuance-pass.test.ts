@@ -1,7 +1,6 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
-import { venueLocationId } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -133,11 +132,9 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -145,7 +142,7 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
   });
 
   const seeded = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: `Issuance pass menu ${cfg.locationId}` });
+    const menu = await createCatalogue(tx, { name: `Issuance pass menu ${cfg.nodeId}` });
     const category = (name: string, parentId?: string) =>
       createCategory(tx, { name, ...(parentId ? { parentId } : {}) });
     const drinks = await category("Bebidas");

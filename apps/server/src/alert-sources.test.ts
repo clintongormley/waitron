@@ -14,7 +14,6 @@ import {
   kitchenStations,
   type Database,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
@@ -814,20 +813,15 @@ function minsAgo(mins: number): string {
   return new Date(NOW.getTime() - mins * 60_000).toISOString();
 }
 
-async function seedLocation(): Promise<string> {
+async function seedFixtureVenue(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Counter",
     invoiceLocales: ["es-ES"],
     operationDescription: "Retail",
   });
-  return venueLocationId(suite.db);
 }
 
-async function seedPrinter(t: {
-  locationId: string;
-  name: string;
-  active?: boolean;
-}): Promise<string> {
+async function seedPrinter(t: { name: string; active?: boolean }): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
     .values({
@@ -841,7 +835,6 @@ async function seedPrinter(t: {
 }
 
 async function seedAgent(t: {
-  locationId: string;
   name: string;
   lastSeenAt: string | null;
   active?: boolean;
@@ -859,7 +852,6 @@ async function seedAgent(t: {
 }
 
 async function seedJob(t: {
-  locationId: string;
   printerId: string;
   createdAt: string;
   kind?: "document" | "drawer";
@@ -902,15 +894,14 @@ async function readAlerts(now = NOW) {
 
 describe("printingAlertSource — agent.silent", () => {
   it("stays quiet for an agent seen 4 minutes ago", async () => {
-    const locationId = await seedLocation();
-    await seedAgent({ locationId, name: "Kitchen agent", lastSeenAt: minsAgo(4) });
+    await seedFixtureVenue();
+    await seedAgent({ name: "Kitchen agent", lastSeenAt: minsAgo(4) });
     expect(await readAlerts()).toEqual([]);
   });
 
   it("raises agent.silent for an agent seen 6 minutes ago, then clears on a fresh pull", async () => {
-    const locationId = await seedLocation();
+    await seedFixtureVenue();
     const agentId = await seedAgent({
-      locationId,
       name: "Kitchen agent",
       lastSeenAt: minsAgo(6),
     });
@@ -931,10 +922,9 @@ describe("printingAlertSource — agent.silent", () => {
   });
 
   it("gives two silent agents that share a name two distinct alerts", async () => {
-    const locationId = await seedLocation();
-    const first = await seedAgent({ locationId, name: "Kitchen agent", lastSeenAt: minsAgo(6) });
+    await seedFixtureVenue();
+    const first = await seedAgent({ name: "Kitchen agent", lastSeenAt: minsAgo(6) });
     const second = await seedAgent({
-      locationId,
       name: "Kitchen agent",
       lastSeenAt: minsAgo(7),
     });
@@ -947,21 +937,20 @@ describe("printingAlertSource — agent.silent", () => {
   });
 
   it("ignores a deactivated silent agent and a never-seen agent", async () => {
-    const locationId = await seedLocation();
+    await seedFixtureVenue();
     await seedAgent({
-      locationId,
       name: "Retired",
       lastSeenAt: minsAgo(30),
       active: false,
     });
-    await seedAgent({ locationId, name: "Never", lastSeenAt: null });
+    await seedAgent({ name: "Never", lastSeenAt: null });
     expect(await readAlerts()).toEqual([]);
   });
 });
 
 describe("stationOutputAlertSource", () => {
   it("alerts an open default station's stopped printer and stays quiet while it is closed without waiting dishes", async () => {
-    const locationId = await seedLocation();
+    await seedFixtureVenue();
     const [station] = await suite.db
       .insert(kitchenStations)
       .values({
@@ -969,9 +958,9 @@ describe("stationOutputAlertSource", () => {
         isDefault: true,
       })
       .returning({ id: kitchenStations.id });
-    const printerId = await seedPrinter({ locationId, name: "Epson" });
+    const printerId = await seedPrinter({ name: "Epson" });
     await attachStationPrinterForTest(suite.db, station!.id, printerId);
-    await seedJob({ locationId, printerId, createdAt: minsAgo(3), status: "failed", attempts: 5 });
+    await seedJob({ printerId, createdAt: minsAgo(3), status: "failed", attempts: 5 });
     let open = true;
     const source = stationOutputAlertSource({
       stationStates: async () =>
@@ -996,10 +985,10 @@ describe("stationOutputAlertSource", () => {
 
 describe("printingAlertSource — printer.jobs_waiting", () => {
   it("raises for a document job queued 3 minutes ago, with the printer name and count", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
-    await seedJob({ locationId, printerId, createdAt: minsAgo(3) });
-    await seedJob({ locationId, printerId, createdAt: minsAgo(5) });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
+    await seedJob({ printerId, createdAt: minsAgo(3) });
+    await seedJob({ printerId, createdAt: minsAgo(5) });
 
     expect(await readAlerts()).toMatchObject([
       {
@@ -1014,25 +1003,24 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("stays quiet for a job only 1 minute old", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
-    await seedJob({ locationId, printerId, createdAt: minsAgo(1) });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
+    await seedJob({ printerId, createdAt: minsAgo(1) });
     expect(await readAlerts()).toEqual([]);
   });
 
   it("never counts a drawer job, however old", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
-    await seedJob({ locationId, printerId, createdAt: minsAgo(30), kind: "drawer" });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
+    await seedJob({ printerId, createdAt: minsAgo(30), kind: "drawer" });
     expect(await readAlerts()).toEqual([]);
   });
 
   it("raises for a fresh failed job that has hit the delivery-attempt ceiling", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
     // 1 minute old — below the stuck-time threshold — but exhausted, so it will never print again.
     await seedJob({
-      locationId,
       printerId,
       createdAt: minsAgo(1),
       status: "failed",
@@ -1044,10 +1032,9 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("does not count a job ended because its printer was unpaired, and still counts an ordinary stuck job beside it", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
     await seedJob({
-      locationId,
       printerId,
       createdAt: minsAgo(10),
       status: "failed",
@@ -1057,7 +1044,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
     expect(await readAlerts()).toEqual([]);
 
     // No last_error at all: a filter that compares it with `<>` alone would drop this job too.
-    await seedJob({ locationId, printerId, createdAt: minsAgo(3) });
+    await seedJob({ printerId, createdAt: minsAgo(3) });
     expect(await readAlerts()).toMatchObject([
       {
         code: "printer.jobs_waiting",
@@ -1068,10 +1055,9 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("still counts a job whose Bluetooth transport exhausted its attempts", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
     await seedJob({
-      locationId,
       printerId,
       createdAt: minsAgo(1),
       status: "failed",
@@ -1084,9 +1070,9 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("stops counting a job that ran out of attempts once a resend of it has printed, and not while the resend waits", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
-    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
+    const failed = await seedJob({ printerId, createdAt: minsAgo(10), ...exhausted });
 
     const copy = await resend(failed);
     expect(await readAlerts()).toMatchObject([
@@ -1098,10 +1084,10 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("stops counting a job once a resend of it has printed on another printer", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
-    const otherId = await seedPrinter({ locationId, name: "Terrace printer" });
-    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
+    const otherId = await seedPrinter({ name: "Terrace printer" });
+    const failed = await seedJob({ printerId, createdAt: minsAgo(10), ...exhausted });
 
     const moved = await withTransaction(
       suite.db,
@@ -1114,9 +1100,9 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("still counts a job whose resend also ran out of attempts, and the resend beside it", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
-    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
+    const failed = await seedJob({ printerId, createdAt: minsAgo(10), ...exhausted });
     await setStatus(await resend(failed), exhausted);
 
     expect(await readAlerts()).toMatchObject([
@@ -1129,9 +1115,9 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("stops counting a job and its failed resend once a resend of that resend has printed", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
-    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
+    const failed = await seedJob({ printerId, createdAt: minsAgo(10), ...exhausted });
     const first = await resend(failed);
     await setStatus(first, exhausted);
 
@@ -1140,9 +1126,9 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("stops counting a failed resend once a later resend of the same job has printed", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
-    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
+    const failed = await seedJob({ printerId, createdAt: minsAgo(10), ...exhausted });
     await setStatus(await resend(failed), exhausted);
 
     await setStatus(await resend(failed), { status: "done" });
@@ -1150,10 +1136,9 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("still counts a resend that ran out of attempts though the job it copies printed before it", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
     const printed = await seedJob({
-      locationId,
       printerId,
       createdAt: minsAgo(10),
       status: "done",
@@ -1166,9 +1151,9 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("still counts a resend that ran out of attempts though an earlier resend of the same job printed", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
-    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
+    const failed = await seedJob({ printerId, createdAt: minsAgo(10), ...exhausted });
     const printed = await resend(failed);
     await setStatus(printed, { status: "done" });
 
@@ -1179,10 +1164,10 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("still counts a job that ran out of attempts beside a printed job with the same bytes that is not its resend", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
-    await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
-    await seedJob({ locationId, printerId, createdAt: minsAgo(5), status: "done" });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Bar printer" });
+    await seedJob({ printerId, createdAt: minsAgo(10), ...exhausted });
+    await seedJob({ printerId, createdAt: minsAgo(5), status: "done" });
 
     expect(await readAlerts()).toMatchObject([
       { code: "printer.jobs_waiting", params: { printer: "Bar printer", count: 1 } },
@@ -1190,9 +1175,9 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("ignores jobs on a deactivated printer", async () => {
-    const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Off", active: false });
-    await seedJob({ locationId, printerId, createdAt: minsAgo(10) });
+    await seedFixtureVenue();
+    const printerId = await seedPrinter({ name: "Off", active: false });
+    await seedJob({ printerId, createdAt: minsAgo(10) });
     expect(await readAlerts()).toEqual([]);
   });
 });

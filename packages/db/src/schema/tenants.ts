@@ -1,20 +1,9 @@
 import { sql } from "drizzle-orm";
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, enumCheck, enumType, id, label, newId, now, table, ts } from "./columns.js";
+import { count, label, now, table, ts } from "./columns.js";
 
 /** The venue time-zone default, shared with runtime fallbacks. */
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
-
-/**
- * Read by nothing: each station has its own `bump_mode`.
- */
-export const bumpMode = enumType(["line", "ticket"]);
-
-/**
- * Read by nothing. Dropping this column alone rebuilds `locations`, so A1301 S28's drop of
- * `locations` removes it.
- */
-export const fireControlMode = enumType(["waiter", "kitchen", "expo"]);
 
 /**
  * One taxpayer per database. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
@@ -36,18 +25,5 @@ export const tenants = table(
   (t) => [
     check("tenants_singleton_ck", sql`${t.id} = 1`),
     uniqueIndex("tenants_country_tax_id_key").on(t.country, t.taxId),
-  ],
-);
-
-export const locations = table(
-  "locations",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    bumpMode: bumpMode("bump_mode").notNull().default("line"),
-    fireControl: fireControlMode("fire_control").notNull().default("waiter"),
-  },
-  (t) => [
-    check("locations_bump_mode_ck", enumCheck(t.bumpMode)),
-    check("locations_fire_control_ck", enumCheck(t.fireControl)),
   ],
 );

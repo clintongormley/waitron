@@ -8,7 +8,6 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { venueLocationId } from "../venue.js";
 import { deviceProfilePrinters } from "./device-profile-printers.js";
 
 import { pagePrinters } from "./page-printers.js";
@@ -28,14 +27,12 @@ describe("device_profile_printers defaults", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    const venueId = await venueLocationId(db);
     const [made] = await seedDeviceProfiles(db, { name: "Profile", formFactor: "till" });
     profile = made!.id;
     const madePrinters = await db
       .insert(printers)
       .values(
         ["10.0.0.1", "10.0.0.2"].map((host) => ({
-          locationId: venueId,
           name: host,
           transport: "network_tcp" as const,
           host,

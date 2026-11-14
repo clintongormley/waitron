@@ -8,7 +8,6 @@ import {
   diningTables,
   engineErrorMessage,
   FOREIGN_KEY_VIOLATION,
-  locations,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -56,7 +55,6 @@ describe("the bookings Drizzle table config", () => {
 
 // The foreign-key message is the same whichever key was broken, so the three key cases below are
 // told apart only by which parent row each made absent.
-const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 const TABLE = "aaaaaaaa-0000-4000-8000-000000000009";
 // The person recorded as the booking creator.
 const CREATED_BY = "cccccccc-0000-4000-8000-000000000001";
@@ -68,9 +66,6 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
   async function seedParents(): Promise<void> {
     await seedTenant(suite.db);
     await seedPerson(suite.db, { id: CREATED_BY });
-    await suite.db.insert(locations).values({
-      id: LOCATION,
-    });
     await seedVenueSettings(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],

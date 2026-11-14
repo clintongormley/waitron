@@ -8,7 +8,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   stampDeployment,
@@ -58,7 +57,6 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 const NODE_ID = "33333333-3333-4333-8333-333333333333";
-const LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const SERIES_ID = "44444444-4444-4444-8444-444444444444";
 const ORIGIN_NODE_ID = "77777777-7777-4777-8777-777777777777";
 // Differs from `useTestProducer`'s 00000000T; both pass the tax-number check.
@@ -87,9 +85,6 @@ beforeAll(async () => {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Producer Change SL" });
-  await db.insert(locations).values({
-    id: LOCATION_ID,
-  });
   await seedVenueSettings(db, {
     name: "Barra",
     invoiceLocales: ["en"],
@@ -100,7 +95,7 @@ beforeAll(async () => {
   await db.insert(invoiceSeries).values({ id: SERIES_ID, nodeId: NODE_ID, code: "A" });
   await establishNodeIdentity({ ownerDb: db, node, ring: RING }, NODE_ID);
   const ids = await seedFiscalParents(db, {
-    ids: { locationId: LOCATION_ID, nodeId: NODE_ID, seriesId: SERIES_ID },
+    ids: { nodeId: NODE_ID, seriesId: SERIES_ID },
     reuseExistingParents: true,
   });
   const head = await insertFiscalRegistro(db, ids, {

@@ -24,7 +24,7 @@ import {
 } from "./hour-dormant-standby.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
+const primary = { nodeId: TENANT_A.nodeId };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
 const bases = [
   { code: "FF", purpose: "full" },
@@ -187,7 +187,7 @@ it("reads retained dormant state with exactly five keys", () => {
   ).toEqual(state);
 });
 it.each([false, true])(
-  "refuses obsolete six-key dormant state with a valid entry present: %s",
+  "refuses six-key dormant state with a valid entry present: %s",
   (withValidEntry) => {
     const state = {
       kind: "hour-dormant",
@@ -196,7 +196,7 @@ it.each([false, true])(
       scope: { taxpayerNif: "89890001K", environment: "preproduction" },
       bases,
     };
-    const obsolete = { ...state, locationId: primary.locationId };
+    const obsolete = { ...state, extra: "retired-value" };
     const dormant = withValidEntry ? [obsolete, state] : [obsolete];
     expect(() =>
       readRetainedHourDormant([{ version: 1, entries: [], dormant }], reserveBinding),

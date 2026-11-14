@@ -7,7 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { serve, type ServerType } from "@hono/node-server";
 import { Hono } from "hono";
-import { deployment, locations, nodes, tenants, withNodeTransaction } from "@waitron/db";
+import { deployment, nodes, tenants, withNodeTransaction } from "@waitron/db";
 import { readPairLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -34,7 +34,6 @@ import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const LOCATION = "a7000000-0000-4000-8000-000000000001";
 const PRIMARY = "a7000000-0000-4000-8000-000000000002";
 const STANDBY = "a7000000-0000-4000-8000-000000000003";
 const PRIMARY_KEYS = generateNodeKeyPair();
@@ -186,7 +185,6 @@ it("adopts when the allocation-dependent module is disabled", async () => {
   expect(await suite.db.select().from(deployment)).toEqual([
     { id: 1, environment: "preproduction", stampedAt: expect.any(Date) },
   ]);
-  expect(await readPendingAdoption(stateDir)).not.toHaveProperty("locationId");
   expect(await readPendingAdoption(stateDir)).toMatchObject({
     originNodeId: PRIMARY,
   });
@@ -195,7 +193,6 @@ it("a pending adoption with the allocation-dependent module enabled finishes wit
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Synthetic SL" });
-  await suite.db.insert(locations).values({ id: LOCATION });
   await seedVenueSettings(suite.db, {
     name: "Venue",
     invoiceLocales: ["es"],

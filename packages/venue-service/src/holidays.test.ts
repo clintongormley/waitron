@@ -16,7 +16,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -156,7 +155,7 @@ async function setCountry(tx: Transaction, country: string) {
     .onConflictDoUpdate({ target: tenants.id, set: { country } });
 }
 
-async function venue(address: Address = {}): Promise<{ locationId: string }> {
+async function venue(address: Address = {}): Promise<void> {
   return withTransaction(db, async (tx) => {
     await setCountry(tx, address.country ?? "ZZ");
     await seedVenue(tx, {
@@ -166,12 +165,10 @@ async function venue(address: Address = {}): Promise<{ locationId: string }> {
       province: address.province === undefined ? "Northshire" : address.province,
       city: address.city === undefined ? "Villa Real" : address.city,
     });
-    const venueId = await venueLocationId(tx);
-    return { locationId: venueId };
   });
 }
 
-async function moveTo(_cfg: { locationId: string }, address: Address) {
+async function moveTo(address: Address) {
   await withTransaction(db, async (tx) => {
     if (address.country !== undefined) await setCountry(tx, address.country);
     const set: { province?: string | null; city?: string | null } = {};
@@ -184,12 +181,7 @@ async function moveTo(_cfg: { locationId: string }, address: Address) {
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
 
 /** A special day closed all day on `date`, written straight to its tables. */
-async function specialDay(
-  _cfg: { locationId: string },
-  date: string,
-  name: string,
-  repeatsYearly = false,
-) {
+async function specialDay(date: string, name: string, repeatsYearly = false) {
   await run(async (tx) => {
     const [day] = await tx
       .insert(specialDays)
@@ -199,12 +191,7 @@ async function specialDay(
   });
 }
 
-async function seedRetainedGeographyWithSpecialDay(
-  tx: Transaction,
-  _cfg: { locationId: string },
-  date: string,
-  name: string,
-) {
+async function seedRetainedGeographyWithSpecialDay(tx: Transaction, date: string, name: string) {
   await saveVenueFields(
     tx,
     { holidayArea: { country: "ZZ", provinceCode: "10", cityKey: "villa real", areaKey: null } },
@@ -297,8 +284,8 @@ describe("reading a venue's holidays", () => {
   });
 
   it("does not count a special day as a local holiday, whatever its name", async () => {
-    const cfg = await venue();
-    await specialDay(cfg, "2026-12-19", "Fiesta mayor", true);
+    await venue();
+    await specialDay("2026-12-19", "Fiesta mayor", true);
     const read = await run((tx) => store.readHolidays(tx, "2026-12-01", "2027-11-30"));
     expect(read.coverage.map(({ local, sourceIds }) => ({ local, sourceIds }))).toEqual([
       { local: "none_entered", sourceIds: ["ZZ-ANNEX"] },
@@ -309,8 +296,8 @@ describe("reading a venue's holidays", () => {
   });
 
   it("keeps a special day and retained geography out of holiday facts, coverage and sources", async () => {
-    const cfg = await venue();
-    await run((tx) => seedRetainedGeographyWithSpecialDay(tx, cfg, "2026-01-01", "Fiesta mayor"));
+    await venue();
+    await run((tx) => seedRetainedGeographyWithSpecialDay(tx, "2026-01-01", "Fiesta mayor"));
     const read = await run((tx) => store.readHolidays(tx, "2026-01-01", "2026-01-01"));
     expect(read.facts).toEqual([
       {
@@ -334,8 +321,8 @@ describe("reading a venue's holidays", () => {
   });
 
   it("gives each civil year its own coverage, with a special day in neither", async () => {
-    const cfg = await venue();
-    await specialDay(cfg, "2026-03-19", "Our holiday");
+    await venue();
+    await specialDay("2026-03-19", "Our holiday");
     const read = await run((tx) => store.readHolidays(tx, "2026-12-01", "2027-01-31"));
     expect(read.facts.map(({ id }) => id)).toEqual(["shipped:new-year-2027"]);
     expect(read.coverage).toEqual([
@@ -471,7 +458,7 @@ describe("an address that does not resolve", () => {
   });
 
   it("guesses nothing when the database has no taxpayer row", async () => {
-    const cfg = await venue();
+    await venue();
     await run((tx) => tx.delete(tenants));
     const read = await run((tx) => store.readHolidays(tx, ...year));
     expect(read).toEqual({
@@ -490,7 +477,7 @@ describe("an address that does not resolve", () => {
       ],
       sources: [],
     });
-    await moveTo(cfg, { country: "ZZ", province: null, city: null });
+    await moveTo({ country: "ZZ", province: null, city: null });
     expect(await run((tx) => store.readHolidayAreaModel(tx))).toEqual({
       venue: { country: "ZZ", provinceCode: null, city: null },
       readiness: "unresolved_address",
@@ -502,8 +489,8 @@ describe("an address that does not resolve", () => {
   });
 
   it("reports no local holidays for a known province whose region is unknown, a special day included", async () => {
-    const cfg = await venue({ province: "Lostshire" });
-    await specialDay(cfg, "2026-03-19", "Our holiday");
+    await venue({ province: "Lostshire" });
+    await specialDay("2026-03-19", "Our holiday");
     const read = await run((tx) => store.readHolidays(tx, ...year));
     expect(read.facts).toEqual([]);
     expect(read.coverage).toMatchObject([
@@ -518,8 +505,8 @@ describe("an address that does not resolve", () => {
   });
 
   it("returns no local facts for a matching geography once its country has no holiday capability", async () => {
-    const cfg = await venue({ country: "ZY" });
-    await run((tx) => seedRetainedGeographyWithSpecialDay(tx, cfg, "2026-03-19", "Retired"));
+    await venue({ country: "ZY" });
+    await run((tx) => seedRetainedGeographyWithSpecialDay(tx, "2026-03-19", "Retired"));
     const read = await run((tx) => store.readHolidays(tx, "2026-01-01", "2026-12-31"));
     expect(read).toEqual({
       facts: [],
@@ -563,7 +550,7 @@ describe("territorial areas", () => {
   });
 
   it("stores the choice on a geography with no entries, keeps it across a move away and back, and clears it with null", async () => {
-    const cfg = await venue({ province: "Isleshire" });
+    await venue({ province: "Isleshire" });
     const specials = await run((tx) => tx.select().from(specialDays));
     const geography = (await run((tx) => store.saveHolidayArea(tx, { areaKey: "isle-a" })))!;
     expect(geography).toEqual({
@@ -578,12 +565,12 @@ describe("territorial areas", () => {
     expect(chosen.facts.map(({ id }) => id)).toEqual(["shipped:new-year", "shipped:isle-a-day"]);
     expect(chosen.coverage).toMatchObject([{ nationalRegional: "complete" }]);
 
-    await moveTo(cfg, { city: "Puerto Nuevo" });
+    await moveTo({ city: "Puerto Nuevo" });
     expect(await run((tx) => store.readHolidayAreaModel(tx))).toMatchObject({
       areaRequired: true,
       chosen: null,
     });
-    await moveTo(cfg, { city: "Villa Real" });
+    await moveTo({ city: "Villa Real" });
     expect(await run((tx) => store.readHolidayAreaModel(tx))).toMatchObject({
       areaRequired: false,
     });
@@ -626,7 +613,7 @@ describe("territorial areas", () => {
   });
 
   it("refuses an area nobody sourced, an omitted key and a wrong type", async () => {
-    const cfg = await venue();
+    await venue();
     const isles: Address = { province: "Isleshire" };
     const north: Address = { province: "Northshire" };
     const cases: [Address, unknown][] = [
@@ -639,7 +626,7 @@ describe("territorial areas", () => {
       [north, { areaKey: null }],
     ];
     for (const [address, input] of cases) {
-      await moveTo(cfg, address);
+      await moveTo(address);
       expect(
         await refusal(() =>
           run((tx) => store.saveHolidayArea(tx, input as { areaKey: string | null })),
@@ -650,10 +637,10 @@ describe("territorial areas", () => {
   });
 
   it("offers the Arán choice for a Spanish venue in Lleida and none in Sevilla", async () => {
-    const lleida = await venue({ country: "ES", province: "Lérida", city: "Vielha" });
+    await venue({ country: "ES", province: "Lérida", city: "Vielha" });
     const options = (await run((tx) => packageIndex.readHolidayAreaModel(tx))).areaOptions;
     expect(options.map(({ key }) => key)).toEqual(["aran", "lleida-except-aran"]);
-    await moveTo(lleida, { province: "Sevilla" });
+    await moveTo({ province: "Sevilla" });
     expect((await run((tx) => packageIndex.readHolidayAreaModel(tx))).areaOptions).toEqual([]);
   });
 });
@@ -821,8 +808,8 @@ describe("no network", () => {
 });
 
 it("reports an unresolved address when the public-holiday address cannot resolve, a special day included", async () => {
-  const cfg = await venue({ country: "XY", province: null, city: null });
-  await specialDay(cfg, "2026-12-25", "Our holiday");
+  await venue({ country: "XY", province: null, city: null });
+  await specialDay("2026-12-25", "Our holiday");
   const read = await run((tx) => store.readHolidays(tx, "2026-01-01", "2026-01-01"));
   expect(read.coverage[0]).toMatchObject({
     nationalRegional: "unsupported_country",
@@ -833,9 +820,9 @@ it("reports an unresolved address when the public-holiday address cannot resolve
 });
 
 it("lets a Spanish venue add more special days than the informational local number", async () => {
-  const cfg = await venue({ country: "ES", province: "Sevilla", city: "Sevilla" });
+  await venue({ country: "ES", province: "Sevilla", city: "Sevilla" });
   for (const date of ["2026-03-19", "2026-06-04", "2026-09-08"])
-    await specialDay(cfg, date, `Own ${date}`);
+    await specialDay(date, `Own ${date}`);
   expect(
     (await run((tx) => tx.select().from(specialDayDates))).map(({ date }) => date).sort(),
   ).toEqual(["2026-03-19", "2026-06-04", "2026-09-08"]);
@@ -848,10 +835,10 @@ it("lets a Spanish venue add more special days than the informational local numb
 });
 
 it("reuses a holiday area's geography for an equivalent city spelling", async () => {
-  const cfg = await venue({ province: "Isleshire", city: "  Villa   Real  " });
+  await venue({ province: "Isleshire", city: "  Villa   Real  " });
   const saved = (await run((tx) => store.saveHolidayArea(tx, { areaKey: "isle-a" })))!;
   expect(saved.city).toBe("Villa   Real");
-  await moveTo(cfg, { city: "VILLA REAL" });
+  await moveTo({ city: "VILLA REAL" });
   expect((await run((tx) => store.readHolidayAreaModel(tx))).chosen).toBe("isle-a");
   const again = (await run((tx) => store.saveHolidayArea(tx, { areaKey: "isle-b" })))!;
   expect(again.areaKey).toBe("isle-b");
@@ -864,22 +851,22 @@ it("reuses a holiday area's geography for an equivalent city spelling", async ()
 });
 
 it("the retained area writer stores a city trimmed at the address's full length", async () => {
-  const cfg = await venue({ province: "Isleshire" });
+  await venue({ province: "Isleshire" });
   for (const city of ["  Villa Real  ", "x".repeat(5000)]) {
-    await moveTo(cfg, { city });
+    await moveTo({ city });
     const saved = (await run((tx) => store.saveHolidayArea(tx, { areaKey: "isle-a" })))!;
     expect(saved.city).toBe(city.trim());
   }
 });
 
 it("the area choice keeps cities with different accents and punctuation apart", async () => {
-  const cfg = await venue({ province: "Isleshire", city: "Puerto Ísla" });
+  await venue({ province: "Isleshire", city: "Puerto Ísla" });
   await run((tx) => store.saveHolidayArea(tx, { areaKey: "isle-a" }));
   for (const city of ["Puerto Isla", "Puerto-Ísla"]) {
-    await moveTo(cfg, { city });
+    await moveTo({ city });
     expect((await run((tx) => store.readHolidayAreaModel(tx))).chosen).toBeNull();
   }
-  await moveTo(cfg, { city: "PUERTO I\u0301SLA" });
+  await moveTo({ city: "PUERTO I\u0301SLA" });
   expect((await run((tx) => store.readHolidayAreaModel(tx))).chosen).toBe("isle-a");
 });
 

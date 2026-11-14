@@ -4,7 +4,6 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { writeModuleConfig } from "./module-config.js";
-import { locations } from "@waitron/db";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { uploadImage } from "@waitron/media";
@@ -117,15 +116,12 @@ import { freePort } from "./testing/free-ports.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { peerCertificate } from "./testing/box-tls.js";
 import {
-  seedBusinessDay,
   seedDevice,
   seedDeviceProfiles,
-  seedVenueSettings,
   seedWorkingOrder,
   attachStationPrinterForTest,
 } from "@waitron/db/testing/seed.js";
 import {
-  TILL_LOCATION_ID,
   TILL_ENV,
   TRADING_STATE_DIR,
   KEY_ENV,
@@ -450,7 +446,7 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     expect(model.receipt).toEqual(previewBody.receipt);
     expect(model.policy).toEqual(policy);
     expect(model).not.toHaveProperty("venueDefaults");
-    for (const oldRoute of ["receipt", "receipt-settings", "location-settings"]) {
+    for (const oldRoute of ["receipt", "receipt-settings"]) {
       expect(
         (await fetch(`http://127.0.0.1:${port}/management-api/${oldRoute}`, { headers })).status,
       ).toBe(404);
@@ -2191,7 +2187,6 @@ describe("startServer, against a migrated venue directory", () => {
             locale: "es-ES",
             ...loadNodeIdentity(TILL_ENV),
             ...loadTillAppSettings(TILL_ENV),
-            locationId: TILL_LOCATION_ID,
             simplifiedInvoiceLimit: null,
           },
           zoneId,
@@ -2653,31 +2648,6 @@ describe("startServer, against a migrated venue directory", () => {
     });
   });
 
-  it("refuses trading boot when the database holds a second venue", async () => {
-    const other = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-    await sharedDb.insert(locations).values({
-      id: other,
-    });
-    await seedVenueSettings(sharedDb, {
-      name: "Other",
-      invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
-    });
-    await seedBusinessDay(sharedDb, {});
-    try {
-      const error = await startServer({
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: sharedVenueDir,
-        WAITRON_HTTP_PORT: String(await freePort()),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_ENV: "production",
-      }).catch((caught: unknown) => caught);
-      expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
-    } finally {
-      await sharedDb.delete(locations).where(eq(locations.id, other));
-    }
-  });
-
   // Pins which timing reaches the drain: a `timings.minTickMs` passed as `skipRetryMs` would pass
   // the typecheck and every unit test. A due `envios` row is seeded with no `fiscal.aeat` credential,
   // and the loop's logged sleep is read back. That row would stay due forever in the shared directory,
@@ -2688,7 +2658,6 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        locationId: TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },
@@ -2742,7 +2711,6 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        locationId: TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },
@@ -2979,7 +2947,6 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        locationId: TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },

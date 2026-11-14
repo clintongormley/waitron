@@ -22,7 +22,6 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
@@ -133,7 +132,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
@@ -152,7 +150,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     await tx
       .insert(personStaffRoles)
       .values({ personId: admin!.id, staffRoleId: await ensureFixtureJobRole(tx) });
-    const cat = await createCatalogue(tx, { name: `Party menu ${venueId}` });
+    const cat = await createCatalogue(tx, { name: `Party menu ${venue.nodeId}` });
     const platos = await createCategory(tx, { name: "Platos" });
     for (const product of MENU) {
       await createProduct(tx, {

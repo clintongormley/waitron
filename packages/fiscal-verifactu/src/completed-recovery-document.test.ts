@@ -1,13 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import {
-  deployment,
-  invoiceSeries,
-  tenants,
-  locations,
-  stampDeployment,
-  withTransaction,
-} from "@waitron/db";
+import { deployment, invoiceSeries, tenants, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_RECOVERY_PACK_PAGE } from "./completed-recovery-document.js";
 import { recoveryDocumentBytes } from "./recovery-document.js";
@@ -25,7 +18,7 @@ const suite = useVenueDb({
     null,
   ),
 });
-const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
+const node = { nodeId: TENANT_A.nodeId };
 const nodeKey = {
   nodeId: node.nodeId,
   name: "2026-10-18 · TEST",
@@ -114,9 +107,9 @@ describe("the pack's server-key page seat", () => {
   }
 
   it("refuses a missing venue with venue.not_found", async () => {
+    await suite.db.execute(sql`delete from settings where module = 'venue'`);
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
-      await suite.db.delete(locations);
       await expect(page()).rejects.toMatchObject({ code: "venue.not_found" });
     } finally {
       await suite.db.execute(sql`pragma foreign_keys = on`);

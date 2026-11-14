@@ -28,7 +28,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq, sql } from "drizzle-orm";
 import {
   invoiceSeries,
-  locations,
   nodes,
   settings,
   stampDeployment,
@@ -90,7 +89,6 @@ const suite = useVenueDb({
 });
 
 const T = {
-  locationId: "c0000000-0000-4000-8000-000000000002",
   seriesId: "c0000000-0000-4000-8000-000000000004",
   fullSeriesId: "c0000000-0000-4000-8000-000000000005",
   nodeId: "c0000000-0000-4000-8000-000000000008",
@@ -110,9 +108,6 @@ beforeAll(async () => {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
-  await db.insert(locations).values({
-    id: T.locationId,
-  });
   await seedVenueSettings(db, {
     name: "Local",
     invoiceLocales: ["es"],
@@ -2206,11 +2201,7 @@ describe("transactional series restore identity", () => {
 });
 
 it("resolves an archive node through the read-only source database", async () => {
-  const otherLocation = "c0000000-0000-4000-8000-000000000001";
   const otherNode = "c0000000-0000-4000-8000-000000000009";
-  await suite.db.insert(locations).values({
-    id: otherLocation,
-  });
   await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: otherNode, name: "Other node" });
@@ -2235,7 +2226,6 @@ it("resolves an archive node through the read-only source database", async () =>
     });
   } finally {
     await suite.db.delete(nodes).where(eq(nodes.id, otherNode));
-    await suite.db.delete(locations).where(eq(locations.id, otherLocation));
   }
 });
 

@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -74,7 +74,7 @@ async function seed() {
   };
   const app = new Hono();
   mountWebhook(app, deps, log);
-  return { deps, admission, app, sessionId, locationId: await venueLocationId(db) };
+  return { deps, admission, app, sessionId };
 }
 
 function event(sessionId: string, type = "checkout.session.completed") {

@@ -77,20 +77,17 @@ it.each([
   },
 );
 
-it.each(["waiter", "kitchen", "expo"] as const)(
-  "held reorder stays shared with a locked outbox, paid food and %s fire control",
-  async (fireControl) => {
-    const draft = new DraftStore();
-    draft.lockEdits();
-    const orders = structuredClone(current());
-    for (const group of orders.groups) for (const row of group.rows) row.billStatus = "settled";
-    const { el, button } = await open({
-      draftStore: draft,
-      ...{ fireControl },
-      currentOrders: orders,
-    });
-    const events = collect(el, "reorder-groups");
-    await userEvent.click(button);
-    expect(events.map((event) => event.detail)).toEqual([{ heldGroupIds: ["g4", "g3"] }]);
-  },
-);
+it("keeps held reorder shared with a locked outbox and paid food", async () => {
+  const draft = new DraftStore();
+  draft.lockEdits();
+  const orders = structuredClone(current());
+  for (const group of orders.groups) for (const row of group.rows) row.billStatus = "settled";
+  const { el, button } = await open({
+    draftStore: draft,
+
+    currentOrders: orders,
+  });
+  const events = collect(el, "reorder-groups");
+  await userEvent.click(button);
+  expect(events.map((event) => event.detail)).toEqual([{ heldGroupIds: ["g4", "g3"] }]);
+});

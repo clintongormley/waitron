@@ -320,7 +320,7 @@ describe("drain — a run of refusals with one code stops its chain", () => {
     // On the run's node, so only the chain separates this record from the run below it.
     const other = await seedPendingEnvios(suite.db, {
       count: 1,
-      identity: { locationId: seeded.locationId, nodeId: seeded.nodeId, nif: seeded.nif },
+      identity: { nodeId: seeded.nodeId, nif: seeded.nif },
     });
     expect(other.sifId).not.toBe(seeded.sifId);
     const held = await appendPendingAlta(suite.db, seeded, 1_000_000);
@@ -338,7 +338,7 @@ describe("drain — a run of refusals with one code stops its chain", () => {
     const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100]);
     const newChain = await seedPendingEnvios(suite.db, {
       count: 1,
-      identity: { locationId: seeded.locationId, nodeId: seeded.nodeId, nif: seeded.nif },
+      identity: { nodeId: seeded.nodeId, nif: seeded.nif },
     });
     expect(newChain.sifId).not.toBe(seeded.sifId);
     const wire = recording(aeat.client());

@@ -660,9 +660,11 @@ describe("a catch-up that changes nothing", () => {
       const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
       try {
         await catchUpZone(tx, [BOOKINGS_TABLE_REMOVAL], zoneId, NOW);
-        expect(prepare.mock.calls.filter(([query]) => /join "settings"/.test(query))).toHaveLength(
-          1,
-        );
+        expect(
+          prepare.mock.calls.filter(([query]) =>
+            /from "settings" left join "day_cutover_changes"/.test(query),
+          ),
+        ).toHaveLength(1);
         return prepare.mock.calls.length;
       } finally {
         prepare.mockRestore();
@@ -696,9 +698,11 @@ describe("a catch-up that removes two tables", () => {
       const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
       try {
         await catchUpZone(tx, [BOOKINGS_TABLE_REMOVAL], zoneId, NOW);
-        expect(prepare.mock.calls.filter(([query]) => /join "settings"/.test(query))).toHaveLength(
-          2,
-        );
+        expect(
+          prepare.mock.calls.filter(([query]) =>
+            /from "settings" left join "day_cutover_changes"/.test(query),
+          ),
+        ).toHaveLength(2);
         return prepare.mock.calls.length;
       } finally {
         prepare.mockRestore();

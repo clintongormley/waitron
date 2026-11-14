@@ -1,7 +1,7 @@
 import { ensureOperator } from "./cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { venueLocationId, workingOrderLines, withTransaction } from "@waitron/db";
+import { workingOrderLines, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -49,10 +49,9 @@ export async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const catalogueId = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Split extras menu ${locationId}` });
+    const cat = await createCatalogue(tx, { name: `Split extras menu ${nodeId}` });
     await assignCatalogueToVenue(tx, cat.id);
     return cat.id;
   });

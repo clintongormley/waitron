@@ -292,10 +292,9 @@ it("makes one passive summary read on first entry rather than fetching it twice"
   await new Promise((r) => requestAnimationFrame(r));
   expect(paths.filter((p) => p.includes("/hours?"))).toHaveLength(1);
 });
-it("has no Location field and reads hours once the inbox arrives", async () => {
+it("reads hours once the inbox arrives", async () => {
   const { el, paths } = await mount();
   await ready(el);
-  expect(el.shadowRoot!.querySelector('[name="hoursLocation"]')).toBeNull();
   const inboxRead = paths.findIndex((p) => p.endsWith("/inbox"));
   const hoursRead = paths.findIndex((p) => p.includes("/hours?"));
   expect(inboxRead).toBeGreaterThanOrEqual(0);

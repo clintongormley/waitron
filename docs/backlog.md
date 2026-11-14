@@ -987,11 +987,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **The "Goes with" line** (bundle of 4, size S). [Detail](backlog/till.md#bundle-the-goes-with-line)
 
-- **Delete the tests and fixtures that still set `fireControl` with A1301 S28 (left open by A773-2
-  PR D, its plan's D113).** Nothing reads the setting; tests still pass it to the till's setup
-  answer or write the `fire_control` column, and they pass.
-  [Detail](backlog/till.md#delete-the-tests-and-fixtures-that-still-set-firecontrol-with-a1301-s28)
-
 - **Pass board code and missing test pins** (bundle of 3, size M). [Detail](backlog/till.md#bundle-pass-board-code-and-missing-test-pins)
 
 - **Status words on the pass and beside it** (bundle of 5, size S). [Detail](backlog/till.md#bundle-status-words-on-the-pass-and-beside-it)
@@ -2229,15 +2224,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [release guide](developers/shared-ui-preparation.md) explains local inspection.
   Cloud's D579 owns dependency updates, the seven-day lag check and portal/image
   qualification under the [approved simple release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
-
-- **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
-  2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: 5h
-  of A1308's slice 5; every other slice has landed. S18 has a plan
-  ([S18 plan](superpowers/plans/2026-11-04-a1301-s18-contract-cleanup.md)); its S18e is the
-  approved [venue-id design](superpowers/specs/2026-11-04-a1301-venue-id-design.md), built in A1308 slice 5g.
-  [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
-  [plan](superpowers/plans/2026-11-01-a1301-remove-location.md).
-  [Detail](backlog/architecture.md#a1301-remove-the-location-concept-the-venue-holds-everything-a-location-held)
 
 - **The setup app's configuration preview types four address fields as always text.**
   `ConfigurationPreview.venue` in `apps/setup/src/api/client.ts` is `VenueDraft`'s shape, which

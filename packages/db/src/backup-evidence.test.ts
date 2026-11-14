@@ -222,7 +222,6 @@ describe("core backup source binding", () => {
       db.run(
         sql`insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'fixture-id', 'Fixture company', '2026-10-20T00:00:00Z')`,
       );
-      db.run(sql`insert into locations (id) values ('venue')`);
       db.run(
         sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T00:00:00Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T00:00:00Z') on conflict (module) do nothing`,
       );
@@ -663,7 +662,6 @@ describe("backup membership private/public identity", () => {
   const publicKey = pair.publicKey.export({ format: "der", type: "spki" }).toString("base64");
   function seed(key: string | null = publicKey) {
     for (const suite of [before, after]) {
-      suite.db.run(sql`insert into locations (id) values ('venue')`);
       suite.db.run(
         sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T00:00:00Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T00:00:00Z') on conflict (module) do nothing`,
       );

@@ -81,7 +81,6 @@ export {
   readBusinessDayRevision,
   readVenueClockAndPlace,
   readVenueInvoiceLocales,
-  venueLocationId,
 } from "./venue.js";
 export type { Venue, VenuePlace } from "./venue.js";
 export { nodes } from "./schema/nodes.js";

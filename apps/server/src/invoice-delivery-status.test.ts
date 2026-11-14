@@ -11,7 +11,6 @@ import {
   printers,
   tenants,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -78,23 +77,22 @@ type Status = "queued" | "sending" | "sent" | "failed" | "unknown";
 async function venue() {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
-  const locationId = await location("Bar");
+  await seedNamedVenue("Bar");
   const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
     .insert(printAgents)
     .values({ name: "Back office agent", tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
-  return { locationId, nodeId, agentId: agent!.id };
+  return { nodeId, agentId: agent!.id };
 }
 type Venue = Awaited<ReturnType<typeof venue>>;
 
-async function location(name: string): Promise<string> {
+async function seedNamedVenue(name: string): Promise<void> {
   await seedVenue(suite.db, {
     name,
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  return venueLocationId(suite.db);
 }
 
 let hostCounter = 20;

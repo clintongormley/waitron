@@ -271,9 +271,8 @@ const OLD_VARIANT = '{"es":"Grande","ca":"Gran"}';
  */
 function seed(connection) {
   const statements = [
-    // Venue: one location with TWO invoice locales, so "exactly the venue locales" has a set to be
+    // Venue: one venue with TWO invoice locales, so "exactly the venue locales" has a set to be
     // wrong about in both directions.
-    `insert into locations (id) values ('loc')`,
     `insert into settings (module,version,revision,doc,updated_at) values ('venue',1,1,'{"invoiceLocales":["es","ca"]}','${STAMP}')`,
 
     // Working orders, one per case that changes an order's state.
@@ -1300,9 +1299,9 @@ describe("working_order_lines_check_locales", () => {
       expect(
         refusalFor(separate, line("document-only", "wo-open", '{"es":"Dish"}')),
       ).toBeUndefined();
-      expect(
-        refusalFor(separate, line("old-location", "wo-open", '{"es":"Dish","ca":"Dish"}')),
-      ).toBe(LOCALES_REFUSAL);
+      expect(refusalFor(separate, line("old-venue", "wo-open", '{"es":"Dish","ca":"Dish"}'))).toBe(
+        LOCALES_REFUSAL,
+      );
     } finally {
       separate.close();
     }

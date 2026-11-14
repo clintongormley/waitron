@@ -34,7 +34,7 @@ describe("venueWallClockAt", () => {
     });
   });
 
-  it("reads the clock in the venue's zone without being told a location", async () => {
+  it("reads the clock in the venue's zone", async () => {
     await makeVenue("Pacific/Auckland");
     await expect(
       withTransaction(db, (tx) => venueWallClockAt(tx, new Date("2026-03-01T12:00:00Z"))),

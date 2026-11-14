@@ -1,13 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  departments,
-  kitchenStations,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, departments, kitchenStations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -31,12 +25,9 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, fn);
 }
 
-async function seedLocation(name: string): Promise<string> {
+async function seedFixtureVenue(name: string): Promise<void> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
   await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
-  return locationId;
 }
 
 async function setMinutes(departmentId: string, minutes: number | null): Promise<void> {
@@ -56,7 +47,7 @@ async function departmentWithZone(name: string) {
 
 describe("readReleaseReminderMinutesByZone", () => {
   it("reads each zone's department's minutes, null where the department has reminders off", async () => {
-    await seedLocation("Reminders on and off");
+    await seedFixtureVenue("Reminders on and off");
     const a = await departmentWithZone("A");
     const b = await departmentWithZone("B");
     await setMinutes(a.departmentId, 25);
@@ -72,7 +63,7 @@ describe("readReleaseReminderMinutesByZone", () => {
   });
 
   it("reads 10 for a department nobody has changed", async () => {
-    await seedLocation("Reminder untouched");
+    await seedFixtureVenue("Reminder untouched");
     const a = await departmentWithZone("A");
     expect(await scoped((tx) => readReleaseReminderMinutesByZone(tx, [a.zoneId]))).toEqual(
       new Map([[a.zoneId, 10]]),
@@ -80,7 +71,7 @@ describe("readReleaseReminderMinutesByZone", () => {
   });
 
   it("leaves out an inactive zone, and an id that is no zone", async () => {
-    await seedLocation("Reminder without department");
+    await seedFixtureVenue("Reminder without department");
     const a = await departmentWithZone("A");
     const bare = await seedZone(db, { name: "Inactive zone", active: false });
     const unknown = randomUUID();
@@ -93,7 +84,7 @@ describe("readReleaseReminderMinutesByZone", () => {
   });
 
   it("still answers for a department that has been made inactive", async () => {
-    await seedLocation("Reminder inactive department");
+    await seedFixtureVenue("Reminder inactive department");
     const a = await departmentWithZone("A");
     await setMinutes(a.departmentId, 25);
     await db.execute(sql`update departments set active = 0 where id = ${a.departmentId}`);
@@ -114,7 +105,7 @@ describe("readReleaseReminderMinutesByZone", () => {
 
 describe("listDepartmentReminderMinutes", () => {
   it("lists every active department's minutes", async () => {
-    await seedLocation("Reminder list");
+    await seedFixtureVenue("Reminder list");
     const a = await departmentWithZone("A");
     const b = await departmentWithZone("B");
     const c = await departmentWithZone("C");
@@ -131,7 +122,7 @@ describe("listDepartmentReminderMinutes", () => {
 
 describe("updateDepartment", () => {
   it("writes a reminder given alone", async () => {
-    await seedLocation("Reminder update");
+    await seedFixtureVenue("Reminder update");
     const a = await departmentWithZone("A");
     await scoped((tx) => updateDepartment(tx, a.departmentId, { releaseReminderMinutes: 5 }));
     const [row] = await db

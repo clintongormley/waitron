@@ -3,7 +3,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction, venueLocationId } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
@@ -33,7 +33,7 @@ const suite = useVenueDb({
 const noopLog: Logger = () => {};
 
 /** Stores No preparation in the category's Every zone cell and, given a zone, its cell there. */
-async function routeCategory(_locationId: string, categoryId: string, zoneId?: string) {
+async function routeCategory(categoryId: string, zoneId?: string) {
   await suite.db
     .insert(routingCells)
     .values([
@@ -69,7 +69,7 @@ it("folder summaries count routing cells in the subtree and deletion removes the
       })
     ).status,
   ).toBe(200);
-  await routeCategory(v.locationId, child, await seedZone());
+  await routeCategory(child, await seedZone());
   const summary = await send(
     app,
     "GET",
@@ -108,8 +108,8 @@ it("moving a category's contents up removes only its own routing rules, which it
       })
     ).status,
   ).toBe(200);
-  await routeCategory(v.locationId, parent);
-  await routeCategory(v.locationId, child, await seedZone());
+  await routeCategory(parent);
+  await routeCategory(child, await seedZone());
   const summary = await send(
     app,
     "GET",
@@ -139,7 +139,7 @@ it("refuses a category delete with 409 when a routing rule was added since the c
   const v = await setupVenue();
   const app = mountApp();
   const drinks = await createCategory(app, v.managerCookie, "Drinks");
-  await routeCategory(v.locationId, drinks);
+  await routeCategory(drinks);
   const response = await send(app, "POST", "/management-api/folders/delete", v.managerCookie, {
     productIds: [],
     categoryIds: [drinks],
@@ -165,7 +165,7 @@ it("refuses a category delete with 409 when a routing rule was added to one of i
       })
     ).status,
   ).toBe(200);
-  await routeCategory(v.locationId, beer);
+  await routeCategory(beer);
   const response = await send(app, "POST", "/management-api/folders/delete", v.managerCookie, {
     productIds: [],
     categoryIds: [drinks],
@@ -187,7 +187,6 @@ it("refuses a category delete with 409 when a routing rule was added to one of i
 });
 
 interface Venue {
-  locationId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `catalogue.manage`). */
   managerCookie: string;
   /** A live MANAGEMENT session cookie for a `staff` person (holds no `catalogue.manage`). */
@@ -245,9 +244,7 @@ async function setupVenue(): Promise<Venue> {
     return { managerSid: managerSession.token, staffSid: staffSession.token };
   });
 
-  const venueId = await venueLocationId(suite.db);
   return {
-    locationId: venueId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };
@@ -447,7 +444,7 @@ describe("sections and the reporting and routing they do not touch", () => {
         })
       ).status,
     ).toBe(204);
-    await routeCategory(v.locationId, categoryId);
+    await routeCategory(categoryId);
     await suite.db.insert(routingCells).values({
       productId,
       noPreparation: true,

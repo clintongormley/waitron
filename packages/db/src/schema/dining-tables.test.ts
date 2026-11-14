@@ -12,11 +12,8 @@ import { isRefusal } from "../unique-violation.js";
 import { NOT_NULL_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { shortNameColumns } from "../table-short-names.js";
 import { diningTables } from "./dining-tables.js";
-import { locations } from "./tenants.js";
 
-const LOCATION_B = "aaaaaaaa-0000-4000-8000-000000000002";
-
-describe("table labels without a location", () => {
+describe("table labels without a venue", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("two tables cannot share a label, including in different zones", async () => {
@@ -46,9 +43,6 @@ describe("dining_tables columns", () => {
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
-    });
-    await db.insert(locations).values({
-      id: LOCATION_B,
     });
     await seedVenueSettings(db, {
       name: "Loc B",

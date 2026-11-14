@@ -194,20 +194,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
-
-  it.each(["receipt_print_mode", "drawer_open_policy"])(
-    "retires location %s and its CHECK",
-    async (column) => {
-      const columns = suite.db.all<{ name: string }>(
-        sql`select name from pragma_table_info('locations')`,
-      );
-      expect(columns.map((row) => row.name)).not.toContain(column);
-      const [definition] = suite.db.all<{ sql: string }>(
-        sql`select sql from sqlite_schema where type = 'table' and name = 'locations'`,
-      );
-      expect(definition!.sql).not.toContain(column);
-    },
-  );
 });
 
 describe("settled-tender refund drawer targets", () => {

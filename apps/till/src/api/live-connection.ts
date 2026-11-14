@@ -47,7 +47,6 @@ const MENU_TYPES = [
 
 const KITCHEN_TYPES = [
   "ticket_item_moves",
-  "locations",
   "categories",
   "category_details",
   ...DEVICE_TYPES,
@@ -133,7 +132,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     ...DEVICE_TYPES,
     "persons",
     "time_entries",
-    "locations",
     "settings.venue",
     "attendance_day_work",
     "attendance_operation_facts",
@@ -143,7 +141,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     ...DEVICE_TYPES,
     ...MENU_TYPES,
     "settings.venue",
-    "locations",
     "departments",
     "floor_zones",
     "menu_periods",

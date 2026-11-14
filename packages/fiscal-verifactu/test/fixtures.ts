@@ -1,14 +1,7 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedFixtureSif as registerSif } from "./sif-fixture.js";
 import { sql } from "drizzle-orm";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  sales,
-  tenants,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { invoiceSeries, nodes, sales, tenants, type Database, type Transaction } from "@waitron/db";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -27,7 +20,6 @@ import { nifWithControlLetter } from "../src/testing/seed.js";
 const ISSUED_AT = "2026-07-20T19:20:30+01:00";
 
 export const TENANT_A = {
-  locationId: "a0000000-0000-4000-8000-000000000002",
   seriesId: "a0000000-0000-4000-8000-000000000004",
   saleId: "a0000000-0000-4000-8000-000000000005",
   sifId: "a0000000-0000-4000-8000-000000000006",
@@ -40,7 +32,7 @@ export const TENANT_B = {
 };
 
 /**
- * Seed the foreign-key parents needed by insertRegistro: the taxpayer row, location, device, node,
+ * Seed the foreign-key parents needed by insertRegistro: the taxpayer row, device, node,
  * invoice series, sale and SIF identity. The zero-total sale remains unsettled; settlement
  * coverage is checked on settlement.
  */
@@ -49,12 +41,8 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
     .onConflictDoNothing({ target: tenants.id });
-  const existing = await db.select({ id: locations.id }).from(locations).limit(2);
-  const venueId = existing.length === 1 ? existing[0]!.id : undefined;
-  if (venueId === undefined) {
-    await db.insert(locations).values({
-      id: TENANT_A.locationId,
-    });
+  const existing = await readSettings(db, VENUE_SETTINGS);
+  if (existing.revision === 0) {
     await seedVenueSettings(db, {
       name: "Local principal",
       invoiceLocales: ["es"],
@@ -108,12 +96,8 @@ export async function seedTenants(db: Database): Promise<void> {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
     .onConflictDoNothing({ target: tenants.id });
-  const existing = await db.select({ id: locations.id }).from(locations).limit(2);
-  const venueId = existing.length === 1 ? existing[0]!.id : undefined;
-  if (venueId === undefined) {
-    await db.insert(locations).values({
-      id: TENANT_A.locationId,
-    });
+  const existing = await readSettings(db, VENUE_SETTINGS);
+  if (existing.revision === 0) {
     await seedVenueSettings(db, {
       name: "Local principal",
       operationDescription: "Venta en establecimiento",
@@ -132,9 +116,6 @@ export async function seedVenueNodes(db: Database): Promise<void> {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
     .onConflictDoNothing({ target: tenants.id });
-  await db.insert(locations).values({
-    id: TENANT_A.locationId,
-  });
   await seedVenueSettings(db, {
     name: "Local principal",
     operationDescription: "Venta en establecimiento",
@@ -163,7 +144,6 @@ export async function seedVenueNodes(db: Database): Promise<void> {
 export async function seedSoldRegistro(
   db: Database,
   params: {
-    locationId: string;
     nodeId: string;
     sifId: string;
     nif: string;
@@ -230,8 +210,7 @@ export async function seedSoldRegistro(
 }
 
 export interface SeededNodeWithSif {
-  locationId: string;
-  /** A till device at that location, for a sale recorded with a device origin. */
+  /** A till device at the venue, for a sale recorded with a device origin. */
   deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -247,15 +226,11 @@ function freshNif(): string {
   return nifWithControlLetter(20_000_000 + nifSequence);
 }
 
-async function insertLocationNodeSeries(
+async function insertNodeAndSeries(
   tx: Transaction,
-): Promise<{ locationId: string; nodeId: NodeId; seriesId: SeriesId }> {
-  const existing = await tx.select({ id: locations.id }).from(locations).limit(2);
-  const [location] =
-    existing.length === 1
-      ? existing
-      : await tx.insert(locations).values({}).returning({ id: locations.id });
-  if (existing.length !== 1) {
+): Promise<{ nodeId: NodeId; seriesId: SeriesId }> {
+  const existing = await readSettings(tx, VENUE_SETTINGS);
+  if (existing.revision === 0) {
     await seedVenueSettings(tx, {
       name: "Sala principal",
       operationDescription: "Venta en establecimiento",
@@ -268,7 +243,7 @@ async function insertLocationNodeSeries(
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })
     .returning({ id: invoiceSeries.id });
-  return { locationId: location!.id, nodeId, seriesId: brandSeriesId(series!.id) };
+  return { nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
 /**
@@ -311,7 +286,7 @@ export async function seedTenantWithSif(
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: nif, legalName: "Waitron SL" })
       .onConflictDoNothing({ target: tenants.id });
-    const { locationId, nodeId, seriesId } = await insertLocationNodeSeries(tx);
+    const { nodeId, seriesId } = await insertNodeAndSeries(tx);
     await registerSif(tx, {
       nodeId,
       nif,
@@ -320,7 +295,7 @@ export async function seedTenantWithSif(
     // No `working_orders` row and no `workingOrderId`: `recordSale` writes `input.workingOrderId`
     // to `sales.working_order_id`, a real FK onto `working_orders`, so the write-path suites here
     // record walk-up sales that omit it.
-    return { locationId, nodeId, seriesId };
+    return { nodeId, seriesId };
   });
   const { deviceId } = await seedDevice(db, {});
   return { ...seeded, deviceId };

@@ -26,7 +26,7 @@ import {
 import { verifyChain } from "./chain-hash.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { timeEntries } from "./schema/time-entries.js";
-import { seedLocation, seedPerson } from "../test/fixtures.js";
+import { seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 
 // Concurrent appenders are ./chain.concurrency.test.ts's subject, not this suite's.
 const suite = useVenueDb({
@@ -39,7 +39,7 @@ let nodeId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
 });
 

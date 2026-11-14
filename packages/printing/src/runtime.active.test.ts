@@ -1,31 +1,21 @@
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  printAgents,
-  printers,
-  printJobs,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, printAgents, printers, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { claimPrintJobs, PRINT_JOB_LEASE_MS } from "./runtime.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
-type PrintConfig = { locationId: string };
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function setup(): Promise<PrintConfig> {
+async function setup(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
-  return { locationId: venueId };
 }
 
 async function seedAgent(): Promise<string> {
@@ -125,10 +115,8 @@ describe("claimPrintJobs respects printers.active", () => {
 // After the clock steps back, a claim stamped before the step lies ahead of the new clock by the
 // step's length. One further ahead than the lease was stamped before such a step, and has lapsed.
 describe("a print job's claim stamped ahead of the clock", () => {
-  async function claimedJobStampedAt(
-    claimedAt: Date,
-  ): Promise<{ cfg: PrintConfig; agentId: string; jobId: string }> {
-    const cfg = await setup();
+  async function claimedJobStampedAt(claimedAt: Date): Promise<{ agentId: string; jobId: string }> {
+    await setup();
     const agentId = await seedAgent();
     const jobId = await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, {
@@ -147,7 +135,7 @@ describe("a print job's claim stamped ahead of the clock", () => {
       .update(printJobs)
       .set({ claimedAt: claimedAt.toISOString() })
       .where(eq(printJobs.id, jobId));
-    return { cfg, agentId, jobId };
+    return { agentId, jobId };
   }
 
   it("claims again a job whose claim lies 400 days ahead", async () => {

@@ -603,7 +603,7 @@ describe("the device delete impact", () => {
     }
   });
 
-  it("lets a new device take the deleted device's name at the same location", async () => {
+  it("lets a new device take the deleted device's name at the same venue", async () => {
     const s = await seed();
     await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill));
     const again = await enrolDeviceForTest(suite.db, s.cfg, {

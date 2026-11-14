@@ -8,7 +8,6 @@ import {
   orderServiceContexts,
   saleReceiptHeaders,
   sales,
-  venueLocationId,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -32,7 +31,6 @@ async function fixture(active = true) {
     operationDescription: "Hospitality",
   });
   const cfg = {
-    locationId: await venueLocationId(suite.db),
     receiptLanguages: ["es-ES", "ca-ES"],
   };
   const [dept] = await suite.db
@@ -554,7 +552,7 @@ describe("department-owned address and fiscal description", () => {
       );
     },
   );
-  it("clears both fields without taking the other department or location value", async () => {
+  it("clears both fields without taking the other department or venue value", async () => {
     const f = await fixture();
     await scoped((tx) =>
       receipts.writeDepartmentReceipt(tx, f.id, {

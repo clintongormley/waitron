@@ -19,7 +19,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { deviceOrigin, jobOrigin, type Origin } from "@waitron/shared";
-import { seedLocation } from "../test/fixtures.js";
+import { seedFixtureVenue } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend } from "./clocking.js";
 import * as responses from "./attendance-responses.js";
@@ -48,7 +48,7 @@ const now = new Date("2026-01-07T08:00:00.000Z");
 let personId: string, manager: string, other: string, nodeId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },

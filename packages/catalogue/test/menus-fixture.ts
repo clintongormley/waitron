@@ -22,7 +22,6 @@ export const NO_ICE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 export const WITH_ICE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 export interface MenusFixture {
-  locationId: string;
   lunch: string;
   dinner: string;
   lunchRoot: string;
@@ -58,7 +57,7 @@ export const section = (sectionId: string): MemberRef => ({ kind: "section", sec
  * internal and customer names differ, so a read of the wrong one fails.
  */
 export async function menusFixture(db: Database): Promise<MenusFixture> {
-  const { locationId } = await seedVenueWithSeries(db);
+  await seedVenueWithSeries(db);
   await seedLegacySellingUnits(db);
   return withTransaction(db, async (tx) => {
     await seedLibraryImages(tx, "lemonade.jpg", "large.jpg");
@@ -180,7 +179,6 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
       .values({ name: "Starters" })
       .returning({ id: kitchenCourses.id });
     return {
-      locationId,
       lunch: lunch.id,
       dinner: dinner.id,
       lunchRoot,

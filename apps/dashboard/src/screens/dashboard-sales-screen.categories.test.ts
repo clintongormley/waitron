@@ -652,7 +652,7 @@ describe("dashboard-sales-screen — category report", () => {
 });
 
 describe("dashboard-sales-screen — printing the category report", () => {
-  it("offers this location's printers and sends the report as shown to the chosen one", async () => {
+  it("offers this venue's printers and sends the report as shown to the chosen one", async () => {
     setLocale("en");
     const api = stubApi();
     const el = await mount(api);
@@ -766,7 +766,7 @@ describe("dashboard-sales-screen — printing the category report", () => {
     expect(q(el, "print-status")).not.toBeNull();
   });
 
-  it("says there is nowhere to print, and disables Print, when the location has no printer", async () => {
+  it("says there is nowhere to print, and disables Print, when the venue has no printer", async () => {
     setLocale("en");
     const api = stubApi({ getReportPrinters: vi.fn().mockResolvedValue([]) });
     const el = await mount(api);

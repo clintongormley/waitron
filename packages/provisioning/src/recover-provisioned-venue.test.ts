@@ -3,7 +3,7 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { venueLocationId, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules } from "@waitron/module";
@@ -38,7 +38,6 @@ async function fixture() {
   ).rows[0]!;
   return {
     target,
-    venueId: await venueLocationId(suite.db),
     initialOperations: {
       nodeId: target.nodeId,
       administratorId: admin.id,
@@ -54,7 +53,7 @@ async function fixture() {
   };
 }
 
-it("recovers the existing location, node and all three series without allocating replacements", async () => {
+it("recovers the existing venue, node and all three series without allocating replacements", async () => {
   const f = await fixture();
   await withTransaction(suite.db, (tx) =>
     tx.execute(sql`update invoice_series set next_number = 47`),
@@ -94,7 +93,7 @@ it.each(["name", "fiscalTerritory"] as const)(
         );
     });
     const before = {
-      venue: (await suite.db.execute(sql`select * from locations`)).rows,
+      venue: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
       document: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
       series: (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows,
     };
@@ -102,7 +101,7 @@ it.each(["name", "fiscalTerritory"] as const)(
       refusal,
     );
     expect({
-      venue: (await suite.db.execute(sql`select * from locations`)).rows,
+      venue: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
       document: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
       series: (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows,
     }).toEqual(before);
@@ -113,7 +112,9 @@ it("refuses recovery when no matching node was committed", async () => {
   await expect(recoverProvisionedVenue(suite.db, { venue }, ALL_MODULES)).rejects.toMatchObject(
     refusal,
   );
-  expect((await suite.db.execute(sql`select * from locations`)).rows).toEqual([]);
+  expect((await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows).toEqual(
+    [],
+  );
 });
 
 it.each(["malformed", "wrong-node", "missing-administrator"])(

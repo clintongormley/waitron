@@ -86,7 +86,7 @@ const inTx = <T>(fn: Parameters<typeof withTransaction<T>>[1]) => withTransactio
 
 async function seedPrinter(
   name: string,
-  opts: { portable?: boolean; hasCashDrawer?: boolean; locationId?: string } = {},
+  opts: { portable?: boolean; hasCashDrawer?: boolean } = {},
 ): Promise<string> {
   const [row] = await suite.db
     .insert(printers)

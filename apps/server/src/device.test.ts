@@ -404,7 +404,7 @@ describe("accepting a device writes its kitchen screens", () => {
   });
 });
 
-describe("device names among a location's active devices", () => {
+describe("device names among a venue's active devices", () => {
   it("refuses a second active device of the same name there as device.name_taken, and the request survives", async () => {
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("till", "Till profile");

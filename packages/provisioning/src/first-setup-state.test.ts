@@ -120,7 +120,7 @@ async function interruptedCompletion(f: Awaited<ReturnType<typeof fixture>>) {
   return (await f.store.readResumable())!.state;
 }
 
-it("refuses a frozen request that still nests a location object", async () => {
+it("refuses a frozen request with nested venue fields", async () => {
   const f = await fixture();
   const state = await f.claim();
   const {
@@ -137,7 +137,7 @@ it("refuses a frozen request that still nests a location object", async () => {
     dayCutover,
     ...identity
   } = state.frozen.request;
-  const location = {
+  const venueDoc = {
     name,
     fiscalTerritory,
     invoiceLocales,
@@ -150,7 +150,7 @@ it("refuses a frozen request that still nests a location object", async () => {
     timeZone,
     dayCutover,
   };
-  state.frozen.request = { ...identity, location } as unknown as FirstSetupFrozen["request"];
+  state.frozen.request = { ...identity, extra: venueDoc } as unknown as FirstSetupFrozen["request"];
   expect(() => parseState(state, f.options.venueDir, f.options.stateDir)).toThrowError(
     expect.objectContaining({ code: "setup.attempt_invalid" }),
   );

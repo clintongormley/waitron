@@ -9,7 +9,6 @@ import {
   menuPeriods,
   withTransaction,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -33,8 +32,7 @@ async function fixture() {
       operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     });
-    const venueId = await venueLocationId(tx);
-    const cfg = { locationId: venueId, receiptLanguages: ["en-GB"] };
+    const cfg = { receiptLanguages: ["en-GB"] };
     const live = await service.createDepartment(tx, { name: "Live" });
     const gone = await service.createDepartment(tx, { name: "Gone" });
     const zone = await service.createServiceZone(tx, {

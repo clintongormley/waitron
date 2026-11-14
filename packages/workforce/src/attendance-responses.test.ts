@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
-import { seedLocation } from "../test/fixtures.js";
+import { seedFixtureVenue } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
 import { readChain } from "./chain.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -22,7 +22,7 @@ let personId: string, managerId: string, nodeId: string;
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 beforeEach(async () => {
   await seedTenant(suite.db);
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Ana", pinHash: "scrypt$00$00", role: "staff" },
@@ -166,7 +166,6 @@ const bundle = (requests: TimeEntryRecord[]) => ({
   requestedByPersonId: "worker",
   authorizedByPersonId: "worker",
   personId: "worker",
-  locationId: "venue",
   questionId: null,
   action: "request",
   input: {

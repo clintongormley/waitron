@@ -32,7 +32,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
   beforeAll(async () => {
     db = suite.db;
     await seedVenue(db, {
-      name: "Fixture Location",
+      name: "Fixture Venue",
       invoiceLocales: [...LOCALES],
       operationDescription: "Hostelería",
     });

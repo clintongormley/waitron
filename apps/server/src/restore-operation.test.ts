@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readVenue } from "@waitron/db";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, invoiceSeries, locations, nodes, tenants } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword } from "@waitron/identity";
 import {
@@ -20,7 +20,6 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const target = {
-  locationId: "c0000000-0000-4000-8000-000000000001",
   nodeId: nodeId("c0000000-0000-4000-8000-000000000002"),
 };
 const ADMIN = "c0000000-0000-4000-8000-000000000003";
@@ -40,9 +39,6 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Restaurant" });
-  await suite.db.insert(locations).values({
-    id: target.locationId,
-  });
   await seedVenueSettings(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["es"],

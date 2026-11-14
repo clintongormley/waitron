@@ -33,7 +33,6 @@ import {
   openVenueDatabase,
   stampDeployment,
   withTransaction,
-  venueLocationId,
   ensureStreamId,
 } from "@waitron/db";
 import { hashDeviceToken, persons } from "@waitron/identity";
@@ -289,7 +288,6 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     let box: {
       nodeId: string;
       seriesId: string;
-      locationId: string;
       streamId: string;
       adminId: string;
       deviceId: string;
@@ -329,7 +327,6 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         ),
         { db: seeding.venue, modules: ALL_MODULES },
       );
-      const locationId = await venueLocationId(seeding.venue);
       const streamId = await withTransaction(seeding.venue, ensureStreamId);
       await establishNodeIdentity(
         { ownerDb: seeding.venue, node: seeding.node, ring },
@@ -374,15 +371,12 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
           vatClass: "general",
         });
         await assignCatalogueToVenue(tx, catalogue.id);
-        const offers = await offerProducts(tx, {
-          locationId,
-        });
+        const offers = await offerProducts(tx, {});
         return offers.offerFor(water.id);
       });
       box = {
         nodeId: venue.nodeId,
         seriesId: venue.seriesIds[0]!,
-        locationId,
         streamId,
         adminId: admin!.id,
         deviceId,

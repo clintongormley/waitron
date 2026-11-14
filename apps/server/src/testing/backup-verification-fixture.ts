@@ -15,7 +15,7 @@ import { afterEach, beforeEach, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { loadKeyRing } from "@waitron/credentials";
 import { recordSale } from "@waitron/core";
-import { deployment, locations, nodes, tenants, withTransaction } from "@waitron/db";
+import { deployment, nodes, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, withOperationAuthority } from "@waitron/module";
@@ -46,7 +46,6 @@ import type { BackupVerificationDeps } from "../backup-verification.js";
 
 export const verificationNode = {
   nodeId: nodeId("20000000-0000-4000-8000-000000000002"),
-  locationId: "10000000-0000-4000-8000-000000000001",
 };
 export const verificationTime = "2026-10-20T12:00:00.000Z";
 const vault = Buffer.alloc(32, 19).toString("base64");
@@ -183,11 +182,8 @@ export function useBackupVerificationFixture() {
     await suite.db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Fixture restaurant" });
-    await suite.db.insert(locations).values({
-      id: verificationNode.locationId,
-    });
     await seedVenueSettings(suite.db, {
-      name: "Fixture location",
+      name: "Fixture venue",
       invoiceLocales: ["en"],
       operationDescription: "Restaurant service",
     });

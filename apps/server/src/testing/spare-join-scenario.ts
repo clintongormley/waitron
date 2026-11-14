@@ -366,16 +366,12 @@ interface CounterTill {
  * One product offered at a counter, one staff member and one enrolled till signed in by PIN, written
  * into M's database before M starts.
  */
-async function seedCounterTill(
-  venueDir: string,
-  box: { nodeId: string; locationId: string },
-): Promise<CounterTill> {
+async function seedCounterTill(venueDir: string, box: { nodeId: string }): Promise<CounterTill> {
   const store = await openVenueDatabase(venueDir);
   try {
     const db = store.venue;
     const cfg = {
       nodeId: brandNodeId(box.nodeId),
-      locationId: box.locationId,
       locale: LOCALE_M,
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,

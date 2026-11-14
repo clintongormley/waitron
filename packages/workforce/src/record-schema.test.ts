@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, newId, captureError, engineErrorMessage } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedLocation, seedPerson } from "../test/fixtures.js";
+import { seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
@@ -14,7 +14,7 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
   otherPersonId = await seedPerson(suite.db, "Other");
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
 });
 interface Shape {

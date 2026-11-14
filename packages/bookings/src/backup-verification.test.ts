@@ -1,7 +1,7 @@
 import { seedVenueSettings, seedBusinessDay, seedPerson } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
@@ -16,9 +16,6 @@ const passed = { status: "passed", checks: [{ code: "data", status: "passed" }] 
 const invalid = { status: "invalid", checks: [{ code: "data", status: "invalid" }] };
 beforeEach(async () => {
   for (const suite of [original, restored]) {
-    await suite.db.insert(locations).values({
-      id: "location",
-    });
     await seedVenueSettings(suite.db, {
       name: "Venue",
       invoiceLocales: ["en"],

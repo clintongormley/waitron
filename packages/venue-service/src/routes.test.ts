@@ -17,7 +17,6 @@ import {
   floorZones,
   kitchenCourses,
   kitchenStations,
-  locations,
   serviceSteps,
   withTransaction,
   type Database,
@@ -52,7 +51,6 @@ const noopLog: Logger = () => {};
 
 interface Fixture {
   app: Hono;
-  locationId: string;
   managerCookie: string;
   staffCookie: string;
   supervisorCookie: string;
@@ -67,14 +65,13 @@ async function fixture(
   operationDescriptionDefault?: string,
 ): Promise<Fixture> {
   await seedTenant(db);
-  const [location] = await db.insert(locations).values({}).returning({ id: locations.id });
   await seedVenueSettings(db, {
     name: "Venue",
     invoiceLocales: ["en-GB"],
     operationDescription: "Hospitality",
   });
   await seedBusinessDay(db, {});
-  const scopedLocationId = location!.id;
+  const fixtureId = randomUUID();
   const [unavailable] = await db
     .insert(departments)
     .values({ name: "Unavailable", tradingName: "Unavailable", active: false })
@@ -87,20 +84,20 @@ async function fixture(
 
   const { menuId, categoryId, managerSessionId, staffSessionId, supervisorSessionId } =
     await db.transaction(async (tx) => {
-      const menu = await createCatalogue(tx, { name: `Drinks ${scopedLocationId}` });
-      const category = await createCategory(tx, { name: `Cocktails ${scopedLocationId}` });
+      const menu = await createCatalogue(tx, { name: `Drinks ${fixtureId}` });
+      const category = await createCategory(tx, { name: `Cocktails ${fixtureId}` });
       const [manager] = await seedPersons(tx, {
-        displayName: `Manager ${scopedLocationId}`,
+        displayName: `Manager ${fixtureId}`,
         pinHash: hashPin("1234"),
         role: "manager",
       });
       const [staff] = await seedPersons(tx, {
-        displayName: `Staff ${scopedLocationId}`,
+        displayName: `Staff ${fixtureId}`,
         pinHash: hashPin("1234"),
         role: "staff",
       });
       const [supervisor] = await seedPersons(tx, {
-        displayName: `Supervisor ${scopedLocationId}`,
+        displayName: `Supervisor ${fixtureId}`,
         pinHash: hashPin("1234"),
         role: "supervisor",
       });
@@ -128,7 +125,7 @@ async function fixture(
     {
       db,
       cfg: Object.assign(
-        { locationId: scopedLocationId },
+        {},
         { operationDescriptionRequired },
         operationDescriptionDefault === undefined ? {} : { operationDescriptionDefault },
       ),
@@ -182,7 +179,6 @@ async function fixture(
   );
   return {
     app,
-    locationId: scopedLocationId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSessionId}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSessionId}`,
     supervisorCookie: `${MANAGEMENT_COOKIE}=${supervisorSessionId}`,
@@ -3353,7 +3349,7 @@ describe("station service-times planning route", () => {
 it("the station planning route returns the configured period ranges for a non-default station", async () => {
   const f = await fixture();
   const expected = await withTransaction(db, async (tx) => {
-    const cfg = { locationId: f.locationId };
+    const cfg = {};
     const departmentId = (await createDepartment(tx, { name: "Dining", orderStart: "table" })).id;
     await configureZone(tx, { zoneId: f.zoneId, departmentId });
     const product = await createProduct(tx, {
@@ -3879,7 +3875,7 @@ describe("department description setup in the live model", () => {
 it("A724: the station planning route returns last orders at its period's own end", async () => {
   const f = await fixture();
   const expected = await withTransaction(db, async (tx) => {
-    const cfg = { locationId: f.locationId };
+    const cfg = {};
     const departmentId = (await createDepartment(tx, { name: "Dining", orderStart: "table" })).id;
     await configureZone(tx, { zoneId: f.zoneId, departmentId });
     const product = await createProduct(tx, {

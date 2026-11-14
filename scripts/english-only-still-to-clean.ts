@@ -596,7 +596,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/testing/dormant-contract.ts",
   "apps/server/src/testing/dr303.ts",
   "apps/server/src/testing/fiscal-fixtures.ts",
-  "apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json",
   "apps/server/src/testing/full-invoice-fixture.ts",
   "apps/server/src/testing/invoice-customer-fixture.ts",
   "apps/server/src/testing/order-venue.ts",

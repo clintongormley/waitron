@@ -7,7 +7,6 @@ import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  locations,
   openVenueDatabase,
   readDeploymentEnvironment,
   stampDeployment,
@@ -443,7 +442,6 @@ describe("runStagedReset", () => {
       const pending = JSON.parse(
         await readFile(join(stateDir, PENDING_ADOPTION_FILE), "utf8"),
       ) as PendingAdoption;
-      expect(pending).not.toHaveProperty("locationId");
       expect(pending.standby.nodeId).toBe(standbyNodeId);
       expect(pending.originNodeId).toBe(PRIMARY_NODE_ID);
       expect(await readMirrorLink(store.node, standbyNodeId!)).toMatchObject({
@@ -546,7 +544,6 @@ describe("runStagedReset", () => {
       async (box: { stateDir: string; venueDir: string; operationId: string }) => {
         const store = await openVenueDatabase(box.venueDir);
         try {
-          await store.venue.insert(locations).values({});
           await seedVenueSettings(store.venue, {
             name: "Sala principal",
             invoiceLocales: ["es-ES"],

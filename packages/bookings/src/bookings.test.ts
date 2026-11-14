@@ -8,7 +8,6 @@ import {
   floorPlans,
   newId,
   nowIso,
-  venueLocationId,
   withTransaction,
   diningTables,
 } from "@waitron/db";
@@ -32,10 +31,6 @@ import {
 } from "./bookings.js";
 import "./errors.js";
 
-interface VenueCfg {
-  locationId: string;
-}
-
 const suite = useVenueDb({
   migrations: BOOKINGS_TEST_MIGRATIONS,
   timeoutMs: 60_000,
@@ -48,7 +43,6 @@ beforeAll(() => {
 });
 
 interface Venue {
-  cfg: VenueCfg;
   /** A fixture person id for `created_by` (no FK — the drawer_opens.person_id seam). */
   createdBy: string;
 }
@@ -74,9 +68,7 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant service",
   });
-  const locationId = await venueLocationId(db);
   return {
-    cfg: { locationId: locationId },
     createdBy: await seedPerson(db),
   };
 }
@@ -459,7 +451,6 @@ async function seedTable(label: string): Promise<string> {
 // still writes a real working_orders row.
 describe("seatBooking", () => {
   async function setupTillVenue(): Promise<{
-    cfg: VenueCfg;
     core: CoreServices;
     createdBy: string;
     seatedBy: string;
@@ -469,11 +460,9 @@ describe("seatBooking", () => {
       invoiceLocales: ["es-ES"],
       operationDescription: "Restaurant service",
     });
-    const locationId = await venueLocationId(db);
     const nodeId = await seedNode(db);
     return {
-      cfg: { locationId: locationId },
-      core: fakeCore({ locationId, nodeId }),
+      core: fakeCore({ nodeId }),
       createdBy: await seedPerson(db),
       seatedBy: await seedPerson(db, { displayName: "Booking waiter" }),
     };

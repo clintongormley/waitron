@@ -23,7 +23,6 @@ async function fixture() {
   await withTransaction(receiver.db, async (tx) => {
     for (const table of [
       "tenants",
-      "locations",
       "settings",
       "device_profiles",
       "nodes",

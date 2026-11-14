@@ -56,8 +56,7 @@ async function mount(missing = false) {
         },
       };
     if (path.includes("/roster/breaches?")) {
-      if (missing)
-        throw { code: "configuration.not_found", status: 409, params: { locationId: "location" } };
+      if (missing) throw { code: "configuration.not_found", status: 409, params: {} };
       return { breaches, ruleset };
     }
     if (path.endsWith("/change-week")) {

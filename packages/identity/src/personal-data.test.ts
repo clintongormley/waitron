@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import {
   CORE_MIGRATIONS,
   withTransaction,
-  venueLocationId,
   persons,
   webauthnChallenges,
   webauthnCredentials,
@@ -40,13 +39,12 @@ interface Seeded {
   readonly distinct: readonly string[];
 }
 
-async function seedLocation(db: Database): Promise<string> {
+async function seedFixtureVenue(db: Database): Promise<void> {
   await seedVenue(db, {
     name: "Main",
     invoiceLocales: ["en"],
     operationDescription: "Sale on premises",
   });
-  return venueLocationId(db);
 }
 
 /** A person with a distinct value in every exported column, and rows in every table. */
@@ -313,7 +311,7 @@ async function downloadParsed(personId: string): Promise<{ profile: unknown; sig
 }
 
 async function seedBoth() {
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   const marta = await seedFull(suite.db, "marta", 2021);
   const colleague = await seedFull(suite.db, "colleague", 2022);
   const nobody = await seedSignInsWithNoPerson(suite.db);

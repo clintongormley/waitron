@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
-import { venueLocationId } from "@waitron/db";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -161,11 +160,9 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -173,7 +170,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
   });
 
   const products = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: `Vat rate at issue menu ${cfg.locationId}` });
+    const menu = await createCatalogue(tx, { name: `Vat rate at issue menu ${cfg.nodeId}` });
     const product = (name: string, unitPrice: string, vatClass: "reduced" | "general") =>
       createProduct(tx, {
         catalogueId: menu.id,
@@ -549,7 +546,7 @@ describe("the day is the invoice's own, read once", () => {
     const east = randomUUID();
     const utc = randomUUID();
 
-    const [location] = await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
+    const [venueDoc] = await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
     try {
       await suite.db.run(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${"Etc/GMT-2"}) where module = 'business_day'`,
@@ -583,7 +580,7 @@ describe("the day is the invoice's own, read once", () => {
       });
     } finally {
       await suite.db.run(
-        sql`update settings set doc = json_set(doc, '$.timeZone', ${location!.timeZone}) where module = 'business_day'`,
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${venueDoc!.timeZone}) where module = 'business_day'`,
       );
     }
   });

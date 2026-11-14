@@ -29,7 +29,6 @@ import {
   workingLinePortions,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -58,7 +57,6 @@ import { createTable } from "./live-table.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
-import type { WithVenueRowId } from "./venue-row-id.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
@@ -274,7 +272,7 @@ export interface AdjustmentVenue {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   /** The display language the till routes are mounted with; the same code as `cfg.locale`. */
   venueLocale: string;
   tables: ZoneOffers;
@@ -346,10 +344,8 @@ export async function provisionAdjustmentVenue(
     ),
     { db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -368,7 +364,7 @@ export async function provisionAdjustmentVenue(
       stationId: station!.id,
       printerId: printer.id,
     });
-    const cat = await createCatalogue(tx, { name: `Adjustment menu ${cfg.locationId}` });
+    const cat = await createCatalogue(tx, { name: `Adjustment menu ${cfg.nodeId}` });
     const category = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {

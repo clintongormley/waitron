@@ -120,7 +120,6 @@ export async function mountReceiptApp(
       "/management-api/receipt-preview": preview(),
       "/management-api/receipt": { receipt: {}, venueAddress: [] },
       "/management-api/receipt-settings": { settings: {} },
-      "/management-api/location-settings": { name: "Casa", operationDescription: "Legacy" },
       "/management-api/venue-details": venueDetailsFixture(),
       "/management-api/venue-defaults": {
         receiptLanguage: "es-ES",

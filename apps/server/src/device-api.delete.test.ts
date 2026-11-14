@@ -543,7 +543,7 @@ describe("a deleted device", () => {
     expect((await suite.db.select().from(joinRequests)).map((row) => row.id)).toEqual([deviceId]);
   });
 
-  it("a new device is accepted under a deleted device's name at the same location", async () => {
+  it("a new device is accepted under a deleted device's name at the same venue", async () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);

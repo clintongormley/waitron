@@ -33,7 +33,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -99,8 +98,7 @@ async function fixture(tx: Transaction, suffix = "") {
     invoiceLocales: ["en-GB"],
     operationDescription: "Hospitality",
   });
-  const venueId = await venueLocationId(tx);
-  const cfg = { locationId: venueId };
+  const cfg = {};
   const department = await createDepartment(tx, {
     name: "Dining",
     orderStart: "table",
@@ -1805,8 +1803,7 @@ describe("routing previews", () => {
         invoiceLocales: ["en-GB"],
         operationDescription: "Hospitality",
       });
-      const venueId = await venueLocationId(tx);
-      const cfg = { locationId: venueId };
+      const cfg = {};
       const zone = async (name: string) => {
         const department = await createDepartment(tx, {
           name: `${name} service`,

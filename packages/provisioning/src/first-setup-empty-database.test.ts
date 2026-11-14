@@ -75,7 +75,7 @@ it.each([
     "scheduler",
     "insert into scheduled_runs(id, duty, period_from, period_to, state, created_at, updated_at) values ('run', 'close', '2026-10-15', '2026-10-16', 'succeeded', '2026-10-16', '2026-10-16')",
   ],
-])("refuses retained %s rows without a taxpayer or location", async (_name, insert) => {
+])("refuses retained %s rows without a taxpayer or venue", async (_name, insert) => {
   expect(await inspect((connection) => connection.exec(insert))).toBe(false);
 });
 it.each([

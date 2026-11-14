@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, invoiceSeries, printers, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, printers } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { TrustedReading } from "@waitron/fiscal";
@@ -52,18 +52,16 @@ function stubReaders(over: Partial<BoxHealthReaders> = {}): BoxHealthReaders {
   };
 }
 
-async function seedLocation(): Promise<string> {
+async function seedFixtureVenue(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Counter",
     invoiceLocales: ["es-ES"],
     operationDescription: "Retail",
   });
-  const venueId = await venueLocationId(suite.db);
-  return venueId;
 }
 
 async function seedSales(issued: { id: string; at: string; corrects?: string }[]): Promise<void> {
-  await seedLocation();
+  await seedFixtureVenue();
   const node = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
@@ -155,7 +153,7 @@ describe("collectBoxHealth", () => {
   });
 
   it("lists only printers that are switched on and not deleted", async () => {
-    await seedLocation();
+    await seedFixtureVenue();
     const active = await seedPrinter("Bar");
     await seedPrinter("Off", { active: false });
     await seedPrinter("Gone", { active: true, deletedAt: "2026-10-01T00:00:00.000Z" });
@@ -164,7 +162,7 @@ describe("collectBoxHealth", () => {
   });
 
   it("lists printers by name", async () => {
-    await seedLocation();
+    await seedFixtureVenue();
     const second = await seedPrinter("Kitchen");
     const first = await seedPrinter("Bar");
     const health = await collectBoxHealth(suite.db, stubReaders());
@@ -236,7 +234,7 @@ describe("collectBoxHealth", () => {
   });
 
   it("counts a source that writes a row as unavailable, and its row does not stay", async () => {
-    await seedLocation();
+    await seedFixtureVenue();
     const sources: OwnedStaffNoticeSource[] = [
       {
         owner: "writer",

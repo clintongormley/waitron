@@ -122,7 +122,7 @@ it("moves a captured clock and its dated starts without changing the frozen inpu
   captured.tables.location_business_day_settings = {
     columns: [],
     foreignKeys: [],
-    rows: { revision: { location_id: "place", revision: 2 } },
+    rows: { revision: { revision: 2 } },
   };
   captured.tables.location_day_cutover_changes = {
     columns: ["location_id", "effective_business_day", "day_cutover"].map((name, i) => ({
@@ -135,7 +135,6 @@ it("moves a captured clock and its dated starts without changing the frozen inpu
     foreignKeys: [],
     rows: {
       later: {
-        location_id: "place",
         effective_business_day: "2026-12-01",
         day_cutover: "07:00:00",
       },

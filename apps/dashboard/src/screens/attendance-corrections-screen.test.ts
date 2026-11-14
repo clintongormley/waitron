@@ -718,9 +718,8 @@ it("a pending day's late answer stays hidden when the selection changes without 
   await m.el.updateComplete;
   expect(m.root.querySelector("[data-day]")).toBeNull();
 });
-it("has no Location field and reads the queue as soon as lookups arrive", async () => {
+it("reads the queue as soon as lookups arrive", async () => {
   const m = await mount();
-  expect(m.root.querySelector('[name="attendanceLocation"]')).toBeNull();
   await expect.poll(() => m.reads.some((read) => read.path.endsWith("/queue"))).toBe(true);
 });
 it("a passive read's recovery clears its own failure and leaves a completed selected day", async () => {

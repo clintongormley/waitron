@@ -337,7 +337,7 @@ it("brake probe, release and filing-case resolution retain the original fiscal a
   expect(facts()).toEqual(before);
 });
 
-it("configuration export carries settings without fiscal, payment, location history or chain rows", async () => {
+it("configuration export carries settings without fiscal, payment, venue history or chain rows", async () => {
   await issue();
   await closeHistory();
   const before = facts();
@@ -345,7 +345,6 @@ it("configuration export carries settings without fiscal, payment, location hist
   expect(exported.tables.products?.length).toBeGreaterThan(0);
   for (const name of [
     ...Object.keys(before),
-    "locations",
     "nodes",
     "day_cutover_changes",
     "fiscal_allocations",

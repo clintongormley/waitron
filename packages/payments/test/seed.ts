@@ -1,3 +1,4 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -5,12 +6,10 @@ import type { NodeId } from "@waitron/shared";
 import {
   billPayments,
   invoiceSeries,
-  locations,
   nodes,
   sales,
   tenants,
   tenders,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -26,8 +25,6 @@ import type { CollectionOwners } from "../src/provider.js";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
 export interface Seeded {
-  locationId: string;
-  /** A till device at that location: where the seeded order's payments are started. */
   deviceId: string;
   nodeId: NodeId;
   workingOrderId: string;
@@ -54,18 +51,17 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nif, legalName: "Test SL" })
     .onConflictDoNothing({ target: tenants.id });
-  const [venue] = await db.select({ id: locations.id }).from(locations).limit(1);
-  if (venue === undefined)
+  const venue = await readSettings(db, VENUE_SETTINGS);
+  if (venue.revision === 0)
     await seedVenue(db, {
       name: "Counter",
       invoiceLocales: ["es"],
       operationDescription: "Retail",
     });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const { deviceId } = await seedDevice(db);
   const order = await seedOrder(db, { source: "device", deviceId });
-  return { locationId, deviceId, nodeId, workingOrderId: order.id };
+  return { deviceId, nodeId, workingOrderId: order.id };
 }
 
 /** Owners that cover every payment in the database, for a sweep test about something other than

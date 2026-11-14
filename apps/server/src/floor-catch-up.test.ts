@@ -356,7 +356,7 @@ async function onNextDay(act: () => Promise<void>): Promise<void> {
   const [{ cutover }] = (await inTx(v, (tx) =>
     Promise.resolve(
       tx.all<{ cutover: string }>(
-        sql`select c.day_cutover as cutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+        sql`select c.day_cutover as cutover from (select doc from settings where module = 'business_day') b join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
       ),
     ),
   )) as [{ cutover: string }];

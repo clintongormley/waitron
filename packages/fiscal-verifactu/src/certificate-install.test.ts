@@ -1,4 +1,3 @@
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomBytes } from "node:crypto";
 import {
   credentialRevision,
@@ -6,7 +5,7 @@ import {
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
-import { captureError, locations, withTransaction } from "@waitron/db";
+import { captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -627,18 +626,6 @@ describe("installCertificate's log", () => {
 });
 
 describe("venueTimeZone", () => {
-  it("refuses a second venue row", async () => {
-    await seedTenantNodeSif(suite.db);
-    await suite.db.insert(locations).values({});
-    await seedVenueSettings(suite.db, {
-      name: "Second venue",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
-    });
-    await seedBusinessDay(suite.db, {});
-    const error = await captureError(() => withTransaction(suite.db, (tx) => venueTimeZone(tx)));
-    expect(error).toMatchObject({ code: "provisioning.second_venue" });
-  });
   it("reads the venue's zone, and UTC with no venue row or an unknown zone", async () => {
     const read = () => withTransaction(suite.db, (tx) => venueTimeZone(tx));
     expect(await read()).toBe("UTC");

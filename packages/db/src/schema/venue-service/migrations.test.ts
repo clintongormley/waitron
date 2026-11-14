@@ -14,7 +14,6 @@ import {
   kitchenStations,
   UNIQUE_VIOLATION,
   withTransaction,
-  locations,
 } from "../../index.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "../../index.js";
@@ -446,28 +445,26 @@ async function insertMenu(name: string): Promise<{ id: string }> {
 describe("the venue-service foreign keys refuse a missing target", () => {
   async function venue() {
     await seedTenant(db);
-    const [location] = await db.insert(locations).values({}).returning({ id: locations.id });
+    const fixtureId = randomUUID();
     await seedVenueSettings(db, {
       name: "Venue",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     });
     await seedBusinessDay(db, {});
-    const locationId = location!.id;
     const [department] = await db
       .insert(departments)
       .values({
-        name: `Bar ${locationId}`,
+        name: `Bar ${fixtureId}`,
         tradingName: "Bar",
       })
       .returning({ id: departments.id });
     const [zone] = await db
       .insert(floorZones)
-      .values({ name: `Terrace ${locationId}`, departmentId: department!.id })
+      .values({ name: `Terrace ${fixtureId}`, departmentId: department!.id })
       .returning({ id: floorZones.id });
-    const menu = await insertMenu(`Drinks ${locationId}`);
+    const menu = await insertMenu(`Drinks ${fixtureId}`);
     return {
-      locationId: locationId as string,
       zoneId: zone!.id,
       departmentId: department!.id,
       menuId: menu.id,

@@ -1188,30 +1188,27 @@ const coursedOrder: StationQueueGroup = {
 };
 
 describe("till-station-queue — KDS-2 courses & fire", () => {
-  it.each(["waiter", "kitchen", "expo"] as const)(
-    "A773 waiter authority: legacy %s mode cannot start held food",
-    async (fireControl) => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [coursedOrder, partyOrder],
-        ...{ fireControl },
-        stationId: "st-1",
-      });
-      const fire = vi.fn();
-      const advance = vi.fn();
-      el.addEventListener("fire-course", fire);
-      el.addEventListener("fire-kitchen-group", fire);
-      el.addEventListener("advance-ticket-item", advance);
-      expect(el.shadowRoot!.querySelectorAll("[data-fire], [data-fire-group]")).toHaveLength(0);
-      for (const id of ["it-main", "it-steak", "it-fish", "it-flan"]) {
-        const held = el.shadowRoot!.querySelector<HTMLElement>(`[data-item="${id}"]`)!;
-        expect(held.tagName).toBe("SPAN");
-        expect(held.classList.contains("held")).toBe(true);
-        held.click();
-      }
-      expect(fire).not.toHaveBeenCalled();
-      expect(advance).not.toHaveBeenCalled();
-    },
-  );
+  it("does not start held food from the station queue", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [coursedOrder, partyOrder],
+
+      stationId: "st-1",
+    });
+    const fire = vi.fn();
+    const advance = vi.fn();
+    el.addEventListener("fire-course", fire);
+    el.addEventListener("fire-kitchen-group", fire);
+    el.addEventListener("advance-ticket-item", advance);
+    expect(el.shadowRoot!.querySelectorAll("[data-fire], [data-fire-group]")).toHaveLength(0);
+    for (const id of ["it-main", "it-steak", "it-fish", "it-flan"]) {
+      const held = el.shadowRoot!.querySelector<HTMLElement>(`[data-item="${id}"]`)!;
+      expect(held.tagName).toBe("SPAN");
+      expect(held.classList.contains("held")).toBe(true);
+      held.click();
+    }
+    expect(fire).not.toHaveBeenCalled();
+    expect(advance).not.toHaveBeenCalled();
+  });
 
   it("rail: groups a card's lines by course, header per named course, ordered null-course-first then by displayOrder", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
@@ -1275,7 +1272,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       stationId: "st-1",
-      ...{ fireControl: "kitchen" },
     });
     const fire = vi.fn();
     const advance = vi.fn();
@@ -1294,7 +1290,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       stationId: "st-1",
-      ...{ fireControl: "kitchen" },
     });
     expect(el.shadowRoot!.querySelectorAll("[data-fire]")).toHaveLength(0);
     expect(el.shadowRoot!.querySelector('[data-fire="co-start"]')).toBeNull();
@@ -1305,7 +1300,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       stationId: "st-1",
-      ...{ fireControl: "waiter" },
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-item="it-main"]')!.classList.contains("held")).toBe(
@@ -1327,7 +1321,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       stationId: "st-1",
-      ...{ fireControl: "kitchen" },
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
   });
@@ -1336,7 +1329,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       stationId: "st-1",
-      ...{ fireControl: "kitchen" },
+
       advanceOnly: true,
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
@@ -1913,7 +1906,6 @@ describe("till-station-queue — a seated party's groups", () => {
         },
       ],
       stationId: "st-1",
-      ...{ fireControl: "kitchen" },
     });
     expect(cards(el).map((c) => c.dataset.cardGroup)).toEqual(["none", "g-4", "g-3", "g-2"]);
     expect(cards(el)[1]!.querySelector(".ticket-head")!.textContent).toContain(
@@ -1961,7 +1953,6 @@ describe("till-station-queue — a seated party's groups", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
       stationId: "st-1",
-      ...{ fireControl: "kitchen" },
     });
     const fire = vi.fn();
     const advance = vi.fn();
@@ -1978,23 +1969,19 @@ describe("till-station-queue — a seated party's groups", () => {
     expect(advance).not.toHaveBeenCalled();
   });
 
-  it.each(["waiter", "expo"] as const)(
-    "fire control %s: no Fire on a held group",
-    async (fireControl) => {
-      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [partyOrder],
-        stationId: "st-1",
-        ...{ fireControl },
-      });
-      expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
-    },
-  );
+  it("offers no Fire on a held group", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [partyOrder],
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
+  });
 
   it("advanceOnly: a device display never offers Fire on a held group", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
       stationId: "st-1",
-      ...{ fireControl: "kitchen" },
+
       advanceOnly: true,
     });
     expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
@@ -2004,7 +1991,6 @@ describe("till-station-queue — a seated party's groups", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [partyOrder],
       stationId: "st-1",
-      ...{ fireControl: "kitchen" },
     });
     expect(el.shadowRoot!.querySelector("[data-fire-group]")).toBeNull();
   });
@@ -2013,7 +1999,6 @@ describe("till-station-queue — a seated party's groups", () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder, partyOrder],
       stationId: "st-1",
-      ...{ fireControl: "kitchen" },
     });
     const counter = el.shadowRoot!.querySelector('[data-order="7"]')!;
     expect(

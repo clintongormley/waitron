@@ -20,7 +20,6 @@ import {
 } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  locations,
   nodes,
   tenants,
   stampDeployment,
@@ -128,7 +127,6 @@ vi.mock("./menu-activation.js", async (load) => {
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const fixture = serverFixture();
 const NODE = "33333333-3333-4333-8333-333333333333";
-const LOCATION = "55555555-5555-4555-8555-555555555555";
 const ORIGIN = "http://127.0.0.1:32123";
 const PATH = "/management-api/venue-details/time-zone-repair";
 const PASSWORD = "syntheticPassword123";
@@ -163,9 +161,6 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90000001R", legalName: "Zone Admission SL" });
-  await suite.db.insert(locations).values({
-    id: LOCATION,
-  });
   await seedVenueSettings(suite.db, {
     name: "Counter",
     invoiceLocales: ["en-GB"],
@@ -398,7 +393,6 @@ describe("startup zone admission", () => {
       expect(context.status).toBe(200);
       const view = await context.json();
       expect(view).toMatchObject({ eligible: true, nodeId: NODE });
-      expect(view).not.toHaveProperty("locationId");
       expect(readVenueDetails).not.toHaveBeenCalled();
       noDuties();
       const asset = await fetch(`${url}/manage/account?token=synthetic`, {
@@ -599,7 +593,6 @@ describe("startup zone admission", () => {
     expect(status.status).toBe(200);
     const view = await status.json();
     expect(view).toMatchObject({ eligible: true, category: "invalid", nodeId: NODE });
-    expect(view).not.toHaveProperty("locationId");
     noDuties();
     expect(readVenueDetails).not.toHaveBeenCalled();
   });
@@ -833,8 +826,8 @@ describe("startup zone admission", () => {
       await server!.close();
       server = undefined;
     });
-    const [location] = await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
-    expect(location!.timeZone).toBe("Europe/Madrid");
+    const [venueDoc] = await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
+    expect(venueDoc!.timeZone).toBe("Europe/Madrid");
     expect(
       (
         await suite.db

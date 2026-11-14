@@ -159,7 +159,7 @@ const printBody = (requestKey: string = randomUUID(), printerId: string = office
 });
 
 let hostCounter = 30;
-/** Another A4 printer, at the venue's location unless `locationId` names another. */
+
 async function extraOffice(name: string) {
   const [row] = await inTx(venue, (tx) =>
     tx
@@ -552,7 +552,7 @@ describe("the order detail's delivery status", () => {
     });
   });
 
-  it("reads no sale location while mail can be sent", async () => {
+  it("reads no sale venue while mail can be sent", async () => {
     email.transport = true;
     const { billId } = await fullInvoice();
     const session = (

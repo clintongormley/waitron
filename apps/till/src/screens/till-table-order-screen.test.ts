@@ -144,7 +144,7 @@ function servedMenu(
   return servedMenus([{ id, name, isDefault, versionId: `${id}-v1` }], offers)[0]!;
 }
 
-const mount = async (over: Partial<TillTableOrderScreen> & { fireControl?: string } = {}) => {
+const mount = async (over: Partial<TillTableOrderScreen> & {} = {}) => {
   const draftStore = new DraftStore();
   const mounted = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products,
@@ -1374,21 +1374,18 @@ describe("till-table-order-screen", () => {
     });
 
     describe("who may fire the draft now", () => {
-      it.each(["waiter", "kitchen", "expo"] as const)(
-        "offers direct selected Fire under fire_control '%s'",
-        async (fireControl) => {
-          const { el } = await mount({ courses: serviceCourses, products: menu, fireControl });
-          await ring(el, [beer, "1"], [steak, "1"]);
-          expect(draftAction(el, "fire-selected")).not.toBeNull();
-          expect(draftAction(el, "fire-selected")!.hasAttribute("disabled")).toBe(true);
-          await toggle(el, "Beer");
-          expect(draftAction(el, "fire-selected")).not.toBeNull();
-          expect(draftAction(el, "fire-selected")!.hasAttribute("disabled")).toBe(false);
-          expect((await submitDraft(el, "fire-selected"))!.detail.lines).toEqual([
-            { menuItemId: "offer-beer", quantity: "1" },
-          ]);
-        },
-      );
+      it("offers direct selected Fire", async () => {
+        const { el } = await mount({ courses: serviceCourses, products: menu });
+        await ring(el, [beer, "1"], [steak, "1"]);
+        expect(draftAction(el, "fire-selected")).not.toBeNull();
+        expect(draftAction(el, "fire-selected")!.hasAttribute("disabled")).toBe(true);
+        await toggle(el, "Beer");
+        expect(draftAction(el, "fire-selected")).not.toBeNull();
+        expect(draftAction(el, "fire-selected")!.hasAttribute("disabled")).toBe(false);
+        expect((await submitDraft(el, "fire-selected"))!.detail.lines).toEqual([
+          { menuItemId: "offer-beer", quantity: "1" },
+        ]);
+      });
     });
 
     describe("later additions", () => {
@@ -1739,9 +1736,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
     }
 
-    async function mountSentGroups(
-      over: Partial<TillTableOrderScreen> & { fireControl?: string } = {},
-    ) {
+    async function mountSentGroups(over: Partial<TillTableOrderScreen> & {} = {}) {
       const lines = over.lines ?? tabLines;
       const known = over.groups ?? groups;
       const mounted = await mount({
@@ -2042,7 +2037,6 @@ describe("till-table-order-screen", () => {
 
     it("disables every held group's controls while a group command is running, and enables them after", async () => {
       const { el, panel } = await mountSentGroups({
-        fireControl: "waiter",
         groupCommandBusy: true,
       });
       const controls = [
@@ -2069,7 +2063,7 @@ describe("till-table-order-screen", () => {
     });
 
     it("Fire on a held group asks first, naming its contents, and fires it once confirmed", async () => {
-      const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
+      const { el, panel } = await mountSentGroups({});
       const fires = capture(el, "fire-group");
       const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
         "[data-fire-dialog]",
@@ -2115,7 +2109,7 @@ describe("till-table-order-screen", () => {
     }
 
     it("fires once, and throws nothing, when Fire's confirmation is pressed twice in one turn", async () => {
-      const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
+      const { el, panel } = await mountSentGroups({});
       const fires = capture(el, "fire-group");
       await userEvent.click(
         panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g3"]')!,
@@ -2149,7 +2143,7 @@ describe("till-table-order-screen", () => {
     });
 
     it("fires nothing when the Fire confirmation is dismissed", async () => {
-      const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
+      const { el, panel } = await mountSentGroups({});
       const fires = capture(el, "fire-group");
       await userEvent.click(
         panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g3"]')!,
@@ -2163,29 +2157,25 @@ describe("till-table-order-screen", () => {
       expect(fires).toEqual([]);
     });
 
-    it.each(["kitchen", "expo"] as const)(
-      "offers Fire and group rearrangement under fire_control '%s', without sent-line Move or Split",
-      async (fireControl) => {
-        const { panel } = await mountSentGroups({ fireControl });
-        expect(
-          [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-group-fire]")].map(
-            (button) => button.dataset.groupFire,
-          ),
-        ).toEqual(["g3", "g4", "g5"]);
-        expect(
-          panel.shadowRoot!.querySelector('[data-group-more="g3"] [data-group-later]'),
-        ).not.toBeNull();
-        expect(panel.shadowRoot!.querySelector('[data-move-line="l-steak"]')).toBeNull();
-        expect(panel.shadowRoot!.querySelector('[data-split-group-line="l-steak"]')).toBeNull();
-      },
-    );
+    it("offers Fire and group rearrangement without sent-line Move or Split", async () => {
+      const { panel } = await mountSentGroups({});
+      expect(
+        [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-group-fire]")].map(
+          (button) => button.dataset.groupFire,
+        ),
+      ).toEqual(["g3", "g4", "g5"]);
+      expect(
+        panel.shadowRoot!.querySelector('[data-group-more="g3"] [data-group-later]'),
+      ).not.toBeNull();
+      expect(panel.shadowRoot!.querySelector('[data-move-line="l-steak"]')).toBeNull();
+      expect(panel.shadowRoot!.querySelector('[data-split-group-line="l-steak"]')).toBeNull();
+    });
 
     it("offers Fire on a held group of a no-route line with no course, and not once it has fired", async () => {
       const noRoute = dishLine("l-water", 1, "Water", "1.000", "g-held", { state: null });
       const { el, panel } = await mountSentGroups({
         lines: [noRoute],
         groups: [group("g-held", 1, "held", ["l-water"], "1 × Water")],
-        fireControl: "waiter",
       });
       expect(panel.shadowRoot!.querySelector('[data-group-fire="g-held"]')).not.toBeNull();
 
@@ -2204,7 +2194,7 @@ describe("till-table-order-screen", () => {
     });
 
     it("offers no Fire course section and no tab-level Send all", async () => {
-      const { el } = await mountSentGroups({ fireControl: "waiter", courses });
+      const { el } = await mountSentGroups({ courses });
       expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-fire-course]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
@@ -2219,7 +2209,7 @@ describe("till-table-order-screen", () => {
       await fresh.el.updateComplete;
       expect(move.open).toBe(false);
       expect(fresh.draft.lines[0]!.draftLineId).toBe("l-flan");
-      const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
+      const { el, panel } = await mountSentGroups({});
       panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g3"]')!.click();
       await el.updateComplete;
       const fire = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
@@ -2232,7 +2222,7 @@ describe("till-table-order-screen", () => {
     });
 
     it("gives every held group's control, and its dialogs' buttons, a tap target of 44 px each way", async () => {
-      const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
+      const { el, panel } = await mountSentGroups({});
       const listed = panel.shadowRoot!.querySelectorAll("[data-group-fire], [data-group-more]");
       expect(listed.length).toBe(6);
       expect(underTapSize(listed)).toEqual([]);
@@ -2779,7 +2769,6 @@ describe("till-table-order-screen", () => {
         }),
         groups: [orderGroup("g-held", "held")],
         courses,
-        fireControl: "waiter",
       });
       const panel = await sentPanelFor(el);
       for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {

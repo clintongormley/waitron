@@ -1,5 +1,6 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "./person-rows.js";
-import { captureError, locations, withTransaction } from "@waitron/db";
+import { captureError, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
@@ -17,8 +18,8 @@ export const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.a
 /** Pairs a new device at the venue (seeding the venue on first use) and returns its id: the device
  * a shift session is opened on. */
 export async function seedSessionDevice(db: Database): Promise<string> {
-  const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
-  if (existing === undefined) {
+  const existing = await readSettings(db, VENUE_SETTINGS);
+  if (existing.revision === 0) {
     await seedVenue(db, {
       name: "Main",
       invoiceLocales: ["en"],

@@ -37,7 +37,6 @@ import {
   isPlainWebAddress,
   isZeroDecimal,
   jobOrigin,
-  locationId,
   mapComments,
   MAX_GUEST_COUNT,
   PORTIONS_AT_ONCE,
@@ -108,7 +107,6 @@ describe("package public surface (./index.js)", () => {
     const uuid = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
     expect(isUuid(uuid)).toBe(true);
     expect(normaliseUuid(uuid.toUpperCase(), "ProductId")).toBe(uuid);
-    expect(locationId(uuid)).toBe(uuid);
     expect(deviceId(uuid)).toBe(uuid);
     expect(nodeId(uuid)).toBe(uuid);
     expect(seriesId(uuid)).toBe(uuid);

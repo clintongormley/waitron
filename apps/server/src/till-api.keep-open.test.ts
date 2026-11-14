@@ -370,7 +370,7 @@ describe("the till keeps a zone open today", () => {
     expect(answer.json).toMatchObject({ code: "authorization.not_permitted" });
     expect(await zoneRows()).toEqual([]);
   });
-  it("refuses an unreadable location clock without writing", async () => {
+  it("refuses an unreadable venue clock without writing", async () => {
     await suite.db.run(
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
     );

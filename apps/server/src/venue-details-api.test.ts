@@ -267,7 +267,7 @@ it("rechecks a real sale after GET before accepting any clock patch", async () =
     lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
     tender: { method: "cash", amount: "1.50" },
   });
-  const before = suite.db.all(sql`select * from locations`);
+  const before = suite.db.all(sql`select * from settings order by module`);
   const refused = await request("PATCH", venue.managerCookie, {
     expected: model.details,
     changes: { name: "Not committed", dayCutover: "04:30" },
@@ -279,14 +279,14 @@ it("rechecks a real sale after GET before accepting any clock patch", async () =
       params: { field: "dayCutover", reason: "effective_date_required" },
     },
   });
-  expect(suite.db.all(sql`select * from locations`)).toEqual(before);
+  expect(suite.db.all(sql`select * from settings order by module`)).toEqual(before);
   const repeat = await request("PATCH", venue.managerCookie, {
     expected: model.details,
     changes: { province: "28", dayCutover: "05:00:00" },
   });
   expect(repeat.status).toBe(200);
   expect(await repeat.json()).toEqual({ changed: false, model: await initial() });
-  expect(suite.db.all(sql`select * from locations`)).toEqual(before);
+  expect(suite.db.all(sql`select * from settings order by module`)).toEqual(before);
   expect(suite.db.all(sql`select id from sales`)).toHaveLength(1);
 });
 

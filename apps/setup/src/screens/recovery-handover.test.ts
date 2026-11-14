@@ -12,7 +12,7 @@ const preview = {
   nodeId,
   nodeRecoveryKeyName: "Amber Hill",
   taxpayer: { legalName: "Saved venue", taxId: "89890001K" },
-  venueName: "Saved location",
+  venueName: "Saved venue",
 } satisfies RecoveryBackupPreview;
 const operation = {
   binding: {

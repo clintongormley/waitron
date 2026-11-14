@@ -625,7 +625,7 @@ describe("page-printer management routes", () => {
     }
   });
 
-  it("serves no location-wide invoice printer route", async () => {
+  it("serves no venue-wide invoice printer route", async () => {
     const app = mountApp();
     const { id } = await onePrinter(app, "10.61.10.1");
     const res = await send(app, "PUT", "/management-api/page-printers/invoice-printer", {

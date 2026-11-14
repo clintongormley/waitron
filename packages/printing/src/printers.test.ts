@@ -7,7 +7,6 @@ import {
   isRefusal,
   printers,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,25 +16,21 @@ import { createPrinter, listPrinters, updatePrinter } from "./printers.js";
 import type { PaperWidth } from "./layout.js";
 import type { PrintTransport } from "./printers.js";
 
-type PrintConfig = { locationId: string };
 import "./errors.js";
 
 // The CHECK and the partial UNIQUE have their own cases in `packages/db/src/schema/printing.test.ts`;
 // this suite covers the error codes those refusals are mapped onto.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function setup(): Promise<PrintConfig> {
+async function setup(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
-  return { locationId: venueId };
 }
 
-function asTx<T>(cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);
 }
 
@@ -68,8 +63,8 @@ async function errorOf(fn: () => Promise<unknown>): Promise<unknown> {
 }
 
 /** Create a network_tcp printer and return its id. */
-async function seedPrinter(cfg: PrintConfig, name = "Kitchen"): Promise<string> {
-  const { id } = await asTx(cfg, (tx) =>
+async function seedPrinter(name = "Kitchen"): Promise<string> {
+  const { id } = await asTx((tx) =>
     createPrinter(tx, { name, transport: "network_tcp", host: "10.0.0.9" }),
   );
   return id;
@@ -103,8 +98,8 @@ describe("createPrinter", () => {
     { transport: "network_tcp" as const, host: "10.0.0.19" },
     { transport: "cloud_poll" as const, pollId: "restore-poll" },
   ])("Add restores a retained $transport printer with its saved settings", async (endpoint) => {
-    const cfg = await setup();
-    const { id } = await asTx(cfg, (tx) =>
+    await setup();
+    const { id } = await asTx((tx) =>
       createPrinter(tx, {
         ...endpoint,
         name: "Saved printer",
@@ -116,12 +111,10 @@ describe("createPrinter", () => {
       }),
     );
     for (const deletedAt of [null, "2026-11-10T12:00:00.000Z"]) {
-      await asTx(cfg, (tx) =>
+      await asTx((tx) =>
         tx.update(printers).set({ active: false, deletedAt }).where(eq(printers.id, id)),
       );
-      const added = await asTx(cfg, (tx) =>
-        createPrinter(tx, { ...endpoint, name: "Scanned name" }),
-      );
+      const added = await asTx((tx) => createPrinter(tx, { ...endpoint, name: "Scanned name" }));
       expect(added.id).toBe(id);
       const [restored] = await suite.db.select().from(printers).where(eq(printers.id, id));
       expect(restored).toMatchObject({
@@ -138,11 +131,11 @@ describe("createPrinter", () => {
   });
 
   it("restores the latest deleted endpoint, but keeps active network Add as an insertion", async () => {
-    const cfg = await setup();
+    await setup();
     const endpoint = { transport: "network_tcp" as const, host: "10.0.0.29", port: 9200 };
-    const older = await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Older" }));
-    const newer = await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Newer" }));
-    await asTx(cfg, async (tx) => {
+    const older = await asTx((tx) => createPrinter(tx, { ...endpoint, name: "Older" }));
+    const newer = await asTx((tx) => createPrinter(tx, { ...endpoint, name: "Newer" }));
+    await asTx(async (tx) => {
       await tx
         .update(printers)
         .set({ active: false, deletedAt: "2026-11-09T12:00:00.000Z" })
@@ -152,34 +145,32 @@ describe("createPrinter", () => {
         .set({ active: false, deletedAt: "2026-11-10T12:00:00.000Z" })
         .where(eq(printers.id, newer.id));
     });
-    expect((await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Scan" }))).id).toBe(
+    expect((await asTx((tx) => createPrinter(tx, { ...endpoint, name: "Scan" }))).id).toBe(
       newer.id,
     );
-    const fresh = await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Another" }));
+    const fresh = await asTx((tx) => createPrinter(tx, { ...endpoint, name: "Another" }));
     expect(fresh.id).not.toBe(newer.id);
     expect(fresh.id).not.toBe(older.id);
-    await asTx(cfg, (tx) =>
+    await asTx((tx) =>
       tx.update(printers).set({ active: false, deletedAt: null }).where(eq(printers.id, older.id)),
     );
-    const another = await asTx(cfg, (tx) =>
-      createPrinter(tx, { ...endpoint, name: "Third active" }),
-    );
+    const another = await asTx((tx) => createPrinter(tx, { ...endpoint, name: "Third active" }));
     expect(another.id).not.toBe(older.id);
     expect(another.id).not.toBe(newer.id);
     expect(another.id).not.toBe(fresh.id);
   });
 
   it("lists printers with no watcherId", async () => {
-    const cfg = await setup();
-    const kitchen = await seedPrinter(cfg, "Kitchen");
-    const listed = await asTx(cfg, (tx) => listPrinters(tx));
+    await setup();
+    const kitchen = await seedPrinter("Kitchen");
+    const listed = await asTx((tx) => listPrinters(tx));
     expect(listed.map((printer) => printer.id)).toContain(kitchen);
     for (const printer of listed) expect(printer).not.toHaveProperty("watcherId");
   });
   it("inserts a network_tcp printer; an omitted port defaults to 9100", async () => {
-    const cfg = await setup();
+    await setup();
     // port deliberately OMITTED: the stored port must be the column default 9100, not NULL.
-    const { id } = await asTx(cfg, (tx) =>
+    const { id } = await asTx((tx) =>
       createPrinter(tx, { name: "Kitchen", transport: "network_tcp", host: "10.0.0.9" }),
     );
     const row = await printerRow(id);
@@ -188,10 +179,10 @@ describe("createPrinter", () => {
   });
 
   it("creates a usb printer from a serial", async () => {
-    const cfg = await setup();
+    await setup();
     expect(
       (
-        await asTx(cfg, (tx) =>
+        await asTx((tx) =>
           createPrinter(tx, { name: "Pantry", transport: "usb", localKey: "SN-1" }),
         )
       ).id,
@@ -199,9 +190,9 @@ describe("createPrinter", () => {
   });
 
   it("rejects a usb printer with no local_key before any write", async () => {
-    const cfg = await setup();
+    await setup();
     await expect(
-      asTx(cfg, (tx) => createPrinter(tx, { name: "X", transport: "usb" })),
+      asTx((tx) => createPrinter(tx, { name: "X", transport: "usb" })),
     ).rejects.toMatchObject({
       code: "printer.invalid_config",
       params: { reason: "usb_missing_localKey" },
@@ -209,17 +200,17 @@ describe("createPrinter", () => {
   });
 
   it("maps a duplicate local_key to printer.already_registered", async () => {
-    const cfg = await setup();
-    await asTx(cfg, (tx) => createPrinter(tx, { name: "A", transport: "usb", localKey: "SN-DUP" }));
+    await setup();
+    await asTx((tx) => createPrinter(tx, { name: "A", transport: "usb", localKey: "SN-DUP" }));
     await expect(
-      asTx(cfg, (tx) => createPrinter(tx, { name: "B", transport: "usb", localKey: "SN-DUP" })),
+      asTx((tx) => createPrinter(tx, { name: "B", transport: "usb", localKey: "SN-DUP" })),
     ).rejects.toMatchObject({ code: "printer.already_registered", params: { localKey: "SN-DUP" } });
   });
 
   it("creates a bluetooth printer from a MAC", async () => {
-    const cfg = await setup();
+    await setup();
     await expect(
-      asTx(cfg, (tx) =>
+      asTx((tx) =>
         createPrinter(tx, {
           name: "BT",
           transport: "bluetooth",
@@ -230,49 +221,45 @@ describe("createPrinter", () => {
   });
 
   it("inserts an agent-less cloud_poll printer", async () => {
-    const cfg = await setup();
-    const { id } = await asTx(cfg, (tx) =>
+    await setup();
+    const { id } = await asTx((tx) =>
       createPrinter(tx, { name: "Cloud", transport: "cloud_poll", pollId: "poll-123" }),
     );
     expect((await printerRow(id)).transport).toBe("cloud_poll");
   });
 
   it("rejects a network_tcp printer with no host → printer.invalid_config", async () => {
-    const cfg = await setup();
+    await setup();
     expect(
       await codeOf(() =>
-        asTx(cfg, (tx) => createPrinter(tx, { name: "Bad", transport: "network_tcp" })),
+        asTx((tx) => createPrinter(tx, { name: "Bad", transport: "network_tcp" })),
       ),
     ).toBe("printer.invalid_config");
   });
 
   it("rejects a bluetooth printer with no local_key → printer.invalid_config", async () => {
-    const cfg = await setup();
+    await setup();
     expect(
-      await codeOf(() =>
-        asTx(cfg, (tx) => createPrinter(tx, { name: "Bad", transport: "bluetooth" })),
-      ),
+      await codeOf(() => asTx((tx) => createPrinter(tx, { name: "Bad", transport: "bluetooth" }))),
     ).toBe("printer.invalid_config");
   });
 
   it("rejects a cloud_poll printer with no poll_id → printer.invalid_config", async () => {
-    const cfg = await setup();
+    await setup();
     expect(
-      await codeOf(() =>
-        asTx(cfg, (tx) => createPrinter(tx, { name: "Bad", transport: "cloud_poll" })),
-      ),
+      await codeOf(() => asTx((tx) => createPrinter(tx, { name: "Bad", transport: "cloud_poll" }))),
     ).toBe("printer.invalid_config");
   });
 });
 
 describe("updatePrinter", () => {
   it("applies a partial edit (only the named fields change) and 204-equivalents (resolves)", async () => {
-    const cfg = await setup();
-    const id = await seedPrinter(cfg);
+    await setup();
+    const id = await seedPrinter();
     // Every editable field present at once — so each `if (patch.X !== undefined)` set-branch is
     // exercised (port/pollId/active included). The extra pollId on a network_tcp row is allowed: the
     // CHECK asserts the transport's REQUIRED fields are present, not that the others are absent.
-    await asTx(cfg, (tx) =>
+    await asTx((tx) =>
       updatePrinter(tx, id, {
         name: "Kitchen 2",
         host: "10.0.0.20",
@@ -293,50 +280,50 @@ describe("updatePrinter", () => {
   });
 
   it("clears a nullable field with an explicit null (local_key cleared on a network_tcp printer)", async () => {
-    const cfg = await setup();
-    const id = await seedPrinter(cfg);
-    await asTx(cfg, (tx) => updatePrinter(tx, id, { localKey: null }));
+    await setup();
+    const id = await seedPrinter();
+    await asTx((tx) => updatePrinter(tx, id, { localKey: null }));
     expect((await fullRow(id)).local_key).toBeNull();
   });
 
   it("an EMPTY patch is a no-op on an existing printer, and 404s a missing one", async () => {
-    const cfg = await setup();
-    const id = await seedPrinter(cfg);
+    await setup();
+    const id = await seedPrinter();
     // Empty patch, existing id → resolves (no-op), never a drizzle "No values to set" throw.
-    await expect(asTx(cfg, (tx) => updatePrinter(tx, id, {}))).resolves.toBeUndefined();
-    expect(await codeOf(() => asTx(cfg, (tx) => updatePrinter(tx, randomUUID(), {})))).toBe(
+    await expect(asTx((tx) => updatePrinter(tx, id, {}))).resolves.toBeUndefined();
+    expect(await codeOf(() => asTx((tx) => updatePrinter(tx, randomUUID(), {})))).toBe(
       "printer.not_found",
     );
   });
 
   it("an unknown printer id → printer.not_found", async () => {
-    const cfg = await setup();
-    expect(
-      await codeOf(() => asTx(cfg, (tx) => updatePrinter(tx, randomUUID(), { name: "X" }))),
-    ).toBe("printer.not_found");
+    await setup();
+    expect(await codeOf(() => asTx((tx) => updatePrinter(tx, randomUUID(), { name: "X" })))).toBe(
+      "printer.not_found",
+    );
   });
 
   it("a transport change that leaves a required field absent → printer.invalid_config", async () => {
     // network_tcp → usb needs local_key; the row has host but no local_key, so the transport-fields
     // CHECK fails on the update. `localKey` is NOT in the patch (undefined), exercising the
     // unique-violation-branch skip.
-    const cfg = await setup();
-    const id = await seedPrinter(cfg);
-    expect(await codeOf(() => asTx(cfg, (tx) => updatePrinter(tx, id, { transport: "usb" })))).toBe(
+    await setup();
+    const id = await seedPrinter();
+    expect(await codeOf(() => asTx((tx) => updatePrinter(tx, id, { transport: "usb" })))).toBe(
       "printer.invalid_config",
     );
   });
 
   it("a re-key to an already-registered local_key → printer.already_registered", async () => {
-    const cfg = await setup();
-    await asTx(cfg, (tx) =>
+    await setup();
+    await asTx((tx) =>
       createPrinter(tx, { name: "Existing", transport: "usb", localKey: "SN-TAKEN" }),
     );
-    const id = await asTx(cfg, (tx) =>
+    const id = await asTx((tx) =>
       createPrinter(tx, { name: "Mine", transport: "usb", localKey: "SN-MINE" }),
     ).then((r) => r.id);
     await expect(
-      asTx(cfg, (tx) => updatePrinter(tx, id, { localKey: "SN-TAKEN" })),
+      asTx((tx) => updatePrinter(tx, id, { localKey: "SN-TAKEN" })),
     ).rejects.toMatchObject({
       code: "printer.already_registered",
       params: { localKey: "SN-TAKEN" },
@@ -347,10 +334,10 @@ describe("updatePrinter", () => {
     // Only `printers_transport_fields_ck` means "this transport is short of a field it needs". A
     // paper width the schema does not list trips `printers_paper_width_ck`, a different complaint, so
     // translating it to `printer.invalid_config` would send an operator to the wrong field.
-    const cfg = await setup();
-    const id = await seedPrinter(cfg);
+    await setup();
+    const id = await seedPrinter();
     const err = await errorOf(() =>
-      asTx(cfg, (tx) => updatePrinter(tx, id, { paperWidth: "100mm" as PaperWidth })),
+      asTx((tx) => updatePrinter(tx, id, { paperWidth: "100mm" as PaperWidth })),
     );
     expect(err).toMatchObject({
       errcode: CHECK_VIOLATION[0],
@@ -359,10 +346,10 @@ describe("updatePrinter", () => {
   });
 
   it("printers_transport_ck, a CHECK other than the transport-fields one, is rethrown as the engine's own refusal", async () => {
-    const cfg = await setup();
-    const id = await seedPrinter(cfg);
+    await setup();
+    const id = await seedPrinter();
     const err = await errorOf(() =>
-      asTx(cfg, (tx) => updatePrinter(tx, id, { transport: "carrier_pigeon" as PrintTransport })),
+      asTx((tx) => updatePrinter(tx, id, { transport: "carrier_pigeon" as PrintTransport })),
     );
     expect(err).toMatchObject({
       errcode: CHECK_VIOLATION[0],
@@ -372,9 +359,9 @@ describe("updatePrinter", () => {
 });
 
 describe("a deleted printer", () => {
-  async function markDeleted(cfg: PrintConfig, id: string): Promise<void> {
+  async function markDeleted(id: string): Promise<void> {
     // Deletion is set independently of `active`, so a predicate that reads only `active` fails here.
-    await asTx(cfg, (tx) =>
+    await asTx((tx) =>
       tx
         .update(printers)
         .set({ deletedAt: "2026-10-09T10:00:00.000Z", active: true })
@@ -383,80 +370,78 @@ describe("a deleted printer", () => {
   }
 
   it("deleted printer refuses empty patch and Enable, disabled can Enable", async () => {
-    const cfg = await setup();
-    const id = await seedPrinter(cfg);
-    await markDeleted(cfg, id);
+    await setup();
+    const id = await seedPrinter();
+    await markDeleted(id);
     for (const patch of [{}, { active: true }, { name: "Renamed" }]) {
-      await expect(asTx(cfg, (tx) => updatePrinter(tx, id, patch))).rejects.toMatchObject({
+      await expect(asTx((tx) => updatePrinter(tx, id, patch))).rejects.toMatchObject({
         code: "printer.not_found",
       });
     }
-    expect(await asTx(cfg, (tx) => listPrinters(tx))).toEqual([]);
-    const disabled = await seedPrinter(cfg, "Disabled control");
-    await asTx(cfg, (tx) => updatePrinter(tx, disabled, { active: false }));
-    await asTx(cfg, (tx) => updatePrinter(tx, disabled, { active: true }));
-    expect((await asTx(cfg, (tx) => listPrinters(tx))).map((p) => p.id)).toEqual([disabled]);
+    expect(await asTx((tx) => listPrinters(tx))).toEqual([]);
+    const disabled = await seedPrinter("Disabled control");
+    await asTx((tx) => updatePrinter(tx, disabled, { active: false }));
+    await asTx((tx) => updatePrinter(tx, disabled, { active: true }));
+    expect((await asTx((tx) => listPrinters(tx))).map((p) => p.id)).toEqual([disabled]);
   });
 
   it("updatePrinter refuses a deleted printer and leaves it unchanged", async () => {
-    const cfg = await setup();
-    const id = await seedPrinter(cfg);
-    await markDeleted(cfg, id);
-    await expect(asTx(cfg, (tx) => updatePrinter(tx, id, { active: false }))).rejects.toMatchObject(
-      {
-        code: "printer.not_found",
-      },
-    );
+    await setup();
+    const id = await seedPrinter();
+    await markDeleted(id);
+    await expect(asTx((tx) => updatePrinter(tx, id, { active: false }))).rejects.toMatchObject({
+      code: "printer.not_found",
+    });
     expect((await fullRow(id)).active).toBe(true);
   });
 
   it("a deleted printer's local_key can be registered again", async () => {
-    const cfg = await setup();
-    const { id: first } = await asTx(cfg, (tx) =>
+    await setup();
+    const { id: first } = await asTx((tx) =>
       createPrinter(tx, { name: "Old", transport: "usb", localKey: "SN-REUSE" }),
     );
-    await markDeleted(cfg, first);
-    const { id: second } = await asTx(cfg, (tx) =>
+    await markDeleted(first);
+    const { id: second } = await asTx((tx) =>
       createPrinter(tx, { name: "Old", transport: "usb", localKey: "SN-REUSE" }),
     );
     expect(second).toBe(first);
-    expect((await asTx(cfg, (tx) => listPrinters(tx))).map((p) => p.id)).toEqual([second]);
+    expect((await asTx((tx) => listPrinters(tx))).map((p) => p.id)).toEqual([second]);
   });
 });
 
 describe("updatePrinter", () => {
   it("flips active=false (never a delete) and 404s an unknown id", async () => {
-    const cfg = await setup();
-    const id = await seedPrinter(cfg);
-    await asTx(cfg, (tx) => updatePrinter(tx, id, { active: false }));
+    await setup();
+    const id = await seedPrinter();
+    await asTx((tx) => updatePrinter(tx, id, { active: false }));
     expect((await fullRow(id)).active).toBe(false);
     const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from printers where id = ${id}`,
     );
     expect(rows[0]!.n).toBe(1);
     expect(
-      await codeOf(() => asTx(cfg, (tx) => updatePrinter(tx, randomUUID(), { active: false }))),
+      await codeOf(() => asTx((tx) => updatePrinter(tx, randomUUID(), { active: false }))),
     ).toBe("printer.not_found");
   });
 });
 
 describe("listPrinters", () => {
   it("lists printers with local_key, no agentId field", async () => {
-    const cfg = await setup();
-    await asTx(cfg, (tx) =>
+    await setup();
+    await asTx((tx) =>
       createPrinter(tx, { name: "N", transport: "network_tcp", host: "10.0.0.9" }),
     );
-    const rows = await asTx(cfg, (tx) => listPrinters(tx));
+    const rows = await asTx((tx) => listPrinters(tx));
     expect(rows[0]).toMatchObject({ transport: "network_tcp", localKey: null, host: "10.0.0.9" });
     expect(rows[0]).not.toHaveProperty("agentId");
   });
 
   it("lists this tenant's printers by name (active and deactivated)", async () => {
-    const cfg = await setup();
-    const bId = await seedPrinter(cfg, "Bravo");
-    const aId = await seedPrinter(cfg, "Alfa");
-    await asTx(cfg, (tx) => updatePrinter(tx, bId, { active: false }));
-    const rows = await asTx(cfg, (tx) => listPrinters(tx));
+    await setup();
+    const bId = await seedPrinter("Bravo");
+    const aId = await seedPrinter("Alfa");
+    await asTx((tx) => updatePrinter(tx, bId, { active: false }));
+    const rows = await asTx((tx) => listPrinters(tx));
     const mine = rows.filter((r) => r.id === aId || r.id === bId);
     expect(mine.map((r) => r.name)).toEqual(["Alfa", "Bravo"]);
     expect(mine.find((r) => r.id === bId)!.active).toBe(false);
@@ -506,9 +491,9 @@ describe("isRefusal (@waitron/db result-code cause-walk, as printers.ts uses it)
 
 describe("printer layout settings", () => {
   it("defaults to 80mm and 180dpi, and stores, updates and lists each setting", async () => {
-    const cfg = await setup();
-    const defaulted = await seedPrinter(cfg, "Defaults");
-    const { id } = await asTx(cfg, (tx) =>
+    await setup();
+    const defaulted = await seedPrinter("Defaults");
+    const { id } = await asTx((tx) =>
       createPrinter(tx, {
         name: "Narrow",
         transport: "network_tcp",
@@ -516,8 +501,8 @@ describe("printer layout settings", () => {
         paperWidth: "58mm",
       }),
     );
-    await asTx(cfg, (tx) => updatePrinter(tx, id, { resolution: "203dpi" }));
-    const rows = await asTx(cfg, (tx) => listPrinters(tx));
+    await asTx((tx) => updatePrinter(tx, id, { resolution: "203dpi" }));
+    const rows = await asTx((tx) => listPrinters(tx));
     expect(rows.find((r) => r.id === defaulted)).toMatchObject({
       paperWidth: "80mm",
       resolution: "180dpi",
@@ -530,8 +515,8 @@ describe("printer layout settings", () => {
 });
 
 it("lists pick-up roles as a set so repeated roles do not appear as multiple choices", async () => {
-  const cfg = await setup();
-  const { id } = await asTx(cfg, (tx) =>
+  await setup();
+  const { id } = await asTx((tx) =>
     createPrinter(tx, {
       name: "Receipt only",
       transport: "network_tcp",
@@ -539,6 +524,6 @@ it("lists pick-up roles as a set so repeated roles do not appear as multiple cho
       pickupRoles: ["receipt", "receipt"],
     }),
   );
-  const listed = await asTx(cfg, (tx) => listPrinters(tx));
+  const listed = await asTx((tx) => listPrinters(tx));
   expect(listed.find((row) => row.id === id)!.pickupRoles).toEqual(["receipt"]);
 });

@@ -6,7 +6,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   devices,
   incidents,
-  locations,
   printJobs,
   printers,
   withTransaction,
@@ -494,7 +493,6 @@ async function seedLowReader(name = "Card reader"): Promise<void> {
 
 /** A document print job old enough to count as stuck, on an active printer. */
 async function seedStuckPrintJob(): Promise<void> {
-  await db.insert(locations).values({}).returning({ id: locations.id });
   await seedVenueSettings(db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],

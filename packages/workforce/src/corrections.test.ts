@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
 
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
+import { seedEmployment, seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 
 const backend = new WorkforceBackend();
 
@@ -20,7 +20,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    await seedLocation(db);
+    await seedFixtureVenue(db);
     nodeId = await seedNode(db);
   },
 });

@@ -10,7 +10,7 @@ import * as schema from "./schema/index.js";
 const OWNED = ["convenio_config"];
 
 /** Core tables that must never appear in this package's generated SQL. */
-const CORE = ["tenants", "locations"];
+const CORE = ["tenants", "settings"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 

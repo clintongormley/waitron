@@ -9,7 +9,6 @@ import {
   productUnits,
   products,
   units,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -99,7 +98,6 @@ export async function plantStoredProduct(
 }
 
 export interface SeededVenue {
-  locationId: string;
   nodeId: NodeId;
   seriesId: SeriesId;
 }
@@ -136,14 +134,13 @@ export async function seedLegacySellingUnits(db: Database): Promise<void> {
 /** Seeds the taxpayer, the venue, a node and that node's invoice series "A". */
 export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
   await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })
     .returning({ id: invoiceSeries.id });
   const seriesId = brandSeriesId(series!.id);
-  return { locationId, nodeId, seriesId };
+  return { nodeId, seriesId };
 }
 
 export interface SeededCatalogue {

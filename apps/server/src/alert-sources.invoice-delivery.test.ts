@@ -10,7 +10,6 @@ import {
   printJobs,
   tenants,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -48,7 +47,6 @@ async function venue() {
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const locationId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
     .insert(printAgents)
@@ -67,7 +65,7 @@ async function venue() {
       resolutionDpi: 600,
     })
     .returning({ id: pagePrinters.id });
-  return { locationId, nodeId, agentId: agent!.id, officeId: office!.id };
+  return { nodeId, agentId: agent!.id, officeId: office!.id };
 }
 type Venue = Awaited<ReturnType<typeof venue>>;
 

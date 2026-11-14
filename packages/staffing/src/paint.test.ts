@@ -758,7 +758,7 @@ describe("venue clock", () => {
 async function guideVenue() {
   const v = await venue();
   return inTx(async (tx) => {
-    const cfg = { locationId: v.cfg.locationId };
+    const cfg = {};
     const menuId = (await createCatalogue(tx, { name: randomUUID() })).id;
     const categoryId = (await createCategory(tx, { name: randomUUID() })).id;
     const productId = (

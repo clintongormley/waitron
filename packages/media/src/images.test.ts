@@ -31,7 +31,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedTenant,
-  seedVenue,
+  seedBusinessDay,
   seedVenueSettings,
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
@@ -1322,11 +1322,12 @@ describe("free default choice with incomplete catalogue and image text", () => {
       ]);
       const { hash } = await previewMenu(tx, menu.id);
       await publishMenu(tx, menu.id, hash, "person-default-switch");
-      await seedVenue(tx, {
+      await seedVenueSettings(tx, {
         name: "Saved-order venue",
         invoiceLocales: ["en"],
         operationDescription: "Restaurant",
       });
+      await seedBusinessDay(tx);
       const order = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 17 });
       await tx.insert(workingOrderLines).values({
         workingOrderId: order.id,

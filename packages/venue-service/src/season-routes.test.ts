@@ -15,7 +15,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -52,8 +51,7 @@ async function routed() {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   });
-  const venueId = await venueLocationId(db);
-  const cfg = { locationId: venueId };
+  const cfg = {};
   const made = await scoped(async (tx) => {
     const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     const menuId = (await createCatalogue(tx, { name: `Dinner ${randomUUID()}` })).id;

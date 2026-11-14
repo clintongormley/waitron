@@ -1,6 +1,6 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
-import { locations, nodes, readVenue } from "@waitron/db";
+import { nodes, readVenue } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedNode, seedNodesForSifContention } from "./testing/seed.js";
@@ -27,7 +27,6 @@ it.each([
   { name: "seedTenantNodeSif", seed: seedTenantNodeSif },
   { name: "seedTenants", seed: seedTenants },
 ])("reuses an existing venue for fixed-id parents: $name", async ({ seed }) => {
-  await suite.db.insert(locations).values({});
   await seedVenueSettings(suite.db, {
     name: "Retained venue",
     invoiceLocales: ["es"],

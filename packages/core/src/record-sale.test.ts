@@ -215,7 +215,7 @@ describe("recordSale — the sale's origin", () => {
   });
 
   it.each(["Deli meals", "Terrace drinks", ""])(
-    "files the supplied operation description %j without location fallback",
+    "files the supplied operation description %j without venue fallback",
     async (operationDescription) => {
       expect(await descriptionsFiled({ operationDescription })).toEqual([operationDescription]);
     },

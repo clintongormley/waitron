@@ -14,13 +14,11 @@ import { workingOrderLines, workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
 import { invoiceSeries } from "./series.js";
 import { sales } from "./sales.js";
-import { locations } from "./tenants.js";
 
 // A trigger's refusal carries its `RAISE(ABORT, …)` text and nothing else — no table, no column,
 // no constraint name — so it is compared by EQUALITY against the literal the migration owns
 // (`packages/db/src/trigger-refusals.ts`).
 
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 // Matches LOCATION_A's invoice_locales (es, ca), so check_locales lets the draft line reach
 // require_open_parent — the trigger this suite's composition-freeze case exercises.
@@ -118,18 +116,15 @@ describe("working_orders state machine (enforce_transition)", () => {
   beforeAll(async () => {
     const db = suite.db;
     await seedVenue(db, {
-      name: "Fixture Location A",
+      name: "Fixture Venue A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     });
     nodeA = await seedNode(db);
     ({ deviceId: deviceA } = await seedDevice(db));
     ({ deviceId: deviceB } = await seedDevice(db));
-    await db.insert(locations).values({
-      id: LOCATION_B,
-    });
     await seedVenueSettings(db, {
-      name: "Fixture Location B",
+      name: "Fixture Venue B",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     });

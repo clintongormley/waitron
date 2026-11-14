@@ -103,12 +103,12 @@ async function resolveZone(
     .from(floorZones)
     .where(eq(floorZones.id, zoneId));
   const departmentId = policy?.departmentId ?? (await department(tx, orderStart));
-  const location = await readVenue(tx);
+  const venueDoc = await readVenue(tx);
   await tx
     .insert(departmentReceipts)
     .values({
       departmentId,
-      receipt: { operationDescription: location.operationDescription },
+      receipt: { operationDescription: venueDoc.operationDescription },
     })
     .onConflictDoNothing({ target: departmentReceipts.departmentId });
   await configureZone(tx, { zoneId, departmentId, orderStart });

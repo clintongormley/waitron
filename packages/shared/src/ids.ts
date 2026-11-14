@@ -8,7 +8,6 @@ export declare const idBrand: unique symbol;
 
 export type Branded<T, B extends string> = T & { readonly [idBrand]: B };
 
-export type LocationId = Branded<string, "LocationId">;
 export type DeviceId = Branded<string, "DeviceId">;
 export type NodeId = Branded<string, "NodeId">;
 export type SeriesId = Branded<string, "SeriesId">;
@@ -49,8 +48,6 @@ function brandId<B extends string>(value: string, kind: B): Branded<string, B> {
   return normaliseUuid(value, kind) as Branded<string, B>;
 }
 
-/** Kept only for fiscal-verifactu's unedited write-path.e2e.test.ts; A1301 schema slices drop it */
-export const locationId = (value: string): LocationId => brandId(value, "LocationId");
 export const deviceId = (value: string): DeviceId => brandId(value, "DeviceId");
 export const nodeId = (value: string): NodeId => brandId(value, "NodeId");
 export const seriesId = (value: string): SeriesId => brandId(value, "SeriesId");

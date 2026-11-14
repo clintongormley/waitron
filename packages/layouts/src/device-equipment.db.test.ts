@@ -7,7 +7,6 @@ import {
   printerHolders,
   printers,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -54,10 +53,8 @@ function lists(partial: Partial<ProfilePrinterLists>): ProfilePrinterLists {
   };
 }
 
-async function seedLocation(name: string): Promise<string> {
+async function seedFixtureVenue(name: string): Promise<void> {
   await seedVenue(suite.db, { name, invoiceLocales: ["es"], operationDescription: "Hospitality" });
-  const venueId = await venueLocationId(suite.db);
-  return venueId;
 }
 
 async function seedPrinter(
@@ -152,7 +149,7 @@ describe("which printer each of a device's roles resolves to", () => {
 
   // `useVenueDb` empties every table after each test.
   beforeEach(async () => {
-    await seedLocation("Here");
+    await seedFixtureVenue("Here");
     const first = await seedDevice(suite.db, { label: "Till A" });
     profile = first.profileId;
     a = first.deviceId;
@@ -820,7 +817,7 @@ describe("a deleted printer as a device's choice or a portable setting", () => {
   let other: string;
 
   beforeEach(async () => {
-    await seedLocation("Here");
+    await seedFixtureVenue("Here");
     const first = await seedDevice(suite.db, { label: "Till A" });
     profile = first.profileId;
     a = first.deviceId;
@@ -996,7 +993,7 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
   let awayPrinter: string;
 
   beforeEach(async () => {
-    await seedLocation("Here");
+    await seedFixtureVenue("Here");
     const first = await seedDevice(suite.db, { label: "Till A" });
     profile = first.profileId;
     a = first.deviceId;

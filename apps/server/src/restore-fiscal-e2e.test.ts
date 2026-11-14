@@ -1,4 +1,4 @@
-import { venueLocationId, readCloudVenueId, saveCloudVenueId } from "@waitron/db";
+import { readCloudVenueId, saveCloudVenueId } from "@waitron/db";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 // Every database here is a real venue DIRECTORY migrated by the product's own `applyMigrations`,
@@ -14,7 +14,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mediaImageData, mediaImages, readImageBytes } from "@waitron/media";
 import {
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   readStandardSeriesId,
@@ -64,7 +63,6 @@ const noopLog: Logger = () => {};
 const SQLITE_CONSTRAINT_TRIGGER = 1811;
 
 const F = {
-  locationId: "c0000000-0000-4000-8000-000000000002",
   seriesId: "c0000000-0000-4000-8000-000000000004",
   saleId: "c0000000-0000-4000-8000-000000000005",
   sifId: "c0000000-0000-4000-8000-000000000006",
@@ -80,9 +78,6 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
-  await db.insert(locations).values({
-    id: F.locationId,
-  });
   await seedVenueSettings(db, {
     name: "Local principal",
     invoiceLocales: ["es"],
@@ -455,7 +450,6 @@ describe("fiscal restore, end to end", () => {
       expect(await db.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, F.nodeId))).toEqual([
         { id: F.nodeId },
       ]);
-      expect(await venueLocationId(db)).toBe(F.locationId);
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(
         "WAITRON_CREDENTIALS_KEY=deadbeef\n",
       );

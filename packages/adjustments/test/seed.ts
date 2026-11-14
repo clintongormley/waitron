@@ -1,4 +1,5 @@
-import { locations, withTransaction, type Database } from "@waitron/db";
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { seedVenue, seedWorkingOrder as seedOrder } from "@waitron/db/testing/seed.js";
 import { decimal } from "@waitron/shared";
 import { createAdjustmentReason, type AdjustmentReasonInput } from "../src/operations.js";
@@ -9,8 +10,8 @@ let orderNumber = 0;
 /** An open working order at the venue (seeded on first use), opened from the dashboard; returns
  * its id. */
 export async function seedWorkingOrder(db: Database): Promise<string> {
-  const [venue] = await db.select({ id: locations.id }).from(locations).limit(1);
-  if (venue === undefined)
+  const venue = await readSettings(db, VENUE_SETTINGS);
+  if (venue.revision === 0)
     await seedVenue(db, {
       name: "Dining room",
       invoiceLocales: ["es"],

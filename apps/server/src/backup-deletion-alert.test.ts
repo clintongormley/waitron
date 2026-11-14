@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { incidents, locations, withTransaction, type Database } from "@waitron/db";
+import { incidents, settings, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -136,7 +136,10 @@ describe("readInstallationStart", () => {
       fiscal: {
         installationStartedAt: async (tx, node) => {
           asked.push(node);
-          const [row] = await tx.select({ id: locations.id }).from(locations);
+          const [row] = await tx
+            .select({ module: settings.module })
+            .from(settings)
+            .where(eq(settings.module, "venue"));
           expect(row).toBeDefined();
           return start;
         },

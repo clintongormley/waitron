@@ -19,7 +19,6 @@ import {
   withTransaction,
   workingLineContexts,
   workingOrderLines,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -291,15 +290,13 @@ function cutoverFromNow(minutes: number): string {
   return `${new Date(Date.now() + minutes * 60_000).toISOString().slice(11, 16)}:00`;
 }
 
-async function seedLocation(name: string): Promise<string> {
+async function seedFixtureVenue(name: string): Promise<void> {
   await seedVenue(db, {
     name,
     invoiceLocales: ["en"],
     operationDescription: "Hospitality",
     timeZone: "UTC",
   });
-  const venueId = await venueLocationId(db);
-  return venueId;
 }
 
 async function seedStation(name: string): Promise<string> {
@@ -371,10 +368,10 @@ async function seedOrder(
 }
 
 async function venue() {
-  const locationId = await seedLocation("Venue");
+  await seedFixtureVenue("Venue");
   const grill = await seedStation("Grill");
   const bar = await seedStation("Bar");
-  return { locationId, grill, bar };
+  return { grill, bar };
 }
 
 /** A notice written directly, at a chosen moment. */

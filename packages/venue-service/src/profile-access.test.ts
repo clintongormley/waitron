@@ -8,7 +8,6 @@ import {
   deviceProfileZones,
   floorZones,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
@@ -69,10 +68,8 @@ interface Venue {
   profile: string;
 }
 
-async function seedLocation(name: string): Promise<string> {
+async function seedFixtureVenue(name: string): Promise<void> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
-  const venueId = await venueLocationId(db);
-  return venueId;
 }
 
 async function seedProfile(): Promise<string> {
@@ -82,7 +79,7 @@ async function seedProfile(): Promise<string> {
 
 /** Restaurant with two zones, Deli with one, and a till profile with nothing stored yet. */
 async function seedVenueWithZones(): Promise<Venue> {
-  await seedLocation(`Venue ${randomUUID()}`);
+  await seedFixtureVenue(`Venue ${randomUUID()}`);
   const ids = await scoped(async (tx) => {
     const restaurant = await createDepartment(tx, {
       name: "Restaurant",

@@ -14,7 +14,7 @@ import { seedFixtureSif } from "../test/sif-fixture.js";
 import { registroSif } from "./schema/sif.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
+const node = { nodeId: TENANT_A.nodeId };
 const nodeKey = {
   nodeId: node.nodeId,
   name: "2026-10-18 · TEST",

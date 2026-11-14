@@ -714,7 +714,7 @@ describe("A4 filed language outside the current pack choices", () => {
         footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
       },
     });
-    const { doc: location } = await readVenueSettings(suite.db);
+    const { doc: venueDoc } = await readVenueSettings(suite.db);
     try {
       await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
       const document = await read(backend, issued.saleId);
@@ -724,7 +724,7 @@ describe("A4 filed language outside the current pack choices", () => {
       });
       expect(document.invoiceLocale).toBe(printed);
     } finally {
-      await seedVenueSettings(suite.db, { invoiceLocales: location.invoiceLocales });
+      await seedVenueSettings(suite.db, { invoiceLocales: venueDoc.invoiceLocales });
     }
   });
 });

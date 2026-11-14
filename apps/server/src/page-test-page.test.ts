@@ -14,7 +14,6 @@ import {
   printAgents,
   tenants,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { hashPin, hashDeviceToken, persons, startManagementSession } from "@waitron/identity";
 import { createClient } from "@waitron/print-agent";
@@ -76,7 +75,6 @@ async function venue(opts: { render?: Render } = {}) {
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const locationId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
@@ -136,7 +134,6 @@ async function venue(opts: { render?: Render } = {}) {
     cfg,
     state,
     backend,
-    locationId,
     nodeId,
     seriesId: series!.id,
     agentOne,

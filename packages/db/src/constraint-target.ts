@@ -98,8 +98,8 @@ export function constraintTarget(error: unknown): ConstraintTarget | undefined {
 /**
  * Is `target` the table and columns of `expected` — same table, same columns, same order?
  *
- * Order is part of the identity, because an index on `(location_id, name)` is a different index
- * from one on `(name, location_id)`. An absent `target` is never a match; a caller that wants to
+ * Order is part of the identity, because an index on `(node_id, name)` is a different index
+ * from one on `(name, node_id)`. An absent `target` is never a match; a caller that wants to
  * translate an unidentified refusal anyway tests for `undefined` itself, so that the choice is
  * visible where it is made.
  */

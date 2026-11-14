@@ -9,7 +9,6 @@ import {
   deviceProfiles,
   devices,
   kitchenStations,
-  locations,
   printJobs,
   ticketItems,
   workingOrderLines,
@@ -355,7 +354,6 @@ describe("the pass screen's device routes", () => {
       const response = await done(f.app, f.a.cookie, { ticketItemIds, done: true });
       expect(response.status).toBe(404);
     }
-    await suite.db.insert(locations).values({}).returning({ id: locations.id });
     await seedVenueSettings(suite.db, {
       name: "Other venue",
       invoiceLocales: ["es-ES"],

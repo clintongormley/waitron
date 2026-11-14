@@ -23,7 +23,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -72,9 +71,7 @@ async function routed() {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
-  const cfg = { locationId };
+  const cfg = {};
   const [station] = await db
     .insert(kitchenStations)
     .values({ name: "Kitchen", isDefault: true })
@@ -165,7 +162,7 @@ async function routed() {
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-  return { ...made, cfg, locationId, app, send };
+  return { ...made, cfg, app, send };
 }
 type Routed = Awaited<ReturnType<typeof routed>>;
 

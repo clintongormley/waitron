@@ -9,7 +9,6 @@ import {
   printJobs,
   sales,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -25,7 +24,6 @@ async function setup() {
     invoiceLocales: ["en-GB"],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
     .insert(printAgents)
@@ -82,7 +80,6 @@ async function setup() {
       ordinary: ordinary.jobId,
       deliveryId: delivery!.id,
       agentId: agent!.id,
-      locationId: venueId,
     };
   });
 }

@@ -14,7 +14,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -27,7 +26,6 @@ const LEWIS = "cccccccc-0000-4000-8000-0000000000b2";
 const NOBODY = "cccccccc-0000-4000-8000-0000000000c3";
 
 interface Place {
-  locationId: string;
   nodeId: string;
   deviceId: string;
   printerId: string;
@@ -47,7 +45,6 @@ const suite = useVenueDb({
 
 async function seedPlace(db: Database): Promise<Place> {
   await seedVenue(db, { name: "Actions", invoiceLocales: ["en"], operationDescription: "Meals" });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const { deviceId } = await seedDevice(db);
   const series: Record<string, string> = {};
@@ -62,7 +59,7 @@ async function seedPlace(db: Database): Promise<Place> {
     .insert(printers)
     .values({ name: "Bar printer", transport: "network_tcp", host: "10.0.0.1" })
     .returning();
-  return { locationId, nodeId, deviceId, printerId: printer!.id, series };
+  return { nodeId, deviceId, printerId: printer!.id, series };
 }
 
 async function seedSale(

@@ -1,13 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  printAgents,
-  printJobs,
-  printers,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, printAgents, printJobs, printers, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { FakeSink } from "@waitron/print-agent";
@@ -23,7 +16,6 @@ async function fixture(kind: "document" | "drawer", separatePrinter = false) {
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const locationId = await venueLocationId(suite.db);
   const agents = await suite.db
     .insert(printAgents)
     .values([
@@ -52,7 +44,7 @@ async function fixture(kind: "document" | "drawer", separatePrinter = false) {
       .where(eq(printJobs.id, tail.jobId));
     return { first: first.jobId, tail: tail.jobId };
   });
-  return { locationId, a: agents[0]!.id, b: agents[1]!.id, ...ids };
+  return { a: agents[0]!.id, b: agents[1]!.id, ...ids };
 }
 
 describe("aged print batches", () => {

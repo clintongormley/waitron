@@ -157,7 +157,7 @@ describe("parseBinding", () => {
   });
 
   it("refuses an extra field", () => {
-    expect(refusal({ ...binding, locationId: "loc-1" })).toEqual(invalid("locationId"));
+    expect(refusal({ ...binding, extra: "unexpected" })).toEqual(invalid("extra"));
     expect(refusal({ ...binding, venue: { ...binding.venue, legalName: "Bar" } })).toEqual(
       invalid("venue.legalName"),
     );

@@ -84,9 +84,9 @@ it("carries host-selected identities and opaque input into the real initial CLI 
           expect(readOperationAuthority(operation!.authority, operation!.binding)).toEqual({
             operatorId: ADMIN,
           });
-          expect(operation!.input).toEqual({ approvedLocationName: "From supplied allocation" });
+          expect(operation!.input).toEqual({ approvedVenueName: "From supplied allocation" });
           await seedVenueSettings(tx, {
-            name: (operation!.input as { approvedLocationName: string }).approvedLocationName,
+            name: (operation!.input as { approvedVenueName: string }).approvedVenueName,
           });
           return "initial-42";
         },
@@ -124,7 +124,7 @@ it("carries host-selected identities and opaque input into the real initial CLI 
           {
             eventId: "initial-42",
             sourceId: "paper-42",
-            input: { approvedLocationName: "From supplied allocation" },
+            input: { approvedVenueName: "From supplied allocation" },
           },
         ],
       ]),

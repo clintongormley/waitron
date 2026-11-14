@@ -332,7 +332,7 @@ it("first setup writes the venue document and an identical reapply keeps its rev
 });
 
 describe("applyVenue: the one taxpayer row", () => {
-  it("stores the taxpayer domicile without copying the location address", async () => {
+  it("stores the taxpayer domicile without copying the venue address", async () => {
     await applyVenue(
       planVenue(
         { ...request("B10000007"), taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid" },
@@ -344,11 +344,11 @@ describe("applyVenue: the one taxpayer row", () => {
     const tenant = await suite.db.execute<{ taxpayer_domicile: string }>(
       sql`select taxpayer_domicile from tenants where id = 1`,
     );
-    const location = await suite.db.execute<{ address_line1: string }>(
+    const venueDoc = await suite.db.execute<{ address_line1: string }>(
       sql`select json_extract(doc, '$.addressLine1') as address_line1 from settings where module = 'venue'`,
     );
     expect(tenant.rows).toEqual([{ taxpayer_domicile: "Calle Fiscal 8, 28013 Madrid" }]);
-    expect(location.rows).toEqual([{ address_line1: "Calle Mayor 1" }]);
+    expect(venueDoc.rows).toEqual([{ address_line1: "Calle Mayor 1" }]);
   });
 
   it("creates it with id 1 on a fresh database", async () => {
@@ -439,7 +439,7 @@ describe("applyVenue: the one taxpayer row", () => {
 });
 
 describe("applyVenue", () => {
-  it("provisions a sellable venue: tenant, location, node, live SIF, three series, and no till", async () => {
+  it("provisions a sellable venue: tenant, venue, node, live SIF, three series, and no till", async () => {
     const result = await applyVenue(planVenue(request(), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -754,15 +754,15 @@ describe("applyVenue", () => {
     expect(tenants.rows[0]?.n).toBe(1);
     expect(second.nodeId).toBe(first.nodeId);
     const venueRows = await suite.db.execute<{
-      locations: number;
+      venues: number;
       devices: number;
       nodes: number;
     }>(sql`
       select
-        (select count(*) from locations ) as locations,
+        (select count(*) from settings where module = 'venue') as venues,
         (select count(*) from devices ) as devices,
         (select count(*) from nodes ) as nodes`);
-    expect(venueRows.rows[0]).toEqual({ locations: 1, devices: 0, nodes: 1 });
+    expect(venueRows.rows[0]).toEqual({ venues: 1, devices: 0, nodes: 1 });
   });
 
   it("refuses a different operational venue for the same tenant", async () => {
@@ -781,10 +781,10 @@ describe("applyVenue", () => {
       }),
     ).rejects.toMatchObject({ code: "provisioning.second_venue" });
 
-    const locations = await suite.db.execute<{ n: number }>(sql`
-      select count(*) as n from locations
+    const venues = await suite.db.execute<{ n: number }>(sql`
+      select count(*) as n from settings where module = 'venue'
       `);
-    expect(locations.rows[0]?.n).toBe(1);
+    expect(venues.rows[0]?.n).toBe(1);
   });
 
   describe("refuses a same-tenant re-run whose venue differs from the stored one", () => {
@@ -803,23 +803,6 @@ describe("applyVenue", () => {
         a.kind === "create-node" ? { ...a, ...change } : a,
       );
     }
-
-    it("when the database already holds two venues, even if one matches the plan exactly", async () => {
-      await applyVenue(planVenue(request("B13131313"), ALL_MODULES), {
-        db: suite.db,
-        modules: ALL_MODULES,
-      });
-      await suite.db.execute(sql`
-        insert into locations (id)
-        values ('00000000-0000-4000-8000-0000000000ff')`);
-
-      await expect(
-        applyVenue(planVenue(request("B13131313"), ALL_MODULES), {
-          db: suite.db,
-          modules: ALL_MODULES,
-        }),
-      ).rejects.toMatchObject({ code: "provisioning.second_venue" });
-    });
 
     it.each([
       ["name", { name: "Otro nodo" }],
@@ -982,7 +965,7 @@ describe("applyVenue", () => {
       taxId,
       legalName: "Deli SL",
     };
-    const createLocation: VenueAction = {
+    const createVenue: VenueAction = {
       kind: "create-venue",
       name: "Mostrador",
       fiscalTerritory: "ES-common",
@@ -1034,7 +1017,7 @@ describe("applyVenue", () => {
         name: "seed-module before create-node",
         plan: [
           ensure,
-          createLocation,
+          createVenue,
           { kind: "seed-module", module: "fiscal-verifactu", summary: "s" } as VenueAction,
         ],
         message: "applyVenue: seed-module before create-node",
@@ -1043,7 +1026,7 @@ describe("applyVenue", () => {
         name: "create-series before create-node",
         plan: [
           ensure,
-          createLocation,
+          createVenue,
           { kind: "create-series", code: "A", purpose: "standard" } as VenueAction,
         ],
         message: "applyVenue: create-series before create-node",
@@ -1144,7 +1127,7 @@ it.each([
       modules: ALL_MODULES,
     });
     const before = Object.fromEntries(
-      ["tenants", "locations", "nodes", "invoice_series", "registro_sif", "fiscal_allocations"].map(
+      ["tenants", "settings", "nodes", "invoice_series", "registro_sif", "fiscal_allocations"].map(
         (table) => [
           table,
           suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
@@ -1172,7 +1155,7 @@ it.each([
   },
 );
 
-it("reuses the current dated start without clearing the location timeline", async () => {
+it("reuses the current dated start without clearing the venue timeline", async () => {
   const original = request("B10000008");
   const first = await applyVenue(planVenue(original, ALL_MODULES), {
     db: suite.db,

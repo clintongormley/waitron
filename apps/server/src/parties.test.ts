@@ -211,7 +211,7 @@ describe("seating", () => {
 });
 
 describe("related bills", () => {
-  it("names the language a paid bill's sale was filed in, not the location's current one", async () => {
+  it("names the language a paid bill's sale was filed in, not the venue's current one", async () => {
     const venue = await setupPartyVenue(suite.db);
     const { partyId, tabId } = await seat(venue, await venue.table("Table 4"));
     await order(venue, tabId, "Red wine bottle");

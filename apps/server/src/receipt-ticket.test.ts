@@ -551,11 +551,11 @@ it.each([PRINTER_58, PRINTER_80])(
   (printer) => {
     for (const invoiceLocale of ["es-ES", "en-GB"]) {
       for (const duplicate of [false, true]) {
-        for (const { invoiceType, domicile, showLocation } of [
-          { invoiceType: "F1", domicile: "Calle Fiscal 27", showLocation: true },
-          { invoiceType: "F1", domicile: undefined, showLocation: true },
-          { invoiceType: "F2", domicile: "Calle Fiscal 27", showLocation: true },
-          { invoiceType: "F2", domicile: undefined, showLocation: true },
+        for (const { invoiceType, domicile, showVenueAddress } of [
+          { invoiceType: "F1", domicile: "Calle Fiscal 27", showVenueAddress: true },
+          { invoiceType: "F1", domicile: undefined, showVenueAddress: true },
+          { invoiceType: "F2", domicile: "Calle Fiscal 27", showVenueAddress: true },
+          { invoiceType: "F2", domicile: undefined, showVenueAddress: true },
         ] as const) {
           const printed = drawn(
             formatReceipt({
@@ -572,8 +572,8 @@ it.each([PRINTER_58, PRINTER_80])(
               duplicate,
             }),
           ).join(" ");
-          expect(printed.includes("Location Street 45")).toBe(showLocation);
-          expect(printed.includes("28001 Madrid")).toBe(showLocation);
+          expect(printed.includes("Location Street 45")).toBe(showVenueAddress);
+          expect(printed.includes("28001 Madrid")).toBe(showVenueAddress);
           expect(printed.replace(/\s+/g, " ").includes("Calle Fiscal 27")).toBe(
             invoiceType === "F1" && domicile !== undefined,
           );

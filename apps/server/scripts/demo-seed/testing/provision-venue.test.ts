@@ -43,7 +43,7 @@ describe("the demo scripts' test venue", () => {
     {
       country: "ES" as const,
       invoiceLocale: "es-ES",
-      location: {
+      venueSnapshot: {
         name: "Main room",
         address_line1: "1 Market Street",
         invoice_locales: '["es-ES"]',
@@ -54,7 +54,7 @@ describe("the demo scripts' test venue", () => {
     {
       country: "GB" as const,
       invoiceLocale: "en-GB",
-      location: {
+      venueSnapshot: {
         name: "Main counter",
         address_line1: "1 High Street",
         invoice_locales: '["en-GB"]',
@@ -62,7 +62,7 @@ describe("the demo scripts' test venue", () => {
         time_zone: "Europe/London",
       },
     },
-  ])("stores English location text for $country with its fiscal settings", async (fixture) => {
+  ])("stores English venue text for $country with its fiscal settings", async (fixture) => {
     await createDemoVenueProvisioner(() => suite.db, {
       country: fixture.country,
       nifBase: 82_000_000,
@@ -74,7 +74,7 @@ describe("the demo scripts' test venue", () => {
         select json_extract(settings.doc, '$.name') as name, json_extract(settings.doc, '$.addressLine1') as address_line1, json_extract(settings.doc, '$.invoiceLocales') as invoice_locales, json_extract(settings.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(b.doc, '$.timeZone') as time_zone
         from settings cross join settings b where settings.module = 'venue' and b.module = 'business_day'
       `),
-    ).toEqual([fixture.location]);
+    ).toEqual([fixture.venueSnapshot]);
   });
 
   it.each([

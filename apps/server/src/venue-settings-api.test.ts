@@ -6,7 +6,7 @@ import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { locations, withTransaction } from "@waitron/db";
+import { settings, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
@@ -49,7 +49,7 @@ beforeAll(async () => {
     .values({ departmentId, receipt: { operationDescription: "Venta en establecimiento" } });
   offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
 });
-function app(locationId?: string) {
+function app() {
   const app = new Hono();
   mountVenueSettingsApi(
     app,
@@ -65,7 +65,6 @@ function app(locationId?: string) {
       db: suite.db,
       venueCfg: () => ({
         ...venue.cfg,
-        locationId: (locationId ?? venue.cfg.locationId) as typeof venue.cfg.locationId,
       }),
       validateOperationDescription: realFiscal().venueFields?.validateOperationDescription,
     },
@@ -266,20 +265,6 @@ describe("department invoice settings", () => {
       expect((await read.json()).receipt.operationDescription).toBe("Venta en establecimiento");
     },
   );
-  it.each(["GET", "PUT"])(
-    "the retired location settings %s route stays absent without writing",
-    async (method) => {
-      const before = await suite.db.select().from(departmentReceipts);
-      const response = await app("no-such-location").request(
-        "/management-api/location-settings",
-        method === "PUT"
-          ? request(venue.managerCookie, "Venta de comidas")
-          : { headers: { cookie: venue.managerCookie } },
-      );
-      expect(response.status).toBe(404);
-      expect(await suite.db.select().from(departmentReceipts)).toEqual(before);
-    },
-  );
 
   it.each([
     ["an object without the field", {}],
@@ -370,7 +355,7 @@ describe("receipt language", () => {
     );
     return JSON.parse(rows[0]!.invoice_locales) as string[];
   };
-  /** The shared location placed in `province` with `invoiceLocales`, put back afterwards. */
+
   async function at(province: string, invoiceLocales: string[], fn: () => Promise<void>) {
     await seedVenueSettings(suite.db, { province });
     await suite.db.execute(
@@ -432,7 +417,7 @@ describe("receipt language", () => {
     });
   });
 
-  it("saves Galician for Madrid as the location's one language", async () => {
+  it("saves Galician for Madrid as the venue's one language", async () => {
     try {
       const saved = await write({ receiptLanguage: "gl-ES" });
       expect(saved.status).toBe(200);
@@ -581,7 +566,7 @@ describe("venue defaults", () => {
     };
   };
   const untouched = () => ({ languages: ["es-ES"], vatClass: initialVatClass });
-  /** The shared location placed in `province` with `invoiceLocales`; both values put back afterwards. */
+
   async function at(province: string, invoiceLocales: string[], fn: () => Promise<void>) {
     await seedVenueSettings(suite.db, { province });
     await suite.db.execute(
@@ -766,15 +751,15 @@ describe("no venue row", () => {
     "/management-api/venue-defaults",
     "/management-api/receipt-language",
   ])("%s answers 409 venue.not_found", async (path) => {
-    const [venueRow] = await suite.db.select().from(locations);
+    const [venueRow] = await suite.db.select().from(settings).where(eq(settings.module, "venue"));
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
-      await suite.db.execute(sql`delete from locations`);
+      await suite.db.execute(sql`delete from settings where module = 'venue'`);
       const response = await app().request(path, { headers: { cookie: venue.managerCookie } });
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({ error: { code: "venue.not_found", params: {} } });
     } finally {
-      await suite.db.insert(locations).values(venueRow!);
+      await suite.db.insert(settings).values(venueRow!);
       await suite.db.execute(sql`pragma foreign_keys = on`);
     }
   });

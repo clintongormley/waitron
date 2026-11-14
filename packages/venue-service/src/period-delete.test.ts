@@ -22,7 +22,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
   readVenueClock,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -70,8 +69,7 @@ async function venue() {
     timeZone: ZONE,
     dayCutover: "06:00:00",
   });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
+  const fixtureId = randomUUID();
   const [station] = await db
     .insert(kitchenStations)
     .values({ name: "Kitchen", isDefault: true })
@@ -82,7 +80,7 @@ async function venue() {
       seasons.find((entry) => entry.name === starterSeasonName(name, "es"))!.id;
     const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     const deli = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
-    const menu = (await createCatalogue(tx, { name: `Period menu ${locationId}` })).id;
+    const menu = (await createCatalogue(tx, { name: `Period menu ${fixtureId}` })).id;
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (departmentId: string, name: string) =>
@@ -106,7 +104,6 @@ async function venue() {
       seasonId: season("Winter"),
     });
     return {
-      locationId,
       stationId: station!.id,
       restaurant,
       deli,

@@ -226,7 +226,6 @@ const till = {
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
-  fireControl: "waiter" as const,
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
@@ -1487,7 +1486,7 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(el.shadowRoot!.querySelector("till-reprint-language-dialog")).toBeNull();
   });
 
-  it("starts a paid bill's receipt copy on the location's language when the bill names none", async () => {
+  it("starts a paid bill's receipt copy on the venue's language when the bill names none", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({
         ...till,

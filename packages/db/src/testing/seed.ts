@@ -13,14 +13,18 @@ import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
 import { workingOrders } from "../schema/orders.js";
-import { locations } from "../schema/tenants.js";
 import { newId, nowIso } from "../schema/columns.js";
 import { settings } from "../schema/settings.js";
-import { BUSINESS_DAY_SETTINGS, FIRST_DAY_START, type VenueSettings } from "../venue-settings.js";
+import {
+  BUSINESS_DAY_SETTINGS,
+  VENUE_SETTINGS,
+  FIRST_DAY_START,
+  type VenueSettings,
+} from "../venue-settings.js";
 import { readSettings, saveSettings } from "../settings.js";
 import { dayCutoverChanges } from "../schema/day-cutover-changes.js";
 import { catalogues } from "../schema/catalogue.js";
-import { createVenueSettings, saveVenueFields, venueLocationId, type Venue } from "../venue.js";
+import { createVenueSettings, saveVenueFields, readVenueSettings, type Venue } from "../venue.js";
 
 import { deviceProfileAdmissionRoles } from "../schema/identity/profile-admission.js";
 import { staffRoles } from "../schema/identity/staff-roles.js";
@@ -104,8 +108,8 @@ export async function seedVenue(
   db: Database | Transaction,
   overrides: Partial<Venue> & { defaultCatalogueId?: string | null } = {},
 ): Promise<void> {
-  const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
-  if (existing) throw new Error(`seedVenue: a venue row already exists (${existing.id})`);
+  const existing = await readSettings(db, VENUE_SETTINGS);
+  if (existing.revision > 0) throw new Error("seedVenue: a venue document already exists");
   await seedTenant(db);
   const {
     defaultCatalogueId,
@@ -120,11 +124,7 @@ export async function seedVenue(
     dayCutover,
     fiscalTerritory,
     operationDescription,
-    ...columns
   } = overrides;
-  await db.insert(locations).values({
-    ...columns,
-  });
   if (defaultCatalogueId !== undefined) {
     await db.update(catalogues).set({ isDefault: false }).where(eq(catalogues.isDefault, true));
     if (defaultCatalogueId !== null)
@@ -212,7 +212,7 @@ export async function seedDevice(
     profileId?: string;
   } = {},
 ): Promise<{ deviceId: DeviceId; profileId: string }> {
-  await venueLocationId(db);
+  await readVenueSettings(db);
   deviceCounter += 1;
   const label = opts.label ?? `Device ${deviceCounter}`;
   const profileId =

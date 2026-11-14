@@ -58,7 +58,6 @@ const W175_DIET_OVERRIDE = { vegetarian: "yes" as const };
 const W175_DIET = { vegan: "no" as const, vegetarian: "yes" as const, contains: ["dairy"] };
 
 interface Fixture {
-  locationId: string;
   catalogueId: string;
   otherCatalogueId: string;
   wines: string;
@@ -75,7 +74,7 @@ interface Fixture {
 let f: Fixture;
 
 beforeEach(async () => {
-  const venue = await seedVenueWithSeries(fx.db);
+  await seedVenueWithSeries(fx.db);
   f = await run(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Bar" });
     const other = await createCatalogue(tx, { name: "Terrace" });
@@ -174,7 +173,6 @@ beforeEach(async () => {
     await tx.insert(productUnits).values({ productId: wine175!.id, unitId: largeGlass.id });
     await assignCatalogueToVenue(tx, catalogue.id);
     return {
-      locationId: venue.locationId,
       catalogueId: catalogue.id,
       otherCatalogueId: other.id,
       wines: wines.id,

@@ -23,7 +23,6 @@ import type { VenueResult } from "./venue-apply.js";
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 const VENUE_RESULT = {
-  locationId: "22222222-2222-2222-2222-222222222222",
   nodeId: "44444444-4444-4444-4444-444444444444",
   seriesIds: [],
   seeded: [],

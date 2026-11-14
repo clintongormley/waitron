@@ -590,7 +590,9 @@ it("direct import refuses bad zone metadata before replacing retained rows", asy
     },
   };
   await applyVenue(planVenue(input, []), { db: suite.db, modules: [] });
-  const beforeLocations = (await suite.db.execute(sql`select * from locations`)).rows;
+  const beforeVenueDocuments = (
+    await suite.db.execute(sql`select * from settings where module = 'venue'`)
+  ).rows;
   await withTransaction(suite.db, async (tx) => {
     await tx.execute(sql`create table zz_parents (id text primary key)`);
     await tx.execute(sql`insert into zz_parents values ('retained')`);
@@ -606,7 +608,9 @@ it("direct import refuses bad zone metadata before replacing retained rows", asy
     expect((await suite.db.execute(sql`select * from zz_parents`)).rows).toEqual([
       { id: "retained" },
     ]);
-    expect((await suite.db.execute(sql`select * from locations`)).rows).toEqual(beforeLocations);
+    expect(
+      (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
+    ).toEqual(beforeVenueDocuments);
     expect(refusal).toMatchObject({
       code: "venue.time_zone_invalid",
       params: { reason: "country" },
@@ -659,28 +663,7 @@ it.each([" Europe/London ", "GB"])(
 );
 
 function formatNineBundle(): Record<string, unknown> {
-  const { venue, ...rest } = configurationBundle();
-  const { country, taxId, legalName, taxpayerDomicile, ...fields } = venue;
-  const { seriesCode, fullSeriesCode, rectificativeSeriesCode, ...location } = fields;
-  return {
-    ...rest,
-    version: 9,
-    venue: {
-      country,
-      taxId,
-      legalName,
-      taxpayerDomicile,
-      seriesCode,
-      fullSeriesCode,
-      rectificativeSeriesCode,
-      location: {
-        ...location,
-        id: "source-location",
-        fireControl: "waiter",
-        catalogueId: null,
-      },
-    },
-  };
+  return { ...configurationBundle(), version: 9 };
 }
 
 it("refuses a format 9 export as outdated", () => {

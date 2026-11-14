@@ -2,7 +2,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { getTableColumns, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { saleLines, sales, withTransaction, type Database, venueLocationId } from "@waitron/db";
+import { saleLines, sales, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -122,11 +122,9 @@ async function fileOneSale(db: Database) {
     ),
     { db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -134,7 +132,7 @@ async function fileOneSale(db: Database) {
   });
   const seeded = await withTransaction(db, async (tx) => {
     const menu = await createCatalogue(tx, {
-      name: `List unit price fiscal identity menu ${cfg.locationId}`,
+      name: `List unit price fiscal identity menu ${cfg.nodeId}`,
     });
     const bebidas = await createCategory(tx, { name: "Drinks" });
     const cocteles = await createCategory(tx, {

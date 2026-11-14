@@ -77,14 +77,14 @@ async function prepareSale(config: ServerConfig) {
         .insert(personStaffRoles)
         .values({ personId: person!.id, staffRoleId: staffRole!.id });
       await setProfileAdmission(tx, profile.id, { admittedStaffRoleIds: [staffRole!.id] });
-      const location = await readVenue(tx);
+      const venue = await readVenue(tx);
       const menu = await createCatalogue(tx, { name });
       const product = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
         unitId: null,
         name: `${name} item`,
-        customerName: { [location.invoiceLocales[0]!]: "Upgrade check item" },
+        customerName: { [venue.invoiceLocales[0]!]: "Upgrade check item" },
         kitchenName: "Upgrade check kitchen item",
         unitPrice: "1.00",
         vatClass: "general",
@@ -104,7 +104,7 @@ async function prepareSale(config: ServerConfig) {
       });
       await tx.insert(departmentReceipts).values({
         departmentId: department.id,
-        receipt: { operationDescription: location.operationDescription },
+        receipt: { operationDescription: venue.operationDescription },
       });
       const period = await saveMenuPeriod(tx, department.id, {
         name,

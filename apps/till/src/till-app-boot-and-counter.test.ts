@@ -99,7 +99,6 @@ const till = {
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
-  fireControl: "waiter" as const,
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
@@ -320,9 +319,7 @@ describe("till-app session activity", () => {
       const getDeviceStationScreen = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
       const getDevicePassBoard = vi.fn().mockResolvedValue(board);
       const { el } = await mountApp({
-        getTill: vi
-          .fn()
-          .mockResolvedValue({ ...till, formFactor: "kds", fireControl: "expo", capabilities }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "kds", capabilities }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "pass-device",
           name: "Pantalla Pase",
@@ -339,7 +336,6 @@ describe("till-app session activity", () => {
           initialBoard: unknown;
           runsPass: boolean;
           deviceName?: string;
-          fireControl: string;
         }
       >("till-pass-screen");
       expect(screen).not.toBeNull();
@@ -347,7 +343,6 @@ describe("till-app session activity", () => {
       expect(screen!.initialBoard).toBe(board);
       expect(screen!.runsPass).toBe(runsPass);
       expect(screen!.deviceName).toBe("Pantalla Pase");
-      expect("fireControl" in screen!).toBe(false);
       expect(getDevicePassBoard).toHaveBeenCalledTimes(1);
       expect(getDeviceStationScreen).not.toHaveBeenCalled();
     },

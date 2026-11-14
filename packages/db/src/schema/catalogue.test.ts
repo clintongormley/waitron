@@ -96,12 +96,11 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     await db.execute(insertProduct("each", "general"));
   });
 
-  it("has a snapshot category column on both line tables and no catalogue_id on locations", async () => {
+  it("has a snapshot category column on both line tables", async () => {
     const present = async (table: string, column: string) =>
       (await columnsOf(db, table)).some((c) => c.name === column);
     expect(await present("sale_lines", "category")).toBe(true);
     expect(await present("working_order_lines", "category")).toBe(true);
-    expect(await present("locations", "catalogue_id")).toBe(false);
   });
 
   it("products carries a plain-text name and a nullable customer_name, and no descriptions", async () => {

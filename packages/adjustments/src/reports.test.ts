@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
-  locations,
+  settings,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -65,12 +65,14 @@ async function person(name: string, status?: "suspended"): Promise<string> {
 
 let orderNumber = 0;
 
-/** A bill opened from the dashboard at `openedAt`, at this test's location, made on first use. */
 async function bill(
   opts: { openedAt?: string } = {},
 ): Promise<{ id: string; orderNumber: number }> {
-  const [location] = await db.select({ id: locations.id }).from(locations);
-  if (location === undefined)
+  const [venueDoc] = await db
+    .select({ module: settings.module })
+    .from(settings)
+    .where(eq(settings.module, "venue"));
+  if (venueDoc === undefined)
     await seedVenue(db, {
       name: "Sala",
       invoiceLocales: ["es"],

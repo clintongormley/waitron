@@ -17,7 +17,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -59,9 +58,8 @@ async function routed() {
     operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
   });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
-  const cfg = { locationId };
+  const fixtureId = randomUUID();
+  const cfg = {};
   await db.insert(kitchenStations).values({ name: "Kitchen", isDefault: true });
   const zone = async (name: string, departmentId: string) =>
     (
@@ -78,7 +76,7 @@ async function routed() {
     await configureZone(tx, { zoneId: barZone, departmentId: restaurant });
     await configureZone(tx, { zoneId: counterZone, departmentId: deli });
     const menu = async (name: string) => {
-      const id = (await createCatalogue(tx, { name: `${name} ${locationId}` })).id;
+      const id = (await createCatalogue(tx, { name: `${name} ${fixtureId}` })).id;
       const { document } = await buildMenuDocument(tx, id);
       await publishMenu(tx, id, menuDocumentHash(document), "person-1");
       return id;

@@ -10,14 +10,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  invoiceSeries,
-  locations,
-  nodes,
-  stampDeployment,
-  tenants,
-  withTransaction,
-} from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, tenants, withTransaction } from "@waitron/db";
 import { setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -168,9 +161,6 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
-  await suite.db.insert(locations).values({
-    id: TENANT_A.locationId,
-  });
   await seedVenueSettings(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["en"],
@@ -180,7 +170,6 @@ beforeEach(async () => {
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,
-      locationId: TENANT_A.locationId,
       name: node === primary ? "Primary" : "Standby",
       filingModule: "verifactu",
       taxModule: "vat",

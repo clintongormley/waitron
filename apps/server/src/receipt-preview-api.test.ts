@@ -125,11 +125,10 @@ function printedLines(result: ReceiptPreviewResponse): string[] {
   return linesOf(result, 0, result.preview.blocks.length);
 }
 
-function setLocationLanguages(invoiceLocales: string[]): Promise<unknown> {
+function setVenueLanguages(invoiceLocales: string[]): Promise<unknown> {
   return withTransaction(suite.db, (tx) => seedVenueSettings(tx, { invoiceLocales }));
 }
 
-/** Each row is one device of the location, on its own new receipt printer. */
 async function withPrinters(
   rows: {
     device: string;
@@ -359,7 +358,7 @@ describe("POST /management-api/receipt-preview", () => {
     });
   });
 
-  it("marks nothing for absent trim and marks the explicitly enabled location address", async () => {
+  it("marks nothing for absent trim and marks the explicitly enabled venue address", async () => {
     const result = await rendered({});
     const lines = printedLines(result);
     const name = lines.indexOf(legal());
@@ -374,7 +373,7 @@ describe("POST /management-api/receipt-preview", () => {
     expect(lines.slice(name + 1, name + 5)).toEqual([nif(), "Calle Mayor 1", "28013 Madrid", RULE]);
   });
 
-  it("is drawn 512 dots wide (80 mm at 180 dpi) when the location has no active receipt printer", async () => {
+  it("is drawn 512 dots wide (80 mm at 180 dpi) when the venue has no active receipt printer", async () => {
     await withPrinters(
       [{ device: "Till 1", paperWidth: "58mm", resolution: "203dpi", active: false }],
       async () => {
@@ -384,7 +383,7 @@ describe("POST /management-api/receipt-preview", () => {
     );
   });
 
-  it("is drawn at the width of the receipt printer of the location's one device that has one", async () => {
+  it("is drawn at the width of the receipt printer of the venue's one device that has one", async () => {
     await withPrinters(
       [{ device: "Till 1", paperWidth: "58mm", resolution: "203dpi" }],
       async () => {
@@ -416,7 +415,7 @@ describe("POST /management-api/receipt-preview", () => {
         return (await response.json()) as ReceiptPreviewResponse;
       });
 
-    it("offers each width the location's receipt printers have, narrowest first, and draws at the one most devices use", async () => {
+    it("offers each width the venue's receipt printers have, narrowest first, and draws at the one most devices use", async () => {
       await withPrinters(
         [
           { device: "Bar", paperWidth: "58mm", resolution: "180dpi" },
@@ -471,7 +470,7 @@ describe("POST /management-api/receipt-preview", () => {
       );
     });
 
-    it("reads each device's receipt printer, not every printer at the location", async () => {
+    it("reads each device's receipt printer, not every printer at the venue", async () => {
       await withPrinters(
         [{ device: "Till 1", paperWidth: "80mm", resolution: "203dpi" }],
         async () => {
@@ -582,7 +581,7 @@ describe("POST /management-api/receipt-preview", () => {
       );
     });
 
-    it("offers no width, and draws at 80 mm, when the location has no receipt printer", async () => {
+    it("offers no width, and draws at 80 mm, when the venue has no receipt printer", async () => {
       const result = await at();
       expect([result.paperWidths, result.paperWidth]).toEqual([[], "80mm"]);
     });
@@ -624,14 +623,12 @@ describe("POST /management-api/receipt-preview", () => {
     });
   });
 
-  it("formats the sample in the location's receipt language", async () => {
-    // `cfg.locale` stays the fixture's `es-ES`, which would print «5,50 €». Restored in `finally`, as
-    // the location is shared.
-    await setLocationLanguages(["en-GB"]);
+  it("formats the sample in the venue's receipt language", async () => {
+    await setVenueLanguages(["en-GB"]);
     try {
       expect((await rendered({})).preview.text).toContain("€5.50");
     } finally {
-      await setLocationLanguages(["es-ES"]);
+      await setVenueLanguages(["es-ES"]);
     }
   });
 
@@ -655,21 +652,21 @@ describe("POST /management-api/receipt-preview", () => {
     const labelled = (lines: string[], label: string) =>
       lines.some((line) => line === label || line.startsWith(`${label} `));
 
-    it("draws the sample in a language asked for, whatever the location has saved", async () => {
+    it("draws the sample in a language asked for, whatever the venue has saved", async () => {
       const lines = await at("gl-ES");
       expect(labelled(lines, "Base impoñible 10%")).toBe(true);
       expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
       expect(labelled(lines, "Base imponible 10%")).toBe(false);
     });
 
-    it("follows the location's saved language when none is asked for", async () => {
-      await setLocationLanguages(["gl-ES"]);
+    it("follows the venue's saved language when none is asked for", async () => {
+      await setVenueLanguages(["gl-ES"]);
       try {
         const lines = await at();
         expect(labelled(lines, "Base impoñible 10%")).toBe(true);
         expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
       } finally {
-        await setLocationLanguages(["es-ES"]);
+        await setVenueLanguages(["es-ES"]);
       }
       expect(labelled(await at(), "Base imponible 10%")).toBe(true);
     });
@@ -794,7 +791,7 @@ describe("the receipt preview's top block", () => {
   const sizes = (result: ReceiptPreviewResponse) =>
     pictures(result).map((block) => (block.kind === "image" ? [block.width, block.height] : []));
 
-  it("draws the enabled location address and authored contact under the subtitle, and marks each", async () => {
+  it("draws the enabled venue address and authored contact under the subtitle, and marks each", async () => {
     const result = await rendered({
       headerSubtitle: "Desde 1990",
       phone: "910 000 000",

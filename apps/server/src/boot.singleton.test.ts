@@ -10,7 +10,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   stampDeployment,
@@ -58,7 +57,6 @@ beforeEach(() => {
 });
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
-const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
@@ -87,12 +85,6 @@ async function seedIdentity(db: Database): Promise<void> {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90333333P", legalName: "Secondary SL" })
-    .onConflictDoNothing();
-  await db
-    .insert(locations)
-    .values({
-      id: TILL_LOCATION_ID,
-    })
     .onConflictDoNothing();
   await withTransaction(db, (tx) =>
     writeArchiveSettings(tx, loadKeyRing(KEY_ENV), {

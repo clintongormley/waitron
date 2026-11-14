@@ -7,16 +7,19 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { acceptSwap, decideSwap, listPendingSwaps, requestSwap } from "./shift-swaps.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import { insertDraftShift, insertShiftSwap, seedLocation, seedPerson } from "../test/fixtures.js";
-
-let locationId: string;
+import {
+  insertDraftShift,
+  insertShiftSwap,
+  seedFixtureVenue,
+  seedPerson,
+} from "../test/fixtures.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    locationId = await seedLocation(db);
+    await seedFixtureVenue(db);
   },
 });
 
@@ -38,7 +41,6 @@ async function twoPeopleAndAShift(): Promise<{
   const toPerson = await seedPerson(suite.db, `to-${crypto.randomUUID()}`);
   const fromShift = await insertDraftShift(suite.db, {
     personId: requester,
-    locationId,
   });
   return { requester, toPerson, fromShift };
 }
@@ -63,7 +65,6 @@ describe("requestSwap", () => {
     const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
     const returnShift = await insertDraftShift(suite.db, {
       personId: toPerson,
-      locationId,
     });
     const swapId = await run((tx) =>
       requestSwap(tx, {
@@ -131,7 +132,6 @@ describe("requestSwap", () => {
     const thirdPerson = await seedPerson(suite.db, `third-${crypto.randomUUID()}`);
     const foreignReturnShift = await insertDraftShift(suite.db, {
       personId: thirdPerson,
-      locationId,
     });
     const code = await codeOfRejection(() =>
       run((tx) =>
@@ -181,7 +181,7 @@ describe("requestSwap", () => {
   it("refuses an unknown toPersonId beside a real toShiftId — management.request_invalid, no row written", async () => {
     const result = await unknownToPersonRefusal(async () => {
       const other = await seedPerson(suite.db, `other-${crypto.randomUUID()}`);
-      return insertDraftShift(suite.db, { personId: other, locationId });
+      return insertDraftShift(suite.db, { personId: other });
     });
     expect(result).toEqual({
       refusal: { code: "management.request_invalid", params: { field: "toPersonId" } },
@@ -279,7 +279,6 @@ describe("decideSwap", () => {
     const toPerson = await seedPerson(suite.db, `to-${crypto.randomUUID()}`);
     const fromShift = await insertDraftShift(suite.db, {
       personId: requester,
-      locationId,
     });
     return insertShiftSwap(suite.db, {
       requestedByPersonId: requester,
@@ -330,7 +329,6 @@ describe("decideSwap", () => {
     const toPerson = await seedPerson(suite.db, `t-${crypto.randomUUID()}`);
     const fromShift = await insertDraftShift(suite.db, {
       personId: requester,
-      locationId,
     });
     const swapId = await insertShiftSwap(suite.db, {
       requestedByPersonId: requester,
@@ -358,20 +356,16 @@ describe("listPendingSwaps", () => {
   it("returns only accepted swaps, ordered by created_at", async () => {
     // The queue reads every swap in the shared database, so clear the earlier tests' rows.
     await suite.db.execute(sql`delete from shift_swaps`);
-    const listLocation = locationId;
     const requester = await seedPerson(suite.db, `lr-${crypto.randomUUID()}`);
     const toPerson = await seedPerson(suite.db, `lt-${crypto.randomUUID()}`);
     const s1 = await insertDraftShift(suite.db, {
       personId: requester,
-      locationId: listLocation,
     });
     const s2 = await insertDraftShift(suite.db, {
       personId: requester,
-      locationId: listLocation,
     });
     const s3 = await insertDraftShift(suite.db, {
       personId: requester,
-      locationId: listLocation,
     });
     // Inserted out of created_at order, so `order by created_at` is what puts the early one first.
     const acceptedLate = await insertShiftSwap(suite.db, {

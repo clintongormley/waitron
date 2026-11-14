@@ -645,13 +645,13 @@ describe("till-ticket-view", () => {
   );
 
   it.each([
-    { invoiceType: "F1", domicile: "Calle Fiscal 27", showLocation: true },
-    { invoiceType: "F1", domicile: undefined, showLocation: true },
-    { invoiceType: "F2", domicile: "Calle Fiscal 27", showLocation: true },
-    { invoiceType: "F2", domicile: undefined, showLocation: true },
+    { invoiceType: "F1", domicile: "Calle Fiscal 27", showVenueAddress: true },
+    { invoiceType: "F1", domicile: undefined, showVenueAddress: true },
+    { invoiceType: "F2", domicile: "Calle Fiscal 27", showVenueAddress: true },
+    { invoiceType: "F2", domicile: undefined, showVenueAddress: true },
   ] as const)(
-    "keeps filed F1 domicile separate from the current location address on $invoiceType with domicile=$domicile",
-    async ({ invoiceType, domicile, showLocation }) => {
+    "keeps filed F1 domicile separate from the current venue address on $invoiceType with domicile=$domicile",
+    async ({ invoiceType, domicile, showVenueAddress }) => {
       for (const locale of ["es-ES", "en-GB"]) {
         const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
           result: {
@@ -667,8 +667,8 @@ describe("till-ticket-view", () => {
           invoiceLocale: locale,
         });
         const header = norm(el.shadowRoot!.querySelector(".issuer")!.textContent ?? "");
-        expect(header.includes("Location Street 45")).toBe(showLocation);
-        expect(header.includes("28001 Madrid")).toBe(showLocation);
+        expect(header.includes("Location Street 45")).toBe(showVenueAddress);
+        expect(header.includes("28001 Madrid")).toBe(showVenueAddress);
         expect(header.includes("Calle Fiscal 27")).toBe(
           invoiceType === "F1" && domicile !== undefined,
         );

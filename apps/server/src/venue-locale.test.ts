@@ -1,8 +1,8 @@
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { getCountryPack } from "@waitron/country-packs";
@@ -77,12 +77,12 @@ it.each([
   ["readVenueContentLanguageRules", () => readVenueContentLanguageRules(suite.db)],
   ["readVenueReceiptLanguageRules", () => withTransaction(suite.db, readVenueReceiptLanguageRules)],
 ])("%s refuses when no venue is set up", async (_name, read) => {
-  const [venue] = await suite.db.select().from(locations);
-  await suite.db.delete(locations);
+  const [venue] = await suite.db.select().from(settings).where(eq(settings.module, "venue"));
   try {
+    await suite.db.delete(settings).where(eq(settings.module, "venue"));
     await expect(read()).rejects.toMatchObject({ code: "venue.not_found" });
   } finally {
-    await suite.db.insert(locations).values(venue!);
+    await suite.db.insert(settings).values(venue!);
   }
 });
 
@@ -192,7 +192,7 @@ describe("offeredReceiptLanguages", () => {
 });
 
 describe("readOfferedReceiptLanguages", () => {
-  it("offers the venue's receipt languages without being told a location", async () => {
+  it("offers the venue's receipt languages without being told a venue", async () => {
     expect(await withTransaction(suite.db, readOfferedReceiptLanguages)).toEqual(["es-ES"]);
   });
 

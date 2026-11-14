@@ -1,3 +1,4 @@
+import { settings } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
@@ -13,13 +14,11 @@ import {
   diningTables,
   kitchenCourses,
   kitchenStations,
-  locations,
   parties,
   partyTables,
   printers,
   products,
   stationPrinterPairs,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -237,7 +236,6 @@ async function login(app: Hono, email: string): Promise<string> {
 
 let app: Hono;
 let venue: VenueResult;
-let venueId: string;
 let managerCookie: string;
 let staffCookie: string;
 let supervisorCookie: string;
@@ -247,7 +245,6 @@ const json = { "content-type": "application/json" };
 beforeAll(async () => {
   const setup = await setupTenant();
   venue = setup.venue;
-  venueId = await venueLocationId(suite.db);
   testDepartmentId = (
     await withTransaction(suite.db, (tx) =>
       createDepartment(tx, {
@@ -2229,8 +2226,8 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(malformed.status).toBe(404);
   });
 
-  it("the retired venue bump mode routes answer 404 and change no location row", async () => {
-    const before = await suite.db.select().from(locations).where(eq(locations.id, venueId));
+  it("the retired venue bump mode routes answer 404 and change no venue row", async () => {
+    const before = await suite.db.select().from(settings).orderBy(settings.module);
     const read = await req("/bump-mode", { method: "GET" }, managerCookie);
     expect(read.status).toBe(404);
     const write = await req(
@@ -2239,9 +2236,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       managerCookie,
     );
     expect(write.status).toBe(404);
-    expect(await suite.db.select().from(locations).where(eq(locations.id, venueId))).toEqual(
-      before,
-    );
+    expect(await suite.db.select().from(settings).orderBy(settings.module)).toEqual(before);
   });
 
   it("a STAFF session is refused on every station/routing route (403 authorization.not_permitted)", async () => {
@@ -2572,7 +2567,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
 
 describe("/management-api/courses + product course + fire-control (KDS-2 config)", () => {
   it("A773 waiter authority: fire-control is retired without changing stored settings", async () => {
-    const before = await suite.db.select().from(locations).where(eq(locations.id, venueId));
+    const before = await suite.db.select().from(settings).orderBy(settings.module);
     for (const cookie of [managerCookie, supervisorCookie, staffCookie, undefined]) {
       const read = await req("/fire-control", { method: "GET" }, cookie);
       expect(read.status).toBe(404);
@@ -2583,9 +2578,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
           cookie,
         );
         expect(write.status).toBe(404);
-        expect(await suite.db.select().from(locations).where(eq(locations.id, venueId))).toEqual(
-          before,
-        );
+        expect(await suite.db.select().from(settings).orderBy(settings.module)).toEqual(before);
       }
     }
   });
@@ -3088,37 +3081,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       });
     }
   });
-
-  it.each(["waiter", "kitchen", "expo"])(
-    "retired fire-control routes leave the stored %s value and the venue row unchanged",
-    async (mode) => {
-      const [original] = await suite.db.select().from(locations).where(eq(locations.id, venueId));
-      try {
-        await suite.db
-          .update(locations)
-          .set({ fireControl: mode as "waiter" | "kitchen" | "expo" })
-          .where(eq(locations.id, venueId));
-        const [before] = await suite.db.select().from(locations).where(eq(locations.id, venueId));
-        const initial = await req("/fire-control", { method: "GET" }, managerCookie);
-        expect(initial.status).toBe(404);
-        for (const next of ["waiter", "kitchen", "expo", "banana"]) {
-          const set = await req(
-            "/fire-control",
-            { method: "PUT", body: JSON.stringify({ mode: next }) },
-            managerCookie,
-          );
-          expect(set.status).toBe(404);
-          const [after] = await suite.db.select().from(locations).where(eq(locations.id, venueId));
-          expect(after).toEqual(before);
-        }
-      } finally {
-        await suite.db
-          .update(locations)
-          .set({ fireControl: original!.fireControl })
-          .where(eq(locations.id, venueId));
-      }
-    },
-  );
 
   it("a STAFF session is refused on every retained course/product-course route (403 authorization.not_permitted)", async () => {
     const someId = randomUUID();

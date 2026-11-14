@@ -310,7 +310,6 @@ describe("createJoinRequest", () => {
     await suite.db.insert(joinRequests).values(
       Array.from({ length: 98 }, (_, i) => i + 2).map((n) => ({
         nodeId: venue.cfg.nodeId,
-        locationId: venue.cfg.locationId,
         kind: "print_agent" as const,
         label: `seed ${n}`,
         tokenHash: "x",
@@ -427,7 +426,6 @@ describe("createJoinRequest — serialization of number allocation and the cap o
     await suite.db.insert(joinRequests).values(
       Array.from({ length: 9 }, (_, i) => i + 1).map((n) => ({
         nodeId: venue.cfg.nodeId,
-        locationId: venue.cfg.locationId,
         kind: "device" as const,
         label: `seed ${n}`,
         tokenHash: "x",
@@ -641,7 +639,6 @@ describe("acceptDeviceJoinRequest", () => {
       .insert(printers)
       .values(
         ["Bar", "Counter", "Portable"].map((name) => ({
-          locationId: venue.cfg.locationId,
           name,
           transport: "network_tcp" as const,
           host: "10.0.0.5",
@@ -843,7 +840,6 @@ describe("a returning disabled device", () => {
       .insert(printers)
       .values(
         ["Bar", "Counter", "Portable"].map((name) => ({
-          locationId: venue.cfg.locationId,
           name,
           transport: "network_tcp" as const,
           host: "10.0.0.5",

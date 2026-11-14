@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { tenants, venueLocationId } from "@waitron/db";
+import { tenants } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -17,16 +17,11 @@ import "./errors.js";
 
 const noopLog: Logger = () => {};
 
-// The tenant and its location are seeded once in `beforeAll` and every case reads them.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   resetPerTest: false,
   timeoutMs: 60_000,
 });
-
-interface Tenant {
-  locationId: string;
-}
 
 let nifCounter = 0;
 function nextNif(): string {
@@ -34,7 +29,7 @@ function nextNif(): string {
   return `${String(78_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-async function seedTenantWithLocation(): Promise<Tenant> {
+async function seedTestVenue(): Promise<void> {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
@@ -43,11 +38,10 @@ async function seedTenantWithLocation(): Promise<Tenant> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
-  return { locationId: await venueLocationId(suite.db) };
 }
 
 beforeAll(async () => {
-  await seedTenantWithLocation();
+  await seedTestVenue();
 });
 
 /** A fresh nodeId per call keeps each mounted app's enrol row independent, because this suite does

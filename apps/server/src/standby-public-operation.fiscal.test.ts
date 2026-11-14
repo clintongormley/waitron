@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { loadKeyRing } from "@waitron/credentials";
-import { deployment, invoiceSeries, locations, nodes, tenants, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, nodes, tenants, withTransaction } from "@waitron/db";
 import { readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -55,7 +55,6 @@ const ADMIN = "e1000000-0000-4000-8000-000000000004";
 const ADMIN_EMAIL = "owner@example.test";
 const PASSWORD = "public-synthetic-admin";
 const HASH = hashPassword(PASSWORD);
-const LOCATION = "e1000000-0000-4000-8000-000000000001";
 const PRIMARY = "e1000000-0000-4000-8000-000000000002";
 const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x1b).toString("base64"),
@@ -136,9 +135,6 @@ beforeEach(async () => {
       country: "ES",
       taxId: allocation.taxpayerNif,
       legalName: "Standby Host SL",
-    });
-    await db.insert(locations).values({
-      id: LOCATION,
     });
     await seedVenueSettings(db, {
       name: "Restaurant",

@@ -555,7 +555,7 @@ describe("selected-hour admission before archive placement", () => {
       if (kind === "cloud") {
         const point = {
           id: pointId,
-          venueId: node.locationId,
+          venueId: node.streamId,
           capturedAt: new Date().toISOString(),
           modules: (
             await buildManifest({
@@ -655,7 +655,7 @@ describe("selected-hour admission before archive placement", () => {
         binding: { ...prior, eventId: "browser-http" },
         context: {
           selectedSourceId: bucket
-            ? `stream:${node.locationId}:gen-0-${node.nodeId}-20261016T124000Z`
+            ? `stream:${node.streamId}:gen-0-${node.nodeId}-20261016T124000Z`
             : f.options.selected.sourceId,
           oldBoxGone: true,
           soleRecovery: true,

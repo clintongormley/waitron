@@ -17,7 +17,7 @@ const suite = useVenueDb({
 });
 
 describe("the operator scripts' shared test venue", () => {
-  it("stores English location text while retaining the Spanish fiscal and receipt settings", () => {
+  it("stores English venue text while retaining the Spanish fiscal and receipt settings", () => {
     expect(
       suite.db.all(sql`
       select json_extract(settings.doc, '$.name') as name, json_extract(settings.doc, '$.operationDescription') as operation_description, json_extract(settings.doc, '$.addressLine1') as address_line1, json_extract(settings.doc, '$.invoiceLocales') as invoice_locales,

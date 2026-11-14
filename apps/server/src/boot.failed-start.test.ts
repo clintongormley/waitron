@@ -12,7 +12,6 @@ import { Agent } from "undici";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   readVenueHolder,
@@ -162,7 +161,6 @@ vi.mock("./pending-card-recovery.js", async (importOriginal) => {
 });
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
-const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
@@ -323,9 +321,6 @@ async function seedVenueWithNode(directory: string): Promise<void> {
     await db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "90444444J", legalName: "Failed Start SL" });
-    await db.insert(locations).values({
-      id: TILL_LOCATION_ID,
-    });
     await seedVenueSettings(db, {
       name: "Barra",
       invoiceLocales: ["es-ES"],

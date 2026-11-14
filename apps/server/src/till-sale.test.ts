@@ -771,11 +771,6 @@ describe("receiptQr", () => {
   });
 });
 
-/**
- * Catalogue content is authored under the BARE language tag (`es`), and `priceOrderLines` re-keys it
- * to the location's full-tag `invoice_locales`, which the `working_order_lines_check_locales` trigger
- * requires the line's `descriptions` to hold exactly. The same re-keyed map flows on to `sale_lines`.
- */
 describe("priceOrderLines re-keys bare catalogue content to the venue invoice_locales", () => {
   // `customerName` is the per-language text the re-key acts on. The staff `name` is deliberately a
   // string no assertion expects, so a line that fell back to it instead of re-keying the customer
@@ -837,8 +832,6 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
   }
 
   it("re-keys bare `es` to full-tag `es-ES` — reading invoice_locales FRESH from the DB, not cfg", async () => {
-    // `[cfg.locale]` is deliberately WRONG: a re-key that read cfg rather than the location
-    // would produce `ca-ES`, which the trigger refuses.
     const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES"], { es: "Café" });
     const driftedCfg = await deviceRequestCfg(suite.db, {
       ...cfg,

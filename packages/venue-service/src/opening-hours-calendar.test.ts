@@ -1,3 +1,4 @@
+import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { listVenueReadiness } from "./operations.js";
@@ -13,12 +14,10 @@ import {
   CORE_MIGRATIONS,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
-  locations,
   specialDayDates,
   tenants,
   withTransaction,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -50,8 +49,8 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "House Ltd" })
     .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
-  const [existing] = await suite.db.select({ id: locations.id }).from(locations);
-  if (existing === undefined)
+  const existing = await readSettings(suite.db, VENUE_SETTINGS);
+  if (existing.revision === 0)
     await seedVenue(suite.db, {
       name: `House ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
@@ -61,9 +60,8 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
       province: "Sevilla",
       city: "Sevilla",
     });
-  const venueId = await venueLocationId(suite.db);
-  const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-  const cfg: { locationId: string } = { locationId: venueId };
+  const suffix = existing.revision === 0 ? "" : ` ${randomUUID()}`;
+
   return run(async (tx) => {
     const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
@@ -94,7 +92,7 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
     const seasons = Object.fromEntries(
       (await readSeasons(tx)).map((season) => [englishSeasonName(season.name, "es"), season.id]),
     );
-    return { cfg, seasons };
+    return { seasons };
   });
 }
 
@@ -303,7 +301,7 @@ describe("the Opening hours year read", () => {
 });
 
 async function monthVenue() {
-  const { cfg } = await venue([]);
+  await venue([]);
   return run(async (tx) => {
     const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
@@ -353,7 +351,6 @@ async function monthVenue() {
       { seasonId: seasons.Winter },
     );
     return {
-      cfg,
       seasons,
       diningDepartment,
       barDepartment,
@@ -699,31 +696,24 @@ describe("the Opening hours month read", () => {
       try {
         const frame = await readCalendarMonthPlan(tx, "2026-04", AT);
         expect(frame.plan.special.get("2026-04-03")?.specialDayId).toBe(easterWeek.id);
-        return prepared.mock.calls.flatMap((call) =>
-          [...(call[0] as { sql: string }).sql.matchAll(/\b(?:from|join) "(\w+)"/g)].map(
-            (match) => match[1]!,
-          ),
-        );
+        return prepared.mock.calls.flatMap((call) => {
+          const query = call[0] as { sql: string; params: unknown[] };
+          return [...query.sql.matchAll(/\b(?:from|join) "(\w+)"/g)].flatMap((match) =>
+            match[1] === "settings"
+              ? ["venue", "business_day"]
+                  .filter((module) => query.params.includes(module))
+                  .map((module) => `settings.${module}`)
+              : [match[1]!],
+          );
+        });
       } finally {
         prepared.mockRestore();
       }
     });
-    expect(
-      [
-        ...new Set(
-          tables.map((table) =>
-            table === "settings"
-              ? "settings.venue"
-              : table === "locations"
-                ? "settings.business_day"
-                : table,
-          ),
-        ),
-      ].sort(),
-    ).toEqual([...CALENDAR_MONTH_PLAN_READS].sort());
+    expect([...new Set(tables)].sort()).toEqual([...CALENDAR_MONTH_PLAN_READS].sort());
   });
 
-  it("reads the location and the taxpayer record once when a repeating special day follows a public holiday, and places it by that holiday", async () => {
+  it("reads the venue and the taxpayer record once when a repeating special day follows a public holiday, and places it by that holiday", async () => {
     await venue();
     const easterWeek = await special({
       name: "Easter week",
@@ -735,7 +725,7 @@ describe("the Opening hours month read", () => {
       .update(specialDayDates)
       .set({ holidayName: "Viernes Santo" })
       .where(eq(specialDayDates.specialDayId, easterWeek.id));
-    const { month, tables } = await run(async (tx) => {
+    const { month, tables, texts } = await run(async (tx) => {
       const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
         .session;
       const prepared = vi.spyOn(session, "prepareQuery");
@@ -747,6 +737,7 @@ describe("the Opening hours month read", () => {
               (match) => match[1]!,
             ),
           ),
+          texts: prepared.mock.calls.map((call) => (call[0] as { sql: string }).sql),
         };
       } finally {
         prepared.mockRestore();
@@ -756,7 +747,9 @@ describe("the Opening hours month read", () => {
     const day = (date: string) => month.days.find((d) => d.date === date)!;
     expect(day("2026-04-03").specialDay).toEqual({ id: easterWeek.id, name: "Easter week" });
     expect(day("2026-04-18").specialDay).toBeNull();
-    expect(tables.filter((table) => table === "locations")).toHaveLength(1);
+    expect(
+      texts.filter((text) => /from "settings" left join "day_cutover_changes"/.test(text)),
+    ).toHaveLength(1);
     expect(tables.filter((table) => table === "tenants")).toHaveLength(1);
   });
 
@@ -885,7 +878,7 @@ describe("the season days read", () => {
 describe("a past day's range around a start change", () => {
   const AFTER_RETURN = new Date("2026-11-02T12:00:00Z");
   async function lateSaturday() {
-    const { cfg } = await venue([]);
+    await venue([]);
     await seedBusinessDay(suite.db, { dayCutover: "05:00:00" });
     await run(async (tx) => {
       await tx
@@ -932,7 +925,7 @@ describe("a past day's range around a start change", () => {
         2,
         AFTER_RETURN,
       );
-      return { cfg, diningDepartment, lunch, dinner, terrace: zone!.id };
+      return { diningDepartment, lunch, dinner, terrace: zone!.id };
     });
   }
   const october = () => run((tx) => readOpeningHoursMonth(tx, "2026-10", AFTER_RETURN));

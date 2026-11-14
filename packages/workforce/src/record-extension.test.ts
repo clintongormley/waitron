@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { jobOrigin } from "@waitron/shared";
-import { seedLocation, seedPerson } from "../test/fixtures.js";
+import { seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 import { computeEntryHash, verifyChain, type EntryHashInput } from "./chain-hash.js";
 import { appendToChain, readChain } from "./chain.js";
 import { readRecordedEntries } from "./record-reads.js";
@@ -73,7 +73,7 @@ let nodeId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
-  await seedLocation(suite.db);
+  await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
 });
 it("round-trips an automatic end with no human recorder and verifies its hash", async () => {

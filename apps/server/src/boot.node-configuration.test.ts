@@ -11,7 +11,6 @@ import { Agent } from "undici";
 import { sql } from "drizzle-orm";
 import {
   invoiceSeries,
-  locations,
   nodes,
   sales,
   stampDeployment,
@@ -80,7 +79,6 @@ vi.mock("./till-api.js", async (original) => {
 });
 
 const NODE = "33333333-3333-4333-8333-333333333333";
-const LOCATION = "55555555-5555-4555-8555-555555555555";
 const source = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const { startServer, httpPort } = ephemeralServerFixture();
 let root: string | undefined;
@@ -163,7 +161,7 @@ it.each([undefined, ""])(
   60_000,
 );
 
-it("pending adoption without an own node serves status and help before location resolution", async () => {
+it("pending adoption without an own node serves status and help before venue resolution", async () => {
   const env = await environment(true, true);
   const server = await startServer(env);
   try {
@@ -183,7 +181,7 @@ it("pending adoption without an own node serves status and help before location 
   });
 }, 60_000);
 
-it("otherwise identical trading without a latch refuses a missing node location", async () => {
+it("otherwise identical trading without a latch refuses a missing node venue", async () => {
   await expect(startServer(await environment(true))).rejects.toMatchObject({
     code: "server.node_config_invalid",
     params: { key: "WAITRON_NODE_ID" },
@@ -198,9 +196,6 @@ it.each([
   "a %s venue in %s answers its own display language with no locale variable",
   async (country, province, taxId, timeZone, invoiceLocales, expected) => {
     await source.db.insert(tenants).values({ id: 1, country, taxId, legalName: "Test Ltd" });
-    await source.db.insert(locations).values({
-      id: LOCATION,
-    });
     await seedVenueSettings(source.db, {
       name: "Counter",
       province,
@@ -248,9 +243,6 @@ it.each([
     await source.db
       .insert(tenants)
       .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
-    await source.db.insert(locations).values({
-      id: LOCATION,
-    });
     await seedVenueSettings(source.db, {
       name: "Counter",
       province: "London",
@@ -292,9 +284,6 @@ it.each(["mirror", "primary"] as const)(
     await source.db
       .insert(tenants)
       .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
-    await source.db.insert(locations).values({
-      id: LOCATION,
-    });
     await seedVenueSettings(source.db, {
       name: "Counter",
       province: "London",

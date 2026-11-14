@@ -3,7 +3,7 @@ import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, nodes, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
@@ -30,7 +30,6 @@ const restored = useVenueDb({ migrations });
 const absent = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const at = "2026-01-05T09:00:00.000Z";
 const person = "10000000-0000-4000-8000-000000000001";
-const place = "10000000-0000-4000-8000-000000000002";
 const node = "10000000-0000-4000-8000-000000000004";
 const retired = "10000000-0000-4000-8000-000000000005";
 const codes = ["data", "chain", "head", "history"] as const;
@@ -41,7 +40,6 @@ beforeEach(async () => {
   for (const suite of [original, restored]) {
     await seedTenant(suite.db);
     await seedPersons(suite.db, { id: person, displayName: "Worker" });
-    await suite.db.insert(locations).values([{ id: place }]);
     await seedVenueSettings(suite.db, {
       name: "Main",
       invoiceLocales: ["en"],

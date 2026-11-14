@@ -13,7 +13,6 @@ import {
   pagePrinters,
   tenants,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -264,7 +263,6 @@ async function venue() {
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const locationId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
@@ -350,7 +348,6 @@ async function venue() {
     app,
     cfg,
     backend,
-    locationId,
     nodeId,
     seriesId: series!.id,
     zoneId,

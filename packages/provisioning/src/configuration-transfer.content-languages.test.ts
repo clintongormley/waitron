@@ -221,7 +221,7 @@ describe("required languages before configuration replacement", () => {
     expect(
       (
         await suite.db.execute(
-          sql`select json_extract(settings.doc, '$.province') as province from locations cross join settings on settings.module = 'venue'`,
+          sql`select json_extract(settings.doc, '$.province') as province from settings where settings.module = 'venue'`,
         )
       ).rows,
     ).toEqual([{ province: "Barcelona" }]);

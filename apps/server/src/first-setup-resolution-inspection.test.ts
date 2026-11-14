@@ -447,7 +447,7 @@ it.each(["file", "directory"])(
   },
 );
 
-it("refuses empty-only restart with retained catalogue rows and no taxpayer or location", async () => {
+it("refuses empty-only restart with retained catalogue rows and no taxpayer or venue", async () => {
   const { catalogues } = await import("@waitron/db");
   await suite.db.insert(catalogues).values({ name: "Restaurant retained menu" });
   const f = await actionsFixture();
@@ -495,7 +495,7 @@ it("does not call a database with retained catalogue rows empty", async () => {
 });
 
 it.each(["missing-table", "missing-column", "short-journal", "foreign-journal"])(
-  "refuses empty-only restart with %s despite intact taxpayer and location reads",
+  "refuses empty-only restart with %s despite intact taxpayer and venue reads",
   async (kind) => {
     const { DatabaseSync } = await import("node:sqlite");
     const f = await actionsFixture();

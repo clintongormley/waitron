@@ -3,7 +3,7 @@ import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { asc, eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
@@ -24,7 +24,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
 });
 const backend = new WorkforceBackend();
-let app: Hono, locationId: string, personId: string, otherId: string, cookie: string;
+let app: Hono, personId: string, otherId: string, cookie: string;
 beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Madrid",
@@ -33,7 +33,6 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Meals",
   });
-  locationId = await venueLocationId(suite.db);
   const workers = await seedPersons(suite.db, [
     { displayName: "Manager", role: "manager" },
     { displayName: "Worker", role: "staff" },
@@ -63,7 +62,6 @@ async function version() {
 }
 const shiftBody = (day = "2026-01-05") => ({
   personId,
-  locationId,
   startsAt: `${day}T09:00:00Z`,
   endsAt: `${day}T13:00:00Z`,
   startsOffsetMinutes: 60,
@@ -83,7 +81,7 @@ async function cleanQueue() {
 
 describe("accepted rota writes invalidate attendance in their transaction", () => {
   it("watches a newly created empty draft for later publication", async () => {
-    const response = await send("POST", "roster", { locationId, period: "2026-01-05" });
+    const response = await send("POST", "roster", { period: "2026-01-05" });
     expect(response.status).toBe(201);
     const { versionId } = (await response.json()) as { versionId: string };
     expect(await suite.db.select().from(attendanceSourceState)).toEqual([
@@ -225,7 +223,7 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     );
   });
 
-  it("keeps captured day bounds when the location's cutover is later changed", async () => {
+  it("keeps captured day bounds when the venue's cutover is later changed", async () => {
     const id = await add(await version());
     await seedBusinessDay(suite.db, { dayCutover: "06:00" });
     expect(
@@ -311,7 +309,7 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
       try {
         const response =
           action === "create"
-            ? await send("POST", "roster", { locationId, period: "2026-01-12" })
+            ? await send("POST", "roster", { period: "2026-01-12" })
             : action === "add"
               ? await send("POST", `roster/${draft}/shifts`, shiftBody("2026-01-06"))
               : action === "edit"

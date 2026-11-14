@@ -238,7 +238,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
   });
 
-  it("printers: rejects a second registration of the same (location, local_key)", async () => {
+  it("printers: rejects a second registration of the same (venue, local_key)", async () => {
     await insertPrinter({ transport: "usb", localKey: "SN-DUP" });
     const e = await captureError(() => insertPrinter({ transport: "usb", localKey: "SN-DUP" }));
     expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
@@ -303,7 +303,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     },
   );
 
-  it("printers: allows two NULL-local_key printers in one location (partial index)", async () => {
+  it("printers: allows two NULL-local_key printers in one venue (partial index)", async () => {
     const a = await insertPrinter({ transport: "network_tcp", host: "10.0.0.1" });
     expect(a[0]!.id).toBeDefined();
     const b = await insertPrinter({ transport: "network_tcp", host: "10.0.0.2" });

@@ -14,9 +14,7 @@ import { withTransaction } from "../tenancy.js";
 import { devices } from "./devices.js";
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
-import { locations } from "./tenants.js";
 
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const KDS_PROFILE_A = "eeeeeeee-0000-4000-8000-000000000001";
 const KDS_PROFILE_B = "eeeeeeee-0000-4000-8000-000000000002";
 const RECEIPT_PRINTER = "11111111-0000-4000-8000-0000000000a1";
@@ -24,7 +22,7 @@ const PAGE_PRINTER = "11111111-0000-4000-8000-0000000000a2";
 const GHOST_PRINTER = "11111111-0000-4000-8000-0000000000ff";
 const TOKEN_HASH = "scrypt$00$00";
 
-describe("device labels without a location", () => {
+describe("device labels without a venue", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("two active devices cannot share a label, and an inactive one can", async () => {
@@ -60,9 +58,6 @@ describe("devices schema (columns, FKs, unique)", () => {
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
-    });
-    await db.insert(locations).values({
-      id: LOCATION_B,
     });
     await seedVenueSettings(db, {
       name: "Loc B",

@@ -90,10 +90,10 @@ describe("tablesCreatedBy", () => {
   it("collects a backtick-quoted created table, the spelling the SQLite baselines use", () => {
     expect(
       tablesCreatedBy([
-        "CREATE TABLE `locations` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`catalogue_id` text\n);",
+        "CREATE TABLE `catalogues` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`catalogue_id` text\n);",
         "CREATE TABLE `absences` (\n\t`id` text PRIMARY KEY NOT NULL,\n\tFOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict\n);",
       ]),
-    ).toEqual(new Set(["locations", "absences"]));
+    ).toEqual(new Set(["catalogues", "absences"]));
   });
 
   // The CREATE is deliberately the OTHER spelling: with both backtick-quoted, an empty result would

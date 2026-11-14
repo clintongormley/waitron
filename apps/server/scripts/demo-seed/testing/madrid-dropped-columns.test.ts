@@ -26,7 +26,7 @@ const original: CanonicalMadridSemantics = {
         },
       ],
       rows: {
-        "@departments:a": { id: "@departments:a", location_id: "@locations:a", name: "Bar" },
+        "@departments:a": { id: "@departments:a", name: "Bar" },
       },
     },
   },
@@ -59,7 +59,6 @@ it("rekeys routing cells and their references when location leaves their identit
         rows: {
           [old]: {
             id: old,
-            location_id: "@locations:a",
             category_id: "@categories:drinks",
             product_id: null,
             zone_id: null,
@@ -90,7 +89,7 @@ it("rekeys a floor zone and its table references when its location column goes",
       floor_zones: {
         columns: [column("id"), column("location_id"), column("name")],
         foreignKeys: [],
-        rows: { [old]: { id: old, location_id: "@locations:venue", name: "Bar" } },
+        rows: { [old]: { id: old, name: "Bar" } },
       },
       dining_tables: {
         columns: [],
@@ -112,7 +111,6 @@ it("rekeys a floor zone and its table references when its location column goes",
     rows: {
       [routeId]: {
         id: routeId,
-        location_id: "@locations:venue",
         category_id: "category",
         product_id: null,
         zone_id: old,

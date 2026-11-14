@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
-import { CORE_MIGRATIONS, catalogues, venueLocationId, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, catalogues, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -30,7 +30,6 @@ async function seed(withMenu = true, receiptLocale = "en-GB") {
     defaultCatalogueId: withMenu ? menu!.id : null,
   });
   const cfg = {
-    locationId: await venueLocationId(db),
     nodeId: await seedNode(db),
   };
   await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, cfg));

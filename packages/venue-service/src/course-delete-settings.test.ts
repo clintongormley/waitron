@@ -5,7 +5,6 @@ import {
   departments,
   kitchenCourses,
   serviceSteps,
-  venueLocationId,
   withTransaction,
   type Database,
   type ServiceStepStart,
@@ -37,23 +36,18 @@ type Step = [name: string, start: ServiceStepStart, minutes?: number, course?: "
 
 async function venue(name: string) {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
-  const cfg: { locationId: string } = { locationId: await venueLocationId(db) };
+
   const [dessert] = await db
     .insert(kitchenCourses)
-    .values({ ...cfg, name: "Dessert", displayOrder: 1 })
+    .values({ name: "Dessert", displayOrder: 1 })
     .returning({ id: kitchenCourses.id });
-  return { cfg, courseId: dessert!.id };
+  return { courseId: dessert!.id };
 }
 
-async function department(
-  cfg: { locationId: string },
-  courseId: string,
-  name: string,
-  steps: Step[],
-) {
+async function department(courseId: string, name: string, steps: Step[]) {
   const [row] = await db
     .insert(departments)
-    .values({ ...cfg, name, tradingName: name })
+    .values({ name, tradingName: name })
     .returning({ id: departments.id });
   for (const [position, [stepName, start, minutes = 0, course]] of steps.entries())
     await db.insert(serviceSteps).values({
@@ -75,12 +69,12 @@ const stepsOf = (departmentId: string) =>
     .orderBy(asc(serviceSteps.position), asc(serviceSteps.id));
 
 it("counts the steps that start when the course is served, in every department", async () => {
-  const { cfg, courseId } = await venue("Counting");
-  await department(cfg, courseId, "Dining", [
+  const { courseId } = await venue("Counting");
+  await department(courseId, "Dining", [
     ["Set up", "seated"],
     ["Dessert?", "course_served", 10, "dessert"],
   ]);
-  await department(cfg, courseId, "Terrace", [
+  await department(courseId, "Terrace", [
     ["Set up", "seated"],
     ["Dessert?", "course_served", 5, "dessert"],
   ]);
@@ -90,14 +84,14 @@ it("counts the steps that start when the course is served, in every department",
 });
 
 it("reports nothing when no step names it", async () => {
-  const { cfg, courseId } = await venue("Nothing");
-  await department(cfg, courseId, "Dining", [["Set up", "seated"]]);
+  const { courseId } = await venue("Nothing");
+  await department(courseId, "Dining", [["Set up", "seated"]]);
   expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([]);
 });
 
 it("clears them and leaves other steps", async () => {
-  const { cfg, courseId } = await venue("Clearing");
-  const dining = await department(cfg, courseId, "Dining", [
+  const { courseId } = await venue("Clearing");
+  const dining = await department(courseId, "Dining", [
     ["Set up", "seated"],
     ["Dessert?", "course_served", 10, "dessert"],
     ["Anything else?", "all_served", 10],
@@ -111,8 +105,8 @@ it("clears them and leaves other steps", async () => {
 });
 
 it("a step left first that started after the step before now starts When seated, its minutes kept", async () => {
-  const { cfg, courseId } = await venue("Promoting");
-  const dining = await department(cfg, courseId, "Dining", [
+  const { courseId } = await venue("Promoting");
+  const dining = await department(courseId, "Dining", [
     ["Dessert?", "course_served", 10, "dessert"],
     ["Coffee", "after_previous", 5],
   ]);
@@ -125,10 +119,10 @@ it("a step left first that started after the step before now starts When seated,
 });
 
 it("every step tied at the lowest remaining position that starts after the step before now starts When seated", async () => {
-  const { cfg, courseId } = await venue("Ties");
+  const { courseId } = await venue("Ties");
   const [row] = await db
     .insert(departments)
-    .values({ ...cfg, name: "Dining", tradingName: "Dining" })
+    .values({ name: "Dining", tradingName: "Dining" })
     .returning({ id: departments.id });
   const dining = row!.id;
   await db.insert(serviceSteps).values([
@@ -157,8 +151,8 @@ it("every step tied at the lowest remaining position that starts after the step 
 });
 
 it("a step that stays below another keeps After the step before", async () => {
-  const { cfg, courseId } = await venue("Below");
-  const dining = await department(cfg, courseId, "Dining", [
+  const { courseId } = await venue("Below");
+  const dining = await department(courseId, "Dining", [
     ["Set up", "seated"],
     ["Dessert?", "course_served", 10, "dessert"],
     ["Coffee", "after_previous", 5],
@@ -174,8 +168,8 @@ it("a step that stays below another keeps After the step before", async () => {
 });
 
 it("a first step that does not start after the step before is left as it is", async () => {
-  const { cfg, courseId } = await venue("Left alone");
-  const dining = await department(cfg, courseId, "Dining", [
+  const { courseId } = await venue("Left alone");
+  const dining = await department(courseId, "Dining", [
     ["Dessert?", "course_served", 10, "dessert"],
     ["Anything else?", "all_served", 10],
   ]);

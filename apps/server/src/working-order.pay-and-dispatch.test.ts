@@ -472,10 +472,6 @@ async function readyAtOf(id: string): Promise<string | null | undefined> {
   return rows[0]?.ready_at;
 }
 
-/** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location —
- *  venue-apply.ts). No fixture product names a station, itself or through its category, so the
- *  routes `offerProducts` writes send every line here; it is the id the whole-ticket bump and the
- *  per-station queue address. */
 async function defaultStationId(): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select id from kitchen_stations
@@ -504,21 +500,11 @@ async function asTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   });
 }
 
-/**
- * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s node, series and location, on a
- * device of its own.
- */
 /** `cfg` as a request from a second device at the venue. */
 async function addDevice(cfg: DeviceRequestConfig): Promise<DeviceRequestConfig> {
   return deviceRequestCfg(suite.db, cfg);
 }
 
-/**
- * The deployment holds one tenant per database. A SECOND node under the SAME tenant + location —
- * a `cfg` differing only in `node_id`. It never sells here; it exists so reads run under it prove
- * they are venue-wide (#259): a node reaches the venue's open tabs regardless of the
- * `node_id` they carry. `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
- */
 async function addNode(cfg: DeviceRequestConfig): Promise<DeviceRequestConfig> {
   return { ...cfg, nodeId: await seedNode(suite.db) };
 }
@@ -1136,8 +1122,7 @@ describe("card tender (manual / datáfono)", () => {
 describe("cross-till end-to-end", () => {
   it("parks on till A, lists + retrieves + pays on till B (same node), and the chain across two sales verifies", async () => {
     const { cfg: tillA, coffee, water, zoneId } = await setupVenue();
-    // A SECOND device on the SAME node. It differs from till A ONLY in its device: same tenant, node,
-    // series and location — the shared node is the whole point of this cross-till, same-node path.
+
     const tillB = await addDevice(tillA);
     expect(tillB.origin.deviceId).not.toBe(tillA.origin.deviceId);
     expect(tillB.nodeId).toBe(tillA.nodeId);
@@ -1244,9 +1229,8 @@ describe("cross-till end-to-end", () => {
 
   it("venue-wide reads: the by-id family (get/update/abandon) reaches a foreign-node order", async () => {
     const { cfg: nodeA, coffee, zoneId } = await setupVenue();
-    // A second register under the SAME tenant + location, differing only in node_id. Reads are
-    // venue-wide, so every by-id lookup on node B reaches node A's order — a promoted node serves
-    // the tabs it inherited (getHeldOrder/updateHeldOrder/abandonHeldOrder — the whole by-id family).
+
+    // By-id reads on node B reach node A's orders, so a promoted node serves the tabs it inherited.
     const nodeB = await addNode(nodeA);
 
     const orderId = randomUUID();
@@ -2578,9 +2562,7 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
 
   it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node", async () => {
     const { cfg: nodeA, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    // A second node under the SAME tenant + location, differing only in `node_id`. Reads are venue-wide, so BOTH nodes fire a genuine order and BOTH queues show
-    // both — a measurement where each side holds two orders, not "one empty, one not" (CLAUDE.md §1).
-    // Both nodes share the location's one default station.
+
     const nodeB = await addNode(nodeA);
     const station = await defaultStationId();
 
@@ -2667,8 +2649,6 @@ describe("the pass board — venue-wide", () => {
     const expoA = await orderIdsOn();
     const expoB = await orderIdsOn();
 
-    // Same tenant + location on both sides, each pass board holding BOTH orders (oldest-first: A
-    // fired before B) — the reads do not separate by node.
     expect(expoA).toEqual([idA, idB]);
     expect(expoB).toEqual([idA, idB]);
   });
@@ -3004,8 +2984,6 @@ describe("markCollected (the counter handover)", () => {
   });
 });
 
-/** Insert an active dining table in `zoneId` under `cfg`'s location and return its id — the `openTab`
- *  → `addTabRound` entry point. */
 async function addTable(tx: Transaction, zoneId: string): Promise<string> {
   // Through the table, not a raw `insert`: BOTH `dining_tables.id` and
   // `dining_tables.created_at` are `$defaultFn` columns, so a raw insert naming neither is refused

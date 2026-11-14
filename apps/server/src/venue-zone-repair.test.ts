@@ -11,7 +11,6 @@ import {
   incidents,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -30,7 +29,7 @@ const suite = useVenueDb({
 });
 const AT = new Date("2026-10-14T23:30:00.000Z");
 const RAW = "Invalid/Zone?token=private-invalid-value";
-let scope: { nodeId: string; locationId: string };
+let scope: { nodeId: string };
 let token: string;
 let actor: string;
 const body = { timeZone: "Europe/Madrid", expectedClockRevision: 1, confirmed: true };
@@ -43,7 +42,7 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Restaurant service",
   });
-  scope = { locationId: await venueLocationId(suite.db), nodeId: await seedNode(suite.db) };
+  scope = { nodeId: await seedNode(suite.db) };
   const [person] = await seedPersons(suite.db, { displayName: "Manager", role: "manager" });
   actor = person!.id;
   token = (await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: actor })))
@@ -56,8 +55,8 @@ const read = (candidate?: string) =>
     readVenueZoneRepair(tx, scope, token, new TradingAdmission().snapshot(), AT, candidate),
   );
 const snapshot = () => ({
-  locations: suite.db.all<Record<string, unknown>>(
-    sql`select l.*, json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from locations l join settings v on v.module = 'venue' join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+  venueState: suite.db.all<Record<string, unknown>>(
+    sql`select json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from (select doc from settings where module = 'venue') v join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
   ),
   settings: suite.db.all<Record<string, unknown>>(
     sql`select * from settings where module = 'business_day'`,
@@ -82,8 +81,8 @@ describe("atomic unusable-zone confirmation", () => {
         admission: "restart_required",
       });
       const after = snapshot();
-      expect(after.locations).toEqual(
-        before.locations.map((row) => ({ ...row, time_zone: "Europe/Madrid" })),
+      expect(after.venueState).toEqual(
+        before.venueState.map((row) => ({ ...row, time_zone: "Europe/Madrid" })),
       );
       expect(after.cutovers).toEqual(before.cutovers);
       expect(after.orders).toEqual(before.orders);
@@ -100,8 +99,8 @@ describe("atomic unusable-zone confirmation", () => {
     const result = await confirm();
     expect(result).toEqual({ repaired: true, clockRevision: 2, admission: "restart_required" });
     const after = snapshot();
-    expect(after.locations).toEqual(
-      before.locations.map((row) => ({ ...row, time_zone: "Europe/Madrid" })),
+    expect(after.venueState).toEqual(
+      before.venueState.map((row) => ({ ...row, time_zone: "Europe/Madrid" })),
     );
     expect(after.cutovers).toEqual(before.cutovers);
     expect(after.orders).toEqual(before.orders);

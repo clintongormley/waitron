@@ -150,9 +150,8 @@ const suite = useVenueDb({
     });
     ({ deviceId } = await seedDevice(db));
     nodeId = await seedNode(db);
-    // A SECOND node at the SAME location — no sales of its own. The venue-wide vs node-scoped test
-    // below mounts report-api pointed at THIS node to prove the overview aggregates the other node's
-    // sale (venue-wide) while the daily close scoped to this node stays empty.
+
+    // The overview below aggregates the other node's sale while this node's daily close stays empty.
     secondNodeId = await seedNode(db);
     const [series] = await db
       .insert(invoiceSeries)

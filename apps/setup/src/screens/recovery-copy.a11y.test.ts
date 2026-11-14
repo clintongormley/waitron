@@ -15,7 +15,7 @@ const copy = {
   nodeId: "saved-node",
   nodeRecoveryKeyName: "Amber Hill",
   taxpayer: { legalName: "Saved venue", taxId: "89890001K" },
-  venueName: "Saved location",
+  venueName: "Saved venue",
 };
 it.each(["light", "dark"] as const)(
   "the selected-copy preview is accessible in %s in blank, loading, selected and refused states",

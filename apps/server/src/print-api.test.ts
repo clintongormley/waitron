@@ -1,5 +1,4 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { locations, readVenue } from "@waitron/db";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { seedVenueSettings, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
@@ -22,7 +21,6 @@ import {
   printerHolders,
   printers,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
@@ -87,7 +85,6 @@ const EXPECTED_SERVERS = [
   { nodeId: "cloud", url: "https://cloud.deli.test", standing: "serving-secondary" },
 ];
 
-let locationId: string;
 let cfg: TradingContext;
 let managerCookie: string;
 let staffCookie: string;
@@ -103,7 +100,6 @@ async function seedPrintRouteFixture(db: Database) {
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
-  locationId = await venueLocationId(db);
   // Knock and accept must share this one cfg: every join-request statement filters by node.
   cfg = {
     nodeId: brandNodeId(randomUUID()),
@@ -193,23 +189,6 @@ async function send(
     ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
   });
 }
-
-it("refuses the retired venue-wide receipt mode write without changing the location", async () => {
-  const app = mountApp();
-  const before = await Promise.all([suite.db.select().from(locations), readVenue(suite.db)]);
-
-  const response = await send(
-    app,
-    "PATCH",
-    `/management-api/locations/${locationId}/receipt-print-mode`,
-    { cookie: managerCookie, body: { mode: "never" } },
-  );
-
-  expect(response.status).toBe(404);
-  expect(await Promise.all([suite.db.select().from(locations), readVenue(suite.db)])).toEqual(
-    before,
-  );
-});
 
 /** Accepts through the verb; the accept route is `join-api.ts`'s. */
 async function joinAndAccept(
@@ -2820,7 +2799,7 @@ describe("mountPrintApi — management: recent jobs", () => {
     const payload = new Uint8Array([0x01]);
     await suite.db
       .insert(printJobs)
-      .values(Array.from({ length: 101 }, () => ({ locationId, printerId, payload })));
+      .values(Array.from({ length: 101 }, () => ({ printerId, payload })));
     const stamped = nowIso();
     await suite.db.insert(printJobs).values([
       {
@@ -2877,7 +2856,6 @@ describe("mountPrintApi — management: recent jobs", () => {
               ["failed", 5],
             ] as const
           ).map(([status, attempts]) => ({
-            locationId,
             printerId,
             payload,
             status,
@@ -2893,7 +2871,6 @@ describe("mountPrintApi — management: recent jobs", () => {
           Array.from({ length: 101 }, (_, i) => {
             const n = i + 1;
             return {
-              locationId,
               printerId,
               payload,
               status: "done" as const,
@@ -2953,7 +2930,6 @@ describe("mountPrintApi — management: recent jobs", () => {
             ] as const
           ).flatMap(([status, attempts]) =>
             Array.from({ length: 101 }, () => ({
-              locationId,
               printerId,
               payload,
               status,
@@ -2967,7 +2943,6 @@ describe("mountPrintApi — management: recent jobs", () => {
         .insert(printJobs)
         .values(
           Array.from({ length: 101 }, (_, i) => ({
-            locationId,
             printerId,
             payload,
             status: "failed" as const,
@@ -3020,7 +2995,6 @@ describe("mountPrintApi — management: recent jobs", () => {
       const payload = new Uint8Array([0x01]);
       await suite.db.insert(printJobs).values(
         Array.from({ length: 101 }, () => ({
-          locationId,
           printerId,
           payload,
           status: "done" as const,
@@ -6149,7 +6123,6 @@ describe("drawer expiry and printer visibility in the queue", () => {
     ] as const;
     const jobs = states.map((state) => ({
       id: randomUUID(),
-      locationId,
       printerId,
       payload: Buffer.from([1]),
       kind: state.kind,

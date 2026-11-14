@@ -121,7 +121,7 @@ describe("the venue's zone across a daylight-saving change", () => {
   });
 });
 
-describe("the void caller's original writing location", () => {
+describe("the void caller's original writing venue", () => {
   it("keeps the offset-zero original day and prepares the new annulment from Madrid", async () => {
     const old = await original();
     const before = records(old.saleId)[0];

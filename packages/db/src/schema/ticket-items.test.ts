@@ -28,7 +28,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   beforeAll(async () => {
     const db = suite.db;
     await seedVenue(db, {
-      name: "Fixture Location A",
+      name: "Fixture Venue A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });

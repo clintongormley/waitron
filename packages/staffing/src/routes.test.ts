@@ -1163,7 +1163,7 @@ describe("changing a week through the route", () => {
       refusal("management.request_invalid", { field: "body" }),
     );
   });
-  it("copies only the route's location, returning the new version and pending swap list", async () => {
+  it("copies only the route's venue, returning the new version and pending swap list", async () => {
     const r = await routed(),
       role = await r.create("Waiter");
     const added = await r.call("POST", `${root}/shifts`, r.manager, {

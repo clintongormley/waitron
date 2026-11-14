@@ -12,7 +12,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
 import {
   invoiceSeries,
-  locations,
   nodes,
   openVenueDatabase,
   stampDeployment,
@@ -118,7 +117,6 @@ const db = {} as Record<VenueName, Database>;
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
 const MIRROR_STAFF_ID = "66666666-6666-4666-8666-666666666666";
-const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
@@ -256,12 +254,6 @@ async function seedIdentity(admin: Database): Promise<void> {
   await admin
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222J", legalName: "Mirror SL" })
-    .onConflictDoNothing();
-  await admin
-    .insert(locations)
-    .values({
-      id: TILL_LOCATION_ID,
-    })
     .onConflictDoNothing();
   await seedVenueSettings(admin, {
     name: "Loc",
@@ -507,7 +499,6 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     // A pending envío this node must NOT submit.
     const seeded = await seedFiscalRegistro(db.mirror, {
       ids: {
-        locationId: TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         seriesId: SEEDED_SERIES_ID,
       },
