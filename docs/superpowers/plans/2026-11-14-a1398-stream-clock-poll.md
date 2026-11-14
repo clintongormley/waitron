@@ -5,6 +5,8 @@ Ask verbatim — `/Users/clintongormley/waitron-campaign-i/queue.md`, A1398-2:
 
 Smallest result: shorter readiness waits in the existing stream tests, with the same checks and timeout budgets. The separate high-effort Codex draft received Claude's 114-second plan read; the watcher has not cleared this design. No owner design approval is recorded. Claude questions whether 244–250-second jobs already meet “about four minutes”; the watcher settles that priority before build.
 
+14 November 2026 update: the opening paragraph records the proposal before clearance; see the dated watcher clearance at the end.
+
 ## Measured cause
 
 At `4a7ad1ca745ee104485824968a47f1fcd50d3e9b`, unchanged `supervisor.test.ts` passes 153/153 in 49.34 s wall / 48.187 s tests. Timing-only instrumentation also passes 153/153, in 49.50 / 48.67 s: 593 delayed successful `ManualClock.asleep` checks cost 30.557 s; 14 refusals cost 4.220 s. The instrumentation is removed; no candidate is built.
@@ -27,3 +29,5 @@ Retained full runs 43555982953/43572788079 attempt 2 show light-a at 250/244 s a
 Expected build: test support **+1/-1**, production **+0/-0**, new tests **+0/-0**, docs about **+4/-2** besides this plan. No package moves, new helper, scheduler, shard, worker, table, workflow change or product behavior change. Campaign finish/land authorisation remains subject to plan clearance and all qualification gates.
 
 Watcher clearance, 14 November 2026 11:18 (`~/waitron-campaign-i/questions.md`): “Cleared, inside A1398-2. Light jobs at 244–250 s are just over the owner's four-minute target, and a one-line test-clock change that saves about 30 s locally, without dropping any check, is the cheapest way under it. Three bounded runs as you propose, plus the hosted job time on the PR's own CI. Land it, then close A1398-2 if nothing else in it is over four minutes, and say which jobs still are, if any.” This clears the build and replaces the separate full qualification request above with timing from this PR's CI; no additional dispatch or rerun is authorised.
+
+Watcher correction clearance, 14 November 2026 11:38 (`~/waitron-campaign-i/questions.md`): the completed run-it review found that faster polling exposes the real child-exit wait in “kills a leftover that ignores the polite signal, after the grace”. Add `once(leftover, "exit")`, drive the existing clock through the grace until the replacement fake starts, then await the real exit; retain the exact `SIGKILL` assertion. The watcher cleared this test repair, the delayed-exit control, three consumer-file runs and the single corrections read, with no further review wave. This supersedes the original requirement to leave that test unchanged.
