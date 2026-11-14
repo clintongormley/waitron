@@ -12,12 +12,7 @@ import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import * as identity from "./index.js";
 import { declaredPermissions, registerModulePermissions } from "./permissions.js";
-import {
-  openFreshManagementSession,
-  openManagementSession,
-  refusalOf,
-  seedPerson,
-} from "../test/fixtures.js";
+import { openFreshManagementSession, openManagementSession, refusalOf } from "../test/fixtures.js";
 import { seedPersons } from "../test/person-rows.js";
 
 registerModulePermissions([{ permission: "fiscal.remedy", defaultHolders: [] }]);
@@ -216,7 +211,11 @@ it("protects built-in names/deletion and Admin's permissions", async () => {
 
 it("edits built-in grants by set value, logs each difference and changes live authority without mail", async () => {
   const { actor, builtIns } = await fixture(true);
-  const target = await seedPerson(suite.db, "staff");
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Waiter",
+    email: "waiter@example.test",
+  });
+  const target = person!.id;
   await suite.db
     .update(roles)
     .set({ permissions: ["payment.take", "report.view"] })
@@ -306,6 +305,7 @@ it("deletes the custom role and every membership, logs each removal and queues o
     permissions: ["report.view", "report.export", "fiscal.view"],
   });
   const mail = await suite.db.select().from(outgoingMail);
+  expect(mail).toHaveLength(2);
   expect(new Set(mail.map((m) => m.personId))).toEqual(
     new Set(people.slice(0, 2).map((p) => p.id)),
   );
