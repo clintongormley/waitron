@@ -19,7 +19,7 @@ import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { closeStationForToday } from "./station-times.js";
-import { stationServiceTimes } from "./station-service-times.js";
+import { stationServiceTimes, stationsServiceTimes } from "./station-service-times.js";
 import { readSeasons } from "./seasons.js";
 import * as service from "./index.js";
 import { saveSpecialDay, type SpecialDayInput } from "./special-days.js";
@@ -800,4 +800,27 @@ it("A724: two reaching zones union their open shares without filling a shared cl
         { periodId: f.lunch, startsAt: "15:00", endsAt: "16:00" },
       ]),
     );
+  }));
+
+it("reads every active station through one dated planning batch", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const session = (db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
+      .session;
+    const spy = vi.spyOn(session, "prepareQuery");
+    try {
+      expect(await stationsServiceTimes(db, day, day)).toEqual({
+        [f.defaultStation]: { always: "default", days: [] },
+        [f.station]: planned(f),
+        [f.unused]: { always: null, days: [{ date: day, departments: [] }] },
+      });
+      const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+      for (const table of ["menu_periods", "routing_cells"])
+        expect(
+          texts.filter((text) => text.includes(`from "${table}"`)),
+          table,
+        ).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+    }
   }));
