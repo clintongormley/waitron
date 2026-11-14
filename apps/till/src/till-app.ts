@@ -2677,6 +2677,7 @@ export class TillApp extends LitElement {
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
     this.#stopPinScreenPoll();
+    this.#kitchenSetupPoll.stop();
     this.#stopFloorPoll();
     this.#endSplitRefusalReads(SPLIT_READS_OFF_PAGE);
     this.#draftSync?.drop();
@@ -3235,18 +3236,42 @@ export class TillApp extends LitElement {
         this.#tabNeedsFloorData(tab)
       )
         void this.#refreshFloorZones();
-      return this.#readLiveDeviceZones(signal);
+      const zones = this.#readLiveDeviceZones(signal);
+      if (this.#menuZones().length > 0) return zones;
+      // A failed setup read must not end the tick, or change how the zones read's failure is judged.
+      return Promise.all([zones, this.#followSetup(signal).catch(() => undefined)]).then(
+        () => undefined,
+      );
     },
     read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
-    // A table's zone only while its order is on screen: each read takes a turn of the write lock.
-    zones: () =>
-      [
-        ...new Set([
-          this.counterServiceZoneId,
-          this.#tableCatalogueActive() ? (this.#tableZoneId ?? "") : "",
-        ]),
-      ].filter((id) => id !== ""),
+    zones: () => this.#menuZones(),
     onState: (zoneId, state) => this.#onMenuState(zoneId, state),
+  });
+  /** A table's zone only while its order is on screen: each read takes a turn of the write lock. */
+  #menuZones(): string[] {
+    return [
+      ...new Set([
+        this.counterServiceZoneId,
+        this.#tableCatalogueActive() ? (this.#tableZoneId ?? "") : "",
+      ]),
+    ].filter((id) => id !== "");
+  }
+  /** A kitchen screen in device mode reads no zone; only its tick runs, to follow the setup. */
+  readonly #kitchenSetupPoll = new MenuStatePoll({
+    live: () => this.#live,
+    onTick: async (signal) => {
+      if (this.#themeHash !== undefined) followVenueTheme(this.#themeHash);
+      await this.#followSetup(signal).catch((error: unknown) => {
+        if (
+          !signal.aborted &&
+          (error as { code?: string } | undefined)?.code === "device.unauthorized"
+        )
+          this.#kitchenSetupPoll.stop();
+      });
+    },
+    read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
+    zones: () => [],
+    onState: () => undefined,
   });
   readonly #equipmentPoll = new EquipmentPoll({
     live: () => this.#live,
@@ -4788,6 +4813,7 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
     this.#stopPinScreenPoll();
+    this.#kitchenSetupPoll.stop();
     const bootGeneration = ++this.#bootGeneration;
     this.#refusedPerson = undefined;
     this.#setupRead = undefined;
@@ -4959,6 +4985,7 @@ export class TillApp extends LitElement {
         show();
         this.#sayIfSwitched(from);
         this.deviceMode = true;
+        this.#kitchenSetupPoll.start();
         if (this.#preLoginChoice === undefined) setLocale(this.#venueLocale);
         this.#setScreen("station");
         this.#onHistory();
@@ -5916,6 +5943,7 @@ export class TillApp extends LitElement {
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
     this.#stopPinScreenPoll();
+    this.#kitchenSetupPoll.stop();
     this.#equipmentPoll.start();
     void this.#readEquipment().then(() => {
       if (replaced()) return;
@@ -10963,6 +10991,16 @@ export class TillApp extends LitElement {
         if (this.#setupRead === read) this.#setupRead = undefined;
       });
     this.#setupRead = read;
+  }
+
+  /** For a till whose polls name no setup revision: reads the setup and applies it when it moved. */
+  async #followSetup(signal: AbortSignal): Promise<void> {
+    const generation = this.#bootGeneration;
+    const asked = ++this.#setupAsked;
+    const till = await this.api.getTill({ signal });
+    if (signal.aborted || generation !== this.#bootGeneration || asked < this.#setupApplied) return;
+    if (till.setupRevision === this.#setupRevision) this.#setupApplied = asked;
+    else this.#applyVenueSetup(till, asked);
   }
 
   /** The parts of the till's setup that come from the device's profile. */

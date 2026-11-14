@@ -836,6 +836,125 @@ describe("A841 the till follows the theme in use", () => {
     expect(themeFetch).toHaveBeenCalledTimes(2);
   });
 
+  it("a moved theme hash repaints a cash register with no counter zone on the floor plan", async () => {
+    const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["z1"])),
+      getTill: vi.fn().mockResolvedValue(first),
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    expect(floor(el)).not.toBeNull();
+    expect(themeFetch).toHaveBeenCalledTimes(1);
+    themeAnswer = fixture;
+    api.getTill.mockResolvedValue(moved);
+    await poll(el);
+    await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+    expect(themeFetch).toHaveBeenCalledTimes(2);
+  });
+
+  const kds = { ...first, formFactor: "kds" as FormFactor, capabilities: ["act-as-kds"] };
+
+  async function openKitchen(): Promise<TillApp> {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(kds),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "dev-1",
+        formFactor: "kds",
+        kitchenScreens: [
+          {
+            kind: "station",
+            available: true,
+            stations: [],
+            zones: null,
+            nonPassStationsOverride: null,
+            showNonPassStations: true,
+          },
+        ],
+      }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen")?.deviceMode).toBe(
+      true,
+    );
+    expect(themeFetch).toHaveBeenCalledTimes(1);
+    return el;
+  }
+
+  it("a moved theme hash repaints a kitchen screen in device mode", async () => {
+    const el = await openKitchen();
+    themeAnswer = fixture;
+    api.getTill.mockResolvedValue({ ...kds, themeHash: "h2", setupRevision: "s2" });
+    await poll(el);
+    await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+    expect(themeFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("a kitchen screen in device mode tries a failed theme fetch again on its next tick", async () => {
+    const el = await openKitchen();
+    const before = bg();
+    themeAnswer = new TypeError("Failed to fetch");
+    api.getTill.mockResolvedValue({ ...kds, themeHash: "h2", setupRevision: "s2" });
+    await poll(el);
+    await vi.waitFor(() => expect(themeFetch).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(bg()).toBe(before);
+    expect(before).not.toBe(FIXTURE_LIGHT_BG);
+    themeAnswer = fixture;
+    await poll(el);
+    await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+    expect(themeFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("a kitchen screen taken off the page ignores a setup answer that arrives afterwards", async () => {
+    const el = await openKitchen();
+    const before = bg();
+    let answer!: (value: unknown) => void;
+    api.getTill.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    const reads = api.getTill.mock.calls.length;
+    await poll(el);
+    expect(api.getTill.mock.calls.length).toBe(reads + 1);
+    el.remove();
+    themeAnswer = fixture;
+    answer({ ...kds, themeHash: "h2", setupRevision: "s2" });
+    await flush(el);
+    expect(bg()).toBe(before);
+    expect(themeFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("an older setup answer arriving after a newer unchanged one does not paint the older theme", async () => {
+    const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["z1"])),
+      getTill: vi.fn().mockResolvedValue(first),
+    });
+    await flush(el);
+    await signIn(el);
+    let older!: (value: unknown) => void;
+    api.getTill.mockImplementationOnce(() => new Promise((resolve) => (older = resolve)));
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    const reads = api.getTill.mock.calls.length;
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tableOrder(el)).not.toBeNull();
+    await poll(el);
+    expect(api.getTill.mock.calls.length).toBe(reads + 1);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    expect(tableOrder(el)).toBeNull();
+    await poll(el);
+    expect(api.getTill.mock.calls.length).toBe(reads + 2);
+    const before = bg();
+    themeAnswer = fixture;
+    older(moved);
+    await flush(el);
+    expect(bg()).toBe(before);
+    expect(themeFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("a moved theme hash brings a new logo into a handheld's bar without a reload", async () => {
     const handheld = till("tablet-landscape");
     const before = { width: innerWidth, height: innerHeight };

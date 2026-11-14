@@ -110,8 +110,7 @@ su línea se corta en mitad de la palabra, sin guion, con cualquier tamaño de t
 grande ocurre más a menudo.
 
 Un tamaño de texto guardado llega a los paneles y las cajas igual que los colores de un tema guardado
-(consulta [Guarda un tema](appearance.md#save)). Una pantalla de cocina en la que nadie inicia sesión
-lo toma la próxima vez que se inicia.
+(consulta [Guarda un tema](appearance.md#save)).
 
 El papel impreso conserva los tamaños de Waitron: los recibos, las comandas de cocina, la etiqueta
 del equipo y el kit de recuperación del nodo. El botón de inicio de sesión de Google conserva el
@@ -379,10 +378,7 @@ a todas las pantallas.
 
 Cuando el tema que guardaste es el que está en uso, el panel que estás usando cambia al nuevo
 aspecto al momento. Los demás paneles abiertos a la vez lo siguen por su cuenta, y una caja con la
-sesión iniciada lo sigue la próxima vez que comprueba si su carta ha cambiado. Un teléfono o una
-tableta de mano, y una caja registradora preparada para el servicio en mostrador, lo comprueban
-cada 15 segundos. Cualquier otra caja registradora lo comprueba cada 15 segundos mientras tiene
-abierto el pedido de una mesa y, si no, lo sigue cuando vuelve a abrir uno, o cuando se reinicia.
+sesión iniciada o una pantalla de cocina lo sigue en 15 segundos.
 Guardar un tema que no está en uso no cambia ninguna pantalla hasta que lo pones en uso.
 
 Si guardaste de todos modos, la fila de ese tema en la tarjeta Temas muestra una etiqueta como «2 se

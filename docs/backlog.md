@@ -978,7 +978,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `party_id` is the table's own party.
   [Detail](backlog/till.md#a1030-firing-one-held-dish-is-refused-on-a-merged-in-partys-paid-bill-found-by-a758-7)
 
-- **What an open till picks up from a setup change** (bundle of 3, 1 important, size S). Holds A785, A787. [Detail](backlog/till.md#bundle-what-an-open-till-picks-up-from-a-setup-change)
+- **What an open till picks up from a setup change** (bundle of 1, size S). Holds A787. [Detail](backlog/till.md#bundle-what-an-open-till-picks-up-from-a-setup-change)
 
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
   that drag** — left open by A642.

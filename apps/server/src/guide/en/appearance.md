@@ -102,8 +102,7 @@ longer than its button or line breaks inside the word, with no hyphen, at any te
 makes that happen more often.
 
 A saved text size reaches the dashboards and tills as a saved theme's colours do (see
-[Save a theme](appearance.md#save)). A kitchen screen that nobody signs in on takes it when it next
-starts.
+[Save a theme](appearance.md#save)).
 
 Printed paper keeps Waitron's sizes: receipts, kitchen tickets, the equipment label and the node
 recovery pack. Google's sign-in button keeps Google's size.
@@ -347,10 +346,8 @@ saving at once. While its switch is on, the name dialog lists the colours and te
 still hard to read, so you see them before the theme goes on every screen.
 
 When the theme you saved is the one in use, the dashboard you are using changes to the new look at
-once. Other dashboards open at the same time follow on their own, and a signed-in till follows the
-next time it checks its menu for changes. A handheld phone or tablet, and a cash register set up
-for counter service, check every 15 seconds. Any other cash register checks every 15 seconds while
-a table's order is open on it, and otherwise follows when it next opens one, or when it restarts.
+once. Other dashboards open at the same time follow on their own, and a signed-in till or a
+kitchen screen follows within 15 seconds.
 Saving a theme that is not in use changes no screen until you put it in use.
 
 If you saved anyway, the Themes card's row for that theme shows a tag such as "2 hard to read", and
