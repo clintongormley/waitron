@@ -11,7 +11,7 @@
 3. Exact 403 `emergency_hosting_closed` plus reason `setting_off|level_inactive|no_payment_method|not_provisioned` maps to `cloud.emergency_hosting_closed`; exact 403 `emergency_hosting_installation_ineligible` maps to `cloud.unavailable`, without revocation. Actual 403 `revoked` retires registration. Keep machine-v1 encoding/body unchanged; add `emergency-hosting-display` and `emergency-hosting-code` in slice 1a to `packages/contract/src/signing/installation-proof.ts` and its test. Follow `docs/developers/shared-ui-preparation.md`: normal publisher, installed-consumer qualification and exact version/source/integrity handoff to Cloud before its adapters build; no manual publishing.
 4. Published `hostedMonthlyCents/hostedDayDivisor` (30), rounded once half-up to whole cents using exact integer/Decimal arithmetic: 9000→300, 10000→333, 10005→334, 14→0, 15→1. Label an approximate informational quote excluding VAT, formatting the returned rate once, including one percent sign. Unpublished prices affect only the price line; retain the other facts. Change no invoice calculation.
 
-Cloud contract blob `9fcb2de1d02373b936a45a393b8030d713df591a`, “Read the facts”, requires persistence outside backups and a daily projection. Retain both; runtime is unqualified.
+[Cloud proposal #1214](https://github.com/waitron-io/waitron-cloud/pull/1214), based on contract blob `9fcb2de1d02373b936a45a393b8030d713df591a`, “Read the facts”, requires persistence outside backups and a daily projection. Retain both; runtime is unqualified.
 
 ## Build and prove by layer
 
