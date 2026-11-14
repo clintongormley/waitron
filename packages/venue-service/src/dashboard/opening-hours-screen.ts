@@ -958,6 +958,7 @@ export class OpeningHoursScreen extends LitElement {
     if (current.searchParams.get("back") === periodsPath) {
       this.pushedPainter = undefined;
       const guard = navigationGuardFor(window);
+      // A fresh document has no earlier entry in this guard's history.
       if (guard && guard.position.index > 0) history.back();
       else this.replaceAddress(new URL(periodsPath, current));
       return;

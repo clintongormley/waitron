@@ -6820,8 +6820,7 @@ without a modal, window URL or Close action.
 
 The body is a table in a scrolling region named "Seasons", with the columns Colour, Season, Starts
 on, Runs until and a bin. The bin column stays at the region's trailing edge while the others scroll
-sideways under it, as a `wt-data-table` column with `pinned: "end"` does. Colour choosers have no narrow-width cap. At phone width, scroll the table to see the date
-columns while the bin stays pinned. Rows run from the season in force on 1 January, then by start (`draftOf`,
+sideways under it, as a `wt-data-table` column with `pinned: "end"` does. At phone width, scroll the table to see the date columns while the bin stays pinned. Rows run from the season in force on 1 January, then by start (`draftOf`,
 `season-draft.ts`); they do not re-sort while editing, and the list comes back sorted after a Save.
 Each row edits its colour (a `wt-colour-chooser` with `hide-label`, whose tiles name the other named rows
 that use each colour; two seasons may share one), painted with the same pale season tints as the Calendar, its name, and its start as a Day and a Month
