@@ -220,6 +220,12 @@ Before activation, verify repository-variable arrival in an ordinary run and che
 The snapshot has no expiry rule, so inspect the printed age; the decision routes a whole run.
 `scripts/ci-hosted-route.test.mjs` exercises these decisions with controlled API replies,
 including pagination and incomplete inventories; it does not measure live capacity.
+Routing limits its queued-run lists to runs created in the last 24 hours, using
+GitHub's `created` filter before checking list completeness. This omits older runs
+from both queue pressure and the advertised total, including old runs with jobs
+(watcher, 2026-11-14 10:24). A missing recent run still makes the list unreadable.
+Running-run lists, health checks, recovery and cancellation retain their full reads.
+The query omits old records without enumerating or logging their individual ids.
 Each list read restarts once from page 1, discarding its earlier rows, after an empty
 page before completion or a changed valid total. Duplicate/excess rows take precedence
 even when the total changes; malformed replies also refuse the read. A second mismatch
@@ -233,6 +239,7 @@ External provenance, read 2026-11-09:
 | --- | --- | --- |
 | The routing script uses its workflow commit | [GitHub contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context): “The commit SHA for the workflow file.” | Read the routing module at `GITHUB_WORKFLOW_SHA`, so an older candidate checkout cannot supply a different input contract. |
 | The repository run list uses the existing read permission | [GitHub workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository): “Anyone with read access to the repository can use this endpoint” | Routing reads this repository without another credential. |
+| Routing omits queued runs created over 24 hours ago | [GitHub Actions limits](https://docs.github.com/en/actions/reference/limits), read 2026-11-14: self-hosted job queue time is “24 hours” | This routing cutoff uses run creation time; it is not evidence that GitHub cancelled an old record. Recovery keeps its full lists. |
 | Only the server planning step installs gh | [GitHub runner context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#runner-context): “self-hosted for self-hosted runners configured by the repository owner” | Test `runner.environment` so hosted jobs keep their existing tools. |
 
 The existing health check reads CI's queued and running workflows. A job's wait is dated from its own

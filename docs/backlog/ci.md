@@ -443,6 +443,9 @@ The remaining work concerns live routing qualification and the action-repository
   other stuck work is reported without moving runs. First-attempt PR planners use published
   spare capacity; non-PR planning remains hosted. A1473’s reviewed controller is installed. Each router list now restarts once after an empty page
   or a changed valid total, discarding partial rows; persistent mismatch remains unknown.
+  Routing uses date-bounded queued-run reads from the last 24 hours, so older records
+  are absent from the server-side count and rows; missing recent rows still refuse
+  routing. Health recovery and cancellation retain full lists (watcher, 2026-11-14 10:24).
   Duplicate/excess refusals take precedence even when totals change (watcher, 2026-11-13 05:43). Run 43278084012’s first planner never ran the ratio during
   its 32-minute wait; the historical admission/recovery cause remains unproved.
   Qualify the idle probe, browser guest

@@ -162,13 +162,24 @@ export async function serverHealth(options, unavailable) {
 }
 
 export async function serverRoute(options) {
-  const { runId, attempt = 1, request, repository, repositoryId } = options;
+  const since = new Date((options.now ?? Date.now()) - 86_400_000).toISOString();
+  const recent = {
+    ...options,
+    request: (path, requestOptions) =>
+      options.request(
+        path.includes("/runs?status=queued")
+          ? `${path}&created=${encodeURIComponent(">=" + since)}`
+          : path,
+        requestOptions,
+      ),
+  };
+  const { runId, attempt = 1, request, repository, repositoryId } = recent;
   const unavailable = [];
   if (attempt > 1) {
     const cancelled = await readInventory(async () => {
       const run = await request(`/repos/${repository}/actions/runs/${runId}`);
       assert.ok(run.id === runId && owned(run, repositoryId), "Foreign retry run");
-      const jobs = await serverJobs(options, run, attempt - 1);
+      const jobs = await serverJobs(recent, run, attempt - 1);
       return jobs.filter(
         (job) =>
           job.status === "completed" &&
@@ -184,7 +195,7 @@ export async function serverRoute(options) {
       };
     }
   }
-  const state = await serverHealth(options, unavailable);
+  const state = await serverHealth(recent, unavailable);
   if (state.stuck.length)
     return {
       route: "hosted",
@@ -223,7 +234,7 @@ export async function serverRoute(options) {
   let running = 0,
     queued = 0;
   for (const run of runs.values()) {
-    for (const job of await runJobs(options, run)) {
+    for (const job of await runJobs(recent, run)) {
       if (!job.labels.length || job.labels.includes("self-hosted")) continue;
       if (job.status === "in_progress") running++;
       if (["queued", "pending", "waiting", "requested"].includes(job.status)) queued++;

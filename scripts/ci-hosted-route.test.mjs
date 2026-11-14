@@ -63,6 +63,69 @@ function fixture(running = 0, queued = 0) {
 }
 
 describe("queue-pressure routing", () => {
+  it.each(["health", "hosted"])(
+    "routes past an old queued-list mismatch in the %s read but refuses a missing fresh run",
+    async (scope) => {
+      const f = fixture(20),
+        request = f.options.request,
+        now = Date.parse("2026-11-14T09:20:00Z"),
+        cutoff = "2026-11-13T09:20:00.000Z",
+        oldRun = {
+          ...f.run,
+          id: 49,
+          head_repository: { id: 42 },
+          status: "queued",
+          created_at: "2026-11-11T20:00:00Z",
+        },
+        freshRun = {
+          ...f.run,
+          id: 52,
+          head_repository: { id: 42 },
+          status: "queued",
+          created_at: "2026-11-14T09:18:00Z",
+        };
+      f.options.now = now;
+      let missingFresh = false;
+      const recentReads = [];
+      f.options.request = async (path, options) => {
+        if (
+          path.includes("/runs?status=queued") &&
+          path.includes("/workflows/ci.yml/") === (scope === "health")
+        ) {
+          const params = new URL("https://fixture.test" + path).searchParams;
+          const recent = params.get("created") === ">=" + cutoff;
+          if (recent) recentReads.push(path);
+          return {
+            total_count: recent && !missingFresh ? 1 : 2,
+            workflow_runs: params.get("page") === "1" ? [recent ? freshRun : oldRun] : [],
+          };
+        }
+        if (path.includes("/runs/52/attempts/2/jobs?")) return { total_count: 0, jobs: [] };
+        return request(path, options);
+      };
+      const outputs = [],
+        reports = [];
+      await healthCommand("route", f.options, {
+        output: (line) => outputs.push(line),
+        report: (line) => reports.push(line),
+      });
+      expect(outputs).toEqual(["server_route=server"]);
+      expect(recentReads).toHaveLength(1);
+      expect(reports.join("\n")).not.toContain("CI_ROUTE_BLIND");
+
+      missingFresh = true;
+      outputs.length = 0;
+      reports.length = 0;
+      await healthCommand("route", f.options, {
+        output: (line) => outputs.push(line),
+        report: (line) => reports.push(line),
+      });
+      expect(outputs).toEqual(["server_route=hosted"]);
+      expect(reports.join("\n")).toContain("CI_ROUTE_BLIND run=51 attempt=1");
+      expect(reports.join("\n")).toContain("empty page after 1 of 2");
+    },
+  );
+
   it.each([
     [6, "hosted", "server"],
     [0, "hosted", "hosted"],
