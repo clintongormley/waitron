@@ -36,8 +36,9 @@ Cada parte tiene una fila con un punto de color:
 
 - **Verde** significa que la parte está bien.
 - **Ámbar** significa que necesita atención, pero todo sigue funcionando.
-- **Rojo** significa que algo no se puede guardar: el disco está lleno, o la hora del servidor es tan
-  incorrecta que no se puede registrar una venta. Cualquiera de ellos pone también en rojo **Ventas**.
+- **Rojo** significa que algo no se puede guardar o cobrar: el disco está lleno, la hora del
+  servidor es tan incorrecta que no se puede registrar una venta, o los cobros esperan a que se
+  confirme la hora del servidor. Cualquiera de ellos pone también en rojo **Ventas**.
 
 Cada fila muestra los mismos avisos que la campana para esa parte, con las mismas palabras. Las
 filas **Copia en el bucket**, **Impresoras** y **Lectores de tarjetas** tienen un botón **Ir a …**,

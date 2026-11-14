@@ -257,7 +257,7 @@ export const ALERT_MESSAGES: Readonly<
   },
   "clock.unconfirmed": {
     en: "The box has not confirmed its time since it started, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
-    es: "El servidor no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en un terminal.",
+    es: "El servidor no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
     variants: {
       hostSilent: {
         mode: "append",

@@ -31,8 +31,9 @@ Each part has a row with a coloured dot:
 
 - **Green** means the part is fine.
 - **Amber** means it needs attention, but everything still works.
-- **Red** means something can't be saved: the disk is full, or the clock is too wrong to record a
-  sale. Each of these also turns **Sales** red.
+- **Red** means something can't be saved or paid: the disk is full, the clock is too wrong to
+  record a sale, or payments wait for the box's time to be confirmed. Each of these also turns
+  **Sales** red.
 
 A row shows the alerts the bell shows for that part, in the bell's words. The **Bucket copy**,
 **Printers** and **Card readers** rows have a **Go to …** button, such as **Go to Backups**, that

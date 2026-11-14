@@ -1984,7 +1984,8 @@ export interface ClockChallengeView {
   boxAt: string;
 }
 
-/** LOCAL copy of `POST /api/box/clock-set`'s answer (`apps/server/src/box-health-api.ts`). */
+/** LOCAL copy of the answer of `POST /api/box/clock-set` and `POST /api/box/clock-confirm`
+ * (`apps/server/src/box-health-api.ts`). */
 export interface ClockSetView {
   confirmationId: string | null;
   stepMs: number;

@@ -941,7 +941,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   time is confirmed: by the box's internet time service being synchronised, by two enrolled devices
   at different addresses reading within 5 seconds of it, or by a person confirming or correcting the
   date and time on a till or on Box status; AEAT is not asked, and orders still reach the kitchen** (owner,
-  2026-11-10). Guards:
+  2026-11-10; "or on Box status" is the watcher's, 2026-11-13, for the owner to confirm). Guards:
   `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-unconfirmed-gate.test.ts` and
   `apps/server/src/boot.start-clock-gate.test.ts`, weaker than the rule.
   [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).

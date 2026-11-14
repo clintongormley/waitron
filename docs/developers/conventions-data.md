@@ -4360,7 +4360,7 @@ How it moves (plan D3):
   equipment read, every 15 seconds while it shows the PIN screen or someone is signed in on it, and
   the store keeps a reading for five minutes (plan R11). Tablets at the PIN screen count: two
   switched on and connected confirm the box's time with nobody signed in (PR 1c).
-- **A person on a till** (below) confirms `by_person`.
+- **A person on a till, or an administrator on Box status** (below), confirms `by_person`.
 - **Back to waiting.** A clock set that moved the clock by more than a second but could not be
   verified (the host gave no successful answer, or the clock did not land within 2 seconds of the target) sends a start that is
   `by_devices` or `by_person` back to `waiting` and logs `clock_start.step_unverified`, whatever the
@@ -4436,7 +4436,7 @@ covered only once that file lists it.
 Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
 The app's container cannot set the clock, so a small root program on the box's own system, outside
 the container — the **host service** — sets it when the server asks. The box sets its clock
-inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time, while a start waits for its time to be
+inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time or an administrator's own device, while a start waits for its time to be
 confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), and from the setup,
 restore and handover pages' clock step. It opens no stop of its own.
 
@@ -4490,8 +4490,8 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
 **Who may set it** (`apps/server/src/clock-correction.ts`, one correction per server, built in
 `boot.ts`; setup mode builds its own, in the last item):
 
-- an administrator, from their own device, while the clock reads before 28-10-2024:
-  `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `system.box_admin`), after
+- an administrator, from their own device, while the clock reads before 28-10-2024 or the start
+  waits for its time: `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `system.box_admin`), after
   `POST /api/box/clock-challenge`;
 - on a till, `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
   (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, while

@@ -1678,8 +1678,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se ha registrado: la hora del servidor es incorrecta.",
   },
   "clock.unconfirmed": {
-    en: "Not recorded: the box is waiting for its time to be confirmed. Use “Check the time” on a till.",
-    es: "No se ha registrado: el servidor espera a que se confirme su hora. Usa «Comprobar la hora» en una caja.",
+    en: "Not recorded: the box is waiting for its time to be confirmed. Confirm it on the Box status page, or with “Check the time” on a till.",
+    es: "No se ha registrado: el servidor espera a que se confirme su hora. Confírmala en Estado del servidor o con «Comprobar la hora» en una caja.",
   },
   "clock.check_expired": {
     en: "The check took too long. Try again.",
