@@ -138,6 +138,9 @@ taking orders in person, by phone and by app. We have read only a summary of it,
 - **My call, moving an order to another department** (`acceptDepartmentTransfer`): while the switch
   would still be allowed, the order takes the new department's setting. After that it keeps its
   own, and a move into a department fixed the other way is refused with a message saying why.
+  _Narrowed 2026-11-14 by the owner's 15:22 answers (watcher, 22:57): a takeaway order moved to a
+  table stays takeaway, and a bill whose way is fixed keeps it wherever it moves, with no refusal.
+  The plan's Decision 6 has the rule as built._
 - **My call, the bottle a table guest takes home:** a department that also sells to take away is
   set to chosen on the till; its table orders still start as eaten here. A department set to eaten
   in sells nothing to take away.
