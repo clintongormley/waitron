@@ -14,7 +14,9 @@ import {
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { mkdtemp, rm } from "node:fs/promises";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -430,6 +432,53 @@ describe("devSetup against a real venue directory", () => {
     );
     expect(await devicesCount()).toBe(5);
   });
+
+  it("names the settings file it read in that refusal", async () => {
+    await expect(devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} })).rejects.toThrow(
+      envPath,
+    );
+  });
+});
+
+describe("dev-setup run as a command", () => {
+  let workDir: string;
+
+  beforeAll(async () => {
+    workDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-main-"));
+  });
+
+  afterAll(async () => {
+    if (workDir !== undefined) await rm(workDir, { recursive: true, force: true });
+  });
+
+  it("writes the settings file WAITRON_DEV_ENV_FILE names, making its folder, and leaves apps/server/.env alone", () => {
+    const checkoutEnv = fileURLToPath(new URL("../.env", import.meta.url));
+    const checkoutEnvBefore = existsSync(checkoutEnv) ? statSync(checkoutEnv).mtimeMs : null;
+    const settingsFile = join(workDir, "not-yet", "server.env");
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", fileURLToPath(new URL("./dev-setup.ts", import.meta.url))],
+      {
+        cwd: fileURLToPath(new URL("..", import.meta.url)),
+        encoding: "utf8",
+        timeout: 150_000,
+        env: {
+          ...process.env,
+          WAITRON_ENV: "dev",
+          WAITRON_SEED_SALES_DAYS: "0",
+          WAITRON_STATE_DIR: join(workDir, "state"),
+          WAITRON_VENUE_DIR: join(workDir, "venue"),
+          WAITRON_DEV_ENV_FILE: settingsFile,
+        },
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(`dev-setup: wrote ${settingsFile}`);
+    expect(parseEnvFile(readFileSync(settingsFile, "utf8")).WAITRON_VENUE_DIR).toBe(
+      join(workDir, "venue"),
+    );
+    expect(existsSync(checkoutEnv) ? statSync(checkoutEnv).mtimeMs : null).toBe(checkoutEnvBefore);
+  }, 180_000);
 });
 
 describe("devSetup under WAITRON_ENV=production", () => {

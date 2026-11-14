@@ -1,5 +1,6 @@
 // Dev launcher for apps/server (`pnpm --filter @waitron/server dev`, and via the root `pnpm dev`).
-// Needs the `.env` that `pnpm dev:setup` (trading mode) or `pnpm dev:onboard` (setup mode) writes.
+// Needs the `.env` that `pnpm dev:setup` (trading mode) or `pnpm dev:onboard` (setup mode) writes,
+// or the file `WAITRON_DEV_ENV_FILE` names.
 //
 // Run from source, boot's default migrations root does not exist (each set lives in its package's
 // own `drizzle/`), so this assembles them with copy-migrations and points `WAITRON_MIGRATIONS_DIR`
@@ -14,11 +15,13 @@ import { dirname, join, resolve } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(here, "..");
 
-if (!existsSync(join(pkgRoot, ".env"))) {
+const envFile = resolve(process.env.WAITRON_DEV_ENV_FILE?.trim() || join(pkgRoot, ".env"));
+
+if (!existsSync(envFile)) {
   console.error(
-    "apps/server/.env is missing — run `pnpm dev:setup` (provisions a venue → trading mode) or " +
+    `${envFile} is missing — run \`pnpm dev:setup\` (provisions a venue → trading mode) or ` +
       "`pnpm dev:onboard` (no venue → setup mode) from the repo root first.\n" +
-      "Both write the `.env` this reads, and migrate the local venue directory it points at.",
+      "Both write the settings file this reads, and migrate the local venue directory it points at.",
   );
   process.exit(1);
 }
@@ -48,7 +51,7 @@ function parseEnvFile(text) {
 
 // Resolved as `config.ts` resolves `stateDir`: unset or empty takes the default; a set value is
 // relative to the child's cwd (`pkgRoot`), not this process's.
-const envFileVars = parseEnvFile(readFileSync(join(pkgRoot, ".env"), "utf8"));
+const envFileVars = parseEnvFile(readFileSync(envFile, "utf8"));
 const stateDirValue = envFileVars.WAITRON_STATE_DIR;
 const stateDir =
   stateDirValue === undefined || stateDirValue === ""
@@ -56,7 +59,7 @@ const stateDir =
     : resolve(pkgRoot, stateDirValue);
 
 // Later `--env-file` flags override earlier ones.
-const envFileFlags = ["--env-file=.env"];
+const envFileFlags = [`--env-file=${envFile}`];
 const secretsEnvFile = join(stateDir, "secrets.env");
 const tradingEnvFile = join(stateDir, "trading.env");
 if (existsSync(secretsEnvFile)) envFileFlags.push(`--env-file=${secretsEnvFile}`);
