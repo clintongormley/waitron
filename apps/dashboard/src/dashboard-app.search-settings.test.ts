@@ -1,6 +1,7 @@
 import { html } from "lit";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { navigationGuardFor } from "@waitron/ui";
 import { setLocale, type DashboardSettingCandidate } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
 import { mountReceiptApp } from "./testing/department-receipt-app-fixture.js";
@@ -154,7 +155,7 @@ it.each(["vanished", "invalid"])(
     expect(searchBox(app).value).toBe("reminder");
   },
 );
-it.each(["cancel", "new activation", "session exit", "disconnect"])(
+it.each(["cancel", "new activation", "session exit", "disconnect", "back"])(
   "retires a late answer after %s",
   async (mode) => {
     let finish!: (rows: DashboardSettingCandidate[]) => void;
@@ -163,12 +164,16 @@ it.each(["cancel", "new activation", "session exit", "disconnect"])(
     });
     state.resolve.mockReturnValueOnce(pending).mockResolvedValue([]);
     const app = await mount();
+    if (mode === "back") await navigationGuardFor(window)!.write("/manage/venue-operations");
     await open(app);
     await expect.poll(() => settingChooser(app)).toBeTruthy();
     if (mode === "cancel") await cancelSettingSearch(app);
     else if (mode === "new activation") {
       searchResult(app, "reminder")!.click();
       await expect.poll(() => settingChooser(app)?.textContent).toContain("No available");
+    } else if (mode === "back") {
+      history.back();
+      await expect.poll(() => location.pathname).toBe("/manage/overview");
     } else if (mode === "session exit")
       window.dispatchEvent(
         new CustomEvent("waitron-session-invalid", {
@@ -176,6 +181,7 @@ it.each(["cancel", "new activation", "session exit", "disconnect"])(
         }),
       );
     else app.remove();
+    expect(app.isConnected).toBe(mode !== "disconnect");
     finish(mode === "disconnect" ? [] : [row("bar")]);
     await pending;
     await app.updateComplete;
