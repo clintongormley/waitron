@@ -6007,10 +6007,6 @@ export class TillApp extends LitElement {
     return this.#refreshList("held");
   }
 
-  #refreshStationQueue(): Promise<void> {
-    return this.#refreshList("station");
-  }
-
   /** Never throws: a failure is said in the list's own retry notice. */
   #refreshWaiting(): Promise<void> {
     return this.#refreshList("waiting", "refresh.waiting");
@@ -6346,7 +6342,7 @@ export class TillApp extends LitElement {
       this.stage = "order";
       this.collectFlow = undefined;
       this.#onTabSelect("counter");
-      await this.#refreshStationQueue();
+      await this.#refreshList("station", "refresh.station");
       if (session !== this.#operatorSession) return;
       this.#followDefault();
       this.errorKey = undefined;
@@ -9159,7 +9155,7 @@ export class TillApp extends LitElement {
           : "station.advance_error";
     }
     if (session !== this.#operatorSession) return;
-    await this.#refreshStationQueue();
+    await this.#refreshAfterWrite("station", "refresh.station");
   }
 
   async #onMarkCollected(event: Event): Promise<void> {
@@ -9192,11 +9188,9 @@ export class TillApp extends LitElement {
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_hand_over");
       return;
     }
-    try {
-      await this.#refreshStationQueue();
-    } finally {
-      if (session === this.#operatorSession) await this.#refreshWaiting();
-    }
+    await this.#refreshAfterWrite("station", "refresh.station");
+    if (session === this.#operatorSession)
+      await this.#refreshAfterWrite("waiting", "refresh.waiting");
   }
 
   /**
@@ -9230,7 +9224,7 @@ export class TillApp extends LitElement {
       this.#handingOver.delete(id);
     }
     if (!live()) return;
-    if (!handedOver) return this.#refreshWaiting();
+    if (!handedOver) return this.#refreshAfterWrite("waiting", "refresh.waiting");
     // The counter's prep-queue card offers its own Collect, which would now be refused.
     await this.#refreshAfterWrite("station", "refresh.station_after_hand_over");
     if (!live()) return;
@@ -9469,7 +9463,7 @@ export class TillApp extends LitElement {
       this.#counterRetrievals.delete(read);
     }
     if (session !== this.#operatorSession) return;
-    await this.#refreshHeldOrders();
+    await this.#refreshAfterWrite("held", "refresh.held");
   }
 
   /** Loads the order again after a save was refused for an out-of-date copy, or (`sentDish`) for a
@@ -9691,7 +9685,7 @@ export class TillApp extends LitElement {
     const said = failure !== undefined && !movedOn();
     if (said) this.errorKey = failure;
     if (session !== this.#operatorSession) return "unread";
-    await this.#refreshHeldOrders();
+    await this.#refreshAfterWrite("held", "refresh.held");
     if (failure === undefined) return "read";
     return said && failure === "held.stale" ? "gone" : "unread";
   }
@@ -16957,7 +16951,7 @@ export class TillApp extends LitElement {
       }
       if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
       else await this.#onTableRefusal(error, live);
-      if (live()) await this.#refreshHeldOrders().catch(() => undefined);
+      if (live()) await this.#refreshAfterWrite("held", "refresh.held");
       return;
     }
     if (this.#store.id === orderId) {

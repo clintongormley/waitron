@@ -159,21 +159,6 @@ may make one or both of those branches reachable, or show they can go.
   `apps/server/src/receipt-guests.ts`), so that receipt prints no guests line where Part 3a would
   have printed one. Decide whether bookings and parties take the same 1 to 999 bound.
 
-## Three till handlers still leave a failed list refresh unhandled
-
-- `#onRetrieveOrder` awaits `#refreshHeldOrders()`, and `#onAdvanceTicketItem` awaits
-  `#refreshStationQueue()`, in `apps/till/src/till-app.ts`, each after its `try`/`catch` and
-  outside it, on both paths, after a success and after a failure. A failed refresh there is an
-  unhandled promise rejection and the operator sees nothing. Retrieve writes nothing, so an "X
-  succeeded, but…" message does not fit it.
-- `#onMarkCollected` goes through `#refreshAfterWrite` after a successful collect, but after a
-  failed one it awaits `#refreshStationQueue()` in a `try`/`finally` with no `catch`, so a failed
-  refresh there is an unhandled promise rejection too.
-
-**Next action:** decide whether advance goes through `#refreshAfterWrite` with its own "X
-succeeded, but…" string, what retrieve shows when its refresh fails, and what mark-collected shows
-when its refresh after a failed collect fails.
-
 ## Cash handed back for a voided cash sale is recorded nowhere
 
 A void writes no payment or refund row, so if staff give a customer cash back, the void's day shows
@@ -2400,21 +2385,6 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   destinations while preserving same-area moves.
   [Detail](till.md#held-order-closed-area-destinations-need-the-orders-source-area)
 
-## Bundle: Failed refreshes with nowhere to go
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Investigate a null device identity during profile switching.** A432's full till coverage run
-  on 2026-10-08 logged an unhandled rejection through `#readIdentity` / `#enterSwitchedProfile`.
-  Reproduce which profile-switch test answers null. Cause unverified.
-  [Detail](till.md#investigate-a-null-device-identity-during-profile-switching)
-- **Three till handlers still leave a failed list refresh unhandled** — OPEN (found 2026-09-25,
-  review of PR #641). `#onAdvanceTicketItem` and `#onRetrieveOrder` (`apps/till/src/till-app.ts`)
-  await their list refresh after their `try`/`catch`, outside it, and `#onMarkCollected` awaits
-  `#refreshStationQueue()` after a failed collect in a `try`/`finally` with no `catch`. **Next
-  action:** decide what each shows when that refresh fails.
-  [Detail](till.md#three-till-handlers-still-leave-a-failed-list-refresh-unhandled)
-
 ## Bundle: Two forms not yet on the Forms contract
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -3671,26 +3641,6 @@ change covers the order screen; the held-order picker still leaves this decision
   after a send through `commit()`, and has no `savedValue` to follow, unlike the order screen's Name window since A717. **Next action:** probe it
   in real Chromium; if Save compares against the old name, follow the stored name as
   `party-name-dialog.ts` does.
-
-## Investigate a null device identity during profile switching
-
-A432’s full till coverage run
-on 2026-10-08 passed 5,951 tests and its thresholds, but the browser logged an unhandled
-rejection at `apps/till/src/till-app.ts:4468` through `#readIdentity` / `#enterSwitchedProfile`.
-Reproduce which profile-switch test answers null and determine whether the fixture or the
-public identity response needs correction; keep the existing profile and login assertions.
-Receipt: Lane D `receipts/a432/task5-ci-till-coverage-green.log`, PR #1463. Cause unverified.
-
-2026-11-08 occurrence: A1002 cut 1's selected till run passed 2,855 tests while Chromium logged
-`Cannot read properties of null (reading 'approvedProfiles')` through `#holdIdentity`,
-`#readIdentity` and `#enterSwitchedProfile`. The cause remains unverified. Receipt: Lane K
-`receipts/a1002-cut1-20261108/till-focused.log`; the same reproduction question above remains open.
-
-2026-11-13 occurrence: A1102's review ran `pnpm --filter @waitron/till exec vitest run
-src/till-app.test.ts --maxWorkers=1` alone on main at `b8c0b7513b`; every case passed while Chromium
-logged the same rejection through `#holdIdentity`, `#readIdentity`, `#enterSwitchedProfile`,
-`#switchProfile` and `#onProfileSwitch`, so a case in `apps/till/src/till-app.test.ts` reaches it.
-The cause remains unverified. Receipt: the A1102 pull request thread.
 
 ## Loose ends left by A718
 

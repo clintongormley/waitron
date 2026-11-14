@@ -1886,6 +1886,61 @@ describe("till-app", () => {
     expect(listZoneOffers).toHaveBeenCalledTimes(2);
   });
 
+  it("a kitchen queue that cannot be read after the counter zone loaded says the queue could not refresh, not that the zone could not load", async () => {
+    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
+    defaultCatalogue.zones = [
+      {
+        id: "zone-counter",
+        name: "Counter",
+        departmentId: "department-default",
+        departmentName: "Restaurant",
+        serviceMode: "prepay",
+      },
+      {
+        id: "zone-deli",
+        name: "Deli",
+        departmentId: "department-deli",
+        departmentName: "Deli",
+        serviceMode: "ticket_then_pay",
+      },
+    ];
+    const deliCatalogue = fixtureOffers({
+      menus: [{ id: "menu-deli", name: "Deli", isDefault: true }],
+      products: [{ ...ham, catalogueId: "menu-deli", catalogueName: "Deli" }],
+    });
+    deliCatalogue.context = {
+      departmentName: "Restaurant",
+      zoneId: "zone-deli",
+      departmentId: "department-deli",
+      serviceMode: "ticket_then_pay",
+    };
+    const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
+    const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultCatalogue)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
+      listZoneOffers: vi.fn().mockResolvedValue(deliCatalogue),
+      getStationQueue,
+    });
+    const c = await toCounter(el);
+    const said = () =>
+      el.shadowRoot!.querySelector('[data-refresh-notice="station"]')?.textContent ?? "";
+    expect(said()).not.toContain(t("refresh.station"));
+    expect(c.selectedMenuId).not.toBe("menu-deli");
+    const reads = getStationQueue.mock.calls.length;
+    getStationQueue.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
+    await flush(el);
+
+    expect(getStationQueue).toHaveBeenCalledTimes(reads + 1);
+    expect(c.selectedServiceZoneId).toBe("zone-deli");
+    expect(c.selectedMenuId).toBe("menu-deli");
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent ?? "").not.toContain(
+      t("service_zone.load_error"),
+    );
+    expect(said()).toContain(t("refresh.station"));
+  });
+
   it("visibly refuses a service-zone change while the basket has lines", async () => {
     const catalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
     catalogue.zones = [
@@ -13454,7 +13509,7 @@ describe("till-app", () => {
     });
 
     // The app's `#onMarkCollected` is mode-independent (it stamps a settled order's handover and reloads);
-    // the reload is only OBSERVABLE where the counter's queue is live — Modes I/T — since `#refreshStationQueue`
+    // the reload is only OBSERVABLE where the counter's queue is live — Modes I/T — since `#loadStationQueue`
     // skips Mode P. So these exercise the handler wiring under `ticket_then_pay`, exactly as the
     // advance-ticket-item tests above do.
     it("mark-collected: hands over the order via markCollected, then refreshes the default station's queue", async () => {
@@ -18217,6 +18272,30 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads + 1);
   });
 
+  it("says the held orders could not refresh when they cannot be read again after a refused move", async () => {
+    const { el, c } = await counterWith({
+      moveBill: vi.fn().mockRejectedValue({ code: "table.needs_clearing" }),
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([counterOrder])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
+    await flush(el);
+    await answerCounterMoveIfAsked(el);
+
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads + 1);
+    expect(alert(el)!.textContent).toContain(codeMessage("table.needs_clearing"));
+    expect(toast(el).open).toBe(false);
+    expect(
+      el
+        .shadowRoot!.querySelector('[data-refresh-notice="held"] .refresh-message')
+        ?.textContent?.trim(),
+    ).toBe(t("refresh.held"));
+  });
+
   it("says the table changed when a party sat there since it was read free", async () => {
     const reads = vi
       .fn()
@@ -18321,6 +18400,25 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await flush(el);
 
     expect(alert(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
+  });
+
+  it("says the parked orders could not refresh when they cannot be read after one is brought back", async () => {
+    const { el, c } = await counterWith({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([heldSummary])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    expect(c.store.id).toBe("wo-1");
+    expect(
+      el
+        .shadowRoot!.querySelector('[data-refresh-notice="held"] .refresh-message')!
+        .textContent!.trim(),
+    ).toBe(t("refresh.held"));
   });
 });
 
@@ -18717,6 +18815,81 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     },
   );
 
+  it("a waiting-list read after a refused Collect still out when the till's request limit passes is cancelled and said in the list's notice", async () => {
+    const listCounterWaiting = vi.fn().mockResolvedValue([paidOrder]);
+    const { el, c } = await counterWaiting({
+      ...invoiceFirst,
+      markCollected: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      listCounterWaiting,
+    });
+    const reads = listCounterWaiting.mock.calls.length;
+    listCounterWaiting.mockImplementation(
+      (options?: { signal?: AbortSignal }) =>
+        new Promise((_, reject) =>
+          options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+        ),
+    );
+    const said = () =>
+      el.shadowRoot!.querySelector('[data-refresh-notice="waiting"]')?.textContent ?? "";
+    vi.useFakeTimers();
+    try {
+      emit(c, "mark-collected", { orderId: "wo-paid" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(listCounterWaiting).toHaveBeenCalledTimes(reads + 1);
+      const [options] = listCounterWaiting.mock.lastCall as [{ signal?: AbortSignal }?];
+
+      // TABLE_REQUEST_LIMIT_MS in till-app.ts.
+      await vi.advanceTimersByTimeAsync(149_999);
+      await el.updateComplete;
+      expect(options?.signal?.aborted).toBe(false);
+      expect(said()).not.toContain(t("refresh.waiting"));
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+      expect(options?.signal?.aborted).toBe(true);
+      expect(said()).toContain(t("refresh.waiting"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a waiting-list read after a refused hand over still out when the till's request limit passes is cancelled and said in the list's notice", async () => {
+    const listCounterWaiting = vi.fn().mockResolvedValue([paidOrder]);
+    const { el } = await counterWaiting({
+      ...invoiceFirst,
+      markCollected: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      listCounterWaiting,
+    });
+    const reads = listCounterWaiting.mock.calls.length;
+    listCounterWaiting.mockImplementation(
+      (options?: { signal?: AbortSignal }) =>
+        new Promise((_, reject) =>
+          options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+        ),
+    );
+    const said = () =>
+      el.shadowRoot!.querySelector('[data-refresh-notice="waiting"]')?.textContent ?? "";
+    vi.useFakeTimers();
+    try {
+      emit(waitingList(el)!, "hand-over-order", { id: "wo-paid" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(listCounterWaiting).toHaveBeenCalledTimes(reads + 1);
+      const [options] = listCounterWaiting.mock.lastCall as [{ signal?: AbortSignal }?];
+
+      // TABLE_REQUEST_LIMIT_MS in till-app.ts.
+      await vi.advanceTimersByTimeAsync(149_999);
+      await el.updateComplete;
+      expect(options?.signal?.aborted).toBe(false);
+      expect(said()).not.toContain(t("refresh.waiting"));
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+      expect(options?.signal?.aborted).toBe(true);
+      expect(said()).toContain(t("refresh.waiting"));
+      expect(alert(el)!.textContent).toContain(t("waiting.hand_over_error"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("the waiting list is read again after the kitchen queue's Collect when the kitchen queue cannot be", async () => {
     const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
     const listCounterWaiting = vi.fn().mockResolvedValueOnce([paidOrder]).mockResolvedValue([]);
@@ -18798,6 +18971,50 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
 
     const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="station"]')!;
     expect(notice.textContent).toContain(t("refresh.station_after_hand_over"));
+  });
+
+  it.each([
+    ["advanced", () => Promise.resolve(), null],
+    ["refused", () => Promise.reject({ code: "server.internal" }), "station.advance_error"],
+  ] as const)(
+    "a kitchen queue that cannot be read after a dish is %s says the queue could not refresh",
+    async (_how, advanceTicketItem, error) => {
+      const { el, c } = await counterWaiting({
+        ...invoiceFirst,
+        advanceTicketItem: vi.fn(advanceTicketItem),
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValueOnce({ items: [], notices: [] })
+          .mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+
+      emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-1", to: "preparing" });
+      await flush(el);
+
+      const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="station"]')!;
+      expect(notice.textContent).toContain(t("refresh.station"));
+      if (error !== null) expect(alert(el)!.textContent).toContain(t(error));
+    },
+  );
+
+  it("a kitchen queue that cannot be read after a refused Collect says so and reads the waiting list again", async () => {
+    const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
+    const listCounterWaiting = vi.fn().mockResolvedValue([paidOrder]);
+    const { el, c } = await counterWaiting({
+      ...invoiceFirst,
+      markCollected: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      getStationQueue,
+      listCounterWaiting,
+    });
+    const reads = listCounterWaiting.mock.calls.length;
+    getStationQueue.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(c, "mark-collected", { orderId: "wo-paid" });
+    await flush(el);
+
+    expect(listCounterWaiting).toHaveBeenCalledTimes(reads + 1);
+    const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="station"]')!;
+    expect(notice.textContent).toContain(t("refresh.station"));
   });
 
   it.each([
@@ -21237,6 +21454,7 @@ describe("switching the device's profile from the header", () => {
       let switched = false;
       const { el } = await openProfile({
         // A device read after the switch that answers nothing makes the profiles step throw.
+        // Under an AI agent Vite still prints that rejection, reading `approvedProfiles` of null (A902).
         getDeviceIdentity: vi.fn(async () => (switched ? null : identity)),
         switchDeviceProfile: vi.fn(async () => {
           switched = true;
