@@ -58,15 +58,22 @@ interface ReceiptEditor {
   hasUnsavedChanges?: boolean;
   saving?: boolean;
   invalid?: boolean;
+  operationDescription?: { saved: string; required: boolean };
+  descriptionProblem?(value: string): string;
+  saveOperationDescription?(value: string): Promise<string | undefined>;
 }
+/** `operationDescription` is the receipt record's, present while the receipt editor offers it; it
+ * is saved through that editor, never with the department's settings. */
 type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & {
   serviceSteps: ServiceStepDraft[];
+  operationDescription?: string;
 };
 const REMINDER_MINUTES = [0, 5, 10, 15, 20, 30];
 type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
   tradingName: "details",
+  operationDescription: "details",
   orderStart: "service",
   paidWhen: "service",
   collectionNumber: "service",
@@ -91,6 +98,8 @@ const copy = (value: DepartmentDraft): DepartmentDraft => ({
     : {}),
 });
 const equal = (a: DepartmentDraft, b: DepartmentDraft) =>
+  a.operationDescription === b.operationDescription && settingsEqual(a, b);
+const settingsEqual = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.name.trim() === b.name.trim() &&
   a.tradingName.trim() === b.tradingName.trim() &&
   a.orderStart === b.orderStart &&
@@ -208,6 +217,7 @@ export class DepartmentSettings extends LitElement {
   private transferLoading = false;
   private transfersLoaded = false;
   private transfersShown = false;
+  private descriptionSource?: string;
   override connectedCallback() {
     super.connectedCallback();
     this.requestUpdate();
@@ -268,6 +278,31 @@ export class DepartmentSettings extends LitElement {
     this.requestUpdate();
     if (event.detail.invalid && this.tab !== "receipt") this.showFirstInvalid(new Set(["receipt"]));
   }
+  private receiptDescription(event: CustomEvent<{ departmentId?: string }>) {
+    event.stopPropagation();
+    if (event.detail?.departmentId === this.departmentId) this.requestUpdate();
+  }
+  /** Takes the receipt editor's saved description into baseline, and into the draft while the
+   * draft's copy is untouched. */
+  private followDescription() {
+    const offered = this.receipt?.operationDescription;
+    const saved = offered?.required ? offered.saved : undefined;
+    if (saved === this.descriptionSource || this.busy) return;
+    this.descriptionSource = saved;
+    const draft = { ...this.draft! },
+      baseline = { ...this.baseline! };
+    if (saved === undefined) {
+      delete draft.operationDescription;
+      delete baseline.operationDescription;
+    } else {
+      if (draft.operationDescription === baseline.operationDescription)
+        draft.operationDescription = saved;
+      baseline.operationDescription = saved;
+    }
+    this.draft = draft;
+    this.baseline = baseline;
+    this.scope?.commit(baseline);
+  }
   private async receiptRefused(event: CustomEvent<{ departmentId?: string }>) {
     event.stopPropagation();
     if (event.detail?.departmentId !== this.departmentId) return;
@@ -322,6 +357,7 @@ export class DepartmentSettings extends LitElement {
       this.transferLoading = false;
       this.transfersLoaded = false;
       this.transfersShown = false;
+      this.descriptionSource = undefined;
       this.draft = copy(source);
       this.source = copy(source);
       this.baseline = copy(this.draft);
@@ -386,11 +422,15 @@ export class DepartmentSettings extends LitElement {
           ...source,
           serviceSteps: steps,
           ...(this.draft!.transfers ? { transfers: this.draft!.transfers } : {}),
+          ...(this.draft!.operationDescription === undefined
+            ? {}
+            : { operationDescription: this.draft!.operationDescription }),
         };
         this.baseline = copy(this.draft);
         this.scope.commit(this.baseline);
       }
     }
+    this.followDescription();
     if (
       this.isConnected &&
       this.showsTransfers &&
@@ -592,9 +632,17 @@ export class DepartmentSettings extends LitElement {
       shown[key] = { ...shown[key], ...row };
     return shown;
   }
+  /** A description equal to the saved one is not sent, so it is not judged. */
+  private get descriptionError() {
+    const value = this.draft?.operationDescription;
+    if (value === undefined || value === this.baseline?.operationDescription) return "";
+    return this.receipt?.descriptionProblem?.(value) ?? "";
+  }
   private get errors(): Partial<Record<Field, string>> {
+    const description = this.descriptionError;
     return {
       ...(this.draft?.name.trim() ? {} : { name: t("venue.field_required") }),
+      ...(description ? { operationDescription: description } : {}),
       ...(this.draft?.tradingName.trim() ? {} : { tradingName: t("venue.field_required") }),
       ...(Object.keys(this.stepErrors).length ? { serviceSteps: "" } : {}),
     };
@@ -695,27 +743,55 @@ export class DepartmentSettings extends LitElement {
     kept.name = kept.name.trim();
     kept.tradingName = kept.tradingName.trim();
     if (!this.showsTransfers) delete kept.transfers;
-    const { serviceSteps, ...unchanged } = kept;
+    const { serviceSteps, operationDescription, ...unchanged } = kept;
+    const description =
+      operationDescription !== undefined &&
+      operationDescription !== this.baseline!.operationDescription
+        ? operationDescription
+        : undefined;
     const submitted: DepartmentSettingsInput = stepsEqual(serviceSteps, this.baseline!.serviceSteps)
       ? unchanged
       : { ...unchanged, serviceSteps: toStepInputs(serviceSteps) };
     const publish = this.publishSaved;
     this.busy = true;
+    let written = false;
     try {
-      const answer = await this.api.saveDepartmentSettings(id, submitted);
-      publish?.(answer);
-      if (this.current(id, generation)) {
-        const committed = copy(kept);
-        if (!kept.transfers && this.showsTransfers)
-          committed.transfers = copy(this.baseline!).transfers;
-        if (!this.showsTransfers) delete committed.transfers;
-        this.baseline = committed;
-        this.model = { ...this.model!, ...answer };
-        this.scope?.commit(committed);
-        this.emit("saved", { departmentId: id });
+      if (!settingsEqual(kept, this.baseline!)) {
+        try {
+          const answer = await this.api.saveDepartmentSettings(id, submitted);
+          publish?.(answer);
+          if (!this.current(id, generation)) return;
+          const committed = copy(kept);
+          if (!kept.transfers && this.showsTransfers)
+            committed.transfers = copy(this.baseline!).transfers;
+          if (!this.showsTransfers) delete committed.transfers;
+          if (this.baseline!.operationDescription === undefined)
+            delete committed.operationDescription;
+          else committed.operationDescription = this.baseline!.operationDescription;
+          this.baseline = committed;
+          this.model = { ...this.model!, ...answer };
+          this.scope?.commit(committed);
+          written = true;
+        } catch (error) {
+          if (this.current(id, generation)) this.fieldRefusal(error, submitted, serviceSteps);
+          return;
+        }
       }
-    } catch (error) {
-      if (this.current(id, generation)) this.fieldRefusal(error, submitted, serviceSteps);
+      const receipt = this.receipt;
+      if (description !== undefined && receipt?.saveOperationDescription) {
+        const refusal = await receipt.saveOperationDescription(description);
+        if (!this.current(id, generation)) return;
+        if (refusal === undefined) {
+          this.descriptionSource = description;
+          this.baseline = { ...this.baseline!, operationDescription: description };
+          this.scope?.commit(this.baseline);
+          written = true;
+        } else {
+          this.refused = { operationDescription: refusal };
+          this.showFirstInvalid();
+        }
+      }
+      if (written) this.emit("saved", { departmentId: id });
     } finally {
       if (this.current(id, generation)) this.busy = false;
     }
@@ -847,6 +923,23 @@ export class DepartmentSettings extends LitElement {
               this.changed("tradingName", e.detail.value);
             }}
           ></wt-input>
+          ${
+            draft.operationDescription === undefined
+              ? nothing
+              : html`<wt-input
+                  name="operationDescription"
+                  label=${t("venue.operation_description")}
+                  hint=${t("venue.operation_description_hint")}
+                  required
+                  .value=${draft.operationDescription}
+                  error=${errors.operationDescription ?? ""}
+                  ?disabled=${disabled}
+                  @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                    e.stopPropagation();
+                    this.changed("operationDescription", e.detail.value);
+                  }}
+                ></wt-input>`
+          }
         </div>
         <div class="panel" slot="service" @keydown=${this.submitOnEnter}>
           <section aria-label=${t("venue.orders_and_payment")}>
@@ -943,6 +1036,7 @@ export class DepartmentSettings extends LitElement {
                 slot="receipt"
                 @department-receipt-invalid=${this.receiptInvalid}
                 @department-receipt-refused=${this.receiptRefused}
+                @department-receipt-description=${this.receiptDescription}
               >
                 ${this.receiptEditor}
               </div>`

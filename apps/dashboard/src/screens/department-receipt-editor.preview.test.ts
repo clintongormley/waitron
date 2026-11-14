@@ -193,7 +193,7 @@ it.each([
     await expect
       .poll(() => receiptRoot(el).querySelector(`[data-mark=${mark}]`)?.hasAttribute("data-active"))
       .toBe(true);
-    receiptField(el, "operationDescription").focus();
+    receiptField(el, "previewLanguage").focus();
     await el.updateComplete;
     expect(receiptRoot(el).querySelector(`[data-mark=${mark}]`)!.hasAttribute("data-active")).toBe(
       false,

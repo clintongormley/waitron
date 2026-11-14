@@ -503,6 +503,9 @@ const en = {
   "venue.same_as_department": "Same as department ({value})",
   "venue.name": "Department name",
   "venue.trading_name": "Trading name",
+  "venue.operation_description": "Invoice operation description",
+  "venue.operation_description_hint":
+    "Sent to the tax agency with each invoice record; not printed",
   "venue.on_receipt": "On the receipt",
   "venue.order_start": "How orders start",
   "venue.table_service": "Table service",
@@ -1435,6 +1438,9 @@ const es: Record<keyof typeof en, string> = {
   "venue.same_as_department": "Igual que el departamento ({value})",
   "venue.name": "Nombre del departamento",
   "venue.trading_name": "Nombre comercial",
+  "venue.operation_description": "Descripción de la operación",
+  "venue.operation_description_hint":
+    "Se envía a la Agencia Tributaria con cada registro de factura; no se imprime",
   "venue.on_receipt": "En el recibo",
   "venue.order_start": "Cómo empiezan los pedidos",
   "venue.table_service": "Servicio de mesa",

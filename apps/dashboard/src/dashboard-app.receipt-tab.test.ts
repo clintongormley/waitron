@@ -1,7 +1,7 @@
 import { navigationGuardFor } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { cleanupWidgets, dialogClosed } from "./widgets/test-helpers.js";
 import {
   deferred,
@@ -18,6 +18,7 @@ import {
   mountReceiptApp as mount,
   mountReceiptTab,
   receiptTabEditor,
+  venueServiceModel,
 } from "./testing/department-receipt-app-fixture.js";
 
 afterEach(() => {
@@ -31,7 +32,8 @@ it.each([true, false])(
     const { app, editor } = await mountReceiptTab({ required });
     expect(departmentForm(app)!.tab).toBe("receipt");
     expect(receiptTabEditor(app)!.subject).toEqual({ id: "bar", name: "Bar" });
-    expect(!!receiptRoot(editor).querySelector("[name=operationDescription]")).toBe(required);
+    expect(receiptRoot(editor).querySelector("[name=operationDescription]")).toBeNull();
+    await expect.poll(() => !!detailsDescription(app)).toBe(required);
     expect(deep(app.shadowRoot!, "dashboard-receipts-screen")).toBeNull();
     expect(departmentDialog(app)!.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
       "Edit department: Bar",
@@ -331,3 +333,143 @@ it("a Receipt deep link without venue permission opens the overview without depa
   expect(fetchImpl.mock.calls.some(([path]) => path.endsWith("/bar/receipt"))).toBe(false);
   push.mockRestore();
 });
+
+function detailsDescription(app: Parameters<typeof departmentForm>[0]) {
+  return (
+    departmentForm(app)?.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[slot=details] [name=operationDescription]",
+    ) ?? null
+  );
+}
+async function editDetails(app: Parameters<typeof departmentForm>[0], name: string, value: string) {
+  const field = departmentForm(app)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    `[slot=details] [name=${name}]`,
+  )!;
+  await field.updateComplete;
+  await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
+  await departmentForm(app)!.updateComplete;
+}
+function detailsSave(app: Parameters<typeof departmentForm>[0]) {
+  return departmentForm(app)!.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!;
+}
+const settingsAnswer = () =>
+  new Response(JSON.stringify(venueServiceModel()), {
+    headers: { "content-type": "application/json" },
+  });
+const puts = (fetchImpl: { mock: { calls: [string, RequestInit][] } }) =>
+  fetchImpl.mock.calls
+    .filter(([, init]) => init.method === "PUT")
+    .map(([path, init]) => [path, JSON.parse(init.body as string)]);
+async function mountDetails(
+  respond?: (path: string, init: RequestInit) => Promise<Response> | undefined,
+) {
+  const mounted = await mountReceiptTab({
+    path: "/manage/venue-operations/department/bar",
+    respond: (path, init) =>
+      respond?.(path, init) ??
+      (init.method === "PUT" && path.endsWith("/bar/settings")
+        ? Promise.resolve(settingsAnswer())
+        : undefined),
+  });
+  await expect.poll(() => detailsDescription(mounted.app)?.value).toBe("Dining service");
+  return mounted;
+}
+it("the Details tab's Save sends the description through the receipt request alone, with the saved receipt and not the Receipts tab's unsaved edits", async () => {
+  const { app, fetchImpl, modal, editor } = await mountDetails();
+  const field = detailsDescription(app)!;
+  expect(field.required).toBe(true);
+  expect(field.label).toBe("Invoice operation description");
+  await showDepartmentTab(app, "receipt");
+  await editReceipt(editor, "phone", "+34 912 345 678");
+  await showDepartmentTab(app, "details");
+  await editDetails(app, "operationDescription", "Counter service");
+  await userEvent.click(page.elementLocator(detailsSave(app)));
+  await expect.poll(() => puts(fetchImpl).length).toBe(1);
+  expect(puts(fetchImpl)).toEqual([
+    [
+      "/management-api/venue-service/departments/bar/receipt",
+      {
+        receipt: { ...receiptModel.receipt, operationDescription: "Counter service" },
+        policy: receiptModel.policy,
+      },
+    ],
+  ]);
+  expect(editor.hasUnsavedChanges).toBe(true);
+  expect(modal.open).toBe(true);
+  expect(departmentForm(app)!.hasUnsavedChanges).toBe(false);
+});
+it("a Details Save with a name and a description sends the settings, then the receipt request", async () => {
+  const { app, fetchImpl, modal } = await mountDetails();
+  await editDetails(app, "name", "Bar renamed");
+  await editDetails(app, "operationDescription", "Counter service");
+  const closed = dialogClosed(modal);
+  await userEvent.click(page.elementLocator(detailsSave(app)));
+  await closed;
+  expect(puts(fetchImpl).map(([path]) => path)).toEqual([
+    "/management-api/venue-service/departments/bar/settings",
+    "/management-api/venue-service/departments/bar/receipt",
+  ]);
+  expect(puts(fetchImpl)[0]![1]).not.toHaveProperty("operationDescription");
+  expect(puts(fetchImpl)[1]![1].receipt.operationDescription).toBe("Counter service");
+});
+it("a refused description shows its refusal under the Details field and stays unsaved while the renamed department stands", async () => {
+  const { app, fetchImpl, modal, editor } = await mountDetails((path, init) =>
+    init.method === "PUT" && path.endsWith("/bar/receipt")
+      ? Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "management.request_invalid",
+                params: { field: "operationDescription" },
+              },
+            }),
+            { status: 422, headers: { "content-type": "application/json" } },
+          ),
+        )
+      : undefined,
+  );
+  await editDetails(app, "name", "Bar renamed");
+  await editDetails(app, "operationDescription", "Rejected service");
+  await userEvent.click(page.elementLocator(detailsSave(app)));
+  const field = detailsDescription(app)!;
+  await expect.poll(() => field.error).toBe(t("venue_settings.invalid"));
+  await expect
+    .poll(() => field.shadowRoot!.activeElement)
+    .toBe(field.shadowRoot!.querySelector("input"));
+  expect(puts(fetchImpl).map(([path]) => path)).toEqual([
+    "/management-api/venue-service/departments/bar/settings",
+    "/management-api/venue-service/departments/bar/receipt",
+  ]);
+  expect(field.value).toBe("Rejected service");
+  expect(modal.open).toBe(true);
+  expect(departmentForm(app)!.tab).toBe("details");
+  expect(departmentForm(app)!.hasUnsavedChanges).toBe(true);
+  expect(editor.operationDescription?.saved).toBe("Dining service");
+  await editDetails(app, "operationDescription", "Dining service");
+  expect(field.error).toBe("");
+  expect(departmentForm(app)!.hasUnsavedChanges).toBe(false);
+});
+it.each([
+  ["", "venue_settings.required"],
+  [" ", "venue_settings.required"],
+  ["a".repeat(501), "venue_settings.invalid"],
+  ["Sale\u0001service", "venue_settings.invalid"],
+] as const)(
+  "an invalid description (case %#) is explained under the Details field and sends nothing",
+  async (value, key) => {
+    const { app, fetchImpl } = await mountDetails();
+    await editDetails(app, "operationDescription", value);
+    await userEvent.click(page.elementLocator(detailsSave(app)));
+    const field = detailsDescription(app)!;
+    await expect.poll(() => field.error).toBe(t(key));
+    await expect
+      .poll(() => field.shadowRoot!.activeElement)
+      .toBe(field.shadowRoot!.querySelector("input"));
+    expect(puts(fetchImpl)).toEqual([]);
+    await editDetails(app, "operationDescription", "a".repeat(500));
+    expect(field.error).toBe("");
+    await userEvent.click(page.elementLocator(detailsSave(app)));
+    await expect.poll(() => puts(fetchImpl).length).toBe(1);
+    expect(puts(fetchImpl)[0]![1].receipt.operationDescription).toBe("a".repeat(500));
+  },
+);

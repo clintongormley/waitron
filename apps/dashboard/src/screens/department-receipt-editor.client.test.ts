@@ -53,7 +53,7 @@ it("the host-supplied editor reads the initial model actively and its live refre
   await expect
     .poll(() => fetchImpl.mock.calls.some(([path]) => path.endsWith("receipt-preview")))
     .toBe(true);
-  expect(receiptField(el, "operationDescription").value).toBe("Dining service");
+  expect(el.operationDescription?.saved).toBe("Dining service");
   liveData.invalidate([{ type: "department_receipts" }]);
   await expect
     .poll(() => fetchImpl.mock.calls.filter(([path]) => path.endsWith("/bar/receipt")).length)
@@ -75,7 +75,7 @@ it("a live policy and receipt read preserves the host-supplied editor's authored
   await expect
     .poll(() => fetchImpl.mock.calls.filter(([path]) => path.endsWith("/bar/receipt")).length)
     .toBe(2);
-  await expect.poll(() => receiptField(el, "operationDescription").value).toBe("New elsewhere");
+  await expect.poll(() => el.operationDescription?.saved).toBe("New elsewhere");
   expect(receiptField(el, "email").value).toBe("draft@example.com");
   expect(receiptRoot(el).querySelector("[name=receiptPrintMode]")).toBeNull();
   expect(
