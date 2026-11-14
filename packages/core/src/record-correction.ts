@@ -3,14 +3,7 @@ import { saleLineRows } from "./sale-line-rows.js";
 import "./errors.js";
 import { operationDescriptionFor } from "./operation-description.js";
 import { eq, sql } from "drizzle-orm";
-import {
-  insertInChunks,
-  allocateInvoiceNumber,
-  invoiceSeries,
-  saleLines,
-  saleVoids,
-  sales,
-} from "@waitron/db";
+import { insertInChunks, allocateInvoiceNumber, saleLines, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -31,6 +24,7 @@ import type {
 } from "@waitron/fiscal";
 import { authorize, authorizeManager, type AuthzInput } from "@waitron/identity";
 import { insertSale } from "./insert-sale.js";
+import { requireCorrectiveSeries } from "./corrective-series.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
@@ -165,41 +159,7 @@ export async function recordCorrection(
     throw new AppError("sale.voided", { saleId: input.correctsSaleId });
   }
 
-  const [series] = await tx
-    .select({
-      code: invoiceSeries.code,
-      nodeId: invoiceSeries.nodeId,
-      purpose: invoiceSeries.purpose,
-      retiredAt: invoiceSeries.retiredAt,
-    })
-    .from(invoiceSeries)
-    .where(eq(invoiceSeries.id, input.seriesId));
-
-  if (series === undefined) {
-    throw new AppError("sale.series_not_found", {
-      seriesId: input.seriesId,
-    });
-  }
-  if (series.nodeId !== input.nodeId) {
-    throw new AppError("sale.series_wrong_node", {
-      seriesId: input.seriesId,
-      expected: series.nodeId,
-      actual: input.nodeId,
-    });
-  }
-  if (series.purpose !== "rectificative") {
-    throw new AppError("sale.series_wrong_purpose", {
-      seriesId: input.seriesId,
-      expected: "rectificative",
-      actual: series.purpose,
-    });
-  }
-  if (series.retiredAt !== null) {
-    throw new AppError("sale.series_retired", {
-      seriesId: input.seriesId,
-      retiredAt: series.retiredAt.toISOString(),
-    });
-  }
+  const series = await requireCorrectiveSeries(tx, input.seriesId, input.nodeId);
 
   const authorization =
     "invoiceCorrectionId" in input.authz
