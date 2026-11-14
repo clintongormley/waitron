@@ -14,14 +14,21 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { layerPaint, stepSpan } from "../day-paint.js";
+import { layerPaint, layerZonePaint, stepSpan } from "../day-paint.js";
 import { holidayDateName } from "../holiday-naming.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { isLocalDate, rangeDates } from "../hours-rules.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { Paint } from "../paint-model.js";
-import { rebaseDays, refill, samePaint, savedBlocks, withoutPeriods } from "../paint-model.js";
+import {
+  paintStretch,
+  rebaseDays,
+  refill,
+  samePaint,
+  savedBlocks,
+  withoutPeriods,
+} from "../paint-model.js";
 import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
 import { closuresInHours } from "../zone-own-hours.js";
 import type { AddDates, RemoveDates } from "./add-dates-calendar.js";
@@ -1256,8 +1263,10 @@ export class SpecialDayPainter extends LitElement {
         );
         continue;
       }
-      const closures: Paint[] = (
-        season.zones.find((zone) => zone.zoneId === zoneId)?.closed ?? []
+      const closures: Paint[] = layerZonePaint(
+        season.zones.find((zone) => zone.zoneId === zoneId)?.closed ?? [],
+        [],
+        cutover,
       ).map(({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }));
       const open = layerPaint(
         layerPaint(season.ranges, painted?.get(date) ?? [], cutover),
@@ -1274,6 +1283,23 @@ export class SpecialDayPainter extends LitElement {
       underlay,
     };
     return underlay;
+  }
+  private zoneDaysMemo?: {
+    source: ReadonlyMap<string, Paint[]>;
+    cutover: string;
+    days: ReadonlyMap<string, Paint[]>;
+  };
+  private zoneDays(source: ReadonlyMap<string, Paint[]>, cutover: string) {
+    if (this.zoneDaysMemo?.source === source && this.zoneDaysMemo.cutover === cutover)
+      return this.zoneDaysMemo.days;
+    const days = new Map(
+      [...source].map(([date, paint]) => [
+        date,
+        paint.reduce<Paint[]>((ranges, block) => paintStretch(ranges, block, cutover, false), []),
+      ]),
+    );
+    this.zoneDaysMemo = { source, cutover, days };
+    return days;
   }
   private underlayMemo?: {
     days: ReadonlyMap<LocalDate, SeasonDay>;
@@ -1455,7 +1481,7 @@ export class SpecialDayPainter extends LitElement {
         : html`<paint-grid
             .target=${`${this.seeded ?? ""}/${owner}`}
             .columns=${this.columns()}
-            .days=${this.draft.paint.get(owner) ?? NOTHING_BY_KEY}
+            .days=${zone ? this.zoneDays(this.draft.paint.get(owner) ?? NOTHING_BY_KEY, cutover) : (this.draft.paint.get(owner) ?? NOTHING_BY_KEY)}
             .underlay=${this.underlay(department, zone?.id, cutover)}
             .closedWithin=${within}
             .closedBehind=${within ? this.closedBehind(department, within) : NOTHING_BY_KEY}

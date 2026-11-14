@@ -18,10 +18,10 @@ async function mount(theme: "light" | "dark", state: string) {
     box.nameKind = "special";
     box.line = "Special day — replaces Autumn's standard hours";
     box.rows = [
-      { name: "Santet Deli Co", text: "Lunch 16:00–17:00 · Open 17:00–02:00", strong: true },
-      { name: "Front Bar", text: "as Santet Deli Co" },
+      { name: "Santet Deli Co", text: "16:00–02:00", strong: true },
+      { name: "Front Bar", text: "16:00–02:00", inheritedFrom: "Santet Deli Co" },
     ];
-    box.innerHTML = `<wt-button variant="secondary">Edit special day</wt-button>`;
+    box.innerHTML = `<wt-button slot="season-action" variant="secondary">Edit Autumn's standard week</wt-button><wt-button variant="secondary">Edit special day</wt-button>`;
   } else if (state === "a plain day with a long name") {
     box.name = "Fiesta de la Exaltación de la Santa Cruz y Romería de San Cristóbal del Monte";
     box.nameKind = "holiday";

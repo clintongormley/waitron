@@ -1780,6 +1780,8 @@ describe("Month view", () => {
     expect(placed.bottom).toBeLessThanOrEqual(innerHeight);
     expect(box.heading).toBe(formatDate("2026-12-10"));
     expect(box.line).toBe("Winter standard hours");
+    expect(boxButton(el, "edit-week")!.slot).toBe("season-action");
+    expect(boxButton(el, "special-add")!.slot).toBe("");
     expect(boxButtons(el)).toEqual([
       "Make a special day",
       "Edit Winter's standard week",

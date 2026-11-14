@@ -5356,10 +5356,10 @@ Opening hours' Year.
   moving a word that does not fit onto the next line and breaking only a word wider than the box
   inside itself),
   and a bar of hours per active department, or, with one department picked,
-  a bar for it and one per zone. A zone's bar shows the zone's own hours, its department's hours
-  less the zone's closed times (`zoneOwnHours`, `zone-own-hours.ts`): the bar stops where the zone
-  closes, a closed time inside the department's hours is hatched while the zone has some hours that
-  day, and pointing at it names it, as does the date's spoken label. A row with no hours that day is an empty bar in `--wt-color-track`, as in the Week, the same height as a bar with
+  a bar for it and one per zone. Department and zone spans merge touching periods and use
+  `--wt-color-primary`, with time-only titles and spoken descriptions. A zone's bar shows its
+  department's hours less its closures (`zoneOwnHours`, `zone-own-hours.ts`); a closure leaves
+  the bare track visible. Station spans keep their period colours and labels. A row with no hours that day is an empty bar in `--wt-color-track`, as in the Week, the same height as a bar with
   hours, and, unless the whole date is closed, is read out as "<name> closed". A date closed all day adds
   Closed to its first name, or reads Closed with none, and draws its names in the closed date's
   colour. Above the dates, ‹, the month's name and year, › and the Show picker share one
@@ -5396,14 +5396,11 @@ Opening hours' Year.
   for that it is labelled every four, six, eight, twelve or twenty-four hours, and the label before
   the last is left out when the last, kept inside the track, would come within `--wt-space-2` of it. A department's blocks carry
   their period's colour, name and times; a zone's piece that only follows its department is faded
-  and unlabelled, and a piece of its own, or a closed time inside its department's hours, is
-  labelled. A row with no hours is an empty track in `--wt-color-track`; only a day closed all day writes "Closed
-  all day", in its departments' tracks. Every block shows its whole label in a tip above it (below
-  when there is no room above it inside the area the Week scrolls in): pointing with a mouse shows it while no tip is pinned, a click or tap pins it, a click on the pinned block
-  hides it, leaving the block or the tip hides an unpinned one a moment later, so the pointer can
-  still reach the tip on a path the bridge does not cover, and a click elsewhere, Escape, a scroll or a change of
-  the Week's size hides it. Screen readers skip the tip and read each row's whole text instead. A day's name
-  is the one button per day and opens the day box (below). Nothing is painted in the Week. When the
+  and unlabelled, and a piece of its own is labelled. Zone closures leave gaps, with their joined
+  times kept in the phone and spoken words. A row with no hours is an empty track in
+  `--wt-color-track`; only a day closed all day writes "Closed all day", in its departments'
+  tracks. Screen readers read each row's whole text. A day's name or any of its bars opens the
+  day box, returning focus to the date heading when it closes; bars show no hover or click tip. Nothing is painted in the Week. When the
   Week itself is narrower than 560 px (`PHONE_WIDTH`) it draws the `week` date alone: its special
   day's and public holiday's names over a card holding the same rows, each its name, its times in
   words and a thin bar of its blocks, with no ruler and no tips. Its title ("Tue 1 Dec") has no
@@ -5432,21 +5429,26 @@ Opening hours' Year.
   Viewers keep single-date day boxes and cannot open a painter or show the selection bar.
 - **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host; it is exported as
   `@waitron/venue-service/dashboard/calendar-day-box` for other screens; Staffing's month opens it
-  (above), and so does the Week, from a day's name. One box at a time floats below the date that
+  (above), and so does the Week, from a day's name or bar. One box at a time floats below the date that
   opened it, or above it when there is no room below, kept on screen; it moves nothing on the page.
   It follows its date as the page scrolls or the window resizes, and closes once a scroll or a
   resize leaves none of the date inside the window and every box around it that clips its contents.
   In Opening hours it is headed by the date, with the special day's name, or else the public holiday's, beside it;
   then a line saying which season's standard hours the date follows, or that a special day replaces
   them; then each department's hours followed by its zones' (in the Month and the Week, with one
-  department picked, that department alone). A zone that follows its department reads "as <department>"; a
-  zone with hours of its own lists them and its closed times, in bold as a department is. Opened
+  department picked, that department alone). Each department and zone lists only its merged opening
+  times, separated by commas when there is a gap; no hours reads Closed. A zone that follows its
+  department repeats those times in muted italics, with hidden "as <department>" context. A zone
+  with closures uses the department's bold name style. Opened
   from the Year, it reads its date's month and says Loading… until that read answers; when its
   month's read fails it says so, beside any hours it already shows. Make a
   special day (Edit special day on a special-day date) opens the special-day painter (Forms above,
   hosted by `opening-hours-screen.ts`) on a new day holding the date, pre-filled when the date is a
-  public holiday, or on the stored day; Edit <season>'s standard week opens the season painter. A
-  viewer's box has no special-day button and offers Show <season>'s standard week, read-only. In
+  public holiday, or on the stored day. Edit <season>'s standard week sits beside the season line
+  at the top and opens the season painter. Its named `season-action` slot can show before the line
+  arrives; the default slot keeps special-day and Open this week actions at the bottom, including
+  Staffing's existing footer. A viewer's box has no special-day button and offers Show <season>'s
+  standard week in the top slot, read-only. In
   the Year and the Month, a viewer's box included, the last button is Open this week: it opens the
   Week on that date's week, or on a phone on that date alone, and puts focus on the date's name, unless focus has moved elsewhere by
   then. A box opened from the Week does not offer it. A

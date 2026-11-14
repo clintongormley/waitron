@@ -108,8 +108,7 @@ describe("Opening hours week", () => {
     const width = terrace.getBoundingClientRect().width;
     const left = dinner.getBoundingClientRect().left - terrace.getBoundingClientRect().left;
     expect(Math.abs((left / width) * 100 - 66.67)).toBeLessThan(0.1);
-    const closed = terrace.querySelector<HTMLElement>('.block[data-kind="closed"]')!;
-    expect(getComputedStyle(closed).backgroundImage).toContain("repeating-linear-gradient");
+    expect(terrace.querySelector('.block[data-kind="closed"]')).toBeNull();
   });
 
   it("names a special day and a holiday; only a date closed all day says so in its track", async () => {
@@ -342,413 +341,6 @@ describe("Opening hours week", () => {
 });
 
 /** December's model with the Restaurant's Lunch on 2 December moved to 16:00–17:00. */
-function sliverModel(): OpeningHoursMonth {
-  const model = monthModel();
-  model.days = model.days.map((d) =>
-    d.date === "2026-12-02"
-      ? {
-          ...d,
-          departments: d.departments.map((dep) =>
-            dep.departmentId === "rest"
-              ? {
-                  ...dep,
-                  ranges: dep.ranges.map((r) =>
-                    r.periodId === "lunch" ? { ...r, startsAt: "16:00", endsAt: "17:00" } : r,
-                  ),
-                }
-              : dep,
-          ),
-        }
-      : d,
-  );
-  return model;
-}
-
-const blockSelector = (date: LocalDate, key: string, nth: number) =>
-  `opening-hours-week section[data-date="${date}"] .row[data-row="${key}"] .block:nth-child(${nth})`;
-const block = (el: OpeningHoursWeekView, date: LocalDate, key: string, nth: number) =>
-  track(el, date, key).querySelector<HTMLElement>(`.block:nth-child(${nth})`)!;
-const tip = (el: OpeningHoursWeekView) => testId(el, "block-tip")!;
-const open = (el: OpeningHoursWeekView) => tip(el).matches(":popover-open");
-
-/** The Week inside a box that scrolls, drawn in another element's shadow root below a banner
- *  `bannerHeight` tall, as the dashboard draws its pages. */
-async function mountInScroller(
-  bannerHeight: number,
-): Promise<{ el: OpeningHoursWeekView; scroller: HTMLElement }> {
-  const app = document.createElement("div");
-  const shadow = app.attachShadow({ mode: "open" });
-  const banner = document.createElement("div");
-  banner.style.height = `${bannerHeight}px`;
-  const scroller = document.createElement("div");
-  scroller.style.height = "500px";
-  scroller.style.overflow = "auto";
-  const el = document.createElement("opening-hours-week");
-  Object.assign(el, { model: sliverModel(), date: "2026-12-02", departments: DEPARTMENTS });
-  const spacer = document.createElement("div");
-  spacer.style.height = "3000px";
-  scroller.append(el, spacer);
-  shadow.append(banner, scroller);
-  applyTokens(el);
-  document.body.append(app);
-  hosts.push(app);
-  await el.updateComplete;
-  return { el, scroller };
-}
-
-describe("Opening hours week: a block's label", () => {
-  it("a sliver's label shows whole when pointed at, above it", async () => {
-    const el = await mount({ model: sliverModel() });
-    const lunch = block(el, "2026-12-02", "rest", 2);
-    expect(text(lunch)).toBe("Lunch 16:00–17:00");
-    const words = lunch.querySelector<HTMLElement>(".text")!;
-    expect(words.scrollWidth).toBeGreaterThan(words.clientWidth);
-    expect(open(el)).toBe(false);
-    await userEvent.hover(lunch);
-    expect(open(el)).toBe(true);
-    expect(text(tip(el))).toBe("Restaurant · Lunch 16:00–17:00");
-    expect(tip(el).getBoundingClientRect().bottom).toBeLessThan(lunch.getBoundingClientRect().top);
-    const painted = getComputedStyle(tip(el));
-    expect(painted.backgroundColor).toBe(resolved(el, "--wt-color-text"));
-    expect(painted.color).toBe(resolved(el, "--wt-color-bg"));
-    expect(painted.borderTopWidth).toBe("0px");
-    expect(painted.boxShadow).toBe("none");
-    await commands.parkPointer();
-    await vi.waitFor(() => expect(open(el)).toBe(false));
-
-    const spacer = document.createElement("div");
-    spacer.style.height = "3000px";
-    document.body.append(spacer);
-    hosts.push(spacer);
-    const first = block(el, "2026-11-30", "rest", 1);
-    window.scrollTo(0, first.getBoundingClientRect().top + window.scrollY);
-    await frames();
-    expect(Math.abs(first.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
-    await userEvent.hover(first);
-    expect(open(el)).toBe(true);
-    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
-    expect(tip(el).getBoundingClientRect().top).toBeGreaterThan(
-      first.getBoundingClientRect().bottom,
-    );
-  });
-
-  it("a click pins it, and leaving does not hide a pinned tip", async () => {
-    const el = await mount({ model: sliverModel() });
-    const lunch = block(el, "2026-12-02", "rest", 2);
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    try {
-      await userEvent.click(lunch);
-      expect(open(el)).toBe(true);
-      await commands.parkPointer();
-      vi.advanceTimersByTime(1000);
-      expect(open(el)).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
-    await userEvent.click(lunch);
-    expect(open(el)).toBe(false);
-  });
-
-  it("a click elsewhere hides a pinned tip", async () => {
-    const el = await mount({ model: sliverModel() });
-    await userEvent.click(block(el, "2026-12-02", "rest", 2));
-    await commands.parkPointer();
-    expect(open(el)).toBe(true);
-    await userEvent.click(testId(el, "week-month")!);
-    expect(open(el)).toBe(false);
-  });
-
-  it("Escape hides it and goes no further", async () => {
-    const el = await mount({ model: sliverModel() });
-    await userEvent.click(block(el, "2026-12-02", "rest", 2));
-    expect(open(el)).toBe(true);
-    const seen: string[] = [];
-    const listener = (event: KeyboardEvent) => seen.push(event.key);
-    const prevented: boolean[] = [];
-    const reader = (event: KeyboardEvent) => prevented.push(event.defaultPrevented);
-    document.addEventListener("keydown", listener);
-    window.addEventListener("keydown", reader, { capture: true });
-    try {
-      await userEvent.keyboard("{Escape}");
-    } finally {
-      document.removeEventListener("keydown", listener);
-      window.removeEventListener("keydown", reader, { capture: true });
-    }
-    expect(open(el)).toBe(false);
-    expect(seen).toEqual([]);
-    expect(prevented).toEqual([true]);
-  });
-
-  it("a tap shows it and it stays after the tap's own pointerleave", async () => {
-    const el = await mount({ model: sliverModel() });
-    const lunch = block(el, "2026-12-02", "rest", 2);
-    const order: string[] = [];
-    for (const type of ["pointerenter", "pointerdown", "pointerup", "pointerleave", "click"])
-      lunch.addEventListener(type, () => order.push(type));
-    await commands.touchGesture({ at: blockSelector("2026-12-02", "rest", 2) });
-    await frames();
-    expect(order).toEqual(["pointerenter", "pointerdown", "pointerup", "pointerleave", "click"]);
-    expect(open(el)).toBe(true);
-    expect(text(tip(el))).toBe("Restaurant · Lunch 16:00–17:00");
-    await commands.touchGesture({ at: blockSelector("2026-12-02", "rest", 2) });
-    await frames();
-    expect(open(el)).toBe(false);
-    await commands.touchGesture({ at: blockSelector("2026-12-02", "rest", 2) });
-    await frames();
-    expect(open(el)).toBe(true);
-    await commands.touchGesture({
-      at: 'opening-hours-week [data-test="week-month"][data-month="2026-12"]',
-    });
-    await frames();
-    expect(open(el)).toBe(false);
-  });
-
-  it("a scroll hides a pinned tip", async () => {
-    const el = await mount({ model: sliverModel() });
-    const spacer = document.createElement("div");
-    spacer.style.height = "3000px";
-    document.body.append(spacer);
-    hosts.push(spacer);
-    await userEvent.click(block(el, "2026-12-02", "rest", 2));
-    await commands.parkPointer();
-    expect(open(el)).toBe(true);
-    window.scrollBy(0, 40);
-    await frames();
-    expect(window.scrollY).toBeGreaterThan(0);
-    expect(open(el)).toBe(false);
-  });
-
-  it("a scroll of a box the Week is drawn in, inside a shadow root, hides and unpins the tip", async () => {
-    const { el, scroller } = await mountInScroller(0);
-    await userEvent.click(block(el, "2026-12-02", "rest", 2));
-    await commands.parkPointer();
-    expect(open(el)).toBe(true);
-    scroller.scrollBy(0, 40);
-    await frames();
-    expect(scroller.scrollTop).toBeGreaterThan(0);
-    expect(open(el)).toBe(false);
-    await userEvent.hover(block(el, "2026-12-03", "rest", 1));
-    expect(open(el)).toBe(true);
-    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
-  });
-
-  it("a block at the top of the box it scrolls in has its tip below", async () => {
-    const { el, scroller } = await mountInScroller(200);
-    const first = block(el, "2026-11-30", "rest", 1);
-    scroller.scrollTop = first.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-    await frames();
-    const top = first.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-    expect(Math.abs(top)).toBeLessThanOrEqual(1);
-    expect(first.getBoundingClientRect().top).toBeGreaterThan(150);
-    await userEvent.hover(first);
-    expect(open(el)).toBe(true);
-    expect(tip(el).dataset.side).toBe("below");
-    expect(tip(el).getBoundingClientRect().top).toBeGreaterThan(
-      first.getBoundingClientRect().bottom,
-    );
-  });
-
-  it("moving the mouse onto the tip keeps it, above or below its block", async () => {
-    const el = await mount({ model: sliverModel() });
-    const tipSelector = 'opening-hours-week [data-test="block-tip"]';
-    await commands.mouseMove([blockSelector("2026-12-02", "rest", 2), tipSelector], {
-      steps: 20,
-      keepX: true,
-    });
-    expect(tip(el).dataset.side).toBe("above");
-    expect(open(el)).toBe(true);
-    await commands.parkPointer();
-    await vi.waitFor(() => expect(open(el)).toBe(false));
-
-    const spacer = document.createElement("div");
-    spacer.style.height = "3000px";
-    document.body.append(spacer);
-    hosts.push(spacer);
-    const first = block(el, "2026-11-30", "rest", 1);
-    window.scrollTo(0, first.getBoundingClientRect().top + window.scrollY);
-    await frames();
-    await commands.mouseMove([blockSelector("2026-11-30", "rest", 1), tipSelector], {
-      steps: 20,
-      keepX: true,
-    });
-    expect(tip(el).dataset.side).toBe("below");
-    expect(open(el)).toBe(true);
-  });
-
-  it("a diagonal path from a wide block's centre to its tip's keeps the tip", async () => {
-    const el = await mount({ departmentId: "bar" });
-    const bar = block(el, "2026-12-02", "bar", 1);
-    const tipSelector = 'opening-hours-week [data-test="block-tip"]';
-    await userEvent.hover(bar);
-    expect(bar.getBoundingClientRect().width).toBeGreaterThan(
-      3 * tip(el).getBoundingClientRect().width,
-    );
-    await commands.parkPointer();
-    const onto: (EventTarget | null)[] = [];
-    bar.addEventListener("pointerleave", (event) => onto.push(event.relatedTarget));
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    try {
-      await commands.mouseMove([blockSelector("2026-12-02", "bar", 1), tipSelector], { steps: 30 });
-      expect(onto).toHaveLength(1);
-      expect(onto[0]).not.toBe(tip(el));
-      expect(open(el)).toBe(true);
-      expect(text(tip(el))).toBe("Bar · All day 10:00–02:00");
-      vi.advanceTimersByTime(1000);
-      expect(open(el)).toBe(true);
-      await commands.parkPointer();
-      vi.advanceTimersByTime(1000);
-      expect(open(el)).toBe(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("a diagonal path from a narrow block to a tip shifted left by its long label keeps the tip", async () => {
-    const departments = structuredClone(DEPARTMENTS);
-    departments[0]!.name =
-      "Restaurant with a very long descriptive department name for the main dining room";
-    const model = monthModel();
-    const rest = model.days.find((d) => d.date === "2026-12-02")!.departments[0]!;
-    rest.ranges = rest.ranges.map((r) =>
-      r.periodId === "dinner" ? { ...r, startsAt: "04:30", endsAt: "05:00" } : r,
-    );
-    const el = await mount({ model, departments });
-    const late = block(el, "2026-12-02", "rest", 3);
-    const tipSelector = 'opening-hours-week [data-test="block-tip"]';
-    await userEvent.hover(late);
-    const shifted = tip(el).getBoundingClientRect();
-    expect(shifted.left + shifted.width / 2).toBeLessThan(late.getBoundingClientRect().left);
-    await commands.parkPointer();
-    const onto: (EventTarget | null)[] = [];
-    late.addEventListener("pointerleave", (event) => onto.push(event.relatedTarget));
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    try {
-      await commands.mouseMove([blockSelector("2026-12-02", "rest", 3), tipSelector], {
-        steps: 30,
-      });
-      expect(onto).toHaveLength(1);
-      expect(onto[0]).toBe(track(el, "2026-12-02", "rest"));
-      expect(open(el)).toBe(true);
-      vi.advanceTimersByTime(1000);
-      expect(open(el)).toBe(true);
-      await commands.mouseMove([blockSelector("2026-12-02", "rest", 3)]);
-      await commands.parkPointer();
-      vi.advanceTimersByTime(1000);
-      expect(open(el)).toBe(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("moving from one block to another keeps the second block's tip after the first's hide delay", async () => {
-    const el = await mount();
-    await userEvent.hover(block(el, "2026-12-02", "rest", 3));
-    expect(open(el)).toBe(true);
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    try {
-      await userEvent.hover(block(el, "2026-12-02", "rest", 1));
-      vi.advanceTimersByTime(1000);
-      expect(open(el)).toBe(true);
-      expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("a long unbroken label wraps inside the window", async () => {
-    await page.viewport(1024, 800);
-    expect(window.innerWidth).toBe(1024);
-    const departments = structuredClone(DEPARTMENTS);
-    departments[0]!.name = "W".repeat(100);
-    const el = await mount({ departments });
-    await userEvent.hover(block(el, "2026-12-02", "rest", 3));
-    expect(open(el)).toBe(true);
-    expect(text(tip(el))).toContain(departments[0]!.name);
-    const pen = document.createElement("canvas").getContext("2d")!;
-    pen.font = getComputedStyle(tip(el)).font;
-    expect(pen.measureText(departments[0]!.name).width).toBeGreaterThan(1024);
-    const words = document.createRange();
-    words.selectNodeContents(tip(el));
-    const box = words.getBoundingClientRect();
-    expect(box.left).toBeGreaterThanOrEqual(8);
-    expect(box.right).toBeLessThanOrEqual(1024 - 8);
-    expect(tip(el).getBoundingClientRect().right).toBeLessThanOrEqual(1024 - 8);
-  });
-
-  it("a resize hides and unpins the tip", async () => {
-    const el = await mount();
-    await userEvent.click(block(el, "2026-12-02", "rest", 3));
-    await commands.parkPointer();
-    expect(open(el)).toBe(true);
-    await page.viewport(900, 800);
-    expect(window.innerWidth).toBe(900);
-    await frames();
-    expect(open(el)).toBe(false);
-    await userEvent.hover(block(el, "2026-12-02", "rest", 1));
-    expect(open(el)).toBe(true);
-    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
-  });
-
-  it("a tip shown again is placed afresh in a narrow window", async () => {
-    await page.viewport(600, 800);
-    expect(window.innerWidth).toBe(600);
-    const el = await mount();
-    await userEvent.hover(block(el, "2026-12-02", "rest", 3));
-    expect(open(el)).toBe(true);
-    const breakfast = block(el, "2026-12-02", "rest", 1);
-    await userEvent.hover(breakfast);
-    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
-    const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-1"));
-    expect(gap).toBeGreaterThan(0);
-    const box = tip(el).getBoundingClientRect();
-    expect(box.right).toBeLessThanOrEqual(600 - 8);
-    expect(
-      Math.abs(box.bottom - (breakfast.getBoundingClientRect().top - gap)),
-    ).toBeLessThanOrEqual(0.5);
-  });
-
-  it("a change to what the Week shows hides the tip", async () => {
-    const el = await mount({ model: sliverModel() });
-    for (const change of [
-      () => (el.date = "2026-12-09"),
-      () => (el.model = monthModel()),
-      () => (el.departmentId = "rest"),
-    ]) {
-      await userEvent.click(block(el, "2026-12-02", "rest", 2));
-      expect(open(el)).toBe(true);
-      change();
-      await el.updateComplete;
-      expect(open(el)).toBe(false);
-      if (el.date !== "2026-12-02") {
-        el.date = "2026-12-02";
-        await el.updateComplete;
-      }
-    }
-  });
-
-  it("a faded zone piece names its zone", async () => {
-    const el = await mount({ departmentId: "rest" });
-    const faded = block(el, "2026-12-02", "terrace", 2);
-    expect(faded.hasAttribute("data-faded")).toBe(true);
-    await userEvent.hover(faded);
-    expect(open(el)).toBe(true);
-    expect(text(tip(el))).toBe("Terrace · Lunch 13:00–16:00");
-  });
-
-  it("stays inside a narrow window", async () => {
-    await page.viewport(600, 800);
-    expect(window.innerWidth).toBe(600);
-    const el = await mount();
-    const dinner = block(el, "2026-12-02", "rest", 3);
-    await userEvent.hover(dinner);
-    expect(open(el)).toBe(true);
-    const box = tip(el).getBoundingClientRect();
-    expect(box.right).toBeLessThanOrEqual(600 - 8);
-    expect(box.left).toBeGreaterThanOrEqual(8);
-    expect(box.left).toBeLessThan(dinner.getBoundingClientRect().left);
-  });
-});
-
 describe("Opening hours week on a phone", () => {
   beforeEach(async () => {
     await page.viewport(390, 800);
@@ -792,9 +384,7 @@ describe("Opening hours week on a phone", () => {
     expect(blocks.length).toBeGreaterThan(0);
     for (const b of blocks) expect(text(b)).toBe("");
     expect(terraceTrack.querySelectorAll(".block[data-faded]")).toHaveLength(2);
-    expect(
-      getComputedStyle(terraceTrack.querySelector('.block[data-kind="closed"]')!).backgroundImage,
-    ).toContain("repeating-linear-gradient");
+    expect(terraceTrack.querySelector('.block[data-kind="closed"]')).toBeNull();
     expect(root(el).querySelector(".ruler")).toBeNull();
     expect(testId(el, "block-tip")).toBeNull();
 
@@ -947,27 +537,6 @@ describe("Opening hours week on a phone", () => {
     expect(testId(el, "day-card")).toBeNull();
     expect(testId(el, "next-week")).not.toBeNull();
     expect(text(testId(el, "week"))).toBe("30 Nov – 6 Dec 2026");
-  });
-
-  it("turning narrow hides and unpins a shown tip", async () => {
-    await page.viewport(1280, 800);
-    expect(window.innerWidth).toBe(1280);
-    const el = await mount();
-    await userEvent.click(block(el, "2026-12-02", "rest", 3));
-    await commands.parkPointer();
-    expect(open(el)).toBe(true);
-    const shown = tip(el);
-    await page.viewport(390, 800);
-    expect(window.innerWidth).toBe(390);
-    await vi.waitFor(() => expect(testId(el, "day-card")).not.toBeNull());
-    expect(shown.matches(":popover-open")).toBe(false);
-
-    await page.viewport(1280, 800);
-    expect(window.innerWidth).toBe(1280);
-    await vi.waitFor(() => expect(root(el).querySelectorAll("section")).toHaveLength(7));
-    await userEvent.hover(block(el, "2026-12-02", "rest", 1));
-    expect(open(el)).toBe(true);
-    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
   });
 
   it("pointing at or tapping a row's bar shows no tip", async () => {
@@ -1371,24 +940,6 @@ describe("Opening hours week, a station shown", () => {
     expect(show(el).value).toBe("station:grill");
   });
 
-  it("a station block's tip names its department", async () => {
-    const el = await mount({ stations: STATIONS, station: grill() });
-    const lunch = block(el, "2026-12-02", "rest", 2);
-    await userEvent.hover(lunch);
-    expect(open(el)).toBe(true);
-    expect(text(tip(el))).toBe("Restaurant · Lunch 13:00–15:30");
-  });
-
-  it("a change of station hides a shown tip", async () => {
-    const el = await mount({ stations: STATIONS, station: grill() });
-    await userEvent.hover(block(el, "2026-12-02", "rest", 2));
-    expect(open(el)).toBe(true);
-    el.station = { ...grill(), id: "cold" };
-    await el.updateComplete;
-    expect(block(el, "2026-12-02", "rest", 2)).toBeTruthy();
-    expect(open(el)).toBe(false);
-  });
-
   it("a station read lacking a shown date draws as loading does", async () => {
     const station = grill();
     const el = await mount({
@@ -1494,3 +1045,55 @@ function probeText(el: HTMLElement, token: string): HTMLElement {
   hosts.push(probe);
   return probe;
 }
+
+it.each([false, true])(
+  "headings and bars open the same day without a tip (phone %s)",
+  async (phone) => {
+    const el = await mount({ departmentId: "rest" });
+    if (phone) {
+      el.style.width = "390px";
+      await expect.poll(() => el.narrow).toBe(true);
+    }
+    const sent = events<CalendarDayOpen>(el, "calendar-day-open");
+    const heading = testId(el, "day-name");
+    const bar = root(el).querySelector<HTMLElement>(".block")!;
+    await userEvent.hover(bar);
+    expect(root(el).querySelector("[data-test=block-tip]")).toBeNull();
+    await userEvent.click(bar);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.date).toBe(phone ? "2026-12-02" : "2026-11-30");
+    expect(sent[0]!.returnTo()).toBe(heading);
+    await userEvent.click(heading!);
+    expect(sent).toHaveLength(2);
+    expect(sent[1]!.date).toBe(sent[0]!.date);
+  },
+);
+
+it("swiping across a bar changes day without opening", async () => {
+  const el = await mount();
+  el.style.width = "390px";
+  await expect.poll(() => el.narrow).toBe(true);
+  const opened = events<CalendarDayOpen>(el, "calendar-day-open");
+  const changed = events<{ date: LocalDate }>(el, "week-change");
+  const bar = root(el).querySelector<HTMLElement>(".block")!;
+  bar.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      pointerType: "touch",
+      pointerId: 7,
+      clientX: 230,
+      clientY: 200,
+    }),
+  );
+  window.dispatchEvent(
+    new PointerEvent("pointerup", {
+      pointerType: "touch",
+      pointerId: 7,
+      clientX: 100,
+      clientY: 200,
+    }),
+  );
+  bar.click();
+  expect(changed).toEqual([{ date: "2026-12-03" }]);
+  expect(opened).toEqual([]);
+});

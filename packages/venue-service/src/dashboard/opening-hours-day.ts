@@ -1,8 +1,8 @@
 import { currentLocale } from "@waitron/dashboard-kit";
 import { holidayDateName } from "../holiday-naming.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
-import type { ServiceRange } from "../service-day.js";
-import { zoneOwnHours, type ZoneOwnHours } from "../zone-own-hours.js";
+import type { ClosedRange } from "../service-day.js";
+import { joinPlacedRanges, placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
 import type { DayBoxRow } from "./calendar-day-box.js";
 import { format } from "./hours-view.js";
 import type { MonthDepartment } from "./opening-hours-month.js";
@@ -86,17 +86,21 @@ export function openingHoursDay(
   const rows = day.departments
     .filter((d) => !chosen || d.departmentId === chosen)
     .flatMap((read) => {
-      const department = departmentRow(read, names);
+      const department = {
+        name: names.name(read.departmentId),
+        text: openHoursText(read.ranges.map(placeOnDay(day))),
+        strong: true,
+      };
       return [
         department,
-        ...read.zones.map((zone) =>
-          zoneRow(
-            zoneOwnHours(read.ranges, zone.closed, day),
-            names.name(zone.zoneId),
-            department.name,
-            names,
-          ),
-        ),
+        ...read.zones.map((zone) => {
+          const own = zoneOwnHours(read.ranges, zone.closed, day);
+          return {
+            name: names.name(zone.zoneId),
+            text: openHoursText(own.ranges),
+            ...(own.closed.length ? { strong: true } : { inheritedFrom: department.name }),
+          };
+        }),
       ];
     });
   return {
@@ -107,42 +111,11 @@ export function openingHoursDay(
   };
 }
 
-/** The day box's row for a department of a date's read. */
-export function departmentRow(read: Day["departments"][number], names: MonthNames): DayBoxRow {
-  return {
-    name: names.name(read.departmentId),
-    text: read.ranges.length
-      ? read.ranges.map((range) => serviceRangeText(range, names)).join(" · ")
-      : t("hours.closed"),
-    strong: true,
-  };
-}
-
-/** The day box's row for the zone `name` of the department named `department`, from the zone's
- *  own hours. */
-export function zoneRow(
-  own: ZoneOwnHours,
-  name: string,
-  department: string,
-  names: MonthNames,
-): DayBoxRow {
-  if (!own.closed.length) return { name, text: format("day.as_department", { name: department }) };
-  const text = own.ranges.length
-    ? [
-        ...own.ranges.map((range) => serviceRangeText(range, names)),
-        ...own.closed.map(({ startsAt, endsAt }) =>
-          format("day.closed_range", { start: startsAt, end: endsAt }),
-        ),
-      ].join(" · ")
+export function openHoursText(ranges: readonly (ClosedRange & Placed)[]): string {
+  const joined = joinPlacedRanges(ranges);
+  return joined.length
+    ? joined
+        .map(({ startsAt, endsAt }) => format("day.open_range", { start: startsAt, end: endsAt }))
+        .join(", ")
     : t("hours.closed");
-  return { name, text, strong: true };
-}
-
-/** A range in words, "Dinner 20:00–23:00". */
-export function serviceRangeText(range: ServiceRange, names: MonthNames): string {
-  return format("month.range", {
-    name: names.period(range.periodId).name,
-    start: range.startsAt,
-    end: range.endsAt,
-  }).trim();
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { closureOutsideHours, closuresInHours, zoneOwnHours } from "./zone-own-hours.js";
+import {
+  closureOutsideHours,
+  closuresInHours,
+  joinPlacedRanges,
+  zoneOwnHours,
+} from "./zone-own-hours.js";
 
 const day = { dayCutover: "06:00", endMinute: 1440 };
 const range = (periodId: string, startsAt: string, endsAt: string) => ({
@@ -243,4 +248,18 @@ describe("closuresInHours", () => {
       ),
     ).toEqual([closure("21:00", "23:00")]);
   });
+});
+
+it("joins touching placed ranges through midnight without carrying a period identity", () => {
+  const pieces = [
+    { ...range("late", "23:15", "00:00"), start: 1035, end: 1080 },
+    { ...range("early", "09:00", "23:15"), start: 180, end: 1035 },
+    { ...range("overnight", "01:00", "02:00"), start: 1140, end: 1200 },
+  ];
+  expect(joinPlacedRanges(pieces)).toEqual([
+    { startsAt: "09:00", endsAt: "00:00", start: 180, end: 1080 },
+    { startsAt: "01:00", endsAt: "02:00", start: 1140, end: 1200 },
+  ]);
+  expect(pieces[0]!.periodId).toBe("late");
+  expect(pieces[1]!.endsAt).toBe("23:15");
 });

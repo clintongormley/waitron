@@ -77,7 +77,7 @@ export function zoneOwnHours(
 }
 
 /** The pieces joined where they touch or overlap, in day order. */
-function joined(pieces: readonly Piece[]): Piece[] {
+export function joinPlacedRanges(pieces: readonly Piece[]): Piece[] {
   const spans: Piece[] = [];
   for (const piece of [...pieces].sort((a, b) => a.start - b.start)) {
     const last = spans.at(-1);
@@ -86,7 +86,10 @@ function joined(pieces: readonly Piece[]): Piece[] {
         last.end = piece.end;
         last.endsAt = piece.endsAt;
       }
-    } else spans.push({ ...piece });
+    } else {
+      const { start, end, startsAt, endsAt } = piece;
+      spans.push({ start, end, startsAt, endsAt });
+    }
   }
   return spans;
 }
@@ -98,7 +101,7 @@ export function closureOutsideHours(
   day: { dayCutover: string; endMinute: number },
 ): number {
   const place = placeOnDay(day);
-  const spans = joined(department.map(place));
+  const spans = joinPlacedRanges(department.map(place));
   return closures.findIndex((closure) => {
     const { start, end } = place(closure);
     return !spans.some((span) => span.start <= start && end <= span.end);
@@ -113,7 +116,7 @@ export function closuresInHours(
   day: { dayCutover: string; endMinute: number },
 ): ClosedRange[] {
   const place = placeOnDay(day);
-  const spans = joined(department.map(place));
+  const spans = joinPlacedRanges(department.map(place));
   const pieces: Piece[] = [];
   for (const closure of closures.map(place)) {
     for (const span of spans) {
@@ -121,5 +124,5 @@ export function closuresInHours(
       pieces.push(overlap(span, closure));
     }
   }
-  return joined(pieces).map(({ startsAt, endsAt }) => ({ startsAt, endsAt }));
+  return joinPlacedRanges(pieces).map(({ startsAt, endsAt }) => ({ startsAt, endsAt }));
 }

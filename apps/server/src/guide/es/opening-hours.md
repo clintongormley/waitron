@@ -1,5 +1,13 @@
 # Horario de apertura
 
+## Consulta el horario de un día {#day-hours}
+
+Abre una fecha para ver cuándo abre cada departamento y zona. Mes y la ventana del día unen los periodos contiguos: **09:00–00:00** indica una apertura continua. Las horas en gris y cursiva siguen el horario del departamento.
+
+Para consultar el detalle por periodo, elige **Abrir esta semana** en la ventana del día. En Semana, pulsa el encabezado de un día o cualquiera de sus barras para abrir su horario. Un hueco en las barras de una zona indica que está cerrada durante ese tramo.
+
+Para cambiar el horario habitual, elige **Editar la semana estándar de <temporada>** junto a la temporada, arriba de la ventana. Para una excepción, elige **Crear un día especial** abajo. Los tramos Cerrado contiguos aparecen unidos en el editor.
+
 ## Selecciona varios días {#select-days}
 
 En Año o Mes, selecciona un tramo con Mayús+clic y añade fechas sueltas con Cmd+clic (Ctrl+clic en Windows). En el móvil, mantén pulsada una fecha y arrastra para seleccionar un tramo. Mientras aparezca la barra de selección, toca fechas para añadirlas o quitarlas y elige **Crear un día especial**.

@@ -1,5 +1,13 @@
 # Opening hours
 
+## Check a day's hours {#day-hours}
+
+Open a date to see when each department and zone is open. The Month and the day pop-up combine periods that touch: **09:00–00:00** means continuous opening. Grey italic times follow the department's hours.
+
+For the period detail, choose **Open this week** in the pop-up. In Week, click a day's heading or any of its bars to open that day's hours. A gap in a zone's bars means it is closed then.
+
+To change the usual timetable, choose **Edit <season>'s standard week** beside the season at the top of the pop-up. For an exception, choose **Make a special day** at the bottom. Touching Closed stretches appear as one in the editor.
+
 ## Select days together {#select-days}
 
 In Year or Month, select a run with Shift-click and add separate dates with Cmd-click (Ctrl-click on Windows). On a phone, press and hold a date, then drag to pick a run. While the selection bar shows, tap dates to add or remove them, then choose **Make a special day**.

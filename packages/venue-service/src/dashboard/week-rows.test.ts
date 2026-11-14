@@ -3,7 +3,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import type { LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
-import { monthNames, openingHoursDay } from "./opening-hours-day.js";
+import { monthNames } from "./opening-hours-day.js";
 import { weekDates, weekDays, weekMonth, weekRows, weekStationRows } from "./week-rows.js";
 
 beforeEach(() => setLocale("en"));
@@ -67,7 +67,6 @@ describe("weekRows", () => {
       "Dinner 20:00–23:00",
     ]);
     expect(rest!.blocks.some((b) => b.faded)).toBe(false);
-    expect(rest!.blocks[0]!.label).toBe("Restaurant · Breakfast 08:00–11:00");
 
     expect(terrace!.key).toBe("terrace");
     expect(terrace!.zone).toBe(true);
@@ -80,19 +79,7 @@ describe("weekRows", () => {
     ]);
     expect(open[2]!.start).toBe(960);
     const closed = terrace!.blocks.filter((b) => b.kind === "closed");
-    expect(closed).toEqual([
-      {
-        kind: "closed",
-        periodId: null,
-        start: 840,
-        end: 960,
-        startsAt: "20:00",
-        endsAt: "22:00",
-        text: "Closed 20:00–22:00",
-        label: "Terrace · Closed 20:00–22:00",
-        faded: false,
-      },
-    ]);
+    expect(closed).toEqual([]);
     expect(terrace!.words).toBe(
       "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 22:00–23:00 · closed 20:00–22:00",
     );
@@ -103,7 +90,6 @@ describe("weekRows", () => {
     const terrace = rowsOn("2026-12-02", "rest")[1]!;
     expect(terrace.blocks.length).toBe(3);
     expect(terrace.blocks.every((b) => b.faded && b.text === "")).toBe(true);
-    expect(terrace.blocks[1]!.label).toBe("Terrace · Lunch 13:00–16:00");
     expect(terrace.words).toBe("as Restaurant");
     expect(terrace.strong).toBe(false);
   });
@@ -141,7 +127,6 @@ describe("weekRows", () => {
       end: 1200,
       startsAt: "10:00",
       endsAt: "02:00",
-      label: "Bar · All day 10:00–02:00",
       faded: false,
     });
   });
@@ -153,7 +138,8 @@ describe("weekRows", () => {
       terraceClosed("2026-12-02", [{ startsAt: "22:00", endsAt: "05:00" }]),
     )[1]!;
     const closed = late.blocks.filter((b) => b.kind === "closed");
-    expect(closed.map((b) => [b.text, b.end])).toEqual([["Closed 22:00–23:00", 1020]]);
+    expect(closed).toEqual([]);
+    expect(late.words).toContain("closed 22:00–23:00");
     expect(
       late.blocks.filter((b) => b.periodId === "dinner").map((b) => [b.faded, b.text]),
     ).toEqual([[false, "Dinner 20:00–22:00"]]);
@@ -187,25 +173,18 @@ describe("weekRows", () => {
     expect(bar!.blocks[0]).toMatchObject({ start: 960, end: 1500 });
   });
 
-  it("puts the day box's words for each row beside it on every date of the month", () => {
-    const model = monthModel();
-    for (const day of model.days) {
-      for (const chosen of ["", "rest"]) {
-        const box = openingHoursDay(day, model.seasons, DEPARTMENTS, chosen);
-        for (const row of weekRows(day, chosen, names)) {
-          expect(row.words, `${day.date} ${chosen} ${row.name}`).toBe(
-            box.rows.find((r) => r.name === row.name)!.text,
-          );
-        }
-      }
-    }
+  it("keeps period detail in the Week's words", () => {
+    expect(rowsOn("2026-12-01", "rest").map((row) => row.words)).toEqual([
+      "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 20:00–23:00",
+      "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 22:00–23:00 · closed 20:00–22:00",
+    ]);
   });
 
   it("writes its words in Spanish", () => {
     setLocale("es");
     try {
       const terrace = rowsOn("2026-12-01", "rest")[1]!;
-      expect(terrace.blocks.find((b) => b.kind === "closed")!.text).toBe("Cerrado 20:00–22:00");
+      expect(terrace.words).toContain("cerrado 20:00–22:00");
       expect(rowsOn("2026-12-25", "")[0]!.empty).toBe("Cerrado todo el día");
     } finally {
       setLocale("en");
@@ -237,9 +216,9 @@ describe("weekStationRows", () => {
     const [rest, bar, ...more] = weekStationRows(grillDay(), names);
     expect(more).toEqual([]);
     expect(rest).toMatchObject({ key: "rest", name: "Restaurant", zone: false, strong: true });
-    expect(rest!.blocks.map((b) => [b.kind, b.periodId, b.text, b.label, b.faded])).toEqual([
-      ["open", "breakfast", "Breakfast 08:00–10:30", "Restaurant · Breakfast 08:00–10:30", false],
-      ["open", "lunch", "Lunch 13:00–15:30", "Restaurant · Lunch 13:00–15:30", false],
+    expect(rest!.blocks.map((b) => [b.kind, b.periodId, b.text, b.faded])).toEqual([
+      ["open", "breakfast", "Breakfast 08:00–10:30", false],
+      ["open", "lunch", "Lunch 13:00–15:30", false],
     ]);
     expect(rest!.blocks[1]).toMatchObject({ start: 420, end: 570 });
     expect(rest!.empty).toBe("");
@@ -274,4 +253,18 @@ describe("weekStationRows", () => {
       setLocale("en");
     }
   });
+});
+
+it("joins closure words across a period boundary while retaining the open periods", () => {
+  const model = terraceClosed("2026-12-02", [{ startsAt: "23:00", endsAt: "00:00" }]);
+  const read = model.days.find((day) => day.date === "2026-12-02")!.departments[0]!;
+  read.ranges = [
+    { periodId: "lunch", startsAt: "09:00", endsAt: "23:15" },
+    { periodId: "dinner", startsAt: "23:15", endsAt: "00:00" },
+  ];
+  const terrace = rowsOn("2026-12-02", "rest", model)[1]!;
+  expect(terrace.words).toBe("Lunch 09:00–23:00 · closed 23:00–00:00");
+  expect(
+    terrace.blocks.map(({ periodId, startsAt, endsAt }) => [periodId, startsAt, endsAt]),
+  ).toEqual([["lunch", "09:00", "23:00"]]);
 });

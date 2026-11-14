@@ -270,14 +270,14 @@ describe("Opening hours month", () => {
     await named(dayButton(el, "2026-12-06")).toHaveAccessibleName(containing("Restaurant closed"));
   });
 
-  it("paints a range in a calendar colour beyond the first six", async () => {
+  it("keeps a station range in a calendar colour beyond the first six", async () => {
     const departments = DEPARTMENTS.map((department) => ({
       ...department,
       periods: department.periods.map((period) =>
         period.id === "breakfast" ? { ...period, colour: "brown" as const } : period,
       ),
     }));
-    const el = await mount(monthModel(), { departments });
+    const el = await mount(monthModel(), { departments, stationMode: true });
     applyTokens(el);
     const breakfast = cell(el, "2026-12-07").querySelector<HTMLElement>(".segment")!;
     expect(breakfast.dataset.colour).toBe("brown");
@@ -289,22 +289,18 @@ describe("Opening hours month", () => {
     expect(painted).not.toBe("rgba(0, 0, 0, 0)");
   });
 
-  it("draws a bar per department, each range placed from changeover to changeover in its period's colour", async () => {
+  it("draws opening spans per department, placed from changeover to changeover", async () => {
     const el = await mount();
     const tracks = [...cell(el, "2026-12-07").querySelectorAll<HTMLElement>(".track")];
     expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
     const segments = [...tracks[0]!.querySelectorAll<HTMLElement>(".segment")];
-    expect(segments.map((s) => s.title)).toEqual([
-      "Breakfast 08:00–11:00",
-      "Lunch 13:00–16:00",
-      "Dinner 20:00–23:00",
-    ]);
-    expect(segments.map((s) => s.dataset.colour)).toEqual(["amber", "green", "red"]);
+    expect(segments.map((s) => s.title)).toEqual(["08:00–11:00", "13:00–16:00", "20:00–23:00"]);
+    expect(segments.map((s) => s.dataset.colour)).toEqual([undefined, undefined, undefined]);
     // 13:00 is 7 hours after the 06:00 changeover.
     expect(percent(segments[1]!.style.left)).toBeCloseTo((7 / 24) * 100, 3);
     expect(percent(segments[1]!.style.width)).toBeCloseTo((3 / 24) * 100, 3);
     const bar = tracks[1]!.querySelector<HTMLElement>(".segment")!;
-    expect(bar.title).toBe("All day 10:00–02:00");
+    expect(bar.title).toBe("10:00–02:00");
     expect(percent(bar.style.left)).toBeCloseTo((4 / 24) * 100, 3);
     expect(percent(bar.style.width)).toBeCloseTo((16 / 24) * 100, 3);
   });
@@ -342,15 +338,12 @@ describe("Opening hours month", () => {
     const tracks = [...cell(el, "2026-12-01").querySelectorAll<HTMLElement>(".track")];
     expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "terrace"]);
     const gaps = [...tracks[1]!.querySelectorAll<HTMLElement>('[data-test="gap"]')];
-    expect(gaps).toHaveLength(1);
-    expect(gaps[0]!.title).toBe("Terrace closed 20:00–22:00");
-    expect(percent(gaps[0]!.style.left)).toBeCloseTo((14 / 24) * 100, 3);
-    expect(percent(gaps[0]!.style.width)).toBeCloseTo((2 / 24) * 100, 3);
+    expect(gaps).toHaveLength(0);
     expect(tracks[1]!.querySelectorAll(".segment")).toHaveLength(3);
     expect(cell(el, "2026-12-02").querySelectorAll('[data-test="gap"]')).toHaveLength(0);
   });
 
-  it("draws a zone's closure hatched, not as the bare track", async () => {
+  it("leaves zone closures as the bare track in both themes", async () => {
     const page = document.documentElement;
     const before = {
       root: page.getAttribute("data-wt-theme-root"),
@@ -360,17 +353,13 @@ describe("Opening hours month", () => {
     try {
       const el = await mount(monthModel(), { departmentId: "rest" });
       const terrace = cell(el, "2026-12-01").querySelector<HTMLElement>('[data-row="terrace"]')!;
-      const gap = terrace.querySelector<HTMLElement>('[data-test="gap"]')!;
+      expect(terrace.querySelector('[data-test="gap"]')).toBeNull();
       const seen: string[] = [];
       for (const theme of ["light", "dark"] as const) {
         page.setAttribute("data-theme", theme);
         const track = getComputedStyle(terrace).backgroundColor;
-        const image = getComputedStyle(gap).backgroundImage;
-        expect(image, theme).toContain("repeating-linear-gradient");
-        const stripes = image.match(/rgba?\([^)]*\)/g) ?? [];
-        const visible = stripes.filter((colour) => colour !== track && !/,\s*0\)$/.test(colour));
-        expect(visible, theme).not.toEqual([]);
-        seen.push(`${track} ${image}`);
+        expect(getComputedStyle(terrace).backgroundImage).toBe("none");
+        seen.push(track);
       }
       expect(new Set(seen).size).toBe(2);
     } finally {
@@ -388,9 +377,9 @@ describe("Opening hours month", () => {
     const terrace = cell(el, "2026-12-01").querySelector<HTMLElement>('[data-row="terrace"]')!;
     const segments = [...terrace.querySelectorAll<HTMLElement>(".segment")];
     expect(segments.map((segment) => segment.title)).toEqual([
-      "Breakfast 08:00–11:00",
-      "Lunch 13:00–16:00",
-      "Dinner 22:00–23:00",
+      "08:00–11:00",
+      "13:00–16:00",
+      "22:00–23:00",
     ]);
     expect(percent(segments[2]!.style.left)).toBeCloseTo((16 / 24) * 100, 3);
   });
@@ -419,17 +408,15 @@ describe("Opening hours month", () => {
     const el = await mount({ ...model, days }, { departmentId: "rest" });
     const terrace = cell(el, "2026-12-09").querySelector<HTMLElement>('[data-row="terrace"]')!;
     const segments = [...terrace.querySelectorAll<HTMLElement>(".segment")];
-    expect(segments.map((segment) => segment.title)).toEqual([
-      "Dinner 22:00–05:00",
-      "Dinner 06:00–07:00",
-    ]);
+    expect(segments.map((segment) => segment.title)).toEqual(["22:00–05:00", "06:00–07:00"]);
     // 06:00 tomorrow is 24 hours into the 25-hour day.
     expect(percent(segments[1]!.style.left)).toBeCloseTo((24 / 25) * 100, 3);
     expect(percent(segments[1]!.style.width)).toBeCloseTo((1 / 25) * 100, 3);
-    const gap = terrace.querySelector<HTMLElement>('[data-test="gap"]')!;
-    expect(gap.title).toBe("Terrace closed 05:00–06:00");
-    expect(percent(gap.style.left)).toBeCloseTo((23 / 25) * 100, 3);
-    expect(percent(gap.style.width)).toBeCloseTo((1 / 25) * 100, 3);
+    expect(terrace.querySelector('[data-test="gap"]')).toBeNull();
+    expect(percent(segments[0]!.style.left) + percent(segments[0]!.style.width)).toBeCloseTo(
+      (23 / 25) * 100,
+      3,
+    );
   });
 
   /** The Terrace on 2 December is closed 22:00–03:00, past the Restaurant's 23:00 close. */
@@ -461,13 +448,14 @@ describe("Opening hours month", () => {
     const el = await mount(lateClosureModel(), { departmentId: "rest" });
     const terrace = cell(el, "2026-12-02").querySelector<HTMLElement>('[data-row="terrace"]')!;
     const gaps = [...terrace.querySelectorAll<HTMLElement>('[data-test="gap"]')];
-    expect(gaps).toHaveLength(1);
-    expect(gaps[0]!.title).toBe("Terrace closed 22:00–23:00");
-    expect(percent(gaps[0]!.style.left)).toBeCloseTo((16 / 24) * 100, 3);
-    expect(percent(gaps[0]!.style.width)).toBeCloseTo((1 / 24) * 100, 3);
+    expect(gaps).toHaveLength(0);
     expect(terrace.querySelectorAll(".segment")).toHaveLength(3);
     const dinner = [...terrace.querySelectorAll<HTMLElement>(".segment")][2]!;
-    expect(dinner.title).toBe("Dinner 20:00–22:00");
+    expect(dinner.title).toBe("20:00–22:00");
+    expect(percent(dinner.style.left) + percent(dinner.style.width)).toBeCloseTo(
+      (16 / 24) * 100,
+      3,
+    );
   });
 
   it("a zone closed for its department's whole day is an empty grey bar, spoken closed", async () => {
@@ -501,9 +489,7 @@ describe("Opening hours month", () => {
   it("says a zone's own hours to a screen reader", async () => {
     const el = await mount(lateClosureModel(), { departmentId: "rest" });
     await named(dayButton(el, "2026-12-02")).toHaveAccessibleName(
-      containing(
-        "Terrace: Breakfast 08:00–11:00, Lunch 13:00–16:00, Dinner 20:00–22:00, Terrace closed 22:00–23:00",
-      ),
+      containing("Terrace: 08:00–11:00, 13:00–16:00, 20:00–22:00"),
     );
   });
 
@@ -1148,7 +1134,7 @@ describe("Opening hours month", () => {
     const el = await mount({ ...model, days }, { departments: [] });
     const segment = cell(el, "2026-12-09").querySelector<HTMLElement>(".segment")!;
     expect(segment.hasAttribute("data-colour")).toBe(false);
-    expect(segment.title).toBe(" 08:00–11:00");
+    expect(segment.title).toBe("08:00–11:00");
     expect(cell(el, "2026-12-07").hasAttribute("data-tint")).toBe(false);
   });
 
@@ -1216,7 +1202,7 @@ describe("Opening hours month", () => {
   it("names each date in full for a screen reader, with its hours", async () => {
     const el = await mount();
     await named(dayButton(el, "2026-12-06")).toHaveAccessibleName(
-      "Sunday, 6 December 2026, Restaurant closed, Bar: All day 10:00–02:00",
+      "Sunday, 6 December 2026, Restaurant closed, Bar: 10:00–02:00",
     );
   });
 
@@ -1232,7 +1218,7 @@ describe("Opening hours month", () => {
         "en",
         {
           "2026-12-08":
-            "Tuesday, 8 December 2026, Today, Immaculate Conception, Restaurant: Breakfast 08:00–11:00, Lunch 13:00–16:00, Dinner 20:00–23:00, Bar: All day 10:00–02:00",
+            "Tuesday, 8 December 2026, Today, Immaculate Conception, Restaurant: 08:00–11:00, 13:00–16:00, 20:00–23:00, Bar: 10:00–02:00",
           "2026-12-25": "Friday, 25 December 2026, Staff party · Closed, Christmas Day",
         },
       ],
@@ -1240,7 +1226,7 @@ describe("Opening hours month", () => {
         "es",
         {
           "2026-12-08":
-            "martes, 8 de diciembre de 2026, Hoy, Immaculate Conception, Restaurant: Breakfast 08:00–11:00, Lunch 13:00–16:00, Dinner 20:00–23:00, Bar: All day 10:00–02:00",
+            "martes, 8 de diciembre de 2026, Hoy, Immaculate Conception, Restaurant: 08:00–11:00, 13:00–16:00, 20:00–23:00, Bar: 10:00–02:00",
           "2026-12-25": "viernes, 25 de diciembre de 2026, Staff party · Cerrado, Christmas Day",
         },
       ],
@@ -1541,4 +1527,27 @@ describe("Opening hours month, a station shown", () => {
       await page.viewport(width, height);
     }
   });
+});
+
+it("draws merged opening spans with time-only descriptions", async () => {
+  const model = monthModel();
+  const day = model.days.find((d) => d.date === "2026-12-01")!;
+  day.departments[0]!.ranges = [
+    { periodId: "lunch", startsAt: "09:00", endsAt: "23:15" },
+    { periodId: "dinner", startsAt: "23:15", endsAt: "00:00" },
+  ];
+  day.departments[0]!.zones[0]!.closed = [{ startsAt: "23:00", endsAt: "00:00" }];
+  const el = await mount(model, { departmentId: "rest" });
+  const spans = [...cell(el, day.date).querySelectorAll<HTMLElement>(".segment")];
+  expect(spans.map((span) => span.title)).toEqual(["09:00–00:00", "09:00–23:00"]);
+  expect(percent(spans[0]!.style.left)).toBeCloseTo(12.5);
+  expect(percent(spans[0]!.style.width)).toBeCloseTo(62.5);
+  expect(percent(spans[1]!.style.width)).toBeCloseTo(58.333);
+  expect(getComputedStyle(spans[0]!).backgroundColor).toBe(
+    getComputedStyle(spans[1]!).backgroundColor,
+  );
+  expect(cell(el, day.date).querySelector(".gap")).toBeNull();
+  await named(dayButton(el, day.date)).toHaveAccessibleName(
+    containing("Restaurant: 09:00–00:00, Terrace: 09:00–23:00"),
+  );
 });

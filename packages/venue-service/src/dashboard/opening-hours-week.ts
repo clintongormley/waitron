@@ -18,9 +18,7 @@ import {
 import type { CalendarDayOpen, MonthDepartment } from "./opening-hours-month.js";
 import type { ShowStation, StationShow } from "./station-show.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
-import { scrollTargets, visibleTop } from "./flat-tree.js";
-import { POPOVER_MARGIN } from "./paint-grid-parts.js";
-import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
+import { periodColourStyles } from "./period-colour-styles.js";
 import { dayNameWords, dayNameWordStyles } from "./day-name-words.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import {
@@ -117,28 +115,6 @@ function dayTitleCandidates(): TemplateResult[] {
     dayWidthCandidates = [...titles.values()];
   }
   return dayWidthCandidates;
-}
-
-/** How long an unpinned tip outlasts the pointer leaving its block or itself, so a path from the
- *  block that the bridge does not cover can still reach the tip. */
-const TIP_LEAVE_DELAY = 300;
-
-/** Shows `tip` and places it in the same call, so it never paints where it was last: above
- *  `block` when it fits below the top of the area the block scrolls in, else below; its left lined
- *  up with the block's and kept inside the window's edges. */
-function placeTip(tip: HTMLElement, block: HTMLElement): void {
-  if (!tip.matches(":popover-open")) tip.showPopover();
-  tip.style.left = "0px";
-  tip.style.top = "0px";
-  tip.style.maxWidth = `${window.innerWidth - 2 * POPOVER_MARGIN}px`;
-  const gap = parseFloat(getComputedStyle(tip).getPropertyValue("--wt-space-1"));
-  const at = block.getBoundingClientRect();
-  const size = tip.getBoundingClientRect();
-  const above = at.top - gap - size.height;
-  const fits = above >= visibleTop(block);
-  tip.dataset.side = fits ? "above" : "below";
-  tip.style.top = `${fits ? above : at.bottom + gap}px`;
-  tip.style.left = `${Math.max(POPOVER_MARGIN, Math.min(at.left, window.innerWidth - POPOVER_MARGIN - size.width))}px`;
 }
 
 /** The Monday-to-Sunday week holding `date`, each day a section of rows with its hours drawn as
@@ -302,39 +278,8 @@ export class OpeningHoursWeekView extends LitElement {
         color: var(--period-on-fill);
         font-weight: var(--wt-font-weight-bold);
       }
-      .block[data-kind="closed"] {
-        background: ${closedHatch};
-        color: var(--wt-color-text);
-      }
       .block[data-faded] {
         opacity: var(--wt-opacity-disabled);
-      }
-      .tip {
-        position: fixed;
-        inset: auto;
-        margin: 0;
-        overflow: visible;
-        padding: var(--wt-space-1) var(--wt-space-2);
-        border: 0;
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-text);
-        color: var(--wt-color-bg);
-        font-size: var(--wt-font-size-sm);
-        overflow-wrap: anywhere;
-      }
-      /* Bridges the gap between the tip and its block, so the pointer crossing it never leaves
-         both (WCAG 1.4.13). */
-      .tip::before {
-        content: "";
-        position: absolute;
-        inset-inline: 0;
-        block-size: var(--wt-space-1);
-      }
-      .tip[data-side="above"]::before {
-        inset-block-start: 100%;
-      }
-      .tip[data-side="below"]::before {
-        inset-block-end: 100%;
       }
       .text {
         overflow: hidden;
@@ -414,102 +359,13 @@ export class OpeningHoursWeekView extends LitElement {
     return this.narrow ? this.date.slice(0, 7) : weekMonth(this.date);
   }
 
-  /** The block the tip was pinned to by a click or tap; leaving does not hide a pinned tip. */
-  #pinned: HTMLElement | null = null;
-  #shownFor: HTMLElement | null = null;
-  #scrollTargets: EventTarget[] = [];
-  #hideLater: ReturnType<typeof setTimeout> | undefined;
-  #size = "";
   #narrowing = 0;
 
-  #tip(): HTMLElement | null {
-    return this.renderRoot.querySelector<HTMLElement>('[data-test="block-tip"]');
-  }
-
-  #showTip(block: HTMLElement, label: string, pinned: boolean): void {
-    const tip = this.#tip();
-    if (!tip) return;
-    this.#stayShown();
-    tip.textContent = label;
-    if (!this.#shownFor) {
-      this.#scrollTargets = scrollTargets(block);
-      for (const target of this.#scrollTargets)
-        target.addEventListener("scroll", this.#onScroll, { capture: true, passive: true });
-      // Added during the click that pins a tip, the click listener still sees that click; the
-      // block in its path keeps it from hiding the tip.
-      window.addEventListener("click", this.#onWindowClick);
-      window.addEventListener("keydown", this.#onWindowKeydown, { capture: true });
-    }
-    this.#shownFor = block;
-    this.#pinned = pinned ? block : null;
-    placeTip(tip, block);
-  }
-
-  #hideTip(): void {
-    this.#stayShown();
-    this.#pinned = null;
-    this.#shownFor = null;
-    for (const target of this.#scrollTargets.splice(0))
-      target.removeEventListener("scroll", this.#onScroll, { capture: true });
-    window.removeEventListener("click", this.#onWindowClick);
-    window.removeEventListener("keydown", this.#onWindowKeydown, { capture: true });
-    const tip = this.#tip();
-    if (tip?.matches(":popover-open")) tip.hidePopover();
-  }
-
-  #leave(): void {
-    if (this.#pinned || !this.#shownFor) return;
-    clearTimeout(this.#hideLater);
-    this.#hideLater = setTimeout(() => this.#hideTip(), TIP_LEAVE_DELAY);
-  }
-
-  #stayShown(): void {
-    clearTimeout(this.#hideLater);
-    this.#hideLater = undefined;
-  }
-
-  #onWindowClick = (event: MouseEvent): void => {
-    const path = event.composedPath();
-    const tip = this.#tip();
-    if (
-      path.some(
-        (node) =>
-          node === tip ||
-          (node instanceof HTMLElement &&
-            node.classList.contains("block") &&
-            this.renderRoot.contains(node)),
-      )
-    )
-      return;
-    this.#hideTip();
-  };
-
-  #onWindowKeydown = (event: KeyboardEvent): void => {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.#hideTip();
-  };
-
-  #onScroll = (): void => this.#hideTip();
-
   override willUpdate(changed: PropertyValues<this>): void {
-    if (
-      changed.has("model") ||
-      changed.has("date") ||
-      changed.has("departmentId") ||
-      changed.has("station") ||
-      changed.has("narrow")
-    )
-      this.#hideTip();
     if (changed.has("narrow")) this.#swipeStop();
   }
 
-  /** A change of size moves the blocks, so a shown tip is hidden as a scroll hides it. */
   #resizes = new ResizeObserver(([entry]) => {
-    const size = `${entry!.contentRect.width}x${entry!.contentRect.height}`;
-    if (this.#size && size !== this.#size) this.#hideTip();
-    this.#size = size;
     const narrow = entry!.contentRect.width < PHONE_WIDTH;
     cancelAnimationFrame(this.#narrowing);
     // Set in this callback, the redraw would change the host's height inside the observer's own
@@ -561,7 +417,6 @@ export class OpeningHoursWeekView extends LitElement {
     super.disconnectedCallback();
     this.#resizes.disconnect();
     cancelAnimationFrame(this.#narrowing);
-    this.#hideTip();
     this.#swipeStop();
   }
 
@@ -621,15 +476,7 @@ export class OpeningHoursWeekView extends LitElement {
       </div>
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>
       <span id="year-hint" class="hint">${t("month.year_view_hint")}</span>
-      ${drawn ? this.#body(drawn, (body) => this.#week(body)) : nothing}
-      <div
-        popover="manual"
-        class="tip"
-        data-test="block-tip"
-        aria-hidden="true"
-        @pointerenter=${() => this.#stayShown()}
-        @pointerleave=${() => this.#leave()}
-      ></div>`;
+      ${drawn ? this.#body(drawn, (body) => this.#week(body)) : nothing}`;
   }
 
   #step(by: number, test: string, label: Parameters<typeof t>[0], glyph: string) {
@@ -756,11 +603,13 @@ export class OpeningHoursWeekView extends LitElement {
       </div>`;
   }
 
+  #swiped = false;
   #swipeFrom: { id: number; x: number; y: number } | undefined;
   /** The touch and pen contacts down on the day card. */
   #contacts = new Set<number>();
 
   #swipeStart(event: PointerEvent) {
+    this.#swiped = false;
     if (event.pointerType === "mouse") return;
     if (this.#contacts.size === 0) {
       // Heard on the window, so a contact lifted where the card does not hear it still ends.
@@ -782,6 +631,7 @@ export class OpeningHoursWeekView extends LitElement {
     const across = event.clientX - from.x;
     const down = event.clientY - from.y;
     if (Math.abs(across) < SWIPE_PX || Math.abs(across) <= 2 * Math.abs(down)) return;
+    this.#swiped = true;
     const target = addDays(this.date, across < 0 ? 1 : -1);
     if (weekInRange(target)) this.#emit("week-change", { date: target });
   };
@@ -791,6 +641,17 @@ export class OpeningHoursWeekView extends LitElement {
     this.#contacts.clear();
     window.removeEventListener("pointerup", this.#swipeEnd);
     window.removeEventListener("pointercancel", this.#swipeEnd);
+  }
+
+  #openBarDay(date: LocalDate): void {
+    if (this.#swiped) {
+      this.#swiped = false;
+      return;
+    }
+    this.#emit<CalendarDayOpen>("calendar-day-open", {
+      date,
+      returnTo: () => this.#dayButton(date),
+    });
   }
 
   #phoneRow(row: WeekRow, day: Day, names: MonthNames, orders: boolean) {
@@ -803,6 +664,7 @@ export class OpeningHoursWeekView extends LitElement {
           (block) =>
             html`<span
               class="block"
+              @click=${() => this.#openBarDay(day.date)}
               data-kind=${block.kind}
               data-colour=${(block.periodId && names.period(block.periodId).colour) || nothing}
               ?data-faded=${block.faded}
@@ -898,16 +760,7 @@ export class OpeningHoursWeekView extends LitElement {
                         (block.periodId && names.period(block.periodId).colour) || nothing
                       }
                       ?data-faded=${block.faded}
-                      @pointerenter=${(event: PointerEvent) => {
-                        if (event.pointerType === "mouse" && !this.#pinned)
-                          this.#showTip(event.currentTarget as HTMLElement, block.label, false);
-                      }}
-                      @pointerleave=${() => this.#leave()}
-                      @click=${(event: MouseEvent) => {
-                        const target = event.currentTarget as HTMLElement;
-                        if (this.#pinned === target) this.#hideTip();
-                        else this.#showTip(target, block.label, true);
-                      }}
+                      @click=${() => this.#openBarDay(day.date)}
                       style=${styleMap({
                         left: `${(block.start / span) * 100}%`,
                         width: `${((block.end - block.start) / span) * 100}%`,

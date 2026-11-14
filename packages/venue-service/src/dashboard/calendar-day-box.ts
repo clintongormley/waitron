@@ -1,17 +1,19 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { flatParent, scrollTargets } from "./flat-tree.js";
+import { format } from "./hours-view.js";
 import { placePopover } from "./painter.js";
 
 export interface DayBoxRow {
   name: string;
   text: string;
   strong?: boolean;
+  inheritedFrom?: string;
 }
 
-/** One day in words, floating below the day that opened it. Presentational: the host formats
- *  every word, and its buttons go in the default slot. Sends `calendar-day-box-close` when it closes. */
+/** Sends `calendar-day-box-close` when it closes; season actions use the named slot, other actions
+ *  the default slot. */
 @customElement("calendar-day-box")
 export class CalendarDayBox extends LitElement {
   static override styles = [
@@ -48,6 +50,26 @@ export class CalendarDayBox extends LitElement {
       .name {
         margin-inline-start: var(--wt-space-2);
         font-weight: var(--wt-font-weight-bold);
+      }
+      .season {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin-block-start: var(--wt-space-1);
+      }
+      .season[hidden] {
+        display: none;
+      }
+      .season .line {
+        margin: 0;
+      }
+      .inherited {
+        color: var(--wt-color-text-muted);
+        font-style: italic;
+      }
+      .visually-hidden {
+        ${visuallyHiddenStyles}
       }
       .line,
       .message {
@@ -101,6 +123,7 @@ export class CalendarDayBox extends LitElement {
   @query("h2") private headingEl!: HTMLElement;
 
   @state() private hasActions = false;
+  @state() private hasSeasonActions = false;
 
   #anchor: HTMLElement | undefined;
   #focusWasInside = false;
@@ -217,7 +240,13 @@ export class CalendarDayBox extends LitElement {
           ? html`<span class="name" data-test="name" data-kind=${this.nameKind}>${this.name}</span>`
           : nothing
       }
-      ${this.line ? html`<p class="line" data-test="line">${this.line}</p>` : nothing}
+      <div class="season" ?hidden=${!this.line && !this.hasSeasonActions}>
+        ${this.line ? html`<p class="line" data-test="line">${this.line}</p>` : nothing}
+        <slot
+          name="season-action"
+          @slotchange=${(event: Event) => (this.hasSeasonActions = (event.target as HTMLSlotElement).assignedElements().length > 0)}
+        ></slot>
+      </div>
       ${this.error ? html`<p class="error" data-test="error" role="alert">${this.error}</p>` : nothing}
       ${
         this.message
@@ -228,7 +257,9 @@ export class CalendarDayBox extends LitElement {
                 ${this.rows.map(
                   (row) =>
                     html`<dt class=${row.strong ? "strong" : ""}>${row.name}</dt>
-                      <dd>${row.text}</dd>`,
+                      <dd class=${row.inheritedFrom !== undefined ? "inherited" : ""}>
+                        ${row.text}${row.inheritedFrom !== undefined ? html`<span class="visually-hidden">, ${format("day.as_department", { name: row.inheritedFrom })}</span>` : nothing}
+                      </dd>`,
                 )}
               </dl>`
       }
