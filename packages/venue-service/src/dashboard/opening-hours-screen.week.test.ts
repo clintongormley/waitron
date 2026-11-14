@@ -52,7 +52,6 @@ function yearRead(year: number): OpeningHoursYear {
     seasons: [],
     days: [],
     publicHolidaysAvailable: true,
-    missingHolidays: [],
     holidayCoverage: [],
     area: {
       addressKey: "fixture-address",

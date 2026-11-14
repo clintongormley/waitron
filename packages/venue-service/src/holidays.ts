@@ -237,20 +237,6 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
 
   const readHolidayFacts: HolidayReader = (tx, from, to) => holidayReadsAt(tx).facts(from, to);
 
-  async function readHolidayEnglishNames(
-    tx: Transaction,
-    names: readonly string[],
-  ): Promise<Map<string, string>> {
-    if (names.length === 0) return new Map();
-    const { calendar } = await readAddress(tx);
-    const englishNames = new Map<string, string>();
-    for (const name of names) {
-      const englishName = calendar?.englishNameFor(name);
-      if (englishName !== undefined) englishNames.set(name, englishName);
-    }
-    return englishNames;
-  }
-
   async function readHolidayAreaModel(tx: Transaction): Promise<HolidayAreaModel> {
     const address = await readAddress(tx);
     const current = currentArea(address);
@@ -281,18 +267,17 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     };
   }
 
-  /** `readHolidays` over `year`, `readHolidayAreaModel` and `readHolidayDates` for `year`,
-   *  reading the address and its geography once. */
+  /** `readHolidays` over `year` and `readHolidayAreaModel`, reading the address and its geography
+   *  once. */
   async function readHolidayYear(
     tx: Transaction,
     year: number,
-  ): Promise<{ read: HolidayRead; area: HolidayAreaModel; dates: HolidayDates }> {
+  ): Promise<{ read: HolidayRead; area: HolidayAreaModel }> {
     const address = await readAddress(tx);
     const current = currentArea(address);
     return {
       read: holidaysAt(address, current, `${String(year).padStart(4, "0")}-01-01`, yearEnd(year)),
       area: areaModelAt(address, current),
-      dates: holidayDatesAt(address, current, year, year),
     };
   }
 
@@ -318,7 +303,6 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     readHolidays,
     readHolidayDates,
     holidayReadsAt,
-    readHolidayEnglishNames,
     readHolidayFacts,
     readHolidayAreaModel,
     readHolidayYear,
@@ -332,7 +316,6 @@ export const {
   readHolidays,
   readHolidayDates,
   holidayReadsAt,
-  readHolidayEnglishNames,
   readHolidayAreaModel,
   readHolidayYear,
   saveHolidayArea,

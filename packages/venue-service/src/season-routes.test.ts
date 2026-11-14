@@ -127,7 +127,6 @@ describe("the year read route", () => {
       days: { date: string; seasonId: string | null; closed: boolean }[];
       seasons: { name: string; lastDay: string }[];
       clockRevision: number;
-      missingHolidays: unknown[];
     };
     expect(year.year).toBe(2030);
     expect(year.days).toHaveLength(365);
@@ -143,7 +142,7 @@ describe("the year read route", () => {
       { name: starterSeasonName("Winter", "es"), lastDay: "02-28" },
     ]);
     expect(year.clockRevision).toBe(1);
-    expect(year.missingHolidays).toEqual([]);
+    expect(year).not.toHaveProperty("missingHolidays");
   });
 
   it("refuses a year that is not four digits, and an anonymous read", async () => {

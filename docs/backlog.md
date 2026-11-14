@@ -664,24 +664,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **A1525. Departments and zones page: the owner's review (owner, 2026-11-14).**
-  - The page's title says "Departments" while the menu says "Departments and zones"; the title says
-    both.
-  - **No public-holiday warnings anywhere.** The owner: "this comes from an official source and will
-    be published later. we shouldn't be warning about these", and no warning even once the year's
-    list is out. Remove "{name} (Every year) has no public holiday of that name in {year}." from
-    this page and the Year view's missing-holiday warning (`#warnings`,
-    `packages/venue-service/src/dashboard/opening-hours-year.ts`). Trace every reader of
-    `special_day.holiday_missing` (`packages/venue-service/src/operations.ts`) before removing it.
-    This replaces the Holidays yearly bundle's readiness-line entry.
-  - **A zone's value that matches its department's is left blank, not drawn in grey italics.** The
-    owner: grey italics for a default stay elsewhere, such as in dropdowns, "but here i think it
-    just adds noise". A row that uses table service leaves "When counter service is used" blank,
-    except that a department whose zones use counter service still shows its own value there, so
-    the value those zones take is shown once.
-  - **The empty "Also edit" column goes** (moved here from the Department dialog bundle; the owner
-    did not know what it was for).
-
 - **A1528. Department window and the delete dialogs: the owner's review (owner, 2026-11-14).**
   Same page as A1525; can land with it or after it.
   - **Adding a receipt logo reloads the page a few seconds later, losing unsaved changes.** On the

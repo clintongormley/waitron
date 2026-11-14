@@ -12,7 +12,7 @@ afterEach(() => {
   sessionStorage.clear();
 });
 describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
-  it.each(["empty", "ready", "issues", "setup", "menu", "deleted-row", "also-edit"])(
+  it.each(["empty", "ready", "issues", "setup", "menu", "deleted-row", "zone-row"])(
     "%s",
     async (state) => {
       setLocale("en");
@@ -33,7 +33,7 @@ describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
                 },
               ],
         zones:
-          state === "also-edit"
+          state === "zone-row"
             ? [
                 {
                   id: "z1",

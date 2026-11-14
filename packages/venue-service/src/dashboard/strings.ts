@@ -482,7 +482,6 @@ const en = {
   "venue.list_name": "Name",
 
   "nav.departments_zones": "Departments and zones",
-  "venue.departments": "Departments",
   "venue.add_department": "Add department",
   "venue.new_zone": "Add zone",
   "venue.add_zone": "Add zone",
@@ -532,7 +531,6 @@ const en = {
   "venue.clear": "Clear",
   "venue.paid": "Paid",
   "venue.none": "None",
-  "venue.also_edit": "Also edit",
   "venue.rename": "Rename",
   "venue.move_to_department": "Move to department",
   "venue.department_name_taken": "A department with this name already exists.",
@@ -581,8 +579,6 @@ const en = {
     "No default prep station is active. Items no rule sends anywhere cannot be sent.",
   "venue.readiness.department_description": "Set up the tax-agency description",
   "venue.readiness.department_no_periods": "has no opening periods.",
-  "venue.readiness.holiday_missing":
-    "{name} (Every year) has no public holiday of that name in {year}.",
   "venue.readiness.date_shared":
     "{other} and {name} both fall on {date}. {name} applies; change one to choose.",
   "venue.readiness.menu_empty": "has no products for",
@@ -1430,7 +1426,6 @@ const es: Record<keyof typeof en, string> = {
   "venue.list_name": "Nombre",
 
   "nav.departments_zones": "Departamentos y zonas",
-  "venue.departments": "Departamentos",
   "venue.add_department": "Añadir departamento",
   "venue.new_zone": "Añadir zona",
   "venue.add_zone": "Añadir zona",
@@ -1482,7 +1477,6 @@ const es: Record<keyof typeof en, string> = {
   "venue.clear": "Borrar",
   "venue.paid": "Pago",
   "venue.none": "Ninguno",
-  "venue.also_edit": "Editar también",
   "venue.rename": "Cambiar nombre",
   "venue.move_to_department": "Mover a departamento",
   "venue.department_name_taken": "Ya existe un departamento con este nombre.",
@@ -1531,8 +1525,6 @@ const es: Record<keyof typeof en, string> = {
     "Ninguna estación de preparación predeterminada está activa. Los artículos que ninguna regla envía a una estación no se pueden enviar.",
   "venue.readiness.department_description": "Configurar la descripción para Hacienda",
   "venue.readiness.department_no_periods": "no tiene períodos de apertura.",
-  "venue.readiness.holiday_missing":
-    "{name} (cada año): en {year} no hay ningún festivo con ese nombre.",
   "venue.readiness.date_shared":
     "{other} y {name} caen el {date}. Se aplica {name}; cambia uno para elegir.",
   "venue.readiness.menu_empty": "no tiene productos para",

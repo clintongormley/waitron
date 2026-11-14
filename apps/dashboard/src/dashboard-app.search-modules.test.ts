@@ -62,7 +62,6 @@ const request = (async (path: string) => {
       today: "2026-10-15",
       days: [],
       publicHolidaysAvailable: true,
-      missingHolidays: [],
       holidayCoverage: [],
       area: {
         addressKey: "fixture",

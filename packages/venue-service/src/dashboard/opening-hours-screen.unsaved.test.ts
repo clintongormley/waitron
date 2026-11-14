@@ -56,7 +56,6 @@ class OpeningLeaveApp extends LitElement {
           },
         ],
         publicHolidaysAvailable: true,
-        missingHolidays: [],
         holidayCoverage: [],
         area: {
           addressKey: "fixture-address",

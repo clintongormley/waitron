@@ -151,7 +151,6 @@ describe("department list", () => {
       ["name", "Name"],
       ["orderStart", "How orders start"],
       ["paidWhen", "When counter service is used"],
-      ["also", "Also edit"],
       ["actions", "Actions"],
     ]);
     expect(list.columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
@@ -197,7 +196,7 @@ describe("department list", () => {
       rows(el)[1]!.querySelectorAll("td")[0]!.querySelectorAll('[part="setup-issue"]'),
     ).toHaveLength(0);
   });
-  it("warns, above the table, of each year a repeating holiday date will not apply", async () => {
+  it("draws no public-holiday warning, even for a missing-holiday issue an older server sends", async () => {
     const el = await setup({
       ...model,
       readiness: [
@@ -206,18 +205,22 @@ describe("department list", () => {
           specialDayId: "sd1",
           holidayName: "Viernes Santo",
           year: 2027,
-        },
+        } as unknown as VenueServiceView["readiness"][number],
       ],
     });
-    const warning = find(el, '[data-test="holiday-missing"]')!;
-    expect(warning.textContent!.trim()).toBe(
-      "Viernes Santo (Every year) has no public holiday of that name in 2027.",
-    );
-    expect(
-      warning.compareDocumentPosition(table(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(find(el, '[data-test="holiday-missing"]')).toBeNull();
+    expect(el.shadowRoot!.querySelectorAll(".issue")).toHaveLength(0);
+    expect(el.shadowRoot!.textContent).not.toContain("Viernes Santo");
   });
-
+  it.each([
+    ["en", "Departments and zones"],
+    ["es", "Departamentos y zonas"],
+  ])("titles the page and its table as the menu does (%s)", async (locale, title) => {
+    setLocale(locale);
+    const el = await setup();
+    expect(el.shadowRoot!.querySelector("h2")!.textContent!.trim()).toBe(title);
+    expect(table(el).getAttribute("aria-label")).toBe(title);
+  });
   it("warns, above the table, of two special days that fall on one date, naming the one that applies", async () => {
     const clash = {
       ...model,
@@ -359,7 +362,6 @@ describe("department list", () => {
       "Nombre",
       "Cómo empiezan los pedidos",
       "Cuando se usa el servicio en mostrador",
-      "Editar también",
       "Acciones",
     ]);
     expect(rows(el)[1]!.textContent).toContain("Servicio en mostrador");
@@ -455,25 +457,3 @@ it("offers no column chooser", async () => {
   expect(list.shadowRoot!.querySelector(".table-search")).toBeNull();
   expect(list.columns.filter((column) => column.choosable !== undefined)).toEqual([]);
 });
-
-it.each(["en", "es"])(
-  "uses %s for a stored holiday warning without renaming its annual rule",
-  async (locale) => {
-    setLocale(locale);
-    const el = await setup({
-      ...model,
-      readiness: [
-        {
-          code: "special_day.holiday_missing",
-          specialDayId: "special",
-          holidayName: "Official holiday",
-          englishName: "English holiday",
-          year: 2027,
-        },
-      ],
-    });
-    const warning = find(el, '[data-test="holiday-missing"]')!.textContent!;
-    expect(warning).toContain(locale === "en" ? "English holiday" : "Official holiday");
-    expect(warning).not.toContain(locale === "en" ? "Official holiday" : "English holiday");
-  },
-);

@@ -388,7 +388,7 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## Bundle: Department dialog
 
-1 entry, size S. The "Also edit" column moved to A1525 (owner, 2026-11-14).
+1 entry, size S.
 
 - **A per-field department policy repair changes the trading-name default.**
   [Detail](service-periods.md#a-per-field-department-policy-repair-changes-the-trading-name-default)
@@ -397,7 +397,7 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 The readiness-line entry went on 2026-11-14: the owner decided there is no missing-holiday warning
-at all (A1525).
+at all, and it was removed (A1525).
 
 - **Two holidays with one name in one year's list**
   [Detail](service-periods.md#two-holidays-with-one-name-in-one-years-list)

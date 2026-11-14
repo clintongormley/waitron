@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
-import { tableNoMatches, currentLocale } from "@waitron/dashboard-kit";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -15,7 +15,6 @@ import {
 import { DepartmentsZonesDrag } from "./departments-zones-drag.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
-import { holidayDisplayName } from "../holiday-naming.js";
 import { periodsWindowPath } from "./opening-hours-paths.js";
 
 export type DepartmentZoneRow =
@@ -69,10 +68,6 @@ export class DepartmentsList extends LitElement {
         background: var(--wt-color-surface-lifted);
         box-shadow: var(--wt-shadow-2);
         border-radius: var(--wt-radius-md);
-      }
-      wt-data-table::part(inherited) {
-        color: var(--wt-color-text-muted);
-        font-style: italic;
       }
       wt-data-table::part(name-link) {
         display: inline-block;
@@ -211,28 +206,44 @@ export class DepartmentsList extends LitElement {
       row.kind === "department" ? { departmentId: row.id } : { zoneId: row.id },
     );
   }
-  #policy(row: DepartmentZoneRow, field: PolicyField) {
-    const parentId = row.kind === "department" ? row.id : row.departmentId;
-    const parent = this.model!.salePolicies.departments.find(
-      (policy) => policy.departmentId === parentId,
+  #value(row: DepartmentZoneRow, field: PolicyField): string {
+    const departmentId = row.kind === "department" ? row.id : row.departmentId;
+    const department = this.model!.salePolicies.departments.find(
+      (policy) => policy.departmentId === departmentId,
     );
-    const zone =
+    const own =
       row.kind === "zone"
-        ? this.model!.salePolicies.zones.find((policy) => policy.zoneId === row.id)
+        ? this.model!.salePolicies.zones.find((policy) => policy.zoneId === row.id)?.[field]
         : undefined;
     const defaults = { orderStart: "counter", paidWhen: "prepay" };
-    const raw = row.kind === "department" ? parent?.[field] : zone?.[field];
-    const value = raw ?? parent?.[field] ?? defaults[field];
+    return own ?? department?.[field] ?? defaults[field];
+  }
+  #policy(row: DepartmentZoneRow, field: PolicyField, rows: readonly DepartmentZoneRow[]) {
+    const value = this.#value(row, field);
+    if (row.kind === "zone") {
+      const department = rows.find(
+        (other) => other.kind === "department" && other.id === row.departmentId,
+      );
+      if (department !== undefined && this.#value(department, field) === value) return nothing;
+    }
+    if (field === "paidWhen" && this.#value(row, "orderStart") === "table") {
+      const counterZone =
+        row.kind === "department" &&
+        rows.some(
+          (other) =>
+            other.kind === "zone" &&
+            other.departmentId === row.id &&
+            this.#value(other, "orderStart") === "counter",
+        );
+      if (!counterZone) return nothing;
+    }
     const labels = {
       table: "venue.table_service",
       counter: "venue.counter_service",
       prepay: "venue.paid_before_preparation",
       ticket_then_pay: "venue.paid_at_collection",
     } as const;
-    const inherited = row.kind === "zone" && raw == null;
-    return html`<span part=${inherited ? `policy inherited inherited-${field}` : "policy"}
-      >${t(labels[value as keyof typeof labels])}</span
-    >`;
+    return html`<span part="policy">${t(labels[value as keyof typeof labels])}</span>`;
   }
   #actions(row: DepartmentZoneRow) {
     const department = row.kind === "department";
@@ -336,17 +347,12 @@ export class DepartmentsList extends LitElement {
       {
         key: "orderStart",
         label: t("venue.order_start"),
-        cell: (row) => this.#policy(row, "orderStart"),
+        cell: (row) => this.#policy(row, "orderStart", rows),
       },
       {
         key: "paidWhen",
         label: t("venue.counter_paid_when"),
-        cell: (row) => this.#policy(row, "paidWhen"),
-      },
-      {
-        key: "also",
-        label: t("venue.also_edit"),
-        cell: () => nothing,
+        cell: (row) => this.#policy(row, "paidWhen", rows),
       },
       {
         key: "actions",
@@ -358,38 +364,28 @@ export class DepartmentsList extends LitElement {
     const unassigned = model.readiness.filter((issue) => issue.code === "zone.department_missing");
     return html`
       <div class="toolbar">
-        <h2>${t("venue.departments")}</h2>
+        <h2>${t("nav.departments_zones")}</h2>
         <wt-button data-test="add-department" @click=${() => this.#emit("add-department")}
           >+ ${t("venue.add_department")}</wt-button
         >
       </div>
       ${model.readiness.some((issue) => issue.code === "venue.default_station_missing") ? html`<p class="issue" data-test="default-station-missing">${t("venue.readiness.default_station_missing")} <a href="/manage/prep-stations">${t("nav.prep_stations")}</a></p>` : nothing}
       ${model.readiness.map((issue) =>
-        issue.code === "special_day.holiday_missing"
-          ? html`<p class="issue" data-test="holiday-missing">
-              ${format("venue.readiness.holiday_missing", {
-                name: holidayDisplayName(
-                  { name: issue.holidayName, englishName: issue.englishName },
-                  currentLocale(),
-                ),
-                year: String(issue.year),
+        issue.code === "special_day.date_shared"
+          ? html`<p class="issue" data-test="date-shared">
+              ${format("venue.readiness.date_shared", {
+                other: issue.otherSpecialDayName,
+                name: issue.specialDayName,
+                date: formatDate(issue.date),
               })}
             </p>`
-          : issue.code === "special_day.date_shared"
-            ? html`<p class="issue" data-test="date-shared">
-                ${format("venue.readiness.date_shared", {
-                  other: issue.otherSpecialDayName,
-                  name: issue.specialDayName,
-                  date: formatDate(issue.date),
-                })}
-              </p>`
-            : nothing,
+          : nothing,
       )}
       ${model.departments.length > 0 && model.readiness.some((issue) => issue.code === "venue.department_missing") ? html`<p class="issue" data-test="no-enabled-department">${t("venue.no_enabled_department")}</p>` : nothing}
       ${this.moveFailure ? html`<p role="alert">${this.moveFailure}</p>` : nothing}
       <wt-data-table
         viewKey="waitron.venue.departments-zones"
-        aria-label=${t("venue.departments")}
+        aria-label=${t("nav.departments_zones")}
         .rows=${rows}
         .columns=${columns}
         .rowKey=${(row: DepartmentZoneRow) => `${row.kind}:${row.id}`}

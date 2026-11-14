@@ -221,7 +221,6 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       seasons: [],
       days: [],
       publicHolidaysAvailable: true,
-      missingHolidays: [],
       holidayCoverage: [],
       area: {
         addressKey: "fixture",
@@ -345,7 +344,6 @@ it("the Calendar's Periods window is read-only for a viewer and editable for a m
     seasons: [],
     days: [],
     publicHolidaysAvailable: true,
-    missingHolidays: [],
     holidayCoverage: [],
     area: { addressKey: "fixture", readiness: "ready", options: [], required: false, chosen: null },
   });

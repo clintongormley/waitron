@@ -73,13 +73,6 @@ export type VenueReadinessIssue =
       menuName: string;
     }
   | {
-      code: "special_day.holiday_missing";
-      specialDayId: string;
-      holidayName: string;
-      englishName?: string;
-      year: number;
-    }
-  | {
       code: "special_day.date_shared";
       date: LocalDate;
       specialDayId: string;

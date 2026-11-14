@@ -20,7 +20,6 @@ import { seasonOn, type Season } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
 import type { ClosedRange, ServiceRange } from "./service-day.js";
 import { serviceDayWallContext, type BusinessDayScheduleStatus } from "./service-day-context.js";
-import { missingHolidaysIn } from "./special-days.js";
 import { readServiceZones } from "./zone-closed-times.js";
 
 export interface OpeningHoursYearDay {
@@ -41,13 +40,6 @@ export interface OpeningHoursYear extends BusinessDayScheduleStatus {
   days: readonly OpeningHoursYearDay[];
   /** False when the official list for `year` has not shipped. */
   publicHolidaysAvailable: boolean;
-  /** Each repeating date following a holiday's name that `year`'s list places nowhere. */
-  missingHolidays: readonly {
-    specialDayId: string;
-    name: string;
-    holidayName: string;
-    englishName?: string;
-  }[];
   holidayCoverage: readonly HolidayCoverage[];
   area: SpecialDaysModel["area"];
 }
@@ -67,10 +59,9 @@ export async function readOpeningHoursYear(
   const dates = rangeDates(`${yearText}-01-01`, `${yearText}-12-31`);
   const clock = await readVenueClock(tx);
   const status = await readBusinessDayScheduleStatus(tx, clock, at);
-  const { read: holidays, area, dates: holidayDates } = await readHolidayYear(tx, year);
+  const { read: holidays, area } = await readHolidayYear(tx, year);
   const seasons = await readSeasons(tx);
   const { days, seasonIdOn } = await calendarDays(tx, dates, holidays.facts, clock, seasons, at);
-  const missing = await missingHolidaysIn(tx, [year], holidayDates);
   return {
     ...status,
     year,
@@ -91,12 +82,6 @@ export async function readOpeningHoursYear(
     publicHolidaysAvailable: !holidays.coverage.some(
       (coverage) => coverage.year === year && coverage.nationalRegional === "missing_year",
     ),
-    missingHolidays: missing.map(({ specialDayId, name, holidayName, englishName }) => ({
-      specialDayId,
-      name,
-      holidayName,
-      ...(englishName === undefined ? {} : { englishName }),
-    })),
     holidayCoverage: holidays.coverage,
     area: holidayAreaSummary(area),
   };

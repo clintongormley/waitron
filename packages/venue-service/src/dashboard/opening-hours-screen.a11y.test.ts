@@ -39,7 +39,6 @@ function request(state: string): DashboardRequest {
         seasons: [],
         days: [],
         publicHolidaysAvailable: true,
-        missingHolidays: [],
         holidayCoverage: [],
         area: {
           addressKey: "fixture-address",

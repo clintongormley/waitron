@@ -4,8 +4,6 @@
 
 When you plan around a public holiday, its name follows your dashboard language. Spain's supplied holidays have English display names in English and their official published names in Spanish. For example, 25 December appears as **Christmas Day** or **Natividad del Señor**. Changing the screen language keeps the holiday on the same date.
 
-Warnings about an annual rule also use the English holiday name when the supplied list knows it. A holiday name from an older list that has no English translation keeps its saved name.
-
 Your own special-day names stay as you entered them. If you create a new special day on a holiday, its suggested name uses your current screen language. You can edit that name before saving.
 
 ## Choose a holiday area {#holiday-area}

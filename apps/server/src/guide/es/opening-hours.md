@@ -4,8 +4,6 @@
 
 Cuando planificas en torno a un festivo, su nombre sigue el idioma del panel. Los festivos de España incluidos se muestran con su nombre oficial publicado en español y con su nombre en inglés cuando usas el panel en inglés. Por ejemplo, el 25 de diciembre aparece como **Natividad del Señor** o **Christmas Day**. Cambiar el idioma de la pantalla mantiene el festivo en la misma fecha.
 
-Los avisos sobre una regla anual también usan el nombre en inglés del festivo cuando la lista incluida lo conoce. Un festivo de una lista anterior que no tenga traducción al inglés conserva su nombre guardado.
-
 Los nombres de tus días especiales se quedan como los escribiste. Si creas un día especial en un festivo, el nombre sugerido usa el idioma actual de la pantalla. Puedes editarlo antes de guardar.
 
 ## Elige una zona de festivos {#holiday-area}
