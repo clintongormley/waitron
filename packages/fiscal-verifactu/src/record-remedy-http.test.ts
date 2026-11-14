@@ -914,7 +914,7 @@ it("keeps a replacement's operation date while correcting its description", asyn
   });
 });
 
-it("refuses to carry a replacement's operation date into a version corrected by differences", async () => {
+it("refuses to turn a replacement into a version corrected by differences", async () => {
   const filingCase = await refusedReplacementCase();
   const before = await snapshot();
 
@@ -931,8 +931,8 @@ it("refuses to carry a replacement's operation date into a version corrected by 
 
   expect(await res.json()).toMatchObject({
     error: {
-      code: "fiscal.record_invalid",
-      params: { fields: ["FechaOperacion"], codes: ["UNSUPPORTED_FIELD"] },
+      code: "fiscal.remedy_printed_fact_changed",
+      params: { registroId: filingCase.registroId, field: "correctionType" },
     },
   });
   expect((await snapshot()).records).toEqual(before.records);
