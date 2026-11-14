@@ -1,5 +1,8 @@
 # A231q implementation plan: invoice delivery, part 2
 
+> **2026-11-14:** [A1308 env4](2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP terminal instructions below: save or remove SMTP through dashboard Email settings; the generic credentials CLI refuses SMTP set/delete.
+
+
 > **2026-10-15, A661:** a location no longer has one invoice printer. The
 > `page_printers.invoice_default` flag, the Printers tab's choice and
 > `PUT /management-api/page-printers/invoice-printer` are gone. Each device profile lists its
