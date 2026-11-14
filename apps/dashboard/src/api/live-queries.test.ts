@@ -434,9 +434,7 @@ it.each([
       "floor_zones",
     ],
   ],
-  // `computeCategorySales` (packages/reporting/src/category-sales.ts) reads the period's lines under
 
-  // mode adds today's classification (`currentClassifications`, packages/catalogue).
   [
     "getCategorySales",
     ["2026-09-01", "2026-09-11", "current", false],

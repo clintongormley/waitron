@@ -16,10 +16,6 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
  * those files mocks its own modules: `vi.mock` is hoisted per test file, so no mock lives here.
  */
 
-// The venue's fiscal identity. Boot's trading branch requires it, so every trading boot carries
-
-// reads at startup.
-export const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 export const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };

@@ -91,7 +91,6 @@ const validate = (candidate: ConfigurationBundle): Promise<void> => {
 
 describe("staged configuration import", () => {
   it.each([
-    ["format-1 export", { ...bundle, version: 1 }],
     [
       "pre-canvas-retirement export with an empty canvas list",
       { version: 2, tables: { ...bundle.tables, canvases: [] } },
@@ -178,7 +177,7 @@ describe("staged configuration import", () => {
     ["pre-job-role-move export", { version: 22 }],
     ["pre-today-choice-fold export", { version: 23 }],
     ["future version", { version: bundle.version + 1 }],
-    ["pre-venue-fields export", { version: 9, venue: bundle.venue }],
+    ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(stateDir);

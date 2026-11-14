@@ -7857,11 +7857,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
   });
 });
 
-// The per-line `courseId` OVERRIDE is screened at the shared ring-time resolver (`priceOrderLines`):
-// a malformed, unknown, other-venue (the working_order_lines.course_id FK is by id only, not
-
-// (`product.course_id`) is NOT re-screened (that would reject a legitimately-deactivated default).
-// Exercised through `addTabRound`; the order paths run the same `priceOrderLines` code.
 describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
   async function openEmptyTab(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {

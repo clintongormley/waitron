@@ -1122,7 +1122,6 @@ describe("card tender (manual / datáfono)", () => {
 describe("cross-till end-to-end", () => {
   it("parks on till A, lists + retrieves + pays on till B (same node), and the chain across two sales verifies", async () => {
     const { cfg: tillA, coffee, water, zoneId } = await setupVenue();
-    // A SECOND device on the SAME node. It differs from till A ONLY in its device: same tenant, node,
 
     const tillB = await addDevice(tillA);
     expect(tillB.origin.deviceId).not.toBe(tillA.origin.deviceId);
@@ -1231,8 +1230,6 @@ describe("cross-till end-to-end", () => {
   it("venue-wide reads: the by-id family (get/update/abandon) reaches a foreign-node order", async () => {
     const { cfg: nodeA, coffee, zoneId } = await setupVenue();
 
-    // venue-wide, so every by-id lookup on node B reaches node A's order — a promoted node serves
-    // the tabs it inherited (getHeldOrder/updateHeldOrder/abandonHeldOrder — the whole by-id family).
     const nodeB = await addNode(nodeA);
 
     const orderId = randomUUID();
@@ -2565,8 +2562,6 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
   it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node", async () => {
     const { cfg: nodeA, coffee, zoneId } = await modeVenue("ticket_then_pay");
 
-    // both — a measurement where each side holds two orders, not "one empty, one not" (CLAUDE.md §1).
-
     const nodeB = await addNode(nodeA);
     const station = await defaultStationId();
 
@@ -2653,7 +2648,6 @@ describe("the pass board — venue-wide", () => {
     const expoA = await orderIdsOn();
     const expoB = await orderIdsOn();
 
-    // fired before B) — the reads do not separate by node.
     expect(expoA).toEqual([idA, idB]);
     expect(expoB).toEqual([idA, idB]);
   });

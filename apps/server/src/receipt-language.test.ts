@@ -354,8 +354,6 @@ describe("a receipt follows its venue's saved language when its order saves none
     expect(sale.status).toBe(200);
     expect(sale.body.locale).toBe("gl-ES");
 
-    // A reprint that names no language is in the language the sale was filed in, whatever the
-
     await withTransaction(suite.db, (tx) => seedVenueSettings(tx, { invoiceLocales: ["es-ES"] }));
     const reprint = await v.app.request(`/api/sales/${sale.id}/reprint`, {
       method: "POST",

@@ -624,8 +624,6 @@ describe("POST /management-api/receipt-preview", () => {
   });
 
   it("formats the sample in the venue's receipt language", async () => {
-    // `cfg.locale` stays the fixture's `es-ES`, which would print «5,50 €». Restored in `finally`, as
-
     await setVenueLanguages(["en-GB"]);
     try {
       expect((await rendered({})).preview.text).toContain("€5.50");

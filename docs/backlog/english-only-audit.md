@@ -21,7 +21,6 @@ _2026-10-28, A965: the owner answered the sample-name question. Both names now f
 
 _2026-10-27, A965: receipt resources now include English without adding it to Spain’s receipt choices. Card slips use the saved sale language; payment/refund/sample wording lives in Spain’s pack. Samples carry an explicit receipt language, captured at request for deferred office printing. The two internal sample names retain A754’s values while the owner question is unanswered. The findings below describe the earlier tree._
 
-
 _2026-10-27, A963: Spain's country pack now owns the invoice-recipient address rule and country names. New recipient addresses keep the country code separately; printed country names follow the receipt language. The address-suffix findings below record the earlier tree. See the [implementation plan](../superpowers/plans/2026-10-27-a963-invoice-address-country.md)._
 
 _2026-10-27, A918 slice 4: setup names the units and the first menu from `packages/catalogue/src/starter-content.ts`, and A918 is finished; the queue line below that names it records the earlier backlog._
@@ -214,8 +213,7 @@ Test helpers under `testing/` and `test/` folders hold Spanish fixture venues: w
 (`apps/server/src/testing/bill-venue.ts:66–75`, `party-venue.ts:57–65`, `adjustment-venue.ts`,
 `split-extras-venue.ts`), «Venta en establecimiento» and «Caja 1» in boot and stream helpers, a
 Spanish A4 invoice for line-wrapping checks (`full-invoice-fixture.ts`), the station default
-«Cocina» (`packages/db/src/testing/seed.ts:66–73`), a frozen configuration export in five languages
-(`apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json`), a signed Cloud
+«Cocina» (`packages/db/src/testing/seed.ts:66–73`), a signed Cloud
 test vector whose bytes cannot change (`apps/server/test/cloud-translation-vector.json`), and the
 demo seed's 4,173-line golden snapshot (`demo-seed/testing/spanish-practice-sales.golden.json`, mostly
 fiscal column names, which are allowed). `apps/server/src/testing/fiscal-fixtures.ts` is AEAT field

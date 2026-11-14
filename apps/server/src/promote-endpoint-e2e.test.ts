@@ -257,7 +257,7 @@ async function seedMirror(
 }
 
 /** What the promoted primary needs to ring a real cash sale; returns the offer to sell. */
-async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
+async function seedSaleVenue(admin: Database): Promise<string> {
   await seedModuleSettings(admin, { "fiscal-none": false });
   await seedLegacySellingUnits(admin);
   if (!(await admin.select({ id: persons.id }).from(persons).where(eq(persons.id, STAFF_ID)))[0]) {
@@ -317,7 +317,6 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
     return offers.offerFor(water.id);
   });
 
-  void nodeId;
   return waterOffer;
 }
 
@@ -392,7 +391,7 @@ async function readEnvios(
 describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
   it("admin login → 200 restarting; restart into primary; sells + chains on its own reserved SIF; does NOT file", async () => {
     const seed = await seedMirror(db.main, stores.main.node);
-    const waterOffer = await seedSaleVenue(db.main, seed.nodeId);
+    const waterOffer = await seedSaleVenue(db.main);
     await mintBreakGlassSecret({ venue: db.main, node: stores.main.node }, seed.nodeId); // an adopted mirror always has a verifier
 
     const mirrorPort = await freePort();

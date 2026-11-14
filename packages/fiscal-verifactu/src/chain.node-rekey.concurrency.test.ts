@@ -150,8 +150,6 @@ describe("currentSif resolves per node", () => {
     expect(byNode.get(sibling)).toBeUndefined();
   });
 
-  // Registers a second node beside an existing fixture's and gives it a live SIF, returning
-
   async function addSiblingNode(): Promise<NodeId> {
     return suite.db.transaction(async (tx) => {
       // Through the tables, not raw SQL: `id` and `created_at` are builder-side `$defaultFn`

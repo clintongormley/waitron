@@ -151,8 +151,6 @@ const suite = useVenueDb({
     ({ deviceId } = await seedDevice(db));
     nodeId = await seedNode(db);
 
-    // below mounts report-api pointed at THIS node to prove the overview aggregates the other node's
-    // sale (venue-wide) while the daily close scoped to this node stays empty.
     secondNodeId = await seedNode(db);
     const [series] = await db
       .insert(invoiceSeries)

@@ -9,7 +9,7 @@ import * as declarations from "./bookings.js";
 describeSchemaConformance({
   subjectName: "bookings",
 
-  // `working_orders`), not something the migration needs: with an empty list every case passes.
+  // Core supplies the tables referenced by booking foreign keys.
   prerequisites: [CORE_MIGRATIONS],
   subject: BOOKINGS_MIGRATIONS,
   declarations,

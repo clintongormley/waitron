@@ -832,7 +832,6 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
   }
 
   it("re-keys bare `es` to full-tag `es-ES` — reading invoice_locales FRESH from the DB, not cfg", async () => {
-    // would produce `ca-ES`, which the trigger refuses.
     const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES"], { es: "Café" });
     const driftedCfg = await deviceRequestCfg(suite.db, {
       ...cfg,
