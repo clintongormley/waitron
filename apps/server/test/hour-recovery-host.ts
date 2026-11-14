@@ -1,4 +1,6 @@
 import { seedModuleSettings } from "./module-settings.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { hashPassword } from "@waitron/identity";
 import "undici";
 import "@waitron/credentials";
 import "../src/node-identity.js";
@@ -46,7 +48,7 @@ import { restoreFromStream } from "../src/restore-stream.js";
 import { recoveryStreamSourceId } from "../src/recovery-source.js";
 import "../src/restore-command.js";
 import "../src/archive-recovery-pack.js";
-import { stageRestoreRequest } from "../src/restore-request.js";
+import { stageRestoreRequest, stageStreamRestore } from "../src/restore-request.js";
 import { Hono } from "hono";
 import { mountSetup, type SetupDeps } from "../src/setup-api.js";
 import { eq, sql } from "drizzle-orm";
@@ -417,8 +419,9 @@ export async function archiveCommand(f: Awaited<ReturnType<typeof archiveHost>>)
   };
 }
 
-export async function bucketCommand() {
-  const f = await archiveHost("stream");
+/** `given`: an archive host already built in this test, whose hour choice this one sits beside. */
+export async function bucketCommand(given?: Awaited<ReturnType<typeof archiveHost>>) {
+  const f = given ?? (await archiveHost("stream"));
   const command = await archiveCommand(f);
   const signer = generateNodeKeyPair();
   const generation = `gen-0-${node.nodeId}-20261016T124000Z`;
@@ -603,6 +606,55 @@ export function archiveForm(f: Awaited<ReturnType<typeof archiveHost>>, context:
   form.set("nodeRecoverySecret", key.secret);
   form.set("recoveryContext", JSON.stringify(context));
   return form;
+}
+
+/**
+ * Stages a bucket restore through `/setup-api/restore-bucket` and the real stream staging, reading
+ * the bucket through stand-ins: an in-memory store, and a copy of the host's database in place of
+ * Litestream. `given`: as `bucketCommand`'s.
+ */
+export async function stageBucketRoute(given?: Awaited<ReturnType<typeof archiveHost>>) {
+  // Bucket staging refuses a backup with no administrator password to sign in with.
+  await seedPersons(suite.db, {
+    displayName: "Backup administrator",
+    role: "admin",
+    passwordHash: hashPassword("fixture-restore-password"),
+  });
+  const { f, command, deps, kit } = await bucketCommand(given);
+  const recoveryContext = {
+    selectedSourceId: `stream:${node.locationId}:gen-0-${node.nodeId}-20261016T124000Z`,
+    oldBoxGone: true,
+    soleRecovery: true,
+  };
+  const app = restoreApp({
+    stageBucketRestore: (input) =>
+      stageStreamRestore({
+        ...f.restore,
+        ...input,
+        kit,
+        litestreamBin: "/unused",
+        now: () => new Date(),
+        openStore: deps.openStore,
+        restoreGeneration: async ({ outPath }) => {
+          await copyFile(f.database, outPath);
+        },
+      }),
+  });
+  const response = await app.request("https://box.test/setup-api/restore-bucket", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      kit: encodeRecoveryKit(kit),
+      environment: "preproduction",
+      oldBoxGone: true,
+      venueConfirmed: scope.taxpayerNif,
+      recoveryOperation: JSON.parse(await readFile(command.operationPath, "utf8")),
+      nodeRecoverySecret: key.secret,
+      recoveryContext,
+    }),
+  });
+  expect(response.status, await response.clone().text()).toBe(202);
+  return { f, recoveryContext };
 }
 
 export async function recordedRecoveryRows(db: Database) {

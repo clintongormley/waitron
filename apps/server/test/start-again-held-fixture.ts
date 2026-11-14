@@ -3,7 +3,8 @@ import { heldSetup } from "./held-setup-database.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { access, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getTableName } from "drizzle-orm";
@@ -21,8 +22,10 @@ import {
   noConfirmations,
   expectStartAgainRefused,
 } from "./start-again-deleted.js";
-import { agreeInternet, archiveForm, restoreApp } from "./hour-recovery-host.js";
+import { agreeInternet, archiveForm, clock, restoreApp } from "./hour-recovery-host.js";
 import { stageRestoreRequest } from "../src/restore-request.js";
+import { createSelectedRecoveryPreparation } from "../src/recovery-preparation.js";
+import { recoverySelectPastWaits } from "../src/testing/hour-test-clock.js";
 
 // Tables a test adds to a module's `startAgainDeletable`, as the holdings reader sees it.
 const extraDeletable = vi.hoisted(() => new Map<string, readonly string[]>());
@@ -213,6 +216,26 @@ async function stageFreshRestore(f: Held, archive: Held["archive"] = f.archive) 
   agreeInternet();
 }
 
+/** The backup's hour, chosen after the wipe as on a box: the wipe deletes an earlier choice. */
+const hourAfterWipe = async (f: Held) =>
+  (await recoverySelectPastWaits(clock, createSelectedRecoveryPreparation(f.archive.options), {
+    onBox: false,
+  })) as { input: unknown };
+
+/**
+ * A resolution record laid out as its writer left one: step 1 in the record folder itself, a later
+ * odd step in its own `step-NNNNNN` folder.
+ */
+async function seedResolutionRecord(f: Pick<Held, "roots">): Promise<string> {
+  const folder = join(f.roots.stateDir, "first-setup-resolutions");
+  const record = join(folder, randomUUID());
+  await mkdir(join(record, "step-000003"), { recursive: true });
+  await writeFile(join(record, "000001.json"), "{}");
+  await writeFile(join(record, "manifest.json"), "{}");
+  await writeFile(join(record, "step-000003", "manifest.json"), "{}");
+  return folder;
+}
+
 const exists = (path: string) =>
   access(path).then(
     () => true,
@@ -314,6 +337,8 @@ export {
   missingHeldDatabase,
   startAgainMissing,
   stageFreshRestore,
+  hourAfterWipe,
+  seedResolutionRecord,
   exists,
   venueDb,
   invoiceTable,

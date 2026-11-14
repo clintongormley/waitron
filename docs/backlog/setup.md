@@ -261,18 +261,11 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
 
 ## Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup wizard).
 
-- The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
-  (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes; the wizard shows
-  one sentence for all three, as the command line does.
 - The first, unconfirmed attempt downloads the whole copy only to show whose it is, and the
   confirmed attempt downloads it again; the HTTP request stays open for the whole download.
 - Walked in the browser test harness against a stubbed server, not yet on a running box. Walk it
   on the box after 2 November: back up a test venue to a real bucket, wipe it, and restore it
   through setup.
-- After an archive restore or a Cloud restore the final screen does not show the device steps the
-  bucket rebuild's shows (`rebuilt` is set only on the bucket path,
-  `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
-  machine's addresses after an archive restore too.
 
 ## Loose ends left by #334.
 
@@ -376,13 +369,6 @@ the environment's key would hide the ring it receives.
   recovery. The only way out is then a
   reinstall. Left open by A1131bc slice 3 (plan, N2).
 
-## The bucket and Waitron Cloud restores have not been run after Start again's deletion
-
-- **The bucket and Waitron Cloud restores have not been run after Start again's deletion.** A1131bc
-  slice 3's server tests run the backup-file restore after the deletion (with the setup database
-  missing, and with a held setup database: `first-setup-start-again-held-wipe.test.ts`); the bucket and Cloud routes were not run on that path.
-  Left open by A1131bc slice 3 (plan, N5).
-
 ## "The saved setup cannot be read. Contact support."
 
 - **"The saved setup cannot be read. Contact support."** (`shell.first_setup.attempt_invalid`,
@@ -437,11 +423,8 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle: Restore paths run
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **The bucket and Waitron Cloud restores have not been run after Start again's deletion.** Left
-  open by A1131bc slice 3.
-  [Detail](setup.md#the-bucket-and-waitron-cloud-restores-have-not-been-run-after-start-agains-deletion)
 - **Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup
   wizard).**
   [Detail](setup.md#loose-ends-left-by-sqlite-slice-2-task-9c-646-restore-from-my-bucket-in-the-setup-wizard)

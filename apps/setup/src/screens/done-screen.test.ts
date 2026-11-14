@@ -210,7 +210,7 @@ describe("setup-done-screen", () => {
   });
 
   it("after a rebuild, names which devices need a person and hides the no-backups nudge", async () => {
-    const el = await mountDone(() => new Promise(() => {}), { rebuilt: true });
+    const el = await mountDone(() => new Promise(() => {}), { restored: "bucket" });
     expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Rebuilt from your bucket");
     const steps = q(el, "[data-test=device-steps]")!.textContent!.replace(/\s+/g, " ");
     expect(steps).toContain("opened at https://waitron.local reconnect by themselves");
@@ -548,9 +548,32 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=reload]")).toBeNull();
   });
 
+  it.each([
+    ["an archive restore", "archive"],
+    ["a Waitron Cloud restore", "cloud"],
+  ] as const)(
+    "after %s, names which devices need a person under a restore heading and shows the no-backups nudge",
+    async (_, restored) => {
+      const el = await mountDone(() => new Promise(() => {}), { restored });
+      expect(q(el, "h1")!.textContent!.trim()).toBe("Restored from your backup");
+      const steps = q(el, "[data-test=device-steps]")!.textContent!.replace(/\s+/g, " ");
+      expect(steps).toContain("opened at https://waitron.local reconnect by themselves");
+      expect(steps).toContain("opened at an IP address");
+      expect(steps).toContain("port 9110");
+      expect(q(el, "[data-test=backup-nudge]")).not.toBeNull();
+    },
+  );
+
+  it("names a restore from a backup in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mountDone(() => new Promise(() => {}), { restored: "archive" });
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Restaurado desde tu copia de seguridad");
+    expect(q(el, "[data-test=device-steps]")).not.toBeNull();
+  });
+
   it("names the devices to reconnect after a rebuild in Spanish", async () => {
     setLocale("es-ES");
-    const el = await mountDone(() => new Promise(() => {}), { rebuilt: true });
+    const el = await mountDone(() => new Promise(() => {}), { restored: "bucket" });
     expect(q(el, "h1")!.textContent!.trim()).toBe("Reconstruido desde tu bucket");
     const steps = q(el, "[data-test=device-steps]")!.textContent!.replace(/\s+/g, " ");
     expect(steps).toContain("Los dispositivos dependen de cómo se configuró cada uno:");
@@ -663,7 +686,7 @@ describe("setup-done-screen layout", () => {
 
   it.each([
     ["an ordinary setup", {}],
-    ["a rebuild", { rebuilt: true }],
+    ["a rebuild", { restored: "bucket" }],
   ] as const)(
     "mentions the print agent's port 9110 nowhere but the device steps, after %s",
     async (_, extra) => {
@@ -731,7 +754,7 @@ describe("setup-done-screen layout", () => {
   });
 
   it("puts the rebuilt device steps in a card, as a list", async () => {
-    const el = await mountDone(() => new Promise(() => {}), { rebuilt: true });
+    const el = await mountDone(() => new Promise(() => {}), { restored: "bucket" });
     const steps = q(el, "[data-test=device-steps]")!;
     expect(steps.localName).toBe("wt-card");
     expect(steps.querySelectorAll(":scope > ul > li")).toHaveLength(3);
@@ -795,7 +818,17 @@ describe("setup-done-screen layout", () => {
 
   it.each([
     ["an ordinary setup", { onboardingIntent: "live" }, ["links", "break-glass", "backup-nudge"]],
-    ["a rebuild", { rebuilt: true }, ["links", "device-steps", "break-glass"]],
+    ["a rebuild", { restored: "bucket" }, ["links", "device-steps", "break-glass"]],
+    [
+      "an archive restore",
+      { restored: "archive" },
+      ["links", "device-steps", "break-glass", "backup-nudge"],
+    ],
+    [
+      "a Waitron Cloud restore",
+      { restored: "cloud" },
+      ["links", "device-steps", "break-glass", "backup-nudge"],
+    ],
   ] as const)("spaces its blocks by the same token after %s", async (_, extra, order) => {
     const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
       api: apiWith(() => new Promise(() => {})),
@@ -806,7 +839,7 @@ describe("setup-done-screen layout", () => {
     host.style.setProperty("--wt-space-4", "21px");
     const blocks = order.map((id) => q(el, `[data-test=${id}]`)!.getBoundingClientRect());
     const gaps = blocks.slice(1).map((block, i) => Math.round(block.top - blocks[i]!.bottom));
-    expect(gaps).toEqual([21, 21]);
+    expect(gaps).toEqual(order.slice(1).map(() => 21));
   });
 
   it("writes its styles in tokens only: no rem or em, no hex colour, no fallback value", () => {

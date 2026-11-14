@@ -43,6 +43,7 @@ export const finishEn = {
   "done.opening_hours": "Opening hours: Monday to Friday, 09:00–17:00",
   "done.change_opening_hours": "Change opening hours",
   "done.heading_rebuilt": "Rebuilt from your bucket",
+  "done.heading_restored": "Restored from your backup",
   "done.restarting": "The server is restarting to finish setup. Once it is back, open it here:",
   "done.ready": "The server is ready. Open it here:",
   "done.description.dashboard":
@@ -120,6 +121,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.opening_hours": "Horario de apertura: de lunes a viernes, 09:00–17:00",
   "done.change_opening_hours": "Cambiar el horario de apertura",
   "done.heading_rebuilt": "Reconstruido desde tu bucket",
+  "done.heading_restored": "Restaurado desde tu copia de seguridad",
   "done.restarting":
     "El servidor se está reiniciando para terminar la configuración. Cuando vuelva, ábrelo desde aquí:",
   "done.ready": "El servidor está listo. Ábrelo desde aquí:",

@@ -416,7 +416,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The key ring after a join** (bundle of 2, 1 important, size S, waits for another entry). Holds A1285, A1284. [Detail](backlog/setup.md#bundle-the-key-ring-after-a-join)
 
-- **Restore paths run** (bundle of 3, 3 important, size S). [Detail](backlog/setup.md#bundle-restore-paths-run)
+- **Restore paths run** (bundle of 2, 2 important, size S). [Detail](backlog/setup.md#bundle-restore-paths-run)
 
 - **`restoreFromArtifact` has no production caller.** Only tests call it since A1131bc slice 4;
   decide whether they should place archives through `runStagedRestore`, then delete it.
