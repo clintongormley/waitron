@@ -33,6 +33,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { withOperationAuthority, type WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
+import { withoutActivationMark } from "./testing/allocated-contract.js";
 import { nodeId } from "@waitron/shared";
 import { type ReservedIdentity } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -118,10 +119,12 @@ beforeEach(async () => {
   modules.splice(
     0,
     modules.length,
-    fakeModule("fiscal-verifactu", {
-      provisioning: { standby: ALLOCATED_FISCAL_STANDBY },
-      operations: createPaperAllocationPreparation(configuration()),
-    }),
+    ...withoutActivationMark([
+      fakeModule("fiscal-verifactu", {
+        provisioning: { standby: ALLOCATED_FISCAL_STANDBY },
+        operations: createPaperAllocationPreparation(configuration()),
+      }),
+    ]),
   );
   await writeFile(
     configuration().custodianPath,

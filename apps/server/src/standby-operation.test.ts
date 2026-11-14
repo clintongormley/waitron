@@ -955,23 +955,37 @@ it("refuses a carrier that smuggles invoice series beside a module that opens th
   expect(await readNodeSigningKey(suite.node, RING, args.standby.nodeId)).toBeNull();
 });
 
-it("refuses a reservation contribution that opens series before its declared activation", async () => {
+it("neither prepares nor reserves, at a join, a module whose series open on activation", async () => {
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
+  const calls: string[] = [];
   modules.push(
     fakeModule(binding.module, {
       provisioning: {
         standby: {
           series: "on-activation",
-          reserve: async () => ({ state: {}, series: [{ code: "unexpected", purpose: "full" }] }),
+          reserve: async () => {
+            calls.push("reserve");
+            return { state: {}, series: [{ code: "unexpected", purpose: "full" }] };
+          },
           establish: async () => {},
+        },
+      },
+      operations: {
+        prepare(operation, run) {
+          calls.push("prepare");
+          return run(operation);
         },
       },
     }),
   );
-  await expect(assembleMirrorBundle(bundleDeps())).rejects.toMatchObject({
-    code: "module.operation_invalid",
-    params: { module: binding.module },
-  });
+  const bundle = await withOperationAuthority(binding, "admin", (authority) =>
+    assembleMirrorBundle({ ...bundleDeps(), moduleOperations: operations(authority) }),
+  );
+  expect({
+    modules: bundle.reservedIdentity.modules,
+    series: bundle.reservedIdentity.series,
+  }).toEqual({ modules: {}, series: [] });
+  expect(calls).toEqual([]);
 });
 
 it("snapshots the submitted spare and reservation before its first credential read", async () => {

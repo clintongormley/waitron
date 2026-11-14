@@ -182,38 +182,45 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     )
       throw new AppError("module.operation_invalid", { module: name });
   }
+  // A module whose series open on activation writes its dormant setup when the spare is switched
+  // on, so the join reserves nothing for it, whatever operation the request carries.
+  const reserving = modules.flatMap((module) => {
+    const provision = module.provisioning?.standby;
+    return provision === undefined || provision.series === "on-activation"
+      ? []
+      : [{ module, provision }];
+  });
+  const reservingOperations = new Map(
+    [...operations].filter(([name]) => reserving.some(({ module }) => module.name === name)),
+  );
 
   // Every module's reservation shares one transaction, so their reads and allocations agree.
   const [reserved, primaryPrivateKey, boxCaPem, boxCaKeyPem] = await Promise.all([
-    withPreparedModuleOperations(modules, operations, standby.nodeId, "reserve", (prepared) =>
-      withTransaction(deps.appDb, async (tx) => {
-        // In the reservation's own transaction, so a removal commits wholly before or after it.
-        const held = await readNodeMembership(tx);
-        refuseRemovedStandby(held, deps.standby.nodeId);
-        refuseFullChart(held, deps.standby.nodeId);
-        const primary = { nodeId: brandNodeId(deps.designated.nodeId) };
-        const states: Record<string, unknown> = {};
-        const series: { code: string; purpose: string }[] = [];
-        for (const m of modules) {
-          if (m.provisioning?.standby === undefined) continue;
-          const operation = moduleOperationFor(prepared, m.name, standby.nodeId, "reserve");
-          // Such a module writes its dormant setup when the spare is switched on, under that
-          // person's sign-in; a join with no prepared operation reserves nothing for it.
-          if (operation === undefined && m.provisioning.standby.series === "on-activation")
-            continue;
-          const r = await m.provisioning.standby.reserve(tx, primary, standby, operation);
-          moduleOperationFor(prepared, m.name, standby.nodeId, "reserve");
-          if (m.provisioning.standby.series === "on-activation" && (r.series?.length ?? 0) !== 0)
-            throw new AppError("module.operation_invalid", { module: m.name });
-          states[m.name] = r.state;
-          series.push(...(r.series ?? []));
-        }
-        for (const m of modules) {
-          if (m.provisioning?.standby !== undefined)
-            moduleOperationFor(prepared, m.name, standby.nodeId, "reserve");
-        }
-        return { modules: states, series };
-      }),
+    withPreparedModuleOperations(
+      reserving.map(({ module }) => module),
+      reservingOperations,
+      standby.nodeId,
+      "reserve",
+      (prepared) =>
+        withTransaction(deps.appDb, async (tx) => {
+          // In the reservation's own transaction, so a removal commits wholly before or after it.
+          const held = await readNodeMembership(tx);
+          refuseRemovedStandby(held, deps.standby.nodeId);
+          refuseFullChart(held, deps.standby.nodeId);
+          const primary = { nodeId: brandNodeId(deps.designated.nodeId) };
+          const states: Record<string, unknown> = {};
+          const series: { code: string; purpose: string }[] = [];
+          for (const { module, provision } of reserving) {
+            const operation = moduleOperationFor(prepared, module.name, standby.nodeId, "reserve");
+            const r = await provision.reserve(tx, primary, standby, operation);
+            moduleOperationFor(prepared, module.name, standby.nodeId, "reserve");
+            states[module.name] = r.state;
+            series.push(...(r.series ?? []));
+          }
+          for (const { module } of reserving)
+            moduleOperationFor(prepared, module.name, standby.nodeId, "reserve");
+          return { modules: states, series };
+        }),
     ),
     deps.primaryPrivateKey ?? readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId),
     readFile(caCertPath(deps.stateDir), "utf8"),

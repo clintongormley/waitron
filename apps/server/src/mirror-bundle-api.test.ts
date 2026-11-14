@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  invoiceSeries,
   nodes,
   readMembershipTrustSet,
   readNodeMembership,
@@ -54,6 +55,7 @@ import {
   allocatedStandbyModules,
   prepareStandbyDatabase,
   takenOverSeries,
+  withoutActivationMark,
 } from "./testing/allocated-contract.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
@@ -278,6 +280,7 @@ async function allocationSnapshot() {
     allocations: await db.select().from(fiscalAllocations),
     reservations: await db.select().from(fiscalReservations),
     identities: await db.select().from(registroSif),
+    series: await db.select().from(invoiceSeries),
     outsideReservations: structuredClone(outsideReservations),
   };
 }
@@ -317,7 +320,13 @@ async function rawPost(app: Hono, body: unknown): Promise<Response> {
     headers: { "content-type": "application/json" },
   });
 }
-async function post(app: Hono, body: unknown): Promise<Response> {
+// The fiscal module joins as an unmarked stand-in unless `veriFactu` is set, so the join's
+// reservation path, which a module whose series open on activation never takes, stays reachable.
+async function post(
+  app: Hono,
+  body: unknown,
+  { veriFactu = false }: { veriFactu?: boolean } = {},
+): Promise<Response> {
   if (typeof body !== "object" || body === null) return rawPost(app, body);
   const request = body as Record<string, unknown>;
   if (
@@ -359,7 +368,11 @@ async function post(app: Hono, body: unknown): Promise<Response> {
       },
     };
   });
-  (ALL_MODULES as WaitronModule[]).splice(0, ALL_MODULES.length, ...allocated);
+  (ALL_MODULES as WaitronModule[]).splice(
+    0,
+    ALL_MODULES.length,
+    ...(veriFactu ? allocated : withoutActivationMark(allocated)),
+  );
   try {
     return await rawPost(app, {
       ...request,
@@ -801,12 +814,36 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const res = await rawPost(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
 
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
-    expect((await res.json()).reservedIdentity).toMatchObject({ modules: {}, series: [] });
+    const reserved = (await res.json()).reservedIdentity;
+    expect({ modules: reserved.modules, series: reserved.series }).toEqual({
+      modules: {},
+      series: [],
+    });
     expect(warnings).toEqual([]);
     expect(await allocationSnapshot()).toEqual(before);
     expect((await readNodeMembership(db))?.body.nodes.map((node) => node.nodeId)).toContain(
       standby.standbyNodeId,
     );
+  });
+
+  it("reserves nothing fiscal at a Veri*Factu venue's join that carries a reserve operation", async () => {
+    const { designated } = await setupVenue();
+    const app = mountApp(designated);
+    const before = await allocationSnapshot();
+
+    const res = await post(
+      app,
+      { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...validStandby() },
+      { veriFactu: true },
+    );
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    const reserved = (await res.json()).reservedIdentity;
+    expect({ modules: reserved.modules, series: reserved.series }).toEqual({
+      modules: {},
+      series: [],
+    });
+    expect(await allocationSnapshot()).toEqual(before);
   });
 
   it("refuses a present non-string totp with 401 (screened before loginManager)", async () => {
@@ -2481,7 +2518,7 @@ async function allocatedReply(
   (ALL_MODULES as WaitronModule[]).splice(
     0,
     ALL_MODULES.length,
-    ...allocatedStandbyModules(ALL_MODULES, fixture),
+    ...withoutActivationMark(allocatedStandbyModules(ALL_MODULES, fixture)),
   );
   try {
     const res = await post(app, {
