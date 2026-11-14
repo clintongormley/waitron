@@ -1,3 +1,4 @@
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { html } from "lit";
@@ -49,14 +50,16 @@ function table(el: HTMLElement) {
 it("draws its rows from the stations list, with its daily status beside Name", async () => {
   const el = await mount();
   expect(
-    [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) => th.textContent?.trim()),
-  ).toEqual(["Name", "Printed on", "Shown on", "Waits for the pass", "Actions"]);
+    [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) =>
+      (th.getAttribute("aria-label") ?? th.textContent)?.trim(),
+    ),
+  ).toEqual(["Name", "Tickets printed on", "Shown on", "Held at the pass", "Actions"]);
   const rows = [...(table(el)?.querySelectorAll("tbody tr") ?? [])];
   expect(rows).toHaveLength(1);
   expect(rows[0]!.textContent).toContain("Bar");
-  expect(rows[0]!.textContent).toContain("Default");
+  expect(rows[0]!.textContent).not.toContain("Default");
   expect(rows[0]!.textContent).toContain("Closed for today → Grill");
-  expect(table(el)?.querySelector("button:not(.row-activate)")).toBeNull();
+  expect(table(el)?.querySelector("tbody button:not(.row-activate)")).toBeNull();
   expect(el.shadowRoot?.textContent).not.toContain("Loading station health");
 });
 it("activates a station row with the station to edit", async () => {
@@ -84,8 +87,16 @@ it("names its columns in Spanish, and says so when there are no stations", async
   setLocale("es");
   const el = await mount();
   expect(
-    [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) => th.textContent?.trim()),
-  ).toEqual(["Nombre", "Se imprime en", "Se muestra en", "Espera al pase", "Acciones"]);
+    [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) =>
+      (th.getAttribute("aria-label") ?? th.textContent)?.trim(),
+    ),
+  ).toEqual([
+    "Nombre",
+    VENUE_SERVICE_STRINGS.es["prep.printed_on"],
+    "Se muestra en",
+    VENUE_SERVICE_STRINGS.es["prep.waits_for_pass"],
+    "Acciones",
+  ]);
   const empty = await mount([]);
   expect(table(empty)?.textContent).toContain("No hay estaciones de preparación");
 });
@@ -97,7 +108,7 @@ it("omits deleted stations and their supplied status while preserving Default", 
   expect(
     [...table(el)!.querySelectorAll("tbody tr")].map((row) => row.textContent?.trim()),
   ).toEqual([expect.stringContaining("Bar")]);
-  expect(table(el)?.textContent).toContain("Default");
+  expect(table(el)?.textContent).not.toContain("Default");
   el.statusNotes = { disabled: "Switched off" };
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(table(el)?.textContent).not.toContain("Switched off");
@@ -149,13 +160,21 @@ const outputs = {
   },
 };
 function headings(el: HTMLElement) {
-  return [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) => th.textContent?.trim());
+  return [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) =>
+    (th.getAttribute("aria-label") ?? th.textContent)?.trim(),
+  );
 }
 it("reads each station's printers and screens in Printed on and Shown on, beside its status", async () => {
   const el = await mount();
   el.outputs = outputs;
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(headings(el)).toEqual(["Name", "Printed on", "Shown on", "Waits for the pass", "Actions"]);
+  expect(headings(el)).toEqual([
+    "Name",
+    "Tickets printed on",
+    "Shown on",
+    "Held at the pass",
+    "Actions",
+  ]);
   const row = table(el)!.querySelector("tbody tr")!;
   expect(row.querySelector('[data-test="printed-on-bar"]')!.textContent?.trim()).toBe(
     "Epson, Star",
@@ -172,9 +191,9 @@ it("names the read-out columns in Spanish", async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(headings(el)).toEqual([
     "Nombre",
-    "Se imprime en",
+    VENUE_SERVICE_STRINGS.es["prep.printed_on"],
     "Se muestra en",
-    "Espera al pase",
+    VENUE_SERVICE_STRINGS.es["prep.waits_for_pass"],
     "Acciones",
   ]);
 });
@@ -208,7 +227,7 @@ it.each([
     expect(
       new Set([...range.getClientRects()].map((box) => Math.round(box.top))).size,
     ).toBeGreaterThan(1);
-    for (const cell of root.querySelectorAll("td")) {
+    for (const cell of root.querySelectorAll("th, td")) {
       const bounds = cell.getBoundingClientRect();
       const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
       while (walker.nextNode()) {
@@ -288,7 +307,7 @@ it("A725 leaves station names and status without a retired Times link", async ()
   const el = await mount([bar, station({ id: "grill", name: "Grill" })]);
   const rows = [...table(el)!.querySelectorAll("tbody tr")];
   expect(rows).toHaveLength(2);
-  expect(rows[0]!.textContent).toContain("Default");
+  expect(rows[0]!.textContent).not.toContain("Default");
   expect(rows[0]!.textContent).toContain("Closed for today → Grill");
   expect(rows[1]!.textContent).toContain("Grill");
   expect(rows.flatMap((row) => [...row.querySelectorAll('a[href*="/view/times"]')])).toEqual([]);
@@ -304,6 +323,10 @@ it("A773 station policy: shows whether each station waits for the pass", async (
   const el = await mount(stations);
   expect(cell(el, "grill")).toBe("Yes");
   expect(cell(el, "bar")).toBe("No");
+  const column = el
+    .shadowRoot!.querySelector("wt-data-table")!
+    .columns.find(({ key }) => key === "waitsForPass")!;
+  expect(column.help?.text).toBe("Its dishes wait at the pass until the pass sends them out.");
   setLocale("es");
   const es = await mount(stations);
   expect(cell(es, "grill")).toBe("Sí");

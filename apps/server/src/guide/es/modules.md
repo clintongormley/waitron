@@ -27,7 +27,7 @@ credenciales están guardadas; es independiente de **Habilitado**.
 
 Como administrador, elige **Desactivar** o **Activar** en el menú de la fila de Reservas y confirma.
 **Pendiente de reinicio** indica que el cambio está guardado. Abre **Estado del servidor** en Sistema y elige **Reiniciar el servidor**
-cuando puedas pausar el servicio. Las cajas se reconectan; comprueba y repite cualquier envío a cocina interrumpido por el reinicio.
+cuando puedas pausar el servicio. Las cajas se reconectan; comprueba y repite cualquier envío a la estación interrumpido por el reinicio.
 Las reservas guardadas permanecen en este equipo cuando Reservas está desactivado.
 
 Si el servidor principal falla repetidamente al arrancar, su página de recuperación ofrece **Desactivar Reservas y volver a arrancar**.
@@ -38,7 +38,7 @@ Un administrador sin contraseña no puede usar esa acción de recuperación.
 
 Como administrador, elige **Desactivar** o **Activar** en el menú de la fila del módulo y confirma.
 **Pendiente de reinicio** indica que tu elección está guardada. Abre **Estado del servidor** en Sistema
-y elige **Reiniciar el servidor** cuando puedas pausar el servicio. Comprueba y repite cualquier envío a cocina interrumpido por el reinicio.
+y elige **Reiniciar el servidor** cuando puedas pausar el servicio. Comprueba y repite cualquier envío a la estación interrumpido por el reinicio.
 
 Antes de desactivar Pagos, desactiva todos los proveedores de tarjeta; elimina o desvincula sus lectores primero.
 Tras reiniciar, puedes seguir cobrando en efectivo y registrando tarjetas cobradas en un terminal independiente.

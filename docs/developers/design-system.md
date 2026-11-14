@@ -2598,7 +2598,7 @@ Merged / Stacked, drawn only on a kitchen screen with more than one station; the
 Columns, and the first Ready, whose wrapper is drawn only while help is on.
 One card and one lever per board carry a badge, so a busy
 board does not fill with identical "?" marks and Tab stops. These badges show on a till's Kitchen and
-Pass screens too. On these boards the cards, Columns and the first lever carry `help-inset`
+Passs too. On these boards the cards, Columns and the first lever carry `help-inset`
 (`kitchenHelpStyles` in `help-badge.ts`), which keeps the badge inside the part's trailing edge:
 at phone width the boards have no side padding, and a badge hung past a full-width card or the
 right-aligned Columns would make the screen scroll sideways. Merged / Stacked sits at the leading
@@ -3777,7 +3777,7 @@ variant describes itself in no language.
   button to a screen reader.
 
 A name is not hinted from a parent this way: a variant's names are its own. In the editors of
-products, variants, options lists, options and extras lists, a blank kitchen name, and a blank
+products, variants, options lists, options and extras lists, a blank prep station name, and a blank
 customer-facing name in the venue's default content language, show the record's own Name as their
 placeholder (on a variant, the variant's Name); a blank customer-facing name in any other language
 shows the default language's customer-facing name, or Name while that is blank too. Each follows the
@@ -3785,7 +3785,7 @@ field it copies as it is typed (`optionalTextFields`, `apps/dashboard/src/widget
 The menu section form, which is also a menu's Add and Rename form
 (`apps/dashboard/src/widgets/section-details-form.ts`), hints its blank customer-facing names the
 same way, with its first field (Internal name on a section, Name on a menu) in place of Name; it has
-no kitchen name.
+no prep station name.
 The Edit dialog of a menu included in another (`apps/dashboard/src/widgets/include-folder-form.ts`)
 hints each blank customer-facing name with what the customer menu would then show: the default
 language's name, or the included menu's staff name when every name is blank — and nothing when the
@@ -3814,8 +3814,8 @@ Descriptors and Nutritional info sections name every field they hold, filled or 
 after its field's name in bold. Empty Kitchen and Descriptors fields read “None specified”
 (“Sin especificar”, `modifiers.none_specified`). Nutritional info distinguishes “Not yet reviewed”
 from “None” for allergens and lists chosen diets before their implied labels, with the latter in
-italic. The Kitchen section reads "**Kitchen name:** Café c/leche ·
-**Course:** Drinks", or "**Kitchen name:** None specified · **Course:** None specified" with
+italic. The Kitchen section reads "**Prep station name:** Café c/leche ·
+**Course:** Drinks", or "**Prep station name:** None specified · **Course:** None specified" with
 neither set. The Descriptors section has one row per field, its languages
 side by side and only the field name bold — "**Name:** EN: Beef tenderloin · ES: Solomillo de
 ternera", cut after one line, then "**Description:** EN: … · ES: …", cut after two — so it stays two
@@ -3833,8 +3833,8 @@ name after its upper-case code in bold — "**ES:** ¿Cómo la quiere hecha? · 
 like it cooked?" — and a blank one, in italic, as the open field hints it while empty: the default
 language's name, then the list's staff name. A language with nothing to fall back to is left out.
 It is built by `effectiveNamesLine` (`apps/dashboard/src/widgets/form-fields.ts`) and passed as
-`summaryFields`. The Extras editor keeps the kitchen name out of the section, as a field of its own
-directly under Name. The options list and single option editors show Name, Kitchen name, then a
+`summaryFields`. The Extras editor keeps the prep station name out of the section, as a field of its own
+directly under Name. The options list and single option editors show Name, Prep station name, then a
 plain Customer-facing names heading with every language's field visible. They have no names fold.
 
 **A section holding a validation error opens itself and cannot be closed again while the error
@@ -5089,14 +5089,13 @@ the address without adding a history entry. A retired `/station/<id>` child is d
 keeps its own tab when an old address names a station. The tab strip wraps onto a second line
 when the labels do not fit.
 
-Stations shows no live kitchen numbers: each station's name with its
-Default mark, Printed on (its printers, or "No printer"), Shown on (the devices whose kitchen screens
-show it, and a link to Devices), Waits for the pass (Yes or No) and Actions, the row's menu.
-The table uses `wrapToFit`; the name grid keeps its min-content width so names and the Default mark stay inside Name.
+Stations shows each station's name, Tickets printed on (its printers, or "No printer"),
+Shown on (device names linking to their editors), Held at the pass (Yes or No, with help) and Actions.
+The table uses `wrapToFit`; the name grid keeps its min-content width. Clicking a row opens its editor.
 A closure note beside its name reads Closed for today and its destination;
 open and default stations need no closure note (`packages/venue-service/src/dashboard/station-table.ts`).
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
-Closing asks where new work goes; it starts with the station's "When closed, send to" choice selected when that station is open, otherwise the default station. With unfinished dishes,
+Closing asks where new work goes; it starts with the station's "When closed for the day, send its dishes to" choice selected when that station is open, otherwise the default station. With unfinished dishes,
 the same dialog asks whether waiting dishes move there or stay to finish; started dishes stay.
 A manager PIN step keeps the draft after a refused PIN. Delete on Prep stations uses the shared
 deletion dialog and refuses unfinished dishes. Reopening moves no dishes back.
@@ -5120,9 +5119,9 @@ Below 40rem the row-label column is at most 96 px and table cells pad by `--wt-s
 window shows the labels, Every zone and one zone column without scrolling (the "at phone width"
 cases in `routing-grid.test.ts`).
 
-Each cell is a borderless button that fills its table cell, except the All categories × Every zone
-cell for someone who cannot set the default station, which is plain text. A warning, a refusal or the default
-cell's repair note under the station is drawn inside the button. Every table cell, blank ones
+Each cell is a borderless button that fills its table cell, except All categories × Every zone,
+which shows the default as plain text for everyone. Warnings and refusals stay inside editable cells.
+The default cell keeps its repair note when no default station is active. Every table cell, blank ones
 included, is filled with `--wt-color-station-<colour>` of the station it sends to (for a blank cell, the
 one it inherits), and a choice waiting to be saved paints as it will be saved; a cell stays plain when it sends nowhere (No
 preparation, no station), sends to a disabled or deleted station, or its station's stored colour is
@@ -5182,22 +5181,21 @@ where the route's Station field ends. "+ Add route" adds a line of periods with 
 department's periods, and none when the zone has no department; a line offers only periods whose
 menus include the row's products, or one the cell already stores with the same choice as that line, a station or No preparation. An inherited cell opens holding
 what it inherits, with Save ready so it can be pinned, and names the inherited periods it did not
-copy. The default cell (All categories × Every zone) takes no period lines. A category, All
+copy. The default cell (All categories × Every zone) has no editor or period lines. A category, All
 categories or No category choice that moves products opens a notice before anything is saved: a
 first sentence naming the change with each side's period lines ("Food, Every zone: this changes Bar
 to Bar (Lunch: Kitchen)."), then one sentence per zone, periods, from and to with a product count
 ("Food, Terrace: 14 products move from Kitchen to Bar during Lunch.") — a variant counted under its
 product, an extra once per sentence — and the full list under a closed "Show products", where a
 variant reads "Product (Variant)" beside its product. A product's own choice, and a choice that
-moves nothing, saves at once. A cell with a saved choice of its own, other than the default cell, offers
-Clear setting, red, at the left of the bottom row after Cancel; Save stands alone on the right. Edit, in a
-Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, "When closed, send to" (not on the default station), Printers, "Waits for the pass"
-with its note, the four minutes fields, two to a row, under "Late flags (minutes)" (Waiting, Overdue, Forgotten, then Ready
-warning), "Done on the screen" (One item at
-a time or Whole ticket at once), "Also list the order's dishes from other
-stations" with "On this station's tickets and kitchen screen", "Print a slip when sent dishes
-move table", then "Identical dishes on a kitchen ticket" and "Print held groups in advance" with its
-note, then "Changes after sending" (Not allowed, While held, or While held or waiting). The slip choices are "Print" and "Don't print".
+moves nothing, saves at once. A cell with a saved choice of its own offers Clear setting, red,
+at the left of the bottom row after Cancel; Save stands alone on the right.
+The station editor (`station-editor.ts`) has four sections. Station holds name, Colour, Ticket printers,
+print-moved slips, ticket grouping, advance held printing and Changes after sending. When it is closed
+holds "When closed for the day, send its dishes to", with a help bubble and a normal-text "Ask each time"
+empty choice; the default station omits this section. The pass holds "Held at the pass" and its help bubble.
+Station screen holds the four late-flag fields, two per row, Done on the screen and the rest-of-order switch.
+The slip choices remain Print and Don't print; the policy choices and save payloads stay unchanged.
 Save sends only what changed, in one request. Each minutes field is required and opens on the
 station's own value; a blank one is marked like any other invalid value. Save first checks that
 each minutes field is a whole number from 1 to 2147483647 and that waiting < overdue < forgotten;
@@ -5212,10 +5210,11 @@ and its popup offers the shared calendar palette, naming the other active statio
 The editor's own station is excluded from those names. Each Stations row also shows its colour
 square beside its name; both squares use the station dot colour. Add station uses the same colour
 field and sets Printers. It starts on the first colour no active station has, or Red when all palette colours
-are taken. Station Edit, Make default and Delete actions belong to the Stations row menu,
-which has its own Actions column pinned to the end of the table, so it stays on screen on a phone;
-stations appear in Spanish alphabetical order without drag grips. The Routes tab's All categories × Every zone cell
-also sets the default station, for someone with `venue.configure`. The page is offered only to
+are taken. Edit and Delete belong to the Stations row menu, in an Actions column pinned to the end;
+stations appear in Spanish alphabetical order without drag grips. Add a station is the primary action.
+Routes starts with "Dishes with no route go to", an active-station combobox that saves through `setDefaultStation`.
+It shows the missing-default repair wording or a read-only name/note as appropriate to `canMakeDefault`.
+The page is offered only to
 someone with `venue.configure`; a supervisor is not offered it.
 
 Department opening hours belong to `/manage/opening-hours`. No switch picks between the Year, the
@@ -6305,7 +6304,7 @@ server's held cards; `held` and `toFireOnly` draw the server's held or To fire c
 Overview is the first column by default (`STATION_COLUMNS`, `kitchen-columns.ts`), and a stored
 layout without it reads with it first, shown and open (`sanitise`). Its rows come from
 `overviewRows` (`apps/till/src/state/kitchen-overview.ts`) over `overviewDishes`
-(`kitchen-cards.ts`): one row per kitchen name across every card of the board, hidden and collapsed
+(`kitchen-cards.ts`): one row per prep station name across every card of the board, hidden and collapsed
 columns included. A fired dish not Ready counts as making, a dish not fired as held and a Ready dish
 not at all, each by `dishThousandths`, which `thousandthsToMake` also uses, so the making counts add
 up to the counts line. Rows with something to make come first, then rows that are only held, each

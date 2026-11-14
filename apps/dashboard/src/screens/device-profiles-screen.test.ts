@@ -418,7 +418,7 @@ describe("device-profiles-screen editor form", () => {
       "Caja registradora",
       "Teléfono de mano",
       "Tableta de mano",
-      "Pantalla de cocina",
+      "Pantalla de estación",
     ]);
   });
 
@@ -1496,14 +1496,8 @@ describe("device-profiles-screen kitchen screens", () => {
   );
 
   it.each([
-    [
-      "en",
-      "Saved. Serving hatch no longer shows Deli. Bar display no longer shows Pass screen, Terrace.",
-    ],
-    [
-      "es",
-      "Guardado. Serving hatch ya no muestra Deli. Bar display ya no muestra Pantalla de pase, Terrace.",
-    ],
+    ["en", "Saved. Serving hatch no longer shows Deli. Bar display no longer shows Pass, Terrace."],
+    ["es", "Guardado. Serving hatch ya no muestra Deli. Bar display ya no muestra Pase, Terrace."],
   ] as const)("names the devices a save narrowed, in %s", async (locale, expected) => {
     const previous = currentLocale();
     setLocale(locale);

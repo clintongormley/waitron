@@ -121,7 +121,7 @@ describe("archived product details", () => {
     );
     expect(pairs["Customer-facing name (en)"]).toBe("House coffee");
     expect(pairs["Customer-facing name (es)"]).toBe("Café de la casa");
-    expect(pairs["Kitchen name"]).toBe("BAR COFFEE");
+    expect(pairs["Prep station name"]).toBe("BAR COFFEE");
     expect(pairs["Options"]).toBe("Cooked staff");
     expect(pairs["Extras"]).toBe("Sauces staff");
     expect(root.querySelector(".variant wt-lozenge")?.textContent).toBe("Archived");

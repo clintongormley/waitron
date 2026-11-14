@@ -45,7 +45,6 @@ async function mount(
   options: {
     zoneDepartmentId?: string | null;
     zoneWithoutDepartment?: boolean;
-    isDefaultCell?: boolean;
     rowProductIds?: string[];
   } = {},
 ) {
@@ -64,7 +63,6 @@ async function mount(
   el.rowProductIds = options.rowProductIds ?? ["mojito", "daiquiri"];
   el.zoneDepartmentId = options.zoneDepartmentId ?? null;
   el.zoneWithoutDepartment = options.zoneWithoutDepartment ?? false;
-  el.isDefaultCell = options.isDefaultCell ?? false;
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -345,16 +343,6 @@ it.each(["en", "es"] as const)(
     }
   },
 );
-
-it("gives the default cell no period lines and no Clear, and offers it stations only", async () => {
-  const el = await mount(
-    { address: { row: { kind: "all" }, zoneId: null }, label: "All categories, Every zone" },
-    { isDefaultCell: true },
-  );
-  expect(button(el, "add-line")).toBeNull();
-  expect(button(el, "clear-cell")).toBeNull();
-  expect(offered(one<Combobox>(el, "[name=target]")!)).toEqual(["station:up", "station:down"]);
-});
 
 it("shows a stored switched-off or unknown station as a disabled choice", async () => {
   const el = await mount({ target: { kind: "station", stationId: "off" } });

@@ -68,7 +68,7 @@ export const venueEn = {
   "venue.staff_language.en": "English",
   "venue.staff_language.es": "Spanish",
   "venue.staff_language.help":
-    "Your initial menu, courses and other starter names are created in this language. In Demo, staff and kitchen dish names use it too. Receipts keep their own language.",
+    "Your initial menu, courses and other starter names are created in this language. In Demo, staff and prep station dish names use it too. Receipts keep their own language.",
   "venue.error.staff_language": "Choose English or Spanish.",
   "review.staff_language": "Working language",
   "venue.label.address_line1": "Address line 1",
@@ -330,7 +330,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.staff_language.en": "Inglés",
   "venue.staff_language.es": "Español",
   "venue.staff_language.help":
-    "Los nombres del menú inicial, los pases y los demás elementos iniciales se crean en este idioma. En la demostración, también se usa para los nombres de platos del personal y de la cocina. Los recibos mantienen su propio idioma.",
+    "Los nombres del menú inicial, los pases y los demás elementos iniciales se crean en este idioma. En la demostración, también se usa para los nombres de platos del personal y de las estaciones. Los recibos mantienen su propio idioma.",
   "venue.error.staff_language": "Elige inglés o español.",
   "review.staff_language": "Idioma de trabajo",
   "venue.label.address_line1": "Dirección (línea 1)",

@@ -67,6 +67,7 @@ describe("the user guides", () => {
         "station-waits",
         "delete-prep-station",
         "paper-language",
+        "default-station",
       ]);
     },
   );

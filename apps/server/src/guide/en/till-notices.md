@@ -18,7 +18,7 @@ When more than one notice is showing, the line ends with a count such as **+1**.
 open the list of every notice, most serious first. The list sits under the line and pushes the
 screen down, so it never covers the order. Tap the count again to close it.
 
-There is no close button for a notice. A kitchen display shows no notice line.
+There is no close button for a notice. A prep station display shows no notice line.
 
 ## What each notice means {#notices}
 
@@ -87,11 +87,11 @@ waiting sales needs one, the hint reads **Tell a manager** instead.
 
 **Printer “Kitchen” not printing · since 21:16** is amber. A ticket sent to that printer at 21:16
 has waited two minutes or more without printing, or the server has stopped trying to send it. A
-kitchen printer's notice shows on every till and handheld; any other printer's only on the tills
+station printer's notice shows on every till and handheld; any other printer's only on the tills
 and handhelds that print their receipts, payment slips or full invoices to it. Check the printer's
 paper, power and cable. The notice goes once the printer prints anything sent to it after that
 ticket. If the server stopped trying to send a ticket, the tills then show **Printer “Kitchen”
-could not print a ticket · Reprint it** in amber until a reprint of it (a kitchen ticket from the
+could not print a ticket · Reprint it** in amber until a reprint of it (a station ticket from the
 table, a receipt from its sale) or a resend from **Printers** has printed.
 
 **The server needs attention · Tell a manager** is a notice this till has no words for, perhaps from

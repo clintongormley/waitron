@@ -98,7 +98,7 @@ it("uses the saved venue zone for every new paper and keeps already queued bytes
       .filter((job) => !original.some((old) => old.id === job.id))
       .map((job) => printedLines(job.payload));
     expect(papers).toHaveLength(8);
-    for (const heading of ["*** VOID ***", "*** KITCHEN NOTE REMOVED ***", "*** MOVED ***"])
+    for (const heading of ["*** VOID ***", "*** STATION NOTE REMOVED ***", "*** MOVED ***"])
       expect(papers.filter((paper) => paper[0] === heading)).toHaveLength(2);
     for (const paper of papers) expect(paper).toContain("08:30");
     expect(papers.filter((paper) => paper[0] === "*** REPRINT 08:30 ***")).toHaveLength(2);

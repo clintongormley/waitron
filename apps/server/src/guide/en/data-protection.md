@@ -133,7 +133,7 @@ name, so include these guests in your privacy notice too.
 Copy and adapt the next paragraph:
 
 **Allergies.** _Your venue's legal name_ records who an allergy concerns, the allergens and any
-kitchen note you give us so we can prepare your food safely. These details go to the kitchen.
+station note you give us so we can prepare your food safely. These details go to the station.
 You can ask us to see, correct or delete your details, or use your other data protection rights.
 More information: _your privacy email address_, _the address of your privacy page_.
 
@@ -316,7 +316,7 @@ details, and Waitron can email them the invoice.
   invoice's customer name and tax number. **Download for accountant (XLSX)** on the same screen
   also includes the recorded customer address. Share these files only with the intended recipient.
 - How long: _set with your adviser_. Waitron never changes or deletes an issued invoice. It also
-  keeps every receipt and ticket it sends to a receipt or kitchen printer and deletes none of them,
+  keeps every receipt and ticket it sends to a receipt or station printer and deletes none of them,
   so the customer's details on an invoice printed at the till stay in the database too. An A4
   invoice is made again each time it is printed, and that printed copy is not kept.
 - Security: as for every entry. Printed copies are yours to look after.
@@ -343,31 +343,31 @@ supplier's name and tax number are personal data if the supplier is a sole trade
 - Security: as for every entry. Notes are free text, so ask staff to write only what service needs.
 
 **Table names and notes.** Staff can give a table, or one of its bills, a name at the till, and type
-notes on an order or a dish for the kitchen.
+notes on an order or a dish for the station.
 
-- Purpose: find the right table, and tell the kitchen what each order needs.
+- Purpose: find the right table, and tell the station what each order needs.
 - Whose data: guests at a table, and anyone a note names.
-- What data: the name typed for the table, which prints on kitchen tickets and on the table's
+- What data: the name typed for the table, which prints on station tickets and on the table's
   receipts and invoices, the emailed PDF included; the name typed for a bill, which only the till
-  shows; and the notes typed on orders and dishes, which print on kitchen tickets. A note is free
+  shows; and the notes typed on orders and dishes, which print on station tickets. A note is free
   text and can mention health, such as a diet, so ask your adviser how to treat it.
 - Who receives it: your email provider, for each invoice you email; _anyone else you share it with_.
 - How long: _set with your adviser_. Waitron keeps every receipt and ticket it sends to a receipt or
-  kitchen printer and deletes none of them, so the names and notes printed on them stay in the
+  station printer and deletes none of them, so the names and notes printed on them stay in the
   database too.
 - Security: as for every entry. Notes are free text, so ask staff to write only what service needs.
 
 **Allergies.** Staff must answer whether anyone at the table has an allergy before the first send
-to the kitchen. They record the details so the kitchen can prepare food safely.
+to the station. They record the details so the station can prepare food safely.
 
 - Purpose: prepare each guest's food safely.
 - Whose data: guests at a table.
 - What data: who has the allergy, which can be the guest's name, the allergens, and a note. Waitron
-  keeps a copy with each kitchen ticket. Allergy details linked to a guest are health data; agree
+  keeps a copy with each station ticket. Allergy details linked to a guest are health data; agree
   their legal basis and retention with your adviser before using the notes.
 - Who receives it: _anyone you share it with_.
-- How long: _set with your adviser_. Waitron keeps every ticket it sends to a kitchen printer and
-  deletes none of them, so the allergy details printed on kitchen tickets stay in the database too.
+- How long: _set with your adviser_. Waitron keeps every ticket it sends to a station printer and
+  deletes none of them, so the allergy details printed on station tickets stay in the database too.
 - Security: as for every entry.
 
 **Card payments.** When a customer pays by card, Waitron keeps the payment's details.

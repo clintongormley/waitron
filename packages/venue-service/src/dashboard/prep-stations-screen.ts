@@ -1,6 +1,7 @@
 import { QueryController, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import {
   baseStyles,
   pageTitleStyles,
@@ -51,12 +52,7 @@ import {
   rowInModel,
   type CellPeriodLines,
 } from "./routing-grid-model.js";
-import type {
-  RoutingCellChange,
-  RoutingDefaultRefusal,
-  RoutingPending,
-  RoutingRefusal,
-} from "./routing-grid.js";
+import type { RoutingCellChange, RoutingPending, RoutingRefusal } from "./routing-grid.js";
 import { t } from "./strings.js";
 import "./station-table.js";
 import "./station-editor.js";
@@ -219,8 +215,7 @@ export class PrepStationsScreen extends LitElement {
   /** The grid shows this choice at its address until the preview or save settles. */
   @state() private cellChoice: RoutingPending | null = null;
   @state() private cellRefusal: RoutingRefusal | null = null;
-  /** A refused Make default: shown on the page, as every station action's is, and in the editor. */
-  @state() private defaultRefusal: RoutingDefaultRefusal | null = null;
+  @state() private defaultError = "";
   /**
    * The refusal `#dropChoice` set, which a refresh that puts its row and zone back in the grid
    * clears.
@@ -388,7 +383,7 @@ export class PrepStationsScreen extends LitElement {
     }
     if (changedState.has("tab")) {
       this.cellRefusal = null;
-      this.defaultRefusal = null;
+      this.defaultError = "";
       this.#closeCellEditor();
     }
   }
@@ -415,7 +410,7 @@ export class PrepStationsScreen extends LitElement {
     this.pending = undefined;
     this.cellChoice = null;
     this.cellRefusal = null;
-    this.defaultRefusal = null;
+    this.defaultError = "";
     this.#writtenChoice = undefined;
     this.#cellRefreshing = undefined;
     this.#releaseCellScope();
@@ -573,48 +568,36 @@ export class PrepStationsScreen extends LitElement {
       : this.#stationName(target.stationId);
   }
   /** Whether `run` succeeded. */
-  async #act(run: () => Promise<unknown>): Promise<boolean> {
-    if (this.busy) return false;
-    this.busy = true;
-    this.#showError("");
-    try {
-      await run();
-      await this.#load();
-      return true;
-    } catch {
-      this.#showError(t("prep.save_error"));
-      return false;
-    } finally {
-      this.busy = false;
-    }
-  }
   /** The grid's open editor closes once its choice is written. */
   #closeCellEditor(): void {
     this.renderRoot.querySelector("venue-routing-grid")?.closeEditor();
   }
   async #makeDefault(stationId: string) {
     if (this.busy || this.pending) return;
-    const address: CellAddress = { row: { kind: "all" }, zoneId: null };
+    if (
+      stationId === this.view?.routing.defaultStationId ||
+      !this.view?.routing.canMakeDefault ||
+      !this.view.stations.some((station) => station.active && station.id === stationId)
+    )
+      return;
     const run = ++this.#cellRun;
     this.busy = true;
     this.#showError("");
-    this.defaultRefusal = null;
-    this.cellChoice = { address, target: { kind: "station", stationId } };
+    this.defaultError = "";
     try {
       await this.api.setDefaultStation(stationId);
-    } catch (error) {
+    } catch {
       if (this.#cellRun !== run || !this.isConnected) return;
       const message = t("prep.save_error");
       this.cellChoice = null;
       this.#showError(message);
-      this.defaultRefusal = { ...refusalOf(error), message };
+      this.defaultError = message;
       this.busy = false;
       return;
     }
     if (this.#cellRun !== run || !this.isConnected) return;
     this.cellChoice = null;
     this.cellRefusal = null;
-    this.#closeCellEditor();
     try {
       await this.#load();
     } finally {
@@ -759,16 +742,6 @@ export class PrepStationsScreen extends LitElement {
         @click=${() => this.#editStation(station)}
         >${t("venue.edit")}</wt-button
       >
-      ${
-        station.active && !station.isDefault
-          ? html`<wt-button
-              data-test=${`make-default-${station.id}`}
-              ?disabled=${this.busy}
-              @click=${() => void this.#act(() => this.api.setDefaultStation(station.id))}
-              >${t("prep.make_default")}</wt-button
-            >`
-          : nothing
-      }
       <wt-button
         data-test=${`delete-${station.id}`}
         ?disabled=${this.busy}
@@ -1536,8 +1509,8 @@ export class PrepStationsScreen extends LitElement {
                       <wt-button
                         @click=${() => this.#openStation()}
                         data-test="new-station"
-                        aria-label=${t("prep.add_station")}
-                        >${t("prep.add")}</wt-button
+                        variant="primary"
+                        >${t("prep.add_station")}</wt-button
                       >
                     </div>`
               }
@@ -1557,15 +1530,36 @@ export class PrepStationsScreen extends LitElement {
                 ></prep-station-table>
               </div>
               <div slot="routing">
+                <div class="form" data-test="default-setting">
+                  ${
+                    view.routing.canMakeDefault
+                      ? html`<wt-combobox
+                          name="defaultStation"
+                          label=${t("prep.default_destination")}
+                          search="auto"
+                          .value=${live(view.stations.some((station) => station.id === view.routing.defaultStationId) ? view.routing.defaultStationId! : "")}
+                          .options=${view.stations.map((station) => ({ value: station.id, label: station.name }))}
+                          .error=${this.defaultError}
+                          ?disabled=${this.busy || this.pending !== undefined}
+                          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                            event.stopPropagation();
+                            void this.#makeDefault(event.detail.value);
+                          }}
+                        ></wt-combobox>`
+                      : html`<p>
+                          ${t("prep.default_destination")}:
+                          ${view.stations.find((station) => station.id === view.routing.defaultStationId)?.name ?? t("routing.no_station")}.
+                          ${t("routing.default_read_only")}
+                        </p>`
+                  }
+                  ${view.stations.some((station) => station.id === view.routing.defaultStationId) ? nothing : html`<p data-test="default-repair">${t("routing.default_repair")}</p>`}
+                </div>
                 <venue-routing-grid
                   .model=${view.routing}
                   .pending=${this.cellChoice}
                   .refusal=${this.cellRefusal}
-                  .defaultRefusal=${this.defaultRefusal}
                   @routing-cell-change=${(event: CustomEvent<RoutingCellChange>) =>
                     void this.#chooseCell(event.detail)}
-                  @routing-make-default=${(event: CustomEvent<{ stationId: string }>) =>
-                    void this.#makeDefault(event.detail.stationId)}
                   @routing-draft-lost=${(event: CustomEvent<{ address: CellAddress }>) =>
                     this.#dropDraft(event.detail.address)}
                 ></venue-routing-grid>

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { t, currentLocale, setLocale } from "../i18n/t.js";
 import type { TillOrderKitchenNote } from "./order-kitchen-note.js";
 import "./order-kitchen-note.js";
 
@@ -37,8 +37,8 @@ async function fill(el: TillOrderKitchenNote, text: string) {
 }
 
 it.each([
-  ["en", "+ Note for the kitchen"],
-  ["es", "+ Nota para cocina"],
+  ["en", "+ Note for the station"],
+  ["es", t("kitchen_note.add", "es")],
 ])("offers an optional whole-order note in %s", async (locale, prompt) => {
   setLocale(locale);
   const el = await mount();
@@ -66,7 +66,7 @@ it("sends a trimmed note with the opening scope/revision, keeps the editor until
   el.revision = 8;
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
-  expect(button(el, "edit").textContent).toContain("For the kitchen: All together, train at 14:30");
+  expect(button(el, "edit").textContent).toContain("For the station: All together, train at 14:30");
   expect(el.shadowRoot!.activeElement).toBe(button(el, "edit"));
 });
 

@@ -48,7 +48,7 @@ lista que estás editando, no lo guardado: no se envía nada hasta que guardas l
 ## Ponle nombre a una lista y decide si está activa {#names}
 
 Da a la lista un nombre del personal en texto sin formato, el nombre con el que tú y tu personal la
-llamáis. Un **Nombre de cocina**, justo debajo, y un **Nombre para el cliente**, con un campo por
+llamáis. Un **Nombre de estación de preparación**, justo debajo, y un **Nombre para el cliente**, con un campo por
 cada idioma de contenido, son opcionales y recurren al nombre del personal cuando los dejas en
 blanco. Las respuestas nuevas guardan los nombres para el cliente de la lista y de la opción
 en el idioma predeterminado. Si falta alguno, guardan su propio nombre del personal; tener texto
@@ -57,7 +57,7 @@ nombres guardados. El nombre para el cliente de una lista
 de extras no se imprime hoy en ningún sitio. Mientras un nombre está en blanco, su campo muestra en
 su lugar el nombre al que recurre.
 
-En una lista de opciones y en la ventana de cada opción ves **Nombre**, después **Nombre de cocina**
+En una lista de opciones y en la ventana de cada opción ves **Nombre**, después **Nombre de estación de preparación**
 y después el encabezado **Nombres para el cliente**, con todos los campos de idioma ya visibles.
 Puedes comparar y editar los nombres sin abrir una sección. Una lista de extras conserva sus
 nombres para el cliente en una sección plegada: abre **Nombres para el cliente** para editarlos.
@@ -122,9 +122,9 @@ siguiente cambio que se guarde en un pedido aparcado de caja quita cualquier ext
 lista eliminada, junto con su cargo, y descarta cualquier respuesta a una lista de opciones eliminada.
 
 Para cambiar un plato ya enviado en una mesa, abre sus detalles en **Enviado**, cámbialo y pulsa
-**Cambiar plato**. Solo se guarda ese plato, y la cocina recibe el cambio. Una fila de platos iguales
+**Cambiar plato**. Solo se guarda ese plato, y la estación recibe el cambio. Una fila de platos iguales
 cambia entera. Para quitar uno o varios platos enviados de la cuenta, usa **Cancelar…**.
-Cuando la cocina ya ha empezado un plato, o ya se ha servido parte de él, no se puede cambiar.
+Cuando la estación ya ha empezado un plato, o ya se ha servido parte de él, no se puede cambiar.
 El plato conserva el precio al que se vendió.
 
 Para que la caja deje de pedir una lista sin eliminarla, desactiva su interruptor **Activa**, o
@@ -151,7 +151,7 @@ opción predeterminada está desactivada, se elige en su lugar la primera opció
 ninguna opción disponible, la ventana dice que no se puede añadir el plato.
 
 El operador lee siempre el nombre del personal. La caja es una pantalla para el personal: el texto del
-comensal es lo que imprime el ticket, y el de la cocina es lo que imprime la comanda de cocina.
+comensal es lo que imprime el ticket, y el de la estación es lo que imprime la comanda de estación.
 
 Cada extra elegido se convierte en su propia línea sangrada bajo el plato en la cesta, con su propio
 precio y sus propios alérgenos y etiquetas dietéticas, nunca sumados a los del plato. Una respuesta de
@@ -167,13 +167,13 @@ En un pedido aparcado de caja, si cambias el nombre del personal de una lista o 
 desactivas una opción, una respuesta de opciones deja de emparejarse. La caja no adivina: pide al operador que abra esa línea y vuelva a
 elegir antes de poder enviar el pedido.
 
-Cambiar solo un nombre para el cliente o un nombre de cocina sigue emparejando, así que nadie se
+Cambiar solo un nombre para el cliente o un nombre de estación de preparación sigue emparejando, así que nadie se
 queda parado en la caja, pero tiene un coste. El pedido recuerda los tres nombres, y Waitron no
 puede distinguir una respuesta renombrada de una distinta. Así que, una vez vuelta a publicar o
 corregida la carta, el siguiente cambio que se haga en ese pedido aparcado, aunque sea en otra línea, guarda el
 texto nuevo en todas las líneas que llevan la respuesta renombrada. Esas líneas conservan los
-precios a los que se vendieron. Una línea que la cocina ya tiene se retira y se le vuelve a enviar
-como una comanda nueva. La caja rechaza el cambio si la cocina ya ha empezado esa línea, si ya se ha servido parte de ella, o si
+precios a los que se vendieron. Una línea que la estación ya tiene se retira y se le vuelve a enviar
+como una comanda nueva. La caja rechaza el cambio si la estación ya ha empezado esa línea, si ya se ha servido parte de ella, o si
 **Cambios tras el envío** de la estación de esa línea, o de uno de sus extras enviado a otra
 estación, no lo permite. Cambia los nombres
 entre servicios y no mientras haya pedidos aparcados. Una lista de extras es la excepción, porque un

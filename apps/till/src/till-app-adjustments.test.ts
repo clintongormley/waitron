@@ -2909,7 +2909,7 @@ describe("till-app: service cancellation consent", () => {
     await clickChoice(el, "[data-confirm]");
     expect(cancelDialog(el)).toBeNull();
     expect(banner(el)?.textContent).toBe(
-      "The dish changed. Check its current kitchen state and choose again.",
+      "The dish changed. Check its current station state and choose again.",
     );
     expect(methods.cancelItem).toHaveBeenCalledOnce();
   });

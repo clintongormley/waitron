@@ -70,12 +70,6 @@ export type RoutingCellChange = {
   target: RouteTarget | null;
   periods?: PeriodLine[];
 };
-/** A refused Make default, for the default cell's editor. */
-export type RoutingDefaultRefusal = {
-  code: string;
-  params?: Record<string, unknown>;
-  message: string;
-};
 /** A choice the host has not saved yet, shown at its address in place of the saved value. */
 export type RoutingPending = RoutingCellChange;
 
@@ -245,6 +239,10 @@ export class RoutingGrid extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
+      .default-station {
+        display: block;
+        font-weight: var(--wt-font-weight-bold);
+      }
       .note {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -386,7 +384,6 @@ export class RoutingGrid extends LitElement {
   @property({ attribute: false }) refusal: RoutingRefusal | null = null;
   /** Set by the host while it previews or saves a choice, and cleared when that settles. */
   @property({ attribute: false }) pending: RoutingPending | null = null;
-  @property({ attribute: false }) defaultRefusal: RoutingDefaultRefusal | null = null;
 
   /** Never written while a search is shown, so clearing the search restores the tree as it was. */
   @state() private expanded: ReadonlySet<string> = new Set();
@@ -696,45 +693,17 @@ export class RoutingGrid extends LitElement {
       : null;
   }
 
-  /** All categories × Every zone is the default station: Make default, never cleared. */
   #defaultCell(): DrawnCell {
-    const model = this.model!;
-    const address: CellAddress = { row: { kind: "all" }, zoneId: null };
     const target = this.#defaultTarget();
-    const colour = this.#colourOf(target);
-    const name = target === null ? null : this.#targetText(target);
-    const repair =
-      target !== null
-        ? null
-        : html`<span class="repair" data-test="default-repair"
-            >${t("routing.default_repair")}</span
-          >`;
-    if (!model.canMakeDefault) {
-      return {
-        saved: target,
-        colour,
-        content: html`${name !== null ? html`<span>${name}</span> ` : nothing}${repair}
-          <span class="note">${t("routing.default_read_only")}</span>`,
-      };
-    }
-    const text = name ?? t("routing.no_station");
-    const spoken = this.#spoken(
-      t("routing.all_categories"),
-      t("routing.every_zone"),
-      t("routing.default_state"),
-    );
     return {
       saved: target,
-      colour,
-      content: this.#button(
-        address,
-        spoken,
-        target,
-        "set",
-        text,
-        [],
-        [this.#error(address), repair],
-      ),
+      colour: this.#colourOf(target),
+      content:
+        target === null
+          ? html`<span class="repair" data-test="default-repair"
+              >${t("routing.default_repair")}</span
+            >`
+          : html`<span class="station default-station">${this.#targetText(target)}</span>`,
     };
   }
 
@@ -801,12 +770,11 @@ export class RoutingGrid extends LitElement {
       .map((product) => product.id);
   }
 
-  #editorCell(address: CellAddress, isDefault: boolean): RoutingCellEditorCell {
+  #editorCell(address: CellAddress): RoutingCellEditorCell {
     const label = format("routing.cell_place", {
       row: this.#rowNameOf(address.row),
       zone: this.#zoneName(address.zoneId),
     });
-    if (isDefault) return { address, label, target: this.#defaultTarget() };
     const own = this.#cells.get(cellKey(address));
     if (own !== undefined) return { address, label, target: own.target, periods: own.periods };
     const selected = this.#inherited(address.row, address.zoneId);
@@ -823,21 +791,14 @@ export class RoutingGrid extends LitElement {
     };
   }
 
-  #refusalFor(address: CellAddress, isDefault: boolean) {
-    if (isDefault && this.defaultRefusal !== null) return this.defaultRefusal;
+  #refusalFor(address: CellAddress) {
     const refusal = this.refusal;
     return refusal?.code !== undefined && sameAddress(refusal.address, address)
       ? (refusal as RoutingRefusal & { code: string })
       : undefined;
   }
 
-  #save(address: CellAddress, isDefault: boolean, { target, periods }: RoutingCellSave): void {
-    if (isDefault) {
-      if (target.kind === "station") {
-        this.#emit("routing-make-default", { stationId: target.stationId });
-      }
-      return;
-    }
+  #save(address: CellAddress, { target, periods }: RoutingCellSave): void {
     const stored = this.#cells.get(cellKey(address))?.periods ?? [];
     this.#emit<RoutingCellChange>(
       "routing-cell-change",
@@ -849,7 +810,6 @@ export class RoutingGrid extends LitElement {
     const address = this.editing;
     if (address === null) return nothing;
     const model = this.model!;
-    const isDefault = address.row.kind === "all" && address.zoneId === null;
     const pending = this.pending;
     const zoneDepartmentId =
       address.zoneId === null
@@ -858,17 +818,16 @@ export class RoutingGrid extends LitElement {
     return html`<routing-cell-editor
       .open=${true}
       .busy=${pending !== null && sameAddress(pending.address, address)}
-      .cell=${this.#editorCell(address, isDefault)}
+      .cell=${this.#editorCell(address)}
       .periods=${model.periods}
       .stations=${model.stations}
       .rowProductIds=${this.#rowProductIds(address.row)}
       .zoneDepartmentId=${zoneDepartmentId}
       .zoneWithoutDepartment=${address.zoneId !== null && zoneDepartmentId === null}
-      .isDefaultCell=${isDefault}
-      .refusal=${this.#refusalFor(address, isDefault)}
+      .refusal=${this.#refusalFor(address)}
       @routing-cell-save=${(event: CustomEvent<RoutingCellSave>) => {
         event.stopPropagation();
-        this.#save(address, isDefault, event.detail);
+        this.#save(address, event.detail);
       }}
       @routing-cell-clear=${(event: Event) => {
         event.stopPropagation();

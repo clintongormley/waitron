@@ -47,24 +47,24 @@ export const ALERT_MESSAGES: Readonly<
     es: "La impresora {printer} de {station} no ha impreso nada desde que se atascó algo que se le envió, así que puede que las comandas de {station} no le lleguen. Arregla la impresora; mientras {station} esté abierta, cerrarla en la página de Estaciones de preparación envía su trabajo nuevo a otro sitio (la página indica adónde).",
   },
   "station.default_printer_down": {
-    en: "{printer}, the printer of the default station {station}, has printed nothing since something sent to it got stuck. The default station cannot be closed: fix the printer, and until then read {station}'s tickets on its kitchen screen or on the till's station view.",
-    es: "La impresora {printer} de la estación predeterminada {station} no ha impreso nada desde que se atascó algo que se le envió. La estación predeterminada no se puede cerrar: arregla la impresora y, mientras tanto, consulta las comandas de {station} en su pantalla de cocina o en la vista de estación del TPV.",
+    en: "{printer}, the printer of the default station {station}, has printed nothing since something sent to it got stuck. The default station cannot be closed: fix the printer, and until then read {station}'s tickets on its station screen or on the till's station view.",
+    es: "La impresora {printer} de la estación predeterminada {station} no ha impreso nada desde que se atascó algo que se le envió. La estación predeterminada no se puede cerrar: arregla la impresora y, mientras tanto, consulta las comandas de {station} en su pantalla de estación o en la vista de estación del TPV.",
   },
   "station.screens_dark": {
-    en: "{station} has dishes waiting, and none of its kitchen screens has checked in for over three minutes. Check the screen; until then, read its tickets on the till's station view. Closing {station} on the Prep stations page sends new work elsewhere, but does not move the dishes already waiting.",
-    es: "{station} tiene platos pendientes y ninguna de sus pantallas de cocina se ha conectado en más de tres minutos. Revisa la pantalla; mientras tanto, consulta sus comandas en la vista de estación del TPV. Cerrar {station} en la página de Estaciones de preparación envía el trabajo nuevo a otro sitio, pero no mueve los platos que ya esperan.",
+    en: "{station} has dishes waiting, and none of its station screens has checked in for over three minutes. Check the screen; until then, read its tickets on the till's station view. Closing {station} on the Prep stations page sends new work elsewhere, but does not move the dishes already waiting.",
+    es: "{station} tiene platos pendientes y ninguna de sus pantallas de estación se ha conectado en más de tres minutos. Revisa la pantalla; mientras tanto, consulta sus comandas en la vista de estación del TPV. Cerrar {station} en la página de Estaciones de preparación envía el trabajo nuevo a otro sitio, pero no mueve los platos que ya esperan.",
   },
   "station.default_screens_dark": {
-    en: "{station}, the default station, has dishes waiting, and none of its kitchen screens has checked in for over three minutes. Check the screen; until then, read its tickets on the till's station view.",
-    es: "{station}, la estación predeterminada, tiene platos pendientes y ninguna de sus pantallas de cocina se ha conectado en más de tres minutos. Revisa la pantalla; mientras tanto, consulta sus comandas en la vista de estación del TPV.",
+    en: "{station}, the default station, has dishes waiting, and none of its station screens has checked in for over three minutes. Check the screen; until then, read its tickets on the till's station view.",
+    es: "{station}, la estación predeterminada, tiene platos pendientes y ninguna de sus pantallas de estación se ha conectado en más de tres minutos. Revisa la pantalla; mientras tanto, consulta sus comandas en la vista de estación del TPV.",
   },
   "kitchen_screen.pass_dark": {
-    en: "Pass screen {device} has dishes waiting and has not checked in for over three minutes. Check it; until then, use the till's Pass view.",
-    es: "La pantalla de pase {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísala; mientras tanto, usa la vista de pase del TPV.",
+    en: "Pass {device} has dishes waiting and has not checked in for over three minutes. Check it; until then, use the till's Pass view.",
+    es: "La vista de pase {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísala; mientras tanto, usa la vista de pase del TPV.",
   },
   "kitchen_screen.pass_monitor_dark": {
-    en: "Pass monitor {device} has dishes waiting and has not checked in for over three minutes. Check it; until then, use the till's Pass view.",
-    es: "El monitor de pase {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísalo; mientras tanto, usa la vista de pase del TPV.",
+    en: "Pass display (view only) {device} has dishes waiting and has not checked in for over three minutes. Check it; until then, use the till's Pass view.",
+    es: "El pantalla de pase (solo lectura) {device} tiene platos pendientes y lleva más de tres minutos sin conectarse. Revísalo; mientras tanto, usa la vista de pase del TPV.",
   },
   "backup.destination_overdue": {
     en: "Backups to “{destination}” are overdue, or the destination could not be checked. Check it on the Backups page.",
@@ -455,8 +455,8 @@ export const ALERT_MESSAGES: Readonly<
     es: `Se devolvieron {moneyBack:money} a un cliente por una rectificación de factura, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta, elige la rectificación en Rectificaciones en curso y pulsa Registrar la rectificación; si indica que la factura ya no se puede rectificar, pulsa Cerrar y conservar las devoluciones.${MORE_ES}`,
   },
   "route.dish_not_sent": {
-    en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the kitchen. Pass them to the kitchen by hand, and check the Prep stations page: a closed station with no replacement, or no active default station, leaves a dish nowhere to go.",
-    es: "El pedido pagado {orderNumber} tiene platos que ninguna estación de preparación podía recibir: {dishes}. No se han enviado a cocina. Pásalos a cocina a mano y revisa la página de Estaciones de preparación: una estación cerrada sin sustituta, o ninguna estación predeterminada activa, deja un plato sin destino.",
+    en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the station. Pass them to the station by hand, and check the Prep stations page: a closed station with no replacement, or no active default station, leaves a dish nowhere to go.",
+    es: "El pedido pagado {orderNumber} tiene platos que ninguna estación de preparación podía recibir: {dishes}. No se han enviado a la estación. Pásalos a la estación a mano y revisa la página de Estaciones de preparación: una estación cerrada sin sustituta, o ninguna estación predeterminada activa, deja un plato sin destino.",
   },
   "route.released_at_closed_station": {
     en: "Order {orderNumber}: {dishes} went to {station}, which is closed or disabled, and the prep station rules sent them nowhere else. If nobody is making them there, move them to another station from the till (Move to station…), or open {station} for today on the Prep stations page. Dishes left at a closed station later do not add to this alert while it is open, so there may be more.",

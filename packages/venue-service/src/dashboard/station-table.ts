@@ -24,6 +24,9 @@ export class StationTable extends LitElement {
         display: block;
         min-width: 0;
       }
+      wt-data-table::part(table-head) {
+        --wt-space-3: var(--wt-space-2);
+      }
       wt-data-table::part(screens) {
         display: grid;
         gap: var(--wt-space-2);
@@ -53,10 +56,6 @@ export class StationTable extends LitElement {
       wt-data-table::part(devices-link) {
         color: var(--wt-color-primary-text);
       }
-      wt-data-table::part(badge) {
-        color: var(--wt-color-text-muted);
-        margin-inline-start: var(--wt-space-2);
-      }
     `,
   ];
   @property({ attribute: false }) statusNotes: Readonly<Record<string, string | TemplateResult>> =
@@ -77,7 +76,6 @@ export class StationTable extends LitElement {
       ></span
       ><span part="station-name-details"
         ><span part="name">${station.name}</span>
-        ${station.isDefault ? html`<span part="badge">${t("prep.default")}</span>` : nothing}
         ${this.statusNotes[station.id] ? html`<span part="station-status">${this.statusNotes[station.id]}</span>` : nothing}
       </span></span
     >`;
@@ -105,6 +103,7 @@ export class StationTable extends LitElement {
       {
         key: "waitsForPass",
         label: t("prep.waits_for_pass"),
+        help: { text: t("prep.waits_for_pass_hint"), label: t("prep.waits_for_pass") },
         cell: (station) =>
           html`<span data-test=${`waits-for-pass-${station.id}`}
             >${station.waitsForPass ? t("venue.yes") : t("venue.no")}</span

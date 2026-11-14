@@ -253,7 +253,7 @@ describe("till-adjustment-dialog: the form", () => {
       text(root(await mount({ kind: "cancel", target })).querySelector("p.lead")!);
 
     expect(await lead({ ...olives, kitchenTold: true })).toBe(
-      "It comes off the bill, and the kitchen is told.",
+      "It comes off the bill, and the station is told.",
     );
     expect(await lead(olives)).toBe(t("table.cancel_sent"));
     expect(await lead(burger)).toBe(t("table.cancel_sent"));
@@ -261,7 +261,7 @@ describe("till-adjustment-dialog: the form", () => {
 
     setLocale("es-ES");
     expect(await lead({ ...olives, kitchenTold: true })).toBe(
-      "Se quitará de la cuenta y se avisará a cocina.",
+      "Se quitará de la cuenta y se avisará a la estación.",
     );
     expect(await lead(olives)).toBe("Se quitará de la cuenta.");
   });

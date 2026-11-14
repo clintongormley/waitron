@@ -47,7 +47,7 @@ export const en = {
   "allergy.none": "No allergies",
   "allergy.who": "Who",
   "allergy.avoid": "Allergens to avoid",
-  "allergy.note": "Note for the kitchen",
+  "allergy.note": "Note for the station",
   "allergy.another": "Another guest with allergies",
   "allergy.next": "Next",
   "allergy.back": "Back",
@@ -66,7 +66,7 @@ export const en = {
   "allergy.none_message": "This clears every guest and dish assignment.",
   "allergy.who_invalid": "Enter who this is, using up to 40 characters.",
   "allergy.avoid_invalid": "Choose at least one allergen and its cereal or nut kinds.",
-  "allergy.note_invalid": "Use up to 2000 characters for the kitchen note.",
+  "allergy.note_invalid": "Use up to 2000 characters for the station note.",
   "allergy.empty": "No allergic guests recorded.",
   "allergy.unanswered": "Record an allergy answer before sending dishes.",
   "allergy.stale": "The table changed. Review the latest allergy information before trying again.",
@@ -213,13 +213,13 @@ export const en = {
     "The server's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
   "tender_refund.left": "{amount} left to refund from another payment",
 
-  "kitchen_note.changed": "Kitchen note changed",
-  "kitchen_note.removed": "Kitchen note removed",
+  "kitchen_note.changed": "Station note changed",
+  "kitchen_note.removed": "Station note removed",
   "kitchen_note.before": "Before",
   "kitchen_note.after": "Now",
-  "kitchen_note.add": "+ Note for the kitchen",
-  "kitchen_note.heading": "For the kitchen",
-  "kitchen_note.title": "Note for the kitchen",
+  "kitchen_note.add": "+ Note for the station",
+  "kitchen_note.heading": "For the station",
+  "kitchen_note.title": "Note for the station",
   "kitchen_note.placeholder": "All together, they have a train at 14:30",
   "kitchen_note.too_long": "Use no more than 2,000 characters.",
   "kitchen_note.clear": "Clear",
@@ -387,8 +387,8 @@ export const en = {
   "department_transfer.view": "View current tab",
   "department_transfer.tab": "Tab {number}",
   "department_transfer.lines": "Ordered items",
-  "department_transfer.work": "Outstanding kitchen work",
-  "department_transfer.no_work": "No outstanding kitchen work.",
+  "department_transfer.work": "Outstanding station work",
+  "department_transfer.no_work": "No outstanding station work.",
   "department_transfer.unrecorded_item": "Unrecorded item",
   "department_transfer.unrecorded_station": "Station not recorded",
   "department_transfer.refresh": "Refresh current tab",
@@ -752,8 +752,8 @@ export const en = {
   // Station display. The view toggles name the view they switch TO. `station.min` is a suffix word,
   // rendered as `${n} ${t(key)}`.
   "kitchen_screen.station": "Station screen",
-  "kitchen_screen.pass": "Pass screen",
-  "kitchen_screen.pass_monitor": "Pass monitor",
+  "kitchen_screen.pass": "Pass",
+  "kitchen_screen.pass_monitor": "Pass display (view only)",
   "kitchen_screen.none":
     "This screen has nothing to show yet. Choose a screen for this device in the dashboard, under Devices.",
   "kitchen_screen.unavailable": "This screen is no longer available: {screen}",
@@ -762,8 +762,8 @@ export const en = {
     "Choose this device's screens again in the dashboard, under Devices.",
   "kitchen_screen.offer_again_in_dashboard":
     "This device's profile can offer it again in the dashboard, under Device profiles.",
-  "station.open": "Kitchen",
-  "station.title": "Kitchen",
+  "station.open": "Stations",
+  "station.title": "Stations",
   "station.back": "Back to counter",
   "station.pick": "Station",
   "station.no_stations": "No stations",
@@ -771,7 +771,7 @@ export const en = {
   "zone.unavailable": "This zone is no longer available: {name}",
   "station.moved_from": "Moved from {station}",
   "station.after_period": "After {period} — agreed",
-  "station.empty": "Nothing in the kitchen",
+  "station.empty": "Nothing in the station",
   "station.view_merged": "Merged",
   "station.view_stacked": "Stacked",
   "station.min": "min",
@@ -856,7 +856,7 @@ export const en = {
   "device.join_retry": "Try again",
   "device.type.till": "Counter till",
   "device.type.handheld": "Handheld",
-  "device.type.kds": "Kitchen display",
+  "device.type.kds": "Prep station display",
   // Dev-only
   "device.switch": "Switch device",
   // Expo / pass display.
@@ -1034,7 +1034,7 @@ export const en = {
   "diet.filter.no_meat": "No meat",
   "diet.filter.no_fish": "No fish",
   // Per-line kitchen note
-  "line.note.label": "Kitchen note",
+  "line.note.label": "Station note",
   "line.note.add": "+ Add a note",
   "line.note.placeholder": "e.g. no onion, allergy — nut",
   "line.note.button": "Note",
@@ -1256,33 +1256,33 @@ export const en = {
   "table.reminder_snooze": "Snooze {n} min",
   "table.reminder_clear_snooze": "Clear snooze",
   "table.print_problem": "Printing problem",
-  "table.print_problem_detail": "A kitchen ticket has not printed: {stations}",
+  "table.print_problem_detail": "A station ticket has not printed: {stations}",
   "table.print_problem_reprint": "Reprint",
-  "table.print_problem_sent": "Kitchen tickets sent to print again: {stations}",
+  "table.print_problem_sent": "Station tickets sent to print again: {stations}",
   "table.group_earlier": "Move earlier",
   "table.group_later": "Move later",
   "table.group_fire": "Fire",
   "table.fire_group_title": "Fire this group?",
-  "table.fire_group_body": "It goes to the kitchen now: {summary}",
+  "table.fire_group_body": "It goes to the station now: {summary}",
   "table.move_line": "Move to…",
   "table.move_new_group": "New group",
   "table.split_group_line": "Split quantity",
   // Per-line kitchen actions
   "table.change_dish": "Change dish",
   "table.change_dish_lower": "To take one off, use Void…",
-  "table.change_dish_started": "The kitchen has already started {dish}, so it can't be changed.",
+  "table.change_dish_started": "The station has already started {dish}, so it can't be changed.",
   // The banner's words when the dish's Sent window cannot say it.
   "table.change_dish_started_void":
     "{dish} is already being made and can no longer be changed. Use Void… to take it off the bill.",
   "table.change_dish_fired_void":
-    "{dish} has already gone to the kitchen and can no longer be changed. Use Void… to take it off the bill.",
+    "{dish} has already gone to the station and can no longer be changed. Use Void… to take it off the bill.",
   "table.change_dish_served_void":
     "{dish} has already been served and can no longer be changed. Use Void… to take it off the bill.",
   "table.void_line": "Void…",
   "table.cancel_line": "Cancel",
-  "table.cancel_started": "The kitchen has started this — cancel and bin it?",
+  "table.cancel_started": "The station has started this — cancel and bin it?",
   "table.cancel_sent": "It comes off the bill.",
-  "table.cancel_extra_told": "It comes off the bill, and the kitchen is told.",
+  "table.cancel_extra_told": "It comes off the bill, and the station is told.",
   "table.discount_bill": "Comp the bill",
   "table.price_was": "Was",
   "table.extra_of": "{extra} (with {dish})",
@@ -1461,19 +1461,19 @@ export const en = {
   "move_station.move": "Move",
   "table.move_station": "Move to station…",
   "move_station.refused.ticket.already_started":
-    "The kitchen has started, finished or sent out this dish, so it stays where it is",
+    "The station has started, finished or sent out this dish, so it stays where it is",
   "move_station.refused.working_order.not_open": "This order has been discarded",
   "move_station.refused.working_order.already_collected": "This order has already been handed over",
   "move_station.refused.tab.line_not_found": "This dish is no longer on this bill",
-  "move_station.refused.ticket.not_sent": "This dish has not gone to the kitchen yet",
+  "move_station.refused.ticket.not_sent": "This dish has not gone to the station yet",
   "move_station.refused.ticket.made_here":
     "This dish is made here at the till, so it has no ticket at a station to move",
   "move_station.order_refused.ticket.already_started":
-    "The kitchen has started, finished or sent out a dish of this order, so nothing was moved",
+    "The station has started, finished or sent out a dish of this order, so nothing was moved",
   "move_station.order_refused.tab.line_not_found":
     "A dish of this order is no longer on it, so nothing was moved",
   "move_station.order_refused.ticket.not_sent":
-    "A dish of this order has not gone to the kitchen yet, so nothing was moved",
+    "A dish of this order has not gone to the station yet, so nothing was moved",
   "move_station.order_refused.ticket.made_here":
     "A dish of this order is made here at the till, so nothing was moved",
   "dead_end.choose_or_remove": "Choose where to make each dish, or remove it.",
@@ -1608,7 +1608,7 @@ export const en = {
   "held.park_error": "Could not park the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
   "held.extra_not_offered":
-    "An extra on this order is no longer offered. It stays on the order as saved, and changing the order removes it. If it can no longer be sold and has not gone to the kitchen, paying is refused until it is removed.",
+    "An extra on this order is no longer offered. It stays on the order as saved, and changing the order removes it. If it can no longer be sold and has not gone to the station, paying is refused until it is removed.",
   // Says what to DO, because reopening the line and choosing again is the only way out.
   "held.options_changed": "An item's choices have changed — open the line and choose again",
   "held.stale": "That order is no longer available",
@@ -1624,16 +1624,16 @@ export const en = {
   "held.sent_dish_served":
     "A dish on this order has already been served and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
   "held.sent_dish_started":
-    "The kitchen has already started a dish on this order, and that dish can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+    "The station has already started a dish on this order, and that dish can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
   "held.sent_dish_fired":
-    "A dish on this order has already gone to the kitchen and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+    "A dish on this order has already gone to the station and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
   "held.sent_dish_sent":
     "A dish on this order has already been sent and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
   "station.no_default_named":
     "No prep station can make {dishes}. Fix this in the dashboard, on the Prep stations page.",
   "place.error": "Could not send the order, try again",
   "place.unconfirmed":
-    "The server did not answer. Send again: the kitchen will not get the order twice.",
+    "The server did not answer. Send again: the station will not get the order twice.",
   // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
     "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this server up.",
@@ -1646,12 +1646,12 @@ export const en = {
   "refresh.held_after_sale":
     "The sale was recorded, but the list of parked orders could not refresh.",
   "refresh.held_after_move": "The bill was moved, but the list of parked orders could not refresh.",
-  "refresh.station": "The kitchen queue could not refresh.",
-  "refresh.station_after_place": "The order was sent, but the kitchen queue could not refresh.",
+  "refresh.station": "The station queue could not refresh.",
+  "refresh.station_after_place": "The order was sent, but the station queue could not refresh.",
   "refresh.station_after_hand_over":
-    "The order was handed over, but the kitchen queue could not refresh.",
-  "refresh.station_after_move": "The dishes were moved, but the kitchen queue could not refresh.",
-  "refresh.station_after_sale": "The sale was recorded, but the kitchen queue could not refresh.",
+    "The order was handed over, but the station queue could not refresh.",
+  "refresh.station_after_move": "The dishes were moved, but the station queue could not refresh.",
+  "refresh.station_after_sale": "The sale was recorded, but the station queue could not refresh.",
   "refresh.waiting": "The list of waiting orders could not refresh.",
   "refresh.waiting_after_sale":
     "The sale was recorded, but the list of waiting orders could not refresh.",
@@ -1938,10 +1938,10 @@ export const en = {
   "basket.period_ended": "{period} ended",
   "late_send.heading": "{period} has ended",
   "late_send.heading_many": "{periods} have ended",
-  "late_send.check": "Check with the kitchen before sending:",
+  "late_send.check": "Check with the station before sending:",
   "late_send.remove": "Remove them",
-  "late_send.agreed": "Kitchen agreed — send",
-  "late_send.agreed_save": "Kitchen agreed — save",
+  "late_send.agreed": "Station agreed — send",
+  "late_send.agreed_save": "Station agreed — save",
   "basket_refresh.period_ended": "{name}: last orders have ended",
   "menu.department_closed": "{department} is closed: no period is running",
   "menu.zone_closed":
@@ -2125,7 +2125,7 @@ export const es: Record<StringKey, string> = {
   "allergy.none": "Sin alergias",
   "allergy.who": "Quién",
   "allergy.avoid": "Alérgenos que debe evitar",
-  "allergy.note": "Nota para cocina",
+  "allergy.note": "Nota para la estación",
   "allergy.another": "Otra persona con alergias",
   "allergy.next": "Siguiente",
   "allergy.back": "Atrás",
@@ -2144,7 +2144,7 @@ export const es: Record<StringKey, string> = {
   "allergy.none_message": "Se eliminarán todas las personas y los platos asignados.",
   "allergy.who_invalid": "Indica quién es, con un máximo de 40 caracteres.",
   "allergy.avoid_invalid": "Elige al menos un alérgeno y los tipos de cereal o fruto de cáscara.",
-  "allergy.note_invalid": "Usa un máximo de 2000 caracteres para la nota de cocina.",
+  "allergy.note_invalid": "Usa un máximo de 2000 caracteres para la nota de estación.",
   "allergy.empty": "No hay personas con alergias registradas.",
   "allergy.unanswered": "Indica si hay alergias antes de enviar los platos.",
   "allergy.stale": "La mesa ha cambiado. Revisa la información de alergias antes de reintentar.",
@@ -2294,13 +2294,13 @@ export const es: Record<StringKey, string> = {
     "No ha llegado la respuesta del servidor. Pulsa Volver a consultar para ver si se hizo antes de pulsar nada más.",
   "tender_refund.left": "Quedan {amount} por devolver de otro pago",
 
-  "kitchen_note.changed": "Nota para cocina cambiada",
-  "kitchen_note.removed": "Nota para cocina eliminada",
+  "kitchen_note.changed": "Nota para la estación cambiada",
+  "kitchen_note.removed": "Nota para la estación eliminada",
   "kitchen_note.before": "Antes",
   "kitchen_note.after": "Ahora",
-  "kitchen_note.add": "+ Nota para cocina",
-  "kitchen_note.heading": "Para cocina",
-  "kitchen_note.title": "Nota para cocina",
+  "kitchen_note.add": "+ Nota para la estación",
+  "kitchen_note.heading": "Para la estación",
+  "kitchen_note.title": "Nota para la estación",
   "kitchen_note.placeholder": "Todo junto, tienen un tren a las 14:30",
   "kitchen_note.too_long": "Usa un máximo de 2000 caracteres.",
   "kitchen_note.clear": "Borrar",
@@ -2471,8 +2471,8 @@ export const es: Record<StringKey, string> = {
   "department_transfer.view": "Ver cuenta actual",
   "department_transfer.tab": "Cuenta {number}",
   "department_transfer.lines": "Productos pedidos",
-  "department_transfer.work": "Trabajo pendiente en cocina",
-  "department_transfer.no_work": "No hay trabajo pendiente en cocina.",
+  "department_transfer.work": "Trabajo pendiente en la estación",
+  "department_transfer.no_work": "No hay trabajo pendiente en la estación.",
   "department_transfer.unrecorded_item": "Producto no registrado",
   "department_transfer.unrecorded_station": "Puesto no registrado",
   "department_transfer.refresh": "Actualizar cuenta",
@@ -2824,10 +2824,10 @@ export const es: Record<StringKey, string> = {
   "find_page.remove_filter": "Quitar filtro de {filter}",
   "find_page.retry": "Reintentar",
   "action.place": "Enviar",
-  "action.send_to_prep": "Enviar a cocina",
+  "action.send_to_prep": "Enviar a la estación",
   "kitchen_screen.station": "Pantalla de estación",
-  "kitchen_screen.pass": "Pantalla de pase",
-  "kitchen_screen.pass_monitor": "Monitor de pase",
+  "kitchen_screen.pass": "Pase",
+  "kitchen_screen.pass_monitor": "Pantalla de pase (solo lectura)",
   "kitchen_screen.none":
     "Esta pantalla aún no tiene nada que mostrar. Elige una pantalla para este dispositivo en el panel, en Dispositivos.",
   "kitchen_screen.unavailable": "Esta pantalla ya no está disponible: {screen}",
@@ -2836,8 +2836,8 @@ export const es: Record<StringKey, string> = {
     "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
   "kitchen_screen.offer_again_in_dashboard":
     "El perfil de este dispositivo puede volver a ofrecerla en el panel, en Perfiles de dispositivo.",
-  "station.open": "Cocina",
-  "station.title": "Cocina",
+  "station.open": "Estaciones",
+  "station.title": "Estaciones",
   "station.back": "Volver al mostrador",
   "station.pick": "Estación",
   "station.no_stations": "Sin estaciones",
@@ -2845,7 +2845,7 @@ export const es: Record<StringKey, string> = {
   "zone.unavailable": "Esta zona ya no está disponible: {name}",
   "station.moved_from": "Pasado de {station}",
   "station.after_period": "Tras {period} — aceptado",
-  "station.empty": "Nada en cocina",
+  "station.empty": "Nada en la estación",
   "station.view_merged": "Todo junto",
   "station.view_stacked": "Por estación",
   "station.min": "min",
@@ -2924,7 +2924,7 @@ export const es: Record<StringKey, string> = {
   "device.join_retry": "Intentar de nuevo",
   "device.type.till": "Caja registradora",
   "device.type.handheld": "Terminal de camarero",
-  "device.type.kds": "Pantalla de cocina",
+  "device.type.kds": "Pantalla de estación",
   "device.switch": "Cambiar de dispositivo",
   "pass.column.held": "En espera",
   "pass.column.to_fire": "Por marchar",
@@ -3100,7 +3100,7 @@ export const es: Record<StringKey, string> = {
   "diet.filter.label": "Filtro dietético",
   "diet.filter.no_meat": "Sin carne",
   "diet.filter.no_fish": "Sin pescado",
-  "line.note.label": "Nota para cocina",
+  "line.note.label": "Nota para la estación",
   "line.note.add": "+ Añadir una nota",
   "line.note.placeholder": "p. ej. sin cebolla, alergia — frutos secos",
   "line.note.button": "Nota",
@@ -3313,32 +3313,32 @@ export const es: Record<StringKey, string> = {
   "table.reminder_snooze": "Posponer {n} min",
   "table.reminder_clear_snooze": "Cancelar posponer",
   "table.print_problem": "Problema de impresión",
-  "table.print_problem_detail": "Un ticket de cocina no se ha impreso: {stations}",
+  "table.print_problem_detail": "Un ticket de estación no se ha impreso: {stations}",
   "table.print_problem_reprint": "Reimprimir",
-  "table.print_problem_sent": "Tickets de cocina enviados a imprimir de nuevo: {stations}",
+  "table.print_problem_sent": "Tickets de estación enviados a imprimir de nuevo: {stations}",
   "table.group_earlier": "Adelantar",
   "table.group_later": "Retrasar",
   "table.group_fire": "Marchar",
   "table.fire_group_title": "¿Marchar este grupo?",
-  "table.fire_group_body": "Pasa a cocina ahora: {summary}",
+  "table.fire_group_body": "Pasa a la estación ahora: {summary}",
   "table.move_line": "Mover a…",
   "table.move_new_group": "Grupo nuevo",
   "table.split_group_line": "Separar cantidad",
   "table.change_dish": "Cambiar plato",
   "table.change_dish_lower": "Para quitar uno, usa Cancelar…",
   "table.change_dish_started":
-    "La cocina ya ha empezado a preparar {dish}, así que no se puede cambiar.",
+    "La estación ya ha empezado a preparar {dish}, así que no se puede cambiar.",
   "table.change_dish_started_void":
     "{dish} ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.change_dish_fired_void":
-    "{dish} ya ha ido a cocina y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+    "{dish} ya ha ido a la estación y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.change_dish_served_void":
     "{dish} ya se ha servido y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.void_line": "Cancelar…",
   "table.cancel_line": "Cancelar",
-  "table.cancel_started": "La cocina ya lo ha empezado — ¿cancelar y tirarlo?",
+  "table.cancel_started": "La estación ya lo ha empezado — ¿cancelar y tirarlo?",
   "table.cancel_sent": "Se quitará de la cuenta.",
-  "table.cancel_extra_told": "Se quitará de la cuenta y se avisará a cocina.",
+  "table.cancel_extra_told": "Se quitará de la cuenta y se avisará a la estación.",
   "table.discount_bill": "Descuento en la cuenta",
   "table.price_was": "Antes",
   "table.extra_of": "{extra} (con {dish})",
@@ -3518,19 +3518,19 @@ export const es: Record<StringKey, string> = {
   "move_station.move": "Pasar",
   "table.move_station": "Cambiar de estación…",
   "move_station.refused.ticket.already_started":
-    "La cocina ya ha empezado, terminado o sacado este plato, así que se queda donde está",
+    "La estación ya ha empezado, terminado o sacado este plato, así que se queda donde está",
   "move_station.refused.working_order.not_open": "Este pedido se ha descartado",
   "move_station.refused.working_order.already_collected": "Este pedido ya se ha entregado",
   "move_station.refused.tab.line_not_found": "Este plato ya no está en esta cuenta",
-  "move_station.refused.ticket.not_sent": "Este plato aún no ha ido a cocina",
+  "move_station.refused.ticket.not_sent": "Este plato aún no ha ido a la estación",
   "move_station.refused.ticket.made_here":
     "Este plato se prepara aquí en la caja, así que no tiene comanda en ninguna estación que pasar",
   "move_station.order_refused.ticket.already_started":
-    "La cocina ya ha empezado, terminado o sacado un plato de este pedido, así que no se ha pasado nada",
+    "La estación ya ha empezado, terminado o sacado un plato de este pedido, así que no se ha pasado nada",
   "move_station.order_refused.tab.line_not_found":
     "Un plato de este pedido ya no está en él, así que no se ha pasado nada",
   "move_station.order_refused.ticket.not_sent":
-    "Un plato de este pedido aún no ha ido a cocina, así que no se ha pasado nada",
+    "Un plato de este pedido aún no ha ido a la estación, así que no se ha pasado nada",
   "move_station.order_refused.ticket.made_here":
     "Un plato de este pedido se prepara aquí en la caja, así que no se ha pasado nada",
   "dead_end.choose_or_remove": "Elige dónde preparar cada plato o quítalo.",
@@ -3658,7 +3658,7 @@ export const es: Record<StringKey, string> = {
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Un producto ya no está disponible y se quitó del pedido",
   "held.extra_not_offered":
-    "Un extra de este pedido ya no se ofrece. Sigue en el pedido tal como se guardó, y si cambias el pedido, se quita. Si ya no se puede vender y no se ha enviado a cocina, no se podrá cobrar hasta que se quite.",
+    "Un extra de este pedido ya no se ofrece. Sigue en el pedido tal como se guardó, y si cambias el pedido, se quita. Si ya no se puede vender y no se ha enviado a la estación, no se podrá cobrar hasta que se quite.",
   "held.options_changed":
     "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
   "held.stale": "Ese pedido ya no está disponible",
@@ -3675,16 +3675,16 @@ export const es: Record<StringKey, string> = {
   "held.sent_dish_served":
     "Un plato de este pedido ya se ha servido y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
   "held.sent_dish_started":
-    "La cocina ya ha empezado a preparar un plato de este pedido, y ese plato no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+    "La estación ya ha empezado a preparar un plato de este pedido, y ese plato no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
   "held.sent_dish_fired":
-    "Un plato de este pedido ya ha ido a cocina y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+    "Un plato de este pedido ya ha ido a la estación y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
   "held.sent_dish_sent":
     "Un plato de este pedido ya se ha enviado y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
   "station.no_default_named":
     "Ninguna estación de preparación puede preparar {dishes}. Corrígelo en el panel, en la página Estaciones de preparación.",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
   "place.unconfirmed":
-    "El servidor no respondió. Vuelve a enviarlo: la cocina no recibirá el pedido dos veces.",
+    "El servidor no respondió. Vuelve a enviarlo: la estación no recibirá el pedido dos veces.",
   "place.refused":
     "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró este servidor.",
   "station.advance_error": "No se pudo actualizar la comanda, inténtalo de nuevo",
@@ -3695,15 +3695,15 @@ export const es: Record<StringKey, string> = {
     "La venta se registró, pero la lista de pedidos aparcados no se pudo actualizar.",
   "refresh.held_after_move":
     "La cuenta se movió, pero la lista de pedidos aparcados no se pudo actualizar.",
-  "refresh.station": "La cola de cocina no se pudo actualizar.",
+  "refresh.station": "La cola de estación no se pudo actualizar.",
   "refresh.station_after_place":
-    "El pedido se envió, pero la cola de cocina no se pudo actualizar.",
+    "El pedido se envió, pero la cola de estación no se pudo actualizar.",
   "refresh.station_after_hand_over":
-    "El pedido se entregó, pero la cola de cocina no se pudo actualizar.",
+    "El pedido se entregó, pero la cola de estación no se pudo actualizar.",
   "refresh.station_after_move":
-    "Los platos se pasaron, pero la cola de cocina no se pudo actualizar.",
+    "Los platos se pasaron, pero la cola de estación no se pudo actualizar.",
   "refresh.station_after_sale":
-    "La venta se registró, pero la cola de cocina no se pudo actualizar.",
+    "La venta se registró, pero la cola de estación no se pudo actualizar.",
   "refresh.waiting": "La lista de pedidos pendientes no se pudo actualizar.",
   "refresh.waiting_after_sale":
     "La venta se registró, pero la lista de pedidos pendientes no se pudo actualizar.",
@@ -3985,10 +3985,10 @@ export const es: Record<StringKey, string> = {
   "basket.period_ended": "Ha terminado {period}",
   "late_send.heading": "Ha terminado {period}",
   "late_send.heading_many": "Han terminado {periods}",
-  "late_send.check": "Consulta con la cocina antes de enviar:",
+  "late_send.check": "Consulta con la estación antes de enviar:",
   "late_send.remove": "Quitarlos",
-  "late_send.agreed": "La cocina acepta — enviar",
-  "late_send.agreed_save": "La cocina acepta — guardar",
+  "late_send.agreed": "La estación acepta — enviar",
+  "late_send.agreed_save": "La estación acepta — guardar",
   "basket_refresh.period_ended": "{name}: ya no se admiten pedidos",
   "menu.department_closed": "{department} está cerrado: no hay ningún periodo en curso",
   "menu.zone_closed":

@@ -89,7 +89,7 @@ theme from the Themes card ask you first.
 
 ## Make text bigger {#text-size}
 
-The **Text size** slider makes the text of every dashboard, till, handheld and kitchen screen
+The **Text size** slider makes the text of every dashboard, till, handheld and station screen
 bigger: each of the four text sizes grows by the same percentage, to the nearest pixel. 100% is
 Waitron's size, and 130% the largest. Spacing stays as it is, and so does the smallest size of a
 button, a till's product buttons included, so a long name that no longer fits takes another line.
@@ -104,7 +104,7 @@ makes that happen more often.
 A saved text size reaches the dashboards and tills as a saved theme's colours do (see
 [Save a theme](appearance.md#save)).
 
-Printed paper keeps Waitron's sizes: receipts, kitchen tickets, the equipment label and the node
+Printed paper keeps Waitron's sizes: receipts, station tickets, the equipment label and the node
 recovery pack. Google's sign-in button keeps Google's size.
 
 A size set by hand grows with the slider too, as [Set text by hand](appearance.md#text-by-hand)
@@ -347,7 +347,7 @@ still hard to read, so you see them before the theme goes on every screen.
 
 When the theme you saved is the one in use, the dashboard you are using changes to the new look at
 once. Other dashboards open at the same time follow on their own, and a signed-in till or a
-kitchen screen follows within 15 seconds.
+station screen follows within 15 seconds.
 Saving a theme that is not in use changes no screen until you put it in use.
 
 If you saved anyway, the Themes card's row for that theme shows a tag such as "2 hard to read", and

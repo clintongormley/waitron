@@ -1377,10 +1377,10 @@ describe("till-app: comping a stored counter order", () => {
   });
 
   it.each([
-    ["en", "The server did not answer. Send again: the kitchen will not get the order twice."],
+    ["en", "The server did not answer. Send again: the station will not get the order twice."],
     [
       "es",
-      "El servidor no respondió. Vuelve a enviarlo: la cocina no recibirá el pedido dos veces.",
+      "El servidor no respondió. Vuelve a enviarlo: la estación no recibirá el pedido dos veces.",
     ],
   ] as const)("a lost Send reply says to send again, in %s", async (language, sentence) => {
     const el = await placeCounter({
@@ -2295,12 +2295,12 @@ describe("till-app: a counter save refused for a dish already sent", () => {
       es: "Un plato de este pedido ya se ha servido y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
     },
     "ticket.already_started": {
-      en: "The kitchen has already started a dish on this order, and that dish can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
-      es: "La cocina ya ha empezado a preparar un plato de este pedido, y ese plato no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+      en: "The station has already started a dish on this order, and that dish can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+      es: "La estación ya ha empezado a preparar un plato de este pedido, y ese plato no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
     },
     "ticket.already_fired": {
-      en: "A dish on this order has already gone to the kitchen and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
-      es: "Un plato de este pedido ya ha ido a cocina y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+      en: "A dish on this order has already gone to the station and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+      es: "Un plato de este pedido ya ha ido a la estación y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
     },
     "ticket.already_sent": {
       en: "A dish on this order has already been sent and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",

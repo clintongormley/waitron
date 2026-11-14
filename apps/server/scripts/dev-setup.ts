@@ -255,7 +255,7 @@ async function provisionVenue(
 /** What `pnpm dev:setup` prints under "Pick a pre-enrolled device"; one entry per enrolled device. */
 export const DEMO_DEVICE_LINES: readonly string[] = [
   "Counter (till) · Handheld 1 (handheld)",
-  "Kitchen screen (station screen) · Pass screen (pass screen) · Pass monitor (pass monitor)",
+  "Station screen · Pass · Pass display (view only)",
 ];
 
 /**
@@ -301,18 +301,18 @@ async function seedDemoDevices(
   });
 
   await enrolDeviceForTest(db, cfg, {
-    name: "Kitchen screen",
+    name: "Station screen",
     profileId: profileFor("kds"),
     stationId: kitchen.id,
   });
   const { kitchen: passKitchen, deli } = seeded.passStationIds;
   await enrolDeviceForTest(db, cfg, {
-    name: "Pass screen",
+    name: "Pass",
     profileId: profileFor("kds"),
     kitchenScreen: { kind: "pass", stationIds: [passKitchen, deli], zoneIds: null },
   });
   await enrolDeviceForTest(db, cfg, {
-    name: "Pass monitor",
+    name: "Pass display (view only)",
     profileId: profileFor("kds"),
     kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
   });

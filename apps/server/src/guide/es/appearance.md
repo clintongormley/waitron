@@ -96,7 +96,7 @@ página y abrir otro tema desde la tarjeta Temas te lo preguntan antes.
 ## Agranda el texto {#text-size}
 
 El control **Tamaño del texto** agranda el texto de todos los paneles, cajas, terminales de camarero
-y pantallas de cocina: cada uno de los cuatro tamaños de texto crece en el mismo porcentaje,
+y pantallas de estación: cada uno de los cuatro tamaños de texto crece en el mismo porcentaje,
 redondeado al píxel. El 100 % es el tamaño de Waitron, y el 130 %, el mayor. Los espacios no
 cambian, ni tampoco el tamaño mínimo de un botón, incluidos los botones de producto de una caja, así
 que un nombre largo que ya no cabe ocupa otra línea.
@@ -112,7 +112,7 @@ grande ocurre más a menudo.
 Un tamaño de texto guardado llega a los paneles y las cajas igual que los colores de un tema guardado
 (consulta [Guarda un tema](appearance.md#save)).
 
-El papel impreso conserva los tamaños de Waitron: los recibos, las comandas de cocina, la etiqueta
+El papel impreso conserva los tamaños de Waitron: los recibos, las comandas de estación, la etiqueta
 del equipo y el kit de recuperación del nodo. El botón de inicio de sesión de Google conserva el
 tamaño de Google.
 
@@ -378,7 +378,7 @@ a todas las pantallas.
 
 Cuando el tema que guardaste es el que está en uso, el panel que estás usando cambia al nuevo
 aspecto al momento. Los demás paneles abiertos a la vez lo siguen por su cuenta, y una caja con la
-sesión iniciada o una pantalla de cocina lo sigue en 15 segundos.
+sesión iniciada o una pantalla de estación lo sigue en 15 segundos.
 Guardar un tema que no está en uso no cambia ninguna pantalla hasta que lo pones en uso.
 
 Si guardaste de todos modos, la fila de ese tema en la tarjeta Temas muestra una etiqueta como «2 se

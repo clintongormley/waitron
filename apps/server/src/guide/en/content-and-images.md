@@ -16,7 +16,7 @@ are English or Spanish. You choose and replace the pictures in the same way.
 ## Choose your working language {#working-language}
 
 During setup, choose **Working language** on **Your shop**. Choose **English** or **Spanish** for
-your initial menu, courses and other starter names, and for the staff and kitchen names in a demo.
+your initial menu, courses and other starter names, and for the staff and prep station names in a demo.
 Your screen, receipt and customer-facing languages have their own choices.
 
 You can rename those items after setup. To change a name from an imported configuration, edit
@@ -115,7 +115,7 @@ names stored with the order, so editing translations or changing the content def
 rename the lines on an issued receipt. If the receipt language is not one of your content languages,
 this page and the Defaults card in Venue settings show a note saying so.
 
-Kitchen displays,
+Prep station displays,
 orders you retrieve and sales reports keep their recorded names, even if you later remove that
 language from your content settings. The language of Waitron's buttons and screens remains your
 separate interface preference. These content settings
@@ -126,10 +126,10 @@ Requesting the original receipt again keeps its existing print job. To print ano
 it has completed, open **Print/Reprint**, choose a printer for **Receipt**, then press
 **Print a copy on {printer}**. The copy carries the same invoice number and a duplicate mark.
 
-Kitchen tickets and collection-number slips also use your default content language for their
-headings. Spanish prints Spanish; other defaults use English. New paper and kitchen reprints
+Station tickets and collection-number slips also use your default content language for their
+headings. Spanish prints Spanish; other defaults use English. New paper and station reprints
 follow a default change immediately, while a resend keeps its original headings. Recorded dish names,
-notes and allergy instructions keep their own text. See [kitchen paper](kitchen-service.md#paper-language).
+notes and allergy instructions keep their own text. See [station paper](kitchen-service.md#paper-language).
 
 ## Add a photograph once {#upload}
 

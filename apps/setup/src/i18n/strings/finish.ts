@@ -58,7 +58,7 @@ export const finishEn = {
   "done.backup_link": "Set up backups now",
   "done.devices.intro": "Devices depend on how each was set up:",
   "done.devices.local":
-    "Tills, handhelds and kitchen screens that were opened at https://waitron.local reconnect by themselves.",
+    "Tills, handhelds and station screens that were opened at https://waitron.local reconnect by themselves.",
   "done.devices.ip":
     "Any that were opened at an IP address (for example by scanning a QR code) must be opened again: go to /setup/trust on this server, scan its QR code, and set the device up again.",
   "done.devices.print_agent":
@@ -138,7 +138,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.backup_link": "Configura ahora las copias de seguridad",
   "done.devices.intro": "Los dispositivos dependen de cómo se configuró cada uno:",
   "done.devices.local":
-    "Las cajas, los terminales de mano y las pantallas de cocina que se abrieron en https://waitron.local se vuelven a conectar solos.",
+    "Las cajas, los terminales de mano y las pantallas de estación que se abrieron en https://waitron.local se vuelven a conectar solos.",
   "done.devices.ip":
     "Los que se abrieron en una dirección IP (por ejemplo, escaneando un código QR) hay que volver a abrirlos: ve a /setup/trust en este servidor, escanea su código QR y vuelve a configurar el dispositivo.",
   "done.devices.print_agent":

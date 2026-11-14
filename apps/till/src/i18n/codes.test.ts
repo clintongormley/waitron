@@ -40,7 +40,7 @@ it.each([
     "The table order could not be found.",
     "No se ha encontrado el pedido de la mesa.",
   ],
-  ["kitchen_note.invalid", "Check the note for the kitchen.", "Revisa la nota para cocina."],
+  ["kitchen_note.invalid", "Check the note for the station.", "Revisa la nota para la estación."],
   [
     "kitchen_note.too_long",
     "Use no more than 2,000 characters.",
@@ -159,7 +159,7 @@ it("localises the refusals of changing a sent line in both languages", () => {
     expect(codeMessage(code, "en")).not.toBe(codeMessage(code, "es"));
   }
   expect(codeMessage("ticket.already_started", "en")).toBe(
-    "The kitchen has already started this item, so it can no longer be changed. You can cancel it",
+    "The station has already started this item, so it can no longer be changed. You can cancel it",
   );
   expect(codeMessage("ticket.already_sent", "en")).toBe(
     "This item has already been sent and cannot be changed. You can cancel it",
@@ -171,10 +171,10 @@ it("localises the refusals of changing a sent line in both languages", () => {
 
 it("explains station move refusals in English and Spanish", () => {
   expect(codeMessage("ticket.not_sent", "en")).toBe(
-    "This dish has not gone to the kitchen yet. Choose where it is made before sending it",
+    "This dish has not gone to the station yet. Choose where it is made before sending it",
   );
   expect(codeMessage("ticket.not_sent", "es")).toBe(
-    "Este plato aún no ha ido a cocina. Elige dónde se prepara antes de enviarlo",
+    "Este plato aún no ha ido a la estación. Elige dónde se prepara antes de enviarlo",
   );
   expect(codeMessage("ticket.made_here", "en")).toBe(
     "This dish is made here at the till, so it cannot be moved to a station",
@@ -468,8 +468,8 @@ it("says in both languages that a bill presented, paid or discarded is no longer
 it("says what to do about each refusal of an unpaid departure, in both languages", () => {
   const cases = {
     "unpaid_departure.unfired_dishes": {
-      en: "This bill holds items the kitchen is not making: not sent, on hold, or waiting for the pass and not fully served. Cancel them first, then record the departure again",
-      es: "Esta cuenta tiene artículos que cocina no está preparando: sin enviar, en espera, o esperando al pase y sin servir del todo. Cancélalos primero y vuelve a registrar la salida",
+      en: "This bill holds items the station is not making: not sent, on hold, or waiting for the pass and not fully served. Cancel them first, then record the departure again",
+      es: "Esta cuenta tiene artículos que la estación no está preparando: sin enviar, en espera, o esperando al pase y sin servir del todo. Cancélalos primero y vuelve a registrar la salida",
     },
     "unpaid_departure.bill_holds_payment": {
       en: "This bill holds a payment that has not been refunded in full, so it cannot be left unpaid. Take the rest of that bill as a payment first",
@@ -601,10 +601,10 @@ it("explains the closed-zone refusal while preserving payment and move choices i
 
 it("tells a kitchen display why its pass lever was refused, in both languages", () => {
   expect(codeMessage("kitchen_screen.zone_not_allowed", "en")).toBe(
-    "This order is in a zone this pass screen doesn't show.",
+    "This order is in a zone this pass view doesn't show.",
   );
   expect(codeMessage("kitchen_screen.zone_not_allowed", "es")).toBe(
-    "Este pedido es de una zona que esta pantalla de pase no muestra.",
+    "Este pedido es de una zona que esta vista de pase no muestra.",
   );
   expect(codeMessage("kitchen_screen.not_allowed", "en")).toBe(
     "This device no longer shows that screen. Choose its screens again in the dashboard, under Devices.",

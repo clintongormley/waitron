@@ -2183,7 +2183,7 @@ describe("counter place and park", () => {
     await place(el);
 
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
-    expect(agreedText(el)).toBe("Kitchen agreed — send");
+    expect(agreedText(el)).toBe("Station agreed — send");
     expect(api.parkOrder).not.toHaveBeenCalled();
     expect(api.placeOrder).not.toHaveBeenCalled();
   });
@@ -2287,7 +2287,7 @@ describe("counter place and park", () => {
     await park(el);
 
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
-    expect(agreedText(el)).toBe("Kitchen agreed — save");
+    expect(agreedText(el)).toBe("Station agreed — save");
     expect(api.parkOrder).not.toHaveBeenCalled();
   });
 
@@ -2306,7 +2306,7 @@ describe("counter place and park", () => {
     const el = await lateCounter(parking(), { products: ["Omelette"], held: true });
     await park(el);
 
-    expect(agreedText(el)).toBe("Kitchen agreed — save");
+    expect(agreedText(el)).toBe("Station agreed — save");
     await choose(el, "data-late-agreed");
 
     expect(savedLateSends()).toEqual([BREAKFAST_CONFIRMED]);
@@ -2348,7 +2348,7 @@ describe("counter place and park", () => {
     await park(el);
 
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
-    expect(agreedText(el)).toBe("Kitchen agreed — save");
+    expect(agreedText(el)).toBe("Station agreed — save");
 
     await choose(el, "data-late-agreed");
 

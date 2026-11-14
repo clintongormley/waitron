@@ -832,8 +832,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta solicitud ya no espera tu aprobación. Si el dispositivo no está en la lista, pídele que lo vuelva a intentar",
   },
   "kitchen_screen.required": {
-    en: "Choose what this kitchen display shows",
-    es: "Elige qué muestra esta pantalla de cocina",
+    en: "Choose what this prep station display shows",
+    es: "Elige qué muestra esta pantalla de estación",
   },
   "kitchen_screen.not_allowed": {
     en: "This device's profile does not offer that screen. Choose one it offers",
@@ -844,8 +844,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El perfil de este dispositivo no incluye esa zona. Elige una de las que incluye",
   },
   "kitchen_screen.invalid": {
-    en: "Something this device's kitchen screens name is no longer available. Check them and save again",
-    es: "Algo que nombran las pantallas de cocina de este dispositivo ya no está disponible. Revísalas y vuelve a guardar",
+    en: "Something this device's station screens name is no longer available. Check them and save again",
+    es: "Algo que nombran las pantallas de estación de este dispositivo ya no está disponible. Revísalas y vuelve a guardar",
   },
   "device.name_taken": {
     en: "An active device here already has that name — choose another",

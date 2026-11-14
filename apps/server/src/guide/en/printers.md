@@ -13,10 +13,10 @@ PIN and choose **Pair and add** again. For a new printer, the name dialog opens:
 If a network printer is not found, open **Check a known address**, type its IP address and choose
 **Connect**.
 
-To remove a receipt or kitchen printer, choose **Delete** in its row menu or details. The
+To remove a receipt or station printer, choose **Delete** in its row menu or details. The
 confirmation lists the assignments removed and work ended. To use it again, choose **Add a
 printer**, then **Add** beside it. A recognised printer keeps its name and calibration, so you
-do not need to name or calibrate it again. Assign its devices and kitchen stations again.
+do not need to name or calibrate it again. Assign its devices and prep stations again.
 
 ## Calibrate a receipt printer {#calibrate}
 
@@ -60,7 +60,7 @@ power and connection, then use **Open drawer** if you still need it open. If no 
 reported, check whether the drawer opened before opening it again.
 
 **Reprint** sends a printout again, on its own printer or another: a receipt or invoice on any
-receipt printer, a kitchen ticket or refund receipt on one at least as wide. A printout waiting on a
+receipt printer, a station ticket or refund receipt on one at least as wide. A printout waiting on a
 printer that is disabled, or on a USB or Bluetooth printer no print agent sees, can be moved the
 same way, and is cancelled there. Other
 printouts reprint only on their own printer.

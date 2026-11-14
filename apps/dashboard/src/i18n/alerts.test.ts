@@ -90,7 +90,7 @@ it("shows every amount an alert carries with the euro sign, where each language 
   }
 });
 
-it("names the dishes a paid order could not send to the kitchen", () => {
+it("names the dishes a paid order could not send to the station", () => {
   const params = {
     dishes: "Croquetas, Pulpo",
     workingOrderId: "w1",
@@ -98,10 +98,10 @@ it("names the dishes a paid order could not send to the kitchen", () => {
     orderLabel: null,
   };
   expect(alertMessage("route.dish_not_sent", params, "en")).toBe(
-    "Paid order 42 has dishes no prep station could take: Croquetas, Pulpo. They were not sent to the kitchen. Pass them to the kitchen by hand, and check the Prep stations page: a closed station with no replacement, or no active default station, leaves a dish nowhere to go.",
+    "Paid order 42 has dishes no prep station could take: Croquetas, Pulpo. They were not sent to the station. Pass them to the station by hand, and check the Prep stations page: a closed station with no replacement, or no active default station, leaves a dish nowhere to go.",
   );
   expect(alertMessage("route.dish_not_sent", params, "es")).toBe(
-    "El pedido pagado 42 tiene platos que ninguna estación de preparación podía recibir: Croquetas, Pulpo. No se han enviado a cocina. Pásalos a cocina a mano y revisa la página de Estaciones de preparación: una estación cerrada sin sustituta, o ninguna estación predeterminada activa, deja un plato sin destino.",
+    "El pedido pagado 42 tiene platos que ninguna estación de preparación podía recibir: Croquetas, Pulpo. No se han enviado a la estación. Pásalos a la estación a mano y revisa la página de Estaciones de preparación: una estación cerrada sin sustituta, o ninguna estación predeterminada activa, deja un plato sin destino.",
   );
 });
 

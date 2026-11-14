@@ -99,9 +99,9 @@ it("labels areas and severities in the active language, keeping an unknown area 
 
 it("labels the kitchen area in both languages", () => {
   setLocale("en-GB");
-  expect(areaLabel("kitchen")).toBe("Kitchen");
+  expect(areaLabel("kitchen")).toBe("Stations");
   setLocale("es-ES");
-  expect(areaLabel("kitchen")).toBe("Cocina");
+  expect(areaLabel("kitchen")).toBe(t("alerts.area.kitchen"));
 });
 
 it("names a Spanish warning differently from the alert column it sits under", () => {

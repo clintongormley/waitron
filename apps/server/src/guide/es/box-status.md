@@ -312,7 +312,7 @@ hora.
 ## Cuando los cobros esperan la hora del servidor {#clock-waiting}
 
 Tras un arranque, el servidor no acepta cobros hasta que se confirma su hora. Los pedidos siguen
-llegando a cocina. La fila **Reloj** dice entonces **Esperando a que se conecten dispositivos y
+llegando a la estación. La fila **Reloj** dice entonces **Esperando a que se conecten dispositivos y
 coincidan con la hora del servidor**, con la fecha y la hora del servidor, y la campana muestra un aviso
 que lo dice. El servidor también espera cuando su reloj salta más de un minuto, hacia delante o hacia
 atrás, mientras no se pone en hora por internet: la fila **Reloj** empieza entonces con **El reloj
@@ -364,7 +364,7 @@ una hora que ya es correcta.
 Un servidor no puede saber por sí solo que su reloj está mal, así que lo compara con otros relojes.
 Las cajas registradoras y los terminales de camarero envían su propia hora al servidor cada 15
 segundos, más o menos, mientras hay alguien con la sesión iniciada en ellos o mientras muestran la
-pantalla de inicio de sesión. Las pantallas de cocina no envían la suya. Una caja o un terminal que
+pantalla de inicio de sesión. Las pantallas de estación no envían la suya. Una caja o un terminal que
 funciona en el propio servidor no cuenta, y los dispositivos con una misma dirección de red cuentan
 como uno.
 

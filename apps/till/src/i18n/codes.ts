@@ -30,8 +30,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Envía o quita los platos sin enviar antes de cobrar.",
   },
   "tab.cancel_context_changed": {
-    en: "The dish changed. Check its current kitchen state and choose again.",
-    es: "El plato ha cambiado. Revisa su estado actual en cocina y vuelve a elegir.",
+    en: "The dish changed. Check its current station state and choose again.",
+    es: "El plato ha cambiado. Revisa su estado actual en la estación y vuelve a elegir.",
   },
   "ticket.pass_context_changed": {
     en: en["station.table_changed"],
@@ -54,8 +54,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se ha encontrado el pedido de la mesa.",
   },
   "kitchen_note.invalid": {
-    en: "Check the note for the kitchen.",
-    es: "Revisa la nota para cocina.",
+    en: "Check the note for the station.",
+    es: "Revisa la nota para la estación.",
   },
   "kitchen_note.too_long": {
     en: "Use no more than 2,000 characters.",
@@ -168,8 +168,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Hay una cuenta de esta mesa sin pagar. Cóbrala antes de cerrar la mesa",
   },
   "unpaid_departure.unfired_dishes": {
-    en: "This bill holds items the kitchen is not making: not sent, on hold, or waiting for the pass and not fully served. Cancel them first, then record the departure again",
-    es: "Esta cuenta tiene artículos que cocina no está preparando: sin enviar, en espera, o esperando al pase y sin servir del todo. Cancélalos primero y vuelve a registrar la salida",
+    en: "This bill holds items the station is not making: not sent, on hold, or waiting for the pass and not fully served. Cancel them first, then record the departure again",
+    es: "Esta cuenta tiene artículos que la estación no está preparando: sin enviar, en espera, o esperando al pase y sin servir del todo. Cancélalos primero y vuelve a registrar la salida",
   },
   "unpaid_departure.bill_holds_payment": {
     en: "This bill holds a payment that has not been refunded in full, so it cannot be left unpaid. Take the rest of that bill as a payment first",
@@ -290,8 +290,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esa mesa no es de estos clientes. Vuelve a cargar la mesa e inténtalo de nuevo",
   },
   "group.not_held": {
-    en: "Those items have already gone to the kitchen. Check the table before trying again",
-    es: "Esos artículos ya se han enviado a cocina. Revisa la mesa antes de volver a intentarlo",
+    en: "Those items have already gone to the station. Check the table before trying again",
+    es: "Esos artículos ya se han enviado a la estación. Revisa la mesa antes de volver a intentarlo",
   },
   "group.not_waiting": {
     en: "Only the next group to fire can be snoozed. Check the table before trying again",
@@ -518,8 +518,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pedido ya no se puede entregar",
   },
   "ticket.not_fired": {
-    en: "Nothing on this order has gone to the kitchen, so there is nothing to hand over",
-    es: "Nada de este pedido ha ido a cocina, así que no hay nada que entregar",
+    en: "Nothing on this order has gone to the station, so there is nothing to hand over",
+    es: "Nada de este pedido ha ido a la estación, así que no hay nada que entregar",
   },
   "tab.not_open": {
     en: "That bill is no longer open. Choose another bill and send again",
@@ -630,12 +630,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ninguna estación de preparación puede preparar uno de estos platos. Corrígelo en el panel, en la página Estaciones de preparación.",
   },
   "ticket.already_started": {
-    en: "The kitchen has already started this item, so it can no longer be changed. You can cancel it",
-    es: "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
+    en: "The station has already started this item, so it can no longer be changed. You can cancel it",
+    es: "La estación ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
   },
   "ticket.not_sent": {
-    en: "This dish has not gone to the kitchen yet. Choose where it is made before sending it",
-    es: "Este plato aún no ha ido a cocina. Elige dónde se prepara antes de enviarlo",
+    en: "This dish has not gone to the station yet. Choose where it is made before sending it",
+    es: "Este plato aún no ha ido a la estación. Elige dónde se prepara antes de enviarlo",
   },
   "ticket.made_here": {
     en: "This dish is made here at the till, so it cannot be moved to a station",
@@ -650,8 +650,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esa estación ya no existe. Elige otra",
   },
   "ticket.already_fired": {
-    en: "This item has already gone to the kitchen and cannot be changed. You can cancel it",
-    es: "Este plato ya ha ido a cocina y no se puede cambiar. Puedes cancelarlo",
+    en: "This item has already gone to the station and cannot be changed. You can cancel it",
+    es: "Este plato ya ha ido a la estación y no se puede cambiar. Puedes cancelarlo",
   },
   "ticket.already_served": {
     en: "This item has already been served and cannot be changed. You can cancel it",
@@ -763,8 +763,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El perfil de este dispositivo no lo permite. Se puede cambiar en el panel, en Perfiles de dispositivo.",
   },
   "kitchen_screen.zone_not_allowed": {
-    en: "This order is in a zone this pass screen doesn't show.",
-    es: "Este pedido es de una zona que esta pantalla de pase no muestra.",
+    en: "This order is in a zone this pass view doesn't show.",
+    es: "Este pedido es de una zona que esta vista de pase no muestra.",
   },
   "kitchen_screen.not_allowed": {
     en: "This device no longer shows that screen. Choose its screens again in the dashboard, under Devices.",

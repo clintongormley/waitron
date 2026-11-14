@@ -12,7 +12,7 @@ de práctica sin registrar un cobro.
 Añade un menú por comensal y elige los platos que quiera ahora. **Elegir más tarde** indica
 un pase que aún no ha elegido. Cada menú queda separado para que puedas volver a él más tarde.
 
-Para retener pases ya elegidos, envía el pedido retenido. En el panel de ese menú, usa **Enviar a cocina**
+Para retener pases ya elegidos, envía el pedido retenido. En el panel de ese menú, usa **Enviar a la estación**
 para el pase que quieras enviar ahora. Abre **Elegir platos** cuando el comensal elija
 otro pase, guarda y envía ese pase. Puedes cambiar una opción hasta enviarla; los platos ya enviados
 se mantienen.
@@ -235,12 +235,12 @@ cancelado, cobra la cuenta.
 
 ## Cancelar un plato de una cuenta pagada {#cancel-paid-dish}
 
-Cuando una mesa ha pagado un plato que no va a llegar, cancélalo para que la cocina deje de
+Cuando una mesa ha pagado un plato que no va a llegar, cancélalo para que la estación deje de
 prepararlo y el cliente pueda recuperar el dinero. Entre los platos enviados de la mesa, elige
 **Cancelar…** en el menú **Más** del plato. En una cuenta pagada solo se ofrece para lo que aún no se ha servido.
 
 La ventana **Cancelar plato** indica **Esta cuenta ya está cerrada**. Elige **Cuántos**, hasta los que
-aún no se han servido. Si el plato ha pasado a cocina pero nadie lo ha marcado como empezado,
+aún no se han servido. Si el plato ha pasado a la estación pero nadie lo ha marcado como empezado,
 responde a **En preparación**. Después elige un **Motivo**.
 
 Marca **Devolución** para devolver el dinero del plato. Empieza marcada cuando la preparación no ha
@@ -256,10 +256,10 @@ rellenada, como se explica en **Devolver un pago desde el recibo**.
 ## Cerrar una mesa pagada con platos aún por llegar {#finish-paid-table}
 
 Cuando eliges **Cerrar mesa** y una cuenta pagada aún tiene platos sin servir, una ventana con un
-título como **2 platos sin servir** los muestra, y puedes cancelarlos todos o, si alguno tiene ticket de cocina, pasar
+título como **2 platos sin servir** los muestra, y puedes cancelarlos todos o, si alguno tiene ticket de estación, pasar
 la comida al mostrador.
 
-Para un plato que ha pasado a cocina pero no está marcado como empezado, responde a **En
+Para un plato que ha pasado a la estación pero no está marcado como empezado, responde a **En
 preparación**. Para los demás, la ventana muestra la respuesta. Marca **Devolución** junto a cada
 plato cuyo dinero se devuelve; un plato empieza marcado cuando la preparación no ha empezado. Un
 solo **Motivo** sirve para todos los platos, y empieza en **No servido** si tu local conserva
@@ -275,9 +275,9 @@ uno para abrir su devolución, ya rellenada. Si solo hay un recibo, su devoluci�
 directamente.
 
 Si los clientes van a esperar y recoger la comida en el mostrador, elige **Lo recogerán en el
-mostrador**. Aparece cuando al menos uno de los platos tiene ticket de cocina. No se cancela ni se
-devuelve nada. Los platos en espera pasan ahora a cocina, cada cuenta cuyos platos por llegar
-tienen ticket de cocina pasa a ser un pedido pagado que espera en el mostrador, y la mesa se
+mostrador**. Aparece cuando al menos uno de los platos tiene ticket de estación. No se cancela ni se
+devuelve nada. Los platos en espera pasan ahora a la estación, cada cuenta cuyos platos por llegar
+tienen ticket de estación pasa a ser un pedido pagado que espera en el mostrador, y la mesa se
 cierra. El pedido espera en **Pedidos pendientes**, en la pantalla **Mostrador**, marcado
 **Pagado, sin entregar**, y aparece en **Buscar cuenta**; elige **Entregar** cuando lo recojan.
 
@@ -391,7 +391,7 @@ repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cue
 
 Cuando tomas un pedido de 2 × Hamburguesa con queso, en una mesa o en el mostrador, la cuenta tiene
 dos hamburguesas, cada una con su queso, en lugar de una línea de dos. Así puedes cancelar una hamburguesa, o en una mesa servirla o moverla, y su queso
-va con ella, y la cuenta y la cocina saben siempre qué hamburguesa es cuál.
+va con ella, y la cuenta y la estación saben siempre qué hamburguesa es cuál.
 
 Mientras los platos son iguales sigues viendo una sola fila, **2 × Hamburguesa**, en la cuenta y en
 **Enviado**. La fila se separa en cuanto un plato cambia, por ejemplo cuando se sirve una hamburguesa
@@ -461,7 +461,7 @@ al otro.
 
 Un móvil o una tableta muestra el nombre corto de una mesa en los botones de mesa de la barra y en
 la barra Listo, donde hay poco espacio, y las tarjetas de la [pantalla de
-cocina](kitchen-service.md#kitchen-screen) y del [pase](kitchen-service.md#pass-screen) nombran su
+la estación](kitchen-service.md#kitchen-screen) y del [pase](kitchen-service.md#pass-screen) nombran su
 mesa por él. En el **Plano de sala** del panel, cada mesa tiene un **Nombre corto** debajo de su
 **Nombre**, que se rellena a partir del nombre: «T1» para «Terraza 1», «Ven» para «Ventana», y un
 nombre de cuatro caracteres o menos tal cual. Sigue al nombre hasta que escribes uno propio, de
@@ -561,7 +561,7 @@ pagar** bajo esa cuenta. Comprueba el importe e indica el motivo. Si hace falta 
 elige un responsable o encargado y pídele que introduzca su PIN.
 
 Solo se detiene la comida pendiente de servir de esa cuenta, con tiques de cancelación para la
-cocina. Las demás cuentas conservan su comida, así que puedes servir el postre de quien ya ha
+la estación. Las demás cuentas conservan su comida, así que puedes servir el postre de quien ya ha
 pagado. La cuenta sigue pendiente por el importe completo. La mesa sigue abierta mientras quede
 otra cuenta por cerrar o comida pagada por servir. Sirve lo que queda y elige **Cerrar mesa**
 cuando todos hayan terminado.
@@ -640,7 +640,7 @@ siendo responsable hasta que el mostrador receptor acepte. Mientras la solicitud
 puedes elegir **Retirar solicitud**.
 
 Para recibir una cuenta, abre **Traspasos** y elige **Ver cuenta actual** junto a la solicitud
-entrante. Revisa **Productos pedidos** y **Trabajo pendiente en cocina** antes de elegir **Aceptar
+entrante. Revisa **Productos pedidos** y **Trabajo pendiente en la estación** antes de elegir **Aceptar
 traspaso**. Elige la **Zona de destino** y, si hace falta, una **Mesa de destino**, y pulsa
 **Guardar**. Para rechazarla, elige **Rechazar traspaso**, introduce el **Motivo del rechazo**
 y pulsa **Guardar**.
@@ -655,8 +655,8 @@ elige **Guardar**. Vacía el campo para quitar el nombre. **Poner nombre a los c
 la mesa** del mismo menú, pone nombre a todo el grupo. Si otra persona tiene platos sin enviar en la
 cuenta, toma primero su pedido.
 
-Para cambiar el nombre que ve cocina, usa **Poner nombre a los clientes**. Si queda trabajo
-pendiente en cocina, sus impresoras reciben un [ticket de cambio de nombre](kitchen-service.md#party-names).
+Para cambiar el nombre que ve la estación, usa **Poner nombre a los clientes**. Si queda trabajo
+pendiente en la estación, sus impresoras reciben un [ticket de cambio de nombre](kitchen-service.md#party-names).
 
 Una cuenta conserva su número mientras sigue con esos clientes. Juntar una cuenta con otra deja un
 hueco: junta la Cuenta 2 con la Cuenta 1 y quedan las Cuentas 1 y 3. Una cuenta que llega de otra
@@ -664,11 +664,11 @@ mesa o del mostrador toma el siguiente número de los clientes, y también las c
 unes. Una mesa que separas con cuentas vuelve a empezar por la Cuenta 1, igual que una mesa que
 se vuelve a ocupar cuando sus clientes terminan. Una cuenta conserva su nombre cuando se mueve,
 también al mostrador, donde no tiene número. Solo puedes poner nombre a una cuenta en una mesa. El
-nombre no se imprime en los tickets de cocina ni en los recibos.
+nombre no se imprime en los tickets de estación ni en los recibos.
 
 ## Ver qué mesas tienen comida lista {#ready-bar}
 
-Cuando la cocina tiene platos listos, quieres saber a qué mesas llevarlos sin tener que ir a mirar.
+Cuando la estación tiene platos listos, quieres saber a qué mesas llevarlos sin tener que ir a mirar.
 En un móvil o una tableta, una barra al pie de **Sala** muestra cada mesa con comida lista y cuántos
 platos esperan, por ejemplo **Listo · M2 · 3**. Cada mesa aparece con su nombre corto, por ejemplo
 M2 para Mesa 2, o con su nombre completo mientras no tenga uno; una mesa unida a otra hoy muestra

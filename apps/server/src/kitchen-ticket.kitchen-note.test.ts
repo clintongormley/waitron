@@ -10,6 +10,8 @@ import {
 import type { KitchenTicketStation } from "./kitchen-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 
+const spanish = kitchenTicketWords("es");
+
 const TEST_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 describe.each([
@@ -25,8 +27,8 @@ describe.each([
   };
 
   it.each([
-    { locale: "en-GB", heading: "For the kitchen: Train 14:30" },
-    { locale: "es-ES", heading: "Para cocina: Train 14:30" },
+    { locale: "en-GB", heading: "For the station: Train 14:30" },
+    { locale: "es-ES", heading: `${spanish.forKitchen}Train 14:30` },
   ])(
     "prints the $locale heading above dishes on station, combined, HOLD, FIRE and reprint tickets",
     ({ locale, heading }) => {
@@ -76,7 +78,7 @@ describe.each([
         TEST_TIME_ZONE,
       ),
     );
-    expect(lines).toContain("For the kitchen: Train 14:30");
+    expect(lines).toContain("For the station: Train 14:30");
     expect(lines).toContain("1 x Burger");
   });
 
@@ -116,8 +118,8 @@ describe.each([
       ),
     );
     for (const lines of [moved, corrected]) {
-      expect(lines).toContain("For the kitchen: Train 14:30");
-      expect(lines.indexOf("For the kitchen: Train 14:30")).toBeLessThan(
+      expect(lines).toContain("For the station: Train 14:30");
+      expect(lines.indexOf("For the station: Train 14:30")).toBeLessThan(
         lines.indexOf("1 x Burger"),
       );
     }
@@ -126,19 +128,19 @@ describe.each([
   it.each([
     {
       locale: "en-GB",
-      changed: "KITCHEN NOTE CHANGED",
-      removedHeading: "KITCHEN NOTE REMOVED",
-      current: "For the kitchen: New time",
+      changed: "STATION NOTE CHANGED",
+      removedHeading: "STATION NOTE REMOVED",
+      current: "For the station: New time",
       before: "Was: Old time",
-      removed: "Note for the kitchen removed",
+      removed: "Note for the station removed",
     },
     {
       locale: "es-ES",
-      changed: "NOTA PARA COCINA CAMBIADA",
-      removedHeading: "NOTA PARA COCINA ELIMINADA",
-      current: "Para cocina: New time",
+      changed: spanish.noteChanged,
+      removedHeading: spanish.noteRemoved,
+      current: `${spanish.forKitchen}New time`,
       before: "Antes: Old time",
-      removed: "Nota para cocina eliminada",
+      removed: spanish.noteRemovedBody,
     },
   ])(
     "prints a $locale note edit or removal separately from the dish note",
@@ -159,7 +161,7 @@ describe.each([
           ),
         );
         expect(lines.slice(0, 2).join(" ")).toContain(after === null ? removedHeading : changed);
-        expect(lines).toContain(after === null ? removed : current);
+        expect(lines.join(" ")).toContain(after === null ? removed : current);
         expect(lines).toContain(before);
         expect(lines).toContain("  * No onions");
       }
@@ -192,30 +194,42 @@ describe.each([
       {
         locale: "en-GB",
         after: "New time",
-        head: ["*** KITCHEN NOTE CHANGED ***"],
-        body: ["For the kitchen: New time", "Was: Old time"],
+        head: ["*** STATION NOTE CHANGED ***"],
+        body: ["For the station: New time", "Was: Old time"],
       },
       {
         locale: "en-GB",
         after: null,
-        head: ["*** KITCHEN NOTE REMOVED ***"],
-        body: ["Note for the kitchen removed", "Was: Old time"],
+        head: ["*** STATION NOTE REMOVED ***"],
+        body: ["Note for the station removed", "Was: Old time"],
       },
       {
         locale: "es-ES",
         after: "New time",
         head: narrow
-          ? ["*** NOTA PARA COCINA CAMBIADA", "***"]
-          : ["*** NOTA PARA COCINA CAMBIADA ***"],
-        body: ["Para cocina: New time", "Antes: Old time"],
+          ? [
+              `*** ${spanish.noteChanged.slice(0, spanish.noteChanged.lastIndexOf(" "))}`,
+              `${spanish.noteChanged.split(" ").at(-1)} ***`,
+            ]
+          : [`*** ${spanish.noteChanged} ***`],
+        body: [`${spanish.forKitchen}New time`, "Antes: Old time"],
       },
       {
         locale: "es-ES",
         after: null,
         head: narrow
-          ? ["*** NOTA PARA COCINA ELIMINADA", "***"]
-          : ["*** NOTA PARA COCINA ELIMINADA ***"],
-        body: ["Nota para cocina eliminada", "Antes: Old time"],
+          ? [
+              `*** ${spanish.noteRemoved.slice(0, spanish.noteRemoved.lastIndexOf(" "))}`,
+              `${spanish.noteRemoved.split(" ").at(-1)} ***`,
+            ]
+          : [`*** ${spanish.noteRemoved} ***`],
+        body: narrow
+          ? [
+              spanish.noteRemovedBody.slice(0, spanish.noteRemovedBody.lastIndexOf(" ")),
+              spanish.noteRemovedBody.split(" ").at(-1)!,
+              "Antes: Old time",
+            ]
+          : [spanish.noteRemovedBody, "Antes: Old time"],
       },
     ];
 

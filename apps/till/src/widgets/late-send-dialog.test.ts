@@ -53,11 +53,11 @@ describe("till-late-send-dialog", () => {
   it("names the ended period and lists each dish to check, in order", async () => {
     const { el } = await mount({ dishes, periodNames: ["Lunch"], purpose: "send" });
     expect(dialog(el).heading).toBe("Lunch has ended");
-    expect(words(el.shadowRoot!.querySelector("p"))).toBe("Check with the kitchen before sending:");
+    expect(words(el.shadowRoot!.querySelector("p"))).toBe("Check with the station before sending:");
     expect(rows(el)).toEqual(["2× Omelette", "1× Steak"]);
     expect(words(button(el, "remove"))).toBe("Remove them");
     expect(button(el, "remove").getAttribute("variant")).toBe("secondary");
-    expect(words(button(el, "agreed"))).toBe("Kitchen agreed — send");
+    expect(words(button(el, "agreed"))).toBe("Station agreed — send");
     expect(button(el, "agreed").getAttribute("variant")).toBe("primary");
   });
 
@@ -79,13 +79,13 @@ describe("till-late-send-dialog", () => {
     );
     expect(dialog(el).heading).toBe("Han terminado Breakfast y Lunch");
     expect(words(el.shadowRoot!.querySelector("p"))).toBe(
-      "Consulta con la cocina antes de enviar:",
+      "Consulta con la estación antes de enviar:",
     );
   });
 
   it("says save on a Park, which stores the order without sending it", async () => {
     const { el } = await mount({ dishes, periodNames: ["Lunch"], purpose: "save" });
-    expect(words(button(el, "agreed"))).toBe("Kitchen agreed — save");
+    expect(words(button(el, "agreed"))).toBe("Station agreed — save");
   });
 
   it("shows a dish sold by weight with its unit", async () => {
