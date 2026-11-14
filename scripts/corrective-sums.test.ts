@@ -33,8 +33,14 @@ const ALLOWED: readonly { file: string; fragment: string; reason: string }[] = [
   },
   {
     file: "apps/server/src/orders-list.ts",
-    fragment: "x.corrects_sale_id = r.sale_id) and x.invoice_number",
-    reason: "the number search finds a bill by its own invoice or any corrective of it",
+    fragment: "where (x.id = r.sale_id or x.corrects_sale_id = r.sale_id",
+    reason:
+      "the number search finds a bill by its own invoice or any corrective of it, its replacement included",
+  },
+  {
+    file: "apps/server/src/orders-list.ts",
+    fragment: "or x.corrects_sale_id in (select y.id from sales y where y.corrects_sale_id = r.sale_id",
+    reason: "the number search finds a bill by a corrective of its replacement",
   },
   {
     file: "apps/server/src/orders-list.ts",

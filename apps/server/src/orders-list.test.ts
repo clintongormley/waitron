@@ -315,12 +315,33 @@ describe("a replaced invoice", () => {
       creditNotes: [expect.stringMatching(/^R\/\d+$/)],
     });
     expect(ids((await list("anyDate=true&limit=200&credited=true")).rows)).toContain(id);
+    const refundNumber = (refunded.creditNotes as string[])[0]!;
+    expect(
+      ids((await list(`anyDate=true&limit=200&q=${encodeURIComponent(refundNumber)}`)).rows),
+    ).toEqual([id]);
     const after = await inTx(venue, (tx) => readOrderDetail(tx, id, "all", false));
     expect(after.invoices.map((invoice) => invoice.kind)).toEqual([
       "invoice",
       "replacement",
       "credit_note",
     ]);
+  });
+
+  it("is not credited in a word search; a refund of its replacement credits it there", async () => {
+    const party = await departed(venue, "Red wine bottle");
+    const table = ((await rowOf(party.tabId)).tables as string[])[0]!;
+    const byWord = async () =>
+      (await list(`anyDate=true&limit=200&q=${encodeURIComponent(table)}`)).rows;
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, party.tabId)),
+    );
+    const replacement = await inTx(venue, (tx) =>
+      insertCorrective(tx, sale!.id, { replaces: true }),
+    );
+    expect(await byWord()).toMatchObject([{ id: party.tabId, credited: null }]);
+
+    await inTx(venue, (tx) => insertCorrective(tx, replacement, { total: "-2.42" }));
+    expect(await byWord()).toMatchObject([{ id: party.tabId, credited: "in_part" }]);
   });
 });
 

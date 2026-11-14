@@ -262,7 +262,8 @@ function wordSearch(filter: OrderListFilter): string | undefined {
 /**
  * `A/12` names a series and a number. A bare number names that number in every series AND the bill
  * with that order number: the ticket shows the order number, and a bill sent under
- * ticket_then_pay has no invoice number yet.
+ * ticket_then_pay has no invoice number yet. The number may be the bill's own invoice, a corrective
+ * of it, or a corrective of its replacement.
  */
 function numberClause(search: string): SQL {
   const trimmed = search.trim();
@@ -271,7 +272,9 @@ function numberClause(search: string): SQL {
   const number = invoice !== null ? Number(invoice[2]) : bare!;
   const code = invoice !== null ? sql` and xs.code = ${invoice[1]} collate nocase` : sql``;
   const byInvoice = sql`exists (select 1 from sales x join invoice_series xs on xs.id = x.series_id
-    where (x.id = r.sale_id or x.corrects_sale_id = r.sale_id) and x.invoice_number = ${number}${code})`;
+    where (x.id = r.sale_id or x.corrects_sale_id = r.sale_id
+      or x.corrects_sale_id in (select y.id from sales y where y.corrects_sale_id = r.sale_id and y.replaces_original = 1))
+      and x.invoice_number = ${number}${code})`;
   return bare === undefined
     ? byInvoice
     : sql`(${byInvoice} or (r.kind = 'bill' and r.order_number = ${bare}))`;
