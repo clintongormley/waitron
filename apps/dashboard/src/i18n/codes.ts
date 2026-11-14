@@ -537,8 +537,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este rol de acceso ya no está disponible. Recarga para elegir entre los roles actuales.",
   },
   "role.not_permitted": {
-    en: "You can only change a role if you hold all of its permissions.",
-    es: "Solo puedes cambiar un rol si tienes todos sus permisos.",
+    en: "You can only create, change, give or take away a role if you hold all of its permissions.",
+    es: "Solo puedes crear, cambiar, dar o quitar un rol si tienes todos sus permisos.",
   },
   "person.roles_changed": {
     en: "Someone changed this person's access roles while you were editing. Reload to see them; your changes are kept until you do.",

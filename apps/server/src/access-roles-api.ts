@@ -16,21 +16,20 @@ import {
 import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 
-const run = createErrorBoundary(
-  {
-    "management_session.required": 401,
-    "management_session.expired": 401,
-    "person.suspended": 403,
-    "authorization.not_permitted": 403,
-    "role.not_permitted": 403,
-    "role.not_found": 404,
-    "role.built_in": 409,
-    "role.name_taken": 409,
-    "role.changed": 409,
-    "person.last_admin": 409,
-  },
-  "management.failed",
-);
+const STATUS = {
+  "management_session.required": 401,
+  "management_session.expired": 401,
+  "person.suspended": 403,
+  "authorization.not_permitted": 403,
+  "role.not_permitted": 403,
+  "role.not_found": 404,
+  "role.built_in": 409,
+  "role.name_taken": 409,
+  "role.changed": 409,
+  "person.last_admin": 409,
+} as const;
+const run = createErrorBoundary(STATUS, "management.failed");
+const runCreate = createErrorBoundary({ ...STATUS, "role.not_found": 400 }, "management.failed");
 
 function text(body: Record<string, unknown>, field: string): string {
   const value = body[field];
@@ -46,7 +45,7 @@ function permissions(body: Record<string, unknown>, field: string): string[] {
 
 export function mountAccessRolesApi(app: Hono, deps: { db: Database }, log: Logger): void {
   app.post("/management-api/access-roles", (c) =>
-    run(c, log, async () => {
+    runCreate(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const name = text(body, "name");

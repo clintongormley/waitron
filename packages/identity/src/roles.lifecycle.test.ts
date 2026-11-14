@@ -68,8 +68,10 @@ it.each([
   ["retired.permission", "role.permission_unknown"],
 ])("refuses creating a role with %s", async (permission, code) => {
   const { actor } = await fixture();
-  expect(await refusalOf(() => create(actor.token, "Accountant", [permission!]))).toMatchObject({
+  expect(await refusalOf(() => create(actor.token, "Accountant", [permission!]))).toEqual({
     code,
+    params: permission === "node.manage" ? {} : { permission },
+    reason: undefined,
   });
   expect(await suite.db.select().from(activityLog)).toEqual([]);
 });
@@ -271,6 +273,16 @@ it("refuses adding an unheld or undeclared permission while allowing retired sto
     .where(eq(roles.id, id));
   await edit([], ["report.view"]);
   expect((await suite.db.select().from(roles).where(eq(roles.id, id)))[0]!.permissions).toEqual([]);
+  expect(
+    (await suite.db.select().from(activityLog)).map((entry) => [entry.kind, entry.data]),
+  ).toEqual([
+    [
+      "access_role.created",
+      { name: "Viewer", permissions: ["report.view"], copiedFromRoleId: null },
+    ],
+    ["access_role.permission_removed", { permission: "report.view" }],
+    ["access_role.permission_removed", { permission: "retired.permission" }],
+  ]);
 });
 
 it("deletes the custom role and every membership, logs each removal and queues only email holders", async () => {

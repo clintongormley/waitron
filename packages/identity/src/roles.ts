@@ -240,10 +240,10 @@ function effectivePermissions(role: typeof roles.$inferSelect): string[] {
 function requireRoleGrants(
   authority: PersonAuthority,
   permissions: readonly string[],
-  roleId: string,
+  roleId?: string,
 ) {
   if (permissions.some((permission) => !holds(authority, permission)))
-    throw new AppError("role.not_permitted", { roleId });
+    throw new AppError("role.not_permitted", roleId === undefined ? {} : { roleId });
 }
 
 function checkedPermissions(permissions: readonly string[]): string[] {
@@ -284,7 +284,7 @@ export async function createAccessRole(
     input.copiedFrom === undefined ? undefined : await accessRole(tx, input.copiedFrom);
   const permissions =
     source === undefined ? checkedPermissions(input.permissions) : effectivePermissions(source);
-  requireRoleGrants(actor.authority, permissions, source?.id ?? "");
+  requireRoleGrants(actor.authority, permissions, source?.id);
   const name = await checkedRoleName(tx, input.name);
   const [role] = await tx
     .insert(roles)
@@ -344,7 +344,7 @@ export async function setAccessRolePermissions(
   const permissions = checkedPermissions(input.permissions);
   requireRoleGrants(actor.authority, permissions, role.id);
   const after = new Set(permissions);
-  const removed = [...before].filter((permission) => !after.has(permission));
+  const removed = [...new Set(role.permissions)].filter((permission) => !after.has(permission));
   const added = permissions.filter((permission) => !before.has(permission));
   await tx.update(roles).set({ permissions }).where(eq(roles.id, role.id));
   for (const permission of removed)

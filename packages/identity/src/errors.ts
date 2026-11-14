@@ -49,7 +49,7 @@ declare module "@waitron/shared" {
     "role.changed": Record<string, never>;
     "role.built_in": { roleId: string };
     "role.not_found": { roleId: string };
-    "role.not_permitted": { roleId: string };
+    "role.not_permitted": { roleId?: string };
     "person.holds_more": { personId: string };
     "device_profile.admission_invalid": {
       field: "admittedStaffRoleIds";

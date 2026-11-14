@@ -142,6 +142,13 @@ it("maps stale drafts, protected built-ins, missing roles and held-grant refusal
     ],
     ["DELETE", `/${builtIns.staff}`, undefined, 409, "role.built_in"],
     ["DELETE", `/${crypto.randomUUID()}`, undefined, 404, "role.not_found"],
+    [
+      "POST",
+      "",
+      { name: "Copy", permissions: [], copiedFrom: crypto.randomUUID() },
+      400,
+      "role.not_found",
+    ],
     ["POST", "", { name: "Escalated", permissions: ["node.manage"] }, 403, "role.not_permitted"],
   ] as const) {
     const response = await send(method, path, body);
