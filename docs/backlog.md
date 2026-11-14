@@ -1493,9 +1493,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
     place kept, with why, for the owner to check. Covers the dashboard, till and venue-service screen text in English and
     Spanish, the guides and help bubbles: for example "Kitchen display" (a device kind), "Kitchen
     screen shows", "kitchen routing rules", "kitchen tickets" and "kitchen screens". A station
-    a venue names Kitchen keeps its name. **Open for the owner:** a product's "Kitchen name" is one
-    of its three names (`docs/developers/products.md`); whether it is renamed too is the owner's
-    call. Code identifiers may keep `kitchen`; only the words people read change.
+    a venue names Kitchen keeps its name. A product's "Kitchen name", one of its three names
+    (`docs/developers/products.md`), becomes "Prep station name" (owner, 2026-11-14), on products
+    and extras alike, with `products.md`'s prose to match. Code identifiers may keep `kitchen`;
+    only the words people read change.
 
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
   The passkey refusal offers retry, password entry and an emailed password reset. These do not
