@@ -11,6 +11,13 @@ import { currentLocale, format, t } from "../i18n/t.js";
 
 export const BACKUP_SETUP_URL = "/manage/backup";
 
+const HEADINGS = {
+  none: "done.heading",
+  bucket: "done.heading_rebuilt",
+  archive: "done.heading_restored",
+  cloud: "done.heading_restored",
+} as const;
+
 function isServerError(error: unknown): boolean {
   if (typeof error !== "object" || error === null || !("status" in error)) return false;
   return typeof error.status === "number" && error.status >= 500;
@@ -94,8 +101,9 @@ export class SetupDoneScreen extends LitElement {
 
   @property() onboardingIntent?: "demo" | "prepare" | "live";
 
-  /** True after a rebuild from the owner's bucket, whose devices may need pointing at this server. */
-  @property({ type: Boolean }) rebuilt = false;
+  /** Which restore ran, if one did: each re-issues the server's certificate for this machine's
+   * addresses, so devices may need pointing at this server. */
+  @property() restored?: "bucket" | "archive" | "cloud";
 
   /** A pause before the first poll so the box has begun its restart. */
   @property({ type: Number }) startDelayMs = 800;
@@ -185,7 +193,7 @@ export class SetupDoneScreen extends LitElement {
 
   #renderTrading(): TemplateResult {
     return html`
-      <h1>${t(this.rebuilt ? "done.heading_rebuilt" : "done.heading")}</h1>
+      <h1>${t(HEADINGS[this.restored ?? "none"])}</h1>
       ${
         this.onboardingIntent === undefined
           ? nothing
@@ -220,9 +228,12 @@ export class SetupDoneScreen extends LitElement {
               <a href="/manage/opening-hours/view/year">${t("done.change_opening_hours")}</a>
             </wt-card>`
       }
-      ${this.rebuilt ? this.#deviceSteps() : nothing} ${this.#breakGlass()}
+      ${this.restored === undefined ? nothing : this.#deviceSteps()} ${this.#breakGlass()}
       ${
-        this.onboardingIntent === "demo" || this.rebuilt
+        // A Cloud restore leaves out the old server's `backup.env`; the other two bring it back.
+        this.onboardingIntent === "demo" ||
+        this.restored === "bucket" ||
+        this.restored === "archive"
           ? nothing
           : html`<wt-card data-test="backup-nudge">
               <p>${t("done.backup_nudge")}</p>

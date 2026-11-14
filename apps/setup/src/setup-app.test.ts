@@ -1113,6 +1113,9 @@ describe("setup-app", () => {
     await flush(el);
     expect(restoreFromCloud).toHaveBeenCalledWith(pointId, false);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+    const done = (await screenHost(el, "done")) as SetupDoneScreen;
+    expect(done.restored).toBe("cloud");
+    expect(done.shadowRoot!.querySelector("[data-test=device-steps]")).not.toBeNull();
   });
 
   it("submits one Cloud restore when the rendered button is clicked twice before the shell redraws", async () => {
@@ -4224,7 +4227,7 @@ describe("restore from my bucket", () => {
       venueConfirmed: null,
     });
     const done = (await screenHost(el, "done")) as SetupDoneScreen;
-    expect(done.rebuilt).toBe(true);
+    expect(done.restored).toBe("bucket");
   });
 
   it("shows the provisioning screen while the rebuild is staged, with no earlier failure on it", async () => {
@@ -4405,17 +4408,17 @@ describe("restore from my bucket", () => {
     [
       "recovery.passphrase_invalid",
       undefined,
-      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest recovery pack or kit.",
+      "The latest copy in the bucket could not be opened. It is damaged, or the recovery key in this kit does not open it. If the recovery key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
     ],
     [
       "backup.artifact_invalid",
       { reason: "magic" },
-      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest recovery pack or kit.",
+      "The latest copy in the bucket could not be opened. It is damaged, or the recovery key in this kit does not open it. If the recovery key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
     ],
     [
       "backup.archive_invalid",
       { reason: "magic" },
-      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest recovery pack or kit.",
+      "The latest copy in the bucket could not be opened. It is damaged, or the recovery key in this kit does not open it. If the recovery key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
     ],
     [
       "backup.stream_restore_failed",
@@ -4923,6 +4926,9 @@ describe("restoring a backup file whose old server may still be running", () => 
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
     expect(readState(el, ["restoreRequest"])).toEqual({ restoreRequest: undefined });
+    const done = (await screenHost(el, "done")) as SetupDoneScreen;
+    expect(done.restored).toBe("archive");
+    expect(done.shadowRoot!.querySelector("[data-test=device-steps]")).not.toBeNull();
   });
 
   it("drops the old-server question it held for another backup file", async () => {
@@ -5642,7 +5648,7 @@ describe("an answer that arrives after the element is detached", () => {
       fire: (el: SetupApp) => restoreRequest(el, backup),
       settle: (d: ReturnType<typeof deferred>) =>
         d.resolve({ restoreStaged: true, restarting: true }),
-      unchanged: { screen: "provisioning" },
+      unchanged: { screen: "provisioning", restored: undefined },
     },
     {
       name: "a restore refusal",
@@ -5657,7 +5663,7 @@ describe("an answer that arrives after the element is detached", () => {
       fire: (el: SetupApp) => bucketRequest(el),
       settle: (d: ReturnType<typeof deferred>) =>
         d.resolve({ restoreStaged: true, restarting: true }),
-      unchanged: { screen: "provisioning", rebuilt: false },
+      unchanged: { screen: "provisioning", restored: undefined },
     },
     {
       name: "a bucket restore refusal",

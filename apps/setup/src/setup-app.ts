@@ -513,11 +513,10 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
   "restore.stream_state_missing": "shell.bucket.state_missing",
   "restore.identity_unknown": "shell.bucket.identity_unknown",
   "restore.administrator_password_missing": "shell.restore.administrator_password_missing",
-  // One sentence for all three, as the command line gives (`DECRYPT_PHASE_CODES`,
-  // apps/server/src/restore-command.ts).
-  "recovery.passphrase_invalid": "shell.bucket.key_does_not_open",
-  "backup.artifact_invalid": "shell.bucket.key_does_not_open",
-  "backup.archive_invalid": "shell.bucket.key_does_not_open",
+  // One sentence for all three, or a stolen copy becomes a key oracle: `DECRYPT_PHASE_CODES`.
+  "recovery.passphrase_invalid": "shell.bucket.copy_unopenable",
+  "backup.artifact_invalid": "shell.bucket.copy_unopenable",
+  "backup.archive_invalid": "shell.bucket.copy_unopenable",
   "backup.stream_restore_failed": "shell.bucket.restore_failed",
   "backup.stream_request_failed": "shell.bucket.request_failed",
   "restore.stream_disk_full": "shell.bucket.disk_full",
@@ -847,7 +846,7 @@ export class SetupApp extends LitElement {
   /** Held only in this tab's memory: the kit inside it is as sensitive as the recovery key. */
   @state() private bucketRequest?: BucketRestoreRequestDetail;
   /** Kept apart from the other outcomes because the done screen's copy depends on which path ran. */
-  @state() private rebuilt = false;
+  @state() private restored: "bucket" | "archive" | "cloud" | undefined;
   @state() private openingHours?: { departmentId: string };
   @state() private cloudRecoveryView?: CloudRecoveryView;
   @state() private cloudRecoveryError?: Message;
@@ -1835,6 +1834,7 @@ export class SetupApp extends LitElement {
       );
       if (!current()) return;
       this.restoreRequest = undefined;
+      this.restored = "archive";
       this.screen = "done";
     } catch (error) {
       if (!current()) return;
@@ -1910,7 +1910,7 @@ export class SetupApp extends LitElement {
       await this.api.restoreFromBucket(request);
       if (!current()) return;
       this.bucketRequest = undefined;
-      this.rebuilt = true;
+      this.restored = "bucket";
       this.screen = "done";
     } catch (error) {
       if (!current()) return;
@@ -2008,7 +2008,10 @@ export class SetupApp extends LitElement {
               ]
             : []),
         );
-        if (current()) this.screen = "done";
+        if (current()) {
+          this.restored = "cloud";
+          this.screen = "done";
+        }
       } else {
         const shown = this.cloudRecoveryView?.point?.id;
         const view =
@@ -2762,7 +2765,7 @@ export class SetupApp extends LitElement {
           .breakGlassKeyName=${this.breakGlassKeyName}
           .mirrorJoin=${this.mirrorJoin}
           .onboardingIntent=${this.draft.mode}
-          .rebuilt=${this.rebuilt}
+          .restored=${this.restored}
           .openingHours=${this.openingHours}
         ></setup-done-screen>`;
       default:

@@ -261,18 +261,11 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
 
 ## Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup wizard).
 
-- The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
-  (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes; the wizard shows
-  one sentence for all three, as the command line does.
 - The first, unconfirmed attempt downloads the whole copy only to show whose it is, and the
   confirmed attempt downloads it again; the HTTP request stays open for the whole download.
 - Walked in the browser test harness against a stubbed server, not yet on a running box. Walk it
   on the box after 2 November: back up a test venue to a real bucket, wipe it, and restore it
   through setup.
-- After an archive restore or a Cloud restore the final screen does not show the device steps the
-  bucket rebuild's shows (`rebuilt` is set only on the bucket path,
-  `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
-  machine's addresses after an archive restore too.
 
 ## Loose ends left by #334.
 
