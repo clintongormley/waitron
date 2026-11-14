@@ -279,7 +279,7 @@ describe("accountant workbook", () => {
 
   it.each([
     ["en", "Replacement — do not add (repeats the original)"],
-    ["es", "Rectificativa por sustitución — no sumar (repite la original)"],
+    ["es", ACCOUNTANT_EXPORT_WORDS.es.replacement],
   ] as const)(
     "types a replaced invoice as its ordinary type and tells the reader not to add its replacement, in %s",
     async (language, replacementType) => {
