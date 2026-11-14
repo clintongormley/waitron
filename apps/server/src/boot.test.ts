@@ -1,4 +1,5 @@
 import { seedModuleSettings } from "../test/module-settings.js";
+import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
@@ -2437,11 +2438,11 @@ describe("startServer, against a migrated venue directory", () => {
   // before it runs Litestream or calls the bucket.
   it("reports a bucket copy that is set up but not running on /health", async () => {
     const port = await freePort();
-    await withTransaction(sharedDb, (tx) =>
-      putCredential(tx, loadKeyRing(KEY_ENV), {
+    await withTransaction(sharedDb, async (tx) => {
+      await ensureStreamId(tx);
+      await putCredential(tx, loadKeyRing(KEY_ENV), {
         purpose: STREAM_PURPOSE,
         value: {
-          venueId: "venue-1",
           endpoint: "https://127.0.0.1:1",
           region: "eu-south-2",
           bucket: "venue-copies",
@@ -2449,8 +2450,8 @@ describe("startServer, against a migrated venue directory", () => {
           accessKeyId: "AKIAEXAMPLE",
           secretAccessKey: "secret-example",
         },
-      }),
-    );
+      });
+    });
     try {
       const server = await startServer({
         ...KEY_ENV,

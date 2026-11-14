@@ -1,4 +1,5 @@
 import { seedModuleSettings } from "../test/module-settings.js";
+import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -183,11 +184,11 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       nodeId,
       "https://box.example",
     );
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, {
+    await withTransaction(suite.db, async (tx) => {
+      await ensureStreamId(tx);
+      await putCredential(tx, ring, {
         purpose: STREAM_PURPOSE,
         value: {
-          venueId: "venue-1",
           endpoint: "-",
           region: "eu-south-2",
           bucket: "venue-copies",
@@ -195,8 +196,8 @@ function observeStart(options: { restricted: boolean }): () => Observed {
           accessKeyId: "AKIAEXAMPLE",
           secretAccessKey: "secret-example",
         },
-      }),
-    );
+      });
+    });
     if (options.restricted) {
       await withNodeTransaction(suite.node, (tx) =>
         recordHandoverRestrictionTx(tx, {

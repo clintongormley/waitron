@@ -307,6 +307,8 @@ it("first setup writes the venue document and an identical reapply keeps its rev
       version: 1,
       revision: 2,
       doc: JSON.stringify({
+        cloudVenueId: null,
+        streamId: null,
         name: "Mostrador",
         fiscalTerritory: "ES-common",
         operationDescription: "venta en establecimiento",

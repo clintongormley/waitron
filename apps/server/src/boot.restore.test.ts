@@ -1,3 +1,4 @@
+import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import * as atomic from "./fs-atomic.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
@@ -523,11 +524,11 @@ describe("startServer, against a migrated venue directory", () => {
     );
     // A bucket copy set up, and no membership document: a copy that tried to start would read off
     // with the reason `no_membership`, so `first_start_pending` shows it was held first.
-    await withTransaction(db, (tx) =>
-      putCredential(tx, loadKeyRing(KEY_ENV), {
+    await withTransaction(db, async (tx) => {
+      await ensureStreamId(tx);
+      await putCredential(tx, loadKeyRing(KEY_ENV), {
         purpose: STREAM_PURPOSE,
         value: {
-          venueId: "venue-1",
           endpoint: "https://127.0.0.1:1",
           region: "eu-south-2",
           bucket: "venue-copies",
@@ -535,8 +536,8 @@ describe("startServer, against a migrated venue directory", () => {
           accessKeyId: "AKIAEXAMPLE",
           secretAccessKey: "secret-example",
         },
-      }),
-    );
+      });
+    });
     let disarmedBeforeServing = false;
     const [server, failed] = await withCapturedStdout(async (lines) => {
       const originalSync = atomic.syncFolderHolding;
