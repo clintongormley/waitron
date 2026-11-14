@@ -10,6 +10,7 @@ describe("the package barrel", () => {
       "HANDOVER_KINDS",
       "HANDOVER_STATES",
       "HANDOVER_TABLES",
+      "MODULE_PREPARED_ITEM",
       "NODE_LOCAL_MANIFEST",
       "READY_TO_PROMOTE",
       "assembleIndicator",

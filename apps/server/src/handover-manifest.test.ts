@@ -365,9 +365,11 @@ describe("buildNodeLocalManifest", () => {
       recursive: true,
     });
     await writeFile(join(stateDir, "module-records/fiscal-verifactu.json"), "{ not json");
-    const error = await buildNodeLocalManifest(stateDir, ringWithRotation(), databaseFor(stateDir)).catch(
-      (e: unknown) => e,
-    );
+    const error = await buildNodeLocalManifest(
+      stateDir,
+      ringWithRotation(),
+      databaseFor(stateDir),
+    ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("setup.attempt_invalid");
   });
 

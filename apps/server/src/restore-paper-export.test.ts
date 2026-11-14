@@ -60,9 +60,9 @@ it.each(["missing", "wrong event", "wrong source"] as const)(
   async (mode) => {
     f = await stagedHourRestore(suite, "archive", "paper-offline-restore");
     const record = JSON.parse(f.journal());
-    if (mode === "missing") record.revisions = [];
+    if (mode === "missing") record.prepared = [];
     else {
-      const intent = record.revisions.at(-1).value.entries.at(-1);
+      const intent = record.prepared.at(-1).value.entries.at(-1);
       intent.binding[mode === "wrong event" ? "eventId" : "sourceId"] = "changed";
       if (mode === "wrong event") intent.operatorId.eventId = "changed";
     }
