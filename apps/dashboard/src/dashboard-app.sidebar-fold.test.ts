@@ -558,10 +558,9 @@ describe("a section with several pages opens a panel beside its icon", () => {
   });
 
   it("kept within the layout when its icon is low in the window", async () => {
-    await atSize(1280, 600, async () => {
+    await atSize(1280, 650, async () => {
       const { el } = await mountFoldedReading("configuration");
       const settings = stripButton(el, "configuration");
-      settings.scrollIntoView({ block: "nearest" });
       const bottom = layout(el).getBoundingClientRect().bottom;
       expect(settings.getBoundingClientRect().bottom).toBeLessThanOrEqual(bottom);
       settings.click();

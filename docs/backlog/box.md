@@ -339,7 +339,7 @@ The [account-delivery amendment](../superpowers/plans/2026-11-08-a987-account-de
 covers the account result messages and recovery actions.
 
 Prepare requires a usable route before setup completes outside development. Live asks again;
-configuration export carries no mail settings or secrets. Settings → Email serves Prepare and
+configuration export carries no mail settings or secrets. System → Email serves Prepare and
 Live; saved-relay changes and captured messages remain admin-only. The sender display uses the
 venue's name. Keep current invoice documents, outbox outcomes and public reset privacy.
 
@@ -583,7 +583,7 @@ Plan one multi-platform application image with arm64 smoke, and an arm64 install
 
 - Live updates of existing installations keep the practice inbox profile, through both `waitron.sh`’s checked manual-upgrade path and the USB recipe’s updater: `scripts/box/upgrades/host.mjs` restarts it without the production selector (env5 limit; watcher, 2026-11-13 06:07).
 
-The [network display](../superpowers/plans/2026-11-12-b3-20-network-screen.md) shows the installed host’s wired and Wi-Fi observation on Settings → Box status. The [first Wi-Fi host cut](../superpowers/plans/2026-11-14-b3-wifi-host.md) adds installed-host scan/join and a separately reported, restart-persistent boot copy through the existing protected API. [Slice 2a](../superpowers/plans/2026-11-14-b3-wifi-host-reconcile.md) adds forget and reconciles the boot copy at startup and after operations. Dashboard controls and live outside-change monitoring remain open. Real adapter/restart/power-cut qualification waits for the later Box status buttons.
+The [network display](../superpowers/plans/2026-11-12-b3-20-network-screen.md) shows the installed host’s wired and Wi-Fi observation on System → Box status. The [first Wi-Fi host cut](../superpowers/plans/2026-11-14-b3-wifi-host.md) adds installed-host scan/join and a separately reported, restart-persistent boot copy through the existing protected API. [Slice 2a](../superpowers/plans/2026-11-14-b3-wifi-host-reconcile.md) adds forget and reconciles the boot copy at startup and after operations. Dashboard controls and live outside-change monitoring remain open. Real adapter/restart/power-cut qualification waits for the later Box status buttons.
 
 The development console shows Spanish and English together, names the checked venue and warns when its tag marks it Live; missing or unusable tags leave Live status unknown. It returns through a one-time EFI boot choice after 15 seconds. Keys pause it until 120 seconds without typing. The `existing-stick` rig completes Prepare, waits for the real startup counter to clear, and requires a continuous return with USB attached, unchanged disk hash before installed startup, unchanged chip unlock and `/health`. The graphical warning, reinstall controls and physical qualification remain open. [Return cut](../superpowers/plans/2026-11-11-b3-18b-firmware-return.md).
 
