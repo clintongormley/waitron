@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
+import { userEvent } from "vitest/browser";
 import {
   codeMessage,
   currentLocale,
@@ -1374,11 +1375,34 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(dateField(details).error).toBe("");
     expect(action(details).disabled).toBe(true);
     expect(flat(details.querySelector("[data-test=day-differs]"))).toBe(
-      `The server's date, ${calendar(deviceDay(-2))}, and this device's, ${calendar(deviceDay())}, differ. Check the time and confirm it on the Box status page, then choose Refresh.`,
+      `The server's date, ${calendar(deviceDay(-2))}, and this device's, ${calendar(deviceDay())}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`,
     );
     action(details).click();
     await screen.updateComplete;
     expect(remedyCalls(request)).toHaveLength(0);
+  });
+
+  it("says the dates differ when Send is chosen after this device's day moved on", async () => {
+    const { screen, request } = await mount(
+      replacementServer(futureCase("2026-11-03")),
+      continuation(["fiscal.remedy"]).value,
+    );
+    const details = await openDetails(screen);
+    await pick(screen, details, "2026-11-02");
+    expect(action(details).disabled).toBe(false);
+    const server = deviceDay();
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + DAY_MS });
+    try {
+      await userEvent.click(action(details));
+      await screen.updateComplete;
+      expect(remedyCalls(request)).toHaveLength(0);
+      expect(action(details).disabled).toBe(true);
+      expect(flat(details.querySelector("[data-test=day-differs]"))).toBe(
+        `The server's date, ${calendar(server)}, and this device's, ${calendar(deviceDay())}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("sends the record and the day, never an amount, and Stop sends nothing", async () => {
@@ -1421,14 +1445,31 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(action(details).disabled).toBe(false);
   });
 
+  it("clears the server's refusal of the day once the day is changed", async () => {
+    const request = replacementServer(futureCase("2026-11-03"), async () => {
+      throw refusal("fiscal.operation_date_invalid");
+    });
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await pick(screen, details, "2026-11-02");
+    action(details).click();
+    await vi.waitFor(() =>
+      expect(dateField(details).error).toBe(t("fiscal_filing.refused.operation_date")),
+    );
+    await pick(screen, details, "2026-11-01");
+    expect(dateField(details).error).toBe("");
+    expect(dateField(details).hasAttribute("invalid")).toBe(false);
+    expect(bottomMessage(details)).toBe("");
+  });
+
   it.each([
     [
       "sale.replacement_not_first",
-      "This invoice already has a corrective invoice, so Waitron cannot replace it, and nothing was sent.",
+      "This invoice already has a refund or another corrective invoice, and Waitron cannot replace an invoice that has one, so nothing was sent. Nothing can be done here; the case stays open.",
     ],
     [
       "fiscal.correction_unsupported",
-      "AEAT already holds a version of this invoice, so a replacement would count the sale twice. Nothing was sent, and the case stays open.",
+      "AEAT holds, or may still receive, another record of this invoice, so a replacement could count the sale twice. Nothing was sent, and nothing can be done here; the case stays open.",
     ],
     ["series.no_rectificative_for_node", "This server has no corrective invoice series"],
   ] as const)("says what %s means under the actions, keeping Send", async (code, words) => {

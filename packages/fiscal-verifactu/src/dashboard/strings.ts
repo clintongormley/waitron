@@ -273,7 +273,7 @@ const en = {
   "fiscal_filing.put_right.replace.order":
     "It goes to AEAT after any earlier invoices AEAT is holding back. The refused invoice stays as it is.",
   "fiscal_filing.put_right.replace.day_differs":
-    "The server's date, {server}, and this device's, {device}, differ. Check the time and confirm it on the Box status page, then choose Refresh.",
+    "The server's date, {server}, and this device's, {device}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.",
   "fiscal_filing.put_right.replace.send": "Send the replacement",
   "fiscal_filing.put_right.none.not-yet":
     "Waitron cannot put this one right yet. The case stays open.",
@@ -309,9 +309,9 @@ const en = {
   "fiscal_filing.refused.operation_date":
     "The server refused this day: it cannot be after today, after the invoice's date, or more than twenty years ago. Choose another day, then send again.",
   "fiscal_filing.refused.replacement_not_first":
-    "This invoice already has a corrective invoice, so Waitron cannot replace it, and nothing was sent. The case stays open, and Export includes it.",
+    "This invoice already has a refund or another corrective invoice, and Waitron cannot replace an invoice that has one, so nothing was sent. Nothing can be done here; the case stays open.",
   "fiscal_filing.refused.correction_unsupported":
-    "AEAT already holds a version of this invoice, so a replacement would count the sale twice. Nothing was sent, and the case stays open.",
+    "AEAT holds, or may still receive, another record of this invoice, so a replacement could count the sale twice. Nothing was sent, and nothing can be done here; the case stays open.",
   "fiscal_filing.refused.no_corrective_series":
     "This server has no corrective invoice series, so nothing was sent. Waitron makes one when it sets up, restores or promotes a server, so this is a fault in Waitron; the case stays open.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Refused",
@@ -651,7 +651,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.put_right.replace.order":
     "Se envía a la AEAT después de las facturas anteriores que la AEAT tenga detenidas. La factura rechazada se queda como está.",
   "fiscal_filing.put_right.replace.day_differs":
-    "La fecha del servidor, {server}, y la de este dispositivo, {device}, no coinciden. Revisa la hora y confírmala en Estado del servidor; después elige Actualizar.",
+    "La fecha del servidor, {server}, y la de este dispositivo, {device}, no coinciden. Elige Parar, después Actualizar, y vuelve a abrir este caso. Si las fechas siguen sin coincidir, revisa la hora en Estado del servidor.",
   "fiscal_filing.put_right.replace.send": "Enviar la rectificativa",
   "fiscal_filing.put_right.none.not-yet":
     "Waitron todavía no puede corregir este caso. El caso sigue abierto.",
@@ -688,9 +688,9 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.operation_date":
     "El servidor ha rechazado este día: no puede ser posterior a hoy ni a la fecha de la factura, ni de hace más de veinte años. Elige otro día y envía de nuevo.",
   "fiscal_filing.refused.replacement_not_first":
-    "Esta factura ya tiene una factura rectificativa, así que Waitron no puede sustituirla y no se ha enviado nada. El caso sigue abierto y se incluye al exportar.",
+    "Esta factura ya tiene una devolución u otra factura rectificativa, y Waitron no puede sustituir una factura que la tenga, así que no se ha enviado nada. Aquí no se puede hacer nada; el caso sigue abierto.",
   "fiscal_filing.refused.correction_unsupported":
-    "La AEAT ya tiene una versión de esta factura, así que una sustitutiva contaría la venta dos veces. No se ha enviado nada y el caso sigue abierto.",
+    "La AEAT tiene, o aún puede recibir, otro registro de esta factura, así que una rectificativa podría contar la venta dos veces. No se ha enviado nada y aquí no se puede hacer nada; el caso sigue abierto.",
   "fiscal_filing.refused.no_corrective_series":
     "Este servidor no tiene una serie de facturas rectificativas, así que no se ha enviado nada. Waitron la crea al configurar, restaurar o promocionar un servidor, así que es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Rechazado",

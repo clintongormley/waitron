@@ -67,7 +67,13 @@ const FUTURE_DATE = overview({
   totalCases: 1,
 });
 
-/** Opens the case and chooses a day after the invoice's, so the field shows its error. */
+/** The same case, read two days ago, so the server's date and this device's differ. */
+const DAYS_DIFFER: FilingOverviewAnswer = {
+  ...FUTURE_DATE,
+  readAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+};
+
+/** Opens the case and chooses a valid day, so the confirmation names the VAT period. */
 async function confirmReplacement(screen: FiscalFilingScreen): Promise<HTMLElement> {
   const details = await openDetails(screen);
   const input = details
@@ -94,13 +100,14 @@ async function show(
   answer: FilingOverviewAnswer,
   theme: Theme,
   permissions = ["report.export", "fiscal.remedy"],
+  remedyRefusal = "clock.unconfirmed",
 ): Promise<FiscalFilingScreen> {
   setLocale("en");
   await mountThemed("<div></div>", theme);
   const entry = VERIFACTU_DASHBOARD.moreScreens!.find((s) => s.screen.id === "fiscal-filing")!;
   const request = (async (path: string) => {
     if (path.endsWith("/remedy"))
-      throw Object.assign(new Error("clock.unconfirmed"), { code: "clock.unconfirmed" });
+      throw Object.assign(new Error(remedyRefusal), { code: remedyRefusal });
     return answer;
   }) as unknown as DashboardRequest;
   render(
@@ -193,6 +200,30 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await screen.updateComplete;
     expect(details.querySelector("wt-input[name=operationDate]")).toHaveProperty("invalid", true);
+    await expectNoA11yViolations(host);
+  });
+
+  it("draws the replacement saying the server's date and this device's differ", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(DAYS_DIFFER, theme);
+    const details = await confirmReplacement(screen);
+    expect(details.querySelector("[data-test=day-differs]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("draws the replacement's day marked after the server refused it", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(
+      FUTURE_DATE,
+      theme,
+      ["report.export", "fiscal.remedy"],
+      "fiscal.operation_date_invalid",
+    );
+    const details = await confirmReplacement(screen);
+    (details.querySelector("[data-test=put-right]") as HTMLElement).click();
+    const field = details.querySelector("wt-input[name=operationDate]")!;
+    await vi.waitFor(() => expect(field).toHaveProperty("invalid", true));
+    await screen.updateComplete;
     await expectNoA11yViolations(host);
   });
 

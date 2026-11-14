@@ -846,7 +846,11 @@ export class FiscalFilingScreen extends LitElement {
   async #send(found: FilingCaseView): Promise<void> {
     if (this.sending || saveActionState(this.#scope).unchanged) return;
     const replaces = putRightFor(found).kind === "replacement-invoice";
-    if (replaces && (this.#dayProblem(found) !== "" || this.#daysDiffer())) return;
+    if (replaces && (this.#dayProblem(found) !== "" || this.#daysDiffer())) {
+      // This device's day may have moved on since the dialog was drawn.
+      this.requestUpdate();
+      return;
+    }
     this.attempted = true;
     if (!replaces && this.#descriptionError() !== "") {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
