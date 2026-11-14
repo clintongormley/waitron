@@ -251,6 +251,13 @@ describe("installed boot evidence", () => {
     networkOperations: {
       scan: { ok: false, reason: "no_wifi" },
       join: { ok: false, reason: "no_wifi" },
+      forget: { ok: false, reason: "not_saved" },
+    },
+    networkReconcile: {
+      savedCopy: true,
+      forgotten: true,
+      measuredUnchanged: true,
+      startupCopy: true,
     },
     networkInterfaces: { eth0: [{ address: "192.0.2.8", internal: false }] },
   };
@@ -258,10 +265,25 @@ describe("installed boot evidence", () => {
     const { installedFailures } = await import("./recipe-setup.mjs");
     expect(installedFailures(expected, "installed-root", first, first)).toEqual([]);
   });
+  it("refuses missing or failed installed saved-network reconciliation evidence", async () => {
+    const { installedFailures } = await import("./recipe-setup.mjs");
+    for (const networkReconcile of [
+      undefined,
+      { ...first.networkReconcile, savedCopy: false },
+      { ...first.networkReconcile, forgotten: false },
+      { ...first.networkReconcile, measuredUnchanged: false },
+      { ...first.networkReconcile, startupCopy: false },
+    ]) {
+      expect(
+        installedFailures(expected, "installed-root", { ...first, networkReconcile }, first),
+      ).toContain("host-network-reconcile");
+    }
+  });
   it.each([
     undefined,
     { scan: { ok: false, reason: "unknown_request" }, join: { ok: false, reason: "no_wifi" } },
     { scan: { ok: false, reason: "no_wifi" }, join: { ok: true } },
+    { ...first.networkOperations, forget: { ok: false, reason: "unknown_request" } },
   ])(
     "rejects missing or incorrectly dispatched installed Wi-Fi operations (%j)",
     async (networkOperations) => {

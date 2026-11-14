@@ -570,10 +570,27 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
         `printf %%s ${Buffer.from(code).toString("base64")} | base64 -d | ${denied ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : ""}node`;
       const network = `const net=require("node:net"),os=require("node:os");const c=net.connect("/run/waitron-box/box.sock");let text="";c.setTimeout(5000,()=>{c.destroy();process.exitCode=1});c.on("connect",()=>c.write('network.read {"actor":{"source":"server"}}\\n'));c.on("data",b=>text+=b);c.on("end",()=>console.log("B3_NETWORK:"+JSON.stringify({reply:JSON.parse(text),interfaces:os.networkInterfaces()})));c.on("error",e=>{throw e});`;
       const networkProbe = `printf %%s ${Buffer.from(network).toString("base64")} | base64 -d | setpriv --reuid=10001 --regid=10001 --clear-groups node`;
-      const networkOperations = `const net=require("node:net");const ask=line=>new Promise((resolve,reject)=>{const c=net.connect("/run/waitron-box/box.sock");let text="";c.setTimeout(5000,()=>{c.destroy();reject(Error("host deadline"))});c.on("connect",()=>c.write(line+"\\n"));c.on("data",b=>text+=b);c.on("end",()=>resolve(JSON.parse(text)));c.on("error",reject)});(async()=>{const actor={source:"person",person:"rehearsal-owner"};const scan=await ask("network.scan "+JSON.stringify({actor}));const join=await ask("network.join "+JSON.stringify({ssidHex:"41",keyMgmt:"wpa-psk",psk:"rehearsal-password",hidden:false,actor}));console.log("B3_NETWORK_OPS:"+JSON.stringify({scan,join}))})().catch(e=>{console.error(e);process.exitCode=1});`;
+      const networkOperations = `const net=require("node:net");const ask=line=>new Promise((resolve,reject)=>{const c=net.connect("/run/waitron-box/box.sock");let text="";c.setTimeout(5000,()=>{c.destroy();reject(Error("host deadline"))});c.on("connect",()=>c.write(line+"\\n"));c.on("data",b=>text+=b);c.on("end",()=>resolve(JSON.parse(text)));c.on("error",reject)});(async()=>{const actor={source:"person",person:"rehearsal-owner"};const scan=await ask("network.scan "+JSON.stringify({actor}));const join=await ask("network.join "+JSON.stringify({ssidHex:"41",keyMgmt:"wpa-psk",psk:"rehearsal-password",hidden:false,actor}));const forget=await ask("network.forget "+JSON.stringify({ssidHex:"42",actor}));console.log("B3_NETWORK_OPS:"+JSON.stringify({scan,join,forget}))})().catch(e=>{console.error(e);process.exitCode=1});`;
       const operationsProbe = `printf %%s ${Buffer.from(networkOperations).toString("base64")} | base64 -d | setpriv --reuid=10001 --regid=10001 --clear-groups node`;
+      const reconcile = `
+const fs=require("node:fs"),cp=require("node:child_process"),net=require("node:net");
+const profile="/etc/NetworkManager/system-connections/b3-rehearsal.nmconnection",copy="/boot/waitron-recovery/wifi.json";
+const measured=()=>cp.execFileSync("sh",["-ec",'sha256sum /boot/vmlinuz-* /boot/initrd.img-* /boot/efi/EFI/BOOT/BOOTX64.EFI'],{encoding:"utf8"});
+const before=measured(),startupCopy=${name === "again" ? 'JSON.parse(fs.readFileSync(copy)).psk==="startup-password"' : "true"};
+const load=password=>{fs.writeFileSync(profile,"[connection]\\nid=B3 rehearsal\\nuuid=22222222-2222-4222-8222-222222222222\\ntype=wifi\\nautoconnect=true\\ninterface-name=wlan-missing\\n[wifi]\\nmode=infrastructure\\nssid=65;\\n[wifi-security]\\nkey-mgmt=wpa-psk\\npsk="+password+"\\n[ipv4]\\nmethod=auto\\n",{mode:384});cp.execFileSync("nmcli",["connection","load",profile]);};
+(async()=>{
+load("rehearsal-password");cp.execFileSync("systemctl",["restart","waitron-network-change.service"]);
+const saved=JSON.parse(fs.readFileSync(copy)),savedCopy=saved.ssidHex==="41"&&saved.psk==="rehearsal-password";
+const reply=await new Promise((resolve,reject)=>{const c=net.connect("/run/waitron-box/box.sock");let text="";c.setTimeout(5000,()=>{c.destroy();reject(Error("forget deadline"))});c.on("connect",()=>c.write('network.forget {"ssidHex":"41","actor":{"source":"person","person":"rehearsal-owner"}}\\n'));c.on("data",b=>text+=b);c.on("end",()=>resolve(JSON.parse(text)));c.on("error",reject)});
+if(reply.ok!==true)throw Error("saved forget refused");cp.execFileSync("systemctl",["start","waitron-network-change.service"]);
+const state=JSON.parse(fs.readFileSync("/var/lib/waitron-host/network.json"));
+const forgotten=!fs.existsSync(copy)&&!fs.existsSync(profile)&&state.change.kind==="forget"&&state.change.state==="applied"&&state.bootCopy.state==="absent";
+load("startup-password");
+console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupCopy,measuredUnchanged:before===measured()}));
+})().catch(e=>{console.error(e);process.exitCode=1});`;
+      const reconcileProbe = probe(reconcile);
       const checks =
-        `; ${networkProbe}; ${operationsProbe}` +
+        `; ${networkProbe}; ${operationsProbe}; ${reconcileProbe}` +
         (caseName === "existing-stick"
           ? `; ${probe(clock)}; ${probe(deny, true)}${name === "again" ? `; ${probe(stayedUpCheck)}` : ""}`
           : "");
@@ -838,12 +855,16 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
         name,
         false,
         "B3_INSTALLED:",
-        caseName === "existing-stick" && name === "again" ? 480000 : 300000,
+        caseName === "existing-stick" && name === "again" ? 480000 : 600000,
       );
       try {
         const observed = JSON.parse(rigLine(guest.serial, "B3_INSTALLED:"));
-        const networkUntil = Date.now() + 20_000;
-        while (!rigLine(guest.serial, "B3_NETWORK:") || !rigLine(guest.serial, "B3_NETWORK_OPS:")) {
+        const networkUntil = Date.now() + 300_000;
+        while (
+          !rigLine(guest.serial, "B3_NETWORK:") ||
+          !rigLine(guest.serial, "B3_NETWORK_OPS:") ||
+          !rigLine(guest.serial, "B3_NETWORK_RECONCILE:")
+        ) {
           if (Date.now() >= networkUntil) throw new Error("network probe did not finish");
           await new Promise((done) => setTimeout(done, 100));
         }
@@ -851,6 +872,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
         observed.network = network.reply;
         observed.networkInterfaces = network.interfaces;
         observed.networkOperations = JSON.parse(rigLine(guest.serial, "B3_NETWORK_OPS:"));
+        observed.networkReconcile = JSON.parse(rigLine(guest.serial, "B3_NETWORK_RECONCILE:"));
         if (caseName === "existing-stick") {
           const until = Date.now() + 20_000;
           while (

@@ -58,6 +58,8 @@ function host({
   profiles = ["normal", "other"],
   addresses = ["192.0.2.8"],
   noIp4 = false,
+  disabledProfiles = [],
+  interfaceNames = {},
 } = {}) {
   const values = {
     [`${root}/Devices/eth1`]: [
@@ -106,7 +108,15 @@ function host({
       return JSON.stringify(
         typed("a{sa{sv}}", [
           {
-            connection: { type: typed("s", "802-11-wireless") },
+            connection: {
+              type: typed("s", "802-11-wireless"),
+              ...(disabledProfiles.includes(path.split("/").at(-1))
+                ? { autoconnect: typed("b", false) }
+                : {}),
+              ...(interfaceNames[path.split("/").at(-1)]
+                ? { "interface-name": typed("s", interfaceNames[path.split("/").at(-1)]) }
+                : {}),
+            },
             "802-11-wireless": {
               mode: typed("s", path.endsWith("hotspot") ? "ap" : "infrastructure"),
               ssid: typed("ay", path.endsWith("normal") ? [0, 255, 195, 40, 92] : [65]),
@@ -241,14 +251,19 @@ it.each([
   ]);
 });
 
-it.each(["failure", "invalid-json"])("sanitises an observation %s", async (kind) => {
-  const { handleNetworkRead } = await import("./network-host.mjs");
-  const run = () => {
-    if (kind === "failure") throw new Error("private SSID and settings");
-    return "private SSID and settings";
-  };
-  expect(await handleNetworkRead(line, { run })).toBe('{"ok":false,"reason":"host_failed"}\n');
-});
+it.each(["failure", "invalid-json", "wifi-failure"])(
+  "sanitises an observation %s",
+  async (kind) => {
+    const { handleNetworkRead } = await import("./network-host.mjs");
+    const source = host();
+    const run = (command, args) => {
+      if (kind === "wifi-failure" && !args.includes("GetSettings")) return source(command, args);
+      if (kind !== "invalid-json") throw new Error("private SSID and settings");
+      return "private SSID and settings";
+    };
+    expect(await handleNetworkRead(line, { run })).toBe('{"ok":false,"reason":"host_failed"}\n');
+  },
+);
 
 it("shares three seconds across commands and caps output without invoking a shell", async () => {
   const { networkCommand } = await import("./network-host.mjs");
@@ -373,7 +388,7 @@ it("answers busy before scanning while a join is pending", async () => {
   expect(run).not.toHaveBeenCalled();
 });
 
-it("keeps the canonical read path and rejects a not-yet-implemented forget", async () => {
+it("keeps the canonical read path and refuses forget on an unverified host", async () => {
   const { handleNetworkRequest } = await import("./network-host.mjs");
   expect(JSON.parse(await handleNetworkRequest(line, { run: host() })).wired).toEqual({
     connected: true,
@@ -385,7 +400,7 @@ it("keeps the canonical read path and rejects a not-yet-implemented forget", asy
         'network.forget {"ssidHex":"41","actor":{"source":"person","person":"owner"}}',
       ),
     ),
-  ).toEqual({ ok: false, reason: "unknown_request" });
+  ).toEqual({ ok: false, reason: "host_failed" });
 });
 
 it("refuses a fresh scan that never completes instead of returning cached access points", async () => {
@@ -481,5 +496,62 @@ it("the read entry refuses malformed input without starting a host command", asy
     ok: false,
     reason: "request_invalid",
   });
+  expect(run).not.toHaveBeenCalled();
+});
+
+it.each([
+  [
+    "active profile even with autoconnect off",
+    { disabledProfiles: ["normal"] },
+    { active: true, connection: `${root}/Active/1`, name: "wlan0" },
+  ],
+  [
+    "unique eligible disconnected profile",
+    { disabledProfiles: ["other"] },
+    { active: false, name: "wlan0" },
+  ],
+  [
+    "interface-compatible profile",
+    { interfaceNames: { other: "wlan1" } },
+    { active: false, name: "wlan0" },
+  ],
+  ["saved profile with no radio", { profiles: ["normal"] }, null],
+])("shares selection for %s", async (_name, config, radio) => {
+  const { networkBus, networkProfile } = await import("./network-manager.mjs");
+  const selected = await networkProfile(networkBus(host(config)), radio);
+  expect(selected.path).toBe(`${root}/Settings/normal`);
+  expect(selected.settings["802-11-wireless"].ssid.data).toEqual([0, 255, 195, 40, 92]);
+});
+
+it("distinguishes no eligible saved profile from ambiguous saved profiles without a radio", async () => {
+  const { networkBus, networkProfile } = await import("./network-manager.mjs");
+  expect(
+    await networkProfile(
+      networkBus(host({ profiles: ["normal"], disabledProfiles: ["normal"] })),
+      null,
+    ),
+  ).toBeNull();
+  await expect(networkProfile(networkBus(host()), null)).rejects.toThrow(
+    "ambiguous saved profiles",
+  );
+});
+
+it("reads the eligible disconnected profile while ignoring retained disabled profiles", async () => {
+  const { handleNetworkRead } = await import("./network-host.mjs");
+  const reply = JSON.parse(
+    await handleNetworkRead(line, {
+      run: host({ active: false, disabledProfiles: ["other"] }),
+    }),
+  );
+  expect(reply.wifi).toEqual({ connectedSsidHex: null, savedSsidHex: "00ffc3285c" });
+});
+
+it.each([
+  'network.forget {"ssidHex":"41","actor":{"source":"server"}}',
+  'network.forget {"ssidHex":"41","uuid":"injected","actor":{"source":"person","person":"waiter-1"}}',
+])("refuses malformed or server-actor forget before touching host state (%s)", async (request) => {
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  const run = vi.fn();
+  expect(JSON.parse(await handleNetworkRequest(request, { run })).ok).toBe(false);
   expect(run).not.toHaveBeenCalled();
 });

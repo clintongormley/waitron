@@ -54,7 +54,16 @@ async function fixture({
     if (command === "nmcli") {
       if (args.includes("modify") && args.includes(previous)) previousAuto = args.at(-1) === "yes";
       if (args.includes("load") && failLoad) throw Error("cannot load profile");
-      if (args.includes("delete") && !candidateUuid) throw Error("unknown connection");
+      if (args.includes("delete")) {
+        if (args.includes(previous)) {
+          noSaved = true;
+          disconnected = true;
+        } else {
+          if (!candidateUuid) throw Error("unknown connection");
+          candidateUuid = undefined;
+          activated = false;
+        }
+      }
       if (args.includes("load"))
         candidateUuid = /^uuid=(.+)$/m.exec(await fs.readFile(args.at(-1), "utf8"))[1];
       if (args.includes("up") && args.includes(previous)) {
@@ -569,13 +578,13 @@ it("refreshes the boot copy even when the demoted previous profile was removed o
   });
 });
 
-it("does not invent an I/O failure or remove a boot copy after a first join is rejected", async () => {
+it("removes the boot copy after a rejected first join leaves no saved network", async () => {
   const f = await fixture({ noSaved: true, disconnected: true, failActivation: true });
   await f.service.accept(fields, { source: "person", person: "waiter-1" });
   await f.service.work();
   expect((await f.service.status()).bootCopy).toEqual({
-    state: "pending",
-    reason: null,
+    state: "absent",
+    reason: "cable-only",
     failure: null,
   });
   expect(await fs.readdir(f.bootRoot)).toEqual([]);
@@ -682,3 +691,171 @@ it.skipIf(process.platform !== "linux")(
     expect(stored.boot).toBe(await fs.readFile("/proc/sys/kernel/random/boot_id", "utf8"));
   },
 );
+
+it("publishes the authoritative saved network at startup without an operation or radio", async () => {
+  const f = await fixture({ disconnected: true });
+  const original = f.run.getMockImplementation();
+  f.run.mockImplementation((command, args) =>
+    args.includes("GetDevices") ? JSON.stringify(typed([[]])) : original(command, args),
+  );
+  await f.service.work();
+  expect(await f.service.status()).toEqual({
+    change: null,
+    bootCopy: { state: "current", reason: null, failure: null },
+  });
+  expect(
+    parseWifiRecord(await fs.readFile(join(f.bootRoot, "waitron-recovery/wifi.json"))),
+  ).toEqual({
+    kind: "loaded",
+    network: { ssidHex: "41", keyMgmt: "sae", psk: "previous-password", hidden: true },
+  });
+  expect(f.run.mock.calls.filter(([command]) => command === "nmcli")).toEqual([]);
+  const before = await fs.stat(join(f.hostRoot, "network.json"));
+  await f.service.work();
+  expect((await fs.stat(join(f.hostRoot, "network.json"))).mtimeMs).toBe(before.mtimeMs);
+});
+
+it.each([false, true])(
+  "does not repeat historical demotion after it completes (retry %s)",
+  async (retry) => {
+    const f = await fixture();
+    const demoteRun = f.run.getMockImplementation();
+    f.run.mockImplementation((command, args) => {
+      if (retry && args.includes(previous) && args.includes("modify")) {
+        retry = false;
+        throw Error("demotion timed out");
+      }
+      return demoteRun(command, args);
+    });
+    const needsRetry = retry;
+    await f.service.accept(fields, { source: "person", person: "waiter-1" });
+    await f.service.work();
+    if (needsRetry) {
+      expect(JSON.parse(await fs.readFile(join(f.hostRoot, "network.json"), "utf8")).previous).toBe(
+        previous,
+      );
+      await f.service.work();
+    }
+    const original = f.run.getMockImplementation();
+    f.run.mockImplementation(async (command, args) => {
+      const result = await original(command, args);
+      if (!args.includes("GetSecrets")) return result;
+      const settings = JSON.parse(result);
+      settings.data[0]["802-11-wireless-security"].psk.data = "outside-password";
+      return JSON.stringify(settings);
+    });
+    f.reboot();
+    const start = f.run.mock.calls.length;
+    await f.service.work();
+    expect(
+      parseWifiRecord(await fs.readFile(join(f.bootRoot, "waitron-recovery/wifi.json"))).network
+        .psk,
+    ).toBe("outside-password");
+    expect(f.run.mock.calls.slice(start).filter(([command]) => command === "nmcli")).toEqual([]);
+  },
+);
+
+it("queues canonical forget, rechecks its target after restart and removes the boot copy", async () => {
+  const f = await fixture({ disconnected: true });
+  const original = f.run.getMockImplementation();
+  f.run.mockImplementation((command, args) =>
+    args.includes("GetDevices") ? JSON.stringify(typed([[]])) : original(command, args),
+  );
+  await f.service.work();
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  const request = 'network.forget {"ssidHex":"41","actor":{"source":"person","person":"waiter-1"}}';
+  expect(JSON.parse(await handleNetworkRequest(request, f.deps))).toEqual({ ok: true });
+  expect((await f.service.status()).change).toEqual({
+    kind: "forget",
+    ssidHex: "41",
+    state: "running",
+    reason: null,
+  });
+  expect(await f.service.accept(fields, { source: "person", person: "waiter-1" })).toEqual({
+    ok: false,
+    reason: "busy",
+  });
+  f.reboot();
+  await f.service.work();
+  expect(await f.service.status()).toEqual({
+    change: { kind: "forget", ssidHex: "41", state: "applied", reason: null },
+    bootCopy: { state: "absent", reason: "cable-only", failure: null },
+  });
+  expect(f.run.mock.calls.filter(([, args]) => args.includes("delete"))).toEqual([
+    ["nmcli", ["--wait", "10", "connection", "delete", "uuid", previous]],
+  ]);
+  expect(f.journal[0]).toEqual({
+    verb: "network.forget",
+    actor: { source: "person", person: "waiter-1" },
+    permission: "system.manage",
+  });
+  await expect(fs.stat(join(f.bootRoot, "waitron-recovery/wifi.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it.each(["replaced", "absent", "copy-unavailable"])(
+  "reconciles a queued forget with its target %s",
+  async (kind) => {
+    const f = await fixture({ disconnected: true, wrongMount: kind === "copy-unavailable" });
+    expect(
+      await f.service.forget({ ssidHex: "41" }, { source: "person", person: "waiter-1" }),
+    ).toEqual({ ok: true });
+    const original = f.run.getMockImplementation();
+    f.run.mockImplementation(async (command, args) => {
+      if (kind === "absent" && args.includes("ListConnections")) return JSON.stringify(typed([[]]));
+      const result = await original(command, args);
+      if (kind !== "replaced" || !args.includes("GetSettings")) return result;
+      const data = JSON.parse(result);
+      data.data[0]["802-11-wireless"].ssid.data = [66];
+      return JSON.stringify(data);
+    });
+    await f.service.work();
+    expect((await f.service.status()).change).toEqual({
+      kind: "forget",
+      ssidHex: "41",
+      state: kind === "replaced" ? "refused" : "applied",
+      reason: kind === "replaced" ? "failed" : null,
+    });
+    if (kind === "copy-unavailable")
+      expect((await f.service.status()).bootCopy.failure).toBe("mount-unverified");
+    else expect(f.run.mock.calls.filter(([, args]) => args.includes("delete"))).toEqual([]);
+  },
+);
+
+it("refuses forgetting a different SSID and clears a forget whose worker cannot start", async () => {
+  const f = await fixture({ failStart: true });
+  expect(
+    await f.service.forget({ ssidHex: "42" }, { source: "person", person: "waiter-1" }),
+  ).toEqual({ ok: false, reason: "not_saved" });
+  expect(
+    await f.service.forget({ ssidHex: "41" }, { source: "person", person: "waiter-1" }),
+  ).toEqual({ ok: false, reason: "host_failed" });
+  expect((await f.service.status()).change.state).toBe("refused");
+  expect(f.run.mock.calls.filter(([, args]) => args.includes("delete"))).toEqual([]);
+});
+
+it("preserves a copy on ambiguous observation and removes it only after authoritative absence", async () => {
+  const f = await fixture({ disconnected: true });
+  await f.service.work();
+  const copy = join(f.bootRoot, "waitron-recovery/wifi.json");
+  const before = await fs.readFile(copy);
+  const original = f.run.getMockImplementation();
+  f.run.mockImplementation(async (command, args) => {
+    if (args.includes("ListConnections")) return JSON.stringify(typed([["/previous", "/second"]]));
+    return original(command, args);
+  });
+  await f.service.work();
+  expect((await f.service.status()).bootCopy.failure).toBe("io-failed");
+  expect(await fs.readFile(copy)).toEqual(before);
+  f.run.mockImplementation((command, args) =>
+    args.includes("ListConnections") ? JSON.stringify(typed([[]])) : original(command, args),
+  );
+  await f.service.work();
+  expect((await f.service.status()).bootCopy).toEqual({
+    state: "absent",
+    reason: "cable-only",
+    failure: null,
+  });
+  await expect(fs.stat(copy)).rejects.toMatchObject({ code: "ENOENT" });
+});
