@@ -350,7 +350,7 @@ cause and its measurement to the watcher before splitting files or changing capa
 
 Dashboard uses six shards. The [14 November plan](../superpowers/plans/2026-11-14-a1398-next-browser-cut.md)
 records the measured dashboard/till baseline and the rationale for that count.
-The [parties task-wait draft](../superpowers/plans/2026-11-14-a1398-till-task-waits.md) targets repeated zero-delay waits measured inside its test helper. Claude reviewed it; watcher clearance, the hosted saving and the archiver wait remain open.
+The [parties task-wait draft](../superpowers/plans/2026-11-14-a1398-till-task-waits.md) targets repeated zero-delay waits measured inside its test helper. Claude reviewed it and the watcher cleared its build; the hosted saving and archiver wait remain open.
 
 ## Bundle A1398: Pack the other packages' test shards by measured time
 

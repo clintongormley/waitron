@@ -1,6 +1,6 @@
 # A1398-2: parties test task waits
 
-Codex plan reviewed by Claude on 14 November (139 s initial read, 58 s corrections read). Watcher clearance is pending; implement inline and land the plan docs only after it. No owner design approval is claimed.
+Codex plan reviewed by Claude on 14 November (139 s initial read, 58 s corrections read). The watcher cleared corrected head `9ec5240891` in Lane I questions.md at 07:26, including one hosted qualification after local checks. Implement inline; no owner design approval is claimed.
 
 Ask, quoted from `~/waitron-campaign-i/queue.md` A1398-2: “every CI test job finishes in about four minutes (owner, 2026-10-09 and 2026-10-11; CLAUDE.md §2: "Fix the cause, never cut a check"). Measure the cause before a performance plan; at most one page, Claude review and watcher clearance.” Watcher `questions.md`, 2026-11-14 06:51, directs till next.
 
