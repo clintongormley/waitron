@@ -29,7 +29,7 @@ const suite = useVenueDb({
     await db.insert(mediaImages).values({ filename: PHOTO, names: { es: "Sopa" } });
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [manager] = await seedPersons(tx, {
-        displayName: "manager-ana",
+        displayName: "Anna Manager",
         pinHash: hashPin("1234"),
         role: "manager",
       });

@@ -2188,6 +2188,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff display names.
   The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
   The shared boot provision-body and stream-pause fixtures use Administrator for their staff display sample.
+  The catalogue include-folder, menu-patch and menu-schedule route suites use English staff display names.
   Other local and shared staff-name samples still need triage; preserve deliberate name and locale cases.
   Logger personal-name samples use English names, except the deliberate accented `Àngel` cases
   and short-email `ana@bo.es` sample;
