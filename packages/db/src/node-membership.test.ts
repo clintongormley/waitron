@@ -39,6 +39,11 @@ describe("before any migration set has run", () => {
 describe("node_membership accessors", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
+  it("stores the term only inside the signed document", async () => {
+    const columns = suite.db.all<{ name: string }>(sql`pragma table_info(node_membership)`);
+    expect(columns.map((column) => column.name)).not.toContain("term");
+  });
+
   it("reads null before any write (a node that has never adopted a document)", async () => {
     expect(await readNodeMembership(suite.db)).toBeNull();
   });
@@ -66,10 +71,10 @@ describe("node_membership accessors", () => {
     expect(await readNodeMembership(suite.db)).toEqual(d);
   });
 
-  it("denormalises term from document.body.term into the bigint column", async () => {
+  it("reads the stored term from the signed document", async () => {
     await writeNodeMembership(suite.db, doc(7));
     const r = await suite.db.execute<{ term: string }>(
-      sql`select term from node_membership where id = 1`,
+      sql`select json_extract(document, '$.body.term') as term from node_membership where id = 1`,
     );
     expect(Number(r.rows[0]?.term)).toBe(7);
   });
@@ -95,7 +100,7 @@ describe("node_membership accessors", () => {
 
   it("permits at most one row — the singleton CHECK rejects any id but 1", async () => {
     const error = await captureError(async () => {
-      suite.db.run(sql`insert into node_membership (id, term, document) values (2, 1, '{}')`);
+      suite.db.run(sql`insert into node_membership (id, document) values (2, '{}')`);
     });
     expect(error).toBeDefined();
   });
@@ -140,10 +145,14 @@ describe("persistNodeMembershipIfNewer (the term-guarded runtime-adoption write)
   });
 
   it("persistNodeMembershipIfNewerTx rejects a non-newer doc (returns false, no write)", async () => {
-    await writeNodeMembership(suite.db, doc(5));
-    const accepted = await suite.db.transaction((tx) => persistNodeMembershipIfNewerTx(tx, doc(5)));
+    const held = doc(5);
+    await writeNodeMembership(suite.db, held);
+    const accepted = await suite.db.transaction((tx) =>
+      persistNodeMembershipIfNewerTx(tx, { ...held, signature: "different-signature" }),
+    );
     expect(accepted).toBe(false);
     expect((await readNodeMembership(suite.db))?.body.term).toBe(5);
+    expect(await readNodeMembership(suite.db)).toEqual(held);
   });
 
   it("a false return lets the caller roll back the whole transaction", async () => {
@@ -183,7 +192,7 @@ describe("node_membership document round-trip", () => {
     expect(await readNodeMembership(suite.db)).toEqual(document);
 
     const term = await suite.db.execute<{ term: string }>(
-      sql`select term from node_membership where id = 1`,
+      sql`select json_extract(document, '$.body.term') as term from node_membership where id = 1`,
     );
     expect(Number(term.rows[0]?.term)).toBe(4);
   });

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "712b367a-bace-47fe-8ceb-775da60bdae6",
+  "id": "6ab1825e-a249-47f2-802c-392c85719f24",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -9643,6 +9643,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "incidents_acknowledged_by_persons_id_fk": {
+          "name": "incidents_acknowledged_by_persons_id_fk",
+          "tableFrom": "incidents",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "acknowledged_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -9740,13 +9753,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 1
-        },
-        "term": {
-          "name": "term",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
         },
         "document": {
           "name": "document",

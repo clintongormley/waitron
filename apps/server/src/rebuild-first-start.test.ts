@@ -161,7 +161,7 @@ async function tamperHeldRow(): Promise<void> {
 /** The raw row, so "unchanged" means the stored bytes and not a parsed equivalent. */
 async function storedRow(): Promise<unknown> {
   const result = await suite.db.execute(
-    sql`select term, document, updated_at from node_membership where id = 1`,
+    sql`select document, updated_at from node_membership where id = 1`,
   );
   return result.rows;
 }

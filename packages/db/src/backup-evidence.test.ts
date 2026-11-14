@@ -354,7 +354,7 @@ describe("core backup source binding", () => {
     expect(await verify()).toBe(false);
   });
 
-  it("verifies the captured membership signature and denormalized term", async () => {
+  it("verifies the captured membership signature", async () => {
     seed();
     const keys = generateNodeKeyPair();
     const body = {
@@ -376,15 +376,13 @@ describe("core backup source binding", () => {
     for (const db of [before.db, after.db]) {
       db.run(sql`update nodes set public_key = ${keys.publicKey}`);
       db.run(
-        sql`insert into node_membership (id, term, document, updated_at) values (1, 7, ${JSON.stringify(document)}, '2026-10-20T00:00:00Z')`,
+        sql`insert into node_membership (id, document, updated_at) values (1, ${JSON.stringify(document)}, '2026-10-20T00:00:00Z')`,
       );
     }
     expect(await verify()).toBe(true);
-    for (const db of [before.db, after.db]) db.run(sql`update node_membership set term = 8`);
-    expect(await verify()).toBe(false);
     for (const db of [before.db, after.db])
       db.run(
-        sql`update node_membership set term = 7, document = ${JSON.stringify({ ...document, signature: "invalid" })}`,
+        sql`update node_membership set document = ${JSON.stringify({ ...document, signature: "invalid" })}`,
       );
     expect(await verify()).toBe(false);
   });
@@ -395,7 +393,7 @@ describe("core backup source binding", () => {
       seed();
       for (const db of [before.db, after.db])
         db.run(
-          sql`insert into node_membership (id, term, document, updated_at) values (1, 7, ${document}, '2026-10-20T00:00:00Z')`,
+          sql`insert into node_membership (id, document, updated_at) values (1, ${document}, '2026-10-20T00:00:00Z')`,
         );
       expect(await verify()).toBe(false);
     },
@@ -442,7 +440,7 @@ describe("core backup source binding", () => {
     for (const db of [before.db, after.db]) {
       db.run(sql`update nodes set public_key = ${keys.publicKey}`);
       db.run(
-        sql`insert into node_membership (id, term, document, updated_at) values (1, 1, ${JSON.stringify(document)}, '2026-10-20T00:00:00Z')`,
+        sql`insert into node_membership (id, document, updated_at) values (1, ${JSON.stringify(document)}, '2026-10-20T00:00:00Z')`,
       );
     }
     expect(await verify()).toBe(false);
@@ -796,7 +794,7 @@ describe("backup membership private/public identity", () => {
           sql`insert into nodes (id,name,public_key,created_at) values ('other','Other',${keys.publicKey},'2026-10-20T00:00:00Z')`,
         );
         suite.db.run(
-          sql`insert into node_membership (id,term,document,updated_at) values (1,1,${JSON.stringify(document)},'2026-10-20T00:00:00Z')`,
+          sql`insert into node_membership (id,document,updated_at) values (1,${JSON.stringify(document)},'2026-10-20T00:00:00Z')`,
         );
       }
       expect(await verify(null)).toBe(mode === "unrelated");
@@ -807,7 +805,7 @@ describe("backup membership private/public identity", () => {
     async (document) => {
       seed(null);
       after.db.run(
-        sql`insert into node_membership (id,term,document,updated_at) values (1,1,${document},'2026-10-20T00:00:00Z')`,
+        sql`insert into node_membership (id,document,updated_at) values (1,${document},'2026-10-20T00:00:00Z')`,
       );
       expect(await verify(null)).toBe(false);
     },
@@ -837,7 +835,7 @@ describe("backup membership private/public identity", () => {
   it("binary document bytes cannot justify keyless admission", async () => {
     seed(null);
     before.db.run(
-      sql`insert into node_membership (id,term,document,updated_at) values (1,1,${Buffer.from("{}")},'2026-10-20T00:00:00Z')`,
+      sql`insert into node_membership (id,document,updated_at) values (1,${Buffer.from("{}")},'2026-10-20T00:00:00Z')`,
     );
     expect(await verify(null)).toBe(false);
   });

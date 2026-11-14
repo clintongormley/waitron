@@ -446,9 +446,8 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
            when not exists (select 1 from test_newer_landed)
            begin
              insert into test_newer_landed values (1);
-             update node_membership set term = term + 1,
-               document = json_insert(
-                 json_set(document, '$.body.term', term + 1),
+             update node_membership set document = json_insert(
+                 json_set(document, '$.body.term', json_extract(document, '$.body.term') + 1),
                  '$.body.nodes[#]',
                  json('${JSON.stringify(added)}')
                ) where id = 1;
@@ -1184,9 +1183,8 @@ describe("POST /management-api/servers/:nodeId/clear", () => {
            when not exists (select 1 from test_newer_landed)
            begin
              insert into test_newer_landed values (1);
-             update node_membership set term = term + 1,
-               document = json_insert(
-                 json_set(document, '$.body.term', term + 1),
+             update node_membership set document = json_insert(
+                 json_set(document, '$.body.term', json_extract(document, '$.body.term') + 1),
                  '$.body.nodes[#]',
                  json('${JSON.stringify(added)}')
                ) where id = 1;

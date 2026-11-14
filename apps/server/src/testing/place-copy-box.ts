@@ -100,8 +100,8 @@ export function holdChart(databasePath: string, document: unknown): void {
   const raw = new DatabaseSync(databasePath);
   try {
     raw
-      .prepare("update node_membership set document = ?, term = ? where id = 1")
-      .run(JSON.stringify(document), (document as { body: { term: number } }).body.term);
+      .prepare("update node_membership set document = ? where id = 1")
+      .run(JSON.stringify(document));
   } finally {
     raw.close();
   }

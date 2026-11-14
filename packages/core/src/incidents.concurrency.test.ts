@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, persons, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, deviceOrigin } from "@waitron/shared";
 import { seedTaxpayer } from "../test/fixtures.js";
@@ -42,6 +42,10 @@ describe("markIncidentHandled — two managers at once", () => {
       personId: "00000000-0000-4000-8000-000000000002",
       handledAt: new Date(BASE.getTime() + 5_000),
     };
+    await suite.db.insert(persons).values([
+      { id: first.personId, displayName: "First manager" },
+      { id: second.personId, displayName: "Second manager" },
+    ]);
     const mark = (by: typeof first) =>
       withTransaction(suite.db, async (tx) => {
         await markIncidentHandled(tx, { id: open!.id, ...by });

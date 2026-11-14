@@ -4,7 +4,15 @@ import { AppError, backupOrigin, deviceOrigin, jobOrigin } from "@waitron/shared
 import type { DeviceId, NodeId, Origin, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { CORE_MIGRATIONS, devices, incidents, nowIso, sales, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  devices,
+  incidents,
+  nowIso,
+  persons,
+  sales,
+  withTransaction,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -35,6 +43,10 @@ const suite = useVenueDb({
 
 beforeEach(async () => {
   ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
+  await suite.db.insert(persons).values([
+    { id: "00000000-0000-4000-8000-000000000001", displayName: "First manager" },
+    { id: "00000000-0000-4000-8000-000000000002", displayName: "Second manager" },
+  ]);
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");

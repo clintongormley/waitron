@@ -550,6 +550,12 @@ describe("readHandledAlerts", () => {
       });
       return p!.id;
     });
+    const [secondPerson] = await asApp((tx) =>
+      seedPersons(tx, {
+        displayName: "Ben",
+        role: "manager",
+      }),
+    );
     await raise(v, "payment.refund_unresolved", "error", NOW);
     await raise(v, "fiscal.registro_rechazado", "error", NOW);
     await raise(v, "chain.verification_failed", "error", NOW);
@@ -565,13 +571,13 @@ describe("readHandledAlerts", () => {
       );
     const DAY = 24 * 60 * 60 * 1000;
     await mark("payment.refund_unresolved", person, 29 * DAY);
-    await mark("fiscal.registro_rechazado", "00000000-0000-4000-8000-00000000abcd", DAY);
+    await mark("fiscal.registro_rechazado", secondPerson!.id, DAY);
     await mark("chain.verification_failed", person, HANDLED_WINDOW_MS + DAY);
     const handled = await asApp((tx) =>
       readHandledAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),
     );
     expect(handled.map((a) => [a.code, a.handledBy])).toEqual([
-      ["fiscal.registro_rechazado", null],
+      ["fiscal.registro_rechazado", "Ben"],
       ["payment.refund_unresolved", "Ada"],
     ]);
     expect(handled[1]!.handledAt).toBe(new Date(NOW.getTime() - 29 * DAY).toISOString());

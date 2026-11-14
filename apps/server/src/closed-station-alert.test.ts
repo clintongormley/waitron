@@ -73,7 +73,7 @@ it("records one release alert with staff names in line order until the open aler
   await inTx(venue, (tx) =>
     markIncidentHandled(tx, {
       id: alerts[0]!.id,
-      personId: "staff",
+      personId: venue.operator.personId,
       handledAt: new Date(at.getTime() + 2000),
     }),
   );

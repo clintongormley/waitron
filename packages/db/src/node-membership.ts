@@ -57,10 +57,6 @@ export async function readNodeMembershipRow(
  * UPSERT of the singleton (`id = 1`). A PLAIN setter — it does NOT run the accept test: the
  * authentic-and-strictly-newer fence is `acceptMembershipDocument` in @waitron/membership.
  *
- * `term` is denormalised from `document.body.term`. Deriving it here keeps the column and the
- * in-blob term in step for writes through this accessor; the DB does not enforce it, so a raw SQL
- * write could set them apart.
- *
  * **Which caller may use this one is a convention, and nothing in the database holds it.** A caller
  * that cannot assume it is the only writer goes through the term-guarded
  * `persistNodeMembershipIfNewer` below, and this one is for where no concurrent writer exists.
@@ -80,13 +76,12 @@ export async function writeNodeMembershipTx(
   tx: Transaction,
   document: SignedMembershipDocument,
 ): Promise<void> {
-  const term = document.body.term;
   await tx
     .insert(nodeMembership)
-    .values({ id: 1, term, document })
+    .values({ id: 1, document })
     .onConflictDoUpdate({
       target: nodeMembership.id,
-      set: { term, document, updatedAt: now() },
+      set: { document, updatedAt: now() },
     });
 }
 
@@ -112,11 +107,11 @@ export async function persistNodeMembershipIfNewerTx(
   const term = document.body.term;
   const rows = await tx
     .insert(nodeMembership)
-    .values({ id: 1, term, document })
+    .values({ id: 1, document })
     .onConflictDoUpdate({
       target: nodeMembership.id,
-      set: { term, document, updatedAt: now() },
-      setWhere: sql`${nodeMembership.term} < ${term}`,
+      set: { document, updatedAt: now() },
+      setWhere: sql`json_extract(${nodeMembership.document}, '$.body.term') < ${term}`,
     })
     .returning({ id: nodeMembership.id });
   return rows.length > 0;
