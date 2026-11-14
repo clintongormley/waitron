@@ -254,6 +254,7 @@ import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import { mountSpareSettingsApi } from "./spare-settings-api.js";
 import { mountHandoverActivationApi, postChartToSource } from "./handover-activation.js";
 import { readTakenOverFrom } from "./handover-collection.js";
 import { mountHandoverPreparationApi } from "./handover-preparation.js";
@@ -2814,6 +2815,7 @@ async function bootServer(
     log,
     () => handoverDestinationDuty?.wake(),
   );
+  mountSpareSettingsApi(app, { ...peerDeps, stateDir: config.stateDir }, log);
   mountNodeMembershipApi(
     app,
     {

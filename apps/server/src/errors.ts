@@ -1449,6 +1449,12 @@ declare module "@waitron/shared" {
      * `WAITRON_BACKUP_`, a value that is not text, or one the file would not keep. `reason` names
      * the check and never a value, which may be the backup recovery key. */
     "spare.settings_invalid": { reason: string };
+    /** A box's backup settings were signed by a key this box does not vouch for, or by a box the
+     * held chart does not name `serving-primary`. Answered only to another box. */
+    "spare.settings_sender_unknown": Record<string, never>;
+    /** A box's backup settings were sent to a box that is not a mirror: a box that took over
+     * keeps its own settings. Answered only to another box. */
+    "spare.settings_not_a_spare": Record<string, never>;
     /**
      * This box's `nodes` row for its spare holds another public key than the pair link names: a
      * fault in Waitron, logged only. The link stays `pending` and is not asked again until the

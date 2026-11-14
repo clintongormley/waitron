@@ -108,6 +108,13 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     authenticates:
       "HTTPS and the sign-in of a person holding `node.manage`, by email, password and authenticator code when enrolled; answers the checked copy and saved declaration without writing one (`handover-emergency-api.ts`)",
   },
+  {
+    method: "POST",
+    path: "/api/node/backup-settings",
+    boxes: ["mirror"],
+    authenticates:
+      "a `backup-settings` envelope signed by the box the held chart names `serving-primary`, under a key this box stores for it or the held chart vouches for (`peerKeyOf`), naming this box; answers only the digest of what it then holds",
+  },
 ];
 
 export function pathMatches(rowPath: string, requestPath: string): boolean {

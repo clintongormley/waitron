@@ -15,6 +15,7 @@ export const HANDOVER_KINDS = [
   "return-receipt",
   "return-clash-acceptance",
   "health",
+  "backup-settings",
 ] as const satisfies readonly HandoverKind[];
 
 export type { HandoverKind, HandoverPurpose, SignedHandoverEnvelope };
