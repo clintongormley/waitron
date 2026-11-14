@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, onTestFinished } from "vitest";
 import { chromium, type Browser } from "playwright";
 import { guestMenuWords, type PublicGuestMenu } from "@waitron/shared";
-import { renderGuestMenuPage } from "./guest-menu-page.js";
+import { renderGuestMenuPage, renderGuestMenuUnavailable } from "./guest-menu-page.js";
 let browser: Browser | undefined;
 beforeAll(async () => {
   browser = await chromium.launch({ headless: true });
@@ -105,4 +105,11 @@ it("labels guest language links in their own languages", async () => {
   );
   expect(await p.getByRole("navigation", { name: "Idiomas" }).count()).toBe(1);
   expect(await p.locator('a[href="?language=en"]').textContent()).toBe("English");
+});
+
+it("paints an unavailable page with the shared guest-page typography", async () => {
+  const p = await browser!.newPage();
+  onTestFinished(() => p.close());
+  await p.setContent(renderGuestMenuUnavailable("en", "en"));
+  expect(await p.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain("system-ui");
 });
