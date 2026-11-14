@@ -254,17 +254,18 @@ const en = {
     "This server no longer files the venue's invoices. Open this page on the server that does.",
   "fiscal_filing.refused.changed":
     "This case was already put right, or it changed; nothing more was sent.",
-  "fiscal_filing.refused.not_sent": "Waitron could not send this correction. Nothing was sent.",
+  "fiscal_filing.refused.not_sent":
+    "Waitron could not send this correction, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.disk_full":
     "The server's disk is full, so nothing was sent. Follow the disk alert, then send again.",
   "fiscal_filing.refused.record_invalid":
-    "The correction record failed Waitron's own check, so nothing was sent. The case stays open.",
+    "The correction record failed Waitron's own check, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.fingerprint":
-    "The fingerprint check of the server's invoice records failed, so nothing was sent. The case stays open.",
+    "The fingerprint check of the server's invoice records failed, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.try_again":
     "The server could not add the correction to its invoice records this time, so nothing was sent. Send again.",
   "fiscal_filing.refused.setup":
-    "The server found a problem with its own invoicing setup, so nothing was sent. The case stays open.",
+    "The server found a problem with its own invoicing setup, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Refused",
   "fiscal_filing.cause.fiscal.aceptado_con_errores": "Accepted with errors",
   "fiscal_filing.cause.fiscal.anulacion_retenida": "Cancellation set aside",
@@ -585,17 +586,17 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.changed":
     "Este caso ya se había corregido o ha cambiado; no se ha enviado nada más.",
   "fiscal_filing.refused.not_sent":
-    "Waitron no ha podido enviar esta subsanación. No se ha enviado nada.",
+    "Waitron no ha podido enviar esta subsanación, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.refused.disk_full":
     "El disco del servidor está lleno, así que no se ha enviado nada. Sigue el aviso del disco y envía de nuevo.",
   "fiscal_filing.refused.record_invalid":
-    "El registro de subsanación no ha pasado la comprobación de Waitron, así que no se ha enviado nada. El caso sigue abierto.",
+    "El registro de subsanación no ha pasado la comprobación de Waitron, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.refused.fingerprint":
-    "Ha fallado la comprobación de la huella de los registros de facturación del servidor, así que no se ha enviado nada. El caso sigue abierto.",
+    "Ha fallado la comprobación de la huella de los registros de facturación del servidor, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.refused.try_again":
     "El servidor no ha podido añadir la subsanación a sus registros de facturación esta vez, así que no se ha enviado nada. Envía de nuevo.",
   "fiscal_filing.refused.setup":
-    "El servidor ha encontrado un problema en su propia configuración de facturación, así que no se ha enviado nada. El caso sigue abierto.",
+    "El servidor ha encontrado un problema en su propia configuración de facturación, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Rechazado",
   "fiscal_filing.cause.fiscal.aceptado_con_errores": "Aceptado con errores",
   "fiscal_filing.cause.fiscal.anulacion_retenida": "Anulación apartada",

@@ -2,6 +2,8 @@ import type { RemedyRefusal } from "../remedy-refusals.js";
 import type { AeatCertificateKey } from "./strings.js";
 
 /** The case dialog's sentence for each refusal the remedy route can give. */
+// refused.not_sent, .record_invalid, .fingerprint and .setup call their codes a fault in Waitron:
+// the dialog sends only a description, after refusing a blank one and any descriptionProblem.
 export const REFUSAL_WORDS: Record<RemedyRefusal, AeatCertificateKey> = {
   "management_session.required": "fiscal_filing.refused.signed_out",
   "management_session.expired": "fiscal_filing.refused.signed_out",
