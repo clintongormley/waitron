@@ -32,7 +32,7 @@ const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 const MAX_WAIT_MS = 20 * 86_400_000;
 // Years after the real clock, so a read that takes the real clock never finds these editions due.
 const day = (date: number) => new Date(`2030-01-${String(date).padStart(2, "0")}T06:00:00.000Z`);
-const ANA = "manager-ana";
+const MANAGER = "manager-ana";
 
 let f: MenusFixture;
 
@@ -42,12 +42,12 @@ async function setSoup(unitPrice: string): Promise<void> {
 
 async function publishNow(menuId: string): Promise<void> {
   const { hash } = await app((tx) => previewMenu(tx, menuId));
-  await app((tx) => publishMenu(tx, menuId, hash, ANA));
+  await app((tx) => publishMenu(tx, menuId, hash, MANAGER));
 }
 
 async function queue(menuId: string, activatesAt: Date) {
   const { hash } = await app((tx) => previewMenu(tx, menuId));
-  return app((tx) => queueMenuPublication(tx, menuId, hash, activatesAt, ANA));
+  return app((tx) => queueMenuPublication(tx, menuId, hash, activatesAt, MANAGER));
 }
 
 /** Lunch live at v1, and v2, v3, v4 queued for the given days, each with a different Soup price. */

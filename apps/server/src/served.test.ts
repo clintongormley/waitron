@@ -421,7 +421,7 @@ async function pay(v: Venue, billId: string, amount: string): Promise<void> {
 }
 
 /** A party with Croquetas ×4 fired. */
-async function croquetas(v: Venue) {
+async function croquettes(v: Venue) {
   const s = await seated(v);
   const groupId = await groupedGroup(v, s, "fire", [line(v, "croquetas", "4")]);
   const croq = await lineNamed(s.partyId, "croquetas");
@@ -430,7 +430,7 @@ async function croquetas(v: Venue) {
 
 /** Splits one Croquetas onto a second bill and marks that bill abandoned; answers the row it holds,
  * after checking Current orders leaves it out. */
-async function abandonedSplitRow(v: Venue, s: Awaited<ReturnType<typeof croquetas>>) {
+async function abandonedSplitRow(v: Venue, s: Awaited<ReturnType<typeof croquettes>>) {
   const { billId: checkId } = await inTx(async (tx) =>
     splitBill(
       tx,
@@ -456,7 +456,7 @@ async function abandonedSplitRow(v: Venue, s: Awaited<ReturnType<typeof croqueta
 describe("served by quantity (§12 item 5)", () => {
   it("serves 2 of Croquetas ×4, then the other 2, which sets served_at", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     const revision = await revisionOf(s.partyId);
 
     const first = await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "2" }]);
@@ -480,7 +480,7 @@ describe("served by quantity (§12 item 5)", () => {
 
   it("unserving 1 clears served_at and leaves 3 of 4 served", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "4" }]);
     const revision = await revisionOf(s.partyId);
 
@@ -554,7 +554,7 @@ describe("served by quantity (§12 item 5)", () => {
 
   it("markGroupServed leaves a line on an abandoned bill as it was, as Current orders leaves it out", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     const gone = await abandonedSplitRow(v, s);
 
     await serveGroup(v, s.partyId, s.groupId);
@@ -581,7 +581,7 @@ describe("served by quantity (§12 item 5)", () => {
 
   it("serves a paper-only station's item straight after it fired, and leaves its kitchen state as the kitchen left it", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     const [ticket] = await suite.db
       .select({ stationId: ticketItems.stationId, firedAt: ticketItems.firedAt })
       .from(ticketItems)
@@ -673,7 +673,7 @@ describe("refusals, each writing nothing", () => {
     ["a quantity finer than the unit counts", "1.5"],
   ])("refuses serving %s (tab.serve_quantity_invalid)", async (_name, quantity) => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await expectRefusedWithNothingWritten(
       s.partyId,
       () => serve(v, s.partyId, [{ lineId: s.croq.id, quantity }]),
@@ -686,7 +686,7 @@ describe("refusals, each writing nothing", () => {
 
   it("refuses serving 3 more once 2 of 4 are served", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "2" }]);
     await expectRefusedWithNothingWritten(
       s.partyId,
@@ -700,7 +700,7 @@ describe("refusals, each writing nothing", () => {
 
   it("refuses unserving more than is served (tab.serve_quantity_invalid)", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "2" }]);
     await expectRefusedWithNothingWritten(
       s.partyId,
@@ -714,8 +714,8 @@ describe("refusals, each writing nothing", () => {
 
   it("refuses a line of another party, and an id naming no line (group.not_found)", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
-    const other = await croquetas(v);
+    const s = await croquettes(v);
+    const other = await croquettes(v);
     for (const lineId of [other.croq.id, randomUUID()]) {
       await expectRefusedWithNothingWritten(
         s.partyId,
@@ -727,7 +727,7 @@ describe("refusals, each writing nothing", () => {
 
   it("refuses a line on an abandoned bill, which Current orders leaves out (group.not_found)", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     const gone = await abandonedSplitRow(v, s);
     await expectRefusedWithNothingWritten(
       s.partyId,
@@ -738,7 +738,7 @@ describe("refusals, each writing nothing", () => {
 
   it("refuses an empty list and a line named twice (management.request_invalid)", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     for (const items of [
       [],
       [
@@ -835,8 +835,8 @@ describe("refusals, each writing nothing", () => {
 
   it("refuses a group of another party, or none (group.not_found)", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
-    const other = await croquetas(v);
+    const s = await croquettes(v);
+    const other = await croquettes(v);
     for (const groupId of [other.groupId, randomUUID()]) {
       await expectRefusedWithNothingWritten(s.partyId, () => serveGroup(v, s.partyId, groupId), {
         code: "group.not_found",
@@ -853,7 +853,7 @@ describe("refusals, each writing nothing", () => {
 describe("the bill's revision and a card payment (menus plan D10, D22; owner 2026-09-28)", () => {
   it("counts a served mark and its undo on the party's revision, never the open bill's", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     const before = await billRevision(s.tabId);
     const party = await revisionOf(s.partyId);
 
@@ -870,7 +870,7 @@ describe("the bill's revision and a card payment (menus plan D10, D22; owner 202
 
   it("takes a served mark, its undo and a group's served mark while a card payment runs on the bill, leaving the payment's mark", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
     const mark = new Date().toISOString();
     await suite.db
@@ -899,7 +899,7 @@ describe("the bill's revision and a card payment (menus plan D10, D22; owner 202
 describe("retries and stale screens (Review Focus 2 and 3; D8, D19)", () => {
   it("serves 2 of Croquetas ×4 once when the command is sent twice with one submission id", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     const opts = { submissionId: randomUUID(), revision: await revisionOf(s.partyId) };
     const items = [{ lineId: s.croq.id, quantity: "2" }];
 
@@ -914,7 +914,7 @@ describe("retries and stale screens (Review Focus 2 and 3; D8, D19)", () => {
 
   it("answers a repeated undo and a repeated group served mark once each", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "4" }]);
     const undo = { submissionId: randomUUID(), revision: await revisionOf(s.partyId) };
     const items = [{ lineId: s.croq.id, quantity: "1" }];
@@ -932,7 +932,7 @@ describe("retries and stale screens (Review Focus 2 and 3; D8, D19)", () => {
 
   it("refuses the same submission id with quantity 3 (submission.id_reused), and nothing changes", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     const submissionId = randomUUID();
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "2" }], { submissionId });
 
@@ -988,7 +988,7 @@ describe("retries and stale screens (Review Focus 2 and 3; D8, D19)", () => {
 
   it("answers a retry carrying the revision it was first sent with, after the party moved on", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     const opts = { submissionId: randomUUID(), revision: await revisionOf(s.partyId) };
     const items = [{ lineId: s.croq.id, quantity: "1" }];
     const first = await serve(v, s.partyId, items, opts);
@@ -1143,7 +1143,7 @@ describe("a card refund pending on a bill", () => {
 
   it("takes a served mark, its undo and a group's served mark on an open bill while its refund is pending, leaving the refund pending", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await pendingRefund(v, s.tabId);
 
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "2" }]);
@@ -1166,7 +1166,7 @@ describe("a card refund pending on a bill", () => {
 
   it("still refuses a line void on that open bill while its refund is pending (bill.refund_in_progress)", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await pendingRefund(v, s.tabId);
 
     await expectRefusedWithNothingWritten(
@@ -1180,7 +1180,7 @@ describe("a card refund pending on a bill", () => {
 describe("a partly served line split or cut", () => {
   it("keeps as much served on the line as it still holds and gives the rest to the split row", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "3" }]);
 
     const { billId: checkId } = await inTx(async (tx) =>
@@ -1207,7 +1207,7 @@ describe("a partly served line split or cut", () => {
 
   it("leaves a split row unserved when the part served stays on the line", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
 
     await inTx(async (tx) =>
@@ -1232,7 +1232,7 @@ describe("a partly served line split or cut", () => {
 
   it("a whole served line split in part keeps both rows fully served", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "4" }]);
     const servedAt = await backdateServed(s.croq.id);
 
@@ -1258,7 +1258,7 @@ describe("a partly served line split or cut", () => {
 
   it("cuts what was served to what a part void leaves, and marks the line served when that is all of it", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "3" }]);
 
     await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, s.croq.lineNo, "2", ALEX));
@@ -1272,7 +1272,7 @@ describe("a partly served line split or cut", () => {
 
   it("keeps the time a line was first fully served when a part void cuts it", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "4" }]);
     const servedAt = await backdateServed(s.croq.id);
 
@@ -1287,7 +1287,7 @@ describe("a partly served line split or cut", () => {
 
   it("keeps what was served when a part void leaves more than that", async () => {
     const v = await setupVenue();
-    const s = await croquetas(v);
+    const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
 
     await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, s.croq.lineNo, "2", ALEX));
