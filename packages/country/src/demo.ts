@@ -93,7 +93,12 @@ interface CountryDemoDataFields<L extends string = string> {
   };
   readonly printerName: DemoPlainText<L>;
   readonly specialDayName: DemoPlainText<L>;
-  readonly menuPeriodName: DemoPlainText<L>;
+  readonly deliPeriodName: DemoPlainText<L>;
+  readonly restaurantPeriodNames: {
+    readonly bar: DemoPlainText<L>;
+    readonly lunch: DemoPlainText<L>;
+    readonly dinner: DemoPlainText<L>;
+  };
   readonly menuPriceOverrides: readonly {
     menu: "drinks" | "lunch";
     productImage: string;

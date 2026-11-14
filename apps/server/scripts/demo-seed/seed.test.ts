@@ -128,13 +128,21 @@ describe("seedDemoRestaurant", () => {
         starts_at: "09:00:00",
         ends_at: "18:00:00",
       })),
-      ...[0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-        department: "Restaurant and bar",
-        period: "Open",
-        weekday,
-        starts_at: "09:00:00",
-        ends_at: "00:00:00",
-      })),
+      ...[0, 1, 2, 3, 4, 5, 6].flatMap((weekday) =>
+        [
+          ["Bar", "09:00:00", "13:00:00"],
+          ["Lunch", "13:00:00", "16:00:00"],
+          ["Bar", "16:00:00", "20:00:00"],
+          ["Dinner", "20:00:00", "23:00:00"],
+          ["Bar", "23:00:00", "00:00:00"],
+        ].map(([period, starts_at, ends_at]) => ({
+          department: "Restaurant and bar",
+          period,
+          weekday,
+          starts_at,
+          ends_at,
+        })),
+      ),
     ]);
     const { rows: separate } = await suite.db.execute<{ count: number }>(sql`
       select cast(count(*) as integer) as count from sqlite_master where type = 'table' and name = 'hours_week_cells'`);
@@ -364,7 +372,7 @@ describe("seedDemoRestaurant", () => {
     ]);
   });
 
-  it("keeps drinks downstairs without station hours or an evening period", async () => {
+  it("keeps drinks downstairs at dinner without station hours", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {
       venue,
@@ -406,13 +414,39 @@ describe("seedDemoRestaurant", () => {
       // Sunday first.
       expect(weeks).toEqual({
         Deli: ["closed", ...Array<string>(6).fill("09:00-18:00")],
-        "Restaurant and bar": Array<string>(7).fill("09:00-00:00"),
+        "Restaurant and bar": Array<string>(7).fill(
+          "09:00-13:00,13:00-16:00,16:00-20:00,20:00-23:00,23:00-00:00",
+        ),
       });
 
-      const { rows: periods } = await tx.execute<{ name: string }>(sql`
-        select p.name from menu_periods p join departments d on d.id = p.department_id
-         order by d.name`);
-      expect(periods).toEqual([{ name: "Open" }, { name: "Open" }]);
+      const { rows: periods } = await tx.execute<{
+        department: string;
+        name: string;
+        menu: string;
+        staff_menus: string | null;
+      }>(sql`
+        select d.name as department, p.name, c.name as menu,
+          (select group_concat(sc.name, ',') from menu_period_staff_menus s
+            join catalogues sc on sc.id = s.menu_id where s.period_id = p.id) as staff_menus
+        from menu_periods p join departments d on d.id = p.department_id
+        join catalogues c on c.id = p.menu_id
+        order by d.name, p.name`);
+      expect(periods).toEqual([
+        { department: "Deli", name: "Open", menu: "Deli takeaway", staff_menus: null },
+        { department: "Restaurant and bar", name: "Bar", menu: "Drinks", staff_menus: null },
+        {
+          department: "Restaurant and bar",
+          name: "Dinner",
+          menu: "Casa Delgado",
+          staff_menus: null,
+        },
+        {
+          department: "Restaurant and bar",
+          name: "Lunch",
+          menu: "Casa Delgado",
+          staff_menus: "Set lunch",
+        },
+      ]);
 
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
         select id from floor_zones
@@ -480,7 +514,7 @@ describe("seedDemoRestaurant", () => {
         select z.name as zone_name, d.name as department_name,
                coalesce(z.order_start, dp.order_start) as order_start,
                z.is_counter_default,
-               json_group_array(c.name order by dm.display_order) as menus
+               json_group_array(c.name order by dm.display_order, c.name) as menus
         from floor_zones z
         join departments d on d.id = z.department_id
         join department_sale_policies dp on dp.department_id = d.id
@@ -626,28 +660,28 @@ describe("seedDemoRestaurant", () => {
         department_name: "Restaurant and bar",
         order_start: "table",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Set lunch"],
+        menus: ["Casa Delgado", "Drinks", "Set lunch"],
       },
       {
         zone_name: "Downstairs bar",
         department_name: "Restaurant and bar",
         order_start: "counter",
         is_counter_default: true,
-        menus: ["Casa Delgado", "Set lunch"],
+        menus: ["Casa Delgado", "Drinks", "Set lunch"],
       },
       {
         zone_name: "Terrace",
         department_name: "Restaurant and bar",
         order_start: "table",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Set lunch"],
+        menus: ["Casa Delgado", "Drinks", "Set lunch"],
       },
       {
         zone_name: "Upstairs bar",
         department_name: "Restaurant and bar",
         order_start: "counter",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Set lunch"],
+        menus: ["Casa Delgado", "Drinks", "Set lunch"],
       },
     ]);
     expect(read.hours).toEqual([
@@ -758,11 +792,15 @@ describe("seedDemoRestaurant", () => {
         dataSet: CASA_DELGADO_ES,
       });
 
-      const restaurantPeriods = await suite.db.execute<{ count: number }>(sql`
-        select count(*) as count from floor_zones z
+      const restaurantPeriods = await suite.db.execute<{ name: string }>(sql`
+        select d.name from floor_zones z
         join menu_periods d on d.department_id = z.department_id
-        where z.is_counter_default`);
-      expect(restaurantPeriods.rows).toEqual([{ count: 1 }]);
+        where z.is_counter_default order by d.name`);
+      expect(restaurantPeriods.rows).toEqual([
+        { name: "Bar" },
+        { name: "Cena" },
+        { name: "Comida" },
+      ]);
 
       const read = await withTransaction(suite.db, async (tx) => {
         const languages = await readContentLanguages(tx, "es");

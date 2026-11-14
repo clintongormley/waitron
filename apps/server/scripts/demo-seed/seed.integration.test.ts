@@ -217,7 +217,7 @@ describe("demo seed end-to-end", () => {
     expect(storedImage?.contentType).toBe("image/webp");
     expect(storedImage!.bytes.length).toBeGreaterThan(0);
 
-    // The counter zone sells from both menus, so the non-default menu's offer must resolve.
+    // At Lunch the counter zone sells from both menus, so the non-default menu's offer must resolve.
     const cfg = tillConfigFor(venue);
     const { zoneId, casaOffer, diaOffer } = await withTransaction(suite.db, async (tx) => {
       const [counter] = await tx
@@ -239,6 +239,8 @@ describe("demo seed end-to-end", () => {
         diaOffer: await offerOf(diaProduct),
       };
     });
+    // 14:00 in Madrid: Lunch is the period that serves both menus.
+    vi.setSystemTime(new Date("2026-10-08T12:00:00.000Z"));
     const orderId = randomUUID();
     const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
       id: orderId,

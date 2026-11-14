@@ -31,6 +31,10 @@ import {
 } from "./testing/madrid-vat-class-changes.js";
 import { madridWithAddedRows, type MadridAddedCategory } from "./testing/madrid-added-rows.js";
 import {
+  madridWithPeriodChanges,
+  type MadridPeriodChange,
+} from "./testing/madrid-period-changes.js";
+import {
   madridWithRenamedColumns,
   type MadridColumnRenames,
 } from "./testing/madrid-renamed-columns.js";
@@ -118,6 +122,41 @@ const ADDED_CATEGORIES: Record<"en" | "es", MadridAddedCategory[]> = {
       ],
     },
   ],
+};
+const periodChange = (
+  department: string,
+  replaced: string,
+  [bar, lunch, dinner]: [string, string, string],
+  menus: { drinks: string; casa: string; lunch: string },
+): MadridPeriodChange => ({
+  department: `@departments:${JSON.stringify([department])}`,
+  replaced,
+  periods: [
+    { name: bar, colour: "red", menu: menus.drinks, staffMenus: [] },
+    { name: lunch, colour: "orange", menu: menus.casa, staffMenus: [menus.lunch] },
+    { name: dinner, colour: "amber", menu: menus.casa, staffMenus: [] },
+  ],
+  week: [
+    { period: bar, startsAt: "09:00:00", endsAt: "13:00:00" },
+    { period: lunch, startsAt: "13:00:00", endsAt: "16:00:00" },
+    { period: bar, startsAt: "16:00:00", endsAt: "20:00:00" },
+    { period: dinner, startsAt: "20:00:00", endsAt: "23:00:00" },
+    { period: bar, startsAt: "23:00:00", endsAt: "00:00:00" },
+  ],
+  occurrence: { period: bar, startsAt: "09:00" },
+});
+const catalogue = (name: string) => `@catalogues:${JSON.stringify([name])}`;
+const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
+  en: periodChange("Restaurant and bar", "Open", ["Bar", "Lunch", "Dinner"], {
+    drinks: catalogue("Drinks"),
+    casa: catalogue("Casa Delgado"),
+    lunch: catalogue("Set lunch"),
+  }),
+  es: periodChange("Restaurante y bar", "Abierto", ["Bar", "Comida", "Cena"], {
+    drinks: catalogue("Bebidas"),
+    casa: catalogue("Casa Delgado"),
+    lunch: catalogue("Menú del Día"),
+  }),
 };
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
@@ -1356,6 +1395,9 @@ for (const locale of ["en", "es"] as const) {
         phases[phase]!.activity_log! += 1;
       }
       if (phase === "seeded") {
+        const periods = madridWithPeriodChanges(expected.seeded, PERIOD_CHANGES[locale]);
+        expected.seeded = periods.semantics;
+        for (const [name, count] of Object.entries(periods.added)) phases.seeded![name]! += count;
         const { semantics, added } = madridWithAddedRows(
           expected.seeded,
           canonical.seeded,

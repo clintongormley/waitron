@@ -31,7 +31,7 @@ export interface SeedFloorInput {
   locale: SeedLocale;
   departmentTradingNames: CountryDemoIdentity["departmentTradingNames"];
   dataSet: DemoDataSet;
-  menuIds?: { restaurant: string; lunch: string; deli: string };
+  menuIds?: { restaurant: string; lunch: string; deli: string; drinks: string };
 }
 
 export async function seedFloor(
@@ -167,21 +167,22 @@ export async function seedFloor(
           inArray(menuPeriods.name, [...STARTER_OPEN_PERIOD_NAMES]),
         ),
       );
-    const restaurant =
-      existing ??
-      (await saveMenuPeriod(tx, restaurantId, {
-        name: plain(dataSet.menuPeriodName),
-        menuId: menuIds.restaurant,
-        staffMenuIds: [menuIds.lunch],
-      }));
-    if (existing !== undefined)
-      await updateMenuPeriod(tx, existing.id, {
-        name: plain(dataSet.menuPeriodName),
-        menuId: menuIds.restaurant,
-        staffMenuIds: [menuIds.lunch],
-      });
+    const names = dataSet.restaurantPeriodNames;
+    const barPeriod = { name: plain(names.bar), menuId: menuIds.drinks, staffMenuIds: [] };
+    const bar = existing ?? (await saveMenuPeriod(tx, restaurantId, barPeriod));
+    if (existing !== undefined) await updateMenuPeriod(tx, existing.id, barPeriod);
+    const lunch = await saveMenuPeriod(tx, restaurantId, {
+      name: plain(names.lunch),
+      menuId: menuIds.restaurant,
+      staffMenuIds: [menuIds.lunch],
+    });
+    const dinner = await saveMenuPeriod(tx, restaurantId, {
+      name: plain(names.dinner),
+      menuId: menuIds.restaurant,
+      staffMenuIds: [],
+    });
     const deli = await saveMenuPeriod(tx, deliDepartmentId, {
-      name: plain(dataSet.menuPeriodName),
+      name: plain(dataSet.deliPeriodName),
       menuId: menuIds.deli,
       staffMenuIds: [],
     });
@@ -190,7 +191,13 @@ export async function seedFloor(
       restaurantId,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
-        slots: [{ periodId: restaurant.id, startsAt: "09:00", endsAt: "00:00" }],
+        slots: [
+          { periodId: bar.id, startsAt: "09:00", endsAt: "13:00" },
+          { periodId: lunch.id, startsAt: "13:00", endsAt: "16:00" },
+          { periodId: bar.id, startsAt: "16:00", endsAt: "20:00" },
+          { periodId: dinner.id, startsAt: "20:00", endsAt: "23:00" },
+          { periodId: bar.id, startsAt: "23:00", endsAt: "00:00" },
+        ],
       })),
       new Date(),
       await readBusinessDayScheduleRevision(tx),
