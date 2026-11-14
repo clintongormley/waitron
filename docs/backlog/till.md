@@ -2051,7 +2051,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: What an open till picks up from a setup change
 
-1 entry, size S. Its text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
 - **A787. Profile values on an open till refresh only at a profile switch or a change of zones (left
   open by A768, 2026-10-17).** Form factor, capabilities, idle logout, starting screen and whether

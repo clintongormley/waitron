@@ -110,8 +110,7 @@ su línea se corta en mitad de la palabra, sin guion, con cualquier tamaño de t
 grande ocurre más a menudo.
 
 Un tamaño de texto guardado llega a los paneles y las cajas igual que los colores de un tema guardado
-(consulta [Guarda un tema](appearance.md#save)). Una pantalla de cocina en la que nadie inicia sesión
-lo toma la próxima vez que se inicia.
+(consulta [Guarda un tema](appearance.md#save)).
 
 El papel impreso conserva los tamaños de Waitron: los recibos, las comandas de cocina, la etiqueta
 del equipo y el kit de recuperación del nodo. El botón de inicio de sesión de Google conserva el

@@ -2285,7 +2285,9 @@ fetched without holding anything** (B4: I chose the stored copy).
   or whose device turns dark under Follow device, switches version with no request at all, as it
   switches Waitron's own colours today; saving and switching are unchanged.
 - **Fixed until reload:** a kitchen screen in device mode, which runs no poll (backlog A785); it is
-  added to that list in `docs/developers/conventions-ui.md`.
+  added to that list in `docs/developers/conventions-ui.md`. (2026-11-14: no longer true; a kitchen
+  screen in device mode reads `/api/till` every 15 seconds and follows the theme, and A785 is
+  deleted.)
 
 ## 13. Permissions
 

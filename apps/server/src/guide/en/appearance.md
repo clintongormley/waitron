@@ -102,8 +102,7 @@ longer than its button or line breaks inside the word, with no hyphen, at any te
 makes that happen more often.
 
 A saved text size reaches the dashboards and tills as a saved theme's colours do (see
-[Save a theme](appearance.md#save)). A kitchen screen that nobody signs in on takes it when it next
-starts.
+[Save a theme](appearance.md#save)).
 
 Printed paper keeps Waitron's sizes: receipts, kitchen tickets, the equipment label and the node
 recovery pack. Google's sign-in button keeps Google's size.
