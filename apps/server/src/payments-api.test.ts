@@ -3269,16 +3269,14 @@ describe("backup-machine audit read", () => {
       ["2026-07-01", 2, "failed", { backupMatches: [], backupUnmatched: [] }],
       ["2026-07-02", 0, "succeeded", { backupMatches: [], backupUnmatched: [] }],
     ] as const)
-      await suite.db
-        .insert(scheduledRuns)
-        .values({
-          duty: "payments.reconcile.sumup",
-          periodFrom: `${from}T00:00:00.000Z`,
-          periodTo: from === "2026-07-01" ? "2026-07-02T00:00:00.000Z" : "2026-07-03T00:00:00.000Z",
-          generation,
-          state,
-          summary,
-        });
+      await suite.db.insert(scheduledRuns).values({
+        duty: "payments.reconcile.sumup",
+        periodFrom: `${from}T00:00:00.000Z`,
+        periodTo: from === "2026-07-01" ? "2026-07-02T00:00:00.000Z" : "2026-07-03T00:00:00.000Z",
+        generation,
+        state,
+        summary,
+      });
     const answer = await send(app, "GET", path, { cookie: venue.managerCookie });
     expect(answer.status, JSON.stringify(await answer.clone().json())).toBe(200);
     expect(await answer.json()).toEqual({

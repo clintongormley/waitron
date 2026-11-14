@@ -61,7 +61,6 @@ machines** shows the current payment state and successful refunds, even if they 
 **Download for accountant (XLSX)** includes a separate sheet of these payments, selected by
 calendar date rather than business-day cutover.
 
-
 In **Card payments**, open **Backup-machine comparison** to check a calendar day in the venue’s
 time zone. A match links one same-account entry to one SumUp charge with the same amount,
 including tips, within five minutes. Check ambiguous or unmatched charges in SumUp before making

@@ -65,7 +65,6 @@ muestra el estado actual del pago y los reembolsos completados, aunque hayan cam
 **Descargar para tu gestor (XLSX)** incluye una hoja separada de estos pagos, seleccionados por
 fecha del calendario y no por el cambio de día de negocio.
 
-
 En **Pagos con tarjeta**, abre **Comparación del datáfono de reserva** para consultar un día natural
 en la zona horaria del local. Una coincidencia vincula una anotación de la misma cuenta con un
 cargo de SumUp del mismo importe, incluida la propina, con un margen de cinco minutos. Comprueba

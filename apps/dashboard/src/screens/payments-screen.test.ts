@@ -2404,15 +2404,13 @@ afterEach(() => setLocale(receivedLocale));
 
 it("opens the backup comparison from Card payments", async () => {
   const api = stubApi({
-    getBackupAudit: vi
-      .fn()
-      .mockResolvedValue({
-        day: "2026-07-01",
-        timeZone: "Europe/Madrid",
-        complete: false,
-        backupMatches: [],
-        backupUnmatched: [],
-      }),
+    getBackupAudit: vi.fn().mockResolvedValue({
+      day: "2026-07-01",
+      timeZone: "Europe/Madrid",
+      complete: false,
+      backupMatches: [],
+      backupUnmatched: [],
+    }),
   });
   const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
     api,
