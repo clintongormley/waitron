@@ -19,6 +19,8 @@ async function fixture({
   failLoad = false,
   disconnected = false,
   failPrevious = false,
+  noSaved = false,
+  omitAutoconnect = false,
 } = {}) {
   const root = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "b3-network-change-")));
   folders.push(root);
@@ -57,7 +59,17 @@ async function fixture({
     if (operation === "call") {
       if (members[0] === "GetDevices") return JSON.stringify(typed([["/radio"]]));
       if (members[0] === "ListConnections")
-        return JSON.stringify(typed([candidateUuid ? ["/previous", "/candidate"] : ["/previous"]]));
+        return JSON.stringify(
+          typed([
+            candidateUuid
+              ? noSaved
+                ? ["/candidate"]
+                : ["/previous", "/candidate"]
+              : noSaved
+                ? []
+                : ["/previous"],
+          ]),
+        );
       if (members[0] === "GetSettings")
         return JSON.stringify(
           typed([
@@ -65,7 +77,9 @@ async function fixture({
               connection: {
                 type: typed("802-11-wireless"),
                 uuid: typed(path === "/candidate" ? candidateUuid : previous),
-                autoconnect: typed(path === "/candidate" ? true : previousAuto),
+                ...(omitAutoconnect && (path === "/candidate" || previousAuto)
+                  ? {}
+                  : { autoconnect: typed(path === "/candidate" ? true : previousAuto) }),
               },
               "802-11-wireless": {
                 mode: typed("infrastructure"),
@@ -513,8 +527,64 @@ it("still refuses a disconnected join when two saved infrastructure profiles can
   await f.service.work();
   f.disconnect();
   await f.run("nmcli", ["connection", "modify", "uuid", previous, "connection.autoconnect", "yes"]);
+  const before = await fs.readFile(join(f.hostRoot, "network.json"), "utf8");
+  const files = await fs.readdir(f.profilesRoot);
   expect(await f.service.accept(fields, { source: "person", person: "waiter-1" })).toEqual({
     ok: false,
     reason: "host_failed",
+  });
+  expect(await fs.readFile(join(f.hostRoot, "network.json"), "utf8")).toBe(before);
+  expect(await fs.readdir(f.profilesRoot)).toEqual(files);
+});
+
+it("refreshes the boot copy even when the demoted previous profile was removed outside Waitron", async () => {
+  const f = await fixture();
+  await f.service.accept(fields, { source: "person", person: "waiter-1" });
+  await f.service.work();
+  const original = f.run.getMockImplementation();
+  f.run.mockImplementation(async (command, args) => {
+    if (command === "nmcli" && args.includes(previous) && args.includes("modify"))
+      throw Error("unknown connection");
+    return original(command, args);
+  });
+  f.reboot();
+  await expect(f.service.work()).resolves.toBeUndefined();
+  expect((await f.service.status()).bootCopy).toEqual({
+    state: "current",
+    reason: null,
+    failure: null,
+  });
+});
+
+it("does not invent an I/O failure or remove a boot copy after a first join is rejected", async () => {
+  const f = await fixture({ noSaved: true, disconnected: true, failActivation: true });
+  await f.service.accept(fields, { source: "person", person: "waiter-1" });
+  await f.service.work();
+  expect((await f.service.status()).bootCopy).toEqual({
+    state: "pending",
+    reason: null,
+    failure: null,
+  });
+  expect(await fs.readdir(f.bootRoot)).toEqual([]);
+});
+
+it("selects a default-enabled saved profile and repairs its copy after worker launch failed", async () => {
+  const f = await fixture({ disconnected: true, omitAutoconnect: true, failStart: true });
+  expect(await f.service.accept(fields, { source: "person", person: "waiter-1" })).toEqual({
+    ok: false,
+    reason: "host_failed",
+  });
+  f.reboot();
+  await f.service.work();
+  expect((await f.service.status()).bootCopy).toEqual({
+    state: "current",
+    reason: null,
+    failure: null,
+  });
+  expect(
+    parseWifiRecord(await fs.readFile(join(f.bootRoot, "waitron-recovery/wifi.json"))),
+  ).toEqual({
+    kind: "loaded",
+    network: { ssidHex: "41", keyMgmt: "sae", psk: "previous-password", hidden: true },
   });
 });

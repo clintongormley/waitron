@@ -166,6 +166,11 @@ export function createNetworkChange({
     let bootCopy;
     try {
       const wanted = state.change.state === "applied" ? state.uuid : state.previous;
+      if (wanted === null) {
+        state.bootCopy = pendingCopy();
+        await save(state);
+        return;
+      }
       let selected;
       for (const path of await bus.call(
         "/org/freedesktop/NetworkManager/Settings",
@@ -207,14 +212,18 @@ export function createNetworkChange({
   }
   async function finish(state) {
     if (state.change.state === "applied" && state.previous)
-      await run("nmcli", [
-        "connection",
-        "modify",
-        "uuid",
-        state.previous,
-        "connection.autoconnect",
-        "no",
-      ]);
+      try {
+        await run("nmcli", [
+          "connection",
+          "modify",
+          "uuid",
+          state.previous,
+          "connection.autoconnect",
+          "no",
+        ]);
+      } catch {
+        /* The old profile may have been removed; publication remains independent. */
+      }
     await publish(state);
   }
   return {
