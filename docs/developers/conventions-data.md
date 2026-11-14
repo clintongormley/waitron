@@ -1535,8 +1535,11 @@ Off module or create its absent tables. `boot.failed-start.test.ts` checks all t
 Payments tables with populated rows, the warning, changed-trigger refusal and unchanged entries in an already-current journal;
 that last assertion does not establish whether the set was passed to the migrator.
 `boot.restore.test.ts` checks a dropped Payments-Off trigger during trading, and
-`boot.payments-off-alerts.test.ts` checks a never-installed Payments set stays absent. The installer
-and stored-text comparison retain the limits above.
+`boot.payments-off-alerts.test.ts` checks a never-installed Payments set stays absent.
+The contained upgrade data check uses the same retained selection, installer and assertion;
+`boot.upgrade.test.ts` checks missing-pair repair and replaced-trigger refusal there. That check
+reports the data-check result without the startup repair warning. The installer and stored-text
+comparison retain the limits above.
 
 No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner
 decision 2026-09-05). Two root guards enforce the classification on every non-docs push:
