@@ -4576,7 +4576,7 @@ describe("till-app: service cancellation consent", () => {
       legs: [],
       fileNow: null,
     };
-    async function resumeCorrection(methods: ReturnType<typeof paidMethods>) {
+    async function openCorrection(methods: ReturnType<typeof paidMethods>) {
       const { el } = await mountApp(methods);
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -4588,6 +4588,10 @@ describe("till-app: service cancellation consent", () => {
         correction: { id: "correction-1", saleId: "own-sale" },
       });
       const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
+      return { el, correcting };
+    }
+    async function resumeCorrection(methods: ReturnType<typeof paidMethods>) {
+      const { el, correcting } = await openCorrection(methods);
       await expect
         .poll(() => correcting()?.shadowRoot!.querySelector("[data-choice=card]"))
         .not.toBeNull();
@@ -4686,6 +4690,57 @@ describe("till-app: service cancellation consent", () => {
       answer(fresh);
       await flush(el);
       expect(refundForm(el)).toBeNull();
+    });
+
+    it("says in Correct invoice that Refund a payment did not open when its saved refund cannot be read", async () => {
+      const fresh = [{ ...resumedCard, appliedRemaining: "4.00" }];
+      const methods = paidMethods({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          capabilities: [...till.capabilities, "take-cash", "integrated-card-payment"],
+        }),
+        getRefundableTenders: vi.fn().mockResolvedValue(fresh),
+        getInvoiceCorrection: vi.fn().mockResolvedValue(resumedCorrection),
+      });
+      const getItem = Storage.prototype.getItem;
+      const unreadable = vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (
+        this: Storage,
+        key: string,
+      ) {
+        return key.startsWith("waitron.tender-refund:") && key.endsWith('"own-sale"')
+          ? "{not json"
+          : getItem.call(this, key);
+      });
+      try {
+        const el = await resumeCorrection(methods);
+        const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog")!;
+
+        await expect
+          .poll(() => correcting().shadowRoot!.querySelector("wt-form-actions")!.error)
+          .toBe(t("invoice_correction.card_not_opened"));
+        expect(refundForm(el)).toBeNull();
+      } finally {
+        unreadable.mockRestore();
+      }
+    });
+
+    it("closes Correct invoice from Close once the correction has ended, reading the payments again", async () => {
+      const getRefundableTenders = vi.fn().mockResolvedValue([resumedCard]);
+      const methods = paidMethods({
+        getRefundableTenders,
+        getInvoiceCorrection: vi
+          .fn()
+          .mockResolvedValue({ ...resumedCorrection, state: "filed", left: "0.00" }),
+      });
+      const { el, correcting } = await openCorrection(methods);
+      const done = () => correcting()?.shadowRoot!.querySelector<HTMLElement>("[data-done]");
+      await expect.poll(done).not.toBeNull();
+      const reads = getRefundableTenders.mock.calls.length;
+
+      done()!.click();
+      await expect.poll(correcting).toBeNull();
+      await expect.poll(() => getRefundableTenders.mock.calls.length).toBe(reads + 1);
+      expect(ticket(el)).not.toBeNull();
     });
 
     it("reports a transaction load failure after the kitchen write without reopening a cancellation", async () => {

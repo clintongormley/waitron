@@ -206,7 +206,6 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     super.connectedCallback();
     if (this.loaded === null) void this.#load();
     if (this.reasons === null) void this.#loadReasons();
-    if (this.#scope) return;
     const { scope, coordinator } = draftScopeFor<Draft>(this, {
       id: this,
       current: () => this.draft,
