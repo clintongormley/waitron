@@ -22,7 +22,7 @@ test("defaults to the medium size, a centered label and the default shape", asyn
   expect(el.getAttribute("shape")).toBe("default");
 });
 
-test("centers its label by default, but left-aligns it when used as a menu item", async () => {
+test("centers its label by default and supports an ordinary start-aligned button", async () => {
   const el = await mount('<wt-button style="width:200px">Account settings</wt-button>');
   const button = el.shadowRoot!.querySelector("button")!;
   expect(getComputedStyle(button).justifyContent).toBe("center");
@@ -352,4 +352,10 @@ test("a primary button takes its colour back when disabled is removed", async ()
     text: "rgb(51, 52, 53)",
     opacity: "1",
   });
+});
+
+test("an owning menu can centre a start-aligned button through inheritance", async () => {
+  const el = await mount('<wt-button align="start">Edit</wt-button>');
+  host.style.setProperty("--wt-button-justify", "center");
+  expect(getComputedStyle(el.shadowRoot!.querySelector("button")!).justifyContent).toBe("center");
 });

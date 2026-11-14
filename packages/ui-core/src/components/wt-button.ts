@@ -26,7 +26,7 @@ export class WtButton extends LitElement {
       button {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
+        justify-content: var(--wt-button-justify, center);
         gap: var(--wt-space-2);
         width: 100%;
         min-width: var(--wt-tap-min);
@@ -106,11 +106,8 @@ export class WtButton extends LitElement {
         opacity: 1;
       }
 
-      /* For a button standing in as a MENU ITEM (e.g. inside wt-row-actions' popover, which already
-         stretches a slotted button to the popover's full width) — a centered label reads oddly once
-         the button is wider than its text, unlike an ordinary button sized to its own content. */
       :host([align="start"]) button {
-        justify-content: flex-start;
+        justify-content: var(--wt-button-justify, flex-start);
       }
 
       :host([shape="round"]) button {
@@ -149,9 +146,7 @@ export class WtButton extends LitElement {
   // control in `form.elements`. Forms are handled in JS via `wt-change`, not native submission.
   // Full form association via ElementInternals is out of scope for this component.
 
-  // `part="button"` lets a consumer layer its own hover accent (e.g. `wt-button.foo::part(button):hover`)
-  // without changing what a variant looks like everywhere else it's used — see "Page composition" in
-  // docs/developers/design-system.md.
+  // Menu items keep the shared row-actions appearance; other buttons may style this part.
   override render() {
     return html`
       <button

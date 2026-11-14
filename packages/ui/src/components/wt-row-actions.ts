@@ -54,15 +54,18 @@ export class WtRowActions extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-1);
       }
+      ::slotted(*) {
+        --wt-button-justify: center;
+      }
       ::slotted(wt-button) {
         width: 100%;
       }
-      /* The same box as a slotted wt-button variant="secondary" align="start". */
       ::slotted(a[href]) {
         box-sizing: border-box;
         display: flex;
         align-items: center;
-        justify-content: flex-start;
+        justify-content: center;
+        text-align: center;
         gap: var(--wt-space-2);
         width: 100%;
         min-width: var(--wt-tap-min);

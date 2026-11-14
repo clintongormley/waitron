@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, test, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import type { WtButton } from "./wt-button.js";
 import "./wt-button.js";
+import "./wt-menu-row.js";
 import { WtDataTable } from "./wt-data-table.js";
 import { cleanup, host, mount } from "../test-helpers.js";
 import { expectNoA11yViolations } from "../a11y-helpers.js";
@@ -1055,7 +1056,7 @@ describe("a link entry", () => {
     const el = (await mount(
       `<wt-row-actions label="Actions for Wine">
         <a href="#wine"${disabled ? ' aria-disabled="true"' : ""}>Open Wine</a>
-        <wt-button variant="secondary" align="start"${disabled ? " disabled" : ""}>Edit</wt-button>
+        <wt-button variant="secondary"${disabled ? " disabled" : ""}>Edit</wt-button>
       </wt-row-actions>`,
     )) as WtRowActions;
     const edit = el.querySelector<WtButton>("wt-button")!;
@@ -1094,7 +1095,7 @@ describe("a link entry", () => {
     "textDecorationLine",
   ] as const;
 
-  it("draws the same box as a secondary start-aligned button beside it", async () => {
+  it("draws the same box as a secondary centred button beside it", async () => {
     const { link, button } = await mountLinkAndButton();
     const linkStyle = getComputedStyle(link);
     const buttonStyle = getComputedStyle(button);
@@ -1130,10 +1131,9 @@ describe("a link entry", () => {
     expect(style.textDecorationLine).toBe("none");
     const label = document.createRange();
     label.selectNodeContents(link);
-    expect(label.getBoundingClientRect().left - link.getBoundingClientRect().left).toBeCloseTo(
-      parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth),
-      0,
-    );
+    const labelBox = label.getBoundingClientRect();
+    const linkBox = link.getBoundingClientRect();
+    expect((labelBox.left + labelBox.right) / 2).toBeCloseTo((linkBox.left + linkBox.right) / 2, 0);
   });
 
   it("shows the token focus ring when reached by keyboard, as the button does", async () => {
@@ -1539,4 +1539,29 @@ it("an empty menu tolerates navigation and Escape still closes it", async () => 
   expect(el.shadowRoot!.activeElement).toBe(trigger);
   await userEvent.keyboard("{Escape}");
   expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+});
+
+it("centres action buttons through nested help rows", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Actions"><div><wt-menu-row><wt-button align="start">Edit</wt-button></wt-menu-row></div></wt-row-actions>',
+  )) as WtRowActions;
+  const button = el.querySelector<WtButton>("wt-button")!;
+  await button.updateComplete;
+  el.show();
+  expect(getComputedStyle(button.shadowRoot!.querySelector("button")!).justifyContent).toBe(
+    "center",
+  );
+});
+
+it("centres each line of a wrapping link label", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Actions"><a href="#details">Open the complete details of this order</a></wt-row-actions>',
+  )) as WtRowActions;
+  const link = el.querySelector("a")!;
+  link.style.width = "120px";
+  el.show();
+  const label = document.createRange();
+  label.selectNodeContents(link);
+  expect(label.getClientRects().length).toBeGreaterThan(1);
+  expect(getComputedStyle(link).textAlign).toBe("center");
 });
