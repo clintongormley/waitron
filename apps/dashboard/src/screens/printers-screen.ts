@@ -56,6 +56,7 @@ import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { SETTING_WIDTHS, textGrid } from "@waitron/printing/src/layout.js";
 import type {
   BluetoothCommandStatus,
+  BluetoothFailureReason,
   DashboardApi,
   DiscoveredPrinter,
   JoinRequestRow,
@@ -171,7 +172,7 @@ const BLUETOOTH_PIN = /^[\x21-\x7e]{1,16}$/;
 type CommandState = BluetoothCommandStatus["state"] | "no_answer";
 
 /** The screen's own copy of a command's status: the server's copy leaves with the device's row. */
-type TrackedCommand = Omit<BluetoothCommandStatus, "state" | "expiresInMs"> & {
+type TrackedCommand = Omit<BluetoothCommandStatus, "state" | "expiresInMs" | "error"> & {
   state: CommandState;
   answerBy: number;
   /** `#readCount` when the screen learned this state, for `#noteUnpaired`. */
@@ -227,9 +228,7 @@ const COMMAND_TEXT: Record<BluetoothCommandStatus["kind"], Record<CommandState, 
   },
 };
 
-/** The agent's reason codes (`BLUETOOTH_FAILURE_REASONS`, packages/print-agent/src/client.ts), repeated
- * here because the dashboard does not depend on that package. */
-const FAILURE_REASON_TEXT: Readonly<Record<string, StringKey>> = {
+const FAILURE_REASON_TEXT: Readonly<Record<BluetoothFailureReason, StringKey>> = {
   wrong_pin: "printers.bluetooth_reason.wrong_pin",
   pin_needed: "printers.bluetooth_reason.pin_needed",
   pin_too_slow: "printers.bluetooth_reason.pin_too_slow",
@@ -249,9 +248,10 @@ const FAILURE_GENERAL_TEXT: Record<BluetoothCommandStatus["kind"], StringKey> = 
 function commandText({ kind, state, reason }: TrackedCommand): string {
   const text = t(COMMAND_TEXT[kind][state]);
   if (state !== "failed") return text;
-  const words = Object.hasOwn(FAILURE_REASON_TEXT, reason ?? "")
-    ? FAILURE_REASON_TEXT[reason!]!
-    : FAILURE_GENERAL_TEXT[kind];
+  const words =
+    reason !== undefined && Object.hasOwn(FAILURE_REASON_TEXT, reason)
+      ? FAILURE_REASON_TEXT[reason]
+      : FAILURE_GENERAL_TEXT[kind];
   return `${text}: ${t(words)}`;
 }
 
@@ -1833,7 +1833,6 @@ export class PrintersScreen extends LitElement {
           ...tracked,
           state: reported.state,
           learnedAt: this.#readCount,
-          ...(reported.error !== undefined && { error: reported.error }),
           ...(reported.reason !== undefined && { reason: reported.reason }),
         };
         changed = true;

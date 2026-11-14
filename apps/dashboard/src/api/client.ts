@@ -1273,6 +1273,18 @@ export interface PrinterAddressProbe {
   expiresAt: number;
 }
 
+/** The agent's reason codes (`BLUETOOTH_FAILURE_REASONS`, packages/print-agent/src/client.ts), repeated
+ * here because the dashboard does not depend on that package. */
+export type BluetoothFailureReason =
+  | "wrong_pin"
+  | "pin_needed"
+  | "pin_too_slow"
+  | "unsupported_method"
+  | "not_found"
+  | "out_of_range"
+  | "timed_out"
+  | "bluetooth_unavailable";
+
 /** The latest Pair or Forget command for one agent and address; it never carries the PIN. */
 export interface BluetoothCommandStatus {
   id: string;
@@ -1281,7 +1293,7 @@ export interface BluetoothCommandStatus {
   state: "pending" | "succeeded" | "failed";
   error?: string;
   /** Failed only: the agent's code for why, when it could name one. */
-  reason?: string;
+  reason?: BluetoothFailureReason;
   /** Pending only: how long until the server drops the command unanswered. */
   expiresInMs?: number;
 }

@@ -31,6 +31,7 @@ import { guideHref } from "../help-guide.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import { formatRecentMinute } from "../date-utils.js";
 import type {
+  BluetoothFailureReason,
   DashboardApi,
   DiscoveredPrinter,
   JoinRequestRow,
@@ -7656,7 +7657,7 @@ describe("printers-screen Bluetooth pairing", () => {
   const finishedCommand = (
     kind: "pair" | "forget",
     state: "succeeded" | "failed",
-    extra: { id?: string; error?: string; reason?: string } = {},
+    extra: { id?: string; error?: string; reason?: BluetoothFailureReason } = {},
   ) => ({ id: `${kind}-1`, kind, address: ADDRESS, state, ...extra });
   const sel = (test: string) => `[data-test="${test}"]`;
 
@@ -8119,7 +8120,7 @@ describe("printers-screen Bluetooth pairing", () => {
   it.each([
     ["en-GB", "wrong_pin", "Pairing failed: the PIN is not correct"],
     ["es-ES", "wrong_pin", "No se pudo emparejar: el PIN no es correcto"],
-    ...(["from_a_newer_agent", undefined] as const).flatMap((reason) => [
+    ...(["from_a_newer_agent" as BluetoothFailureReason, undefined] as const).flatMap((reason) => [
       [
         "en-GB",
         reason,
