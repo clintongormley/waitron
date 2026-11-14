@@ -656,7 +656,7 @@ export class FiscalFilingScreen extends LitElement {
     this.refusal = "";
     // Reopening a case shows the same case object, so its opening's action key tells them apart.
     const actionKey = this.#actionKey;
-    const stillOpen = () => this.viewing === found && this.#actionKey === actionKey;
+    const sameOpening = () => this.viewing === found && this.#actionKey === actionKey;
     try {
       await this.client.putRight({
         kind: "record-correction",
@@ -671,18 +671,18 @@ export class FiscalFilingScreen extends LitElement {
       // be refused again: the dialog closes rather than offering Send.
       if (CASE_CHANGED.has(code)) {
         void this.#read();
-        if (!stillOpen()) return;
+        if (!sameOpening()) return;
         this.#close();
         this.caseChanged = true;
         return;
       }
-      if (!stillOpen()) return;
+      if (!sameOpening()) return;
       this.sending = false;
       this.refusal = code;
       return;
     }
     void this.#read();
-    if (!stillOpen()) return;
+    if (!sameOpening()) return;
     this.#scope?.commit(this.description);
     this.#close();
   }
