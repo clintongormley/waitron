@@ -13,7 +13,6 @@ import {
   bottomMessage,
   FormFeedback,
   draftScopeFor,
-  focusFirstInvalid,
   submitOnEnter,
   type DataTableColumn,
   type DraftScope,
@@ -202,7 +201,7 @@ export class InvoiceCustomerDialog extends LitElement {
     if (this.searching || this.downloading || this.#awaitingInput()) return;
     this.#feedback.press();
     if (this.#ownProblem() !== "") {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const generation = ++this.#generation;
