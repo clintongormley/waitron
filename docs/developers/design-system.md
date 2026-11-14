@@ -169,7 +169,8 @@ edge and the pulse dim colours, is in `colors.test.ts` alone, and the derivation
 `--wt-color-on-danger`, `--wt-color-danger-hover`, `--wt-color-primary-disabled`,
 `--wt-color-on-primary-disabled`, `--wt-color-danger-disabled`, `--wt-color-on-danger-disabled`,
 `--wt-color-success`, `--wt-color-on-success`, `--wt-color-warning`, `--wt-color-on-warning`,
-`--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-logo-plate`, `--wt-color-field-fill`,
+`--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-logo-plate`, `--wt-color-paper`,
+`--wt-color-ink`, `--wt-color-field-fill`,
 `--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
@@ -191,6 +192,9 @@ text `#1f1f1f` in the light theme, and `#131314`, `#8e918f` and `#e3e3e3` in the
 `--wt-color-logo-plate` is the white plate a venue logo is drawn on on dark screens when the logo
 has no version for dark screens, and behind the Look card editor's logo picture (A841): `#ffffff`
 in both themes, and no venue theme writes it.
+
+`--wt-color-paper` and `--wt-color-ink` are a print preview's paper and ink: `#ffffff` and
+`#000000` in both themes, and no venue theme writes them.
 
 Colours are semantic, not literal. There is no `--wt-color-blue`. The one named set is the
 calendar palette below, because there the colour's name is what the operator picks. `--wt-color-scrim` was added
@@ -598,7 +602,11 @@ the circle drawn inside it; see "Help mode"), `--wt-price-field-width`,
 `--wt-duration-move`, `--wt-duration-disclosure`, `--wt-duration-pulse-slow`,
 `--wt-duration-pulse-fast`,
 `--wt-field-height`, `--wt-field-line-width`, `--wt-field-line-width-active`,
-`--wt-dropdown-row-height`
+`--wt-dropdown-row-height`, `--wt-letter-spacing-caps|wide` (0.04em and 0.1em),
+`--wt-row-field-min-width` (12rem), and the sizes particular to one view: the dashboard's
+`--wt-approvals-…`, `--wt-overview-…`, `--wt-menu-list-…`, `--wt-authenticator-…` and
+`--wt-image-preview-…` tokens, the till's `--wt-till-…` tokens, and the bookings screen's
+`--wt-booking-date-field-max-width`
 
 The field tokens size the filled form field (see "The field box" under Forms):
 `--wt-field-height` (56px) is a labelled field's height, above `--wt-tap-min`, which

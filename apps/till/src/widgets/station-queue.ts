@@ -234,7 +234,7 @@ export class TillStationQueue extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
-        min-width: var(--wt-station-ticket-min-width);
+        min-width: var(--wt-till-station-ticket-min-width);
         padding: var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
         border-top: var(--wt-space-1) solid var(--wt-color-border);

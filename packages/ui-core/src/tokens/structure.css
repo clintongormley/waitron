@@ -99,11 +99,6 @@
      placeholder" cases in apps/dashboard/src/widgets/menu-prices-table.test.ts measure it. */
   --wt-price-range-field-width: 168px;
 
-  /* Paper and ink keep their physical colours in both themes, so they sit here rather than in
-     colors.css's per-theme blocks. */
-  --wt-color-paper: #fff;
-  --wt-color-ink: #000;
-
   --wt-letter-spacing-caps: 0.04em;
   --wt-letter-spacing-wide: 0.1em;
   --wt-row-field-min-width: 12rem;
@@ -126,7 +121,7 @@
   --wt-till-roster-card-min-width: 10rem;
   --wt-till-ticket-column-width: 22rem;
   --wt-till-receipt-qr-size: 10rem;
-  --wt-station-ticket-min-width: 12rem;
+  --wt-till-station-ticket-min-width: 12rem;
 
   /* Module dashboard views. */
   --wt-booking-date-field-max-width: 16rem;

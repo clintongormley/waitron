@@ -17,13 +17,19 @@ import { deriveTheme, WAITRON_DEFAULTS } from "./waitron.js";
 const MEANING =
   /^(on-)?(station-|palette-|table-|tab-|day-|danger|success|warning|google-|highlight)/;
 const PREFIX = "--wt-color-";
+// Colours that stay the same in both themes and that no venue theme writes.
+const FIXED: Record<string, string> = {
+  "logo-plate": "#ffffff",
+  paper: "#ffffff",
+  ink: "#000000",
+};
 
 describe("the token list a theme writes", () => {
-  test("the theme writes exactly the colours that carry no meaning, less the scrim and the logo plate", () => {
+  test("the theme writes exactly the colours that carry no meaning, less the scrim and the fixed colours", () => {
     const neutral = Object.keys(WAITRON_DEFAULTS.light)
       .filter((name) => name.startsWith(PREFIX))
       .map((name) => name.slice(PREFIX.length))
-      .filter((key) => !MEANING.test(key) && key !== "scrim" && key !== "logo-plate");
+      .filter((key) => !MEANING.test(key) && key !== "scrim" && !(key in FIXED));
     expect(new Set(THEME_COLOURS)).toEqual(new Set(neutral));
     expect(THEME_COLOURS).toHaveLength(22);
     expect(new Set(THEME_COLOURS).size).toBe(THEME_COLOURS.length);
@@ -41,7 +47,7 @@ describe("the token list a theme writes", () => {
 
   test("the scrim and every meaning colour stay outside", () => {
     expect(THEME_TOKENS).not.toContain("--wt-color-scrim");
-    expect(THEME_TOKENS).not.toContain("--wt-color-logo-plate");
+    for (const key of Object.keys(FIXED)) expect(THEME_TOKENS).not.toContain(colourToken(key));
     for (const name of THEME_TOKENS) {
       if (name.startsWith(PREFIX))
         expect(MEANING.test(name.slice(PREFIX.length)), name).toBe(false);
@@ -73,16 +79,19 @@ describe("the token list a theme writes", () => {
       expect(THEME_TOKENS).not.toContain(name);
   });
 
-  test("the logo plate is white in both modes and no theme writes it", () => {
-    expect(WAITRON_DEFAULTS.light["--wt-color-logo-plate"]).toBe("#ffffff");
-    expect(WAITRON_DEFAULTS.dark["--wt-color-logo-plate"]).toBe("#ffffff");
-    const theme = deriveTheme({
-      ...WAITRON_CHOICES,
-      handSet: { light: { surface: "#0000ff" }, dark: { surface: "#0000ff" } },
-    });
-    expect(theme.light).not.toHaveProperty(["--wt-color-logo-plate"]);
-    expect(theme.dark).not.toHaveProperty(["--wt-color-logo-plate"]);
-  });
+  test.each(Object.entries(FIXED))(
+    "the %s colour is %s in both modes and no theme writes it",
+    (key, value) => {
+      expect(WAITRON_DEFAULTS.light[colourToken(key)]).toBe(value);
+      expect(WAITRON_DEFAULTS.dark[colourToken(key)]).toBe(value);
+      const theme = deriveTheme({
+        ...WAITRON_CHOICES,
+        handSet: { light: { surface: "#0000ff" }, dark: { surface: "#0000ff" } },
+      });
+      expect(theme.light).not.toHaveProperty([colourToken(key)]);
+      expect(theme.dark).not.toHaveProperty([colourToken(key)]);
+    },
+  );
 
   test("the list is the colour tokens in order, then the three radii, then the four sizes, then the typeface and three weights", () => {
     expect(colourToken("bg")).toBe("--wt-color-bg");
