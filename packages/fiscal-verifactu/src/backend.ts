@@ -4,7 +4,7 @@ import { filedFiguresFor } from "./filed-figures.js";
 import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
 // Registers this package's own error codes on the shared registry.
 import "./errors.js";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recipientIdentifierResult } from "@waitron/country-packs";
@@ -49,6 +49,7 @@ import type { SifRegistration } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
+import { registrosFacturacion } from "./schema/registros.js";
 import { verifyChain } from "./verify.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { chainHeads, refuseUntilRecordable } from "./clock-behind.js";
@@ -295,12 +296,35 @@ export class VerifactuBackend implements FiscalBackend {
     };
   }
 
-  private async deliveryState(tx: Transaction, registroId: string): Promise<string | undefined> {
-    const [delivery] = await tx
-      .select({ estado: envios.estado })
-      .from(envios)
-      .where(eq(envios.registroId, registroId));
-    return delivery?.estado;
+  /**
+   * Whether AEAT answered every record stored under the invoice's identity (each version of its
+   * alta, and any anulación) with a refusal carrying a code other than `3000`, the code for
+   * already holding a record under that identity.
+   */
+  private async refusedEveryRecordOf(
+    tx: Transaction,
+    invoice: Pick<
+      OriginalAltaForCorrection,
+      "id_emisor_factura" | "num_serie_factura" | "fecha_expedicion_factura"
+    >,
+  ): Promise<boolean> {
+    const deliveries = await tx
+      .select({ estado: envios.estado, codigoError: envios.codigoError })
+      .from(registrosFacturacion)
+      .leftJoin(envios, eq(envios.registroId, registrosFacturacion.id))
+      .where(
+        and(
+          eq(registrosFacturacion.idEmisorFactura, invoice.id_emisor_factura),
+          eq(registrosFacturacion.numSerieFactura, invoice.num_serie_factura),
+          eq(registrosFacturacion.fechaExpedicionFactura, invoice.fecha_expedicion_factura),
+        ),
+      );
+    return deliveries.every(
+      (delivery) =>
+        delivery.estado === "rechazado" &&
+        delivery.codigoError !== null &&
+        delivery.codigoError !== "3000",
+    );
   }
 
   /**
@@ -489,12 +513,13 @@ export class VerifactuBackend implements FiscalBackend {
     // An R5 by replacement stands in for the simplified invoice it replaced, so a later correction
     // names it by differences, as for an F2.
     const replacement = original.tipo_factura === "R5" && original.tipo_rectificativa === "S";
-    // A replacement files the sale's full amounts with nothing rectified, which is right only
-    // while AEAT holds nothing for the original: its latest version was refused.
+    // A replacement files the sale's full amounts with nothing rectified, which is right only if
+    // AEAT holds no record of the original. This checks only what Waitron stored: every record
+    // it filed under the original's identity was refused, none with `3000`.
     const replacesRefusedF2 =
       correction.replaces === true &&
       original.tipo_factura === "F2" &&
-      (await this.deliveryState(tx, original.id)) === "rechazado";
+      (await this.refusedEveryRecordOf(tx, original));
     if (
       correction.replaces === true
         ? !replacesRefusedF2
@@ -541,7 +566,7 @@ export class VerifactuBackend implements FiscalBackend {
           ),
         },
       ],
-      // Zero: AEAT holds no amount for the refused original, so there is none to take out.
+      // Zero: AEAT refused every record of the original filed from here (see `replacesRefusedF2`).
       ...(replacesRefusedF2 && {
         ImporteRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
       }),

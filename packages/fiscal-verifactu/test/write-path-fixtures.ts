@@ -107,10 +107,11 @@ export async function storedRecord(
   return row;
 }
 
-/** Leaves every record of `saleId` refused by AEAT, as a drain pass does on its refusal. */
+/** Leaves every record of `saleId` refused by AEAT for a future date (`1112`), as a drain pass
+ * does on its refusal. */
 export async function refusedByAeat(db: Database | Transaction, saleId: string): Promise<void> {
   await db.execute(sql`
-    update envios set estado = 'rechazado'
+    update envios set estado = 'rechazado', codigo_error = '1112'
     where registro_id in (select id from registros_facturacion where sale_id = ${saleId})
   `);
 }

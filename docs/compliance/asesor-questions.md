@@ -3359,8 +3359,9 @@ invoice never changes its amounts — the VAT rate, the base, the VAT or the tot
 _2026-11-11 19:11 (owner, "Yes"): nor what a line is — its tax type, regime, taxed or not-subject
 class or exemption reason (`fiscal.remedy_class_changed`; A1481 in `docs/backlog/fiscal.md`)._
 _2026-11-14: the corrective for (1) and (2) is built as a replacement (R5, `TipoRectificativa` "S",
-rectified amounts 0.00 because AEAT holds nothing for the refused invoice, and the sale's real day
-as `FechaOperacion` when it differs from the replacement's date); no screen offers it yet._
+rectified amounts 0.00, and the sale's real day as `FechaOperacion` when it differs from the
+replacement's date). Waitron files it only when AEAT refused every record Waitron sent under that
+invoice's number, none with code 3000 (AEAT already holds one). No screen offers it yet._
 
 **Proposed interim treatment:** preserve the rejected record and response, show the invoice as
 unresolved, and require an explicit corrective action. D2 proposes continuing later submissions

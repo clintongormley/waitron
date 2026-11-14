@@ -26,6 +26,7 @@ import {
 import { computeHuella, serializeEnvio, validate } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
 import { VerifactuBackend } from "./backend.js";
+import { appendToChain } from "./chain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import { currentSif } from "./registro-sif.js";
 import { PRODUCER_PENDING, SOFTWARE_IDENTITY } from "./software-identity.js";
@@ -588,14 +589,61 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
     };
   }
 
-  /** The original's alta, given the delivery state AEAT's last answer left it in. */
-  async function originalWithDelivery(estado: string) {
+  /** The original's alta, given the delivery state and code AEAT's last answer left it in. */
+  async function originalWithDelivery(
+    estado: string,
+    codigoError: string | null = estado === "rechazado" ? "1112" : null,
+  ) {
     const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
     await suite.db.execute(sql`
-      update envios set estado = ${estado}
+      update envios set estado = ${estado}, codigo_error = ${codigoError}
       where registro_id = (select id from registros_facturacion where sale_id = ${saleId})
     `);
     return saleId;
+  }
+
+  /** A correction record of the sale's latest alta, as the record-correction remedy files one,
+   * left in the delivery state given. */
+  async function correctionRecordOf(
+    saleId: ReturnType<typeof brandSaleId>,
+    estado: string,
+    codigoError: string | null,
+  ) {
+    await withTransaction(suite.db, async (tx) => {
+      const { rows } = await tx.execute<Record<string, unknown>>(sql`
+        select * from registros_facturacion r
+        where sale_id = ${saleId} and tipo_registro = 'alta'
+          and not exists (select 1 from registros_facturacion n where n.corrects_registro_id = r.id)
+      `);
+      const stored = decodeRegistroRow(rows[0]!);
+      const previous = fromRegistroRow(stored) as RegistroAlta;
+      const appended = await appendToChain(tx, nodeId, {
+        tipo: "alta",
+        saleId,
+        origin: jobOrigin("operator_script"),
+        entorno: "production",
+        correctsRegistroId: stored.id,
+        input: {
+          IDEmisorFactura: previous.IDFactura.IDEmisorFactura,
+          NumSerieFactura: previous.IDFactura.NumSerieFactura,
+          FechaExpedicionFactura: new Date(
+            Date.parse(`${stored.fecha_expedicion_factura}T00:00:00Z`) - 60 * 60_000,
+          ),
+          NombreRazonEmisor: previous.NombreRazonEmisor,
+          TipoFactura: "F2",
+          DescripcionOperacion: previous.DescripcionOperacion,
+          Desglose: previous.Desglose,
+          CuotaTotal: previous.CuotaTotal,
+          ImporteTotal: previous.ImporteTotal,
+          Subsanacion: "S",
+          RechazoPrevio: estado === "rechazado" ? "X" : "N",
+          SistemaInformatico: previous.SistemaInformatico,
+          generadoEn: new Date("2026-03-02T10:00:00+01:00"),
+          offsetMinutes: 60,
+        },
+      });
+      await tx.insert(envios).values({ registroId: appended.id, estado, codigoError });
+    });
   }
 
   async function replace(
@@ -739,6 +787,45 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
     await expect(replace(original, laterDay, "2026-03-01")).rejects.toMatchObject({
       code: "fiscal.correction_unsupported",
       params: { saleId: original, tipoFactura: "F2", replaces: true },
+    });
+    expect(await storedReplacement()).toEqual([]);
+  });
+
+  it("files the replacement when AEAT refused the original and the correction record of it", async () => {
+    const original = await originalWithDelivery("rechazado");
+    await correctionRecordOf(original, "rechazado", "1112");
+
+    await replace(original, laterDay, "2026-03-01");
+
+    expect(await storedReplacement()).toHaveLength(1);
+  });
+
+  it("refuses a replacement while AEAT holds the original it accepted with errors, though a correction record of it was refused, and records nothing", async () => {
+    const original = await originalWithDelivery("aceptado_con_errores");
+    await correctionRecordOf(original, "rechazado", "1112");
+
+    await expect(replace(original, laterDay, "2026-03-01")).rejects.toMatchObject({
+      code: "fiscal.correction_unsupported",
+      params: { saleId: original, tipoFactura: "F2", replaces: true },
+    });
+    expect(await storedReplacement()).toEqual([]);
+  });
+
+  it("refuses a replacement of an original AEAT refused for already holding a record of that invoice (3000), and records nothing", async () => {
+    const original = await originalWithDelivery("rechazado", "3000");
+
+    await expect(replace(original, laterDay, "2026-03-01")).rejects.toMatchObject({
+      code: "fiscal.correction_unsupported",
+      params: { saleId: original, tipoFactura: "F2", replaces: true },
+    });
+    expect(await storedReplacement()).toEqual([]);
+  });
+
+  it("refuses a replacement of an original whose refusal carries no code, and records nothing", async () => {
+    const original = await originalWithDelivery("rechazado", null);
+
+    await expect(replace(original, laterDay, "2026-03-01")).rejects.toMatchObject({
+      code: "fiscal.correction_unsupported",
     });
     expect(await storedReplacement()).toEqual([]);
   });

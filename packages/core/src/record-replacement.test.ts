@@ -479,6 +479,19 @@ describe("recordReplacement — refusals use no number", () => {
     );
   });
 
+  it("uses no number when the backend refuses to file the replacement", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sell(backend);
+    const refusal = new AppError("fiscal.correction_unsupported", {
+      saleId,
+      tipoFactura: "F2",
+      replaces: true,
+    });
+    vi.spyOn(backend, "recordCorrection").mockRejectedValue(refusal);
+
+    await expectRefused(backend, saleId, {}, { code: "fiscal.correction_unsupported" });
+  });
+
   it("refuses a sale that is itself a corrective, such as a replacement", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
