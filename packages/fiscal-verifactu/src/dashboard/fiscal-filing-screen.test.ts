@@ -820,6 +820,83 @@ describe("putting a case right", () => {
     expect(request.mock.calls[2]![0]).toBe("/management-api/fiscal-filing");
   });
 
+  /** Closes the case dialog with the dialog's own cancel, and waits until it has closed. */
+  async function closeDialog(screen: FiscalFilingScreen, details: HTMLElement) {
+    const closed = new Promise((resolve) =>
+      details.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await (
+      details as HTMLElement & { requestClose(reason: string): Promise<boolean> }
+    ).requestClose("cancel");
+    await closed;
+    await screen.updateComplete;
+  }
+
+  it("keeps a reopened case's unsent description when an earlier opening's send succeeds", async () => {
+    let finish!: (value: unknown) => void;
+    const request = server(
+      refusedCase(1100, NAMES_DESCRIPTION),
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "First description");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    await closeDialog(screen, details);
+    const reopened = await openDetails(screen);
+    await type(screen, reopened, "Second unsent description");
+    finish({});
+    await vi.waitFor(() => expect(request.mock.calls.length).toBe(3));
+    await screen.updateComplete;
+    expect(reopened).toHaveProperty("open", true);
+    expect(field(reopened).value).toBe("Second unsent description");
+  });
+
+  it("keeps a reopened case's own send pending when an earlier opening's send is refused", async () => {
+    let refuseFirst!: (error: Error) => void;
+    let finishSecond!: (value: unknown) => void;
+    let sends = 0;
+    const request = server(refusedCase(1100, NAMES_DESCRIPTION), () =>
+      ++sends === 1
+        ? new Promise((_resolve, reject) => (refuseFirst = reject))
+        : new Promise((resolve) => (finishSecond = resolve)),
+    );
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await type(screen, details, "First description");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    await closeDialog(screen, details);
+    const reopened = await openDetails(screen);
+    await type(screen, reopened, "Second description");
+    action(reopened).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(2));
+    expect(action(reopened).disabled).toBe(true);
+    refuseFirst(refusal("clock.unconfirmed"));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await screen.updateComplete;
+    expect(action(reopened).disabled).toBe(true);
+    const actions = reopened.querySelector("wt-form-actions") as HTMLElement & { error: string };
+    expect(actions.error).toBe("");
+    finishSecond({});
+    await vi.waitFor(() => expect(reopened).toHaveProperty("open", false));
+  });
+
+  it("keeps the administrator sign-in available after the sign-in throws", async () => {
+    const auth = continuation(["report.export"]);
+    auth.signIn.mockImplementation(() => {
+      throw new Error("offline");
+    });
+    const { screen } = await mount(server(refusedCase(1100, NAMES_DESCRIPTION)), auth.value);
+    const details = await openDetails(screen);
+    action(details).click();
+    await screen.updateComplete;
+    expect(auth.signIn).toHaveBeenCalledOnce();
+    expect(action(details).disabled).toBe(false);
+    expect(action(details)).toHaveProperty("loading", false);
+  });
+
   it("counts the description in characters, as the library does, not in UTF-16 units", async () => {
     const request = server(refusedCase(1100, NAMES_DESCRIPTION));
     const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
