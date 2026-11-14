@@ -4248,8 +4248,8 @@ export const es: Record<StringKey, string> = {
   "permission.adjustment.manage": "Gestionar invitaciones",
   "permission.booking.manage": "Gestionar reservas",
   "permission.system.manage": "Gestionar el sistema",
-  "permission.system.box_admin": "Administrar esta caja",
-  "permission.node.manage": "Gestionar cajas",
+  "permission.system.box_admin": "Administrar este servidor",
+  "permission.node.manage": "Gestionar servidores",
 
   "handover_warning.unconfirmed":
     "Hay un traspaso de emergencia registrado. Comprueba las fechas del traspaso antes de usar estas cifras.",
