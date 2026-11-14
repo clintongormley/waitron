@@ -105,6 +105,10 @@ it("labels guest language links in their own languages", async () => {
   );
   expect(await p.getByRole("navigation", { name: "Idiomas" }).count()).toBe(1);
   expect(await p.locator('a[href="?language=en"]').textContent()).toBe("English");
+  await p.setContent(
+    renderGuestMenuPage({ ...menu, language: "fr" }, "The Restaurant", "en", true),
+  );
+  expect(await p.getByRole("navigation", { name: "Languages" }).getAttribute("lang")).toBe("en");
 });
 
 it("paints an unavailable page with the shared guest-page typography", async () => {

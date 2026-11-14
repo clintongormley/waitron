@@ -37,13 +37,13 @@ const run = createErrorBoundary(
   },
   "catalogue.failed",
 );
-async function sharingStatus(tx: Transaction) {
+async function sharingStatus(tx: Transaction, serving: () => boolean) {
   const { doc, revision } = await readSettings(tx, GUEST_MENU_SETTINGS);
-  return { ...doc, revision, available: (await readGuestMenu(tx)) !== null };
+  return { ...doc, revision, available: serving() && (await readGuestMenu(tx)) !== null };
 }
 export function mountGuestMenuApi(
   app: Hono,
-  deps: { db: Database; venueLocale?: string },
+  deps: { db: Database; venueLocale?: string; serving: () => boolean },
   log: Logger,
 ): void {
   app.get("/management-api/guest-menu", (c) =>
@@ -54,7 +54,7 @@ export function mountGuestMenuApi(
           managementSessionId: sessionId,
           permission: "catalogue.manage",
         });
-        return sharingStatus(tx);
+        return sharingStatus(tx, deps.serving);
       });
       c.header("Cache-Control", "no-store");
       return c.json(answer);
@@ -78,7 +78,7 @@ export function mountGuestMenuApi(
           expectedRevision: body.expectedRevision as number,
           personId: authorizedBy,
         });
-        return sharingStatus(tx);
+        return sharingStatus(tx, deps.serving);
       });
       return c.json(answer);
     }),

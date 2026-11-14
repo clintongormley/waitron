@@ -3172,7 +3172,7 @@ async function bootServer(
     },
     log,
   );
-  mountGuestMenuApi(app, { db, venueLocale }, log);
+  mountGuestMenuApi(app, { db, venueLocale, serving: () => cloudServing() }, log);
   mountUnitsApi(app, { db, venueLocale }, log);
   mountPurchasingApi(app, { db }, log);
   const drainWaker = createLoopWaker({ minTickMs: timings.minTickMs });

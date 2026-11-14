@@ -4906,7 +4906,7 @@ export class DashboardApi {
     id: string,
     enabled: boolean,
     revision: number,
-  ): Promise<{ enabled: boolean; revision: number; available: boolean }> {
+  ): Promise<{ enabled: boolean; revision: number }> {
     return this.#request(`/management-api/payments/providers/${id}/state`, "PUT", {
       enabled,
       revision,

@@ -36,7 +36,7 @@ async function fixture() {
   const app = new Hono();
   let serving = true;
   mountPublicGuestMenu(app, { db: suite.db, serving: () => serving }, () => {});
-  mountGuestMenuApi(app, { db: suite.db, venueLocale: "en" }, () => {});
+  mountGuestMenuApi(app, { db: suite.db, venueLocale: "en", serving: () => serving }, () => {});
   return {
     ...f,
     app,
@@ -173,6 +173,10 @@ it("serves only the opted-in publication without sign-in and closes it when serv
   await withTransaction(suite.db, (tx) => setVenueDefaultCatalogue(tx, f.lunch));
   f.serve(false);
   expect((await read()).status).toBe(503);
+  const stopped = await f.app.request("/management-api/guest-menu", {
+    headers: { cookie: f.cookies.manager },
+  });
+  expect(await stopped.json()).toEqual({ enabled: true, revision: 1, available: false });
   f.serve(true);
   expect((await read()).status).toBe(200);
 });
