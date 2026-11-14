@@ -125,8 +125,9 @@ export async function documentPrintersOf(
   );
 }
 
-/** A stuck kitchen printer for any device; another stuck printer only for a device in
- * `documentPrinters`. */
+/** A kitchen printer in trouble for any device; another only for a device in `documentPrinters`.
+ * A stuck printer says it is not printing; one that has printed a later document since asks for
+ * the failed ticket to be reprinted. */
 export function printerStaffNoticeSource(deps: {
   deviceId: string;
   trouble: (tx: Transaction, now: Date) => Promise<readonly PrinterInTrouble[]>;
@@ -135,23 +136,30 @@ export function printerStaffNoticeSource(deps: {
   const documentPrinters = deps.documentPrinters ?? documentPrintersOf;
   return {
     async read({ tx, reading }) {
-      const rows = (await deps.trouble(tx, reading.instant)).filter((r) => r.stuckSince !== null);
+      const rows = await deps.trouble(tx, reading.instant);
       if (rows.length === 0) return [];
       const mine = rows.every((r) => r.kitchen)
         ? new Set<string>()
         : await documentPrinters(tx, deps.deviceId);
+      const since = (r: PrinterInTrouble) => Date.parse(r.stuckSince ?? r.oldest);
       return rows
         .filter((r) => r.kitchen || mine.has(r.id))
-        .sort(
-          (x, y) =>
-            Date.parse(x.stuckSince!) - Date.parse(y.stuckSince!) || x.name.localeCompare(y.name),
-        )
-        .map((r): StaffNotice => ({
-          key: `printer.jobs_waiting:${r.id}`,
-          code: "printer.jobs_waiting",
-          severity: "warning",
-          params: { printer: r.name, since: new Date(r.stuckSince!).toISOString() },
-        }));
+        .sort((x, y) => since(x) - since(y) || x.name.localeCompare(y.name))
+        .map((r): StaffNotice =>
+          r.stuckSince === null
+            ? {
+                key: `printer.ticket_failed:${r.id}`,
+                code: "printer.ticket_failed",
+                severity: "warning",
+                params: { printer: r.name },
+              }
+            : {
+                key: `printer.jobs_waiting:${r.id}`,
+                code: "printer.jobs_waiting",
+                severity: "warning",
+                params: { printer: r.name, since: new Date(r.stuckSince).toISOString() },
+              },
+        );
     },
   };
 }

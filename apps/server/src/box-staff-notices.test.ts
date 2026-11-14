@@ -222,13 +222,60 @@ describe("printer notices", () => {
     expect(trouble).toHaveBeenCalledWith(CTX.tx, AT);
   });
 
-  it("a printer in trouble that has printed since shows nothing", async () => {
+  it("a printer in trouble that has printed since asks for the failed ticket to be reprinted", async () => {
     const source = printerStaffNoticeSource({
       deviceId: "d1",
       trouble: () => Promise.resolve([row({ id: "k", stuckSince: null })]),
       documentPrinters: vi.fn(),
     });
-    expect(await source.read(CTX)).toEqual([]);
+    expect(await source.read(CTX)).toEqual([
+      {
+        key: "printer.ticket_failed:k",
+        code: "printer.ticket_failed",
+        severity: "warning",
+        params: { printer: "Kitchen" },
+      },
+    ]);
+  });
+
+  it("another printer's failed ticket shows only on a device that prints its documents to it", async () => {
+    const documentPrinters = vi.fn(() => Promise.resolve(new Set(["p2"])));
+    const source = printerStaffNoticeSource({
+      deviceId: "d1",
+      trouble: () =>
+        Promise.resolve([
+          row({ id: "p1", name: "Bar", kitchen: false, stuckSince: null }),
+          row({ id: "p2", name: "Terrace", kitchen: false, stuckSince: null }),
+        ]),
+      documentPrinters,
+    });
+    expect(await source.read(CTX)).toEqual([
+      {
+        key: "printer.ticket_failed:p2",
+        code: "printer.ticket_failed",
+        severity: "warning",
+        params: { printer: "Terrace" },
+      },
+    ]);
+    expect(documentPrinters).toHaveBeenCalledWith(CTX.tx, "d1");
+  });
+
+  it("orders a failed ticket's notice by its oldest job among the stuck ones", async () => {
+    const source = printerStaffNoticeSource({
+      deviceId: "d1",
+      trouble: () =>
+        Promise.resolve([
+          row({ id: "stuck", name: "Bar", stuckSince: "2026-10-22T09:55:00.000Z" }),
+          row({ id: "later", name: "Alpha", oldest: "2026-10-22T09:58:00.000Z", stuckSince: null }),
+          row({ id: "early", name: "Zed", oldest: "2026-10-22T09:50:00.000Z", stuckSince: null }),
+        ]),
+      documentPrinters: vi.fn(),
+    });
+    expect((await source.read(CTX)).map((n) => n.key)).toEqual([
+      "printer.ticket_failed:early",
+      "printer.jobs_waiting:stuck",
+      "printer.ticket_failed:later",
+    ]);
   });
 
   it("another printer shows only on a device that prints its documents to it", async () => {

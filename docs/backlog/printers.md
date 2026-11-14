@@ -632,18 +632,6 @@ Hardware and inbox checks to complete in the owner session.
 - **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
   [Detail](printers.md#a-print-agent-cannot-be-discarded-when-the-join-window-shuts-a269-owner-2026-10-04--open)
 
-## Bundle: A printer's till notice and its bell agree
-
-1 entry, size S.
-
-- **A printer that prints some documents and fails others loses its till notice.** The notice goes
-  once any later document on the printer prints (slice 10 decision 18), while the bell keeps
-  naming the printer until the failed ticket is reprinted or resent. Left open by A798-B slice 10.
-  Needs the owner (2026-11-14): making the two agree changes what staff see on the till, by
-  reversing decision 18, adding a second till notice, or narrowing the bell; the question is with
-  the owner ("A printer that came back but gave up on one ticket: should the till say so?",
-  2026-11-14).
-
 ## Bundle: Guest count
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

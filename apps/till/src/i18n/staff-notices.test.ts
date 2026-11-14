@@ -12,6 +12,11 @@ const LANGUAGES = [
   ["es-ES", es],
 ] as const;
 
+const TICKET_FAILED = {
+  "en-GB": { main: "Printer “Kitchen” could not print a ticket", hint: "Reprint it" },
+  "es-ES": { main: "Impresora «Cocina»: no pudo imprimir un ticket", hint: "Vuelve a imprimirlo" },
+} as const;
+
 describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
   it.each(["storage.disk_full", "clock.unusable", "storage.space_low"])(
     "words %s with its own words and the tell-a-manager hint",
@@ -138,6 +143,32 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
         .main,
     ).toContain("$& {time}");
   });
+
+  it("words a failed ticket's notice with the printer's name and asks for a reprint", () => {
+    setLocale(locale);
+    const printer = locale === "es-ES" ? "Cocina" : "Kitchen";
+    expect(staffNoticeText({ code: "printer.ticket_failed", params: { printer } })).toEqual(
+      TICKET_FAILED[locale],
+    );
+  });
+
+  it("keeps a failed ticket's printer name that looks like a replacement pattern", () => {
+    setLocale(locale);
+    expect(
+      staffNoticeText({ code: "printer.ticket_failed", params: { printer: "$& {printer}" } }).main,
+    ).toContain("$& {printer}");
+  });
+
+  it.each([{}, { printer: "" }, { printer: 7 }])(
+    "words a failed ticket's notice with %j as unknown",
+    (params) => {
+      setLocale(locale);
+      expect(staffNoticeText({ code: "printer.ticket_failed", params })).toEqual({
+        main: words["staff_notice.unknown"],
+        hint: words["staff_notice.tell_manager"],
+      });
+    },
+  );
 
   it("words a code the till does not know as unknown", () => {
     setLocale(locale);
