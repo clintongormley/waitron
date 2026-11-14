@@ -3,7 +3,7 @@ import type { LitElement } from "lit";
 import type { WtFileInput } from "@waitron/ui";
 import { SetupApi } from "../api/client.js";
 import { format, setLocale, t } from "../i18n/t.js";
-import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
+import { chooseFiles, drawnFileName, fileControl } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupHandoverScreen } from "./handover-screen.js";
 
@@ -55,6 +55,11 @@ const selectedInput = {
 };
 const q = <T extends HTMLElement>(el: HTMLElement, selector: string) =>
   el.shadowRoot!.querySelector<T>(selector)!;
+async function backupControlDisabled(el: HTMLElement): Promise<boolean> {
+  const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
+  await picker.updateComplete;
+  return fileControl(picker).disabled;
+}
 async function edit(el: LitElement, name: string, value: string) {
   const field = q<LitElement>(el, `[name="${name}"]`);
   await field.updateComplete;
@@ -765,7 +770,7 @@ it("while the spare catches up the page waits and says so, then offers the copy 
   );
   expect(followedTakes(posts)).toBe(1);
   expect(q(el, "[data-test=emergency-held]")).toBeNull();
-  expect(q(el, 'input[name="handover-backup"]')).not.toBeNull();
+  expect(q(el, 'wt-file-input[name="handover-backup"]')).not.toBeNull();
   await vi.advanceTimersByTimeAsync(2000);
   expect(followedTakes(posts)).toBe(2);
   await vi.advanceTimersByTimeAsync(56_000);
@@ -774,7 +779,7 @@ it("while the spare catches up the page waits and says so, then offers the copy 
   await el.updateComplete;
   expect(q(el, "[data-test=emergency-held]")).not.toBeNull();
   expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.still_catching_up"));
-  expect(q<HTMLInputElement>(el, 'input[name="handover-backup"]').disabled).toBe(false);
+  expect(await backupControlDisabled(el)).toBe(false);
   const taken = followedTakes(posts);
   vi.useRealTimers();
   q(el, "[data-test=emergency-held]").click();
@@ -807,7 +812,7 @@ it.each([
     await vi.waitFor(() => expect(q(el, "[data-test=emergency-held]")).not.toBeNull());
     expect(actions(el)).toContain(t(key));
     expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.held_waiting"));
-    expect(q(el, 'input[name="handover-backup"]')).not.toBeNull();
+    expect(q(el, 'wt-file-input[name="handover-backup"]')).not.toBeNull();
     expect(q(el, "[data-test=emergency-copy]")).toBeNull();
     expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual([
       "preview",
@@ -839,7 +844,7 @@ it("from the press, waits visibly with Choose a backup open, and offers the held
   await vi.waitFor(() => expect(followedTakes(posts)).toBe(1));
   await el.updateComplete;
   expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.catching_up"));
-  expect(q<HTMLInputElement>(el, 'input[name="handover-backup"]').disabled).toBe(false);
+  expect(await backupControlDisabled(el)).toBe(false);
   await vi.advanceTimersByTimeAsync(59_000);
   expect(q(el, "[data-test=emergency-held]")).toBeNull();
   await vi.advanceTimersByTimeAsync(1000);
@@ -931,7 +936,7 @@ it("pressing the held copy while the old process is still going down waits for t
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.held_waiting")),
   );
   expect(actions(el)).not.toContain(t("handover.emergency.failed"));
-  expect(q<HTMLInputElement>(el, 'input[name="handover-backup"]').disabled).toBe(false);
+  expect(await backupControlDisabled(el)).toBe(false);
   await vi.advanceTimersByTimeAsync(4000);
   await vi.waitFor(() =>
     expect(q(el, "[data-test=emergency-copy]").textContent).toContain(t("handover.emergency.copy")),
@@ -979,7 +984,7 @@ it("a person only the up-to-date copy knows waits for it, with no held copy to o
   expect(q(el, "[data-test=emergency-held]")).toBeNull();
   expect(q(el, "[data-test=held-copy]")).toBeNull();
   expect(actions(el)).not.toContain(t("handover.emergency.sign_in_failed"));
-  expect(q<HTMLInputElement>(el, 'input[name="handover-backup"]').disabled).toBe(false);
+  expect(await backupControlDisabled(el)).toBe(false);
 });
 
 it("a followed copy placed earlier goes through the take, which may find a newer one", async () => {
