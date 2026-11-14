@@ -21,7 +21,7 @@ import {
 import { seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
 
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
+import type { SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "es";
@@ -67,7 +67,7 @@ const PRODUCTS: SeedSalesProduct[] = [
 
 const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
   nifBase: 80_000_000,
-  invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+  invoiceLocale: "es-ES",
 });
 
 function venueFor(v: VenueResult): SeedSalesVenue {
@@ -89,7 +89,7 @@ describe("seedSales", () => {
 
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
-      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+      invoiceLocale: "es-ES",
       days: 3,
       products: PRODUCTS,
     });
@@ -163,13 +163,13 @@ describe("seedSales", () => {
     const venue = await createDemoVenueProvisioner(() => suite.db, {
       nifBase: 81_000_000,
       nifFormat: "calculated",
-      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+      invoiceLocale: "es-ES",
     })();
     // Two days, not one: before the day's first service slot every one of today's sales would be in
     // the future, so only yesterday guarantees any.
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
-      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+      invoiceLocale: "es-ES",
       days: 2,
       products: PRODUCTS,
     });
@@ -194,7 +194,7 @@ describe("seedSales", () => {
     await expect(
       seedSales(suite.db, {
         venue: venueFor(venue),
-        invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+        invoiceLocale: "es-ES",
         days: 3,
         products: PRODUCTS,
       }),
@@ -215,7 +215,7 @@ describe("seedSales", () => {
 
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
-      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+      invoiceLocale: "es-ES",
       days: 0,
       products: PRODUCTS,
     });

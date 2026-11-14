@@ -27,7 +27,7 @@ import { seedDemoRestaurant } from "./seed.js";
 import * as salesSeed from "./seed-sales.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
+import type { SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";
@@ -40,7 +40,8 @@ const suite = useVenueDb({
 
 const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
   nifBase: 90_000_000,
-  invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+  invoiceLocale: "es-ES",
+  staffLanguage: LOCALE,
   nifFormat: "calculated",
   adminPin: "5555",
 });

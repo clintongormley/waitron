@@ -22,7 +22,7 @@ import {
 import { seedCatalogues } from "./seed-catalogue.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
+import type { SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";
@@ -34,7 +34,8 @@ const suite = useVenueDb({
 
 const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
   nifBase: 50_000_000,
-  invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+  invoiceLocale: "es-ES",
+  staffLanguage: LOCALE,
 });
 
 describe("seedCatalogues", () => {
