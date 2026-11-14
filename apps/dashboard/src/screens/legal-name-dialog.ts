@@ -2,7 +2,9 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  bottomMessage,
   draftScopeFor,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -53,7 +55,7 @@ export class LegalNameDialog extends LitElement {
   @state() private opened: string | null = null;
   @state() private value = "";
   @state() private busy = false;
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   /** A refusal's sentence for the field, kept until the field changes or Save is pressed again. */
   @state() private refusal = "";
   @state() private bottom = "";
@@ -68,7 +70,7 @@ export class LegalNameDialog extends LitElement {
     this.opened = legalName;
     this.value = legalName;
     this.busy = false;
-    this.attempted = false;
+    this.feedback.reset();
     this.refusal = "";
     this.bottom = "";
     const { coordinator, scope } = draftScopeFor<string>(this, {
@@ -80,7 +82,7 @@ export class LegalNameDialog extends LitElement {
         this.value = value;
         this.refusal = "";
         this.bottom = "";
-        this.attempted = false;
+        this.feedback.reset();
       },
     });
     this.#leave = coordinator;
@@ -118,7 +120,7 @@ export class LegalNameDialog extends LitElement {
     (await this.#leave.request({ scopes: [this.#scope.id], reason, proceed() {} })) === "proceeded";
 
   #ownError(): string {
-    return this.attempted && this.value.trim() === "" ? t("venue_details.required") : "";
+    return this.feedback.attempted && this.value.trim() === "" ? t("venue_details.required") : "";
   }
 
   #change(event: CustomEvent<{ value: string }>): void {
@@ -134,7 +136,7 @@ export class LegalNameDialog extends LitElement {
     const expected = this.opened;
     if (expected === null || this.busy) return;
     if (saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
+    this.feedback.press();
     this.refusal = "";
     this.bottom = "";
     if (this.#ownError()) {
@@ -191,7 +193,7 @@ export class LegalNameDialog extends LitElement {
   override render(): TemplateResult {
     const open = this.opened !== null;
     const fieldError = this.refusal || this.#ownError();
-    const bottom = [this.bottom, fieldError ? t("form.fix_fields") : ""].filter(Boolean).join(" ");
+    const bottom = bottomMessage(this.bottom, fieldError ? t("form.fix_fields") : "");
     const action = saveActionState(this.#scope);
     return html`<wt-dialog
       data-test="legal-name-dialog"
