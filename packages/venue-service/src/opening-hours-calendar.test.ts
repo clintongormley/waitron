@@ -32,7 +32,7 @@ import {
 } from "./opening-hours-calendar.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { ensureDefaultSeasons, readSeasons } from "./seasons.js";
-import { missingHolidaysIn, saveSpecialDay } from "./special-days.js";
+import { saveSpecialDay } from "./special-days.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { englishSeasonName, starterSeasonName } from "./testing/starter-seasons.js";
 
@@ -200,38 +200,23 @@ describe("the Opening hours year read", () => {
     expect(year.area.readiness).toBe("ready");
   });
 
-  it("says 2027's public holidays are not available yet, and names the repeating date with no holiday of its name", async () => {
+  it("says 2027's public holidays are not available yet, and warns of no repeating date with no holiday of its name", async () => {
     await venue();
-    const easterWeek = await special({
+    await special({
       name: "Easter week",
       repeatsYearly: true,
       dates: [{ date: "2026-04-03", closedAllDay: true }],
     });
     const now = await read(2026);
-    expect(now.missingHolidays).toEqual([]);
+    expect(now).not.toHaveProperty("missingHolidays");
     const next = await read(2027);
     expect(next.publicHolidaysAvailable).toBe(false);
     expect(next.holidayCoverage.map(({ nationalRegional }) => nationalRegional)).toEqual([
       "missing_year",
     ]);
-    expect(next.missingHolidays).toEqual([
-      {
-        specialDayId: easterWeek.id,
-        name: "Easter week",
-        holidayName: "Viernes Santo",
-        englishName: "Good Friday",
-      },
-    ]);
+    expect(next).not.toHaveProperty("missingHolidays");
     const readiness = await run((tx) => listVenueReadiness(tx, new Date("2026-06-01T12:00:00Z")));
-    expect(readiness).toContainEqual({
-      code: "special_day.holiday_missing",
-      specialDayId: easterWeek.id,
-      holidayName: next.missingHolidays[0]!.holidayName,
-      englishName: "Good Friday",
-      year: 2027,
-    });
-    const known = new Map([[2027, new Map([["Viernes Santo", "2027-03-26"]])]]);
-    expect(await run((tx) => missingHolidaysIn(tx, [2027], known))).toEqual([]);
+    expect(readiness.map(({ code }) => code)).not.toContain("special_day.holiday_missing");
   });
 
   it("closes a date only when every active department is closed all day", async () => {

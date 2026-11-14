@@ -80,7 +80,6 @@ function yearRead(year: number): OpeningHoursYear {
     seasons: [],
     days: year === 2026 ? everyDate2026(day) : [],
     publicHolidaysAvailable: true,
-    missingHolidays: [],
     holidayCoverage: [],
     area: { addressKey: "a", readiness: "ready", options: [], required: false, chosen: null },
   };

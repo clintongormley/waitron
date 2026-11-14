@@ -352,7 +352,6 @@ function yearRead(
     seasons: [],
     days,
     publicHolidaysAvailable: true,
-    missingHolidays: [],
     holidayCoverage: [],
     area: {
       addressKey: "fixture-address",
@@ -880,7 +879,6 @@ describe("Year view", () => {
         },
       ],
       publicHolidaysAvailable: true,
-      missingHolidays: [],
       holidayCoverage: [],
       area: {
         addressKey: "fixture-address",

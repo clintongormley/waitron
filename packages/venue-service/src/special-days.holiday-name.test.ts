@@ -414,35 +414,27 @@ it("finds no special day on an empty list of days", async () => {
   expect(await scoped((tx) => specialDaysOn(tx, []))).toEqual(new Map());
 });
 
-describe("the readiness list warns when a later year has no holiday of the name", () => {
-  const warnings = async (at: Date) =>
-    (await scoped((tx) => listVenueReadiness(tx, at))).filter(
-      (issue) => issue.code === "special_day.holiday_missing",
-    );
+describe("the readiness list never warns that a later year has no holiday of the name", () => {
+  const codes = async (at: Date) =>
+    (await scoped((tx) => listVenueReadiness(tx, at))).map((issue) => issue.code);
 
-  it("names each current or next year whose list lacks the name, or that has no list", async () => {
+  it("says nothing of a current or next year whose list lacks the name, or that has no list", async () => {
     await venue();
-    const friday = await yearly("Viernes Santo", "2026-04-03");
-    const christmas = await yearly("Natividad del Señor", "2026-12-25");
-    const missing = (day: { id: string; name: string }, year: number) => ({
-      code: "special_day.holiday_missing",
-      specialDayId: day.id,
-      holidayName: day.name,
-      year,
-    });
-    expect(await warnings(new Date("2026-06-01T10:00:00Z"))).toEqual([]);
-    expect(await warnings(new Date("2027-06-01T10:00:00Z"))).toEqual([missing(friday, 2028)]);
-    expect(await warnings(new Date("2028-06-01T10:00:00Z"))).toEqual([
-      missing(friday, 2028),
-      missing(friday, 2029),
-      missing(christmas, 2029),
-    ]);
+    await yearly("Viernes Santo", "2026-04-03");
+    await yearly("Natividad del Señor", "2026-12-25");
+    for (const at of ["2026-06-01", "2027-06-01", "2028-06-01"]) {
+      const listed = await codes(new Date(`${at}T10:00:00Z`));
+      expect(listed, at).toEqual(["venue.default_station_missing", "venue.department_missing"]);
+    }
   });
 
-  it("does not warn for a one-off date", async () => {
+  it("says nothing of a one-off date", async () => {
     await venue();
     await save({ name: "Viernes Santo", repeatsYearly: false, dates: dates(["2026-04-03"]) });
-    expect(await warnings(new Date("2028-06-01T10:00:00Z"))).toEqual([]);
+    expect(await codes(new Date("2028-06-01T10:00:00Z"))).toEqual([
+      "venue.default_station_missing",
+      "venue.department_missing",
+    ]);
   });
 });
 

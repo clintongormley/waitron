@@ -1514,9 +1514,6 @@ describe("venue service management routes", () => {
             name,
           })),
         },
-        { key: "zone_policies", count: 2, targets: [] },
-        { key: "department_policy", count: 1, targets: [] },
-        { key: "service_steps", count: 3, targets: [] },
         {
           key: "zones",
           count: 2,
@@ -3469,10 +3466,7 @@ describe("permanent department delete contracts", () => {
       target: { id: department.id, name: "Events" },
       refusals: [],
       ends: [],
-      removes: [
-        { key: "department_policy", count: 1, targets: [] },
-        { key: "service_steps", count: 3, targets: [] },
-      ],
+      removes: [],
     };
     const preview = await send(fx.app, "GET", `${path}/delete-impact`, fx.managerCookie);
     expect(preview.status).toBe(200);

@@ -175,18 +175,10 @@ describe("permanent service delete HTTP contracts", () => {
         target: { id, name: kind === "zone" ? "Garden" : "Events" },
         refusals: [],
         ends: [],
-        removes: [
-          { key: "zone_policies", count: 1, targets: [] },
-          ...(kind === "department"
-            ? [
-                { key: "department_periods", count: 1, targets: [] },
-                { key: "seasons", count: 4, targets: [] },
-                { key: "department_policy", count: 1, targets: [] },
-                { key: "service_steps", count: 3, targets: [] },
-                { key: "zones", count: 1, targets: [{ id: f.zoneId, name: "Garden" }] },
-              ]
-            : []),
-        ],
+        removes:
+          kind === "department"
+            ? [{ key: "zones", count: 1, targets: [{ id: f.zoneId, name: "Garden" }] }]
+            : [],
       };
       const preview = await send("GET", `${path(kind, id)}/delete-impact`);
       expect(preview.status).toBe(200);

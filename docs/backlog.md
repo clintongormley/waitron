@@ -665,53 +665,18 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **A1525. Departments and zones page: the owner's review (owner, 2026-11-14).**
-  - The page's title says "Departments" while the menu says "Departments and zones"; the title says
-    both.
-  - **No public-holiday warnings anywhere.** The owner: "this comes from an official source and will
-    be published later. we shouldn't be warning about these", and no warning even once the year's
-    list is out. Remove "{name} (Every year) has no public holiday of that name in {year}." from
-    this page and the Year view's missing-holiday warning (`#warnings`,
-    `packages/venue-service/src/dashboard/opening-hours-year.ts`). Trace every reader of
-    `special_day.holiday_missing` (`packages/venue-service/src/operations.ts`) before removing it.
-    This replaces the Holidays yearly bundle's readiness-line entry.
-  - **A zone's value that matches its department's is left blank, not drawn in grey italics.** The
-    owner: grey italics for a default stay elsewhere, such as in dropdowns, "but here i think it
-    just adds noise". A row that uses table service leaves "When counter service is used" blank,
-    except that a department whose zones use counter service still shows its own value there, so
-    the value those zones take is shown once.
-  - **The empty "Also edit" column goes** (moved here from the Department dialog bundle; the owner
-    did not know what it was for).
-
-- **A1528. Department window and the delete dialogs: the owner's review (owner, 2026-11-14).**
-  Same page as A1525; can land with it or after it.
-  - **Adding a receipt logo reloads the page a few seconds later, losing unsaved changes.** On the
-    Receipts tab, Chrome asked "Reload site? Changes that you made may not be saved", and Reload
-    throws away the window's unsaved edits. Nothing asked for a reload: the dashboard's own reload
-    calls all wait for a button. Not diagnosed; it may be the development stack only (the
-    dashboard's dev server reloading, or the server restarting on a file change). Find the cause
-    and stop it; where a reload cannot be avoided, the window's unsaved edits survive it.
-  - **After a logo is added, the receipt preview's logo takes focus and draws a blue outline.** The
-    preview is only to look at and never takes focus; focus stays on the logo controls
-    (`apps/dashboard/src/screens/department-receipt-editor.ts`).
+- **A1528. Department window: the owner's review (owner, 2026-11-14).**
   - **"Invoice operation description" moves from the Receipts tab to the Details tab.** It prints
     on no receipt or invoice PDF; it is the description filed in each Veri\*Factu record. Its
-    label and hint say it goes to AEAT and does not print.
+    label and hint say it goes to AEAT and does not print. The Details tab's Save also sends the
+    receipt request the Receipts tab uses (same check); if that request fails, the field shows the
+    refusal and stays unsaved while the rest of the save stands (watcher, 2026-11-14 15:48).
   - **The title, tabs, Save and Cancel stay put; only the content between them scrolls**, on every
     tab. Save and Cancel go in `wt-modal`'s own footer slot, as other dialogs do
     (`department-dialogs.ts`); today `department-edit-dialog.ts` draws them inside the scrolling
     content, and the "Edit department: …" title and the Details / Service / Receipts / Transfers
-    tabs scroll away too.
-  - **Delete department and Delete zone list only what changes outside the thing deleted.** A
-    department added a moment ago listed "Removes 1 department period", "Removes hours in 4
-    seasons", "Removes 1 department service setting" and "Removes 3 service steps", all made
-    automatically and never seen. Both dialogs keep the refusal reasons and "Work ended". Under
-    "Settings removed" they keep zones, tables, floor plans, device profiles, kitchen screens,
-    routing and the default-department and Counter-default lines, and drop the item's own
-    settings: periods, hours, service settings, service steps and zone extensions. With nothing
-    left, the dialog is the name and "This can't be undone." The owner first asked for no list at
-    all, and took this version once told that a till's profile can lose a zone it serves without
-    any other warning (`service-delete-copy.ts`, `service-delete-settings.ts`).
+    tabs scroll away too. No dialog keeps its heading or tabs still today, so the shared
+    `wt-dialog` needs an opt-in for it (lane D).
 
 - **Department dialog** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 
@@ -737,9 +702,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   record keeps the name it was written with, so one written before the change but sent after it
   carries the old name, and a later cancellation of an earlier invoice carries the new one. Waits
   on the asesor's answer to Q37(d), S18 in `docs/compliance/asesor-questions.md`.
-
-- **A department or zone delete's preview never counts a special day's painted hours**
-  [Detail](backlog/service-periods.md#a-department-or-zone-deletes-preview-never-counts-a-special-days-painted-hours)
 
 - **Holidays yearly** (bundle of 3, size S). [Detail](backlog/service-periods.md#bundle-holidays-yearly)
 

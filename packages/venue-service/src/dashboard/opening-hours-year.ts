@@ -409,24 +409,6 @@ export class OpeningHoursYearView extends LitElement {
     </ul>`;
   }
 
-  #warnings(model: OpeningHoursYear) {
-    if (!model.missingHolidays.length) return nothing;
-    return html`<ul class="note notes">
-      ${model.missingHolidays.map(
-        (missing) =>
-          html`<li class="warning" data-test="missing-holiday">
-            ${format("venue.readiness.holiday_missing", {
-              name: holidayDisplayName(
-                { name: missing.holidayName, englishName: missing.englishName },
-                currentLocale(),
-              ),
-              year: String(model.year),
-            })}
-          </li>`,
-      )}
-    </ul>`;
-  }
-
   override render() {
     const model = this.model;
     const shown = model?.year ?? this.year;
@@ -520,7 +502,7 @@ export class OpeningHoursYearView extends LitElement {
               ${format("year.holidays_unavailable", { year: String(model.year) })}
             </p>`
       }
-      ${this.#warnings(model)} ${this.#area(model)} ${this.#notes(model)}
+      ${this.#area(model)} ${this.#notes(model)}
       <div class="months">
         ${MONTHS.map((month) => this.#month(model, month, days, tints, stop, header))}
       </div>`;

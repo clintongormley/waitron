@@ -6566,10 +6566,12 @@ separate. A later order-linked receipt uses the server's print status to offer i
 
 ### Departments and zones
 
-You open one list, with each department followed by its indented zones. The columns show name,
-how orders start, counter service and Also edit. Each row opens its Edit dialog. A
-zone's inherited value is muted and italic; an explicit override stays normal even when it
-matches the department. The row menus stay pinned at the end.
+You open one list, titled Departments and zones, with each department followed by its indented
+zones. The columns show name, how orders start and counter service. Each row opens its Edit dialog.
+A zone's value that matches its department's is left blank; no value is drawn muted or italic. A
+table-service row leaves counter service blank, except that a table-service department with a
+counter-service zone shows its own value there, so those zones' shared value appears once
+(owner, 2026-11-14). The row menus stay pinned at the end.
 
 Beside the plan, or in its bottom sheet on a phone, you see Add tables and Add joined table
 above the selected table's form and the tables list. The form reserves its space even when no
@@ -6611,8 +6613,8 @@ shows the same message; its Save remains available. Cases: `floor-plan-tables-pa
 `apps/dashboard/src/screens/`.
 
 A department's menu offers Edit, Add a zone and Delete. A zone's menu offers Edit and Delete.
-The list has no column picker. Its Also edit column is empty: a department's receipt is edited on its
-dialog's Receipts tab, and a zone's layouts are reached from the Floor plans page. Unassigned zones keep their Add to department action.
+The list has no column picker. A department's receipt is edited on its dialog's Receipts tab, and a
+zone's layouts are reached from the Floor plans page. Unassigned zones keep their Add to department action.
 The sidebar returns to the bare list. An editor's deep link keeps that list underneath it;
 closing the editor returns focus to its originating row menu, or Add when that row is gone.
 

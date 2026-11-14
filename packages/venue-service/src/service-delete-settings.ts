@@ -1,6 +1,5 @@
-import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import {
-  departmentDayRanges,
   departmentDays,
   floorPlanSets,
   departments,
@@ -22,7 +21,6 @@ import {
   routingCellPeriods,
   routingCells,
   serviceSteps,
-  zoneDayRanges,
   zoneDays,
   type Transaction,
 } from "@waitron/db";
@@ -64,7 +62,6 @@ async function settings(
             ),
       ),
     );
-  const extensions = zones.filter((zone) => zone.keptOpenDay !== null);
   const memberships = await tx
     .select()
     .from(deviceProfileZones)
@@ -143,38 +140,10 @@ async function settings(
     .from(deviceKitchenScreenRemovals)
     .innerJoin(devices, eq(devices.id, deviceKitchenScreenRemovals.deviceId))
     .where(inArray(deviceKitchenScreenRemovals.zoneId, zoneIds));
-  const departmentPeriods = await tx
-    .select()
-    .from(menuPeriods)
-    .where(eq(menuPeriods.departmentId, departmentId ?? ""));
   const sets = await tx
     .select()
     .from(floorPlanSets)
     .where(eq(floorPlanSets.departmentId, departmentId ?? ""));
-  const staff = await tx
-    .select()
-    .from(menuPeriodStaffMenus)
-    .where(eq(menuPeriodStaffMenus.departmentId, departmentId ?? ""));
-  const departmentSeasons = await tx
-    .selectDistinct({ seasonId: departmentDays.seasonId })
-    .from(departmentDays)
-    .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
-    .where(
-      and(eq(departmentDays.departmentId, departmentId ?? ""), isNotNull(departmentDays.seasonId)),
-    );
-  const zoneSeasons = await tx
-    .selectDistinct({ seasonId: zoneDays.seasonId })
-    .from(zoneDays)
-    .innerJoin(zoneDayRanges, eq(zoneDayRanges.dayId, zoneDays.id))
-    .where(and(inArray(zoneDays.zoneId, zoneIds), isNotNull(zoneDays.seasonId)));
-  const departmentPolicy = await tx
-    .select()
-    .from(departmentSalePolicies)
-    .where(eq(departmentSalePolicies.departmentId, departmentId ?? ""));
-  const steps = await tx
-    .select({ id: serviceSteps.id })
-    .from(serviceSteps)
-    .where(eq(serviceSteps.departmentId, departmentId ?? ""));
   const desks = await tx
     .select()
     .from(departmentTransferDesks)
@@ -312,18 +281,7 @@ async function settings(
           })),
       ),
     },
-    { key: "zone_policies", count: zones.length, targets: [] },
-    { key: "zone_extensions", count: extensions.length, targets: [] },
-    { key: "department_periods", count: departmentPeriods.length, targets: [] },
     { key: "floor_plan_sets", count: sets.length, targets: [] },
-    { key: "staff_menus", count: staff.length, targets: [] },
-    {
-      key: "seasons",
-      count: new Set([...departmentSeasons, ...zoneSeasons].map((row) => row.seasonId)).size,
-      targets: [],
-    },
-    { key: "department_policy", count: departmentPolicy.length, targets: [] },
-    { key: "service_steps", count: steps.length, targets: [] },
     {
       key: "transfer_desks",
       count: desks.length,

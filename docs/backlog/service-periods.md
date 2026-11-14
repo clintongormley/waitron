@@ -56,17 +56,6 @@ read by separately written queries in `special-days.ts` and `business-day-schedu
 `specialDateIn` and `sharedSpecialDate` live in the database module `special-days.ts` rather than
 the browser-safe repeat rules. Each could collapse to one place.
 
-## A department or zone delete's preview never counts a special day's painted hours
-
-A department or zone delete's preview never counts a special day's painted hours, yet the delete
-removes them: `readServiceDeleteSettings` (`packages/venue-service/src/service-delete-settings.ts`) counts
-only `department_days` and `zone_days` rows that have a season, while
-`clearServiceDeleteSettings` deletes all of the department's `department_days` and the zones'
-`zone_days`, special-day rows included. The season-only count predates A506-5 (it came with A506-1,
-#1577; special-day paint was first written in A506-4); until A506-5 the preview's timetable, slot and
-closed-time lines at least counted the old named-day hours, so now it discloses no dated hours at
-all.
-
 ## A date another manager removed stays in the special-day draft
 
 A date another manager removed stays in the draft when this draft changed its paint or its Closed
@@ -388,7 +377,7 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## Bundle: Department dialog
 
-1 entry, size S. The "Also edit" column moved to A1525 (owner, 2026-11-14).
+1 entry, size S.
 
 - **A per-field department policy repair changes the trading-name default.**
   [Detail](service-periods.md#a-per-field-department-policy-repair-changes-the-trading-name-default)
@@ -396,8 +385,6 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 ## Bundle: Holidays yearly
 
 3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-The readiness-line entry went on 2026-11-14: the owner decided there is no missing-holiday warning
-at all (A1525).
 
 - **Two holidays with one name in one year's list**
   [Detail](service-periods.md#two-holidays-with-one-name-in-one-years-list)
@@ -743,7 +730,8 @@ the season painter continues saving through the season-week route._
 
 
 - **Hierarchy Delete is permanent (A435 step 6, 2026-10-11).** One complete impact is rechecked
-  inside the write transaction. Live work refuses; no work is abandoned. All saved, today, reset
+  inside the write transaction. (2026-11-14, A1528: the preview no longer lists the item's own
+  settings; see conventions-data.md → Permanent hierarchy deletion.) Live work refuses; no work is abandoned. All saved, today, reset
   and join descendants are removed together. Department-owned routing, periods, hours overrides
   and transfer settings go; shared menus, venue calendars and holidays stay. Deleted receipt
   settings and media stay for internal printing, with no editor or import/export access.

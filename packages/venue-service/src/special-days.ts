@@ -25,7 +25,7 @@ import { isLocalDate } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { nextOccurrence, occurrenceIn, repeatKey, standingInYear } from "./repeat-rules.js";
 import { storedTime, wireTime } from "./operations.js";
-import { readHolidayDates, readHolidayEnglishNames, type HolidayReads } from "./holidays.js";
+import { readHolidayDates, type HolidayReads } from "./holidays.js";
 import { joinTouching, type ServingRead } from "./season-weeks.js";
 import { inForceClock, scheduleCutovers, settledClock } from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
@@ -346,13 +346,6 @@ export async function specialDayOccurrences(
   return { name: first.name, occurrences: dates.map(occurrence) };
 }
 
-export interface MissingHoliday {
-  specialDayId: string;
-  holidayName: string;
-  englishName?: string;
-  year: number;
-}
-
 export interface SpecialDayClash {
   date: LocalDate;
   /** The special day that applies on `date`. */
@@ -363,13 +356,9 @@ export interface SpecialDayClash {
   otherSpecialDayName: string;
 }
 
-/** The special-day readiness warnings for the venue's current and next year: each repeating date
- *  following a holiday's name that a year's list places nowhere, and each date that falls where a
- *  different special day applies. The holiday lists are read once for both. */
-export async function specialDayReadiness(
-  tx: Transaction,
-  at: Date,
-): Promise<{ missing: MissingHoliday[]; clashes: SpecialDayClash[] }> {
+/** The special-day readiness warnings for the venue's current and next year: each date that falls
+ *  where a different special day applies. */
+export async function specialDayReadiness(tx: Transaction, at: Date): Promise<SpecialDayClash[]> {
   const clock = await readVenueClock(tx);
   const today = venueLocalMoment(at, clock)?.civilDate ?? at.toISOString().slice(0, 10);
   const years = [yearOf(today), yearOf(today) + 1] as const;
@@ -386,7 +375,6 @@ export async function specialDayReadiness(
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
   const holidays = await holidayDatesFor(tx, rows, years);
-  const missing = await missingHolidaysIn(tx, years, holidays);
   const clashes = new Map<string, SpecialDayClash>();
   for (const year of years) {
     const standing = specialDatesStandingIn(rows, year, holidays);
@@ -404,58 +392,7 @@ export async function specialDayReadiness(
       });
     }
   }
-  return {
-    missing: missing.map(({ specialDayId, holidayName, year, englishName }) => ({
-      specialDayId,
-      holidayName,
-      ...(englishName === undefined ? {} : { englishName }),
-      year,
-    })),
-    clashes: [...clashes.values()],
-  };
-}
-
-/** Each repeating date following a holiday's name that the list for one of `years`, ascending,
- *  places nowhere, that year having no holiday of the name or no list, each naming its special
- *  day. `known`, when given, holds the official holidays of every one of `years` and is read
- *  instead. */
-export async function missingHolidaysIn(
-  tx: Transaction,
-  years: readonly number[],
-  known?: HolidayDates,
-): Promise<(MissingHoliday & { name: string })[]> {
-  const rows = await tx
-    .select({
-      specialDayId: specialDayDates.specialDayId,
-      name: specialDays.name,
-      date: specialDayDates.date,
-      holidayName: specialDayDates.holidayName,
-    })
-    .from(specialDayDates)
-    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .where(and(eq(specialDays.repeatsYearly, true), isNotNull(specialDayDates.holidayName)))
-    .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
-  if (rows.length === 0 || years.length === 0) return [];
-  const rules = rows.map((row) => ({ ...row, repeats: true }));
-  const holidays = known ?? (await holidayDatesFor(tx, rules, [years[0]!, years.at(-1)!]));
-  const missing = new Map<string, MissingHoliday & { name: string }>();
-  for (const year of years)
-    for (const rule of rules)
-      if (year > yearOf(rule.date) && specialDateIn(rule, year, holidays) === null)
-        missing.set(`${rule.specialDayId}|${rule.holidayName}|${year}`, {
-          specialDayId: rule.specialDayId,
-          name: rule.name,
-          holidayName: rule.holidayName!,
-          year,
-        });
-  const labels = await readHolidayEnglishNames(
-    tx,
-    [...missing.values()].map((row) => row.holidayName),
-  );
-  return [...missing.values()].map((row) => {
-    const englishName = labels.get(row.holidayName);
-    return { ...row, ...(englishName === undefined ? {} : { englishName }) };
-  });
+  return [...clashes.values()];
 }
 
 export interface SpecialDayInput {

@@ -28,7 +28,6 @@ function yearRead(year: number): OpeningHoursYear {
     ],
     days: [],
     publicHolidaysAvailable: true,
-    missingHolidays: [],
     holidayCoverage: [],
     area: { addressKey: "a", readiness: "ready", options: [], required: false, chosen: null },
   };

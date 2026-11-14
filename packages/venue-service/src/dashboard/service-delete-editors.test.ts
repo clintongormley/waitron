@@ -180,7 +180,6 @@ async function hours(
           seasons: [],
           days: [],
           publicHolidaysAvailable: true,
-          missingHolidays: [],
           holidayCoverage: [],
           area: {
             addressKey: "fixture",

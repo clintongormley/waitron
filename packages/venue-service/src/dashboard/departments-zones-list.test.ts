@@ -35,7 +35,6 @@ it("keeps departments expanded with each active zone indented below its owning r
     "name",
     "orderStart",
     "paidWhen",
-    "also",
     "actions",
   ]);
   expect(table.columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
@@ -55,23 +54,65 @@ it("keeps departments expanded with each active zone indented below its owning r
   expect(table.shadowRoot!.querySelectorAll(".tree-toggle")).toHaveLength(0);
   expect(table.shadowRoot!.querySelectorAll("[data-test^=zone-grip-]")).toHaveLength(4);
 });
-it("styles only raw-null inheritance even when an explicit value equals its department", async () => {
+function policyCells(table: Element) {
+  return Object.fromEntries(
+    [...table.shadowRoot!.querySelectorAll("tbody tr")].map((row) => [
+      row.getAttribute("data-row-key"),
+      [...row.querySelectorAll("td")].slice(1, 3).map((cell) => cell.textContent!.trim()),
+    ]),
+  );
+}
+it("leaves a zone's value blank where it matches its department's, and counter-service timing blank on a table-service row", async () => {
   const { table } = await setup();
-  const raw = table.shadowRoot!.querySelector('[data-row-key="zone:z2"]')!;
-  const explicit = table.shadowRoot!.querySelector('[data-row-key="zone:z3"]')!;
-  expect(raw, "zone rows are shown under their departments").not.toBeNull();
-  expect(explicit, "explicit zone rows are shown").not.toBeNull();
-  expect(raw.querySelector("[part~=inherited-orderStart]")!.textContent).toBe("Table service");
-  expect(raw.querySelector("[part~=inherited-paidWhen]")!.textContent).toBe(
-    "Paid before preparation",
-  );
-  expect(raw.querySelector("[part~=inherited-receiptPrintMode]")).toBeNull();
-  expect(explicit.querySelector("[part~=inherited]")).toBeNull();
-  const inherited = raw.querySelector("[part~=inherited]")!;
-  expect(getComputedStyle(inherited).fontStyle).toBe("italic");
-  expect(getComputedStyle(inherited).color).not.toBe(
-    getComputedStyle(explicit.querySelector("[part~=policy]")!).color,
-  );
+  expect(policyCells(table)).toEqual({
+    "department:d1": ["Table service", "Paid before preparation"],
+    "zone:z1": ["Counter service", ""],
+    "zone:z2": ["", ""],
+    "zone:z3": ["", ""],
+    "department:d2": ["Counter service", "Paid before preparation"],
+    "zone:z4": ["", ""],
+  });
+  expect(table.shadowRoot!.querySelectorAll("[part~=inherited]")).toHaveLength(0);
+  for (const policy of table.shadowRoot!.querySelectorAll("[part~=policy]"))
+    expect(getComputedStyle(policy).fontStyle).toBe("normal");
+});
+it("shows a counter-service zone's own timing, and leaves a table-service department's blank once no zone uses counter service", async () => {
+  const { el, table } = await setup();
+  const zones = el.model!.salePolicies.zones;
+  el.model = {
+    ...el.model!,
+    salePolicies: {
+      ...el.model!.salePolicies,
+      zones: zones.map((zone) =>
+        zone.zoneId === "z1"
+          ? { ...zone, orderStart: null, effective: { ...zone.effective, orderStart: "table" } }
+          : zone,
+      ),
+    },
+  };
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(policyCells(table)["department:d1"]).toEqual(["Table service", ""]);
+  expect(policyCells(table)["zone:z1"]).toEqual(["", ""]);
+  el.model = {
+    ...el.model,
+    salePolicies: {
+      ...el.model.salePolicies,
+      zones: zones.map((zone) =>
+        zone.zoneId === "z1"
+          ? {
+              ...zone,
+              paidWhen: "ticket_then_pay",
+              effective: { ...zone.effective, paidWhen: "ticket_then_pay" },
+            }
+          : zone,
+      ),
+    },
+  };
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(policyCells(table)["department:d1"]).toEqual(["Table service", "Paid before preparation"]);
+  expect(policyCells(table)["zone:z1"]).toEqual(["Counter service", "Paid at collection"]);
 });
 it("each row opens its own editor and department menus offer Edit, Add a zone and Delete", async () => {
   const { el, table } = await setup();
@@ -135,14 +176,6 @@ it("names missing department receipt setup and opens that receipt without activa
   expect(row.querySelector("[data-test=receipt-setup-d1]")).toBeNull();
 });
 
-function alsoCell(table: Element, rowKey: string) {
-  const row = table.shadowRoot!.querySelector(`[data-row-key="${rowKey}"]`);
-  expect(row, `${rowKey} is shown`).not.toBeNull();
-  const index = (table as HTMLElementTagNameMap["wt-data-table"]).columns.findIndex(
-    ({ key }) => key === "also",
-  );
-  return row!.querySelectorAll("td")[index]!;
-}
 async function withFloorZones(floorZones: FloorZone[]) {
   const { el, table } = await setup();
   el.model = { ...el.model!, floorZones };
@@ -153,8 +186,6 @@ async function withFloorZones(floorZones: FloorZone[]) {
 
 it("a department row has no Receipt link and the description button opens Receipts", async () => {
   const { el, table } = await setup();
-  for (const id of ["d1", "d2"])
-    expect(alsoCell(table, `department:${id}`).textContent!.trim()).toBe("");
   expect(table.shadowRoot!.querySelector('[data-test^="receipt-department-"]')).toBeNull();
   el.model!.readiness.push({
     code: "department.operation_description_required",
@@ -175,7 +206,6 @@ it("a department row has no Receipt link and the description button opens Receip
     { departmentId: "d2" },
   ]);
   expect(opened).not.toHaveBeenCalled();
-  expect(alsoCell(table, "department:d2").textContent!.trim()).toBe("");
 });
 
 it("draws no floor-plan link on a zone row; the Floor plans page holds them", async () => {
@@ -183,7 +213,6 @@ it("draws no floor-plan link on a zone row; the Floor plans page holds them", as
     { id: "z1", name: "Terrace" },
     { id: "z2", name: "Bar" },
   ]);
-  expect(alsoCell(table, "zone:z1").textContent!.trim()).toBe("");
   expect(table.shadowRoot!.querySelectorAll('[data-test^="floor-plan-zone-"]')).toHaveLength(0);
   expect(table.shadowRoot!.querySelectorAll('a[href*="/manage/floor-plan"]')).toHaveLength(0);
 });
@@ -215,20 +244,32 @@ it("keeps the floor-plan link out of the zone's menu", async () => {
   ).toHaveLength(0);
 });
 
-it("orders the columns as drawn, ignoring an order stored before the Also edit column", async () => {
+it("orders the columns as drawn, ignoring an older table's stored order and a stored order naming the removed Also edit column", async () => {
   localStorage.setItem(
     "waitron.venue.departments:column-order",
     JSON.stringify(["receiptPrintMode", "paidWhen", "orderStart"]),
   );
   localStorage.setItem("waitron.venue.departments:columns", JSON.stringify({ orderStart: false }));
+  localStorage.setItem(
+    "waitron.venue.departments-zones:column-order",
+    JSON.stringify(["also", "orderStart", "paidWhen"]),
+  );
+  localStorage.setItem("waitron.venue.departments-zones:columns", JSON.stringify({ also: true }));
   const { table } = await setup();
   expect(
     [...table.shadowRoot!.querySelectorAll("thead th")].map((th) => th.textContent!.trim()),
-  ).toEqual(["Name", "How orders start", "When counter service is used", "Also edit", "Actions"]);
+  ).toEqual(["Name", "How orders start", "When counter service is used", "Actions"]);
+  expect(table.shadowRoot!.querySelectorAll('[data-row-key="department:d1"] td')).toHaveLength(4);
 });
 
-it("labels the Also edit column in Spanish", async () => {
+it("has no Also edit column in Spanish either", async () => {
   setLocale("es");
   const { table } = await setup();
-  expect(table.columns.find(({ key }) => key === "also")!.label).toBe("Editar también");
+  expect(table.columns.map(({ label }) => label)).toEqual([
+    "Nombre",
+    "Cómo empiezan los pedidos",
+    "Cuando se usa el servicio en mostrador",
+    "Acciones",
+  ]);
+  expect(table.shadowRoot!.textContent).not.toContain("Editar también");
 });

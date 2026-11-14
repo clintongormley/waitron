@@ -79,7 +79,6 @@ function yearModel(overrides: Partial<OpeningHoursYear> = {}): OpeningHoursYear 
     seasons,
     days,
     publicHolidaysAvailable: true,
-    missingHolidays: [],
     holidayCoverage: [
       {
         year: 2027,
@@ -632,7 +631,6 @@ describe("Opening hours year", () => {
     expect(root(el).querySelector('[data-test="coverage"]')).toBeNull();
     expect(root(el).querySelector('[data-test="town-holidays"]')).toBeNull();
     expect(root(el).querySelector('[data-test="holidays-unavailable"]')).toBeNull();
-    expect(root(el).querySelector('[data-test="missing-holiday"]')).toBeNull();
   });
 
   it("still warns when the official list is not complete", async () => {
@@ -696,47 +694,7 @@ describe("Opening hours year", () => {
     const line = root(el).querySelector('[data-test="holidays-unavailable"]')!;
     expect(text(line)).toBe("Public holidays for 2027 are not available yet");
     expect(line.previousElementSibling?.localName).toBe("season-chips");
-    const warned = await mount(
-      yearModel({
-        publicHolidaysAvailable: false,
-        missingHolidays: [
-          { specialDayId: "vs", name: "Good Friday", holidayName: "Viernes Santo" },
-        ],
-      }),
-    );
-    const under = root(warned).querySelector('[data-test="holidays-unavailable"]')!;
-    expect(under.previousElementSibling?.localName).toBe("season-chips");
-    expect(under.nextElementSibling?.querySelector('[data-test="missing-holiday"]')).not.toBeNull();
     expect(root(el).querySelector('[data-test="coverage"]')).toBeNull();
-  });
-
-  it("warns once per repeating date with no public holiday of its name this year", async () => {
-    const el = await mount(
-      yearModel({
-        missingHolidays: [
-          { specialDayId: "vs", name: "Viernes Santo", holidayName: "Viernes Santo" },
-          { specialDayId: "cm", name: "Carnival closure", holidayName: "Carnaval" },
-        ],
-        area: {
-          readiness: "ready",
-          addressKey: "city",
-          options: [{ key: "aran", name: "Aran" }],
-          required: true,
-          chosen: null,
-        },
-      }),
-    );
-    const lines = [...root(el).querySelectorAll('[data-test="missing-holiday"]')];
-    expect(lines.map(text)).toEqual([
-      "Viernes Santo (Every year) has no public holiday of that name in 2027.",
-      "Carnaval (Every year) has no public holiday of that name in 2027.",
-    ]);
-    // Directly under the season chips, before the holiday-area chooser.
-    expect(lines[0]!.parentElement!.previousElementSibling?.localName).toBe("season-chips");
-    expect(
-      lines[1]!.compareDocumentPosition(root(el).querySelector("[name=holidayArea]")!) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   });
 
   it("asks for the holiday area when the province needs one", async () => {
@@ -828,20 +786,10 @@ describe("Opening hours year", () => {
 
   it("speaks Spanish", async () => {
     setLocale("es");
-    const el = await mount(
-      yearModel({
-        publicHolidaysAvailable: false,
-        missingHolidays: [
-          { specialDayId: "vs", name: "Viernes Santo", holidayName: "Viernes Santo" },
-        ],
-      }),
-    );
+    const el = await mount(yearModel({ publicHolidaysAvailable: false }));
     expect(text(root(el).querySelector('[data-test="month-name"]'))).toBe("enero");
     expect(text(root(el).querySelector('[data-test="holidays-unavailable"]'))).toBe(
       "Los festivos oficiales de 2027 aún no están disponibles",
-    );
-    expect(text(root(el).querySelector('[data-test="missing-holiday"]'))).toBe(
-      "Viernes Santo (cada año): en 2027 no hay ningún festivo con ese nombre.",
     );
   });
 });
@@ -1141,23 +1089,4 @@ describe("country-pack display names", () => {
       locale === "en-GB" ? "English island" : "Official island",
     );
   });
-});
-
-it.each(["en", "es"])("uses %s for warnings naming a stored official holiday", async (locale) => {
-  setLocale(locale);
-  const el = await mount(
-    yearModel({
-      missingHolidays: [
-        {
-          specialDayId: "special",
-          name: "My special day",
-          holidayName: "Official holiday",
-          englishName: "English holiday",
-        },
-      ],
-    }),
-  );
-  const warning = text(root(el).querySelector('[data-test="missing-holiday"]')!);
-  expect(warning).toContain(locale === "en" ? "English holiday" : "Official holiday");
-  expect(warning).not.toContain(locale === "en" ? "Official holiday" : "English holiday");
 });

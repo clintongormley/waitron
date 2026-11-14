@@ -944,14 +944,6 @@ it("keeps English display names separate from annual holiday matching", async ()
   expect(dates.get(2026)!.has("Christmas Day")).toBe(false);
 });
 
-it("keeps absent country translations absent, including a country without a calendar", async () => {
-  await venue({ country: "ZY" });
-  expect(await run((tx) => store.readHolidayEnglishNames(tx, ["Historic local holiday"]))).toEqual(
-    new Map(),
-  );
-  expect(await run((tx) => store.readHolidayEnglishNames(tx, []))).toEqual(new Map());
-});
-
 it("saves the holiday choice in the venue document and names its saver", async () => {
   await venue({ province: "Isleshire" });
   const [person] = await seedPersons(db, { displayName: "Owner" });

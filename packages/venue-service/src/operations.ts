@@ -254,13 +254,6 @@ export type VenueReadinessIssue =
       menuName: string;
     }
   | {
-      code: "special_day.holiday_missing";
-      specialDayId: string;
-      holidayName: string;
-      englishName?: string;
-      year: number;
-    }
-  | {
       code: "special_day.date_shared";
       date: LocalDate;
       specialDayId: string;
@@ -270,8 +263,7 @@ export type VenueReadinessIssue =
     };
 
 /** Describe configuration that prevents an active zone from accepting new orders, and, for the
- *  current and next year, each repeating holiday date that will not apply and each special-day date
- *  that falls where another special day applies. */
+ *  current and next year, each special-day date that falls where another special day applies. */
 export async function listVenueReadiness(
   tx: Transaction,
   at: Date = new Date(),
@@ -281,14 +273,10 @@ export async function listVenueReadiness(
     .from(kitchenStations)
     .where(and(eq(kitchenStations.isDefault, true), eq(kitchenStations.active, true)))
     .limit(1);
-  const specialDayIssues = await specialDayReadiness(tx, at);
+  const clashes = await specialDayReadiness(tx, at);
   const issues: VenueReadinessIssue[] = [
     ...(defaultStation === undefined ? [{ code: "venue.default_station_missing" as const }] : []),
-    ...specialDayIssues.missing.map((missing) => ({
-      code: "special_day.holiday_missing" as const,
-      ...missing,
-    })),
-    ...specialDayIssues.clashes.map((clash) => ({
+    ...clashes.map((clash) => ({
       code: "special_day.date_shared" as const,
       ...clash,
     })),

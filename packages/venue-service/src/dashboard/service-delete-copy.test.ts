@@ -51,29 +51,6 @@ it.each([
     "Quita {count} avisos de pantallas: {names}.",
   ],
   [
-    "zone_policies",
-    "Removes {count} zone service settings.",
-    "Quita {count} ajustes de servicio de zonas.",
-  ],
-  ["zone_extensions", "Removes {count} zone extensions.", "Quita {count} extensiones de zonas."],
-  [
-    "department_periods",
-    "Removes {count} department periods.",
-    "Quita {count} periodos del departamento.",
-  ],
-  [
-    "staff_menus",
-    "Removes {count} staff menu settings.",
-    "Quita {count} ajustes de cartas del personal.",
-  ],
-  ["seasons", "Removes hours in {count} seasons.", "Quita los horarios de {count} temporadas."],
-  [
-    "department_policy",
-    "Removes {count} department service settings.",
-    "Quita {count} ajustes de servicio del departamento.",
-  ],
-  ["service_steps", "Removes {count} service steps.", "Quita {count} pasos de servicio."],
-  [
     "transfer_desks",
     "Removes the transfer desk for this profile: {names}.",
     "Quita el puesto de traslado de este perfil: {names}.",
@@ -339,50 +316,9 @@ it.each([
     ["Quita {count} aviso de pantalla: {names}.", "Quita {count} avisos de pantallas: {names}."],
   ],
   [
-    "zone_policies",
-    ["Removes {count} zone service setting.", "Removes {count} zone service settings."],
-    ["Quita {count} ajuste de servicio de zona.", "Quita {count} ajustes de servicio de zonas."],
-  ],
-  [
-    "zone_extensions",
-    ["Removes {count} zone extension.", "Removes {count} zone extensions."],
-    ["Quita {count} extensión de zona.", "Quita {count} extensiones de zonas."],
-  ],
-  [
-    "department_periods",
-    ["Removes {count} department period.", "Removes {count} department periods."],
-    ["Quita {count} periodo del departamento.", "Quita {count} periodos del departamento."],
-  ],
-  [
     "floor_plan_sets",
     ["Removes {count} floor plan set.", "Removes {count} floor plan sets."],
     ["Quita {count} conjunto de planos de sala.", "Quita {count} conjuntos de planos de sala."],
-  ],
-  [
-    "staff_menus",
-    ["Removes {count} staff menu setting.", "Removes {count} staff menu settings."],
-    [
-      "Quita {count} ajuste de carta del personal.",
-      "Quita {count} ajustes de cartas del personal.",
-    ],
-  ],
-  [
-    "seasons",
-    ["Removes hours in {count} season.", "Removes hours in {count} seasons."],
-    ["Quita los horarios de {count} temporada.", "Quita los horarios de {count} temporadas."],
-  ],
-  [
-    "department_policy",
-    ["Removes {count} department service setting.", "Removes {count} department service settings."],
-    [
-      "Quita {count} ajuste de servicio del departamento.",
-      "Quita {count} ajustes de servicio del departamento.",
-    ],
-  ],
-  [
-    "service_steps",
-    ["Removes {count} service step.", "Removes {count} service steps."],
-    ["Quita {count} paso de servicio.", "Quita {count} pasos de servicio."],
   ],
   [
     "transfer_routes",

@@ -2453,6 +2453,9 @@ transfers and affected ordering profiles can refuse the whole change. No live wo
 Delete succeed. A successful hierarchy Delete clears its saved, today, reset and join floor state,
 including tables with no today row and reset targets with no live table. Shared menus, venue dates
 and holidays remain; owned routing, periods, opening overrides, transfer settings and service steps are removed.
+The preview does not list the deleted item's own service periods and their staff menu settings,
+its hours and zone closed times, its service settings, service steps or zone extensions, though
+Delete removes them (owner, 2026-11-14, A1528).
 
 Ordering profiles keep one department. A nonretired ordering profile bound to the department
 refuses its deletion, even without an active device. Removing its only usable zone also refuses.

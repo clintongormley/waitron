@@ -56,7 +56,6 @@ function yearModel(overrides: Partial<OpeningHoursYear> = {}): OpeningHoursYear 
     seasons,
     days,
     publicHolidaysAvailable: true,
-    missingHolidays: [],
     holidayCoverage: [
       {
         year: 2027,
@@ -89,12 +88,6 @@ const states: Record<string, () => OpeningHoursYear> = {
         day.holidays.length ? { ...day, holidays: [], tone: "standard" } : day,
       ),
       holidayCoverage: [{ ...yearModel().holidayCoverage[0]!, nationalRegional: "missing_year" }],
-    }),
-  "a year with a warning": () =>
-    yearModel({
-      missingHolidays: [
-        { specialDayId: "vs", name: "Viernes Santo", holidayName: "Viernes Santo" },
-      ],
     }),
   "a year whose holiday coverage could not be read": () => yearModel({ holidayCoverage: [] }),
 };
