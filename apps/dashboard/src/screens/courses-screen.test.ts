@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtInput } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -77,6 +77,26 @@ async function mount(
 }
 
 describe("dashboard-courses-screen", () => {
+  it.each([390, 1280])(
+    "centres the title beside Add and leaves room above the rows (%i px)",
+    async (width) => {
+      const previous = [window.innerWidth, window.innerHeight] as const;
+      try {
+        await page.viewport(width, 900);
+        const { el } = await mount();
+        const title = q(el, "h1")!.getBoundingClientRect();
+        const add = headerAdd(el)!.getBoundingClientRect();
+        expect(Math.abs(title.top + title.height / 2 - add.top - add.height / 2)).toBeLessThan(2);
+        const heading = q(el, ".heading")!.getBoundingClientRect();
+        expect(
+          list(el).parentElement!.getBoundingClientRect().top - heading.bottom,
+        ).toBeGreaterThanOrEqual(12);
+      } finally {
+        await page.viewport(...previous);
+      }
+    },
+  );
+
   it("shows the Courses heading, its help and the shared course list, which loads the courses itself", async () => {
     const { el, api } = await mount();
     await vi.waitFor(() =>

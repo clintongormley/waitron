@@ -65,7 +65,7 @@ const states = [
   "renaming, refused blank",
   "adding",
   "first course",
-  "direct Delete at phone width",
+  "row menu at phone width",
   "Delete dialog, products",
   "Delete dialog, loading",
   "Delete dialog, read failed",
@@ -117,10 +117,10 @@ describe.each(["light", "dark"] as const)("course list (%s)", (theme) => {
       q('[data-test="add-course"]').click();
       await settle(el);
     }
-    if (state === "direct Delete at phone width") {
+    if (state === "row menu at phone width") {
       const actions = q('tr[data-course="c2"] wt-row-actions') as unknown as WtRowActions;
       actions.show();
-      expect(actions.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+      expect(actions.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
       await settle(el);
     }
     if (state.startsWith("Delete dialog")) {

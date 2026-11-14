@@ -22,9 +22,10 @@ export class CoursesScreen extends LitElement {
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
+        margin-bottom: var(--wt-space-4);
       }
       h1 {
-        margin: var(--wt-space-4) 0 var(--wt-space-2);
+        margin: 0;
       }
       .header-actions {
         display: flex;
