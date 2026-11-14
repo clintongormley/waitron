@@ -19,6 +19,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   AppError,
+  int4InRange,
   isAppError,
   isBumpMode,
   isChangesAfterSending,
@@ -475,12 +476,7 @@ function withVenueReadAuth<T>(
  */
 function parseDisplayOrder(value: unknown): number | undefined {
   if (value === undefined) return undefined;
-  if (
-    typeof value !== "number" ||
-    !Number.isInteger(value) ||
-    value < -2_147_483_648 ||
-    value > 2_147_483_647
-  )
+  if (!int4InRange(value))
     throw new AppError("management.request_invalid", { field: "displayOrder" });
   return value;
 }
@@ -491,12 +487,7 @@ function parseDisplayOrder(value: unknown): number | undefined {
  */
 function parseInactivityTimeoutSeconds(value: unknown): number | null {
   if (value === undefined || value === null) return null;
-  if (
-    typeof value !== "number" ||
-    !Number.isInteger(value) ||
-    value < -2_147_483_648 ||
-    value > 2_147_483_647
-  )
+  if (!int4InRange(value))
     throw new AppError("management.request_invalid", { field: "inactivityTimeoutSeconds" });
   return value;
 }
