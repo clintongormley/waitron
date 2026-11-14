@@ -1,3 +1,4 @@
+import { rangeDates } from "./hours-rules.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -32,7 +33,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { readCalendarDays } from "./hours.js";
+import { calendarDays } from "./hours.js";
 import { readOpeningHoursYear } from "./opening-hours-calendar.js";
 import { saveSpecialDay } from "./special-days.js";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
@@ -282,7 +283,7 @@ describe("reading Hours", () => {
       ],
     });
     const model = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, "2030-10-14", "2030-10-15"),
+      calendarDays(tx, rangeDates("2030-10-14", "2030-10-15"), []).then(({ days }) => days),
     );
     expect(model.map((day) => day.closed)).toEqual([true, true]);
     expect(model.map((day) => day.tone)).toEqual(["special_day", "closed"]);
@@ -291,7 +292,7 @@ describe("reading Hours", () => {
       .set({ active: false })
       .where(eq(departments.id, fx.departmentIds.restaurant));
     const deli = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, "2030-10-14", "2030-10-15"),
+      calendarDays(tx, rangeDates("2030-10-14", "2030-10-15"), []).then(({ days }) => days),
     );
     expect(deli.map((day) => [day.tone, day.closed])).toEqual([
       ["special_day", true],
@@ -311,7 +312,7 @@ describe("reading Hours", () => {
       ),
     );
     const open = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, "2030-10-14", "2030-10-15"),
+      calendarDays(tx, rangeDates("2030-10-14", "2030-10-15"), []).then(({ days }) => days),
     );
     expect(open.map((day) => [day.tone, day.closed])).toEqual([
       ["special_day", true],

@@ -514,7 +514,8 @@ serve `/help/…`.
 ## A refusal reaches a field by what the error carries, not by one parameter name
 
 **2026-10-20, A682:** customer-name writes no longer require default-language text. The account
-below records the former translation refusal and its retained UI mapping tests. Image writes
+below records the former translation refusal. DEAD-CODE-1 removed its unused UI mapping and
+the mapping-only tests on 2026-11-14. Image writes
 still use the strict translated-name validator. Current multilingual translation-save refusals
 identify the item, language and field, as described in [products.md](products.md#the-translation-gap-report).
 

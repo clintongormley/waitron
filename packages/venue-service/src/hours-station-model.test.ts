@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { readCalendarDays } from "./hours.js";
+import { calendarDays } from "./hours.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { routingModel } from "./routing-store.js";
 
@@ -71,7 +71,7 @@ describe("Calendar without a station-hours page model", () => {
       return { bar: bar!.id, prep: prep!.id, kitchen: kitchen!.id };
     });
     const model = await withTransaction(suite.db, (tx) =>
-      readCalendarDays(tx, "2026-10-09", "2026-10-09"),
+      calendarDays(tx, ["2026-10-09"], []).then(({ days }) => days),
     );
     const routing = await withTransaction(suite.db, (tx) => routingModel(tx, at));
     expect(routing.stations).toEqual([
@@ -89,7 +89,7 @@ describe("Calendar without a station-hours page model", () => {
     await fixture();
     const special = await festival();
     const model = await withTransaction(suite.db, (tx) =>
-      readCalendarDays(tx, "2026-10-09", "2026-10-09"),
+      calendarDays(tx, ["2026-10-09"], []).then(({ days }) => days),
     );
     expect(model).toEqual([
       {

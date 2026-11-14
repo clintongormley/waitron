@@ -32,36 +32,6 @@ class OpeningLeaveApp extends LitElement {
         paint: [],
         zonePaint: [],
       };
-    if (path.includes("/named-days?"))
-      return {
-        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
-        clockRevision: 0,
-        currentBusinessDay: "2026-10-07",
-        pending: null,
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00",
-        civilDate: "2026-10-07",
-        clockReadable: true,
-        days: [
-          {
-            date: "2026-10-13",
-            specialDay: { id: "own", name: "Anniversary" },
-            holidays: [],
-            tone: "special_day",
-            closed: false,
-          },
-        ],
-        holidayCoverage: [],
-        holidaySources: [],
-        area: {
-          addressKey: "fixture-address",
-          readiness: "ready",
-          options: [],
-          required: false,
-          chosen: null,
-        },
-        localHolidaysPerYear: 2,
-      };
     if (path.endsWith("/special-days")) return [];
     if (path.includes("/opening-hours/month?"))
       return monthModel({ month: new URL(path, "http://x").searchParams.get("month")! });

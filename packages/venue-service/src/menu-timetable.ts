@@ -454,6 +454,7 @@ export async function replaceMenuWeek(
   days: unknown,
   at: Date,
   expectedClockRevision: number,
+  // Named-season writes let fixtures exercise live readers against different seasons.
   options: { seasonId?: string } = {},
 ): Promise<void> {
   const clock = await readVenueClock(tx);

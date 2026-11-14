@@ -1,10 +1,11 @@
+import { rangeDates } from "./hours-rules.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, catalogues, departments, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { readCalendarDays } from "./hours.js";
+import { calendarDays } from "./hours.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { readSeasons } from "./seasons.js";
 import { saveSpecialDay } from "./special-days.js";
@@ -98,7 +99,7 @@ const special = (
 
 const tones = async (from: string, to = from) =>
   withTransaction(suite.db, async (tx) => {
-    const calendar = await readCalendarDays(tx, from, to);
+    const calendar = await calendarDays(tx, rangeDates(from, to), []).then(({ days }) => days);
     return {
       calendar: calendar.map((day) => day.tone),
       closed: calendar.map((day) => day.closed),
@@ -139,7 +140,7 @@ describe("calendar follows department service periods", () => {
       });
     });
     const calendar = await withTransaction(suite.db, (tx) =>
-      readCalendarDays(tx, "2030-11-25", "2030-12-02"),
+      calendarDays(tx, rangeDates("2030-11-25", "2030-12-02"), []).then(({ days }) => days),
     );
     expect(calendar.map((day) => [day.date, day.tone])).toEqual([
       ["2030-11-25", "closed"],

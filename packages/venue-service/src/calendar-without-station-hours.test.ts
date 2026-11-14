@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, specialDayDates, specialDays, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { readCalendarDays } from "./hours.js";
+import { calendarDays } from "./hours.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 
 const suite = useVenueDb({
@@ -46,7 +46,9 @@ it.each(["calendar", "opening hours"] as const)(
           closed: true,
         };
         if (reader === "calendar") {
-          expect(await readCalendarDays(tx, "2027-10-10", "2027-10-10")).toEqual([calendarDay]);
+          expect(await calendarDays(tx, ["2027-10-10"], []).then(({ days }) => days)).toEqual([
+            calendarDay,
+          ]);
         } else {
           expect(await readOpeningHoursModel(tx, at)).not.toHaveProperty("namedDays");
         }

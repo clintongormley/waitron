@@ -16,7 +16,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
-import { readCalendarDays } from "./hours.js";
+import { calendarDays } from "./hours.js";
 import { saveSpecialDay } from "./special-days.js";
 import { readSeasons } from "./seasons.js";
 import { createServiceZone } from "./operations.js";
@@ -506,7 +506,8 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         1,
       ),
     );
-    const readDays = () => db.transaction((tx) => readCalendarDays(tx, "2026-06-04", "2026-06-04"));
+    const readDays = () =>
+      db.transaction((tx) => calendarDays(tx, ["2026-06-04"], []).then(({ days }) => days));
     const before = await readDays();
     await runSeed();
     expect(await readDays()).toEqual(before);

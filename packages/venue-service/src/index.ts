@@ -78,7 +78,7 @@ export { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 export * from "./routing.js";
 export * from "./routing-store.js";
 export * from "./station-times.js";
-export { readCalendarDays, type HolidayReader } from "./hours.js";
+export { type HolidayReader } from "./hours.js";
 export {
   readHolidayFacts,
   readHolidays,

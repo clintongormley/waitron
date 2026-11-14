@@ -13,7 +13,6 @@ import { momentAt, resolveZoneClosedDays, type ServiceDay } from "./day-resolver
 import {
   joinTouching,
   readZoneSeasonWeeks,
-  type ServingRead,
   seasonWeekList,
   seasonsHolding,
   targetSeasons,
@@ -23,17 +22,16 @@ import type { Season } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
 import "./errors.js";
 
-/** Writes a zone's closed week, then runs `afterWrite` with the clock and the zone's department
- *  this write read. */
 export async function replaceZoneClosedWeek(
   tx: Transaction,
   zoneId: string,
   days: unknown,
   expectedClockRevision: number,
   at: Date = new Date(),
-  options: { seasonId?: string; afterWrite?: (read: ServingRead) => Promise<void> } = {},
+  // Named-season writes let fixtures exercise live readers against different seasons.
+  options: { seasonId?: string } = {},
 ): Promise<void> {
-  const zone = await resolveZoneContext(tx, zoneId);
+  await resolveZoneContext(tx, zoneId);
   const clock = await readVenueClock(tx);
   const staged = await stageZoneClosedWeek(
     tx,
@@ -48,10 +46,6 @@ export async function replaceZoneClosedWeek(
     expectedClockRevision,
   );
   await staged.write();
-  await options.afterWrite?.({
-    clock,
-    departmentOf: new Map([[zone.zoneId, zone.departmentId]]),
-  });
   if (staged.changed) await assertWaitingChangeFits(tx, at, clock);
 }
 

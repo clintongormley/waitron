@@ -10,7 +10,6 @@ import "./department-settings.js";
 import "./venue-departments-shell.js";
 import "./zone-edit-dialog.js";
 import "./opening-hours-screen.js";
-import { namedWeekModel } from "../testing/hours-models.js";
 import { drag, frame, settle } from "../testing/season-painter-fixture.js";
 
 const originalUrl = location.href;
@@ -191,7 +190,7 @@ async function hours(
             chosen: null,
           },
         };
-      if (method === "GET") return path.includes("/named-days?") ? namedWeekModel() : model;
+      if (method === "GET") return model;
       writes.push([path, method, body]);
       return write();
     }) as DashboardRequest,

@@ -132,7 +132,6 @@ async function routed() {
   });
   const app = new Hono();
   VENUE_SERVICE_ROUTES.mount(app, { db, cfg: {}, core: {} as ModuleRouteContext["core"] }, noopLog);
-  let season = "";
   const send = (
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
@@ -161,7 +160,7 @@ async function routed() {
           }),
     });
   const model = () => scoped((tx) => readOpeningHoursModel(tx, new Date()));
-  season = (await model()).currentSeasonId!;
+  const season = (await model()).currentSeasonId!;
   return { ...made, cfg, barZone: barZone!, counterZone: counterZone!, app, send, model, season };
 }
 

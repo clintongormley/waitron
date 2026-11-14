@@ -556,10 +556,6 @@ export class CatalogueScreen extends LitElement {
     this.#placementQueries.release("getMenuStructure");
   }
 
-  /**
-   * A refusal carries the field it is about or the id of a
-   * choice that no longer exists; one that points at no field reaches the screen's banner.
-   */
   #rejectedField(error: unknown, submitted: ProductEditorInput): Record<string, string> {
     if (codeOf(error) === "allergen.kinds_required" || codeOf(error) === "allergen.invalid_kind")
       return { allergens: allergenRefusalText(error) };
