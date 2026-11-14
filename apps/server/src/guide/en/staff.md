@@ -147,6 +147,10 @@ roles before choosing again.
 
 ## Who can sign in on a device {#device-profile-sign-in}
 
+Open **Hardware**, then **Device profiles** to find a profile by name, form factor, serving area or
+capability. The search also finds capabilities hidden behind **+N more**. Select its row to edit,
+or use its **⋮** menu to edit, duplicate or delete it.
+
 Open **Device profiles** and edit the profile used by the device. Under **Who can sign in**,
 select its job roles and save. For example, select Waiter for a handheld used by your waiting staff.
 Everyone holding a selected job can sign in; their permissions still decide what they can do.

@@ -1,3 +1,4 @@
+import { profileAction } from "../testing/profile-table.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setHelpMode } from "@waitron/ui";
@@ -180,7 +181,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await flush(el);
     await vi.waitFor(() => {
       if (!el.shadowRoot!.querySelector("[data-test=receipt-printers-up-pr1]"))
@@ -218,7 +219,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
           theme,
         );
         await flush(el);
-        el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+        await profileAction(el, "edit-p1");
         await vi.waitFor(() =>
           expect(el.shadowRoot!.querySelector("[data-test=profile-save]")).not.toBeNull(),
         );
@@ -257,7 +258,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=profile-save]")).not.toBeNull(),
     );
@@ -273,7 +274,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await profileAction(el, "edit-p1");
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=profile-save]")).not.toBeNull(),
     );
@@ -333,7 +334,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
         theme,
       );
       await flush(el);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+      await profileAction(el, "edit-p1");
       await flush(el);
       await vi.waitFor(() =>
         expect(el.shadowRoot!.querySelector("[data-test=profile-readers]")).not.toBeNull(),
@@ -410,7 +411,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
         theme,
       );
       await flush(el);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
+      await profileAction(el, "edit-p2");
       await flush(el);
       expect(
         el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s-off]"),
@@ -468,7 +469,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
+    await profileAction(el, "edit-p2");
     await flush(el);
     const other = (kind: string) =>
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
@@ -537,7 +538,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
         theme,
       );
       await flush(el);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+      await profileAction(el, "edit-p1");
       await flush(el);
       expect(
         el.shadowRoot!.querySelector("[data-test=profile-pass-monitor-zone-z1]"),
@@ -575,7 +576,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
         theme,
       );
       await flush(el);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+      await profileAction(el, "edit-p1");
       await flush(el);
       const toggle = (test: string, checked: boolean) =>
         el
@@ -636,7 +637,7 @@ it.each(retirementLooks)(
       host.style.height = "900px";
       host.style.overflow = "auto";
       await flush(el);
-      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!);
+      await profileAction(el, "edit-p1");
       await flush(el);
       await expect
         .poll(() => el.shadowRoot!.querySelector("[data-test=profile-save]"))

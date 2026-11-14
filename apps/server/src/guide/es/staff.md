@@ -158,6 +158,10 @@ ver sus puestos actuales antes de elegir de nuevo.
 
 ## Quién puede iniciar sesión en un dispositivo {#device-profile-sign-in}
 
+Abre **Hardware** y después **Perfiles de dispositivo** para buscar un perfil por nombre, formato, zona de
+servicio o capacidad. La búsqueda también encuentra las capacidades que quedan tras **+N más**.
+Selecciona su fila para editarlo o usa su menú **⋮** para editarlo, duplicarlo o eliminarlo.
+
 Abre **Perfiles de dispositivo** y edita el perfil que usa el dispositivo. En **Quién puede iniciar
 sesión**, selecciona sus puestos y guarda. Por ejemplo, selecciona Camarero para un móvil que usa
 el personal de sala. Las personas que tienen un puesto seleccionado pueden iniciar sesión; sus
