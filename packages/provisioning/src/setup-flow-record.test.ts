@@ -91,6 +91,18 @@ it("a section with no attempt is refused", async () => {
   });
   expect(await readSetupFlowRecord(f.stateDir)).toBeNull();
 });
+it("an attempt update cannot remove the required section or change the saved record", async () => {
+  const f = await fixture();
+  await updateSetupFlowSection(f.stateDir, "attempt", () => f.attempt);
+  const before = await readFile(f.path);
+
+  await expect(
+    updateSetupFlowSection(f.stateDir, "attempt", () => undefined as never),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+
+  expect(await readFile(f.path)).toEqual(before);
+});
+
 it("a failed write leaves the previous record", async () => {
   const f = await fixture();
   await updateSetupFlowSection(f.stateDir, "attempt", () => f.attempt);
@@ -222,6 +234,8 @@ it("cleanup keeps unknown root files, linked folders and nested attachments", as
   await mkdir(nested, { recursive: true });
   await writeFile(join(nested, "keep.txt"), "nested attachment");
   await writeFile(join(setup, "import", "ordinary.txt"), "ordinary attachment");
+  const fileLink = join(setup, "import", "kept-link");
+  await symlink(join(target, "private.txt"), fileLink);
   await writeFile(join(setup, "unknown.txt"), "unknown setup file");
 
   await expect(endFinishedSetup(f.stateDir)).rejects.toMatchObject({ code: "ENOTEMPTY" });
@@ -231,9 +245,27 @@ it("cleanup keeps unknown root files, linked folders and nested attachments", as
     code: "ENOENT",
   });
   expect((await lstat(join(setup, "documents"))).isSymbolicLink()).toBe(true);
+  expect((await lstat(fileLink)).isSymbolicLink()).toBe(true);
   expect(await readFile(join(target, "private.txt"), "utf8")).toBe("linked folder content");
   expect(await readFile(join(nested, "keep.txt"), "utf8")).toBe("nested attachment");
   expect(await readFile(join(setup, "unknown.txt"), "utf8")).toBe("unknown setup file");
+});
+
+it("cleanup still removes later attachments when an earlier folder retains nested content", async () => {
+  const f = await fixture();
+  await updateSetupFlowSection(f.stateDir, "attempt", () => ({ ...f.attempt, status: "complete" }));
+  const setup = dirname(f.path);
+  const nested = join(setup, "documents", "nested");
+  await mkdir(nested, { recursive: true });
+  await writeFile(join(nested, "keep.txt"), "nested document");
+  await mkdir(join(setup, "import"));
+  await writeFile(join(setup, "import", "attachment.json"), "ordinary import");
+
+  await expect(endFinishedSetup(f.stateDir)).rejects.toMatchObject({ code: "ENOTEMPTY" });
+
+  await expect(lstat(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(join(setup, "import"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(nested, "keep.txt"), "utf8")).toBe("nested document");
 });
 
 it("a refused record removal reports its error and keeps the setup files", async () => {
@@ -243,10 +275,11 @@ it("a refused record removal reports its error and keeps the setup files", async
   const readiness = join(dirname(f.path), "readiness.json");
   await writeFile(readiness, "readiness evidence");
   const refused = Object.assign(new Error("record removal refused"), { code: "EACCES" });
-  vi.spyOn(fs, "unlink").mockRejectedValueOnce(refused);
+  vi.spyOn(fs, "unlink").mockClear().mockRejectedValueOnce(refused);
 
   await expect(endFinishedSetup(f.stateDir)).rejects.toBe(refused);
 
+  expect(fs.unlink).toHaveBeenCalledExactlyOnceWith(f.path);
   expect(await readFile(f.path)).toEqual(before);
   expect(await readFile(readiness, "utf8")).toBe("readiness evidence");
 });
