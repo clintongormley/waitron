@@ -16,9 +16,19 @@ afterEach(() => {
   for (const container of containers.splice(0)) container.remove();
 });
 
-async function mount(readOnly?: boolean) {
+async function mount(readOnly?: boolean, permissions?: string[]) {
   const request = vi.fn(async () => ({ staffRoles: [] }));
-  const handle = STAFFING_DASHBOARD.create({ request: request as unknown as DashboardRequest });
+  const handle = STAFFING_DASHBOARD.create({
+    request: request as unknown as DashboardRequest,
+    permissionContinuation:
+      permissions === undefined
+        ? undefined
+        : {
+            snapshot: () => ({ accountGeneration: 1, authenticated: true, permissions }),
+            subscribe: () => () => {},
+            signIn: async () => "stopped" as const,
+          },
+  });
   const container = document.createElement("div");
   document.body.append(container);
   containers.push(container);
@@ -29,6 +39,18 @@ async function mount(readOnly?: boolean) {
 }
 
 describe("STAFFING_DASHBOARD", () => {
+  it.each([
+    [[], false],
+    [["person.admin"], true],
+  ] as const)(
+    "offers the Access roles link only when the app grants access (%j)",
+    async (permissions, allowed) => {
+      const { screen } = await mount(false, [...permissions]);
+      expect(Boolean(screen.shadowRoot!.querySelector('a[href="/manage/access-roles"]'))).toBe(
+        allowed,
+      );
+    },
+  );
   it("puts the Staff roles page in the Team group for managers of staffing, readable by venue viewers", () => {
     expect(STAFFING_DASHBOARD.module).toBe("staffing");
     expect(STAFFING_DASHBOARD.screen).toEqual({

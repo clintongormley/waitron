@@ -566,7 +566,7 @@ export class AccessRolesScreen extends LitElement {
                 >
               </div>
             </div>
-            <p><a href="/manage/staff-roles">${t("access_roles.job_roles")}</a></p>
+            ${this.viewerPermissions.some((p) => p === "venue.view" || p === "schedule.manage") ? html`<p><a href="/manage/staff-roles">${t("access_roles.job_roles")}</a></p>` : nothing}
             <wt-data-table
               viewKey="waitron.access-roles.table"
               customiseColumnsLabel=${t("table.customise_columns")}

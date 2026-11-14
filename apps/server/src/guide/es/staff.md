@@ -64,16 +64,15 @@ Abre **Roles de acceso** en **Equipo** para crear un rol, por ejemplo para conta
 **Añadir rol de acceso**, escribe un nombre, marca sus permisos y pulsa **Guardar**. Abre un rol
 existente para cambiar sus permisos. Usa **Copiar rol** para partir de sus permisos con otro nombre.
 Para quitar un rol personalizado, pulsa **Eliminar rol** y comprueba cuántas personas lo perderán
-antes de confirmar. Solo puedes cambiar o copiar roles si tienes todos sus permisos. Admin siempre
-tiene todos los permisos y sus casillas están bloqueadas. Asigna el rol por separado en **Usuarios**.
+antes de confirmar. Solo puedes cambiar o copiar roles si tienes todos sus permisos.
 
 Activa **Ayuda** en la cabecera del panel y abre la ayuda de un permiso para comprobar qué
-permite antes de marcarlo. Empleado, Supervisor y Gerente son puntos de partida integrados
-cuyos permisos puedes cambiar. Admin siempre tiene todos, incluidos los que se añadan después.
+permite antes de marcarlo. Empleado, Supervisor y Encargado son puntos de partida integrados
+cuyos permisos puedes cambiar. Administrador siempre tiene todos, incluidos los que se añadan después.
 Los roles integrados no se pueden renombrar ni eliminar.
 
-Asigna los roles a las personas en **Usuarios**, en **Roles de acceso — lo que pueden hacer**,
-y guarda allí. Crear un rol no se lo asigna a nadie. Mantén al menos un Admin activo que pueda
+Asigna los roles a las personas en **Usuarios**, en **Roles de acceso — lo que puede hacer**,
+y guarda allí. Crear un rol no se lo asigna a nadie. Mantén al menos un Administrador activo que pueda
 entrar en el panel.
 
 ## Tu propia cuenta {#own-account}

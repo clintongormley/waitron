@@ -2,7 +2,7 @@ export const en = {
   "access_roles.job_roles":
     "Job roles put people on the rota and on devices; they grant no permissions.",
   "permission.payments.providers.manage.help":
-    "Connect or disconnect payment providers on Payments. Managing card readers uses Manage devices and printers.",
+    "Turn a card provider on or off on Modules. Opening Modules and connecting or disconnecting a provider also need Manage devices and printers.",
   "permission.payment.take.help":
     "Take payments and collect bills on the till, or close a bill for later payment. The device must also allow the payment method.",
   "permission.sale.void.help":
@@ -12,7 +12,7 @@ export const en = {
   "permission.sale.rectify.help":
     "Authorise correcting an issued invoice, including cancelling an invoiced order. Refunding its payment is a separate permission.",
   "permission.cash.drawer.help":
-    "Open a cash drawer manually from the till or Printers. Opening the drawer this way records who requested and authorised it.",
+    "Open a cash drawer manually from the till or Printers. Opening the drawer this way records who requested and authorised it. Using Printers also needs Manage devices and printers.",
   "permission.adjustment.apply.help":
     "Apply comps to items or bills within the reason and bill limits. Beyond a limit, ask someone with Approve comps for their PIN.",
   "permission.adjustment.approve.help":
@@ -24,15 +24,15 @@ export const en = {
   "permission.fiscal.view.help":
     "Read tax-certificate details and see fiscal alerts. Installing or replacing a certificate needs Manage the system.",
   "permission.fiscal.remedy.help":
-    "Authorise the corrective actions offered by Fiscal filing. Opening that page also needs Export reports, and protected corrections ask you to confirm your sign-in.",
+    "Authorise the corrective actions offered by Fiscal filing. Opening that page also needs Export reports, and protected corrections ask you to confirm your sign-in. Also accept returned fiscal records during a server handover.",
   "permission.personal_data.export.help":
     "Download another staff member’s personal-data copy from Users, or customer data from Orders. Confirm your sign-in before downloading staff data.",
   "permission.person.manage.help":
-    "Change staff details, invitations, PINs and account status in Users. Changing another person’s sign-in requires every permission they hold. Inviting someone also needs Manage staff permissions; email and role changes have their own permissions.",
+    "Edit names and contact details in Users. Other people’s PINs, sign-ins, invitations and account status also need Manage staff permissions; changing their sign-in requires every permission they hold. Changing another person’s email also needs Change other people’s email addresses.",
   "permission.person.admin.help":
     "Create and edit access roles, and give or remove them in Users. You can change or give a role only when you hold every permission it grants.",
   "permission.person.email.help":
-    "Change another person’s email address in Users, with Manage staff details and every permission they hold. Confirm your sign-in; the old address is notified.",
+    "Change another person’s email address in Users, with Manage staff details, Manage staff permissions and every permission they hold. Confirm your sign-in; the old address is notified.",
   "permission.schedule.manage.help":
     "Plan and publish the rota, manage job roles and their holders, and handle swaps and absences. Change staff scheduling details in Users too.",
   "permission.workforce.correct.help":
@@ -46,15 +46,15 @@ export const en = {
   "permission.venue.configure.help":
     "Change venue settings, departments, service periods, floor plans, device profiles and appearance. Authorise keeping service open or sending dishes after their service period ends.",
   "permission.hardware.manage.help":
-    "Enrol devices and print agents, and manage printers and card readers. Open Modules to change which modules the venue uses.",
+    "Enrol devices and print agents, and manage printers and card readers. Connect or disconnect providers on Card payments, and view the venue’s modules on Modules.",
   "permission.purchase.manage.help":
     "Record and review supplier invoices on Purchases. Remove an invoice there if it was entered by mistake.",
   "permission.adjustment.manage.help":
     "Configure the reasons and limits for comps, discounts and voids in Adjustments. Applying or approving a comp uses separate permissions.",
   "permission.booking.manage.help":
-    "Create and change reservations on Bookings. Confirm, seat, cancel or mark a reservation as a no-show.",
+    "Create and change reservations on Bookings. Seat guests, cancel a reservation or mark it as completed or a no-show.",
   "permission.system.manage.help":
-    "Manage backups and the Cloud connection, download recovery files, read diagnostics and restart the box. Install tax certificates and retry fiscal submissions; changing the clock or mail server needs Box administration.",
+    "Manage backups and the Cloud connection, download recovery files, read diagnostics and restart the box. Install tax certificates and retry fiscal submissions; changing the clock or mail server needs Administer this box.",
   "permission.system.box_admin.help":
     "Confirm or correct the box’s clock and change the mail server. Opening Box status and reading mail-server settings also needs Manage the system.",
   "permission.node.manage.help":
@@ -4131,7 +4131,7 @@ export const es: Record<StringKey, string> = {
   "access_roles.job_roles":
     "Los puestos ponen a las personas en el cuadrante y en los dispositivos; no dan permisos.",
   "permission.payments.providers.manage.help":
-    "Conecta o desconecta proveedores de pago en Pagos. Para gestionar los lectores necesitas Gestionar dispositivos e impresoras.",
+    "Activa o desactiva un proveedor de tarjetas en Módulos. Para abrir Módulos y conectar o desconectar un proveedor también necesitas Gestionar dispositivos e impresoras.",
   "permission.payment.take.help":
     "Cobra ventas y cuentas en la caja, o cierra una cuenta para cobrarla más tarde. El dispositivo también debe permitir la forma de pago.",
   "permission.sale.void.help":
@@ -4141,7 +4141,7 @@ export const es: Record<StringKey, string> = {
   "permission.sale.rectify.help":
     "Autoriza rectificar una factura emitida, incluida la cancelación de un pedido facturado. Devolver su pago requiere un permiso aparte.",
   "permission.cash.drawer.help":
-    "Abre un cajón de efectivo manualmente desde la caja o Impresoras. Esta apertura registra quién la pidió y quién la autorizó.",
+    "Abre un cajón de efectivo manualmente desde la caja o Impresoras. Esta apertura registra quién la pidió y quién la autorizó. Para usar Impresoras también necesitas Gestionar dispositivos e impresoras.",
   "permission.adjustment.apply.help":
     "Aplica invitaciones a platos o cuentas dentro de los límites del motivo y de la cuenta. Si los superas, pide el PIN a alguien con Aprobar invitaciones.",
   "permission.adjustment.approve.help":
@@ -4153,15 +4153,15 @@ export const es: Record<StringKey, string> = {
   "permission.fiscal.view.help":
     "Consulta los datos del certificado fiscal y las alertas fiscales. Para instalar o sustituir un certificado necesitas Gestionar el sistema.",
   "permission.fiscal.remedy.help":
-    "Autoriza las acciones de corrección que ofrece Remisión a la AEAT. Para abrir esa página también necesitas Exportar informes, y las correcciones protegidas te piden confirmar tu acceso.",
+    "Autoriza las acciones de corrección que ofrece Remisión a la AEAT. Para abrir esa página también necesitas Exportar informes, y las correcciones protegidas te piden confirmar tu acceso. También acepta registros fiscales devueltos durante un traspaso entre servidores.",
   "permission.personal_data.export.help":
     "Descarga la copia de datos personales de otro empleado desde Usuarios, o datos de clientes desde Pedidos. Confirma tu acceso antes de descargar los datos de un empleado.",
   "permission.person.manage.help":
-    "Cambia datos del personal, invitaciones, PIN y estado de cuenta en Usuarios. Para cambiar el acceso de otra persona necesitas todos sus permisos. Invitar también requiere Gestionar permisos del personal; cambiar correos y roles tiene permisos aparte.",
+    "Edita nombres y datos de contacto en Usuarios. Los PIN, accesos, invitaciones y estados de cuenta de otras personas también requieren Gestionar permisos del personal; para cambiar su acceso necesitas todos sus permisos. Cambiar su correo también requiere Cambiar correos de otras personas.",
   "permission.person.admin.help":
     "Crea y edita roles de acceso, y asígnalos o retíralos en Usuarios. Solo puedes cambiar o asignar un rol si tienes todos los permisos que concede.",
   "permission.person.email.help":
-    "Cambia el correo de otra persona en Usuarios, con Gestionar datos del personal y todos sus permisos. Confirma tu acceso; se avisa a la dirección anterior.",
+    "Cambia el correo de otra persona en Usuarios, con Gestionar datos del personal, Gestionar permisos del personal y todos sus permisos. Confirma tu acceso; se avisa a la dirección anterior.",
   "permission.schedule.manage.help":
     "Planifica y publica el cuadrante, gestiona puestos y sus titulares, y tramita cambios de turno y ausencias. También cambia los datos de planificación del personal en Usuarios.",
   "permission.workforce.correct.help":
@@ -4175,17 +4175,17 @@ export const es: Record<StringKey, string> = {
   "permission.venue.configure.help":
     "Cambia la configuración del local, secciones, periodos de servicio, planos, perfiles de dispositivo y apariencia. Autoriza mantener el servicio abierto o enviar platos tras terminar su periodo.",
   "permission.hardware.manage.help":
-    "Da de alta dispositivos y agentes de impresión, y gestiona impresoras y lectores de tarjetas. Abre Módulos para cambiar los módulos que utiliza el local.",
+    "Da de alta dispositivos y agentes de impresión, y gestiona impresoras y lectores de tarjetas. Conecta o desconecta proveedores en Pagos con tarjeta y consulta los módulos del local en Módulos.",
   "permission.purchase.manage.help":
     "Registra y consulta facturas de proveedores en Compras. Elimina allí una factura si se introdujo por error.",
   "permission.adjustment.manage.help":
     "Configura los motivos y límites de invitaciones, descuentos y anulaciones en Ajustes. Aplicar o aprobar una invitación utiliza permisos aparte.",
   "permission.booking.manage.help":
-    "Crea y cambia reservas en Reservas. Confirma, sienta, cancela o marca una reserva como no presentada.",
+    "Crea y cambia reservas en Reservas. Sienta a los clientes, cancela una reserva o márcala como finalizada o no presentada.",
   "permission.system.manage.help":
-    "Gestiona copias de seguridad y la conexión a Cloud, descarga archivos de recuperación, consulta diagnósticos y reinicia el servidor. Instala certificados fiscales y reintenta envíos fiscales; cambiar el reloj o el servidor de correo requiere Administrar esta caja.",
+    "Gestiona copias de seguridad y la conexión a Cloud, descarga archivos de recuperación, consulta diagnósticos y reinicia el equipo. Instala certificados fiscales y reintenta envíos fiscales; cambiar el reloj o el servidor de correo requiere Administrar esta caja.",
   "permission.system.box_admin.help":
-    "Confirma o corrige el reloj del servidor y cambia el servidor de correo. Para abrir Estado del servidor y consultar los ajustes del correo también necesitas Gestionar el sistema.",
+    "Confirma o corrige el reloj del equipo y cambia el servidor de correo. Para abrir Estado del equipo y consultar los ajustes del correo también necesitas Gestionar el sistema.",
   "permission.node.manage.help":
     "Gestiona los servidores del local: prepara uno de reserva o un espejo, traspasa el servicio, activa una reserva y retira un servidor. Sigue la página Servidores para los pasos de cada operación.",
 
@@ -4324,7 +4324,7 @@ export const es: Record<StringKey, string> = {
   "permission_sign_in.read_again": "Volver a consultar",
   "zone_repair.ready": "Las ventas están disponibles. Vuelve a cargar el panel.",
   "zone_repair.conversion_failed":
-    "No se ha podido leer la zona elegida en la hora actual. Comprueba el reloj del servidor y vuelve a intentarlo.",
+    "No se ha podido leer la zona elegida en la hora actual. Comprueba el reloj del equipo y vuelve a intentarlo.",
   "zone_repair.invalid_zone": "Elige una zona horaria admitida para este país.",
   "zone_repair.not_needed": "El local ya tiene una zona horaria válida. Consulta su estado actual.",
   "zone_repair.heading": "Confirmar la zona horaria del local",

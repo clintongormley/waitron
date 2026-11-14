@@ -1348,9 +1348,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Every login failure is one answer (C95, #930, owner decision 2026-09-30)**
   [Detail](backlog/dashboard.md#every-login-failure-is-one-answer-c95-930-owner-decision-2026-09-30)
 
-- **Review every permission: fewer, coarser, and consistently named**
-  [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
-
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
   first). 50 per page with a server-enforced maximum; search and sort over the whole dataset;
   debounce, reset on filter change, ignore superseded responses, keep passive live refreshes.

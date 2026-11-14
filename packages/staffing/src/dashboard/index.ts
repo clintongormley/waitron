@@ -94,6 +94,7 @@ export const STAFFING_DASHBOARD: DashboardContribution & DashboardFurtherScreen 
         html`<dashboard-staff-roles-screen
           .api=${api}
           .readOnly=${readOnly}
+          .canOpenAccessRoles=${ctx.permissionContinuation?.snapshot().permissions.includes("person.admin") ?? false}
         ></dashboard-staff-roles-screen>`,
     };
   },

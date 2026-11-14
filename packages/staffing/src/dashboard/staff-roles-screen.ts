@@ -85,6 +85,7 @@ export class StaffRolesScreen extends LitElement {
 
   @property({ attribute: false }) api!: StaffingApi;
   @property({ type: Boolean }) readOnly = false;
+  @property({ type: Boolean }) canOpenAccessRoles = false;
   @state() private staffRoles?: ListedStaffRole[];
   @state() private loadError?: string;
   /** A refused move; kept apart from `loadError`, so a read's recovery does not clear it. */
@@ -339,7 +340,7 @@ export class StaffRolesScreen extends LitElement {
         }
       </div>
       <p class="intro">${t("staffing.role.intro")}</p>
-      <p><a href="/manage/access-roles">${t("staffing.role.access_roles")}</a></p>
+      ${this.canOpenAccessRoles ? html`<p><a href="/manage/access-roles">${t("staffing.role.access_roles")}</a></p>` : nothing}
       ${
         staffRoles && this.loadError
           ? html`<p class="alert" role="alert" data-test="load-alert">${this.loadError}</p>`
