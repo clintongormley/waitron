@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import * as atomic from "./fs-atomic.js";
@@ -697,7 +698,7 @@ describe("startServer — the append-only watch in trading mode", () => {
   const UPDATE = "sales_append_only_update";
 
   /** A seeded trading venue of its own, so a tampered trigger reaches no other test. */
-  async function startWatched() {
+  async function startWatched(paymentsOff = false) {
     beforeServerStarts();
     const venue = await freshVenue();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-append-only-state-"));
@@ -710,6 +711,9 @@ describe("startServer — the append-only watch in trading mode", () => {
     let stopped = false;
     try {
       await seedTradingVenue(venue.store.venue);
+      if (paymentsOff) {
+        await seedModuleSettings(venue.store.venue, { "fiscal-none": false, payments: false });
+      }
       await venue.store.close();
       const port = await freePort();
       server = await startServer(
@@ -767,7 +771,7 @@ describe("startServer — the append-only watch in trading mode", () => {
     };
   }
 
-  for (const [what, statements, refusedTriggers] of [
+  for (const [what, statements, refusedTriggers, paymentsOff] of [
     [
       "replaced",
       [
@@ -775,12 +779,19 @@ describe("startServer — the append-only watch in trading mode", () => {
         `create trigger ${UPDATE} before update on sales begin select 1; end;`,
       ],
       { missing: [], altered: [UPDATE] },
+      false,
     ],
-    ["dropped", [`drop trigger ${UPDATE};`], { missing: [UPDATE], altered: [] }],
+    ["dropped", [`drop trigger ${UPDATE};`], { missing: [UPDATE], altered: [] }, false],
+    [
+      "dropped while Payments is Off",
+      ["drop trigger payment_holds_append_only_update;"],
+      { missing: ["payment_holds_append_only_update"], altered: [] },
+      true,
+    ],
   ] as const) {
     it(`keeps an untouched box trading, then stops it and records the refusal for the next start when a trigger is ${what}`, async () => {
       await withMockedKill(async (kills) => {
-        const box = await startWatched();
+        const box = await startWatched(paymentsOff);
         try {
           await delay(INTERVAL_MS * 5);
           expect(kills).toEqual([]);

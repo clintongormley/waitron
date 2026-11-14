@@ -30,20 +30,22 @@ export async function missingBeforeMigration(
 ): Promise<string[]> {
   const probe = await openVenueDatabase(venueDir);
   try {
-    const existing = new Set(
-      probe.venue
-        .execute<{ name: string }>(
-          sql`select lower(name) as name from sqlite_master where type = 'table'`,
-        )
-        .rows.map((row) => row.name),
-    );
-    return appendOnlyTriggerFaults(
-      probe.venue,
-      tables.filter((table) => existing.has(table.toLowerCase())),
-    ).missing;
+    return appendOnlyTriggerFaults(probe.venue, existingAppendOnlyTables(probe.venue, tables))
+      .missing;
   } finally {
     await probe.close();
   }
+}
+
+export function existingAppendOnlyTables(db: Database, tables: readonly string[]): string[] {
+  const existing = new Set(
+    db
+      .execute<{ name: string }>(
+        sql`select lower(name) as name from sqlite_master where type = 'table'`,
+      )
+      .rows.map((row) => row.name),
+  );
+  return tables.filter((table) => existing.has(table.toLowerCase()));
 }
 
 export interface RefuseTradingDeps {

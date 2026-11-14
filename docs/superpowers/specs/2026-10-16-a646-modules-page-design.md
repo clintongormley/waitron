@@ -1,5 +1,7 @@
 # A646: configure optional modules without stopping service
 
+**2026-11-14 retained-protection update:** the [remaining-switches plan](../plans/2026-11-14-a646-remaining-module-switches.md), read by Claude and cleared by the watcher at14:22, limits the repair to existing optional-module tables plus selected migration declarations. Unselected fiscal-module tables remain an open decision. Workforce and staffing are mandatory under A1002; only workforce-es and Payments switches remain.
+
 **2026-11-14 implementation update:** Bookings uses a saved On/Off choice and a separate administrator Restart, with a pending-restart indication. Failed-start recovery can switch Bookings off over HTTPS with an active administrator password. Other optional module switches remain unavailable. See the [Bookings plan](../plans/2026-11-12-a483-smallest-module-toggle.md). This supersedes the automatic-restart behavior below for Bookings.
 
 > 2026-11-11: The watcher-cleared [reduced plan](../plans/2026-11-11-a646-modules-and-card-providers.md) supersedes the build scope below. Rows without settings have no Configure action (watcher 17:15).

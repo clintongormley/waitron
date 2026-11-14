@@ -1518,9 +1518,8 @@ start serves the recovery page at once, with no count of failed starts (`refused
 
 - a trigger dropped, rows changed and the exact text re-created within one 10-second interval, or
   the same done while the box is off;
-- the tables of a module that is switched off: it checks the tables the start migrates, so not
-  `time_entries` (workforce), `payment_resolutions` (payments), or `registros_facturacion` and the
-  filing-case tables on a box later moved to `fiscal-none`;
+- retained tables of an unselected provision-only module, such as `registros_facturacion` and
+  the filing-case tables on a box later moved to `fiscal-none`;
 - `PRAGMA recursive_triggers` turned off, which reopens the `INSERT OR REPLACE` hole above without
   touching a trigger;
 - anything but the stored text: it reads `sqlite_master.sql` and nothing else;
@@ -1528,6 +1527,15 @@ start serves the recovery page at once, with no count of failed starts (`refused
   bucket, each through `placeValidated`, `apps/server/src/restore.ts`) or by `waitron-rejoin`
   (`apps/server/src/rejoin-command.ts`): each migrates before any start can look, so none raises
   the warning.
+
+**2026-11-14, A646:** startup also selects existing tables from toggleable modules' append-only
+classifications. It records missing trigger names before migrating, installs missing pairs on those
+retained tables, and includes them in the startup check and trading watch. It does not migrate an
+Off module or create its absent tables. `boot.failed-start.test.ts` checks all three retained
+Payments tables with populated rows, the warning, changed-trigger refusal and an unchanged journal;
+`boot.restore.test.ts` checks a dropped Payments-Off trigger during trading, and
+`boot.payments-off-alerts.test.ts` checks a never-installed Payments set stays absent. The installer
+and stored-text comparison retain the limits above.
 
 No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner
 decision 2026-09-05). Two root guards enforce the classification on every non-docs push:
@@ -6131,6 +6139,8 @@ path does, and `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` 
 without the check; the full list is in [conventions-data.md](conventions-data.md).
 
 ### `registros_facturacion` is immutable
+
+2026-11-14: the current trigger rule above also includes existing optional-module tables; the following root excerpt records the earlier table-selection limit.
 
 **`registros_facturacion` is immutable**: it is declared `appendOnly()`
 (`packages/fiscal-verifactu/src/classification.ts`, beside the two filing-case tables), so `applyMigrations` puts a `RAISE(ABORT)`

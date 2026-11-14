@@ -2302,10 +2302,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Correct every sentence known to be false, then finish comment pruning** (bundle of 26, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning)
 
-- **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; four switches remain).**
+- **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; two switches remain).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md); [plan](superpowers/plans/2026-11-11-a646-modules-and-card-providers.md).
   Administrators can turn card providers on or off while keeping credentials for earlier payments.
-  Bookings can be switched with a separate administrator restart, and failed-start recovery can switch it off. Workforce, workforce-es, payments and staffing still wait for the append-only protection repair. Exports with optional modules off load with those modules on and empty.
+  Bookings can be switched with a separate administrator restart, and failed-start recovery can switch it off. Workforce-es and Payments switches remain; retained optional-module tables are protected. Workforce and staffing stay mandatory under A1002. Exports with optional modules off load with those modules on and empty.
   Google sign-in is no longer part of it (owner, 2026-11-11): see A1507 under Later and parked.
   [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 

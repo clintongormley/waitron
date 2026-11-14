@@ -222,6 +222,6 @@ describe("missingBeforeMigration", () => {
     } finally {
       raw.close();
     }
-    expect(await missingBeforeMigration(dir, ["sales"])).toEqual([DELETE]);
+    expect(await missingBeforeMigration(dir, ["sales", "never_installed"])).toEqual([DELETE]);
   });
 });
