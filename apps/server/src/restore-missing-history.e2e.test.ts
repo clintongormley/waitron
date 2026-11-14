@@ -121,7 +121,7 @@ it.each(["archive", "stream"] as const)(
         app,
         {
           db: store.venue,
-          recordGeneration: { nodeId: f.node.nodeId } as unknown as NonNullable<
+          recordGeneration: { nodeId: f.node.nodeId, clock: steadyClock } as unknown as NonNullable<
             ModuleRouteContext["recordGeneration"]
           >,
         },
