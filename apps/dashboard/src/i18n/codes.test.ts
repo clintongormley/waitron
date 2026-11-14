@@ -724,7 +724,7 @@ it("has English and Spanish copy for every refusal of Print invoice and Download
 it("says a box holds no recovery key rather than asking for one to be entered, since Edit and the recovery pack reach it", () => {
   expect(codeMessage("backup.recovery_key_missing", "en")).toBe("This box holds no recovery key.");
   expect(codeMessage("backup.recovery_key_missing", "es")).toBe(
-    "Esta caja no tiene clave de recuperación.",
+    "Este servidor no tiene clave de recuperación.",
   );
 });
 
@@ -774,7 +774,7 @@ it("words a refused confirmation of the clock in both languages", () => {
     "The clock could not be confirmed. Look at the Box status page.",
   );
   expect(codeMessage("clock.confirm_refused", "es")).toBe(
-    "No se ha podido confirmar la hora. Mira Estado del equipo.",
+    "No se ha podido confirmar la hora. Mira Estado del servidor.",
   );
 });
 
@@ -783,7 +783,7 @@ it("words a refusal while the start's time is unconfirmed in both languages", ()
     "Not recorded: the box is waiting for its time to be confirmed. Use “Check the time” on a till.",
   );
   expect(codeMessage("clock.unconfirmed", "es")).toBe(
-    "No se ha registrado: el equipo espera a que se confirme su hora. Usa «Comprobar la hora» en una caja.",
+    "No se ha registrado: el servidor espera a que se confirme su hora. Usa «Comprobar la hora» en una caja.",
   );
 });
 
@@ -916,7 +916,7 @@ it("words a handover a newer list of boxes stopped as what happened, not as a fa
     "Another box took over or the venue’s list of boxes changed. Open the current main box’s address to continue.",
   );
   expect(codeMessage("handover.superseded_during_start", "es")).toBe(
-    "Otro equipo ha pasado a llevar el local o ha cambiado la lista de equipos. Abre la dirección del equipo principal actual para continuar.",
+    "Otro servidor ha pasado a llevar el local o ha cambiado la lista de servidores. Abre la dirección del servidor principal actual para continuar.",
   );
 });
 
@@ -970,6 +970,6 @@ it("the backup-settings refusal says this box keeps selling and to try again in 
     "The spare does not hold this box's backup settings, so it did not accept the handover. This box keeps selling, and sends the spare its settings by itself. Try again in a minute.",
   );
   expect(codeMessage("handover.backup_settings_differ", "es")).toBe(
-    "El equipo de reserva no tiene los ajustes de copia de seguridad de este equipo, así que no ha aceptado el traspaso. Este equipo sigue vendiendo y le envía sus ajustes solo. Vuelve a intentarlo dentro de un minuto.",
+    "El servidor de reserva no tiene los ajustes de copia de seguridad de este servidor, así que no ha aceptado el traspaso. Este servidor sigue vendiendo y le envía sus ajustes solo. Vuelve a intentarlo dentro de un minuto.",
   );
 });

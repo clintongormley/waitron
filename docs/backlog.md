@@ -1521,7 +1521,6 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
 
 - **What pack part 1's reviews left** (bundle, size M). Holds A1187. [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
 
-- **One word for the box, one name for the key** (bundle of 4, 2 important, size S, needs the owner). Holds A1187. [Detail](backlog/box.md#bundle-one-word-for-the-box-one-name-for-the-key)
 
 - **There is no Backups guide page**, so the Backups screen and its Recovery pack card link to none.
 

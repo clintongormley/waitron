@@ -701,7 +701,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/setup/src/screens/configuration-preview-screen.test.ts",
   "apps/setup/src/screens/connect-screen.test.ts",
   "apps/setup/src/screens/connection-screen.test.ts",
-  "apps/setup/src/screens/done-screen.a11y.test.ts",
   "apps/setup/src/screens/done-screen.test.ts",
   "apps/setup/src/screens/email-screen.test.ts",
   "apps/setup/src/screens/fiscal-test-screen.a11y.test.ts",

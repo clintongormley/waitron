@@ -168,7 +168,7 @@ describe("vf-fiscal-filing-screen", () => {
     expect(parts.indexOf("conflict")).toBeLessThan(parts.indexOf("progress"));
     const link = notice.querySelector("a")!;
     expect(link.getAttribute("href")).toBe("/manage/recovery/fiscal-conflict");
-    expect(text(screen, "[data-test=conflict]")).toContain("recovery key");
+    expect(text(screen, "[data-test=conflict]")).toContain("server key");
     const line = text(screen, "[data-test=conflict] li");
     expect(line).toContain("T1/41");
     expect(line).toContain("Correcto");
@@ -222,7 +222,7 @@ describe("vf-fiscal-filing-screen", () => {
     expect(
       flat(spanish.screen.shadowRoot!.querySelector("[data-test=conflict] [data-test=said]")),
     ).toBe(
-      "La AEAT tiene la factura T1/41 como aceptada, y sus datos no coinciden con el registro de este equipo.",
+      "La AEAT tiene la factura T1/41 como aceptada, y sus datos no coinciden con el registro de este servidor.",
     );
     expect(
       flat(spanish.screen.shadowRoot!.querySelector("[data-test=conflict] [data-test=seen]")),
@@ -243,7 +243,7 @@ describe("vf-fiscal-filing-screen", () => {
     setLocale("es");
     const spanish = await mount(vi.fn(answer));
     expect(text(spanish.screen, "[data-test=conflict] li")).toContain(
-      "La AEAT tiene la factura T1/99; este equipo no la emitió.",
+      "La AEAT tiene la factura T1/99; este servidor no la emitió.",
     );
   });
 
@@ -289,9 +289,9 @@ describe("vf-fiscal-filing-screen", () => {
     const spanish = await mount(vi.fn(answer));
     expect(
       unfolded(spanish.screen.shadowRoot!.querySelector("[data-test=not-issued-here] li")!),
-    ).toContain("La AEAT tiene la factura T0/12 (2026-10-28); este equipo no la emitió.");
+    ).toContain("La AEAT tiene la factura T0/12 (2026-10-28); este servidor no la emitió.");
     expect(text(spanish.screen, "[data-test=identity-changes] li")).toContain(
-      "La identidad fiscal cambió de BOX-01 a BOX-02 sin un traspaso. La última factura que este equipo tiene bajo BOX-01 es la T1/40 (2026-11-02). Puede haber facturas bajo BOX-01 que este equipo no tiene.",
+      "La identidad fiscal cambió de BOX-01 a BOX-02 sin un traspaso. La última factura que este servidor tiene bajo BOX-01 es la T1/40 (2026-11-02). Puede haber facturas bajo BOX-01 que este servidor no tiene.",
     );
   });
 
@@ -314,7 +314,7 @@ describe("vf-fiscal-filing-screen", () => {
     setLocale("es");
     const spanish = await mount(vi.fn(answer));
     expect(text(spanish.screen, "[data-test=identity-changes] li")).toContain(
-      "La identidad fiscal cambió de BOX-01 a BOX-02 sin un traspaso. Este equipo no tiene ninguna factura bajo BOX-01. Puede haber facturas bajo BOX-01 que este equipo no tiene.",
+      "La identidad fiscal cambió de BOX-01 a BOX-02 sin un traspaso. Este servidor no tiene ninguna factura bajo BOX-01. Puede haber facturas bajo BOX-01 que este servidor no tiene.",
     );
   });
 
@@ -490,7 +490,7 @@ describe("vf-fiscal-filing-screen", () => {
       (await mount(vi.fn(async () => overview({ cases: [found] })))).screen,
     );
     expect(flat(spanish.querySelector("[data-test=now] dd"))).toBe(
-      "Se detectó al consultar la factura en la AEAT. La consulta no cambia cómo se envía este registro. Mientras el conflicto siga activo, este equipo no emite facturas.",
+      "Se detectó al consultar la factura en la AEAT. La consulta no cambia cómo se envía este registro. Mientras el conflicto siga activo, este servidor no emite facturas.",
     );
   });
 

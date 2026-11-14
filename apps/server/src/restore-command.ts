@@ -420,7 +420,7 @@ function sharedRefusal(err: unknown): string {
   if (err.code === "restore.request_waiting")
     return "restore failed: restore.request_waiting — a restore saved from the setup page is still waiting and this command changed nothing; start the server to run that restore. If it cannot finish, use Retry a normal boot or choose Throw this restore away on the HTTPS recovery page, using an administrator password from the selected backup; after discarding it, run this command again";
   if (err.code === "promotion.break_glass_invalid")
-    return "restore failed: promotion.break_glass_invalid — use the selected backup's node recovery key";
+    return "restore failed: promotion.break_glass_invalid — use the selected backup's server key";
   if (err.code === "provisioning.database_in_use") {
     return "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)";
   }

@@ -101,7 +101,7 @@ y más información: _correo de privacidad del local_, _dirección de la página
 Cuando Waitron envía por correo una factura completa, el correo lleva este aviso, con la razón
 social de tu local y el correo y la página de privacidad de la tarjeta **Privacidad**. El aviso va en
 español salvo que la factura esté en inglés, y lleva la parte sobre la Agencia Tributaria solo en una
-factura de la que el equipo envía un registro. Si no hay ni correo ni página de privacidad, el correo no lleva aviso. El
+factura de la que el servidor envía un registro. Si no hay ni correo ni página de privacidad, el correo no lleva aviso. El
 correo llega al cliente después de que el personal haya tomado los datos, así que muestra el aviso
 también donde los toma, por ejemplo en un cartel junto a la caja.
 
@@ -200,7 +200,7 @@ busca la tarjeta **Privacidad**. Elige **Editar**, rellena uno o los dos y elige
 
 Para quitar uno, vacía su campo y elige **Guardar**. Un encargado o un administrador puede
 cambiarlos, y un supervisor puede verlos. Una exportación de la configuración los incluye, así que
-un equipo nuevo preparado a partir de ella los muestra. Si lo preparas con **NIF nuevo**, revísalos
+un servidor nuevo preparado a partir de ella los muestra. Si lo preparas con **NIF nuevo**, revísalos
 aquí: siguen siendo los del negocio anterior hasta que los cambies.
 
 Waitron muestra la página en los correos que envía al personal para crear una cuenta, restablecer
@@ -243,10 +243,10 @@ entrada por cada uso. Cópialas en tu propio registro, sustituye cada parte en c
 haces fuera de Waitron, como las nóminas que lleva tu gestor. Dos hechos se aplican a todas las
 entradas, así que no se repiten en cada una:
 
-- Waitron no cifra la base de datos en el disco del equipo. Para la copia continua del bucket,
+- Waitron no cifra la base de datos en el disco del servidor. Para la copia en el bucket,
   envía al proveedor de almacenamiento una clave de cifrado independiente derivada de tu clave de
-  recuperación. Las copias programadas van cifradas con la clave de recuperación. El equipo guarda
-  estas claves, así que el acceso al equipo también puede exponer las copias.
+  recuperación. Las copias programadas van cifradas con la clave de recuperación. El servidor guarda
+  estas claves, así que el acceso al servidor también puede exponer las copias.
 - La copia de tu bucket contiene toda la base de datos, así que tu proveedor de almacenamiento de
   copias de seguridad recibe todo lo siguiente. Que algún dato vaya a un tercer país depende de los
   proveedores que elegiste, y Waitron no comprueba dónde guardan los datos, así que consúltalo con
@@ -320,7 +320,7 @@ o lo autorizó.
 - Interesados: el personal.
 - Datos: quién cobró una venta, quién cambió un pedido, quién autorizó una anulación, quién pidió, autorizó o registró el
   resultado de una devolución, quién abrió el cajón de efectivo o lo autorizó, y cuándo; y quién
-  confirmó o puso la hora del equipo desde una caja, guardado en una tabla cuyas filas no pueden
+  confirmó o puso la hora del servidor desde una caja, guardado en una tabla cuyas filas no pueden
   modificarse ni borrarse.
 - Destinatarios: _cualquiera con quien los compartas_.
 - Plazo de conservación: _fijar con tu asesor_. Waitron nunca cambia ni borra una venta registrada.
@@ -417,37 +417,37 @@ continua en un bucket tuyo, también puede hacer copias programadas, y puede exp
 configuración para poner en marcha otro local.
 
 - Finalidad: recuperar el local tras un fallo, y preparar un local nuevo a partir de este.
-- Interesados: todas las personas de las entradas anteriores, en la copia del bucket y en cada copia
-  programada; el personal, también el que ya no trabaja en el local, en la exportación de la
+- Interesados: todas las personas de las entradas anteriores, en la copia en el bucket y en cada
+  copia programada; el personal, también el que ya no trabaja en el local, en la exportación de la
   configuración.
-- Datos: la copia del bucket y cada copia programada contienen toda la base de datos. La exportación
+- Datos: la copia en el bucket y cada copia programada contienen toda la base de datos. La exportación
   de la configuración contiene a cada persona de la lista del personal con su nombre, correo,
   teléfono, rol y estado, y sus datos de contrato con la tarifa de pago y la disponibilidad. Nunca
   contiene un PIN, una contraseña, una llave de acceso, un secreto de verificación en dos pasos, un
   código de recuperación ni un vínculo con Google.
 - Destinatarios: tu proveedor de almacenamiento de copias de seguridad, y el proveedor de cualquier
   otro bucket al que envíes copias programadas; quien reciba de ti un archivo de exportación de la
-  configuración. Las copias programadas guardadas en **Una carpeta de esta caja** quedan donde esté
+  configuración. Las copias programadas guardadas en **Una carpeta de este servidor** quedan donde esté
   esa carpeta.
-- Plazo de conservación: la copia del bucket guarda una semana de historial. Cada vez que Waitron
+- Plazo de conservación: la copia en el bucket guarda una semana de historial. Cada vez que Waitron
   guarda una copia programada en un destino, borra de ese destino las copias que pasen de las 7 más
   recientes y las de más de 30 días, salvo que cambies esos ajustes. Antes de una copia, cuando
-  al disco del equipo le quedan menos de unos 2 GB libres, o al arrancar con el disco lleno, también puede borrar sus copias más antiguas de las carpetas
-  de ese disco, nunca la más reciente de cada una. Durante un tiempo después de que el equipo ponga
+  al disco del servidor le quedan menos de unos 2 GB libres, o al arrancar con el disco lleno, también puede borrar sus copias más antiguas de las carpetas
+  de ese disco, nunca la más reciente de cada una. Durante un tiempo después de que el servidor ponga
   su propio reloj en hora, conserva algunas de las copias fechadas con el reloj equivocado o las borra las
   últimas; el arranque con el disco lleno aún no lo hace (lo explica [Estado del
-  equipo](box-status.md#free-space)). Desactivar la copia del bucket o las copias
+  servidor](box-status.md#free-space)). Desactivar la copia en el bucket o las copias
   programadas deja lo que ya está guardado, así que bórralo en tu proveedor, o de la carpeta, cuando
   ya no lo necesites. Todo lo demás: _fijar con tu asesor_.
-- Seguridad: Waitron pide al proveedor de almacenamiento que cifre la copia del bucket con una
+- Seguridad: Waitron pide al proveedor de almacenamiento que cifre la copia en el bucket con una
   clave derivada de tu clave de recuperación. El proveedor recibe la base de datos y la clave de
   cifrado. Las contraseñas y claves que Waitron guarda para tus proveedores también van cifradas
-  dentro de la base de datos. Cada copia programada va cifrada con la clave de recuperación, que guarda el equipo. Mientras la hace, el equipo escribe una copia sin cifrar de la
+  dentro de la base de datos. Cada copia programada va cifrada con la clave de recuperación, que guarda el servidor. Mientras la hace, el servidor escribe una copia sin cifrar de la
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
   menos 12 caracteres, así que es tan segura como esa frase. Un paquete de recuperación hecho en
-  **Copias de seguridad** después de configurar la copia del bucket o las copias programadas las
-  abre, así que guarda cada paquete de recuperación bajo llave, fuera del equipo.
+  **Copias de seguridad** después de configurar la copia en el bucket o las copias programadas las
+  abre, así que guarda cada paquete de recuperación bajo llave, fuera del servidor.
 
 ## Si se pierden o se exponen datos personales {#breach}
 
@@ -499,7 +499,7 @@ Para responder a esas preguntas necesitas hechos: qué quedó expuesto, de quié
 Esto es lo que el panel puede mostrarte.
 
 - **Dispositivos** muestra el **Visto por última vez** de cada dispositivo, la última vez que el
-  equipo tuvo noticias de él. Un dispositivo eliminado sale de esa lista, lo que quita su **Visto
+  servidor tuvo noticias de él. Un dispositivo eliminado sale de esa lista, lo que quita su **Visto
   por última vez** de la pantalla, así que anótalo antes de eliminar el dispositivo.
 - Ninguna pantalla muestra quién inició sesión en qué dispositivo. La copia de los datos de cada
   persona sí lo hace: un administrador la descarga desde **Usuarios**, con **Descargar sus datos**
@@ -514,18 +514,18 @@ Esto es lo que el panel puede mostrarte.
   trabajos de la **Cola de impresión**, en **Impresoras**, pero ninguna columna dice cuáles son, y
   ninguna nombra a una persona. Quién abrió el cajón, o lo autorizó, está en el archivo
   `actions.json` de la copia de los datos de esa persona.
-- **Diagnóstico** muestra las últimas líneas del registro del equipo. Cuando Waitron escribe el
+- **Diagnóstico** muestra las últimas líneas del registro del servidor. Cuando Waitron escribe el
   nombre, el correo o el NIF de una persona como un dato que marca como personal, la línea muestra
-  solo unos pocos de sus caracteres. **Avisos** muestra los avisos que ha generado el equipo.
+  solo unos pocos de sus caracteres. **Avisos** muestra los avisos que ha generado el servidor.
   Las líneas enmascaradas siguen siendo datos personales: los caracteres que quedan, los
   identificadores y otros detalles pueden vincularlas con alguien. Limita quién puede verlas o
   recibir una copia, como haces con los demás datos personales.
 
 Waitron no registra quién abrió o leyó un registro en una pantalla, ni la dirección de red desde la
 que llegó un inicio de sesión. La única dirección que toma de la conexión de una petición y guarda
-es la de un dispositivo cuyo reloj ayudó a confirmar o poner en hora el reloj del equipo. Un agente
+es la de un dispositivo cuyo reloj ayudó a confirmar o poner en hora el reloj del servidor. Un agente
 de impresión
-también comunica al equipo su propia dirección de red, que muestra **Impresoras**.
+también comunica al servidor su propia dirección de red, que muestra **Impresoras**.
 
 ## Pérdidas habituales {#breach-losses}
 
@@ -538,7 +538,7 @@ hay que preparar ahora con las notas escritas en ellos, y las devoluciones sin t
 motivo escrito en cada una. Eliminar el dispositivo no borra nada en él. La
 aplicación de caja borra las devoluciones sin terminar de una persona cuando esa persona cierra la
 sesión o la caja se bloquea sola, pero conserva las otras dos. Las que quedaron cuando la caja se
-cerró, se recargó o el equipo la rechazó, como ocurre al eliminarla, siguen en el dispositivo.
+cerró, se recargó o el servidor la rechazó, como ocurre al eliminarla, siguen en el dispositivo.
 Anota su **Visto por última vez** en **Dispositivos** y después elige **Eliminar** en su fila:
 cierra todas las sesiones del personal en el dispositivo y le impide conectarse. Waitron rechaza
 Eliminar mientras haya un pago en curso en él. Averigua quién lo usó con las copias de los datos de
@@ -557,17 +557,17 @@ intentarlo. El navegador también guarda la dirección de correo de la persona s
 mi correo en este dispositivo** al iniciar sesión. Si el móvil o el portátil se usaba también como
 caja, sigue además los pasos para un dispositivo de caja robado.
 
-**Un equipo perdido o robado.** Waitron no cifra la base de datos en el disco del equipo, así que
+**Un servidor perdido o robado.** Waitron no cifra la base de datos en el disco del servidor, así que
 trata todo lo que contiene como expuesto: los datos y los inicios de sesión del personal, los
 clientes con factura, las reservas, las notas de alergias y todas las ventas. Los PIN y las
 contraseñas solo se guardan como hashes, pero un PIN corto puede adivinarse a partir de su hash. El
-equipo usa las contraseñas y claves que guarda para tus proveedores, como la de tu servidor de
+servidor usa las contraseñas y claves que guarda para tus proveedores, como la de tu servidor de
 correo, sin que nadie escriba una clave, así que trátalas también como expuestas y cámbialas en cada
 proveedor, incluidas las claves de acceso de tu bucket. Entre ellas están el certificado con el que
-el equipo envía los registros de facturación a la Agencia Tributaria y su contraseña, así que
-pregunta a tu asesor cómo sustituirlo. El equipo también guarda la clave de recuperación, que abre
+el servidor envía los registros de facturación a la Agencia Tributaria y su contraseña, así que
+pregunta a tu asesor cómo sustituirlo. El servidor también guarda la clave de recuperación, que abre
 tus copias programadas. La clave que protege los secretos de la verificación en dos pasos también
-está en el equipo, así que elige **Restablecer acceso** para cada persona que use la verificación en
+está en el servidor, así que elige **Restablecer acceso** para cada persona que use la verificación en
 dos pasos. Waitron no permite **Restablecer acceso** para el único administrador activo que pueda entrar al panel, que en su
 lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplicación de
 autenticación** y lo vuelve a configurar.
@@ -575,8 +575,8 @@ autenticación** y lo vuelve a configurar.
 **Un paquete de recuperación perdido.** El paquete hecho durante la primera configuración solo
 contiene la clave del servidor, que una recuperación necesita junto con el acceso a una copia; para
 sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
-configurar la copia del bucket contiene la clave de acceso y el
-secreto de tu bucket y la clave de recuperación (el paquete la llama clave de copia), así que quien lo tenga puede leer toda la copia de la base de datos de tu
+configurar la copia en el bucket contiene la clave de acceso y el
+secreto de tu bucket y la clave de recuperación, así que quien lo tenga puede leer toda la copia de la base de datos de tu
 bucket y desbloquear las contraseñas y claves guardadas en ella, incluida la clave que protege los
 secretos de la verificación en dos pasos, así que elige también **Restablecer acceso** para cada
 persona que la use. Waitron no permite **Restablecer acceso** para el único administrador activo que pueda entrar al panel,
@@ -585,9 +585,10 @@ autenticación** y lo vuelve a configurar. La clave de recuperación también ab
 programadas, allí donde esa
 persona pueda llegar a ellas. Revoca las claves de acceso antiguas en tu proveedor del bucket, algo
 que Waitron no puede hacer por ti. Después, en **Copias de seguridad**, elige **Cambiar de bucket**
-e introduce las claves nuevas. Si tus copias programadas van a **El bucket de la copia continua**,
-elige también **Cambiar el destino o la programación**, vuelve a elegir **El bucket de la copia
-continua** y guarda, porque conservan las claves con las que se guardaron. Una clave de recuperación
+e introduce las claves nuevas. Las copias programadas en un bucket
+conservan sus propias claves, que **Cambiar de bucket** no cambia: si usaban las claves antiguas,
+elige también **Cambiar el destino o la programación**, escribe las claves nuevas en **ID de la
+clave de acceso** y **Clave de acceso secreta**, y elige **Guardar cambios**. Una clave de recuperación
 nueva no cambia las contraseñas y claves de tus otros proveedores, así que cámbialas también en cada
 proveedor. Mientras las copias programadas están activadas, **Copias de seguridad** también ofrece
 **Cambiar la clave de recuperación**; después elige **Hacer paquete de recuperación** en **Copias de

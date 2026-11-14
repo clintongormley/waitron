@@ -218,7 +218,7 @@ run the production selector.
 
 Configure backup destinations, schedule and retention on the dashboard's **Backups** screen.
 Backups previously configured in `deploy/.env` stop until you configure them there. Keep the old recovery
-key from `deploy/.env` to open existing archives. The dashboard stores its backup key in
+key from `deploy/.env` to open existing archives. The dashboard stores its recovery key in
 `backup.env`; keep each key with your recovery documents.
 
 The compose project is named `waitron`. On a developer machine that is also running the repository's
@@ -662,9 +662,9 @@ command against it treat that entrypoint differently:
 
   **A filing node also needs its fiscal recovery operation.** Follow
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
-  backup's node key, a fresh allocation and current outside evidence. The source examples below
+  backup's server key, a fresh allocation and current outside evidence. The source examples below
   show archive and bucket access only; add that procedure's recovery override and credentials
-  when restoring Veri*Factu. The archive encryption key alone does not authorise activation.
+  when restoring Veri*Factu. The recovery key alone does not authorise activation.
 
   ```bash
   docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \
@@ -688,7 +688,7 @@ command against it treat that entrypoint differently:
   `<name>` is the archive's file name as the bucket lists it. This form takes neither a backup
   file, `--from-bucket` nor `--confirm-venue`, and uses the pack's recovery key even when
   `WAITRON_BACKUP_RECOVERY_KEY` is set. An archive file downloaded from the bucket by hand
-  opens with `restore <backup-file>` and its encryption key in
+  opens with `restore <backup-file>` and its recovery key in
   `WAITRON_BACKUP_RECOVERY_KEY`. A filing node still needs the separate fiscal recovery inputs.
 
   ```bash
@@ -701,12 +701,12 @@ command against it treat that entrypoint differently:
   in a bucket. The dashboard no longer shows either restore code on screen; both are in the
   recovery pack.
 
-  **Keep older paper recovery keys.** Restoring an older backup also restores the node key
+  **Keep older paper server keys.** Restoring an older backup also restores the server key
   from that time. A replaced key can work again on the restored box, while its replacement
   can be refused. Keep the older paper until every backup made before the replacement has
   been deleted. When the restored copy contains a key name, `restore.recovery_key_selected`
-  names the paper you need. The node key authenticates recovery; the separate backup encryption
-  key opens the backup file.
+  names the paper you need. The server key authenticates recovery; the separate recovery key opens
+  the backup file.
 
   A restore that fails while it writes the backup's secrets or moves its database into place
   leaves the box's database, identity file (`trading.env`) and other secrets as they were. One that

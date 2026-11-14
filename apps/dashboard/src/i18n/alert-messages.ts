@@ -87,17 +87,17 @@ export const ALERT_MESSAGES: Readonly<
   },
   "backup.archives_deleted": {
     en: "Low disk space: the box deleted its {count} oldest backups ({date:date}).",
-    es: "Poco espacio en disco: el equipo borró sus {count} copias más antiguas ({date:date}).",
+    es: "Poco espacio en disco: el servidor borró sus {count} copias más antiguas ({date:date}).",
     one: {
       param: "count",
       en: "Low disk space: the box deleted its oldest backup ({date:date}).",
-      es: "Poco espacio en disco: el equipo borró su copia de seguridad más antigua ({date:date}).",
+      es: "Poco espacio en disco: el servidor borró su copia de seguridad más antigua ({date:date}).",
     },
     variants: {
       severalDays: {
         mode: "replace",
         en: "Low disk space: the box deleted its {count} oldest backups ({date:date} to {lastDate:date}).",
-        es: "Poco espacio en disco: el equipo borró sus {count} copias más antiguas (del {date:date} al {lastDate:date}).",
+        es: "Poco espacio en disco: el servidor borró sus {count} copias más antiguas (del {date:date} al {lastDate:date}).",
       },
     },
   },
@@ -114,11 +114,11 @@ export const ALERT_MESSAGES: Readonly<
   },
   "backup.archive_settings_unusable": {
     en: "Scheduled backups are off because their saved settings could not be used. Open Backups to read the error; its What the box recorded button shows what the box found and what each choice does. Choose the settings again there. Turn on backups replaces the saved choices; leave without applying to keep them. Sales continue.",
-    es: "Las copias programadas están desactivadas porque no se han podido usar sus ajustes guardados. Abre Copias de seguridad para leer el error; su botón Lo que ha registrado el equipo muestra lo que encontró el equipo y qué hace cada opción. Elige allí los ajustes de nuevo. Activar las copias sustituye los ajustes guardados; sal sin aplicarlos para conservarlos. Las ventas continúan.",
+    es: "Las copias programadas están desactivadas porque no se han podido usar sus ajustes guardados. Abre Copias de seguridad para leer el error; su botón Lo que ha registrado el servidor muestra lo que encontró el servidor y qué hace cada opción. Elige allí los ajustes de nuevo. Activar las copias sustituye los ajustes guardados; sal sin aplicarlos para conservarlos. Las ventas continúan.",
   },
   "backup.stream_behind": {
     en: "The bucket copy is {minutes} minutes behind: your most recent sales are not in it yet. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",
-    es: "La copia en el bucket lleva {minutes} minutos de retraso: tus ventas más recientes aún no están en ella. Las ventas continúan. Revisa la conexión a internet del equipo y el bucket en la página de Copias.",
+    es: "La copia en el bucket lleva {minutes} minutos de retraso: tus ventas más recientes aún no están en ella. Las ventas continúan. Revisa la conexión a internet del servidor y el bucket en la página de Copias.",
     variants: {
       toSpare: {
         mode: "replace",
@@ -129,45 +129,45 @@ export const ALERT_MESSAGES: Readonly<
   },
   "backup.stream_paused": {
     en: "The bucket copy is paused: the bucket could not be reached for so long that the box stopped copying to protect its disk. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",
-    es: "La copia en el bucket está en pausa: no se ha podido contactar con el bucket durante tanto tiempo que el equipo ha dejado de copiar para proteger su disco. Las ventas continúan. Revisa la conexión a internet del equipo y el bucket en la página de Copias.",
+    es: "La copia en el bucket está en pausa: no se ha podido contactar con el bucket durante tanto tiempo que el servidor ha dejado de copiar para proteger su disco. Las ventas continúan. Revisa la conexión a internet del servidor y el bucket en la página de Copias.",
     variants: {
       toSpare: {
         mode: "replace",
         en: "The copy to the standby server is paused: this box could not reach the standby for so long that it stopped copying to protect its disk. Sales continue. Check that the standby server is switched on and connected to the restaurant's network.",
-        es: "La copia en el servidor en espera está en pausa: este equipo no ha podido contactar con él durante tanto tiempo que ha dejado de copiar para proteger su disco. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
+        es: "La copia en el servidor en espera está en pausa: este servidor no ha podido contactar con él durante tanto tiempo que ha dejado de copiar para proteger su disco. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
       },
     },
   },
   "backup.stream_refused": {
     en: "The bucket copy has stopped because another box is writing this venue's copy to the same bucket. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
-    es: "La copia en el bucket se ha detenido porque otro equipo está escribiendo la copia de este local en el mismo bucket. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
+    es: "La copia en el bucket se ha detenido porque otro servidor está escribiendo la copia de este local en el mismo bucket. Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
     variants: {
       toSpare: {
         mode: "replace",
         en: "The copy to the standby server has stopped because another box is writing this venue's copy to the standby server. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
-        es: "La copia en el servidor en espera se ha detenido porque otro equipo está escribiendo la copia de este local en el servidor en espera. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
+        es: "La copia en el servidor en espera se ha detenido porque otro servidor está escribiendo la copia de este local en el servidor en espera. Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
       },
     },
   },
   "backup.stream_settings_unusable": {
     en: "The bucket copy has not started because its settings could not be used safely. In Backups, Change bucket lets you edit them. Test checks the bucket without saving settings; Save and turn on applies them; Cancel keeps the saved settings. This form cannot diagnose faults in the box's own configuration.",
-    es: "La copia en el bucket no se ha iniciado porque no se han podido usar sus ajustes de forma segura. En Copias de seguridad, Cambiar de bucket permite editarlos. Probar comprueba el bucket sin guardar ajustes; Guardar y activar los aplica; Cancelar conserva los ajustes guardados. Este formulario no puede diagnosticar fallos de configuración del propio equipo.",
+    es: "La copia en el bucket no se ha iniciado porque no se han podido usar sus ajustes de forma segura. En Copias de seguridad, Cambiar de bucket permite editarlos. Probar comprueba el bucket sin guardar ajustes; Guardar y activar los aplica; Cancelar conserva los ajustes guardados. Este formulario no puede diagnosticar fallos de configuración del propio servidor.",
     variants: {
       toSpare: {
         mode: "replace",
         en: "The copy to the standby server has not started because this box's own configuration could not be used safely. Sales continue. This is a fault in Waitron or this box's installation, and restarting the box does not change it. Scheduled backups on the Backups page can still keep copies of your data.",
-        es: "La copia en el servidor en espera no se ha iniciado porque no se ha podido usar de forma segura la configuración del propio equipo. Las ventas continúan. Es un fallo de Waitron o de la instalación de este equipo, y reiniciar el equipo no lo cambia. Las copias programadas de la página de Copias de seguridad pueden seguir guardando copias de tus datos.",
+        es: "La copia en el servidor en espera no se ha iniciado porque no se ha podido usar de forma segura la configuración del propio servidor. Las ventas continúan. Es un fallo de Waitron o de la instalación de este servidor, y reiniciar el servidor no lo cambia. Las copias programadas de la página de Copias de seguridad pueden seguir guardando copias de tus datos.",
       },
     },
   },
   "backup.stream_bucket_unusable": {
     en: "Your bucket is refusing this box: its access key may no longer work, or the bucket may no longer support the check Waitron uses to stop two boxes overwriting each other's copy. Check the bucket settings on the Backups page.",
-    es: "Tu bucket está rechazando este equipo: puede que su clave de acceso ya no funcione, o que el bucket ya no admita la comprobación que usa Waitron para evitar que dos equipos sobrescriban la copia del otro. Revisa los ajustes del bucket en la página de Copias.",
+    es: "Tu bucket está rechazando este servidor: puede que su clave de acceso ya no funcione, o que el bucket ya no admita la comprobación que usa Waitron para evitar que dos servidores sobrescriban la copia del otro. Revisa los ajustes del bucket en la página de Copias.",
     variants: {
       toSpare: {
         mode: "replace",
         en: "The standby server is not receiving the restaurant's data: this box cannot reach it, or the standby is refusing this box. Sales continue. Check that the standby server is switched on and connected to the restaurant's network.",
-        es: "El servidor en espera no está recibiendo los datos del restaurante: este equipo no consigue contactar con él, o el servidor en espera está rechazando este equipo. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
+        es: "El servidor en espera no está recibiendo los datos del restaurante: este servidor no consigue contactar con él, o el servidor en espera está rechazando este servidor. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
       },
     },
   },
@@ -178,21 +178,21 @@ export const ALERT_MESSAGES: Readonly<
       toSpare: {
         mode: "replace",
         en: "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts: when the restaurant is not serving, open Box status and press Restart the box.",
-        es: "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este equipo lo vuelve a intentar cada vez que arranca: cuando no haya servicio, abre Estado del equipo y pulsa Reiniciar el equipo.",
+        es: "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este servidor lo vuelve a intentar cada vez que arranca: cuando no haya servicio, abre Estado del servidor y pulsa Reiniciar el servidor.",
       },
     },
   },
   "backup.sealed_state_failed": {
     en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved. {errorCode:sealed_state}",
-    es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. {errorCode:sealed_state}",
+    es: "El servidor no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un servidor reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. {errorCode:sealed_state}",
   },
   "storage.space_low": {
     en: "The box has {freeBytes:bytes} of disk space left. Everything still works, but if it fills up nothing can be saved. See what is using it on the Box status page.",
-    es: "Al equipo le quedan {freeBytes:bytes} de espacio en disco. Todo sigue funcionando, pero si se llena no se podrá guardar nada. Mira qué ocupa espacio en Estado del equipo.",
+    es: "Al servidor le quedan {freeBytes:bytes} de espacio en disco. Todo sigue funcionando, pero si se llena no se podrá guardar nada. Mira qué ocupa espacio en Estado del servidor.",
   },
   "storage.disk_full": {
     en: "The box is out of disk space: nothing can be saved.",
-    es: "El equipo no tiene espacio en disco: no se puede guardar nada.",
+    es: "El servidor no tiene espacio en disco: no se puede guardar nada.",
   },
   "append_only.triggers_restored": {
     en: "A record protection was missing at start and was put back.",
@@ -200,7 +200,7 @@ export const ALERT_MESSAGES: Readonly<
   },
   "restore.first_start_failed": {
     en: "This box could not finish setting itself up after the restore. Sales continue, but it will not copy to a storage bucket until it does. Each start tries again, so open Box status and press Restart the box. If this message stays and a bucket copy is set up, check the box's internet connection and the bucket on the Backups page, because that start reads the bucket, then press Restart the box again.",
-    es: "Este equipo no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Cada arranque lo vuelve a intentar, así que abre Estado del equipo y pulsa Reiniciar el equipo. Si el mensaje sigue y hay una copia en el bucket configurada, revisa la conexión a internet del equipo y el bucket en la página de Copias de seguridad, porque ese arranque lee el bucket, y después vuelve a pulsar Reiniciar el equipo.",
+    es: "Este servidor no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Cada arranque lo vuelve a intentar, así que abre Estado del servidor y pulsa Reiniciar el servidor. Si el mensaje sigue y hay una copia en el bucket configurada, revisa la conexión a internet del servidor y el bucket en la página de Copias de seguridad, porque ese arranque lee el bucket, y después vuelve a pulsar Reiniciar el servidor.",
   },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",
@@ -208,72 +208,72 @@ export const ALERT_MESSAGES: Readonly<
   },
   "clock.degraded": {
     en: "This device's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds.",
-    es: "La hora de este equipo no se ha comprobado con una fuente de hora fiable desde hace {anchorAgeSeconds} segundos.",
+    es: "La hora de este servidor no se ha comprobado con una fuente de hora fiable desde hace {anchorAgeSeconds} segundos.",
   },
   "clock.behind_chain": {
     en: "The box's clock ({clockAt:minute}) reads earlier than its last sale ({lastRecordAt:minute}), so no payment can be taken. Orders and the kitchen still work. Sort it out on the Box status page.",
-    es: "La hora del equipo ({clockAt:minute}) es anterior a la última venta ({lastRecordAt:minute}), así que no se puede cobrar. Los pedidos y la cocina siguen funcionando. Resuélvelo en Estado del equipo.",
+    es: "La hora del servidor ({clockAt:minute}) es anterior a la última venta ({lastRecordAt:minute}), así que no se puede cobrar. Los pedidos y la cocina siguen funcionando. Resuélvelo en Estado del servidor.",
   },
   "clock.behind_chain_restarted": {
     en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {confirmedBy:clock_confirmed_by} confirmed it.",
-    es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {confirmedBy:clock_confirmed_by}.",
+    es: "Se reanudaron los cobros con la hora del servidor ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {confirmedBy:clock_confirmed_by}.",
     variants: {
       byStaff: {
         mode: "replace",
         en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {person}, a staff member, confirmed it on till {device}.",
-        es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {person}, miembro del personal, en la caja {device}.",
+        es: "Se reanudaron los cobros con la hora del servidor ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {person}, miembro del personal, en la caja {device}.",
       },
     },
   },
   "clock.corrected": {
     en: "The box set its clock from the tax agency's time: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
-    es: "El equipo puso su reloj con la hora de Hacienda: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+    es: "El servidor puso su reloj con la hora de Hacienda: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
     variants: {
       unverified: {
         mode: "replace",
         en: "The box tried to set its clock but could not confirm the change took. Its clock read {before:minute} before and {after:minute} after ({direction:clock_step_direction} {stepMs:duration}). Check the box's clock on the Box status page.",
-        es: "El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba {before:minute} antes y {after:minute} después ({direction:clock_step_direction} {stepMs:duration}). Comprueba la hora del equipo en Estado del equipo.",
+        es: "El servidor intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba {before:minute} antes y {after:minute} después ({direction:clock_step_direction} {stepMs:duration}). Comprueba la hora del servidor en Estado del servidor.",
       },
       byStaff: {
         mode: "replace",
         en: "The box's clock was set from till {device}, confirmed by {person}: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
-        es: "El reloj del equipo se puso con la hora de la caja {device}, confirmada por {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+        es: "El reloj del servidor se puso con la hora de la caja {device}, confirmada por {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
       },
       byAdmin: {
         mode: "replace",
         en: "The box's clock was set from {person}'s device: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
-        es: "El reloj del equipo se puso con la hora del dispositivo de {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+        es: "El reloj del servidor se puso con la hora del dispositivo de {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
       },
       bySetupAdmin: {
         mode: "replace",
         en: "The box's clock was set from the device showing the setup or restore page, by {person}: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
-        es: "El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración, por {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+        es: "El reloj del servidor se puso en hora con el dispositivo que mostraba la página de configuración o restauración, por {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
       },
       bySetup: {
         mode: "replace",
         en: "The box's clock was set from the device showing the setup or restore page: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
-        es: "El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+        es: "El reloj del servidor se puso en hora con el dispositivo que mostraba la página de configuración o restauración: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
       },
     },
   },
   "clock.records_misdated": {
     en: "{count} sales were recorded with a time later than the real time (from {from:minute} to {to:minute}). They stay as recorded. Go through them with your tax adviser; the list is on the Box status page.",
-    es: "Se registraron {count} ventas con una hora posterior a la real (de {from:minute} a {to:minute}). Quedan como se registraron. Revísalas con tu asesor; la lista está en Estado del equipo.",
+    es: "Se registraron {count} ventas con una hora posterior a la real (de {from:minute} a {to:minute}). Quedan como se registraron. Revísalas con tu asesor; la lista está en Estado del servidor.",
     one: {
       param: "count",
       en: "One sale was recorded with a time later than the real time, at {from:minute}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page.",
-      es: "Se registró una venta con una hora posterior a la real, el {from:minute}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del equipo.",
+      es: "Se registró una venta con una hora posterior a la real, el {from:minute}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del servidor.",
     },
     variants: {
       partial: {
         mode: "append",
         en: "The box restarted during the stop, so the list may be short.",
-        es: "El equipo se reinició durante la parada, así que puede faltar alguna.",
+        es: "El servidor se reinició durante la parada, así que puede faltar alguna.",
       },
       unconfirmed: {
         mode: "replace",
         en: "The payment stop that began at {from:minute} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales were dated wrongly. Check the box's clock, and go through the sales since then with your tax adviser.",
-        es: "La parada de cobros que empezó el {from:minute} terminó sola, pero nada confirmó la hora del equipo, así que el equipo no puede saber qué ventas tienen la fecha mal. Comprueba la hora del equipo y revisa con tu asesor las ventas desde entonces.",
+        es: "La parada de cobros que empezó el {from:minute} terminó sola, pero nada confirmó la hora del servidor, así que el servidor no puede saber qué ventas tienen la fecha mal. Comprueba la hora del servidor y revisa con tu asesor las ventas desde entonces.",
       },
     },
   },
@@ -283,11 +283,11 @@ export const ALERT_MESSAGES: Readonly<
   },
   "clock.unusable": {
     en: "The box's clock reads {clockAt:minute}, before 28 October 2024, so no sale can be recorded for the tax agency. With the internet the box puts it right by itself; otherwise an administrator can usually set it on the Box status page.",
-    es: "El equipo marca {clockAt:minute}, antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda. Con internet, el equipo corrige la hora solo; si no, un administrador normalmente puede ponerla en hora en Estado del equipo.",
+    es: "El servidor marca {clockAt:minute}, antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda. Con internet, el servidor corrige la hora solo; si no, un administrador normalmente puede ponerla en hora en Estado del servidor.",
   },
   "clock.disagrees": {
     en: "{count} devices agree that the time is {deviceAt:minute}, but the box's clock reads {boxAt:minute}. Check the box's date and time on the Box status page.",
-    es: "{count} dispositivos coinciden en que marcan {deviceAt:minute}, pero el equipo marca {boxAt:minute}. Comprueba la fecha y la hora del equipo en Estado del equipo.",
+    es: "{count} dispositivos coinciden en que marcan {deviceAt:minute}, pero el servidor marca {boxAt:minute}. Comprueba la fecha y la hora del servidor en Estado del servidor.",
   },
   "clock.sync_off": {
     en: "{reason:clock_sync_off}",
@@ -295,7 +295,7 @@ export const ALERT_MESSAGES: Readonly<
   },
   "clock.jump_detected": {
     en: "This device's clock went backwards: it changed by {wallClockDeltaSeconds} seconds. Check its date and time.",
-    es: "La hora de este equipo ha retrocedido: ha cambiado {wallClockDeltaSeconds} segundos. Revisa su fecha y hora.",
+    es: "La hora de este servidor ha retrocedido: ha cambiado {wallClockDeltaSeconds} segundos. Revisa su fecha y hora.",
   },
   "fiscal.registro_rechazado": {
     en: "The tax agency (AEAT) rejected an invoice record: {mensaje} (code {codigo}). The record and AEAT's answer are on Fiscal filing. Waitron keeps sending later records unless AEAT refuses several in a row with the same code.",
@@ -327,7 +327,7 @@ export const ALERT_MESSAGES: Readonly<
   },
   "fiscal.environment_mismatch": {
     en: "An invoice record was made for the tax agency's {recordEnvironment} service, but this box sends to {hostEnvironment}. It has not been sent. Contact support.",
-    es: "Un registro de facturación se creó para el servicio de {recordEnvironment} de la AEAT, pero este equipo envía a {hostEnvironment}. No se ha enviado. Contacta con soporte.",
+    es: "Un registro de facturación se creó para el servicio de {recordEnvironment} de la AEAT, pero este servidor envía a {hostEnvironment}. No se ha enviado. Contacta con soporte.",
   },
   "fiscal.environment_unknown": {
     en: "An invoice record does not say which tax agency service it was made for, so it has not been sent. Contact support.",
@@ -656,28 +656,28 @@ export const ALERT_WORDS: Readonly<
     words: {
       "recovery.state_incomplete": {
         en: "Some of the box's own files that every backup must include are missing. This is a fault in Waitron or this box's disk, or a program other than Waitron removed them.",
-        es: "Faltan algunos archivos propios del equipo que toda copia debe incluir. Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron los ha quitado.",
+        es: "Faltan algunos archivos propios del servidor que toda copia debe incluir. Es un fallo de Waitron o del disco de este servidor, o un programa que no es Waitron los ha quitado.",
       },
     },
     otherwise: {
       en: "Waitron tries again at the next scheduled backup. If this message stays, this is a fault in Waitron or this box.",
-      es: "Waitron lo vuelve a intentar en la próxima copia programada. Si el mensaje sigue, es un fallo de Waitron o de este equipo.",
+      es: "Waitron lo vuelve a intentar en la próxima copia programada. Si el mensaje sigue, es un fallo de Waitron o de este servidor.",
     },
   },
   sealed_state: {
     words: {
       "storage.disk_full": {
         en: "The box's disk is full. Free space on the Box status page, then press Restart the box there: each start updates the copy again.",
-        es: "El disco del equipo está lleno. Libera espacio en Estado del equipo y después pulsa allí Reiniciar el equipo: cada arranque vuelve a actualizar la copia.",
+        es: "El disco del servidor está lleno. Libera espacio en Estado del servidor y después pulsa allí Reiniciar el servidor: cada arranque vuelve a actualizar la copia.",
       },
       "recovery.state_incomplete": {
         en: "Sales continue. Some of the box's own files that the copy must include are missing. This is a fault in Waitron or this box's disk, or a program other than Waitron removed them.",
-        es: "Las ventas continúan. Faltan algunos archivos propios del equipo que la copia debe incluir. Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron los ha quitado.",
+        es: "Las ventas continúan. Faltan algunos archivos propios del servidor que la copia debe incluir. Es un fallo de Waitron o del disco de este servidor, o un programa que no es Waitron los ha quitado.",
       },
     },
     otherwise: {
       en: "Sales continue. Each start tries again, so open Box status and press Restart the box.",
-      es: "Las ventas continúan. Cada arranque lo vuelve a intentar, así que abre Estado del equipo y pulsa Reiniciar el equipo.",
+      es: "Las ventas continúan. Cada arranque lo vuelve a intentar, así que abre Estado del servidor y pulsa Reiniciar el servidor.",
     },
   },
   // Why the box's time service is not keeping its clock right, by the `reason` param of
@@ -686,24 +686,24 @@ export const ALERT_WORDS: Readonly<
     words: {
       off: {
         en: "The box's time service is switched off, so nothing keeps its clock right. Check its date and time on the Box status page.",
-        es: "El servicio de hora del equipo está desactivado, así que nada mantiene su reloj en hora. Comprueba su fecha y hora en Estado del equipo.",
+        es: "El servicio de hora del servidor está desactivado, así que nada mantiene su reloj en hora. Comprueba su fecha y hora en Estado del servidor.",
       },
       stopped: {
         en: "The box's time service is on but not running, so nothing keeps its clock right. Check its date and time on the Box status page.",
-        es: "El servicio de hora del equipo está activado pero no funciona, así que nada mantiene su reloj en hora. Comprueba su fecha y hora en Estado del equipo.",
+        es: "El servicio de hora del servidor está activado pero no funciona, así que nada mantiene su reloj en hora. Comprueba su fecha y hora en Estado del servidor.",
       },
       unsynchronised: {
         en: "The box's time service has not reached a time server, so its clock may drift. Check that the box can reach the internet and look at its date and time on the Box status page.",
-        es: "El servicio de hora del equipo no ha contactado con ningún servidor de hora, así que su reloj puede desviarse. Comprueba que el equipo tiene conexión a internet y revisa su fecha y hora en Estado del equipo.",
+        es: "El servicio de hora del servidor no ha contactado con ningún servidor de hora, así que su reloj puede desviarse. Comprueba que el servidor tiene conexión a internet y revisa su fecha y hora en Estado del servidor.",
       },
       unreachable: {
         en: "This box cannot see or control its time service: the part of the box that does that is not answering. If the box can reach the internet, its time service may still keep the clock right by itself. Check its date and time on the Box status page.",
-        es: "Este equipo no puede ver ni controlar su servicio de hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún mantenga el reloj en hora por sí solo. Comprueba su fecha y hora en Estado del equipo.",
+        es: "Este servidor no puede ver ni controlar su servicio de hora: la parte del servidor que lo hace no responde. Si el servidor tiene conexión a internet, puede que su servicio de hora aún mantenga el reloj en hora por sí solo. Comprueba su fecha y hora en Estado del servidor.",
       },
     },
     otherwise: {
       en: "The box's clock is not being kept right. Check its date and time on the Box status page.",
-      es: "El reloj del equipo no se mantiene en hora. Comprueba su fecha y hora en Estado del equipo.",
+      es: "El reloj del servidor no se mantiene en hora. Comprueba su fecha y hora en Estado del servidor.",
     },
   },
   // `clock.corrected`'s direction; the reloj (masculine) is what moved, in Spanish.
@@ -723,6 +723,6 @@ export const ALERT_WORDS: Readonly<
       admin: { en: "an administrator", es: "un administrador" },
       staff: { en: "a staff member", es: "un empleado" },
     },
-    otherwise: { en: "a check recorded on the box", es: "una comprobación anotada en el equipo" },
+    otherwise: { en: "a check recorded on the box", es: "una comprobación anotada en el servidor" },
   },
 };

@@ -131,7 +131,7 @@ it("validates the key before any network work and allows a corrected key", async
   await click(screen, "inspect");
   expect(calls).toEqual([]);
   expect(screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.textContent).toContain(
-    "Enter the current recovery key.",
+    "Enter the current server key.",
   );
   await key(screen, "paper-secret");
   await click(screen, "inspect");

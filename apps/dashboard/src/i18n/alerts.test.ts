@@ -59,7 +59,7 @@ it("reads a backwards clock jump correctly with its negative number", () => {
     "This device's clock went backwards: it changed by -120 seconds. Check its date and time.",
   );
   expect(alertMessage("clock.jump_detected", params, "es")).toBe(
-    "La hora de este equipo ha retrocedido: ha cambiado -120 segundos. Revisa su fecha y hora.",
+    "La hora de este servidor ha retrocedido: ha cambiado -120 segundos. Revisa su fecha y hora.",
   );
 });
 
@@ -362,13 +362,13 @@ describe("the copy when it goes to the standby server, not the owner's bucket", 
       "backup.stream_paused",
       {},
       `The copy to the standby server is paused: this box could not reach the standby for so long that it stopped copying to protect its disk. Sales continue. ${CHECK_EN}`,
-      `La copia en el servidor en espera está en pausa: este equipo no ha podido contactar con él durante tanto tiempo que ha dejado de copiar para proteger su disco. Las ventas continúan. ${CHECK_ES}`,
+      `La copia en el servidor en espera está en pausa: este servidor no ha podido contactar con él durante tanto tiempo que ha dejado de copiar para proteger su disco. Las ventas continúan. ${CHECK_ES}`,
     ],
     [
       "backup.stream_bucket_unusable",
       {},
       `The standby server is not receiving the restaurant's data: this box cannot reach it, or the standby is refusing this box. Sales continue. ${CHECK_EN}`,
-      `El servidor en espera no está recibiendo los datos del restaurante: este equipo no consigue contactar con él, o el servidor en espera está rechazando este equipo. Las ventas continúan. ${CHECK_ES}`,
+      `El servidor en espera no está recibiendo los datos del restaurante: este servidor no consigue contactar con él, o el servidor en espera está rechazando este servidor. Las ventas continúan. ${CHECK_ES}`,
     ],
     [
       "backup.disabled",
@@ -380,19 +380,19 @@ describe("the copy when it goes to the standby server, not the owner's bucket", 
       "backup.stream_stopped",
       { reason: "start_failed" },
       "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts: when the restaurant is not serving, open Box status and press Restart the box.",
-      "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este equipo lo vuelve a intentar cada vez que arranca: cuando no haya servicio, abre Estado del equipo y pulsa Reiniciar el equipo.",
+      "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este servidor lo vuelve a intentar cada vez que arranca: cuando no haya servicio, abre Estado del servidor y pulsa Reiniciar el servidor.",
     ],
     [
       "backup.stream_refused",
       {},
       "The copy to the standby server has stopped because another box is writing this venue's copy to the standby server. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
-      "La copia en el servidor en espera se ha detenido porque otro equipo está escribiendo la copia de este local en el servidor en espera. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
+      "La copia en el servidor en espera se ha detenido porque otro servidor está escribiendo la copia de este local en el servidor en espera. Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
     ],
     [
       "backup.stream_settings_unusable",
       {},
       "The copy to the standby server has not started because this box's own configuration could not be used safely. Sales continue. This is a fault in Waitron or this box's installation, and restarting the box does not change it. Scheduled backups on the Backups page can still keep copies of your data.",
-      "La copia en el servidor en espera no se ha iniciado porque no se ha podido usar de forma segura la configuración del propio equipo. Las ventas continúan. Es un fallo de Waitron o de la instalación de este equipo, y reiniciar el equipo no lo cambia. Las copias programadas de la página de Copias de seguridad pueden seguir guardando copias de tus datos.",
+      "La copia en el servidor en espera no se ha iniciado porque no se ha podido usar de forma segura la configuración del propio servidor. Las ventas continúan. Es un fallo de Waitron o de la instalación de este servidor, y reiniciar el servidor no lo cambia. Las copias programadas de la página de Copias de seguridad pueden seguir guardando copias de tus datos.",
     ],
   ])("words %s for the standby, never naming a bucket or the internet", (code, params, en, es) => {
     expect(alertMessage(code, { ...params, toSpare: true }, "en")).toBe(en);
@@ -462,7 +462,7 @@ describe("a backup that stopped before reaching any destination", () => {
       `${LEAD_EN} Some of the box's own files that every backup must include are missing. This is a fault in Waitron or this box's disk, or a program other than Waitron removed them.`,
     );
     expect(alertMessage("backup.run_stopped", params, "es")).toBe(
-      `${LEAD_ES} Faltan algunos archivos propios del equipo que toda copia debe incluir. Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron los ha quitado.`,
+      `${LEAD_ES} Faltan algunos archivos propios del servidor que toda copia debe incluir. Es un fallo de Waitron o del disco de este servidor, o un programa que no es Waitron los ha quitado.`,
     );
   });
 
@@ -472,7 +472,7 @@ describe("a backup that stopped before reaching any destination", () => {
       `${LEAD_EN} Waitron tries again at the next scheduled backup. If this message stays, this is a fault in Waitron or this box.`,
     );
     expect(alertMessage("backup.run_stopped", params, "es")).toBe(
-      `${LEAD_ES} Waitron lo vuelve a intentar en la próxima copia programada. Si el mensaje sigue, es un fallo de Waitron o de este equipo.`,
+      `${LEAD_ES} Waitron lo vuelve a intentar en la próxima copia programada. Si el mensaje sigue, es un fallo de Waitron o de este servidor.`,
     );
   });
 });
@@ -481,7 +481,7 @@ describe("a box that could not update the locked copy of its own keys and settin
   const LEAD_EN =
     "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved.";
   const LEAD_ES =
-    "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar.";
+    "El servidor no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un servidor reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar.";
   const say = (errorCode: string, lang: "en" | "es") =>
     alertMessage("backup.sealed_state_failed", { errorCode }, lang);
 
@@ -490,7 +490,7 @@ describe("a box that could not update the locked copy of its own keys and settin
       `${LEAD_EN} The box's disk is full. Free space on the Box status page, then press Restart the box there: each start updates the copy again.`,
     );
     expect(say("storage.disk_full", "es")).toBe(
-      `${LEAD_ES} El disco del equipo está lleno. Libera espacio en Estado del equipo y después pulsa allí Reiniciar el equipo: cada arranque vuelve a actualizar la copia.`,
+      `${LEAD_ES} El disco del servidor está lleno. Libera espacio en Estado del servidor y después pulsa allí Reiniciar el servidor: cada arranque vuelve a actualizar la copia.`,
     );
     expect(say("storage.disk_full", "en")).toContain(t("nav.box_status", "en-GB"));
     expect(say("storage.disk_full", "es")).toContain(t("nav.box_status", "es-ES"));
@@ -501,7 +501,7 @@ describe("a box that could not update the locked copy of its own keys and settin
       `${LEAD_EN} Sales continue. Some of the box's own files that the copy must include are missing. This is a fault in Waitron or this box's disk, or a program other than Waitron removed them.`,
     );
     expect(say("recovery.state_incomplete", "es")).toBe(
-      `${LEAD_ES} Las ventas continúan. Faltan algunos archivos propios del equipo que la copia debe incluir. Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron los ha quitado.`,
+      `${LEAD_ES} Las ventas continúan. Faltan algunos archivos propios del servidor que la copia debe incluir. Es un fallo de Waitron o del disco de este servidor, o un programa que no es Waitron los ha quitado.`,
     );
   });
 
@@ -510,7 +510,7 @@ describe("a box that could not update the locked copy of its own keys and settin
       `${LEAD_EN} Sales continue. Each start tries again, so open Box status and press Restart the box.`,
     );
     expect(say("unknown", "es")).toBe(
-      `${LEAD_ES} Las ventas continúan. Cada arranque lo vuelve a intentar, así que abre Estado del equipo y pulsa Reiniciar el equipo.`,
+      `${LEAD_ES} Las ventas continúan. Cada arranque lo vuelve a intentar, así que abre Estado del servidor y pulsa Reiniciar el servidor.`,
     );
   });
 });
@@ -525,10 +525,10 @@ it("says the box deleted its oldest backups for low disk space, and the day they
     "Low disk space: the box deleted its 3 oldest backups (28 Oct 2026).",
   );
   expect(alertMessage("backup.archives_deleted", one, "es")).toBe(
-    "Poco espacio en disco: el equipo borró su copia de seguridad más antigua (28 oct 2026).",
+    "Poco espacio en disco: el servidor borró su copia de seguridad más antigua (28 oct 2026).",
   );
   expect(alertMessage("backup.archives_deleted", three, "es")).toBe(
-    "Poco espacio en disco: el equipo borró sus 3 copias más antiguas (28 oct 2026).",
+    "Poco espacio en disco: el servidor borró sus 3 copias más antiguas (28 oct 2026).",
   );
 });
 
@@ -538,7 +538,7 @@ it("says the first and last day the deleted backups were taken when they span se
     "Low disk space: the box deleted its 3 oldest backups (21 Oct 2026 to 24 Oct 2026).",
   );
   expect(alertMessage("backup.archives_deleted", params, "es")).toBe(
-    "Poco espacio en disco: el equipo borró sus 3 copias más antiguas (del 21 oct 2026 al 24 oct 2026).",
+    "Poco espacio en disco: el servidor borró sus 3 copias más antiguas (del 21 oct 2026 al 24 oct 2026).",
   );
 });
 
@@ -688,7 +688,7 @@ describe("the box's clock was stepped", () => {
       `The box set its clock from the tax agency's time: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
     );
     expect(spanish).toBe(
-      `El equipo puso su reloj con la hora de Hacienda: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
+      `El servidor puso su reloj con la hora de Hacienda: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
     );
   });
 
@@ -708,7 +708,7 @@ describe("the box's clock was stepped", () => {
       `The box's clock was set from till Bar 1, confirmed by Ana: moved back 5 minutes, from ${from} to ${to}.`,
     );
     expect(spanish).toBe(
-      `El reloj del equipo se puso con la hora de la caja Bar 1, confirmada por Ana: atrasado 5 minutos, de ${from} a ${to}.`,
+      `El reloj del servidor se puso con la hora de la caja Bar 1, confirmada por Ana: atrasado 5 minutos, de ${from} a ${to}.`,
     );
   });
 
@@ -718,7 +718,7 @@ describe("the box's clock was stepped", () => {
       `The box's clock was set from Luis's device: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
     );
     expect(spanish).toBe(
-      `El reloj del equipo se puso con la hora del dispositivo de Luis: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
+      `El reloj del servidor se puso con la hora del dispositivo de Luis: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
     );
   });
 
@@ -728,14 +728,14 @@ describe("the box's clock was stepped", () => {
       `The box's clock was set from the device showing the setup or restore page, by Luis: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
     );
     expect(named.spanish).toBe(
-      `El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración, por Luis: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
+      `El reloj del servidor se puso en hora con el dispositivo que mostraba la página de configuración o restauración, por Luis: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
     );
     const nobody = both({ ...base, source: "setup", bySetup: true });
     expect(nobody.english).toBe(
       `The box's clock was set from the device showing the setup or restore page: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
     );
     expect(nobody.spanish).toBe(
-      `El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
+      `El reloj del servidor se puso en hora con el dispositivo que mostraba la página de configuración o restauración: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
     );
   });
 
@@ -751,7 +751,7 @@ describe("the box's clock was stepped", () => {
         `The box tried to set its clock but could not confirm the change took. Its clock read ${from} before and ${to} after (moved forward 2 days and 3 hours). Check the box's clock on the Box status page.`,
       );
       expect(spanish).toBe(
-        `El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba ${from} antes y ${to} después (adelantado 2 días y 3 horas). Comprueba la hora del equipo en Estado del equipo.`,
+        `El servidor intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba ${from} antes y ${to} después (adelantado 2 días y 3 horas). Comprueba la hora del servidor en Estado del servidor.`,
       );
     }
   });
@@ -806,7 +806,7 @@ describe("payments restarted on a clock behind the last sale", () => {
       `Payments restarted on the box's clock (${clockAt}), earlier than the last sale (${lastRecordAt}), once Ana, a staff member, confirmed it on till Bar.`,
     );
     expect(alertMessage("clock.behind_chain_restarted", params, "es")).toBe(
-      `Se reanudaron los cobros con la hora del equipo (${clockAt}), anterior a la última venta (${lastRecordAt}), al confirmarla Ana, miembro del personal, en la caja Bar.`,
+      `Se reanudaron los cobros con la hora del servidor (${clockAt}), anterior a la última venta (${lastRecordAt}), al confirmarla Ana, miembro del personal, en la caja Bar.`,
     );
   });
 
@@ -819,7 +819,7 @@ describe("payments restarted on a clock behind the last sale", () => {
     });
     expect(ALERT_WORDS["clock_confirmed_by"]!.otherwise).toEqual({
       en: "a check recorded on the box",
-      es: "una comprobación anotada en el equipo",
+      es: "una comprobación anotada en el servidor",
     });
   });
 });
@@ -854,7 +854,7 @@ describe("sales recorded with a time later than the real time", () => {
       `One sale was recorded with a time later than the real time, at ${from}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page.`,
     );
     expect(alertMessage("clock.records_misdated", one, "es")).toBe(
-      `Se registró una venta con una hora posterior a la real, el ${from}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del equipo.`,
+      `Se registró una venta con una hora posterior a la real, el ${from}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del servidor.`,
     );
     expect(alertMessage("clock.records_misdated", { ...one, partial: true }, "en")).toBe(
       `One sale was recorded with a time later than the real time, at ${from}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page. The box restarted during the stop, so the list may be short.`,
@@ -865,7 +865,7 @@ describe("sales recorded with a time later than the real time", () => {
     const two = { ...params, count: 2 };
     expect(alertMessage("clock.records_misdated", two, "en")).toBe(LIST_EN.replace("3 ", "2 "));
     expect(alertMessage("clock.records_misdated", two, "es")).toBe(
-      `Se registraron 2 ventas con una hora posterior a la real (de ${from} a ${to}). Quedan como se registraron. Revísalas con tu asesor; la lista está en Estado del equipo.`,
+      `Se registraron 2 ventas con una hora posterior a la real (de ${from} a ${to}). Quedan como se registraron. Revísalas con tu asesor; la lista está en Estado del servidor.`,
     );
   });
 
@@ -988,7 +988,7 @@ describe("refusals that name a way out the product already has", () => {
       "es",
       "es-ES",
       /instal|soporte|encargad|gerente/i,
-      "Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
+      "Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
     ],
   ] as const)(
     "tells %s readers of a bucket copy another box holds to switch this box off if that box replaced it, and sends nobody elsewhere",
@@ -1013,7 +1013,7 @@ describe("refusals that name a way out the product already has", () => {
       expect(text).toContain(
         lang === "en"
           ? "Each start tries again, so open Box status and press Restart the box."
-          : "Cada arranque lo vuelve a intentar, así que abre Estado del equipo y pulsa Reiniciar el equipo.",
+          : "Cada arranque lo vuelve a intentar, así que abre Estado del servidor y pulsa Reiniciar el servidor.",
       );
       expect(text).toContain(
         lang === "en" ? "and a bucket copy is set up" : "y hay una copia en el bucket configurada",

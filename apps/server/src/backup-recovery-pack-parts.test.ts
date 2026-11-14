@@ -113,7 +113,7 @@ describe("the bucket part", () => {
     });
     expect(page.rows).toEqual([
       { label: "Bucket", value: "eu-west-1 · venue-bucket" },
-      { label: "Backup key", value: "changed on 20 September 2026" },
+      { label: "Recovery key", value: "changed on 20 September 2026" },
     ]);
     expect(page.notes).toEqual(PART_WORDS.en.bucket.steps);
     expect(JSON.stringify(built.record)).not.toContain(KEY);
@@ -218,7 +218,7 @@ describe("the archives part", () => {
     expect(built.file).toEqual({ backupKey: spaced });
     expect(built.record.destination).toBe("folder");
     expect(built.part.page!.secret).toEqual({
-      label: "Backup key",
+      label: "Recovery key",
       text: spaced,
       qr: true,
       exactSpaces: true,

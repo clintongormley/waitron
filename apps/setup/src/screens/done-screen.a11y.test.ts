@@ -39,8 +39,8 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
           expect(window.innerWidth).toBe(width);
           expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
             locale === "en-GB"
-              ? "Recovery key 15 Oct 2026 · K7QF"
-              : "Clave de recuperación 15 oct 2026 · K7QF",
+              ? "Server key 15 Oct 2026 · K7QF"
+              : "Clave del servidor 15 oct 2026 · K7QF",
           );
           await expectNoA11yViolations(host);
           if (import.meta.env.VITE_W41S_VISUAL === "1") {

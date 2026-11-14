@@ -1854,7 +1854,7 @@ describe("setup-app", () => {
     adoptRequest(el);
     await flush(el);
     expect(await screenText(el, "done", "[data-test=break-glass-key-name]")).toBe(
-      "Recovery key 15 Oct 2026 · K7QF",
+      "Server key 15 Oct 2026 · K7QF",
     );
     expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
   });
@@ -2043,11 +2043,11 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
-        "The primary server has no backup key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
+        "The primary server has no recovery key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
       ],
       [
         "es-ES",
-        "El servidor principal aún no tiene clave de copia de seguridad. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
+        "El servidor principal aún no tiene clave de recuperación. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
       ],
     ] as const)(
       "shows the no-key refusal and leaves Connect working (%s)",
@@ -3851,7 +3851,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     ],
     [
       "es-ES",
-      "Esta exportación de configuración usa un formato anterior. Vuelve a exportarla desde un equipo actualizado.",
+      "Esta exportación de configuración usa un formato anterior. Vuelve a exportarla desde un servidor actualizado.",
     ],
   ] as const)("explains the retired configuration format (%s)", async (locale, sentence) => {
     try {

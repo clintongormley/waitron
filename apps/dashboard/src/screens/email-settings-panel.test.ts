@@ -50,7 +50,7 @@ it("shows the redacted gateway and opens a quiet credential editor", async () =>
 });
 it.each([
   ["en-GB", "Invoices cannot be emailed until you set up a mail server."],
-  ["es-ES", "No se pueden enviar facturas por correo hasta que configures un servidor."],
+  ["es-ES", "No se pueden enviar facturas por correo hasta que configures un servidor de correo."],
 ])("explains missing live invoice email in %s and offers setup", async (locale, message) => {
   setLocale(locale);
   const { el } = await mount({ mode: "unconfigured", editable: true, settings: null });

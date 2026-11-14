@@ -1456,23 +1456,6 @@ once released. Belongs with A1016.
   reports).**
   [Detail](box.md#loose-ends-left-by-668-686-a57-a60-and-723-the-pause-test-and-the-buckets-error-reports)
 
-## Bundle: One word for the box, one name for the key
-
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1187: one key has three names.** "Recovery key" (the key-change dialog), "backup key" (the
-  card and the PDF), and in Spanish "clave de las copias" beside "Clave de copia".
-- **Backups' Spanish names the box both "caja" and "equipo".** Both words appear across its
-  strings (`strings.ts` `backup.*`) and its error messages (`codes.ts` `backup.*`); its alerts
-  (`alert-messages.ts`) and the settings-evidence panel say "equipo". Pick one word across the
-  screen; elsewhere "caja" also means the till.
-- **The Backups screen's Spanish names the bucket copy two ways.** The bucket choice's option says
-  "El bucket de la copia continua" (`backup.destination.choice_stream`), while the hints beside it
-  and the rest of the screen say "la copia en el bucket". From A538-6 (#1642); seen in A639's
-  screenshots, not changed there.
-- **'Equipo' names two things in the Spanish dashboard.**
-  [Detail](box.md#equipo-names-two-things-in-the-spanish-dashboard)
-
 ## Bundle: Backups screen leftovers
 
 6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
@@ -2251,21 +2234,6 @@ On a box that
   was wrong — neither half clears the stop. The `clock.unusable` email
   (`apps/server/src/i18n/box-emails.ts`) also tells the managers to connect the box to the internet
   first. Left open by A798-B slice 8 (#2012).
-
-## 'Equipo' names two things in the Spanish dashboard.
-
-The bell's new area for the box is
-  'Equipo' (design §4.3), and so is the sidebar's staff group (`nav.group.team`,
-  `apps/dashboard/src/i18n/strings.ts`); since A798-B slice 7 the Box status page is «Estado del
-  equipo» too (`nav.box_status`). The owner's picture 3 shows the first two. Not yet put to the
-  owner. Raised by A798-B slice 5's plan. The Servers screen's handover strings (`servers.handover_*`) call the
-  boxes «equipo» («este equipo», «el de reserva», «los dos equipos») and its guide
-  (`apps/server/src/guide/es/servers.md`) says «equipo de reserva», while the same screen's
-  `servers.intro` says «servidor en espera» and the handover page and the setup app say «servidor»
-  (A1466), except the setup app's start-up messages
-  `shell.first_setup.disk_full` and `shell.first_setup.disk_full_restart_unknown` and its configuration-import messages
-  `shell.configuration.outdated` and `shell.configuration.privacy_*`
-  (`apps/setup/src/i18n/strings/shell.ts`), which still say «equipo».
 
 ## A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but it can still sell.
 

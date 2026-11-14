@@ -1450,7 +1450,7 @@ export const en = {
     "Recovery pack {number}, made on {date}, is incomplete: a page could not be drawn, and that page says why. Make a new pack once the cause is fixed.",
   "recovery_pack.not_received":
     "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, make a new pack.",
-  "recovery_pack.reason.key_changed": "The backup key changed on {date}.",
+  "recovery_pack.reason.key_changed": "The recovery key changed on {date}.",
   "recovery_pack.reason.bucket_settings": "The bucket copy's settings changed.",
   "recovery_pack.reason.archives_settings": "The archive settings changed.",
   "recovery_pack.reason.bucket_set_up": "The bucket copy was set up after this pack.",
@@ -1463,13 +1463,13 @@ export const en = {
   "recovery_pack.make_new": "Make a new pack.",
   "recovery_pack.keep_server_key": "Keep pack {number}, made on {date}: it holds the server key.",
   "recovery_pack.keep_backup_key":
-    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
+    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its recovery key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.keep_old_server_key":
     "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its server key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.older_key":
-    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
+    "The box's backups still use the recovery key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
   "recovery_pack.row.last": "Last pack",
-  "recovery_pack.row.backup_key": "Backup key",
+  "recovery_pack.row.backup_key": "Recovery key",
   "recovery_pack.row.server_key": "Server key",
   "recovery_pack.last_none": "None yet",
   "recovery_pack.last_value": "Pack {number}, made on {date} by {name}",
@@ -2083,15 +2083,15 @@ export const en = {
     "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
   "backup.title": "Backups",
   "node_pack.create": "Create pack",
-  "node_pack.key_error": "The node recovery key is not valid.",
+  "node_pack.key_error": "The server key is not valid.",
   "node_pack.title": "Node recovery pack",
-  "node_pack.key": "Node recovery key",
+  "node_pack.key": "Server key",
   "node_pack.register": "Allocation register",
   "node_pack.secret_warning": "Keep this secret pack outside the server and its backups.",
   "node_pack.old_key_warning":
-    "Older backups restore their older node key. Keep that paper until no older backup remains.",
+    "Older backups restore their older server key. Keep that paper until no older backup remains.",
   "node_pack.archive_key_warning":
-    "This is the node key. The backup file has a separate encryption key.",
+    "This is the server key. The backup file opens with the separate recovery key.",
   "node_pack.snapshot_warning":
     "This register is a snapshot and may be out of date. Reprinting never frees used names. Consult the current outside register before recovery.",
   "node_pack.file": "Signed allocation register",
@@ -2100,7 +2100,7 @@ export const en = {
   "node_pack.print": "Printable copy",
   "node_pack.failed": "The recovery pack could not be created.",
   "node_pack.intro":
-    "Use the current node key and the signed register from its custodian. No bucket or subscription is needed.",
+    "Use the current server key and the signed register from its custodian. No bucket or subscription is needed.",
   "node_pack.clear": "Clear pack",
   "backup.configuration.title": "Configuration export",
   "backup.configuration.explanation":
@@ -2148,9 +2148,9 @@ export const en = {
   "backup_evidence.cause.settings_invalid":
     "The saved settings opened, but their {part} could not be used.",
   "backup_evidence.cause.recovery_key_missing":
-    "The saved settings read correctly, but this box holds no backup recovery key, and backups are never made without one.",
+    "The saved settings read correctly, but this box holds no recovery key, and backups are never made without one.",
   "backup_evidence.cause.recovery_key_too_short":
-    "The saved settings read correctly, but the backup recovery key on this box is shorter than {min} characters.",
+    "The saved settings read correctly, but the recovery key on this box is shorter than {min} characters.",
   "backup_evidence.cause.unknown":
     "The box could not use its backup settings ({code}). Waitron cannot say more about this failure.",
   "backup_evidence.part.not_json": "format",
@@ -2188,11 +2188,10 @@ export const en = {
   "backup_evidence.access_key_id": "Access key ID",
   "backup_evidence.archive_folder": "Archive folder",
   "backup_evidence.key_heading": "Recovery key",
-  "backup_evidence.key.missing": "This box holds no backup recovery key.",
-  "backup_evidence.key.too_short": "The backup recovery key on this box is too short.",
-  "backup_evidence.key.usable":
-    "This box holds a usable backup recovery key, fingerprint {fingerprint}.",
-  "backup_evidence.key.usable_plain": "This box holds a usable backup recovery key.",
+  "backup_evidence.key.missing": "This box holds no recovery key.",
+  "backup_evidence.key.too_short": "The recovery key on this box is too short.",
+  "backup_evidence.key.usable": "This box holds a usable recovery key, fingerprint {fingerprint}.",
+  "backup_evidence.key.usable_plain": "This box holds a usable recovery key.",
   "backup_evidence.reads_now":
     "The saved settings read correctly now. Backups stay off until the settings are saved again, the recovery key is replaced, or the box restarts. Nothing was changed.",
   "backup_evidence.turn_on":
@@ -4195,9 +4194,9 @@ export const es: Record<StringKey, string> = {
   "permission.booking.manage.help":
     "Crea y cambia reservas en Reservas. Sienta a los clientes, cancela una reserva o márcala como finalizada o no presentada.",
   "permission.system.manage.help":
-    "Gestiona copias de seguridad y la conexión a Cloud, descarga archivos de recuperación, consulta diagnósticos y reinicia el equipo. Instala certificados fiscales y reintenta envíos fiscales; cambiar el reloj o el servidor de correo requiere Administrar esta caja.",
+    "Gestiona copias de seguridad y la conexión a Cloud, descarga archivos de recuperación, consulta diagnósticos y reinicia el servidor. Instala certificados fiscales y reintenta envíos fiscales; cambiar el reloj o el servidor de correo requiere Administrar esta caja.",
   "permission.system.box_admin.help":
-    "Confirma o corrige el reloj del equipo y cambia el servidor de correo. Para abrir Estado del equipo y consultar los ajustes del correo también necesitas Gestionar el sistema.",
+    "Confirma o corrige el reloj del servidor y cambia el servidor de correo. Para abrir Estado del servidor y consultar los ajustes del correo también necesitas Gestionar el sistema.",
   "permission.node.manage.help":
     "Gestiona los servidores del local: prepara uno de reserva o un espejo, traspasa el servicio, activa una reserva y retira un servidor. Sigue la página Servidores para los pasos de cada operación.",
 
@@ -4252,13 +4251,13 @@ export const es: Record<StringKey, string> = {
   "permission.adjustment.manage": "Gestionar invitaciones",
   "permission.booking.manage": "Gestionar reservas",
   "permission.system.manage": "Gestionar el sistema",
-  "permission.system.box_admin": "Administrar esta caja",
-  "permission.node.manage": "Gestionar cajas",
+  "permission.system.box_admin": "Administrar este servidor",
+  "permission.node.manage": "Gestionar servidores",
 
   "handover_warning.unconfirmed":
     "Hay un traspaso de emergencia registrado. Comprueba las fechas del traspaso antes de usar estas cifras.",
   "handover_warning.returned":
-    "Se han registrado facturas devueltas desde otro equipo principal. Este aviso es independiente de las fechas seleccionadas aquí. No añadas los importes de la lista a los totales del informe.",
+    "Se han registrado facturas devueltas desde otro servidor principal. Este aviso es independiente de las fechas seleccionadas aquí. No añadas los importes de la lista a los totales del informe.",
   "handover_warning.unavailable":
     "No se pudo comprobar el estado del traspaso. Pulsa Actualizar el estado del traspaso.",
   "handover_warning.check": "Comprobar los intervalos del traspaso",
@@ -4266,17 +4265,17 @@ export const es: Record<StringKey, string> = {
   "nav.handover_intervals": "Intervalos del traspaso",
   "handover_intervals.title": "Intervalos del traspaso",
   "handover_intervals.unconfirmed":
-    "La recepción del inventario confirma los lotes anunciados por el equipo anterior. La actividad que falta, los importes y los arqueos siguen sin confirmar.",
+    "La recepción del inventario confirma los lotes anunciados por el servidor anterior. La actividad que falta, los importes y los arqueos siguen sin confirmar.",
   "handover_intervals.zone": "Horas en {zone}",
   "handover_intervals.guide": "Lee la guía del traspaso",
   "handover_intervals.empty": "No hay intervalos de traspasos de emergencia.",
   "handover_intervals.loading": "Cargando intervalos del traspaso…",
   "handover_intervals.refresh": "Actualizar intervalos",
-  "handover_intervals.source": "Equipo principal anterior",
-  "handover_intervals.destination": "Nuevo equipo principal",
+  "handover_intervals.source": "Servidor principal anterior",
+  "handover_intervals.destination": "Nuevo servidor principal",
   "handover_intervals.copy": "Última hora de venta o pedido en la copia",
-  "handover_intervals.declared": "Declarado en el nuevo equipo",
-  "handover_intervals.activated": "Activado en el nuevo equipo",
+  "handover_intervals.declared": "Declarado en el nuevo servidor",
+  "handover_intervals.activated": "Activado en el nuevo servidor",
   "handover_intervals.reason": "Motivo",
   "handover_intervals.unknown": "Desconocida",
   "handover_intervals.receipt": "Recepción del inventario",
@@ -4738,7 +4737,7 @@ export const es: Record<StringKey, string> = {
   "cloud.health_failed": "No funciona",
 
   "cloud.remote": "Acceso remoto",
-  "cloud.remote_local": "Acceso remoto en este equipo",
+  "cloud.remote_local": "Acceso remoto en este servidor",
   "cloud.remote_on": "Activado en Ajustes · conexión sin comprobar aquí",
   "cloud.remote_off": "Desactivado en Ajustes · desconexión sin comprobar aquí",
   "cloud.remote_help":
@@ -5399,7 +5398,7 @@ export const es: Record<StringKey, string> = {
   "alerts.area.kitchen": "Cocina",
   "alerts.area.invoice_delivery": "Entrega de facturas",
   "alerts.area.content": "Traducciones",
-  "alerts.area.box": "Equipo",
+  "alerts.area.box": "Servidor",
   "action.account_settings": "Configuración de la cuenta",
   "nav.group.reports": "Informes",
   "nav.group.menu": "Productos y cartas",
@@ -5423,7 +5422,7 @@ export const es: Record<StringKey, string> = {
 
   "nav.device_profiles": "Perfiles de dispositivo",
   "nav.diagnostics": "Diagnóstico",
-  "nav.box_status": "Estado del equipo",
+  "nav.box_status": "Estado del servidor",
   "nav.backup": "Copias de seguridad",
   "nav.servers": "Servidores",
   "nav.email_inbox": "Bandeja de correo",
@@ -5438,8 +5437,9 @@ export const es: Record<StringKey, string> = {
   "nav.email": "Correo",
   "email.title": "Correo",
   "email.local_capture":
-    "Los mensajes se guardan en este equipo. No se envía ningún correo a Internet.",
-  "email.smtp": "El correo de cuentas llega a buzones reales mediante el servidor configurado.",
+    "Los mensajes se guardan en este servidor. No se envía ningún correo a Internet.",
+  "email.smtp":
+    "El correo de cuentas llega a buzones reales mediante el servidor de correo configurado.",
   "email.unconfigured":
     "El correo no está configurado. No se pueden enviar invitaciones ni enlaces para restablecer contraseñas.",
   "email.empty": "Aún no hay mensajes guardados.",
@@ -5453,20 +5453,20 @@ export const es: Record<StringKey, string> = {
   "email.settings.remove": "Quitar servidor de correo",
   "email.settings.stop": "Parar",
   "email.settings.prepare_save":
-    "Al guardar un servidor, las invitaciones y los enlaces para restablecer contraseñas llegan a buzones reales.",
+    "Al guardar un servidor de correo, las invitaciones y los enlaces para restablecer contraseñas llegan a buzones reales.",
   "email.settings.remove_capture":
-    "¿Quitar el servidor guardado? El correo volverá a quedarse en el buzón de prueba de esta caja. Parar conserva la configuración.",
+    "¿Quitar el servidor de correo guardado? El correo volverá a quedarse en el buzón de prueba de este servidor. Parar conserva la configuración.",
   "email.settings.remove_live":
-    "¿Quitar el servidor guardado? No se enviarán correos de cuentas ni facturas hasta que configures otro servidor. Las ventas continúan. Parar conserva la configuración.",
+    "¿Quitar el servidor de correo guardado? No se enviarán correos de cuentas ni facturas hasta que configures otro servidor de correo. Las ventas continúan. Parar conserva la configuración.",
   "email.settings.change": "Cambiar servidor de correo",
   "email.settings.set_up": "Configurar servidor de correo",
   "email.settings.unavailable":
-    "No se pueden enviar facturas por correo hasta que configures un servidor.",
+    "No se pueden enviar facturas por correo hasta que configures un servidor de correo.",
   "email.settings.invalid_sender":
     "La dirección del remitente guardada para las facturas no es válida. Cámbiala abajo.",
   "email.settings.captured":
-    "El correo de facturas se guarda en este equipo; no se envía fuera de él.",
-  "email.settings.gateway": "El correo de facturas usa este servidor.",
+    "El correo de facturas se guarda en este servidor; no se envía fuera de él.",
+  "email.settings.gateway": "El correo de facturas usa este servidor de correo.",
   "email.settings.retry": "Volver a cargar la configuración de correo",
   "email.settings.authentication": "Usar autenticación",
   "email.settings.server": "Servidor de correo",
@@ -5575,7 +5575,7 @@ export const es: Record<StringKey, string> = {
   "fresh_sign_in.retry": "Volver a intentarlo",
   "recovery_pack_dialog.heading": "Hacer paquete de recuperación",
   "recovery_pack_dialog.intro":
-    "El paquete contiene todas las claves de este local. Se hace una sola vez, para esta descarga; la caja no guarda ninguna copia.",
+    "El paquete contiene todas las claves de este local. Se hace una sola vez, para esta descarga; el servidor no guarda ninguna copia.",
   "recovery_pack_dialog.new_key": "También crear una clave del servidor nueva",
   "recovery_pack_dialog.new_key_held":
     "Solo si se ha perdido el paquete o la hoja con la clave actual (paquete de recuperación {number}, hecho el {date}).",
@@ -5584,7 +5584,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.new_key_effect":
     "Las copias nuevas usarán la clave nueva; las copias anteriores siguen necesitando la antigua.",
   "recovery_pack_dialog.unreceived":
-    "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, pero la caja nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, haz un paquete nuevo marcando {option}.",
+    "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, pero el servidor nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, haz un paquete nuevo marcando {option}.",
   "recovery_pack_dialog.make": "Hacer paquete",
   "recovery_pack_dialog.key_failed":
     "El paquete se ha hecho, pero la clave del servidor {not} se ha sustituido. La página de la clave del servidor del paquete explica por qué.",
@@ -5592,22 +5592,22 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.key_still_works":
     "La clave actual, en el paquete de recuperación {number} hecho el {date}, sigue funcionando.",
   "recovery_pack_dialog.lost_new_key":
-    "Puede que la caja haya hecho un paquete de recuperación con una nueva clave del servidor que no llegó a este navegador. Si fue así, la única copia de tu clave actual del servidor está en un paquete que no tienes.",
+    "Puede que el servidor haya hecho un paquete de recuperación con una nueva clave del servidor que no llegó a este navegador. Si fue así, la única copia de tu clave actual del servidor está en un paquete que no tienes.",
   "recovery_pack_dialog.lost_new_key_named":
     "Ese paquete es el paquete de recuperación {number}, hecho el {date}.",
   "recovery_pack_dialog.lost_new_key_choices":
     "Hacer un paquete nuevo con una nueva clave del servidor vuelve a sustituir la clave y la pone en un paquete que descargas ahora; antes vuelves a iniciar sesión. Parar cierra esta ventana y no cambia nada.",
   "recovery_pack_dialog.lost":
-    "Puede que la caja haya hecho el paquete de recuperación, pero no llegó a este navegador.",
+    "Puede que el servidor haya hecho el paquete de recuperación, pero no llegó a este navegador.",
   "recovery_pack_dialog.lost_choices":
-    "Volver a intentarlo pide a la caja un paquete nuevo. Parar cierra esta ventana y no cambia nada.",
+    "Volver a intentarlo pide al servidor un paquete nuevo. Parar cierra esta ventana y no cambia nada.",
   "recovery_pack_dialog.remake": "Hacer un paquete nuevo con una nueva clave del servidor",
   "recovery_pack_dialog.try_again": "Volver a intentarlo",
   "recovery_pack_dialog.stop": "Parar",
   "recovery_pack.title": "Paquete de recuperación",
   "recovery_pack.intro":
-    "Un documento impreso con lo que necesitas si la caja falla: los códigos de restauración de tu copia en el bucket y de los archivos, y la clave del servidor. Guárdalo bajo llave, lejos de la caja.",
-  "recovery_pack.none": "Aún no se ha hecho ningún paquete de recuperación en esta caja.",
+    "Un documento impreso con lo que necesitas si el servidor falla: los códigos de restauración de tu copia en el bucket y de los archivos, y la clave del servidor. Guárdalo bajo llave, lejos del servidor.",
+  "recovery_pack.none": "Aún no se ha hecho ningún paquete de recuperación en este servidor.",
   "recovery_pack.up_to_date":
     "El paquete de recuperación {number}, hecho el {date} por {name}, está al día.",
   "recovery_pack.up_to_date_unnamed":
@@ -5617,8 +5617,8 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.incomplete":
     "El paquete de recuperación {number}, hecho el {date}, está incompleto: no se pudo dibujar una página, y esa página explica por qué. Haz un paquete nuevo cuando se haya resuelto la causa.",
   "recovery_pack.not_received":
-    "El paquete de recuperación {number}, hecho el {date}: la caja nunca recibió la confirmación de que llegó. Si no lo tienes, haz un paquete nuevo.",
-  "recovery_pack.reason.key_changed": "La clave de las copias cambió el {date}.",
+    "El paquete de recuperación {number}, hecho el {date}: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, haz un paquete nuevo.",
+  "recovery_pack.reason.key_changed": "La clave de recuperación cambió el {date}.",
   "recovery_pack.reason.bucket_settings": "Los ajustes de la copia en el bucket cambiaron.",
   "recovery_pack.reason.archives_settings": "Los ajustes de los archivos cambiaron.",
   "recovery_pack.reason.bucket_set_up":
@@ -5628,19 +5628,19 @@ export const es: Record<StringKey, string> = {
     "La clave del servidor se creó después de este paquete.",
   "recovery_pack.reason.bucket_removed": "La copia en el bucket se desactivó.",
   "recovery_pack.reason.archives_removed": "Los archivos se desactivaron.",
-  "recovery_pack.reason.server_key_removed": "La caja ya no guarda una clave del servidor.",
+  "recovery_pack.reason.server_key_removed": "El servidor ya no guarda una clave del servidor.",
   "recovery_pack.reason.server_key_replaced": "La clave del servidor se sustituyó.",
   "recovery_pack.make_new": "Haz un paquete nuevo.",
   "recovery_pack.keep_server_key":
     "Guarda el paquete {number}, hecho el {date}: contiene la clave del servidor.",
   "recovery_pack.keep_backup_key":
-    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de las copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
+    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de recuperación si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
   "recovery_pack.keep_old_server_key":
     "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave del servidor si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
   "recovery_pack.older_key":
-    "Las copias de la caja siguen usando la clave de las copias anterior al último cambio, porque la caja no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
+    "Las copias del servidor siguen usando la clave de recuperación anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
   "recovery_pack.row.last": "Último paquete",
-  "recovery_pack.row.backup_key": "Clave de las copias",
+  "recovery_pack.row.backup_key": "Clave de recuperación",
   "recovery_pack.row.server_key": "Clave del servidor",
   "recovery_pack.last_none": "Ninguno todavía",
   "recovery_pack.last_value": "Paquete {number}, hecho el {date} por {name}",
@@ -5651,12 +5651,12 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.backup_key_absent": "No está en el paquete {number}, hecho el {date}",
   "recovery_pack.server_key_on": "En el paquete {number}, hecho el {date}",
   "recovery_pack.server_key_on_unreceived":
-    "En el paquete {number}, hecho el {date} (la caja nunca recibió la confirmación de que llegó)",
+    "En el paquete {number}, hecho el {date} (el servidor nunca recibió la confirmación de que llegó)",
   "recovery_pack.server_key_none": "Este local no guarda clave del servidor",
   "recovery_pack.server_key_elsewhere": "No está en ningún paquete de recuperación",
   "recovery_pack.make": "Hacer paquete de recuperación",
   "recovery_pack.ready":
-    "El paquete de recuperación {number}, hecho el {date}, está listo. Imprímelo o guárdalo, y guárdalo bajo llave, lejos de la caja.",
+    "El paquete de recuperación {number}, hecho el {date}, está listo. Imprímelo o guárdalo, y guárdalo bajo llave, lejos del servidor.",
   "recovery_pack.download": "Descargar PDF",
   "recovery_pack.print": "Abrir para imprimir",
   "recovery_pack.load_failed":
@@ -5770,9 +5770,9 @@ export const es: Record<StringKey, string> = {
   "staff.data_copy_not_permitted":
     "Solo un administrador puede descargar los datos de otra persona, y esta cuenta ya no puede hacerlo. Inicia sesión como administrador para descargar los datos de {name}: antes se cierra tu sesión aquí.",
   "staff.data_copy_not_found":
-    "{name} aparece en esta lista, pero la caja no tiene ningún registro suyo. Es un fallo de Waitron. Se ha vuelto a cargar la lista.",
+    "{name} aparece en esta lista, pero el servidor no tiene ningún registro suyo. Es un fallo de Waitron. Se ha vuelto a cargar la lista.",
   "staff.data_copy_not_found_unreloaded":
-    "{name} aparece en esta lista, pero la caja no tiene ningún registro suyo. Es un fallo de Waitron.",
+    "{name} aparece en esta lista, pero el servidor no tiene ningún registro suyo. Es un fallo de Waitron.",
   "staff.sign_in_as_admin": "Iniciar sesión como administrador",
   "catalogue.title": "Productos",
   "units.title": "Unidades",
@@ -6065,7 +6065,7 @@ export const es: Record<StringKey, string> = {
   "printers.join_choice_label": "Número {number}",
   "printers.join_hint":
     "En el ordenador al que está conectada la impresora (o desde aquí, en http://<ese ordenador>:9110), abre la página de configuración del agente de impresión e introduce esta dirección del servidor:",
-  "printers.provenance_self": "En esta caja",
+  "printers.provenance_self": "En este servidor",
   "printers.list_title": "Impresoras",
   "printers.no_printers": "Todavía no hay impresoras.",
   "printers.name": "Nombre",
@@ -6223,13 +6223,13 @@ export const es: Record<StringKey, string> = {
   "servers.title": "Servidores",
   "servers.hand_over": "Traspasar el local",
   "servers.handover_intro":
-    "Las ventas se detienen en este equipo mientras se mueve la copia final. En el de reserva, identifícate de nuevo, confirma los datos e inicia el local. Los pagos ya registrados se conservan en la copia. Mantén los dos equipos conectados.",
+    "Las ventas se detienen en este servidor mientras se mueve la copia final. En el de reserva, identifícate de nuevo, confirma los datos e inicia el local. Los pagos ya registrados se conservan en la copia. Mantén los dos servidores conectados.",
   "servers.handover_no_password":
-    "Esta cuenta no tiene contraseña; la necesitarás para acceder en el equipo de reserva.",
+    "Esta cuenta no tiene contraseña; la necesitarás para acceder en el servidor de reserva.",
   "servers.handover_password":
-    "En el equipo de reserva necesitarás tu contraseña de administrador y el código actual del autenticador, si está configurado. Tenlos preparados; una llave de acceso o un código de recuperación no permite completar el traspaso.",
+    "En el servidor de reserva necesitarás tu contraseña de administrador y el código actual del autenticador, si está configurado. Tenlos preparados; una llave de acceso o un código de recuperación no permite completar el traspaso.",
   "servers.handover_reconnect":
-    "No se pudo consultar el progreso. Mantén los dos equipos conectados y vuelve a consultarlo.",
+    "No se pudo consultar el progreso. Mantén los dos servidores conectados y vuelve a consultarlo.",
   "servers.handover_check": "Consultar el progreso del traspaso",
   "servers.handover_stop": "Parar",
   "servers.handover_sent":
@@ -6260,16 +6260,16 @@ export const es: Record<StringKey, string> = {
     "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
   "node_pack.create": "Crear kit",
-  "node_pack.key_error": "La clave de recuperación del nodo no es válida.",
+  "node_pack.key_error": "La clave del servidor no es válida.",
   "node_pack.title": "Kit de recuperación del nodo",
-  "node_pack.key": "Clave de recuperación del nodo",
+  "node_pack.key": "Clave del servidor",
   "node_pack.register": "Registro de asignaciones",
   "node_pack.secret_warning":
     "Guarda este kit secreto fuera del servidor y de sus copias de seguridad.",
   "node_pack.old_key_warning":
-    "Las copias antiguas restauran su clave de nodo anterior. Conserva ese papel hasta que no quede ninguna copia antigua.",
+    "Las copias antiguas restauran la clave del servidor de entonces. Conserva ese papel hasta que no quede ninguna copia antigua.",
   "node_pack.archive_key_warning":
-    "Esta es la clave del nodo. El archivo de copia tiene otra clave de cifrado.",
+    "Esta es la clave del servidor. El archivo de copia se abre con la clave de recuperación, que es otra.",
   "node_pack.snapshot_warning":
     "Este registro es una instantánea y puede estar desactualizado. Reimprimirlo no libera nombres usados. Consulta el registro externo actual antes de recuperar.",
   "node_pack.file": "Registro de asignaciones firmado",
@@ -6278,7 +6278,7 @@ export const es: Record<StringKey, string> = {
   "node_pack.print": "Copia para imprimir",
   "node_pack.failed": "No se pudo crear el kit de recuperación.",
   "node_pack.intro":
-    "Usa la clave actual del nodo y el registro firmado de su custodio. No necesitas un bucket ni una suscripción.",
+    "Usa la clave actual del servidor y el registro firmado de su custodio. No necesitas un bucket ni una suscripción.",
   "node_pack.clear": "Borrar kit",
   "backup.configuration.title": "Exportar la configuración",
   "backup.configuration.explanation":
@@ -6306,32 +6306,32 @@ export const es: Record<StringKey, string> = {
   "backup.status.stored_off": "Desactivadas; el destino guardado se conserva",
   "backup.status.load_failed":
     "Las copias están desactivadas porque no se pueden usar los ajustes guardados.",
-  "backup_evidence.heading": "Lo que ha registrado el equipo",
+  "backup_evidence.heading": "Lo que ha registrado el servidor",
   "backup_evidence.happened": "Qué ha pasado",
   "backup_evidence.no_failures":
-    "No consta ninguna ocasión en la que el equipo no haya podido usar sus ajustes de copias guardados desde que se inició.",
+    "No consta ninguna ocasión en la que el servidor no haya podido usar sus ajustes de copias guardados desde que se inició.",
   "backup_evidence.again_rewritten":
     "Volvió a pasar después de que los ajustes se reescribieran ({time}).",
   "backup_evidence.again_changed": "Volvió a pasar después de que cambiaran los ajustes guardados.",
   "backup_evidence.written_then": "Los ajustes que leyó se habían escrito el {time}.",
   "backup_evidence.cause.key_version_unknown":
-    "Los ajustes guardados se cerraron con la clave número {n}. Este equipo tiene la clave número {m}, así que no puede abrirlos.",
+    "Los ajustes guardados se cerraron con la clave número {n}. Este servidor tiene la clave número {m}, así que no puede abrirlos.",
   "backup_evidence.cause.key_version_unknown_two":
-    "Los ajustes guardados se cerraron con la clave número {n}. Este equipo tiene las claves número {m} y {p}, así que no puede abrirlos.",
+    "Los ajustes guardados se cerraron con la clave número {n}. Este servidor tiene las claves número {m} y {p}, así que no puede abrirlos.",
   "backup_evidence.cause.decrypt_failed":
-    "Los ajustes guardados llevan la clave número {n} de este equipo, pero la clave de ese número que tiene este equipo no los abre. O se cambió esa clave, o el registro guardado se modificó o vino de otro equipo; Waitron no puede saber cuál.",
+    "Los ajustes guardados llevan la clave número {n} de este servidor, pero la clave de ese número que tiene este servidor no los abre. O se cambió esa clave, o el registro guardado se modificó o vino de otro servidor; Waitron no puede saber cuál.",
   "backup_evidence.cause.decrypt_failed_plain":
-    "Los ajustes que leyó llevaban un número de clave que este equipo tenía, pero la clave de ese número que tenía el equipo no los abrió. O se cambió esa clave, o ese registro se modificó o vino de otro equipo; Waitron no puede saber cuál.",
+    "Los ajustes que leyó llevaban un número de clave que este servidor tenía, pero la clave de ese número que tenía el servidor no los abrió. O se cambió esa clave, o ese registro se modificó o vino de otro servidor; Waitron no puede saber cuál.",
   "backup_evidence.cause.malformed":
     "El registro guardado se abrió, pero su contenido no son ajustes de copias de seguridad.",
   "backup_evidence.cause.settings_invalid":
     "Los ajustes guardados se abrieron, pero esta parte no se pudo usar: {part}.",
   "backup_evidence.cause.recovery_key_missing":
-    "Los ajustes guardados se leen bien, pero este equipo no tiene clave de recuperación de copias, y nunca se hacen copias sin ella.",
+    "Los ajustes guardados se leen bien, pero este servidor no tiene clave de recuperación, y nunca se hacen copias sin ella.",
   "backup_evidence.cause.recovery_key_too_short":
-    "Los ajustes guardados se leen bien, pero la clave de recuperación de copias de este equipo tiene menos de {min} caracteres.",
+    "Los ajustes guardados se leen bien, pero la clave de recuperación de este servidor tiene menos de {min} caracteres.",
   "backup_evidence.cause.unknown":
-    "El equipo no pudo usar sus ajustes de copias de seguridad ({code}). Waitron no puede decir nada más de este fallo.",
+    "El servidor no pudo usar sus ajustes de copias de seguridad ({code}). Waitron no puede decir nada más de este fallo.",
   "backup_evidence.part.not_json": "el formato",
   "backup_evidence.part.fields": "los campos",
   "backup_evidence.part.revision": "la revisión",
@@ -6351,10 +6351,10 @@ export const es: Record<StringKey, string> = {
     "Los ajustes guardados se reescribieron después del último fallo, así que los datos de abajo describen el registro nuevo, no el que falló.",
   "backup_evidence.removed":
     "Lo guardado ahora ya no es el registro que falló: ese registro se ha borrado desde entonces.",
-  "backup_evidence.absent": "Este equipo no tiene ajustes de copias de seguridad guardados.",
+  "backup_evidence.absent": "Este servidor no tiene ajustes de copias de seguridad guardados.",
   "backup_evidence.written": "Última escritura: {time}, cerrado con la clave número {n}.",
-  "backup_evidence.box_keys": "Este equipo tiene la clave número {m}.",
-  "backup_evidence.box_keys_two": "Este equipo tiene las claves número {m} y {p}.",
+  "backup_evidence.box_keys": "Este servidor tiene la clave número {m}.",
+  "backup_evidence.box_keys_two": "Este servidor tiene las claves número {m} y {p}.",
   "backup_evidence.cannot_tell":
     "Waitron no puede saber qué carpeta o bucket indicaban estos ajustes.",
   "backup_evidence.folder": "Carpeta",
@@ -6368,34 +6368,32 @@ export const es: Record<StringKey, string> = {
   "backup_evidence.access_key_id": "ID de la clave de acceso",
   "backup_evidence.archive_folder": "Carpeta de las copias",
   "backup_evidence.key_heading": "Clave de recuperación",
-  "backup_evidence.key.missing": "Este equipo no tiene clave de recuperación de copias.",
-  "backup_evidence.key.too_short":
-    "La clave de recuperación de copias de este equipo es demasiado corta.",
+  "backup_evidence.key.missing": "Este servidor no tiene clave de recuperación.",
+  "backup_evidence.key.too_short": "La clave de recuperación de este servidor es demasiado corta.",
   "backup_evidence.key.usable":
-    "Este equipo tiene una clave de recuperación de copias válida, con huella {fingerprint}.",
-  "backup_evidence.key.usable_plain":
-    "Este equipo tiene una clave de recuperación de copias válida.",
+    "Este servidor tiene una clave de recuperación válida, con huella {fingerprint}.",
+  "backup_evidence.key.usable_plain": "Este servidor tiene una clave de recuperación válida.",
   "backup_evidence.reads_now":
-    "Los ajustes guardados se leen bien ahora. Las copias siguen desactivadas hasta que se vuelvan a guardar los ajustes, se cambie la clave de recuperación o se reinicie el equipo. No se ha cambiado nada.",
+    "Los ajustes guardados se leen bien ahora. Las copias siguen desactivadas hasta que se vuelvan a guardar los ajustes, se cambie la clave de recuperación o se reinicie el servidor. No se ha cambiado nada.",
   "backup_evidence.turn_on":
     "Elegir de nuevo los destinos en el formulario de abajo y usar «{apply}» sustituye el registro guardado.",
   "backup_evidence.turn_on_new":
     "Elegir los destinos en el formulario de abajo y usar «{apply}» guarda ajustes nuevos.",
   "backup_evidence.choices":
     "«{read_again}» vuelve a leer estos datos y no cambia nada; no activa las copias. «{stop}» cierra este panel y no envía nada.",
-  "backup_evidence.reading": "Leyendo lo que ha registrado el equipo…",
+  "backup_evidence.reading": "Leyendo lo que ha registrado el servidor…",
   "backup_evidence.failed":
-    "Waitron no ha podido leer estos datos del equipo. «{read_again}» lo intenta otra vez; no se ha cambiado nada.",
+    "Waitron no ha podido leer estos datos del servidor. «{read_again}» lo intenta otra vez; no se ha cambiado nada.",
   "backup_evidence.not_permitted":
-    "Esta cuenta ya no puede gestionar el equipo, así que no se pueden mostrar estos datos. Inicia sesión como administrador para verlos: antes se cierra tu sesión aquí.",
+    "Esta cuenta ya no puede gestionar el servidor, así que no se pueden mostrar estos datos. Inicia sesión como administrador para verlos: antes se cierra tu sesión aquí.",
   "backup_evidence.read_again": "Leer de nuevo",
   "backup_evidence.stop": "Parar",
   "backup.reload_failed_after_save":
-    "Se ha guardado, pero la caja no ha podido cargar los ajustes nuevos.",
+    "Se ha guardado, pero el servidor no ha podido cargar los ajustes nuevos.",
   "backup.reload_failed_retry":
-    "La caja lo vuelve a intentar la próxima vez que se inicie y cada vez que se activen, cambien o desactiven las copias programadas.",
-  "backup.destination.local": "En esta caja",
-  "backup.destination.off_box": "Fuera de la caja",
+    "El servidor lo vuelve a intentar la próxima vez que se inicie y cada vez que se activen, cambien o desactiven las copias programadas.",
+  "backup.destination.local": "En este servidor",
+  "backup.destination.off_box": "Fuera del servidor",
   "backup.destination.stored": "Ha guardado una copia con la clave actual",
   "backup.destination.failed": "La última copia aquí ha fallado",
   "backup.destination.unreadable": "No se ha podido comprobar este destino",
@@ -6403,11 +6401,11 @@ export const es: Record<StringKey, string> = {
   "backup.destination.title": "Dónde guardar las copias",
   "backup.destination.label": "Carpeta de copias",
   "backup.destination.hint":
-    "Una ruta completa en esta caja; por ejemplo, una memoria USB conectada o un disco montado.",
+    "Una ruta completa en este servidor; por ejemplo, una memoria USB conectada o un disco montado.",
   "backup.destination.bucket": "Bucket",
   "backup.destination.bucket_none": "Sin bucket",
-  "backup.destination.nothing_chosen": "Elige una carpeta de esta caja, un bucket o los dos.",
-  "backup.destination.choice_local": "Una carpeta de esta caja",
+  "backup.destination.nothing_chosen": "Elige una carpeta de este servidor, un bucket o los dos.",
+  "backup.destination.choice_local": "Una carpeta de este servidor",
   "backup.destination.choice_custom": "Un bucket compatible con S3",
   "backup.destination.prefix_hint":
     "Tras restaurar, elige otra carpeta para conservar las copias anteriores.",
@@ -6419,22 +6417,22 @@ export const es: Record<StringKey, string> = {
   "backup.destination.stream_location": "Las copias se guardarán en",
   "backup.destination.folder_required": "Escribe la carpeta donde guardar las copias.",
   "backup.destination.folder_scratch_refused":
-    "Esta carpeta está dentro de {folder}, que la caja vacía al arrancar. Elige una carpeta de copias fuera de ella.",
+    "Esta carpeta está dentro de {folder}, que el servidor vacía al arrancar. Elige una carpeta de copias fuera de ella.",
   "backup.destination.folder_unreadable":
-    "La caja no ha podido leer esta carpeta. Elige una carpeta a la que pueda acceder.",
+    "El servidor no ha podido leer esta carpeta. Elige una carpeta a la que pueda acceder.",
   "backup.destination.folder_relative":
     "Esta carpeta no es una ruta completa. Escribe la ruta completa, empezando por /.",
   "backup.destination.folder_refused":
-    "La caja no puede usar esta carpeta. Quita cualquier tabulador, salto de línea u otro carácter de control.",
+    "El servidor no puede usar esta carpeta. Quita cualquier tabulador, salto de línea u otro carácter de control.",
   "backup.archive_test.timed_out": "El bucket ha tardado demasiado en responder.",
   "backup.archive_test.read_mismatch": "El archivo de prueba leído no era el que se escribió.",
   "backup.archive_test.not_listed":
     "El archivo de prueba se escribió, pero el bucket no lo ha listado.",
   "backup.key.title": "Clave de recuperación",
   "backup.key.existing":
-    "Las copias usarán la clave de recuperación que este equipo ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu paquete de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de recuperación».",
+    "Las copias usarán la clave de recuperación que este servidor ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu paquete de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de recuperación».",
   "backup.key.too_short":
-    "La clave de recuperación que tiene este equipo es demasiado corta para proteger las copias. La clave nueva de abajo la sustituye.",
+    "La clave de recuperación que tiene este servidor es demasiado corta para proteger las copias. La clave nueva de abajo la sustituye.",
   "backup.key.minted_note":
     "Esta es tu clave de recuperación. Guárdala ahora: solo se muestra una vez y, sin ella, no se puede restaurar una copia.",
   "backup.key.copy": "Copiar",
@@ -6443,7 +6441,7 @@ export const es: Record<StringKey, string> = {
   "backup.key.paste_hint":
     "Al menos 12 caracteres. Guardar una clave pegada es tu responsabilidad.",
   "backup.key.advanced": "Pegar mi propia clave",
-  "backup.key.use_minted": "Usar la clave que generó la caja",
+  "backup.key.use_minted": "Usar la clave que generó el servidor",
   "backup.key.file_heading": "Clave de recuperación de Waitron",
   "backup.key.file_note":
     "Guárdala en un lugar seguro. Sin ella, no se puede restaurar una copia cifrada.",
@@ -6453,7 +6451,7 @@ export const es: Record<StringKey, string> = {
   "backup.schedule.days_daily": "Todos los días",
   "backup.schedule.days_pick": "Elegir días",
   "backup.schedule.time": "Hora",
-  "backup.schedule.time_auto": "Que lo decida la caja (tras el cierre y los informes del día)",
+  "backup.schedule.time_auto": "Que lo decida el servidor (tras el cierre y los informes del día)",
   "backup.schedule.time_fixed": "A una hora fija",
   "backup.schedule.at": "Hora del día",
   "backup.schedule.at_required": "Introduce una hora del día.",
@@ -6486,7 +6484,7 @@ export const es: Record<StringKey, string> = {
   "backup.weekday.sun": "Dom",
   "stream.title": "Copia continua en tu bucket",
   "stream.explanation":
-    "El equipo envía cada cambio a un bucket de almacenamiento compatible con S3 que es tuyo, en segundos. Si el equipo se pierde, se puede reconstruir otro desde el bucket con el paquete de recuperación.",
+    "El servidor envía cada cambio a un bucket de almacenamiento compatible con S3 que es tuyo, en segundos. Si el servidor se pierde, se puede reconstruir otro desde el bucket con el paquete de recuperación.",
   "stream.not_primary": "Solo el servidor principal envía la copia al bucket.",
   "stream.settings_incomplete":
     "Los ajustes guardados del bucket están incompletos. Cambia de bucket para introducirlos de nuevo o desactiva la copia.",
@@ -6532,11 +6530,11 @@ export const es: Record<StringKey, string> = {
     "Usa solo letras sin tilde, cifras, espacios y símbolos básicos del teclado. No se puede usar la comilla simple (').",
   "stream.field.check": "Revisa este valor.",
   "stream.error.recovery_key_too_short":
-    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Activar las copias» más arriba: la clave nueva que guarda sustituye a la corta.",
+    "La clave de recuperación que tiene este servidor es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Activar las copias» más arriba: la clave nueva que guarda sustituye a la corta.",
   "stream.error.recovery_key_too_short_archives_on":
-    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Cambiar la clave de recuperación» más arriba: la clave nueva sustituye a la corta.",
+    "La clave de recuperación que tiene este servidor es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Cambiar la clave de recuperación» más arriba: la clave nueva sustituye a la corta.",
   "stream.error.recovery_key_too_short_unknown":
-    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla.",
+    "La clave de recuperación que tiene este servidor es demasiado corta, así que la copia en el bucket no puede usarla.",
   "stream.change": "Cambiar de bucket",
   "stream.turn_off": "Desactivar",
   "stream.restart": "Volver a iniciar la copia",
@@ -6634,9 +6632,9 @@ export const es: Record<StringKey, string> = {
   "invoice_customer.not_permitted":
     "Solo un administrador puede buscar y descargar los datos de un cliente, y esta cuenta ya no puede hacerlo. Inicia sesión como administrador para hacerlo: antes se cierra tu sesión aquí.",
   "invoice_customer.vanished":
-    "La caja mostró estas facturas hace un momento y ahora no encuentra ninguna. Es un fallo de Waitron.",
+    "El servidor mostró estas facturas hace un momento y ahora no encuentra ninguna. Es un fallo de Waitron.",
   "invoice_customer.read_only":
-    "Esta es una copia de solo lectura de la caja, así que aquí no se puede buscar a un cliente por NIF. Hazlo en la propia caja.",
+    "Esta es una copia de solo lectura del servidor, así que aquí no se puede buscar a un cliente por NIF. Hazlo en el propio servidor.",
   "allergen.add": "Añadir alérgeno",
   "allergen.search": "Buscar alérgenos",
   "allergen.no_matches": "No hay alérgenos coincidentes.",
@@ -7484,21 +7482,21 @@ export const es: Record<StringKey, string> = {
   "menus.guest_sharing_unavailable":
     "La carta está compartida, pero no hay ninguna disponible. Elige una carta predeterminada activa en Cartas y publícala.",
   "menus.guest_cloud_not_connected":
-    "Conecta esta caja a Cloud para enviar la carta para clientes. La última copia enviada puede seguir disponible; deja de compartir desde el portal de Cloud para retirarla.",
+    "Conecta este servidor a Cloud para enviar la carta para clientes. La última copia enviada puede seguir disponible; deja de compartir desde el portal de Cloud para retirarla.",
   "menus.guest_cloud_pending":
     "Actualización de Cloud pendiente. La última carta enviada sigue disponible hasta que llegue la actualización, incluso al dejar de compartir.",
   "menus.guest_cloud_current":
     "Cloud tiene la publicación actual. El acceso público aún se está preparando.",
   "menus.guest_cloud_refused":
-    "Cloud no ha podido aceptar esta publicación. Revisa la carta y sus idiomas de contenido. La caja volverá a intentarlo; para retirar la última copia enviada, deja de compartir desde el portal de Cloud.",
+    "Cloud no ha podido aceptar esta publicación. Revisa la carta y sus idiomas de contenido. El servidor volverá a intentarlo; para retirar la última copia enviada, deja de compartir desde el portal de Cloud.",
   "menus.guest_cloud_off": "Cloud ha confirmado que la carta ya no se comparte.",
   "menus.guest_cloud_blocked":
     "La carta está bloqueada en Cloud. Actívala en el portal de Cloud para reanudar los envíos.",
-  "menus.guest_local_link": "Abrir la carta compartida en esta caja",
+  "menus.guest_local_link": "Abrir la carta compartida en este servidor",
   "menus.guest_sharing_on":
     "La carta predeterminada está compartida. Solo se comparte su versión publicada.",
   "menus.guest_sharing_off":
-    "La carta no está compartida. Al activarlo, se comparte la versión publicada de la carta predeterminada en esta caja, que puede no ser la que ves aquí.",
+    "La carta no está compartida. Al activarlo, se comparte la versión publicada de la carta predeterminada en este servidor, que puede no ser la que ves aquí.",
   "menus.guest_turn_on": "Compartir carta",
   "menus.guest_turn_off": "Dejar de compartir",
   "menus.guest_preview": "Vista previa para clientes",
@@ -7521,7 +7519,7 @@ export const es: Record<StringKey, string> = {
   "menus.paper_order": "Orden de las secciones en papel",
   "menus.paper_up": "Subir",
   "menus.paper_break": "Salto de página antes",
-  "menus.paper_save": "Guardar apariencia en esta caja",
+  "menus.paper_save": "Guardar apariencia en este servidor",
   "menus.paper_preview": "Vista previa A4",
   "menus.paper_print": "Imprimir / Guardar como PDF",
   "menus.guest_language": "Idioma del cliente",
@@ -8153,9 +8151,9 @@ export const es: Record<StringKey, string> = {
   "appearance.delete_changes": "Qué cambia",
   "appearance.delete_in_use":
     "{name} está en uso en todas las pantallas. Al eliminarlo, se pone el tema de Waitron en todas las pantallas.",
-  "disk_stop.open_box_status": "Abrir Estado del equipo",
+  "disk_stop.open_box_status": "Abrir Estado del servidor",
   "disk_stop.sign_in_as_manager": "Iniciar sesión como encargado",
-  "box_status.title": "Estado del equipo",
+  "box_status.title": "Estado del servidor",
   "box_status.network.title": "Red",
   "box_status.network.wired": "Cable",
   "box_status.network.wifi": "Wi-Fi actual",
@@ -8183,15 +8181,15 @@ export const es: Record<StringKey, string> = {
   "box_status.sales.ok": "Se registran con normalidad",
   "box_status.sales.last": "Última venta {time}",
   "box_status.sales.none": "Aún no hay ventas",
-  "box_status.notice.disk_full": "No se puede guardar nada: el equipo no tiene espacio en disco",
+  "box_status.notice.disk_full": "No se puede guardar nada: el servidor no tiene espacio en disco",
   "box_status.notice.clock_unusable":
-    "No se pueden registrar ventas: la hora del equipo es incorrecta",
+    "No se pueden registrar ventas: la hora del servidor es incorrecta",
   "box_status.notice.clock_behind_chain":
-    "No se puede cobrar: la hora del equipo es anterior a la última venta",
+    "No se puede cobrar: la hora del servidor es anterior a la última venta",
   "box_status.tax.ok": "Se envían con normalidad",
-  "box_status.tax.not_filing": "Este equipo no envía registros a Hacienda",
-  "box_status.tax.unsent": "{count} registros sin enviar · el equipo reintenta solo",
-  "box_status.tax.unsent_one": "1 registro sin enviar · el equipo reintenta solo",
+  "box_status.tax.not_filing": "Este servidor no envía registros a Hacienda",
+  "box_status.tax.unsent": "{count} registros sin enviar · el servidor reintenta solo",
+  "box_status.tax.unsent_one": "1 registro sin enviar · el servidor reintenta solo",
   "box_status.tax.unsent_held": "{count} registros sin enviar · el encargado tiene que actuar",
   "box_status.tax.unsent_held_one": "1 registro sin enviar · el encargado tiene que resolverlo",
   "box_status.tax.last_accepted": "Último aceptado {time}",
@@ -8222,78 +8220,78 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.unknown": "Aún no se ha comparado con Hacienda",
   "box_status.clock.compared": "Comparado con Hacienda el {time} · diferencia {seconds} s",
   "box_status.clock.compared_ahead":
-    "Comparado con Hacienda el {time} · el equipo iba {seconds} s adelantado",
+    "Comparado con Hacienda el {time} · el servidor iba {seconds} s adelantado",
   "box_status.clock.compared_behind":
-    "Comparado con Hacienda el {time} · el equipo iba {seconds} s atrasado",
+    "Comparado con Hacienda el {time} · el servidor iba {seconds} s atrasado",
   "box_status.clock.proof.authority": "Hacienda: coincide (comprobado {time})",
   "box_status.clock.proof.devices": "Dispositivos: {count} marcan {time}",
   "box_status.clock.proof.device_one": "Dispositivos: 1 marca {time}",
   "box_status.clock.stop.none":
-    "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), o la de dos cajas o terminales.",
-  "box_status.clock.stop.contrary": "Otros relojes dicen que la hora del equipo está mal.",
+    "Esperando una prueba de que la hora es correcta: la de Hacienda (si el servidor le envía registros), o la de dos cajas o terminales.",
+  "box_status.clock.stop.contrary": "Otros relojes dicen que la hora del servidor está mal.",
   "box_status.clock.contrary.authority": "Hacienda: no coincide (comprobado {time})",
   "box_status.clock.contrary.device": "{name}: no coincide (marcó {time})",
   "box_status.clock.contrary.unnamed_device": "Un dispositivo",
   "box_status.clock.stop.ready": "Hay prueba: los cobros se reanudan en unos segundos.",
   "box_status.clock.stop.start_up":
-    "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), «Comprobar la hora» en una caja si Hacienda no responde, o el dispositivo de un administrador. El equipo arrancó con los cobros parados, así que no bastan dos cajas o terminales.",
+    "Esperando una prueba de que la hora es correcta: la de Hacienda (si el servidor le envía registros), «Comprobar la hora» en una caja si Hacienda no responde, o el dispositivo de un administrador. El servidor arrancó con los cobros parados, así que no bastan dos cajas o terminales.",
   "box_status.clock.stop.confirmed": "Cobros reanudados el {time}, confirmado por {who}.",
   "box_status.clock.check_waiting":
-    "La parada de cobros que empezó el {time} ha terminado, pero nada ha confirmado aún la hora del equipo. El equipo pregunta la hora a Hacienda cada minuto cuando le envía registros; también pueden confirmarla dos cajas o terminales, o el dispositivo de un administrador.",
+    "La parada de cobros que empezó el {time} ha terminado, pero nada ha confirmado aún la hora del servidor. El servidor pregunta la hora a Hacienda cada minuto cuando le envía registros; también pueden confirmarla dos cajas o terminales, o el dispositivo de un administrador.",
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.behind_chain_fix":
-    "Con internet, el equipo corrige la hora solo; si no, un administrador puede usar «Comprobar con la hora de este dispositivo».",
+    "Con internet, el servidor corrige la hora solo; si no, un administrador puede usar «Comprobar con la hora de este dispositivo».",
   "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
   "box_status.clock.admin.sign_in_hint":
-    "Solo un administrador puede comprobar la hora del equipo con la de este dispositivo. Iniciar sesión como administrador cierra primero tu sesión aquí.",
+    "Solo un administrador puede comprobar la hora del servidor con la de este dispositivo. Iniciar sesión como administrador cierra primero tu sesión aquí.",
   "box_status.clock.admin.times":
-    "El reloj del equipo marca {box}. Este dispositivo marca {device}.",
-  "box_status.clock.admin.agree": "Coinciden. ¿Confirmas que la hora del equipo es correcta?",
+    "El reloj del servidor marca {box}. Este dispositivo marca {device}.",
+  "box_status.clock.admin.agree": "Coinciden. ¿Confirmas que la hora del servidor es correcta?",
   "box_status.clock.admin.differ":
-    "El equipo no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el equipo a internet para que corrija la hora.",
+    "El servidor no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el servidor a internet para que corrija la hora.",
   "box_status.clock.admin.refused.same_machine":
-    "Esta pantalla es el propio equipo, así que su hora es la del equipo. Confírmalo desde tu móvil o desde otro ordenador.",
+    "Esta pantalla es el propio servidor, así que su hora es la del servidor. Confírmalo desde tu móvil o desde otro ordenador.",
   "box_status.clock.admin.refused.not_stopped": "No queda nada que confirmar. Mira la fila Reloj.",
   "box_status.clock.admin.set.question":
-    "El reloj del equipo marca {box}. Tu dispositivo marca {device}. ¿Usar la hora de tu dispositivo?",
+    "El reloj del servidor marca {box}. Tu dispositivo marca {device}. ¿Usar la hora de tu dispositivo?",
   "box_status.clock.admin.set.confirm": "Usar esta hora",
-  "box_status.clock.admin.set.done": "El equipo ya está en hora.",
+  "box_status.clock.admin.set.done": "El servidor ya está en hora.",
   "box_status.clock.admin.set.sign_in_again": "Vuelve a iniciar sesión para seguir.",
   "box_status.clock.admin.set.refused.synchronised":
-    "El equipo se pone en hora por internet y dice que su hora es correcta, así que no toma la hora de un dispositivo. Si la hora de tu dispositivo es correcta, comprueba la conexión a internet del equipo.",
+    "El servidor se pone en hora por internet y dice que su hora es correcta, así que no toma la hora de un dispositivo. Si la hora de tu dispositivo es correcta, comprueba la conexión a internet del servidor.",
   "box_status.clock.admin.set.refused.witnessed":
-    "El equipo tiene la hora de Hacienda, así que confirma o corrige su reloj con esa hora por sí mismo, no con la de un dispositivo. Si un intento falla, vuelve a intentarlo más tarde.",
+    "El servidor tiene la hora de Hacienda, así que confirma o corrige su reloj con esa hora por sí mismo, no con la de un dispositivo. Si un intento falla, vuelve a intentarlo más tarde.",
   "box_status.clock.admin.set.refused.stale":
-    "El reloj del equipo ha cambiado mientras se comprobaba. Cierra esto y vuelve a comprobarlo.",
+    "El reloj del servidor ha cambiado mientras se comprobaba. Cierra esto y vuelve a comprobarlo.",
   "box_status.clock.admin.set.refused.host_unavailable":
-    "Este equipo no puede poner su propio reloj en hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cuando el reloj del equipo esté a menos de un minuto del de tu dispositivo, podrás confirmarlo aquí.",
+    "Este servidor no puede poner su propio reloj en hora: la parte del servidor que lo hace no responde. Si el servidor tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cuando el reloj del servidor esté a menos de un minuto del de tu dispositivo, podrás confirmarlo aquí.",
   "box_status.clock.admin.set.refused.target_invalid":
-    "La fecha de tu dispositivo no es una que el equipo pueda tomar. Comprueba la fecha y la hora de tu dispositivo.",
+    "La fecha de tu dispositivo no es una que el servidor pueda tomar. Comprueba la fecha y la hora de tu dispositivo.",
   "box_status.clock.admin.set.refused.pending_disproofs":
-    "El equipo aún no ha terminado de registrar lo que encontró sobre su reloj. Vuelve a intentarlo dentro de un minuto.",
+    "El servidor aún no ha terminado de registrar lo que encontró sobre su reloj. Vuelve a intentarlo dentro de un minuto.",
   "box_status.clock.admin.set.refused.same_machine":
-    "Esta pantalla es el propio equipo, así que su hora es la del equipo. Usa tu móvil u otro ordenador.",
+    "Esta pantalla es el propio servidor, así que su hora es la del servidor. Usa tu móvil u otro ordenador.",
   "box_status.clock.admin.set.refused.not_stopped":
-    "El reloj del equipo ya no necesita ponerse en hora. Mira la fila Reloj.",
+    "El reloj del servidor ya no necesita ponerse en hora. Mira la fila Reloj.",
   "box_status.clock.admin.set.failed.refused":
-    "El equipo no ha podido poner su reloj en hora. Cierra esto y vuelve a comprobarlo.",
+    "El servidor no ha podido poner su reloj en hora. Cierra esto y vuelve a comprobarlo.",
   "box_status.clock.admin.set.failed.unverified":
-    "El equipo ha movido su reloj, pero no ha podido confirmar que haya quedado en la hora de tu dispositivo. Cierra esto y vuelve a comprobarlo.",
+    "El servidor ha movido su reloj, pero no ha podido confirmar que haya quedado en la hora de tu dispositivo. Cierra esto y vuelve a comprobarlo.",
   "box_status.clock_check_help_label": "Qué hace esta comprobación",
   "box_status.clock_check_help":
-    "Compara la hora del equipo con la de este dispositivo. Si están a menos de un minuto, puedes confirmar que la hora del equipo es correcta, y los cobros se reanudan si estaban parados. Comprueba antes que este dispositivo tiene la hora bien. No funciona en la pantalla del propio equipo.",
+    "Compara la hora del servidor con la de este dispositivo. Si están a menos de un minuto, puedes confirmar que la hora del servidor es correcta, y los cobros se reanudan si estaban parados. Comprueba antes que este dispositivo tiene la hora bien. No funciona en la pantalla del propio servidor.",
   "box_status.clock_check_help_guide": "Más sobre comprobar la hora",
   "box_status.disk.free": "Quedan {free} libres de {total}",
-  "box_status.disk.unreadable": "El equipo no puede medir su disco",
+  "box_status.disk.unreadable": "El servidor no puede medir su disco",
   "box_status.disk.database": "Base de datos {size}",
-  "box_status.disk.backups": "copias en este equipo {size}",
+  "box_status.disk.backups": "copias en este servidor {size}",
   "box_status.disk.logs": "registros de actividad {size}",
   "box_status.disk.other": "resto del disco {size}",
   "box_status.free": "Liberar {size}",
   "box_status.free_nothing": "Nada que liberar",
   "box_status.free_read_only":
-    "Este equipo solo guarda una copia de solo lectura, así que aquí no puede liberar espacio.",
+    "Este servidor solo guarda una copia de solo lectura, así que aquí no puede liberar espacio.",
   "box_status.free_backup_running":
     "Hay una copia en curso, así que sus archivos de trabajo no se cuentan.",
   "box_status.freed": "Se han liberado {size}.",
@@ -8301,27 +8299,27 @@ export const es: Record<StringKey, string> = {
   "box_status.free_help":
     "Borra informes de fallos y registros de actividad antiguos, y archivos que dejó una copia interrumpida. Conserva tus ventas, ajustes y copias de seguridad.",
   "box_status.free_help_guide": "Más sobre liberar espacio",
-  "box_status.restart.title": "Reiniciar el equipo",
-  "box_status.restart.question": "¿Reiniciar el equipo?",
+  "box_status.restart.title": "Reiniciar el servidor",
+  "box_status.restart.question": "¿Reiniciar el servidor?",
   "box_status.restart.what":
-    "Waitron se reinicia en el equipo. Ninguna caja puede vender hasta que vuelva a arrancar.",
+    "Waitron se reinicia en el servidor. Ninguna caja puede vender hasta que vuelva a arrancar.",
   "box_status.restart.stop": "Parar",
   "box_status.restart.confirm": "Reiniciar",
   "box_status.restart.done":
-    "El equipo se está reiniciando. Esta página se pone al día sola cuando vuelva.",
+    "El servidor se está reiniciando. Esta página se pone al día sola cuando vuelva.",
   "box_status.restart.read_only":
-    "Este equipo solo guarda una copia de solo lectura de otro equipo, así que no se puede reiniciar desde aquí.",
-  "box_status.restart_help_label": "Cuándo reiniciar el equipo",
+    "Este servidor solo guarda una copia de solo lectura de otro servidor, así que no se puede reiniciar desde aquí.",
+  "box_status.restart_help_label": "Cuándo reiniciar el servidor",
   "box_status.restart_help":
     "Úsalo cuando una alerta lo indique. Las cajas no pueden vender hasta que vuelva.",
-  "box_status.restart_help_guide": "Más sobre reiniciar el equipo",
+  "box_status.restart_help_guide": "Más sobre reiniciar el servidor",
   "box_status.fillers":
     "Elige cuántas copias conservar en Copias de seguridad. Las antiguas solo se borran después de guardar una nueva, o antes de una copia si falta sitio; esto no libera espacio de inmediato en un disco lleno. Sal sin hacer cambios para parar. Conserva la base de datos, las claves de recuperación y las copias guardadas.",
   "box_status.checks_unavailable":
     "Algunas comprobaciones no se han podido hacer, así que esta página puede no mostrar todos los problemas.",
   "box_status.other_alerts": "{count} avisos más",
   "box_status.other_alerts_one": "1 aviso más",
-  "box_status.read_error": "No se ha podido leer el estado del equipo.",
+  "box_status.read_error": "No se ha podido leer el estado del servidor.",
   "box_status.misdated.title": "Ventas con fecha incorrecta",
   "box_status.misdated.table_range": "Ventas con fecha incorrecta de {from} a {to}",
   "box_status.misdated.line":
@@ -8331,7 +8329,7 @@ export const es: Record<StringKey, string> = {
   "box_status.misdated.read_error": "No se ha podido leer la lista de ventas con fecha incorrecta.",
   "box_status.misdated.handled_heading": "Listas resueltas ({count})",
   "box_status.misdated.handled_by_person": "Marcada como resuelta por {name} el {time}.",
-  "box_status.misdated.handled_by_box": "Marcada como resuelta por el equipo el {time}.",
+  "box_status.misdated.handled_by_box": "Marcada como resuelta por el servidor el {time}.",
   "box_status.misdated.handled_by_unknown": "Marcada como resuelta el {time}.",
   "box_status.misdated.note": "Nota: {note}",
   "box_status.misdated.handled_read_error": "No se han podido leer las listas resueltas.",

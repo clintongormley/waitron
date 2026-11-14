@@ -54,7 +54,7 @@ async function inspect(bytes: Uint8Array, locale: "en" | "es") {
     ])
       expect(text).toContain(expected);
     expect(text).toContain(
-      locale === "en" ? "Waitron recovery key" : "Clave de recuperación de Waitron",
+      locale === "en" ? "Waitron server key" : "Clave del servidor de Waitron",
     );
     expect(text).toContain(
       locale === "en"

@@ -32,7 +32,7 @@ se te pide, elige a alguien que pueda autorizar la apertura e introduce su PIN.
 **No se puede guardar nada: el servidor no tiene espacio · Avisa al encargado** es rojo. El servidor
 no tiene espacio en disco, así que no se pueden guardar pedidos, pagos ni otros cambios. El
 encargado tiene que liberar espacio en el servidor, en la
-[página Estado del equipo](box-status.md#free-space). Si el servidor tuvo que usar su espacio de
+[página Estado del servidor](box-status.md#free-space). Si el servidor tuvo que usar su espacio de
 reserva para arrancar, el aviso sigue, también tras reiniciar, hasta que vuelven a quedar libres
 unos 24 MB.
 
@@ -40,8 +40,8 @@ unos 24 MB.
 La hora del servidor está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que
 se corrija, el servidor también rechaza los cobros y las devoluciones. Un administrador puede poner
 la hora desde su propio móvil u ordenador, en la [página Estado del
-equipo](box-status.md#clock-behind). Justo después de que el servidor arranque, la indicación puede
-decir **Comprobar la hora** en su lugar, como se explica más abajo.
+servidor](box-status.md#clock-behind). Justo después de que el servidor arranque, la indicación
+puede decir **Comprobar la hora** en su lugar, como se explica más abajo.
 
 **No se puede cobrar: la hora del servidor es anterior a la última venta · Avisa al encargado** es
 rojo. El reloj del servidor marca más de un minuto antes que la última venta que registró. Hasta que
@@ -76,7 +76,7 @@ Lo que hay que hacer después depende de cómo se cobró la tarjeta:
   se puede volver a cobrar.
 
 Con internet, el servidor normalmente corrige su reloj por sí solo. Si no, un
-administrador pone o confirma la hora en la [página Estado del equipo](box-status.md#clock-behind)
+administrador pone o confirma la hora en la [página Estado del servidor](box-status.md#clock-behind)
 con su propio móvil u ordenador, nunca desde la pantalla del propio servidor. Justo después de que el
 servidor arranque, cualquier empleado puede hacerlo desde una caja con **Comprobar la hora**, como se
 explica más abajo. Si la hora del servidor es correcta y fue la última venta la que llevaba una hora
@@ -125,7 +125,7 @@ la hora desde la misma caja.
 
 **Queda poco espacio en el servidor · Avisa al encargado** es ámbar. El trabajo se sigue guardando,
 pero se está acabando el espacio. El encargado debería liberar espacio antes de que se acabe, en
-la [página Estado del equipo](box-status.md#free-space).
+la [página Estado del servidor](box-status.md#free-space).
 
 **12 ventas sin enviar a Hacienda · Se reintenta solo** es azul. El envío de ventas a Hacienda ha
 fallado y el servidor sigue intentándolo por sí solo. Las ventas están registradas en el servidor, así
@@ -148,7 +148,7 @@ texto, quizá de una versión más reciente del servidor. Avisa al encargado par
 
 Elige **Abrir recuperación** junto al rechazo para abrir la recuperación de este servidor en otra
 pestaña. Conserva la ventana de pago. Si indica que la tarjeta ya se ha cobrado, no vuelvas a
-cobrar. Usa la clave de recuperación actual de este servidor y sigue
+cobrar. Usa la clave del servidor actual y sigue
 [Recuperar una identidad de facturación](box-status.md#invoice-conflict).
 Puedes cerrar la ventana de pago sin iniciar una recuperación. El cambio de identidad conserva
 los resultados de envío y las incidencias existentes.

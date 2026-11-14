@@ -162,13 +162,13 @@ it("keeps an unnamed old key explicit and updates its warnings after a language 
   review(el);
   await vi.waitFor(() =>
     expect(child(el)!.shadowRoot!.textContent).toContain(
-      "This backup's node key has no stored name.",
+      "This backup's server key has no stored name.",
     ),
   );
   setLocale("es-ES");
   await child(el)!.updateComplete;
   expect(child(el)!.shadowRoot!.textContent).toContain(
-    "La clave del nodo de esta copia no tiene nombre guardado.",
+    "La clave del servidor de esta copia no tiene nombre guardado.",
   );
 });
 it("shows a refusal beside the review action and allows another attempt", async () => {
@@ -186,12 +186,12 @@ it("shows a refusal beside the review action and allows another attempt", async 
   await vi.waitFor(() =>
     expect(
       child(el)!.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent,
-    ).toContain("Check the backup file's encryption key."),
+    ).toContain("Check the recovery key."),
   );
   expect(
     el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=recovery-key]")!
       .error,
-  ).toBe("Check the backup file's encryption key.");
+  ).toBe("Check the recovery key.");
   review(el);
   await vi.waitFor(() => expect(child(el)!.shadowRoot!.textContent).toContain("Amber Hill"));
 });

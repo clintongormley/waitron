@@ -254,7 +254,7 @@ export class RecoveryKeyEntry extends LitElement {
         type="password"
         autocomplete="off"
         ?required=${!this.loaded}
-        label=${en ? "Recovery key" : "Clave de recuperación"}
+        label=${en ? "Server key" : "Clave del servidor"}
         placeholder="XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX X"
         .value=${this.draft.value}
         .error=${error}

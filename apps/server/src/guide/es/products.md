@@ -512,19 +512,19 @@ los nombres y las descripciones; los nombres que falten usan el idioma predeterm
 el nombre interno. Publica los cambios antes de revisarlos aquí. Esta vista previa no comparte
 la carta con los clientes.
 
-## Comparte la carta predeterminada en esta caja {#guest-sharing}
+## Comparte la carta predeterminada en este servidor {#guest-sharing}
 
 En **Vista previa para clientes**, elige **Compartir carta** para compartir la versión publicada
 de la carta predeterminada. Puede ser distinta de la que estás revisando. Elige
-**Abrir la carta compartida en esta caja** para comprobarla. Publica los cambios antes de revisarlos ahí.
+**Abrir la carta compartida en este servidor** para comprobarla. Publica los cambios antes de revisarlos ahí.
 Solo se muestra una carta predeterminada activa y publicada. Elige **Dejar de compartir** para retirarla.
-La elección se conserva en esta caja al importar una configuración; una caja nueva empieza sin compartir.
-Cuando esta caja está conectada a Cloud, la vista previa indica si Cloud tiene la publicación actual
-o queda una actualización pendiente. Publica los cambios y espera la confirmación. Si la caja está
+La elección se conserva en este servidor al importar una configuración; un servidor nuevo empieza sin compartir.
+Cuando este servidor está conectado a Cloud, la vista previa indica si Cloud tiene la publicación actual
+o queda una actualización pendiente. Publica los cambios y espera la confirmación. Si el servidor está
 sin conexión, Cloud conserva la última copia enviada. Al dejar de compartir, esa copia se retira
-cuando llega la actualización. Puedes dejar de compartir desde el portal de Cloud mientras la caja
+cuando llega la actualización. Puedes dejar de compartir desde el portal de Cloud mientras el servidor
 está sin conexión; vuelve a activarlo allí para reanudar los envíos. Si Cloud rechaza la publicación,
-revisa la carta y sus idiomas de contenido; la caja vuelve a intentarlo. Tras desconectar la caja,
+revisa la carta y sus idiomas de contenido; el servidor vuelve a intentarlo. Tras desconectar el servidor,
 retira cualquier copia enviada desde el portal de Cloud. El enlace para clientes con datos
 móviles aún se está preparando.
 
@@ -536,8 +536,8 @@ ancha y, cuando hay varias secciones, la última en un panel estrecho. Elige la 
 la leyenda de alérgenos. Usa las palabras junto a cada plato si prefieres leer allí las declaraciones.
 
 Elige un logotipo de tu biblioteca de imágenes, sube secciones y añade saltos de página antes de
-ellas. Estas elecciones pertenecen a esta vista previa. **Guardar apariencia en esta caja** conserva
-el diseño, la tipografía, el espaciado, los colores y la leyenda aquí; otra caja necesita sus propias elecciones.
+ellas. Estas elecciones pertenecen a esta vista previa. **Guardar apariencia en este servidor** conserva
+el diseño, la tipografía, el espaciado, los colores y la leyenda aquí; otro servidor necesita sus propias elecciones.
 
 Elige **Vista previa A4**, revisa todas las páginas y pulsa **Imprimir / Guardar como PDF**.
 Selecciona A4 vertical en el navegador y desactiva sus encabezados y pies de página. Abre de nuevo

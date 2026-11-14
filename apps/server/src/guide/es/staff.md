@@ -42,16 +42,16 @@ restablecer su acceso, deshabilitar o volver a habilitar su cuenta, o cambiar un
 estado en **Usuarios**, incluido tu propio correo, o crear, copiar, editar o eliminar un rol de acceso. Los nombres, el teléfono y el restablecimiento
 del PIN no necesitan esta confirmación.
 También confirmas antes de cambiar las copias de seguridad, descargar archivos de recuperación,
-mostrar la clave de recuperación de las copias o exportar la configuración o los datos de otro
+mostrar la clave de recuperación o exportar la configuración o los datos de otro
 miembro del personal. La misma confirmación cubre conectar o desconectar proveedores de pagos,
-cambiar el servidor de correo o la conexión Cloud, activar el acceso remoto, preparar un equipo
+cambiar el servidor de correo o la conexión Cloud, activar el acceso remoto, preparar un servidor
 sustituto, instalar el certificado fiscal, cambiar la razón social y quitar un servidor.
 Usa tu contraseña o passkey y, si tienes
 verificación en dos pasos, un código del autenticador o de recuperación. La confirmación cubre
 estas acciones en este navegador durante 15 minutos o hasta que termine tu sesión.
 Elige **Cancelar** para dejar la acción sin realizar. Si el disco está lleno, abre **Estado del
-equipo** y usa **Liberar** para dejar espacio antes de confirmar. Consulta
-[Liberar espacio en el equipo](box-status.md#free-space).
+servidor** y usa **Liberar** para dejar espacio antes de confirmar. Consulta
+[Liberar espacio en el servidor](box-status.md#free-space).
 
 ## Roles de acceso {#access-roles}
 
@@ -137,7 +137,7 @@ como se guardó, incluidos los espacios y las mayúsculas. La ventana muestra la
 que coinciden en los tres datos;
 pulsa **Descargar sus datos** para obtener un ZIP con una copia en PDF de cada factura, un archivo
 `invoices.json` con el nombre, el identificador, su tipo y país emisor cuando existen y la dirección de cada una y todas las direcciones de correo
-a las que la caja la envió o intentó enviarla, y un `README.txt` en el idioma del local. Los
+a las que el servidor la envió o intentó enviarla, y un `README.txt` en el idioma del local. Los
 gerentes no ven esta acción. Una reserva no lleva NIF, así que esta búsqueda no encuentra reservas.
 Waitron no guarda una lista de estas solicitudes, así que anota la solicitud y tu respuesta en los
 registros del local. El plazo de un mes para responder y las demás obligaciones del local están en

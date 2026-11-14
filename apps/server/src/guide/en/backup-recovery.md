@@ -42,7 +42,8 @@ Over a plain connection neither works: set up the secure connection first.
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my
-bucket**, as on a new box; restoring needs the backup's own key and its node recovery key. After
+bucket**, as on a new box; restoring needs the recovery key (for a backup file) or the recovery kit
+(for your bucket), and that backup's server key. After
 **Start again**, **Reconnect** opens "Set up this Waitron server", where you choose how to set up
 this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
 chose and opens its first screen. If that screen asks "Is this page secure?", press **Continue to
@@ -71,7 +72,7 @@ a repair. **Stop** ends this attempt; you can close the tab or check again. If r
 failing, stop here. This page cannot repair every saved certificate layout or replace a separately
 installed certificate. For a separately installed certificate, check the server’s HTTPS address
 and stop if it shows a warning. If your device blocks certificate installation, use a venue
-device that allows it. Enter passwords and recovery keys only after HTTPS opens without warnings.
+device that allows it. Enter passwords, recovery keys and server keys only after HTTPS opens without warnings.
 
 Stop the former box and coordinate with the other venues:
 only one person should recover this taxpayer at a time.
@@ -95,11 +96,11 @@ Cloud, choose **Start Cloud recovery**, enter the code the page shows in your Wa
 recovery service.
 
 Then choose **Review backup**. The page shows the selected backup: its source, business, venue,
-date, node and node recovery key. Check those details before continuing. Keep production and
+date, node and server key. Check those details before continuing. Keep production and
 preproduction separate.
 
-The backup's key, the bucket kit and the Cloud approval give access to a copy. You still need that
-copy's named node recovery key to authenticate recovery.
+The recovery key, the bucket kit and the Cloud approval give access to a copy. You still need that
+copy's named server key to authenticate recovery.
 
 On a test server restored from Waitron Cloud, if **Cloud services** says the saved reconnection
 request cannot be read, choose **Get a fresh reconnection request**, then ask the Cloud owner to
@@ -109,7 +110,7 @@ approve the new request in Cloud.
 
 Below the review, under "Recover this box", choose your recovery pack, or an older recovery PDF,
 that holds the server key for this backup in **Recovery PDF**; or type the grouped key printed on it
-in **Recovery key**. If the pack does not hold the server key, the page says so and, when the pack
+in **Server key**. If the pack does not hold the server key, the page says so and, when the pack
 records it, names the pack or the key name to look for. A pack or sheet with a newer server key may
 not open an older backup. Tick "The old box is stopped and will stay offline.", "I am the only
 person recovering this taxpayer, across all venues." and "These details are correct."
@@ -131,7 +132,7 @@ lists the times the box could not use its saved backup settings since it last st
 and at most five, each with what went wrong: for example, the key number the settings were locked
 with and the key numbers this box holds. It then describes the saved record as it is now: when it
 was last written and, if it reads, the folders and buckets it names and whether each folder exists.
-It says whether the box holds a usable backup recovery key. It shows a bucket's access key ID but never its secret,
+It says whether the box holds a usable recovery key. It shows a bucket's access key ID but never its secret,
 and the recovery key only by its fingerprint. The panel reads and changes nothing: **Read again**
 reads the facts again and does not turn backups on, and **Stop** closes the panel. It repairs
 nothing either; to replace the saved settings, choose the destinations again and apply them. Keep
@@ -162,7 +163,7 @@ fetch observations from other devices.
 
 Restoring replaces the database already on this box.
 
-Enter the node recovery key, tick both statements and "These details are correct.", then choose
+Enter the server key, tick both statements and "These details are correct.", then choose
 **Proceed**. The invoice series is
 the code at the start of every invoice number; recovery creates new ones so the box never repeats
 the old box's numbers. After **Proceed** the page compares the clocks and creates the invoice series
@@ -198,7 +199,7 @@ If an earlier restore choice is still saved, it will run when the server starts.
 Until you choose the restore button, the page keeps what you entered only while it stays open.
 Changing the file, key or environment discards what it checked, and a reload opens the page's
 first screen; from there choose **Join or recover** and start the restore again. If the box refuses the
-restore, the page returns to the form and you enter the node recovery key again.
+restore, the page returns to the form and you enter the server key again.
 
 Once you choose the restore button, the page says "Provisioning this server" and asks you to keep it
 open. The box saves the request and restarts. If it stops after saving the request, the next start

@@ -46,7 +46,7 @@ function reasonWords(reason: Worded): StringKey {
   }
 }
 
-/** Each reason's sentence once: the bucket copy and the archives share one backup key. */
+/** Each reason's sentence once: the bucket copy and the archives share one recovery key. */
 function reasonSentences(reasons: Status["reasons"], date: (iso: string) => string): string[] {
   const sentences = reasons.map((reason) =>
     reason.kind === "key_changed"

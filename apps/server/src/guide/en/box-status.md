@@ -104,7 +104,7 @@ says why they stopped.
 If this box stops issuing invoices because its identity conflicts with a filing response or an
 AEAT lookup, keep any old or copied box offline. A new identity does not stop another machine from selling.
 
-Open `/manage/recovery/fiscal-conflict` on this box over HTTPS. You need its current recovery key;
+Open `/manage/recovery/fiscal-conflict` on this box over HTTPS. You need its current server key;
 signing in to the dashboard does not replace that key. Enter the key and choose **Check conflict**
 to see the affected invoice and identity. Confirm that the old or copied box is offline and that
 nobody else is recovering it, then choose **Compare clocks**.

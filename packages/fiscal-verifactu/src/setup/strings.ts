@@ -58,7 +58,7 @@ export const fiscalSetupStrings = {
     assignment: "Asignación importada",
     installation: "Instalación",
     series: "Series exactas",
-    box: "Equipo",
+    box: "Servidor",
     event: "Evento de configuración",
     operator: "Administrador",
     custodian: "Custodio",
@@ -83,7 +83,7 @@ export const fiscalSetupStrings = {
     serialsError: "Usa enteros distintos de 1 a 999999, como máximo 100.",
     candidates: "Comprobar nombres",
     validated:
-      "Nombres comprobados. Reserva estas entradas exactas en el original vigente antes de firmar fuera del equipo.",
+      "Nombres comprobados. Reserva estas entradas exactas en el original vigente antes de firmar fuera del servidor.",
     download: "Guardar solicitud pública",
     resume: "Cargar solicitud pública guardada",
     allocation: "Archivo público de asignación",

@@ -78,8 +78,8 @@ export async function renderRegisterPdf(
   );
   write(
     locale === "en"
-      ? "Contains recovery keys. Keep it in your office."
-      : "Contiene claves de recuperación. Guárdalo en tu oficina.",
+      ? "Contains server keys. Keep it in your office."
+      : "Contiene claves del servidor. Guárdalo en tu oficina.",
   );
   const paper = document.paper;
   if (paper) {
@@ -140,7 +140,7 @@ export async function renderRegisterPdf(
   }
   for (const node of document.nodeKeys) {
     if (pdf.y > 610) pdf.addPage();
-    title(locale === "en" ? "Node recovery key" : "Clave de recuperación del nodo");
+    title(locale === "en" ? "Server key" : "Clave del servidor");
     write(`${node.name} / ${node.nodeId}`, 12);
     const encoding = /^[A-Za-z0-9_-]{32}$/.test(node.secret) ? "raw192" : "utf8";
     const printed = await encodeNodeKey(node, scope, encoding);

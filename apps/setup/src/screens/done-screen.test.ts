@@ -58,8 +58,8 @@ describe("setup-done-screen", () => {
   );
 
   it.each([
-    ["en-GB", "Recovery key 15 Oct 2026 · K7QF"],
-    ["es-ES", "Clave de recuperación 15 oct 2026 · K7QF"],
+    ["en-GB", "Server key 15 Oct 2026 · K7QF"],
+    ["es-ES", "Clave del servidor 15 oct 2026 · K7QF"],
   ] as const)("localizes the issue date and key label in %s", async (locale, name) => {
     setLocale(locale);
     const el = await mountDone(() => new Promise(() => {}), {
@@ -74,8 +74,8 @@ describe("setup-done-screen", () => {
     await el.updateComplete;
     expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
       locale === "en-GB"
-        ? "Clave de recuperación 15 oct 2026 · K7QF"
-        : "Recovery key 15 Oct 2026 · K7QF",
+        ? "Clave del servidor 15 oct 2026 · K7QF"
+        : "Server key 15 Oct 2026 · K7QF",
     );
     expect(el.breakGlassKeyName).toBe("2026-10-15 · K7QF");
   });
@@ -462,11 +462,11 @@ describe("setup-done-screen", () => {
   });
 
   it.each([
-    ["en-GB", "Older backups need the key from that time", "Recovery key 15 Oct 2026 · K7QF"],
+    ["en-GB", "Older backups need the key from that time", "Server key 15 Oct 2026 · K7QF"],
     [
       "es-ES",
       "Las copias antiguas necesitan la clave de entonces",
-      "Clave de recuperación 15 oct 2026 · K7QF",
+      "Clave del servidor 15 oct 2026 · K7QF",
     ],
   ] as const)(
     "shows the paper key name and the old-backup warning in %s",
@@ -567,12 +567,12 @@ describe("setup-done-screen", () => {
     });
     expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor se está uniendo");
     expect(q(el, "[data-test=break-glass] h2")!.textContent!.trim()).toBe(
-      "Guarda ahora tu código de emergencia",
+      "Guarda ahora tu clave del servidor",
     );
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("Se muestra una sola vez y no se volverá a mostrar.");
     expect(warning).toContain(
-      "Lo necesitarás si algún día este servidor tiene que sustituir al principal.",
+      "La necesitarás si algún día este servidor tiene que sustituir al principal.",
     );
     expect(warning).not.toContain("pase a ser el principal");
     expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("bg-9f3a");
@@ -584,7 +584,7 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "bg-9f3a" });
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain(
-      "Lo necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
+      "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
     );
     expect(warning).not.toContain("sustituir al principal");
   });

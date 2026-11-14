@@ -51,7 +51,7 @@ export async function renderRecoveryPdfWithFont(
     "sha256-v1:" + Array.from(hash, (n) => n.toString(16).padStart(2, "0")).join("");
   const en = locale === "en";
   const info = {
-    Title: en ? "Waitron recovery key" : "Clave de recuperación de Waitron",
+    Title: en ? "Waitron server key" : "Clave del servidor de Waitron",
     WaitronRecoveryDigest: contentDigest,
   };
   const pdf = new PDFDocument({
@@ -99,7 +99,7 @@ export async function renderRecoveryPdfWithFont(
     pdf.text(safe(value), 204, y, right);
     pdf.y = y + height + 8;
   };
-  write(en ? "Waitron recovery key" : "Clave de recuperación de Waitron", 22);
+  write(en ? "Waitron server key" : "Clave del servidor de Waitron", 22);
   pdf.moveDown();
   row(en ? "Legal name" : "Razón social", document.taxpayerName);
   row("NIF", document.scope.taxpayerNif);
