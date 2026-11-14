@@ -2059,6 +2059,8 @@ export class TillApp extends LitElement {
       :host {
         display: block;
         height: 100%;
+        /* The page behind the app paints this (index.html). */
+        --wt-form-actions-surface: var(--wt-color-bg);
       }
 
       /* A notice above the shell takes its height from the shell, never adds it to the page. */

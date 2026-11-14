@@ -3357,8 +3357,9 @@ Outside a dialog's footer, the row stays at the bottom of whatever scrolls (the 
 column, a dialog's body, the page) while the form above it scrolls, its message included (owner,
 2026-11-14, A1530). It sits on an opaque background read from `--wt-form-actions-surface`, which a
 container sets to the colour it paints: `wt-card`, `wt-dialog` and `wt-modal`, the dashboard's main
-column and the setup wizard's column do. A container that paints another colour sets it too, as the
-dashboard's settings cards do. The row moves only within its parent element, so that parent holds
+column and the setup wizard's column do, and the till app sets it to the page colour its page paints.
+A container that paints another colour sets it too, as the dashboard's settings cards and the till
+order screen's action panel do. The row moves only within its parent element, so that parent holds
 the row's own form and nothing above it, or the row sits at the bottom of the screen beside
 whatever comes first. While the row is held at the bottom it draws a line along its top, in
 browsers that support scroll-state container queries. When focus moves to a field the held row

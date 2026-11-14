@@ -827,6 +827,7 @@ export class TillTableOrderScreen extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
+        --wt-form-actions-surface: var(--wt-color-surface);
       }
 
       .action-panel h2 {

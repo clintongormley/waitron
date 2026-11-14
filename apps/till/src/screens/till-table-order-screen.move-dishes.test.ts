@@ -900,4 +900,26 @@ describe("on a phone with the order's foot held at the bottom", () => {
       await page.viewport(width, height);
     }
   });
+
+  it("paints the panel's row in the panel's colour on the till's page", async () => {
+    const { el, host } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+      products: [],
+      lines: [...BEERS, HAM],
+      orderId: "wo-2",
+      party,
+      bills: BILLS,
+      billBalance: null,
+      tables: [table("t4")],
+    });
+    // As till-app does for the page.
+    host.style.setProperty("--wt-form-actions-surface", "var(--wt-color-bg)");
+    host.style.background = "var(--wt-color-bg)";
+    await openMoveDishes(el);
+    const aside = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
+    const row = panel(el)!.querySelector("wt-form-actions")!;
+    expect(getComputedStyle(aside).backgroundColor).not.toBe(
+      getComputedStyle(host).backgroundColor,
+    );
+    expect(getComputedStyle(row).backgroundColor).toBe(getComputedStyle(aside).backgroundColor);
+  });
 });

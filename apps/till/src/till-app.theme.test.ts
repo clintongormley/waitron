@@ -105,6 +105,28 @@ it("a pick on the join screen does the same", async () => {
   });
 });
 
+it("paints the join screen's action row in the page's colour", async () => {
+  const { el, host } = await mountWidget<TillApp>("till-app", {
+    api: stubApi({ getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }) }),
+  });
+  // As index.html's body does.
+  host.style.background = "var(--wt-color-bg)";
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-enrol-screen")).not.toBeNull());
+  await flush(el);
+  const screen = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    "till-enrol-screen",
+  )!;
+  await screen.updateComplete;
+  const row = screen.shadowRoot!.querySelector("wt-form-actions")!;
+  const surface = document.createElement("div");
+  surface.style.background = "var(--wt-color-surface)";
+  host.append(surface);
+  expect(getComputedStyle(host).backgroundColor).not.toBe(
+    getComputedStyle(surface).backgroundColor,
+  );
+  expect(getComputedStyle(row).backgroundColor).toBe(getComputedStyle(host).backgroundColor);
+});
+
 const counterTill = {
   locale: "en",
   invoiceLocale: "es-ES",
