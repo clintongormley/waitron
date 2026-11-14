@@ -1,4 +1,4 @@
-import { and, count, eq, gte, inArray, isNull, lt, min, ne, not, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, ne, not, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { SQL } from "drizzle-orm";
 import {
@@ -10,6 +10,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
+import { kitchenJobsNotWaiting } from "./kitchen-print.js";
 
 /** A document job older than this that has not printed counts as in trouble. */
 export const JOBS_WAITING_MS = 2 * 60 * 1000;
@@ -36,8 +37,8 @@ export function printedOrResent(job: typeof printJobs | typeof reprintJob): SQL 
  * ticket is linked to, printed itself or through a resend ({@link printedOrResent}), which is how
  * `readPrintProblems` (apps/server/src/kitchen-print.ts) clears each link; for a receipt, another
  * receipt of the same sale on the same printer. A drawer pulse never counts. The printer's alert
- * and a table's printing problem both read this; the printer's alert also leaves out jobs a
- * succeeded Unpair ended (`printingAlertSource`, apps/server/src/alert-sources.ts).
+ * ({@link printersInTrouble}) and a table's printing problem both read this, and both then drop a
+ * kitchen ticket that leaves nothing waiting at its printer.
  * "After" is `rowid` (for a kitchen ticket, its link row's), not `created_at`, which two jobs can
  * share to the millisecond: SQLite gives a new row one more than the table's largest `rowid`.
  * `VACUUM` and `VACUUM INTO` kept that order in `print_jobs` and `kitchen_print_jobs`, with rows
@@ -106,17 +107,17 @@ export interface PrinterInTrouble {
 }
 
 /** Every active printer with a job in trouble at `now` ({@link printJobInTrouble}), leaving out jobs
- * an Unpair ended. */
+ * an Unpair ended and kitchen tickets that leave nothing waiting there ({@link kitchenJobsNotWaiting}),
+ * so a printer counts what the tables' printing problems count. */
 export async function printersInTrouble(tx: Transaction, now: Date): Promise<PrinterInTrouble[]> {
-  const rows = await tx
+  const jobs = await tx
     .select({
-      id: printers.id,
+      id: printJobs.id,
+      printerId: printers.id,
       printer: printers.name,
-      n: count(),
-      oldest: min(printJobs.createdAt),
-      stuckSince: sql<
-        string | null
-      >`min(case when ${noLaterPrintedDocument} then ${printJobs.createdAt} end)`,
+      resendOf: printJobs.resendOf,
+      createdAt: printJobs.createdAt,
+      stuck: sql<number>`${noLaterPrintedDocument}`,
     })
     .from(printers)
     .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
@@ -127,8 +128,29 @@ export async function printersInTrouble(tx: Transaction, now: Date): Promise<Pri
         // Ended on purpose by an Unpair, not a fault to fix.
         or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
       ),
-    )
-    .groupBy(printers.id, printers.name);
+    );
+  const notWaiting = await kitchenJobsNotWaiting(tx, jobs);
+  const byPrinter = new Map<
+    string,
+    { id: string; printer: string; n: number; oldest: string; stuckSince: string | null }
+  >();
+  for (const job of jobs) {
+    if (notWaiting.has(job.id)) continue;
+    const row = byPrinter.get(job.printerId) ?? {
+      id: job.printerId,
+      printer: job.printer,
+      n: 0,
+      oldest: job.createdAt,
+      stuckSince: null,
+    };
+    row.n += 1;
+    if (job.createdAt < row.oldest) row.oldest = job.createdAt;
+    if (job.stuck && (row.stuckSince === null || job.createdAt < row.stuckSince)) {
+      row.stuckSince = job.createdAt;
+    }
+    byPrinter.set(job.printerId, row);
+  }
+  const rows = [...byPrinter.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   if (rows.length === 0) return [];
 
   const kitchen = await tx
@@ -148,9 +170,8 @@ export async function printersInTrouble(tx: Transaction, now: Date): Promise<Pri
   return rows.map((r) => ({
     id: r.id,
     name: r.printer,
-    count: Number(r.n),
-    // A group only forms when a job matched, and `created_at` is notNull, so `oldest` is present.
-    oldest: r.oldest!,
+    count: r.n,
+    oldest: r.oldest,
     stuckSince: r.stuckSince,
     kitchen: kitchenIds.has(r.id),
   }));

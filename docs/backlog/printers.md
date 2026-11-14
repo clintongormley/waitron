@@ -265,17 +265,6 @@ A404 (2026-11-05) found that each plain report from the agent dropped the printe
 scan had set, which hid a paired printer between scans; that may also explain this entry (not
 checked on the box).
 
-## Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)
-
-- **Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)**, measured with
-  throwaway cases and not pinned: (1) when every dish a failed ticket carried for a station moves to
-  another bill, that bill's printed Reprint clears the table's problem, but the ticket's link to the
-  bill it was fired on is never covered, so the printer's alert keeps counting it. The table also
-  drops a problem once a Reprint would print nothing there (`readReprintTargets`), which the alert
-  does not. (2) A Printers-screen resend of a kitchen ticket carries no kitchen links, so when that
-  resend runs out of attempts, a later printed till Reprint does not clear it from the printer's
-  alert (the table clears).
-
 ## The virtual PDF printer
 
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
@@ -689,13 +678,8 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Bundle: The printer's stuck alert counts what the table counts
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
-- **Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)**, measured with
-  throwaway cases and not pinned.
-  [Detail](printers.md#still-counted-by-the-printers-printerjobs_waiting-alert-after-a167-975)
-- _2026-10-01 (3c-3): a dish moved to another station leaves its ticket at the old station's
-  printer counted by that printer's stuck alert in the same way, because nothing reprints there._
 - **A printer that prints some documents and fails others loses its till notice.** The notice goes
   once any later document on the printer prints (slice 10 decision 18), while the bell keeps
   naming the printer until the failed ticket is reprinted or resent. Left open by A798-B slice 10.

@@ -58,6 +58,7 @@ import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import type { TradingContext } from "./trading-context.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table
@@ -843,6 +844,63 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
     await setJob(jobId, exhausted);
 
     expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+  });
+});
+
+describe("the printer's alert counts what the table counts", () => {
+  it("drops a failed ticket whose dishes all moved to another bill once that bill's Reprint has printed", async () => {
+    const v = await setupVenue();
+    const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
+    await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
+    const lineNo = await lineNoOf(table4.tabId, "burger");
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, table4.tabId, [{ lineNo }], {
+        expectedPartyRevision: (await command(table4.partyId)).expectedPartyRevision,
+        operatorId: ALEX,
+      }),
+    );
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+
+    await reprintPrinted(v, checkId);
+    expect(await problemsOf(table4.partyId)).toEqual([]);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
+  });
+
+  it("drops a failed ticket from the old station's printer once its dish moves to another station", async () => {
+    const v = await setupVenue();
+    const table4 = await firedTable(v, "Table 4");
+    await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
+    const [item] = await db
+      .select({ lineId: ticketItems.workingOrderLineId })
+      .from(ticketItems)
+      .where(eq(ticketItems.stationId, v.kitchenStationId));
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+
+    await inTx((tx) =>
+      moveDishesToStation(
+        tx,
+        v.cfg,
+        table4.tabId,
+        { submissionId: randomUUID(), lineIds: [item!.lineId], stationId: v.barStationId },
+        { deviceId: v.cfg.origin.deviceId, personId: ALEX },
+      ),
+    );
+    expect(await problemsOf(table4.partyId)).toEqual([]);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
+  });
+
+  it("drops a Printers-screen resend of a failed ticket that also ran out once the till's Reprint has printed", async () => {
+    const v = await setupVenue();
+    const table4 = await firedTable(v, "Table 4");
+    const job = await jobFor(table4.tabId, v.kitchenPrinterId);
+    await setJob(job, exhausted);
+    const resend = await inTx((tx) => resendPrintJob(tx, job));
+    await setJob(resend.jobId, exhausted);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(2);
+
+    await reprintPrinted(v, table4.tabId);
+    expect(await problemsOf(table4.partyId)).toEqual([]);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
   });
 });
 

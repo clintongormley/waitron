@@ -2675,6 +2675,86 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
 }
 
 /**
+ * Of `jobs`, the kitchen tickets that leave nothing waiting at their own printer by
+ * {@link readPrintProblems}' rule: each link is covered by a later printed reprint there, or a Reprint
+ * of its bill would link nothing on that printer to its station. A Printers-screen resend carries no
+ * links, so it is judged by its original's. A job with no links is never in the answer.
+ */
+export async function kitchenJobsNotWaiting(
+  tx: Transaction,
+  jobs: readonly { id: string; printerId: string; resendOf: string | null }[],
+): Promise<Set<string>> {
+  const settled = new Set<string>();
+  if (jobs.length === 0) return settled;
+  const sourceOf = (job: { id: string; resendOf: string | null }) => job.resendOf ?? job.id;
+  const links = await tx
+    .select({
+      printJobId: kitchenPrintJobs.printJobId,
+      workingOrderId: kitchenPrintJobs.workingOrderId,
+      stationId: kitchenPrintJobs.stationId,
+      queued: sql<number>`${kitchenPrintJobs}.rowid`,
+    })
+    .from(kitchenPrintJobs)
+    .where(inArray(kitchenPrintJobs.printJobId, [...new Set(jobs.map(sourceOf))]));
+  if (links.length === 0) return settled;
+  const orderIds = [...new Set(links.map((row) => row.workingOrderId))];
+  const reprints = await tx
+    .select({
+      workingOrderId: kitchenPrintJobs.workingOrderId,
+      stationId: kitchenPrintJobs.stationId,
+      printerId: printJobs.printerId,
+      queued: sql<number>`${kitchenPrintJobs}.rowid`,
+    })
+    .from(kitchenPrintJobs)
+    .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobs.printJobId))
+    .where(
+      and(
+        inArray(kitchenPrintJobs.workingOrderId, orderIds),
+        eq(kitchenPrintJobs.reprint, true),
+        printedOrResent(printJobs),
+      ),
+    );
+  const lastReprinted = new Map<string, number>();
+  for (const row of reprints) {
+    const key = `${row.workingOrderId}|${row.stationId}|${row.printerId}`;
+    lastReprinted.set(key, Math.max(lastReprinted.get(key) ?? 0, row.queued));
+  }
+  const linksBySource = new Map<string, typeof links>();
+  for (const row of links) {
+    linksBySource.set(row.printJobId, [...(linksBySource.get(row.printJobId) ?? []), row]);
+  }
+  const uncleared = new Map<string, typeof links>();
+  for (const job of jobs) {
+    const own = linksBySource.get(sourceOf(job));
+    if (own === undefined) continue;
+    uncleared.set(
+      job.id,
+      own.filter(
+        (row) =>
+          (lastReprinted.get(`${row.workingOrderId}|${row.stationId}|${job.printerId}`) ?? 0) <=
+          row.queued,
+      ),
+    );
+  }
+  const waitingOrders = [
+    ...new Set([...uncleared.values()].flat().map((row) => row.workingOrderId)),
+  ];
+  const targets =
+    waitingOrders.length === 0
+      ? new Map<string, Set<string>>()
+      : await readReprintTargets(tx, waitingOrders);
+  for (const job of jobs) {
+    const rows = uncleared.get(job.id);
+    if (rows === undefined) continue;
+    const waiting = rows.some((row) =>
+      targets.get(row.workingOrderId)!.has(`${job.printerId}|${row.stationId}`),
+    );
+    if (!waiting) settled.add(job.id);
+  }
+  return settled;
+}
+
+/**
  * `orderId`'s link rows that no reprint for the same station, on the same printer, queued after
  * them and printed itself or through a resend ({@link printedOrResent}), has covered: the ones still
  * able to name a missing dish. Oldest first.
