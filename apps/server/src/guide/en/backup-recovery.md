@@ -178,10 +178,6 @@ onto this server."), or "I confirm the old server and surviving peers are stoppe
 losing changes after this snapshot." for a Waitron Cloud copy — and choose **Restore backup**,
 **Restore from my bucket** or **Restore this snapshot**.
 
-If the backup holds sales dated more than a minute after the box's time, the box stops taking
-payments once the recovery finishes, until its clock catches up or is confirmed: see
-[When payments stop because of the clock](box-status.md#clock-behind).
-
 A key that opens the backup does not bypass the history and clock checks. If the clock check
 refuses, resolve its cause and choose **Compare the clocks again**. If the clocks differ, after
 **Proceed** the page shows the server's time and this device's and asks which is correct: **The

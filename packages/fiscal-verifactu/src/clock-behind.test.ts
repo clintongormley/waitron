@@ -74,65 +74,9 @@ describe("clockBehindChain", () => {
     await expect(refuse(at(-60_000))).resolves.toBeUndefined();
   });
 
-  it("stops a reading a millisecond more than a minute earlier", async () => {
-    await sellAt(at(0, 60));
-    const reading = at(-60_001, 120);
-    const params = {
-      clockAt: reading.instant.toISOString(),
-      offsetMinutes: 120,
-      lastRecordAt: T.toISOString(),
-      lastRecordOffsetMinutes: 60,
-    };
-    expect(await behind(reading)).toEqual(params);
-    await expect(refuse(reading)).rejects.toMatchObject({ code: "clock.behind_chain", params });
-  });
-
   it("does not stop a reading after the latest record", async () => {
     await sellAt(at(0));
     expect(await behind(at(1_000))).toBeNull();
     await expect(refuse(at(1_000))).resolves.toBeUndefined();
-  });
-
-  it("judges against the latest record in any chain", async () => {
-    const other = await seedTenantWithSif(suite.db);
-    await sellAt(at(0), { nodeId: other.nodeId, seriesId: other.seriesId });
-    const reading = at(-86_400_000);
-    const params = {
-      clockAt: reading.instant.toISOString(),
-      offsetMinutes: 60,
-      lastRecordAt: T.toISOString(),
-      lastRecordOffsetMinutes: 60,
-    };
-    expect(await behind(reading)).toEqual(params);
-    await expect(refuse(reading)).rejects.toMatchObject({ code: "clock.behind_chain", params });
-  });
-
-  it("takes the latest instant, not the latest written", async () => {
-    await sellAt({ instant: new Date("2026-10-24T21:30:00.000Z"), offsetMinutes: 120 });
-    await sellAt({ instant: new Date("2026-10-25T09:00:00.000Z"), offsetMinutes: 60 });
-    await sellAt({ instant: new Date("2026-10-25T08:59:59.999Z"), offsetMinutes: 60 });
-    const answer = await behind({
-      instant: new Date("2026-10-24T00:00:00.000Z"),
-      offsetMinutes: 120,
-    });
-    expect(answer).toMatchObject({
-      lastRecordAt: "2026-10-25T09:00:00.000Z",
-      lastRecordOffsetMinutes: 60,
-    });
-  });
-
-  it("refuses a 2001 reading as clock.unusable first", async () => {
-    await sellAt(at(0));
-    const reading = { instant: new Date("2001-01-01T11:00:00.000Z"), offsetMinutes: 60 };
-    await expect(refuse(reading)).rejects.toMatchObject({
-      code: "clock.unusable",
-      params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 },
-    });
-    expect(await behind(reading)).toEqual({
-      clockAt: "2001-01-01T11:00:00.000Z",
-      offsetMinutes: 60,
-      lastRecordAt: T.toISOString(),
-      lastRecordOffsetMinutes: 60,
-    });
   });
 });

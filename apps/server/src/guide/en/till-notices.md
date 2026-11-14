@@ -34,46 +34,8 @@ space to start, the notice stays, also after a restart, until about 24 MB is fre
 **Sales can't be recorded: the server's clock is wrong · Tell a manager** is red. The server's clock is
 set too far in the past to record a sale for the tax agency. Until it is fixed, the server also
 refuses payments and refunds. An administrator can set the clock from their own phone or computer,
-on the [Box status page](box-status.md#clock-behind). Just after the server starts, the hint can read
+on the [Box status page](box-status.md#clock-own-device). Just after the server starts, the hint can read
 **Check the time** instead, as described below.
-
-**Payments stopped: the server's clock reads earlier than its last sale · Tell a manager** is red. The
-server's clock reads more than a minute earlier than the last sale it recorded. Until it reads no more
-than a minute earlier, or the server's clock is confirmed, the server refuses payments, refunds and
-anything else that would record a sale or settle money: payments in cash or by card, at the counter
-or at a table, refunds and retried refunds, recording a bill as left unpaid, cancelling an order that
-already has an invoice, and a change or a kitchen send that would finish paying a bill already paid
-in part. On the dashboard, managers cannot sort out stuck or held payments and refunds either.
-
-Other work carries on. For example, you can seat tables, take orders, send them to the kitchen,
-clock in and out, reprint a receipt and print an invoice that was already made. A refused payment
-leaves the order open.
-
-When a payment is refused, the till shows the server's time and the time of the last sale. If you
-already charged the customer on another card machine, do not charge again: record the payment once
-payments are back.
-
-Open **Card payments → Backup-machine comparison** to compare the same-account payments you
-recorded with SumUp’s charges. Check payments without a unique match in SumUp. Keep the operation
-number and machine details when you record each payment; this comparison sends no refunds.
-
-If the till says a card was charged but the payment is not recorded, do not charge again. This can
-happen when the clock changes while the reader is charging the card. What to do next depends on how the
-card was taken:
-
-- **At the counter, or a table's bill paid in one go from the presented bill:** once payments are
-  back, pay that order again the same way. The payment is recorded without charging the card a
-  second time.
-- **From the bill's Pay window:** the
-  payment stays waiting, and the server records it by itself once payments are back.
-
-With the internet the server usually puts its clock right by itself. Otherwise an
-administrator sets or confirms the clock on the [Box status page](box-status.md#clock-behind) with
-their own phone or computer, never from the server's own screen. Just after the server starts, any staff
-member can do it from a till with **Check the time**, as described below. If the server's clock is
-right and it was the last sale that carried a wrong time, two tills or handhelds that agree with
-the server also restart payments, unless the stop has lasted since the server started. They never set
-the clock.
 
 **Payments wait: the server is waiting for devices to connect and agree with its time (0 of 2 so
 far) · Check the time** is red. When the server starts without the internet's time, payments wait.
@@ -83,7 +45,7 @@ server's time if it is right, or use this device's time if that is. The sign-in 
 words, without **Check the time**: sign in to use it.
 
 **Check the time** at the end of a red clock line, instead of **Tell a manager**, means the server
-started with its clock in doubt and could not confirm it by itself. It ends any of the three red
+started with its clock in doubt and could not confirm it by itself. It ends either of the two red
 clock lines above. A refused payment then says to use **Check the time** at the top
 of the screen. Tap **Check the time** to open its dialog; when another notice shows first, open the
 list and tap it there. Anyone signed in on the till can use it.
@@ -92,9 +54,7 @@ The dialog shows the server's time and this till's time. Nobody types a time: th
 what is sent.
 
 - When the two times are more than a minute apart, it asks which is correct. Press **This device**
-  if the till's time is right: the server's clock is set to it and payments start again. If the
-  till's time is more than a minute earlier than the server's last sale, payments can stop: when the
-  red clock line then ends with **Check the time**, open it again and press **Yes**. Press **The
+  if the till's time is right: the server's clock is set to it and payments start again. Press **The
   server** if the server's time is right: when **Payments wait** is the only red clock line, the
   server keeps its time and payments start again; otherwise the dialog asks you to correct the
   till's time, as it does for **Both times are wrong**. Press **Both times are wrong** if neither

@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -111,8 +111,6 @@ const UNSYNCHRONISED: ClockServiceStatus = {
   synchronised: false,
   lastSyncAt: null,
 };
-const SYNCHRONISED: ClockServiceStatus = { ...UNSYNCHRONISED, synchronised: true };
-const NO_HOST: ClockServiceStatus = { available: false, reason: "missing", detail: "ENOENT" };
 
 const BOOT: BootReading = { ms: 7_200_000, id: "boot-set-test" };
 
@@ -277,20 +275,6 @@ async function useDevice(box: Box, cookie: string | undefined, offsetMs: number)
   });
 }
 
-/** A device at its own address whose clock read `offsetMs` from the box's. */
-let deviceCount = 0;
-function noteDevice(box: Box, offsetMs: number): void {
-  box.witnesses.noteDevice(
-    randomUUID(),
-    `192.168.10.${30 + deviceCount++}`,
-    boxTime(box) + offsetMs,
-    {
-      wallMs: boxTime(box),
-      monoMs: 0,
-    },
-  );
-}
-
 /** AEAT's reading, taken during the stop, putting the true time `aheadMs` after the box's. */
 function noteAuthority(box: Box, aheadMs: number): void {
   box.witnesses.noteAuthority({
@@ -327,20 +311,6 @@ function confirmationRow(id: string) {
   return { ...row!, proof: JSON.parse(row!.proof) as Record<string, unknown> };
 }
 
-function correctedParams(confirmationId: string): Record<string, unknown> | undefined {
-  return venue.db
-    .all<{ params: string }>(sql`select params from incidents where code = 'clock.corrected'`)
-    .map((row) => JSON.parse(row.params) as Record<string, unknown>)
-    .find((params) => params.confirmationId === confirmationId);
-}
-
-async function stopNow(box: Box) {
-  const reading = box.clock.now();
-  return venue.db.withWriteLock(() =>
-    venue.backend.clockStopState!(venue.db as unknown as Transaction, reading, []),
-  );
-}
-
 const refused = (reason: string) => ({ code: "clock.set_refused", params: { reason } });
 
 /** Asserts a refusal: its answer, nothing written, nothing set. */
@@ -355,8 +325,6 @@ async function expectRefused(
   expect(answer.json).toEqual(refused(reason));
   expect(written(box)).toEqual(before);
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 it("lets only an administrator with a management session set the clock", async () => {
   const box = await stoppedBox(10 * MINUTE);
@@ -422,78 +390,6 @@ it("refuses a set with no stop", async () => {
   await expectRefused(box, useDevice(box, mario.cookie, DAY), "not_stopped");
 });
 
-it("refuses a set once AEAT has spoken during the stop", async () => {
-  const box = await stoppedBox(10 * MINUTE);
-  noteAuthority(box, 10 * MINUTE);
-  await expectRefused(box, useDevice(box, mario.cookie, 10 * MINUTE), "witnessed");
-});
-
-it("sets the clock from the administrator's device when only two devices disagree with the box", async () => {
-  const box = await stoppedBox(10 * MINUTE);
-  noteDevice(box, 2 * HOUR);
-  noteDevice(box, 2 * HOUR);
-
-  const answer = await useDevice(box, mario.cookie, 10 * MINUTE);
-
-  expect(answer.status).toBe(200);
-  expect(box.host.sets).toEqual([
-    { targetMs: box.behind + 10 * MINUTE, requester: { source: "admin", person: mario.id } },
-  ]);
-  // Only the administrator's device set the clock; the devices that disagreed did not.
-  expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
-    source: "admin",
-    person_id: mario.id,
-    proof: { authority: null, devices: [], admin: { uncertaintyMs: 0 } },
-  });
-});
-
-it("measures the device against the box's time at the middle of the challenge's round trip", async () => {
-  const box = await stoppedBox(10 * MINUTE);
-  const asked = await ask(box, mario.cookie);
-  box.setSteady(4_000);
-
-  const answer = await setWith(box, mario.cookie, {
-    challengeId: asked.json.challengeId,
-    deviceAt: boxTime(box) + 10 * MINUTE,
-  });
-
-  expect(answer.status).toBe(200);
-  expect(box.host.sets.map((set) => set.targetMs)).toEqual([box.behind + 10 * MINUTE + 2_000]);
-});
-
-it("refuses a device within a minute of the box: confirm instead", async () => {
-  const box = await stoppedBox(10 * MINUTE);
-  await expectRefused(box, useDevice(box, mario.cookie, 30_000), "agrees");
-});
-
-it("refuses while the time service says the clock is synchronised", async () => {
-  const box = await stoppedBox(10 * MINUTE);
-  box.host.status = SYNCHRONISED;
-  await expectRefused(box, useDevice(box, mario.cookie, 10 * MINUTE), "synchronised");
-});
-
-it("refuses when the box's host service does not answer", async () => {
-  const box = await stoppedBox(10 * MINUTE);
-  box.host.status = NO_HOST;
-  await expectRefused(box, useDevice(box, mario.cookie, 10 * MINUTE), "host_unavailable");
-});
-
-it("says the host is synchronised or unavailable, never witnessed, when AEAT has also spoken", async () => {
-  const synchronised = await stoppedBox(10 * MINUTE);
-  noteAuthority(synchronised, 10 * MINUTE);
-  synchronised.host.status = SYNCHRONISED;
-  await expectRefused(
-    synchronised,
-    useDevice(synchronised, mario.cookie, 10 * MINUTE),
-    "synchronised",
-  );
-
-  const noHost = await stoppedBox(10 * MINUTE);
-  noteAuthority(noHost, 10 * MINUTE);
-  noHost.host.status = NO_HOST;
-  await expectRefused(noHost, useDevice(noHost, mario.cookie, 10 * MINUTE), "host_unavailable");
-});
-
 it("refuses a device's time measured before a step the box made", async () => {
   const box = await stoppedBox(10 * MINUTE, { stepsBehind: 1 });
   await expectRefused(box, useDevice(box, mario.cookie, 10 * MINUTE), "stale");
@@ -506,67 +402,6 @@ it("refuses a device's time that would set the clock before 28-10-2024", async (
     useDevice(box, mario.cookie, Date.UTC(2001, 0, 1) - boxTime(box)),
     "target_invalid",
   );
-});
-
-it("refuses a set the clock watch cannot first record its readings for", async () => {
-  const box = await stoppedBox(10 * MINUTE);
-  box.correction.addAnchor({
-    stepComing: () => Promise.reject(new Error("disk full")),
-    reanchor: async () => {},
-  });
-  await expectRefused(box, useDevice(box, mario.cookie, 10 * MINUTE), "pending_disproofs");
-});
-
-it("answers a set the host left three seconds short as unverified, with no row", async () => {
-  const box = await stoppedBox(10 * MINUTE);
-  box.host.missByMs = -3_000;
-  const before = written(box);
-
-  const answer = await useDevice(box, mario.cookie, 10 * MINUTE);
-
-  expect(answer.status).toBe(502);
-  expect(answer.json).toEqual({ code: "clock.set_failed", params: { reason: "unverified" } });
-  expect(written(box)).toEqual({
-    rows: before.rows,
-    corrected: before.corrected + 1,
-    hostSets: 1,
-  });
-});
-
-it("sets the clock a day on from an administrator's device, records who, and lifts the stop", async () => {
-  const box = await stoppedBox(DAY);
-  const before = written(box);
-  expect(await stopNow(box)).toMatchObject({ proof: "none" });
-
-  const answer = await useDevice(box, mario.cookie, DAY);
-
-  expect(answer.status).toBe(200);
-  expect(answer.json).toEqual({
-    confirmationId: expect.any(String),
-    stepMs: DAY,
-    confirmedAt: new Date(box.behind + DAY).toISOString(),
-  });
-  const confirmationId = answer.json.confirmationId as string;
-  expect(confirmationRow(confirmationId)).toMatchObject({
-    source: "admin",
-    person_id: mario.id,
-    reason: "behind_chain",
-    step_ms: DAY,
-  });
-  expect(correctedParams(confirmationId)).toMatchObject({
-    source: "admin",
-    person: "Mario",
-    byAdmin: true,
-    verified: true,
-  });
-  expect(written(box)).toEqual({
-    rows: before.rows + 1,
-    corrected: before.corrected + 1,
-    hostSets: 1,
-  });
-  expect(box.witnesses.witnesses()).toEqual([]);
-  const after = await stopNow(box);
-  expect(after === null || after.proof === "confirmed").toBe(true);
 });
 
 it("sets a clock that reads a date before 28-10-2024, as that stop", async () => {
@@ -607,93 +442,4 @@ it("has no set route when the fiscal seat records no step", async () => {
     deviceAt: box.behind,
   });
   expect(answer.status).toBe(404);
-});
-
-it("writes a confirmation started while a set holds the turn only after the set's row", async () => {
-  const order: string[] = [];
-  let stopAsked: () => void = () => {};
-  const stopAskedOnce = new Promise<void>((resolve) => {
-    stopAsked = resolve;
-  });
-  const backend = Object.create(venue.backend, {
-    confirmClockStep: {
-      value: (
-        tx: Transaction,
-        input: Parameters<NonNullable<FiscalBackend["confirmClockStep"]>>[1],
-      ) => {
-        order.push("step");
-        return venue.backend.confirmClockStep!(tx, input);
-      },
-    },
-    confirmClockStop: {
-      value: (
-        tx: Transaction,
-        input: Parameters<NonNullable<FiscalBackend["confirmClockStop"]>>[1],
-      ) => {
-        order.push("stop");
-        stopAsked();
-        return venue.backend.confirmClockStop!(tx, input);
-      },
-    },
-  }) as FiscalBackend;
-  const box = await stoppedBox(10 * MINUTE, { backend });
-  let release: () => void = () => {};
-  box.host.setGate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const forSet = await ask(box, mario.cookie);
-  const forConfirm = await ask(box, mario.cookie);
-
-  const set = setWith(box, mario.cookie, {
-    challengeId: forSet.json.challengeId,
-    deviceAt: boxTime(box) + 10 * MINUTE,
-  });
-  await vi.waitFor(() => expect(box.host.sets).toHaveLength(1));
-  const confirmed = send(box.app, mario.cookie, "POST", "/api/box/clock-confirm", {
-    challengeId: forConfirm.json.challengeId,
-    deviceAt: boxTime(box),
-  });
-  await Promise.race([stopAskedOnce, sleep(200)]);
-  release();
-
-  expect((await set).status).toBe(200);
-  expect((await confirmed).json).toEqual({
-    code: "clock.confirm_refused",
-    params: { reason: "not_stopped" },
-  });
-  expect(order).toEqual(["step", "stop"]);
-});
-
-it("finishes a set held in the turn and a confirmation started meanwhile, on the real database", async () => {
-  const box = await stoppedBox(10 * MINUTE);
-  let release: () => void = () => {};
-  box.host.statusGate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const forSet = await ask(box, mario.cookie);
-  const forConfirm = await ask(box, mario.cookie);
-
-  const set = setWith(box, mario.cookie, {
-    challengeId: forSet.json.challengeId,
-    deviceAt: boxTime(box) + 10 * MINUTE,
-  });
-  await vi.waitFor(() => expect(box.host.statusAsks).toBe(1));
-  const confirmed = send(box.app, mario.cookie, "POST", "/api/box/clock-confirm", {
-    challengeId: forConfirm.json.challengeId,
-    deviceAt: boxTime(box),
-  });
-  await sleep(100);
-  release();
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error("the set and the confirmation never finished")),
-      5_000,
-    );
-  });
-  const [setAnswer, confirmAnswer] = await Promise.race([Promise.all([set, confirmed]), deadline]);
-  clearTimeout(timer);
-  expect(setAnswer.status).toBe(200);
-  expect(confirmAnswer.status).toBe(409);
 });

@@ -869,14 +869,14 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
   });
 
   it.each([
-    ["en", "/help/en/box-status#clock-behind"],
-    ["es", "/help/es/box-status#clock-behind"],
+    ["en", "/help/en/box-status#clock-own-device"],
+    ["es", "/help/es/box-status#clock-own-device"],
   ])("the check's help tooltip links to the guide's clock section in %s", async (locale, href) => {
     setLocale(locale);
     const el = await mountClock(clockApi());
     const tooltip = q(el, "[data-test=row-clock] .clock-check-action wt-help-tooltip")!;
     expect(tooltip.getAttribute("guide-href")).toBe(href);
-    expect(tooltip.getAttribute("guide-href")).toBe(guideHref("box-status.clock-behind"));
+    expect(tooltip.getAttribute("guide-href")).toBe(guideHref("box-status.clock-own-device"));
     expect(text(tooltip)).toBe(t("box_status.clock_check_help"));
   });
 

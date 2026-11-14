@@ -598,3 +598,91 @@ describe("settled tender recovery while the start's time is unconfirmed", () => 
     expect(row!.state).toBe("completed");
   });
 });
+describe("refund recovery under a clock before 28-10-2024", () => {
+  // The fixture's offset is 0, so these are the last instant of 27-10-2024 and the first of the
+  // 28th in the reading's own offset.
+  const DAY_BEFORE_FIRST_ISSUE = "2024-10-27T23:59:59.999Z";
+  const FIRST_ISSUE_DAY = "2024-10-28T00:00:00.000Z";
+  const completedMatch = () =>
+    ({
+      kind: "match",
+      providerRefundRef: randomUUID(),
+      outcome: "completed",
+      providerStatus: "completed",
+    }) as const;
+  async function pendingBillRefund() {
+    const t = await billRefund();
+    const send = vi
+      .spyOn(v.card, "sendRefund")
+      .mockResolvedValue({ kind: "uncertain", reason: "network" });
+    await refundBillPayment(v.deps, v.cfg, t.id, t.paymentId, t.request, v.operator, "reader-card");
+    send.mockRestore();
+    const [refund] = await v.db
+      .select()
+      .from(billPaymentRefunds)
+      .where(eq(billPaymentRefunds.billPaymentId, t.paymentId));
+    expect(refund).toMatchObject({ state: "pending", sendCount: 1 });
+    return refund!;
+  }
+  const billRow = async (id: string) =>
+    (await v.db.select().from(billPaymentRefunds).where(eq(billPaymentRefunds.id, id)))[0];
+  const tenderRow = async (id: string) =>
+    (await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id)))[0];
+
+  it("the tender-refund loop asks the provider nothing and leaves the refund as it was, then settles it on 28-10-2024", async () => {
+    const t = await retained(true);
+    const lookup = vi.spyOn(v.card, "lookupRefund").mockResolvedValue(completedMatch());
+    const send = vi.spyOn(v.card, "sendRefund");
+    v.set(DAY_BEFORE_FIRST_ISSUE);
+
+    await recoverTenderRefunds(v.deps);
+
+    expect(await tenderRow(t.refund.id)).toEqual(t.refund);
+    expect(lookup).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+
+    v.set(FIRST_ISSUE_DAY);
+    await recoverTenderRefunds(v.deps);
+
+    expect(await tenderRow(t.refund.id)).toMatchObject({ state: "completed" });
+  });
+
+  it("the bill-refund half of the pass asks the provider nothing and leaves the refund as it was, then settles it on 28-10-2024", async () => {
+    const refund = await pendingBillRefund();
+    const lookup = vi.spyOn(v.card, "lookupRefund").mockResolvedValue(completedMatch());
+    const send = vi.spyOn(v.card, "sendRefund");
+    v.set(DAY_BEFORE_FIRST_ISSUE);
+
+    const held = await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
+
+    expect(held.refundsCompleted).toBe(0);
+    expect(await billRow(refund.id)).toEqual(refund);
+    expect(lookup).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+
+    v.set(FIRST_ISSUE_DAY);
+    await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
+
+    expect(await billRow(refund.id)).toMatchObject({ state: "completed" });
+  });
+
+  it.each([
+    ["tender", async () => (await retained(true)).refund.id, tenderRow],
+    ["bill", async () => (await pendingBillRefund()).id, billRow],
+  ] as const)(
+    "a %s refund stays pending when the clock reads 27-10-2024 by the time the provider answers",
+    async (kind, pending, rowOf) => {
+      const id = await pending();
+      vi.spyOn(v.card, "lookupRefund").mockImplementation(async () => {
+        v.set(DAY_BEFORE_FIRST_ISSUE);
+        return completedMatch();
+      });
+
+      if (kind === "tender") await recoverTenderRefunds(v.deps);
+      else await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
+
+      expect(v.card.lookupRefund).toHaveBeenCalled();
+      expect(await rowOf(id)).toMatchObject({ state: "pending", completedAt: null });
+    },
+  );
+});

@@ -723,7 +723,7 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
     ["new", false, false],
     ["resend", true, false],
     ["generic", true, false],
-    ["clock stop", true, false],
+    ["clock refusal", true, false],
   ] as const)(
     "temporary balance explanation: %s, documented %s",
     async (entry, documented, notice) => {
@@ -760,15 +760,15 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
       });
       const sent = venue.card.sendRefund.bind(venue.card);
       const sendSpy =
-        entry !== "clock stop"
+        entry !== "clock refusal"
           ? null
           : vi.spyOn(venue.card, "sendRefund").mockImplementation(async (request) => {
               const answer = await sent(request);
-              vi.spyOn(venue.backend, "clockBehindLatestRecord").mockResolvedValue({
-                clockAt: "2026-11-08T10:00:00.000Z",
-                offsetMinutes: 0,
-                lastRecordAt: "2026-11-08T10:02:00.000Z",
-                lastRecordOffsetMinutes: 0,
+              vi.spyOn(venue.backend, "assertRecordableAt").mockImplementation((reading) => {
+                throw new AppError("clock.unusable", {
+                  clockAt: reading.instant.toISOString(),
+                  offsetMinutes: reading.offsetMinutes,
+                });
               });
               return answer;
             });
@@ -778,12 +778,12 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
       } finally {
         if (sendSpy !== null) {
           sendSpy.mockRestore();
-          vi.mocked(venue.backend.clockBehindLatestRecord).mockRestore();
+          vi.mocked(venue.backend.assertRecordableAt).mockRestore();
         }
       }
       const view = asked.answer.json.refund as Record<string, unknown>;
       expect(view.state).toBe(
-        documented && entry !== "resend" && entry !== "clock stop" ? "failed" : "pending",
+        documented && entry !== "resend" && entry !== "clock refusal" ? "failed" : "pending",
       );
       expect(view.refusalReason).toBe(notice ? "provider_balance_unavailable" : undefined);
       expect(await onlyRefundOf(card.id)).toMatchObject({
@@ -1739,13 +1739,11 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
       });
     await pass(20 * 60_000);
     const lookups = venue.card.lookupCalls.filter((query) => query.refundId === refundId).length;
-    const original = venue.backend.clockBehindLatestRecord.bind(venue.backend);
-    const closing = vi
-      .spyOn(venue.backend, "clockBehindLatestRecord")
-      .mockImplementation((tx, reading) => {
-        admission.requireRestart();
-        return original(tx, reading);
-      });
+    const original = venue.backend.assertRecordableAt.bind(venue.backend);
+    const closing = vi.spyOn(venue.backend, "assertRecordableAt").mockImplementation((reading) => {
+      admission.requireRestart();
+      original(reading);
+    });
     let refused: Awaited<ReturnType<typeof pass>>;
     try {
       refused = await pass(21 * 60_000);

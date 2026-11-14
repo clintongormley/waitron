@@ -146,8 +146,6 @@ describe("listDeferredPaymentInvoices", () => {
     ]);
   });
 
-  // The file's last sale: its clock is ahead of every other case's, so no later case may file one.
-  // A fixed year would fall behind the chain once real time passes it (`clock.behind_chain`).
   it("dates the invoice by the venue's local day, not the UTC one", async () => {
     const year = new Date(Math.max(Date.now(), t.latestRecordMs())).getUTCFullYear() + 1;
     const clock = t.venue.clock;

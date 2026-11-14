@@ -45,21 +45,6 @@ describe("clockBehindSource", () => {
     expect(clockBehindSource.readOutsideTransaction).toBeUndefined();
   });
 
-  it("raises one error while the clock reads more than a minute before the latest record", async () => {
-    await sellAt(LAST);
-    const now = new Date("2026-10-25T08:58:59.999Z");
-    expect(await read(now)).toEqual([
-      {
-        key: "clock.behind_chain",
-        code: "clock.behind_chain",
-        severity: "error",
-        since: null,
-        screen: "box-status",
-        params: { clockAt: now.toISOString(), lastRecordAt: LAST.toISOString() },
-      },
-    ]);
-  });
-
   it("raises nothing a minute before the latest record", async () => {
     await sellAt(LAST);
     expect(await read(new Date("2026-10-25T08:59:00.000Z"))).toEqual([]);
@@ -100,21 +85,6 @@ describe("clockBehindSource", () => {
 
   it("raises nothing at the start of 28 October 2024 with no records", async () => {
     expect(await read(new Date("2024-10-28T00:00:00.000Z"))).toEqual([]);
-  });
-
-  it("raises clock.behind_chain, not clock.unusable, at the start of 28 October 2024 with a record", async () => {
-    await sellAt(LAST);
-    const now = new Date("2024-10-28T00:00:00.000Z");
-    expect(await read(now)).toEqual([
-      {
-        key: "clock.behind_chain",
-        code: "clock.behind_chain",
-        severity: "error",
-        since: null,
-        screen: "box-status",
-        params: { clockAt: now.toISOString(), lastRecordAt: LAST.toISOString() },
-      },
-    ]);
   });
 
   it("judges the date at offset 0, so 23:30 UTC on 27 October 2024 is still before", async () => {

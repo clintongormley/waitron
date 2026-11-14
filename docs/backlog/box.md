@@ -1408,34 +1408,6 @@ once released. Belongs with A1016.
   when the pack's bucket or archive page failed, nor for backups made under an older key (the guide
   covers older keys further down). Narrow the sentence in English and Spanish.
 
-## Bundle: Wrongly dated sales list and the adviser's file
-
-7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Some sales dated wrongly are in no list**: those of a clock put right from little more than a
-  minute ahead, and those of a stop the box "cannot tell" about, which has no list and no download.
-  Left open by A1088 (design §4.9 f).
-  [Detail](box.md#some-sales-dated-wrongly-are-in-no-list)
-- **The real time of a sale dated wrongly is unknown**: the adviser's file says "Unknown" on every
-  row and gives a time each sale was made before instead (A1088 decision 8). Slice 9c's clock
-  checks are the first place a real time could be worked out. Left open by A1088.
-- **Box status's "cannot tell" sentence, and the note dialog's summary of it, write the stop's start
-  in the browser's time zone**, while the section's tables and the adviser's file write each sale's
-  time at its stored offset: the sentence is the shared `alertMessage` wording. Left open by A1088.
-- **An open list of wrongly dated sales whose list read failed shows no Download** until a later
-  read of the lists answers. A list the box restarted during still shows its sentence and Mark
-  handled; a plain one shows neither. Left open by A1088.
-- **The Box status page's Handled lists fold reads every handled list when opened, with no
-  limit** (A1088 decision 1); page it if a venue gathers many. Left open by A1088.
-- **The adviser's file is comma-separated in both languages, and a spreadsheet set to expect
-  semicolons may open the Spanish file in one column.** Excel in Spain is untested; whether `es`
-  should use `;` is the owner's decision. Left open by A1088.
-  [Detail](box.md#the-advisers-file-is-comma-separated-in-both-languages)
-- **The Box status page reads the wrongly-dated-sales alerts' params through a cast**, keeping its
-  own copy of a shape the Veri\*Factu module writes; a fiscal seat method answering the typed list
-  would remove it. Left open by A798-B slice 9 (#2025).
-  [Detail](box.md#the-box-status-page-reads-the-wrongly-dated-sales-alerts-params-through-a-cast)
-
 ## Bundle: Bucket copy: silent stops and a real outage
 
 5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -1524,6 +1496,7 @@ The owner approved [#2524](https://github.com/clintongormley/waitron/pull/2524) 
 
 - **What the box does when its clock is wrong (owner, 2026-11-06, for slice 9c and A1407).** Setting the clock from an accepted source counts as confirming it, so trading carries on, and records dated in the future beyond the margin are flagged for correction. AEAT refusing the latest record as too far in the future stops trading until the clock is reset. Any accepted source showing the clock outside the margin stops trading until it is corrected, and AEAT disagreeing during normal trading is such a source. A start with no internet whose latest record is in the future beyond the margin needs the time confirmed first. Being unable to reach AEAT never stops trading. The margin is one minute. A box whose time service says it is in sync raises an alert rather than stopping when AEAT disagrees.
   - **Superseded in part (owner, 2026-11-10, A1420).** "Being unable to reach AEAT never stops trading" is replaced by: AEAT is not asked at a start; on a box that files records, a start whose time service is not synchronised takes no payment until two devices agree with its clock or a person confirms or corrects its date and time. "A start with no internet whose latest record is in the future beyond the margin needs the time confirmed first" is replaced by: every start with no internet needs its time confirmed first, wherever its latest record is. "A box whose time service says it is in sync raises an alert rather than stopping when AEAT disagrees" (never built) is replaced by: a box whose time service is synchronised is trusted; its start is confirmed without asking AEAT, and AEAT refusing a sale as dated in the future does not stop it (owner, 2026-11-10: "NTP is the answer for now"; A1420 D5, D9); a restore still compares AEAT's time until A1420 PR 3. "…and records dated in the future beyond the margin are flagged for correction" is replaced by: invoices AEAT refuses as dated in the future are to be corrected (A1407); a wrong date AEAT accepts or never sees is not (owner, 2026-11-10). Built by A1420 PR 1a: the start's check and its wait ([detail](../developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades)).
+  - **Superseded in part (owner, 2026-11-10, A1420 PR 5).** "Any accepted source showing the clock outside the margin stops trading until it is corrected, and AEAT disagreeing during normal trading is such a source" is replaced by: nothing stops trading for the clock once a start's time is confirmed, except a clock reading before 28 October 2024; a synchronised time service may move it any distance (owner, 2026-11-10: "if we successfully sync the clock using ntp then we continue to sell, it doesn't matter how much the clock changes").
 - **A restart may forget that AEAT disagreed with the clock (owner, 2026-11-06).** The disagreement is kept in memory only, and this stays. It matters only if the box's own correction fails, the server restarts, AEAT is out of reach and a device matches the wrong clock, and misdated sales have a remedy (A1407).
 **A798-B clock, disk and printer decisions.**
 
@@ -1542,7 +1515,7 @@ The owner's four answers: no reserved
 **Full-disk write stop (owner, 2026-10-21, A798-B slice 3, #1950):** refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21.
 
 - **A box that already holds Waitron but has its TPM or Secure Boot switched off still starts (owner, 2026-11-03).** The stick starts the installed Waitron after 15 seconds so the venue keeps selling; the installer's message and the status page carry the setting that is off; slice 3's host service raises the alert; a reinstall on that box stays refused. Built as the installer's decision D2 in B3 PR 3 (`scripts/box/installer-policy.mjs`, #2426) and kept as built. The 15 seconds, two minutes, 60 seconds and one minute stay the spec's proposals; the owner was not asked about them. ([B3 PR 4's plan](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md), D13.)
-- **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05, open to the owner).** They have landed, the clock-behind stop and the clock confirmation use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
+- **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05, open to the owner).** They have landed, the start's time check and the clock set use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
 - **The box's network and screen routes send at most two requests to the host service at once, and refuse a third with `box_host.busy` rather than queue it (B3 PR 9's D7; the lane's decision of 2026-11-06, open to the owner).** The host's socket serves four connections (`deploy/box/waitron-box.socket`, `MaxConnections=4`) and how many the clock side holds at once is not measured (PR 9's plan, finding 11). Two rather than one, so a page's read is not refused while a scan runs; refused rather than queued, so no request waits behind a change, which can hold its place for up to 20 seconds. Two places do not hold the total to four; what is still to measure on Linux is in [PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md), D7.
 - **The server-wide page check looks only at whether a change carries the dashboard's sign-in cookie, not at whether its session is live (A1371, 2026-11-06).** Checking the session would cost a database read on every change, and nothing but a browser sends that cookie: outside tests, its name appears only in `packages/server-kit/src/management-cookie.ts` and that package's index (a search of `apps`, `packages` and `scripts`, 2026-11-06), and `git grep` for it in Waitron Cloud's repository at `6eeb0d953` printed nothing. A change without the cookie passes, so a till on another server, Stripe's webhook and the print agent keep working. [Detail](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)
 - **The page check leaves `GET`, `HEAD` and `OPTIONS` alone (A1371, 2026-11-06).** Another page cannot read their answers, and a CORS preflight must reach the CORS middleware. Two kinds of `GET` still change something when another page sends them: every signed-in `GET` that is not a passive read moves the session's last-seen time (`packages/identity/src/management-session.ts:86-91`), so a page on another port left open in the same browser can keep a session from going idle, though it changes no venue data; and the Google sign-in's return, `GET /management-api/google/callback`, sets a session cookie, as a sign-in arriving from Google must, guarded by its own state cookie. No route takes a WebSocket. [Detail](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)
@@ -1702,8 +1675,6 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   [Detail](box.md#a917--the-owner-chooses-the-servers-local-name-instead-of-waitronlocal)
 - **A device's or an administrator's time is self-reported.**
   [Detail](box.md#a-devices-or-an-administrators-time-is-self-reported)
-- **The box sends AEAT's QR host a HEAD once a minute by its steady clock (on every look when that clock cannot be read or went backwards) while the Veri\*Factu module reports the box's clock behind the latest sale — during a stop, and under a confirmation that lifted it — or while a clock check whose stop has ended waits for its witness**
-  [Detail](box.md#the-box-sends-aeats-qr-host-a-head-once-a-minute-by-its-steady-clock-on-every-look-when-that-clock-cannot-be-read-or-went-backwards-while-the-verifactu-module-reports-the-boxs-clock-behind-the-latest-sale--during-a-stop-and-under-a-confirmation-that-lifted-it--or-while-a-clock-check-whose-stop-has-ended-waits-for-its-witness)
 - **AEAT's time outranks the devices.**
   [Detail](box.md#aeats-time-outranks-the-devices)
 - **A malformed confirmation covers nothing.** A row of the append-only `clock_confirmations`
@@ -2050,35 +2021,6 @@ also needs its separately versioned archive contract. Full-history work under th
 resource limits and Cloud's actual isolation, deletion and admission remain joint release checks.
 See [the plan's release gates](../superpowers/plans/2026-10-20-a850-backup-verification.md#exact-remaining-owner-and-release-gates).
 
-## The Box status page reads the wrongly-dated-sales alerts' params through a cast
-
-`readMisdatedOpen`, `readMisdatedHandled` and `readMisdatedEpisode` (`apps/server/src/box-health.ts`)
-find the `clock.records_misdated` alerts (open, handled, and one by id for the download) by their
-code name and read each alert's params through one `as unknown as` cast (`misdatedParams`), so the
-server keeps its own copy of a shape the Veri\*Factu module writes. The compiler does not
-check the two agree; only the field checks in `apps/server/src/clock-confirm.route.test.ts`, where
-the real module writes the alert, do. A fiscal seat method (for example `openMisdated(tx)`)
-answering the typed lists would remove the copy. Naming a code as a string in `apps/server` is house
-practice (`apps/server/src/payments-api.ts`'s status map), so the code name alone is not the
-problem.
-
-## Some sales dated wrongly are in no list
-
-Two kinds of sale dated wrongly reach no list on the Box status page and no file for the adviser
-(design §4.9 f):
-
-- **A clock put right from little more than a minute ahead.** A clock that ran ahead while a clock
-  check waited is caught when putting it right brings the payment stop back, but only when the box's
-  15-second look sees the stop return, which it can miss when the clock was little more than a
-  minute ahead; the sales that clock dated are then in no list.
-- **A stop the box "cannot tell" about.** When the stop ended by itself but nothing confirmed the
-  box's clock, the alert asks the manager to go through every sale since the stop began,
-  but the box lists none of them, so the page shows no table and offers no download
-  (`apps/dashboard/src/screens/box-status-screen.ts`, the actions row; the download route answers
-  `alert.not_found` for it, `apps/server/src/box-health-api.ts`).
-
-Left open by A1088.
-
 ## The adviser's file is comma-separated in both languages
 
 The file for the adviser (`apps/server/src/misdated-sales-csv.ts`) joins its cells with `,` whatever
@@ -2117,12 +2059,6 @@ Whatever their browser sends counts:
   signed in on an enrolled till during such a stop can set any time from 28-10-2024 to 2100, with
   that person named ([Q61](../compliance/asesor-questions.md#q61-a-system-that-corrects-its-own-clock-from-a-tills-clock-when-it-has-no-internet-added-2026-11-01)). Left open by A798-B slice 9 (#2025).
 
-## The box sends AEAT's QR host a HEAD once a minute by its steady clock (on every look when that clock cannot be read or went backwards) while the Veri\*Factu module reports the box's clock behind the latest sale — during a stop, and under a confirmation that lifted it — or while a clock check whose stop has ended waits for its witness
-
-This applies on a primary that files records. The module reports no stop while the clock reads
-a date before 28-10-2024, so no HEAD is sent then.
-  Left open by A798-B slice 9 (#2025).
-
 ## The start on a full disk deletes backups by stamp alone after a clock step.
 
 Making room before a backup run, and the free-space watch, offer last the backups a recent step of
@@ -2138,7 +2074,7 @@ A798-B slice 9b, Task 14a.
 `closePayPeriod` (`packages/workforce/src/pay-period-close.ts`) refuses `pay_period.not_due` until
 the clock passes the period's end. A clock wrongly days ahead could close a period that has not
 ended, and the closure is append-only. No production code calls it yet; the caller that is added
-needs a clock check (the fiscal clock-behind stop's shape, or a confirmed reading). Left open by
+needs a clock check. Left open by
 A798-B slice 9b, Task 15 (its audit table, `docs/developers/conventions-data.md`).
 
 ## A1268 part 2: pair a person's entries by write order after a backward clock step.

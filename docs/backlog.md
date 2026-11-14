@@ -1665,16 +1665,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Bucket copy: silent stops and a real outage** (bundle of 5, 2 important, size S). [Detail](backlog/box.md#bundle-bucket-copy-silent-stops-and-a-real-outage)
 
-- **A second confirmation naming the same record while the first's alerts are open records no
-  second alert.** The bell keys an open alert by the named record's sale, so the second folds into
-  the first; `clock_confirmations` and the Box status page keep both. Left open by A798-B slice 9
-  (#2025).
-
-- **After a 'disproved' alert, the confirmation still covers and later sales are not added to the
-  alert.** Its `{to}` is the latest sale when the disproof was seen; sales made afterwards on the
-  same clock appear in no alert. Whether a disproof should stop payments again is for the owner
-  (slice 9 decision 14). Left open by A798-B slice 9 (#2025).
-
 - **Qualify clock confirmation through remote access** (bundle of 2, 1 important, size M). [Detail](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
 
 - **A1407. A wrong date needs a corrective invoice, and Waitron cannot yet issue the right one.** Research found the remedy is R4 on a full invoice and R5 on a simplified one, and `recordCorrection` handles only F2 to R5. `computeVatReturn` sorts by issue date, so a misdated sale lands in the wrong period in that report. Three identical refusals hold the rest of a chain, so a clock a day ahead could stop later filings; a record refused for a future date should get its corrective at once, naming the refused invoice, which AEAT's developer FAQ §17 says resolves it (case 2.a) and AEAT's test service accepted for an R1 (verifactu run 37286368370). Clocks running behind are not listed for the owner. The invoices to correct are those AEAT refuses as dated in the future (`1112`), already stored on the filing record; a wrong date AEAT accepts is not corrected (owner, 2026-11-10; A1420 D8). An enabled remedy takes the start gate first: today the remedies write past it, and production enables none (A1420 R7). AEAT's `TimestampPresentacion` is read but not stored: kept with each record, it would prove the real time of most sales, and that part needs a column, so it waits for the A1308 table hold to lift. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
@@ -1683,7 +1673,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   waits on [Q60](compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24);
   A1088 built only the list, the handled lists, the note and the download. Left open by A1088.
 
-- **Wrongly dated sales list and the adviser's file** (bundle of 7, 2 important, size M). [Detail](backlog/box.md#bundle-wrongly-dated-sales-list-and-the-advisers-file)
+- **The adviser's file is comma-separated in both languages, and a spreadsheet set to expect
+  semicolons may open the Spanish file in one column.**
+  [Detail](backlog/box.md#the-advisers-file-is-comma-separated-in-both-languages)
 
 - **The bell's printer check reads every print job.**
   [Detail](backlog/box.md#the-bells-printer-check-reads-every-print-job)

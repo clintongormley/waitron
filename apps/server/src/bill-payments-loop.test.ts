@@ -1049,7 +1049,7 @@ describe("a pass while the start's time is unconfirmed", () => {
   });
 
   it("leaves a refund pending when the start's time is unconfirmed as its send or outcome is dated", async () => {
-    const backend = { clockBehindLatestRecord: vi.fn(async () => null) };
+    const backend = { assertRecordableAt: vi.fn() };
     const stops = (unconfirmed: boolean) =>
       clockStopsRefund(
         {} as Transaction,
@@ -1059,7 +1059,7 @@ describe("a pass while the start's time is unconfirmed", () => {
       );
 
     await expect(stops(true)).resolves.toBe(true);
-    expect(backend.clockBehindLatestRecord).not.toHaveBeenCalled();
+    expect(backend.assertRecordableAt).not.toHaveBeenCalled();
     await expect(stops(false)).resolves.toBe(false);
   });
 

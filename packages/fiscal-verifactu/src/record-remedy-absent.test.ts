@@ -400,15 +400,6 @@ it("refuses a second resolution and rolls its candidate append back", async () =
   expect(await snapshot()).toEqual(before);
 });
 
-it("refuses a clock more than a minute behind the chain", async () => {
-  instant = new Date("2026-07-20T17:18:00Z");
-  const before = await snapshot();
-  const response = await send();
-  expect(response.status).toBe(409);
-  expect(await response.json()).toMatchObject({ error: { code: "clock.behind_chain" } });
-  expect(await snapshot()).toEqual(before);
-});
-
 it("requires the case to belong to the selected record even when totals match", async () => {
   const otherSale = await seedSale(suite.db, node, 2);
   const other = await withTransaction(suite.db, async (tx) => {

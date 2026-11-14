@@ -21,9 +21,7 @@ import {
 } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import {
-  MINUTE,
   RECIPIENT,
-  clockAt,
   refusal,
   deferredCloseVenue,
   type DeferredCloseKit,
@@ -295,15 +293,6 @@ describe("closeBillDeferredTx, replay", () => {
 
     expect(await t.close(request, stopped)).toEqual(result);
     expect((await refusal(t.close(fresh, stopped))).code).toBe("storage.disk_full");
-  });
-
-  it("answers an exact replay while the clock is behind the latest record, and refuses new work", async () => {
-    const { request, result } = await closedCounterBill();
-    const fresh = await t.requestFor(await t.counterOrder("placed"), "18.00", null);
-    const behind = t.depsWith({ clock: clockAt(t.latestRecordMs() - 10 * MINUTE) });
-
-    expect(await t.close(request, behind)).toEqual(result);
-    expect((await refusal(t.close(fresh, behind))).code).toBe("clock.behind_chain");
   });
 
   // Freezes today's business day, so it runs last.

@@ -21,7 +21,6 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { httpsVia } from "./testing/boot-harness.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { insertFiscalRegistro, insertFiscalSale } from "./testing/fiscal-fixtures.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -31,7 +30,7 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
-const calls = vi.hoisted(() => ({ authority: 0, sweep: 0, spawn: 0, drain: 0, runner: 0 }));
+const calls = vi.hoisted(() => ({ clockLooks: 0, sweep: 0, spawn: 0, drain: 0, runner: 0 }));
 
 vi.mock("./job-runner.js", async (original) => {
   const actual = await original<typeof import("./job-runner.js")>();
@@ -62,8 +61,8 @@ vi.mock("@waitron/module", async (importOriginal) => {
   };
 });
 
-// AEAT's clock reading is replaced by a stand-in that answers nothing, so no case reaches AEAT;
-// the watch checks often enough to ask within the quiet period.
+// Counts the clock watch's reads of the time service; the watch checks often enough to read it
+// within the quiet period.
 vi.mock("./clock-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./clock-watch.js")>();
   return {
@@ -72,21 +71,19 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
       actual.clockWatchJob(watch, 200),
     createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) => {
       const [deps] = args;
+      const start = deps.start;
       return actual.createClockWatch({
         ...deps,
-        // A proxy, not a spread: the backend is a class instance whose methods a spread drops.
-        backend: new Proxy(deps.backend, {
-          get: (target, key) => {
-            if (key === "readAuthorityTime") {
-              return () => {
-                calls.authority += 1;
-                return Promise.resolve(null);
-              };
-            }
-            const value: unknown = Reflect.get(target, key);
-            return typeof value === "function" ? value.bind(target) : value;
-          },
-        }),
+        start:
+          start === undefined
+            ? undefined
+            : {
+                ...start,
+                clockStatus: () => {
+                  calls.clockLooks += 1;
+                  return start.clockStatus();
+                },
+              },
       });
     },
   };
@@ -121,7 +118,7 @@ const KEY_ENV = {
 interface Observed {
   hashBefore: string;
   hashAfter: string;
-  authority: number;
+  clockLooks: number;
   sweep: number;
   spawn: number;
   drain: number;
@@ -151,10 +148,10 @@ async function venueHash(suite: VenueDb): Promise<string> {
 
 /**
  * Registers, in the calling `describe`, one start of a folder that a full start would stream,
- * sweep, run the fiscal drain on and ask AEAT's time for: it holds a bucket copy's settings and a membership, and a fiscal
- * record a day ahead of the clock, which puts the box in a clock stop. `restricted` adds the
- * handover restriction row. The start runs for `QUIET_MS`, then venue.db's hash and the stand-ins'
- * counts are read for the describe's cases.
+ * sweep, run the fiscal drain on and run the clock watch for: it holds a bucket copy's settings
+ * and a membership, and no host answers, so the start waits for its time and the watch reads the
+ * time service at each look. `restricted` adds the handover restriction row. The start runs for
+ * `QUIET_MS`, then venue.db's hash and the stand-ins' counts are read for the describe's cases.
  */
 function observeStart(options: { restricted: boolean }): () => Observed {
   const suite = useVenueDb({ migrations, resetPerTest: false });
@@ -186,21 +183,6 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       nodeId,
       "https://box.example",
     );
-    const [sif] = suite.db.all<{ id: string }>(
-      sql`select id from registro_sif where node_id = ${nodeId}`,
-    );
-    const ids = {
-      locationId: venue.cfg.locationId,
-      nodeId,
-      seriesId: venue.seriesId,
-      saleId: randomUUID(),
-      sifId: sif!.id,
-    };
-    await insertFiscalSale(suite.db, ids);
-    await insertFiscalRegistro(suite.db, ids, {
-      entorno: "preproduction",
-      generatedAt: new Date(Date.now() + DAY_MS),
-    });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: STREAM_PURPOSE,
@@ -266,7 +248,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       calls.spawn += 1;
       return litestream.spawn(...args);
     };
-    calls.authority = 0;
+    calls.clockLooks = 0;
     calls.sweep = 0;
     calls.spawn = 0;
     calls.drain = 0;
@@ -323,8 +305,8 @@ describe("a restricted start touches nothing outside and nothing in venue.db", (
     expect(observed().mailStatus).toBe("pending");
   });
 
-  it("asks AEAT's host for no clock reading", () => {
-    expect(observed().authority).toBe(0);
+  it("runs no clock watch look", () => {
+    expect(observed().clockLooks).toBe(0);
   });
 
   it("runs no card-provider sweep", () => {
@@ -347,10 +329,10 @@ describe("a restricted start touches nothing outside and nothing in venue.db", (
 describe("control: the same folder without the restriction row", () => {
   const observed = observeStart({ restricted: false });
 
-  it("writes to venue.db, asks AEAT's time, sweeps card providers and starts Litestream", () => {
-    const { hashBefore, hashAfter, authority, sweep, spawn } = observed();
+  it("writes to venue.db, runs the clock watch, sweeps card providers and starts Litestream", () => {
+    const { hashBefore, hashAfter, clockLooks, sweep, spawn } = observed();
     expect(hashAfter).not.toBe(hashBefore);
-    expect(authority).toBeGreaterThan(0);
+    expect(clockLooks).toBeGreaterThan(0);
     expect(sweep).toBeGreaterThan(0);
     expect(spawn).toBeGreaterThan(0);
   });

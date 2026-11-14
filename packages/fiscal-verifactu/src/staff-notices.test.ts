@@ -154,24 +154,6 @@ describe("the clock-behind notice", () => {
   const read = (r: { instant: Date; offsetMinutes: number }) =>
     withTransaction(suite.db, (tx) => FISCAL_STAFF_NOTICES[0]!.read({ tx, reading: r }));
 
-  it("a reading more than a minute before the latest record shows the stop", async () => {
-    await sellAt(LAST);
-    const behind = reading("2026-10-25T08:58:59.999Z", 120);
-    expect(await read(behind)).toEqual([
-      {
-        key: "clock.behind_chain",
-        code: "clock.behind_chain",
-        severity: "error",
-        params: {
-          clockAt: "2026-10-25T08:58:59.999Z",
-          offsetMinutes: 120,
-          lastRecordAt: "2026-10-25T09:00:00.000Z",
-          lastRecordOffsetMinutes: 60,
-        },
-      },
-    ]);
-  });
-
   it("a 2001 reading with records shows only the unusable clock", async () => {
     await sellAt(LAST);
     expect(await read(reading("2001-01-01T11:00:00.000Z", 60))).toEqual([

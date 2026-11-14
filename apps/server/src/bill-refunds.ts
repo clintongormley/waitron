@@ -1,4 +1,5 @@
 import { assertStillSignedIn } from "./till-session.js";
+import { clockUnusableAt } from "./clock-unusable.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
@@ -89,19 +90,15 @@ export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "ad
 };
 
 /** Whether a recovery pass leaves every pending refund as it is: while the start clock gate
- * holds, while the clock reads behind the last record (a completed refund's time places it in
- * a cash-up window), or while the seat refuses a new refund. */
+ * holds, while the seat would refuse a record at the reading (`clock.unusable`, before
+ * 28-10-2024), or while the seat refuses a new refund. */
 export async function refundsPaused(
   deps: BillRefundDeps,
   reading: TrustedReading,
 ): Promise<boolean> {
   if (deps.clockUnconfirmed?.() === true) return true;
-  return withTransaction(
-    deps.db,
-    async (tx) =>
-      (await deps.backend.clockBehindLatestRecord(tx, reading)) !== null ||
-      (await refundRefused(tx, deps)),
-  );
+  if (clockUnusableAt(deps.backend, reading)) return true;
+  return withTransaction(deps.db, (tx) => refundRefused(tx, deps));
 }
 
 export async function refundRefused(tx: Transaction, deps: BillRefundDeps): Promise<boolean> {
@@ -219,11 +216,11 @@ function providerRefundRefOf(evidence: RefundEvidence): string | null {
 
 /**
  * Whether a refund's send or outcome, dated by `reading` in `tx`, is held: while the start clock
- * gate holds, or while `reading` is behind the latest fiscal record. Judged again here because a
- * provider wait since the request's own check can end after the clock steps back or the gate
- * starts holding; the refund is then left pending for a later pass. A manager's confirmed outcome
- * (`evidence` attested) is refused instead, by the seat's `refuseWhileClockBehind`, as their route
- * refuses it.
+ * gate holds, or while the seat would refuse a record at `reading` (`clock.unusable`, before
+ * 28-10-2024). Judged again here because a provider wait since the request's own check can end
+ * after the clock moves or the gate starts holding; the refund is then left pending for a later
+ * pass. A manager's confirmed outcome (`evidence` attested) is refused instead, by the seat's
+ * `refuseWhileClockBehind`, as their route refuses it.
  */
 export async function clockStopsRefund(
   tx: Transaction,
@@ -236,7 +233,7 @@ export async function clockStopsRefund(
     return false;
   }
   if (deps.clockUnconfirmed?.() === true) return true;
-  return (await deps.backend.clockBehindLatestRecord(tx, reading)) !== null;
+  return clockUnusableAt(deps.backend, reading);
 }
 
 /** The card refunds this process is driving, by id: a pending refund missing here is one nothing is

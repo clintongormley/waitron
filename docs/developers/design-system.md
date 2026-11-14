@@ -6472,7 +6472,7 @@ alert list. Its one staged input is the note in its note dialog, which takes its
   other reason is worded by its code. Every refusal reads every open read again. A confirmation
   closes the dialog and reads every open read again. The button carries a `help-mode`
   `wt-help-tooltip` ("What this check does") that says what the check does and links to the
-  guide's `box-status#clock-behind` section, its badge hung over the button's top trailing corner
+  guide's `box-status#clock-own-device` section, its badge hung over the button's top trailing corner
   as Free's and Retry now's are.
 - **Sales dated wrongly.** Under the rows, one section headed "Sales dated wrongly", with
   "Download each list for your tax adviser and go through it with them, then mark it handled here

@@ -431,10 +431,6 @@ it("keeps the default production policy closed with a complete runtime and reque
   });
   expect(await snapshot()).toEqual(before);
 });
-it("refuses a new corrective record when the host clock is behind the chain", async () => {
-  instant = new Date("2026-03-01T12:00:00Z");
-  await refuses(body, "clock.behind_chain", 409);
-});
 it.each(["nodeId", "environment", "clock", "origin", "operatorId", "enabledRemedies", "pending"])(
   "refuses client-owned %s at the request boundary",
   async (key) => {

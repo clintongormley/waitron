@@ -11,6 +11,8 @@ import { registrosFacturacion } from "./schema/registros.js";
 /** A reading exactly this much earlier than the latest record still sells. */
 export const CLOCK_BEHIND_MARGIN_MS = 60_000;
 
+export const CLOCK_BEHIND_STOP_ON = false;
+
 export interface LatestRecord {
   id: string;
   at: Date;
@@ -148,6 +150,7 @@ export async function clockBehindChain(
   tx: Transaction,
   reading: { instant: Date; offsetMinutes: number },
 ): Promise<ClockBehindLatestRecord | null> {
+  if (!CLOCK_BEHIND_STOP_ON) return null;
   const latest = await latestRecord(tx);
   if (
     latest === undefined ||

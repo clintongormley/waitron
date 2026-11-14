@@ -440,10 +440,6 @@ it("retains core below-zero accounting refusal without burning a number", async 
   input.request.correction.lines[0]!.lineTotal = "-15.00";
   await refuses("sale.correction_exceeds_total");
 });
-it("uses the host clock stop before appending the corrective invoice", async () => {
-  instant = new Date("2026-02-28T12:00:00Z");
-  await refuses("clock.behind_chain");
-});
 
 // Removing any admission below must turn a refusal into a write or a different domain refusal.
 it.each(["caseId", "registroId", "actionKey", "reason"] as const)(
