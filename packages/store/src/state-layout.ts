@@ -48,6 +48,7 @@ export const TRADING_ENV_FILE = "trading.env";
 export const BACKUP_ENV_FILE = "backup.env";
 export const CHECKED_ADDRESSES_FILE = "checked-addresses.json";
 export const RECOVERY_STATE_FILE = "recovery.json";
+export const MODULE_RECORDS_DIR = "module-records";
 export const MODULE_PREPARATION_STATE_FILE = "module-preparation-state.json";
 export const MODULE_EVIDENCE_DIR = "module-evidence";
 export const FIRST_FISCAL_DOCUMENTS_DIR = "flows/setup/documents";

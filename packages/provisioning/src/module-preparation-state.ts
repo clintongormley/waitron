@@ -1,10 +1,9 @@
-import { MODULE_PREPARATION_STATE_FILE } from "@waitron/store";
-import { join } from "node:path";
+import { MODULE_RECORDS_DIR } from "@waitron/store";
 import { isDeepStrictEqual } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
 import "./errors.js";
 import { type FirstSetupCoordinator, type FirstSetupHold } from "./first-setup-state.js";
-import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import { readModuleRecord, moduleRecordNames, updateModulePrepared } from "./module-records.js";
 import { isOperationBinding, type OperationBinding } from "@waitron/module";
 
 interface Revision {
@@ -26,7 +25,7 @@ type Options = GrantChecks & {
   authorize(binding: OperationBinding): Promise<void>;
   withVenueExclusion<T>(run: () => Promise<T>): Promise<T>;
 };
-const FILE_NAME = MODULE_PREPARATION_STATE_FILE;
+
 const LIMIT = 1024 * 1024;
 const MERGE_ROOM_FLOOR = 8 * 1024;
 function invalid(): never {
@@ -34,18 +33,6 @@ function invalid(): never {
 }
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function parse(value: unknown): File {
-  if (value === null) return { version: 1, revisions: [] };
-  if (
-    !record(value) ||
-    Object.keys(value).length !== 2 ||
-    value.version !== 1 ||
-    !Array.isArray(value.revisions)
-  )
-    return invalid();
-  for (const revision of value.revisions) if (!wellFormedRevision(revision)) return invalid();
-  return value as unknown as File;
 }
 function wellFormedRevision(revision: unknown): revision is Revision {
   return (
@@ -64,13 +51,36 @@ function snapshot(value: unknown): unknown {
     return invalid();
   }
 }
-async function readStateFile(stateDir: string): Promise<File> {
+async function readPrepared(stateDir: string, module: string): Promise<Revision[]> {
+  const name = `${MODULE_RECORDS_DIR}/${module}.json`;
   try {
-    return parse(await readDurableHostJson(join(stateDir, FILE_NAME), LIMIT));
+    const { prepared } = await readModuleRecord(stateDir, module);
+    if (prepared.some((row) => !wellFormedRevision(row) || row.binding.module !== module))
+      invalid();
+    return prepared as Revision[];
   } catch (error) {
     if (!isAppError(error)) throw error;
-    throw new AppError("setup.attempt_invalid", {}, { reason: `${FILE_NAME} cannot be read` });
+    throw new AppError("setup.attempt_invalid", {}, { reason: `${name} cannot be read` });
   }
+}
+async function readStateFile(stateDir: string): Promise<File> {
+  const revisions: Revision[] = [];
+  for (const module of await moduleRecordNames(stateDir))
+    revisions.push(...(await readPrepared(stateDir, module)));
+  return { version: 1, revisions };
+}
+function preparedBytes(revisions: readonly Revision[]): number {
+  return Buffer.byteLength(JSON.stringify({ version: 1, prepared: revisions, retained: {} }));
+}
+async function writePrepared(
+  stateDir: string,
+  revisions: Revision[],
+  module: string,
+): Promise<void> {
+  if (preparedBytes(revisions) > LIMIT) invalid();
+  await updateModulePrepared(stateDir, module, () =>
+    revisions.filter((row) => row.binding.module === module),
+  );
 }
 export async function readModulePreparationHistory(
   options: { stateDir: string; venueDir: string },
@@ -81,7 +91,7 @@ export async function readModulePreparationHistory(
     .filter((row) => row.binding.module === module)
     .map((row) => structuredClone(row.value));
 }
-/** Every module's revisions, in the order they were written; none when the file is absent. */
+/** Each module's revisions retain their order; modules are listed by filename. */
 export async function readModulePreparationRevisions(options: {
   stateDir: string;
 }): Promise<readonly { binding: OperationBinding; value: unknown }[]> {
@@ -141,7 +151,7 @@ export async function modulePreparationMergeFits(
   // Computed because each revision repeats all earlier entries, so the need grows with the file.
   const room =
     3 * (largestRevisionBytes(incoming) + largestRevisionBytes(own.revisions)) + MERGE_ROOM_FLOOR;
-  return Buffer.byteLength(JSON.stringify(mergedFile(own, incoming))) <= LIMIT - room;
+  return preparedBytes(mergedFile(own, incoming).revisions) <= LIMIT - room;
 }
 /**
  * Writes nothing when this box lacks none of `incoming`. The caller must hold the venue lock: this
@@ -154,7 +164,9 @@ export async function mergeModulePreparationRevisions(
   const own = await readStateFile(options.stateDir);
   const merged = mergedFile(own, incoming);
   if (merged.revisions.length === own.revisions.length) return;
-  await writeDurableHostJson(join(options.stateDir, FILE_NAME), merged, LIMIT);
+  if (preparedBytes(merged.revisions) > LIMIT) invalid();
+  for (const module of new Set(incoming.map((row) => row.binding.module)))
+    await writePrepared(options.stateDir, merged.revisions, module);
 }
 export function createModulePreparationState(options: Options) {
   return {
@@ -172,7 +184,6 @@ export function createModulePreparationState(options: Options) {
       const body = () =>
         options.withVenueExclusion(async () => {
           await options.authorize({ ...binding });
-          const path = join(options.stateDir, FILE_NAME);
           const file = await readStateFile(options.stateDir);
           let value: unknown =
             [...file.revisions].reverse().find((row) => row.binding.module === binding.module)
@@ -208,7 +219,7 @@ export function createModulePreparationState(options: Options) {
                     version: 1,
                     revisions: [...file.revisions, { binding: { ...binding }, value: supplied }],
                   };
-                  await writeDurableHostJson(path, candidate, LIMIT);
+                  await writePrepared(options.stateDir, candidate.revisions, binding.module);
                   await options.authorize({ ...binding });
                   file.revisions = candidate.revisions;
                   value = supplied;

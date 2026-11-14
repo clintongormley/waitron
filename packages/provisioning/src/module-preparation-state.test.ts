@@ -32,7 +32,7 @@ async function fixture() {
   roots.push(root);
   const stateDir = join(root, "state"),
     venueDir = join(root, "venue");
-  await fs.mkdir(stateDir);
+  await fs.mkdir(join(stateDir, "module-records"), { recursive: true });
   await fs.mkdir(venueDir);
   const coordinator = createFirstSetupCoordinator();
   let allowed = true;
@@ -64,7 +64,7 @@ async function fixture() {
     deny() {
       allowed = false;
     },
-    path: join(stateDir, "module-preparation-state.json"),
+    path: join(stateDir, "module-records/fiscal-verifactu.json"),
   };
 }
 it("durably retains module revisions and reconnects after process-local state is lost", async () => {
@@ -78,9 +78,9 @@ it("durably retains module revisions and reconnects after process-local state is
     await state.replace({ entries: [{ identity: "06RB" }, { identity: "06RC" }] });
   });
   const saved = JSON.parse(await fs.readFile(f.path, "utf8"));
-  expect(saved.revisions).toHaveLength(2);
-  expect(saved.revisions[0].value).toEqual({ entries: [{ identity: "06RB" }] });
-  expect(saved.revisions[1].binding.eventId).toBe("event2");
+  expect(saved.prepared).toHaveLength(2);
+  expect(saved.prepared[0].value).toEqual({ entries: [{ identity: "06RB" }] });
+  expect(saved.prepared[1].binding.eventId).toBe("event2");
   expect((await fs.stat(f.path)).mode & 0o777).toBe(0o600);
 });
 it("serializes two requests and supplies the latest committed module state", async () => {
@@ -108,7 +108,7 @@ it("re-enters an existing shared hold without taking the coordinator again", asy
       hold,
     );
   });
-  expect(JSON.parse(await fs.readFile(f.path, "utf8")).revisions).toHaveLength(1);
+  expect(JSON.parse(await fs.readFile(f.path, "utf8")).prepared).toHaveLength(1);
 }, 5000);
 it("refuses a counterfeit or expired hold", async () => {
   const f = await fixture();
@@ -213,7 +213,7 @@ it("does not acknowledge a renamed ledger whose directory sync fails", async () 
   });
   vi.mocked(fs.open).mockImplementation(async (...args) => {
     const handle = await actual.open(...args);
-    if (renamed && String(args[0]) === f.stateDir)
+    if (renamed && String(args[0]) === dirname(f.path))
       vi.spyOn(handle, "sync").mockRejectedValue(new Error("directory sync refused"));
     return handle;
   });
@@ -239,7 +239,7 @@ it("a successor preparation state keeps spent module history in the attempt's ow
     expect(state.value).toEqual({ identities: ["06RB"] });
     await state.replace({ identities: ["06RB", "06RC"] });
   });
-  expect(JSON.parse(await fs.readFile(f.path, "utf8")).revisions).toHaveLength(2);
+  expect(JSON.parse(await fs.readFile(f.path, "utf8")).prepared).toHaveLength(2);
   expect(await fs.readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe(
     "original state",
   );
@@ -332,7 +332,7 @@ it("checks a wait's grant without spending it, and spends it on any other write"
     await state.replace({ entries: [{ kind: "wait" }, { kind: "intent" }] });
   });
   expect(spent).toEqual(["check", "spend"]);
-  expect(JSON.parse(await fs.readFile(f.path, "utf8")).revisions).toHaveLength(2);
+  expect(JSON.parse(await fs.readFile(f.path, "utf8")).prepared).toHaveLength(2);
 });
 it("writes no wait when the grant check refuses", async () => {
   const f = await fixture();
@@ -349,7 +349,7 @@ it("writes no wait when the grant check refuses", async () => {
   await expect(fs.readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
-it("reads every module's revisions in the order they were written, bindings included", async () => {
+it("keeps each module's revision order and latest selection, bindings included", async () => {
   const { options } = await fixture();
   const state = createModulePreparationState(options);
   const other = { ...binding, module: "payments", eventId: "event2" };
@@ -358,9 +358,11 @@ it("reads every module's revisions in the order they were written, bindings incl
   await state.withState(binding, (s) => s.replace({ selected: "BBBBB" }));
   expect(await readModulePreparationRevisions({ stateDir: options.stateDir })).toEqual([
     { binding, value: { selected: "AAAAA" } },
-    { binding: other, value: null },
     { binding, value: { selected: "BBBBB" } },
+    { binding: other, value: null },
   ]);
+  expect(await state.withState(binding, async (s) => s.value)).toEqual({ selected: "BBBBB" });
+  expect(await state.withState(other, async (s) => s.value)).toBeNull();
 });
 
 it("reads no revisions when the file is absent", async () => {
@@ -371,8 +373,8 @@ it("reads no revisions when the file is absent", async () => {
 it("refuses to read revisions from a file that is not the file's format", async () => {
   const { options } = await fixture();
   await fs.writeFile(
-    join(options.stateDir, "module-preparation-state.json"),
-    JSON.stringify({ version: 1, revisions: [{ binding: {}, value: 1 }] }),
+    join(options.stateDir, "module-records/fiscal-verifactu.json"),
+    JSON.stringify({ version: 1, retained: {}, prepared: [{ binding: {}, value: 1 }] }),
   );
   await expect(
     readModulePreparationRevisions({ stateDir: options.stateDir }),
@@ -380,7 +382,7 @@ it("refuses to read revisions from a file that is not the file's format", async 
 });
 
 describe("a damaged file names itself in the log", () => {
-  const FILE = "module-preparation-state.json";
+  const FILE = "module-records/fiscal-verifactu.json";
 
   async function damagedRefusal(text: string): Promise<unknown[]> {
     const f = await fixture();
@@ -394,8 +396,11 @@ describe("a damaged file names itself in the log", () => {
 
   it.each([
     ["not JSON", "{ not json"],
-    ["the wrong shape", JSON.stringify({ version: 2, revisions: [] })],
-    ["a bad revision", JSON.stringify({ version: 1, revisions: [{ binding: {}, value: 1 }] })],
+    ["the wrong shape", JSON.stringify({ version: 2, retained: {}, prepared: [] })],
+    [
+      "a bad revision",
+      JSON.stringify({ version: 1, retained: {}, prepared: [{ binding: {}, value: 1 }] }),
+    ],
     ["over the size limit", " ".repeat(1024 * 1024 + 1)],
   ])("every read of a file that is %s", async (_name, text) => {
     for (const refusal of await damagedRefusal(text)) {
@@ -407,7 +412,10 @@ describe("a damaged file names itself in the log", () => {
 
   it("a file that read correctly and then failed to close is not called damaged", async () => {
     const f = await fixture();
-    await fs.writeFile(join(f.stateDir, FILE), JSON.stringify({ version: 1, revisions: [] }));
+    await fs.writeFile(
+      join(f.stateDir, FILE),
+      JSON.stringify({ version: 1, retained: {}, prepared: [] }),
+    );
     const { open } = await vi.importActual<typeof fs>("node:fs/promises");
     const closeFailure = Object.assign(new Error("close failed"), { code: "EIO" });
     vi.mocked(fs.open).mockImplementationOnce(async (...args) => {
@@ -426,14 +434,17 @@ describe("a damaged file names itself in the log", () => {
 
   it("control: a file that reads gives no refusal", async () => {
     const f = await fixture();
-    await fs.writeFile(join(f.stateDir, FILE), JSON.stringify({ version: 1, revisions: [] }));
+    await fs.writeFile(
+      join(f.stateDir, FILE),
+      JSON.stringify({ version: 1, retained: {}, prepared: [] }),
+    );
     expect(await readModulePreparationRevisions({ stateDir: f.stateDir })).toEqual([]);
   });
 });
 
 const LIMIT = 1024 * 1024;
 const fileBytes = (revisions: unknown[]) =>
-  Buffer.byteLength(JSON.stringify({ version: 1, revisions }));
+  Buffer.byteLength(JSON.stringify({ version: 1, retained: {}, prepared: revisions }));
 const largestBytes = (revisions: unknown[]) =>
   Math.max(0, ...revisions.map((revision) => Buffer.byteLength(JSON.stringify(revision))));
 /** What a merge asks of the file: its bytes, room for three revisions sized from each list, and 8 KiB. */
@@ -466,7 +477,7 @@ describe("modulePreparationMergeFits", () => {
       stored({ eventId: "own-large" }, "b".repeat(40_000)),
       stored({ eventId: "own-last" }, "c"),
     ];
-    await fs.writeFile(path, JSON.stringify({ version: 1, revisions: own }));
+    await fs.writeFile(path, JSON.stringify({ version: 1, retained: {}, prepared: own }));
     const list = [
       stored({ eventId: "theirs-small" }, "d"),
       stored({ eventId: "theirs-large" }, "e".repeat(60_000)),
@@ -502,7 +513,10 @@ describe("modulePreparationMergeFits", () => {
     const large = stored({ eventId: "large" }, "x".repeat(240_000));
     const last = (text: string) => stored({ eventId: "exact" }, text);
     const write = (text: string) =>
-      fs.writeFile(path, JSON.stringify({ version: 1, revisions: [large, last(text)] }));
+      fs.writeFile(
+        path,
+        JSON.stringify({ version: 1, retained: {}, prepared: [large, last(text)] }),
+      );
     const atLimit = "x".repeat(LIMIT - bytesNeeded([], [large, last("")]));
     expect(bytesNeeded([], [large, last(atLimit)])).toBe(LIMIT);
     await write(atLimit);
@@ -521,7 +535,7 @@ describe("modulePreparationMergeFits", () => {
     expect(bytesNeeded([], [large, last(twoBytesEach)])).toBeGreaterThan(LIMIT);
     await fs.writeFile(
       path,
-      JSON.stringify({ version: 1, revisions: [large, last(twoBytesEach)] }),
+      JSON.stringify({ version: 1, retained: {}, prepared: [large, last(twoBytesEach)] }),
     );
     expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [])).toBe(false);
   });
@@ -578,7 +592,7 @@ describe("modulePreparationMergeFits", () => {
 
   it("a damaged file of its own refuses, as every read of it does", async () => {
     const { options } = await fixture();
-    await fs.writeFile(join(options.stateDir, "module-preparation-state.json"), "{not json");
+    await fs.writeFile(join(options.stateDir, "module-records/fiscal-verifactu.json"), "{not json");
     await expect(
       modulePreparationMergeFits({ stateDir: options.stateDir }, []),
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
@@ -586,7 +600,7 @@ describe("modulePreparationMergeFits", () => {
 });
 
 describe("mergeModulePreparationRevisions", () => {
-  const FILE = "module-preparation-state.json";
+  const FILE = "module-records/fiscal-verifactu.json";
   const revision = (eventId: string, value: unknown = { name: eventId }) => ({
     binding: { ...binding, eventId },
     value,
@@ -594,7 +608,10 @@ describe("mergeModulePreparationRevisions", () => {
   const [m1, m2, shared] = [revision("m1"), revision("m2"), revision("shared")];
   /** Indented on purpose: a rewrite of the same revisions would not keep these bytes. */
   const place = (stateDir: string, revisions: unknown[]) =>
-    fs.writeFile(join(stateDir, FILE), JSON.stringify({ version: 1, revisions }, null, 2));
+    fs.writeFile(
+      join(stateDir, FILE),
+      JSON.stringify({ version: 1, retained: {}, prepared: revisions }, null, 2),
+    );
   const events = async (stateDir: string) =>
     (await readModulePreparationRevisions({ stateDir })).map((row) => row.binding.eventId);
 
@@ -694,7 +711,9 @@ describe("mergeModulePreparationRevisions", () => {
 
   const textFilling = (total: number) => {
     const bytes = (text: string) =>
-      Buffer.byteLength(JSON.stringify({ version: 1, revisions: [revision("m1", { text }), m2] }));
+      Buffer.byteLength(
+        JSON.stringify({ version: 1, retained: {}, prepared: [revision("m1", { text }), m2] }),
+      );
     return "x".repeat(total - bytes(""));
   };
 
@@ -757,4 +776,25 @@ describe("mergeModulePreparationRevisions", () => {
       code: "setup.attempt_invalid",
     });
   });
+});
+
+it("prepared revisions keep retained history in the module's one record", async () => {
+  const f = await fixture();
+  const path = join(f.stateDir, "module-records/fiscal-verifactu.json");
+  const retained = { archive: { identities: ["06RB"] } };
+  await fs.mkdir(dirname(path), { recursive: true });
+  await fs.writeFile(path, JSON.stringify({ version: 1, prepared: [], retained }));
+
+  await f.store.withState(binding, (state) => state.replace({ identity: "06RC" }));
+
+  expect(JSON.parse(await fs.readFile(path, "utf8"))).toEqual({
+    version: 1,
+    prepared: [{ binding, value: { identity: "06RC" } }],
+    retained,
+  });
+  await f.create().withState(binding, async (state) => {
+    expect(state.value).toEqual({ identity: "06RC" });
+    expect(state.history).toEqual([{ identity: "06RC" }]);
+  });
+  expect(await fs.readdir(f.stateDir)).toEqual(["module-records"]);
 });
