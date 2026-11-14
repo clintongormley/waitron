@@ -1358,9 +1358,75 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       await flush(el);
       expect(api.clockConfirm).not.toHaveBeenCalled();
       expect(text(q(el, "[data-test=row-clock] [data-test=clock-confirm-refused]"))).toBe(
-        t("box_status.clock.confirm_refused_stale"),
+        "The box's time has changed since this page showed it. Check the time on the Clock row, then press the button again.",
       );
       expect(api.liveData.refresh).toHaveBeenCalled();
+    });
+
+    it("says in Spanish that the box's time changed since the page showed it", async () => {
+      setLocale("es");
+      const el = await mountClock(
+        waitingApi(WAITING_CLOCK, {
+          clockChallenge: vi.fn().mockResolvedValue({
+            challengeId: "ch-1",
+            boxAt: new Date(Date.parse(BOX_AT) + 2 * 24 * 60 * 60_000).toISOString(),
+          }),
+        }),
+      );
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(text(q(el, "[data-test=row-clock] [data-test=clock-confirm-refused]"))).toBe(
+        "La hora del servidor ha cambiado desde que esta página la mostró. Comprueba la hora en la fila Reloj y pulsa el botón otra vez.",
+      );
+    });
+
+    it.each([
+      [30_000, true],
+      [61_000, false],
+    ])("with the box's time %i ms off the row's, confirms: %s", async (offMs, confirms) => {
+      const api = waitingApi(WAITING_CLOCK, {
+        clockChallenge: vi.fn().mockResolvedValue({
+          challengeId: "ch-1",
+          boxAt: new Date(Date.parse(BOX_AT) + offMs).toISOString(),
+        }),
+      });
+      const el = await mountClock(api);
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(vi.mocked(api.clockConfirm).mock.calls.length).toBe(confirms ? 1 : 0);
+    });
+
+    describe("pressed ten minutes after the row was read", () => {
+      const LATER_MS = 10 * 60_000;
+      async function pressLater(freshAt: number) {
+        let steady = 5_000;
+        const spy = vi.spyOn(performance, "now").mockImplementation(() => steady);
+        onTestFinished(() => spy.mockRestore());
+        const api = waitingApi(WAITING_CLOCK, {
+          clockChallenge: vi
+            .fn()
+            .mockResolvedValue({ challengeId: "ch-1", boxAt: new Date(freshAt).toISOString() }),
+        });
+        const el = await mountClock(api);
+        steady += LATER_MS;
+        await userEvent.click(confirmButton(el)!);
+        await flush(el);
+        return { api, el };
+      }
+
+      it("confirms when the box's clock ran on by those ten minutes", async () => {
+        const { api } = await pressLater(Date.parse(BOX_AT) + LATER_MS);
+        expect(api.clockConfirm).toHaveBeenCalledExactlyOnceWith({
+          challengeId: "ch-1",
+          asShown: true,
+        });
+      });
+
+      it("does not confirm when the box's clock still reads the row's time", async () => {
+        const { api, el } = await pressLater(Date.parse(BOX_AT));
+        expect(api.clockConfirm).not.toHaveBeenCalled();
+        expect(q(el, "[data-test=row-clock] [data-test=clock-confirm-refused]")).not.toBeNull();
+      });
     });
 
     it("forgets a refused confirmation once a read shows the wait has ended", async () => {

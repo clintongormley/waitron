@@ -30,9 +30,12 @@ const LEAST_TO_FREE = 500_000;
  * when no read caught the box away: the whole outage can fall between two health reads. */
 const RESTART_AWAY_MS = 30_000;
 
-/** The server's margin for an administrator's device agreeing with the box, and how far the box's
- * time may be from the Clock row's when "The date and time are right" is pressed. */
+/** The server's margin for an administrator's device agreeing with the box. */
 const AGREE_WITHIN_MS = 60_000;
+
+/** How far the box's time may be from the Clock row's, carried forward, when "The date and time
+ * are right" is pressed: the row shows the box's time to the minute. */
+const STILL_SHOWN_WITHIN_MS = 60_000;
 
 /** The reasons a refused set names that have their own sentence. */
 const SET_REFUSALS = {
@@ -480,12 +483,10 @@ export class BoxStatusScreen extends LitElement {
     const readAt = this.#healthReadAt;
     try {
       const { challengeId, boxAt } = await this.api.clockChallenge();
-      // The row shows the box's time to the minute; a box now further from it than that is not
-      // the time the person confirmed.
       const expected =
         shownAt === undefined ? NaN : Date.parse(shownAt) + (performance.now() - readAt);
-      if (!(Math.abs(Date.parse(boxAt) - expected) <= AGREE_WITHIN_MS)) {
-        this.clockConfirmError = t("box_status.clock.confirm_refused_stale");
+      if (!(Math.abs(Date.parse(boxAt) - expected) <= STILL_SHOWN_WITHIN_MS)) {
+        this.clockConfirmError = t("box_status.clock.confirm_refused_moved");
         return;
       }
       await this.api.clockConfirm({ challengeId, asShown: true });
@@ -514,7 +515,7 @@ export class BoxStatusScreen extends LitElement {
             >${t("box_status.clock.confirm")}</wt-button
           >`
         : nothing
-    }${this.#clockCheckNeeded(health) ? this.#clockCheckButton(health) : nothing}`;
+    }${this.#clockCheckButton(health)}`;
   }
 
   #closeClockCheck(): void {

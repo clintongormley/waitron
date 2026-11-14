@@ -4012,7 +4012,7 @@ export const en = {
   "box_status.network.guide": "Network guide",
 
   "box_status.legend":
-    "Updated {time} · amber: needs attention, everything still works · red: something can't be saved",
+    "Updated {time} · amber: needs attention, everything still works · red: something can't be saved or paid",
   "box_status.part.sales": "Sales",
   "box_status.part.tax": "Tax agency",
   "box_status.part.bucket": "Bucket copy",
@@ -4086,6 +4086,8 @@ export const en = {
     "Press this only if the date and time above match a clock you trust, or use “Check with this device's time” to compare them. If they do not match, the box cannot correct its clock while the part that reads its internet time is not answering, so payments keep waiting.",
   "box_status.clock.confirm_refused_stale":
     "The box's clock changed while this was being sent. Check the date and time above again, then press the button again.",
+  "box_status.clock.confirm_refused_moved":
+    "The box's time has changed since this page showed it. Check the time on the Clock row, then press the button again.",
   "box_status.clock.admin.confirmed": "This device agrees, so the box's time is confirmed.",
   "box_status.clock.admin.open": "Check with this device's time",
   "box_status.clock.admin.sign_in_hint":
@@ -8250,7 +8252,7 @@ export const es: Record<StringKey, string> = {
   "box_status.network.guide": "Guía de red",
 
   "box_status.legend":
-    "Actualizado {time} · ámbar: necesita atención, todo sigue funcionando · rojo: algo no se puede guardar",
+    "Actualizado {time} · ámbar: necesita atención, todo sigue funcionando · rojo: algo no se puede guardar o cobrar",
   "box_status.part.sales": "Ventas",
   "box_status.part.tax": "Hacienda",
   "box_status.part.bucket": "Copia en el bucket",
@@ -8326,6 +8328,8 @@ export const es: Record<StringKey, string> = {
     "Pulsa esto solo si la fecha y la hora de arriba coinciden con un reloj de confianza, o usa «Comprobar con la hora de este dispositivo» para compararlas. Si no coinciden, el servidor no puede corregir su reloj mientras no responda la parte que lee su hora de internet, así que los cobros siguen esperando.",
   "box_status.clock.confirm_refused_stale":
     "El reloj del servidor ha cambiado mientras se enviaba. Vuelve a comprobar la fecha y la hora de arriba y pulsa el botón otra vez.",
+  "box_status.clock.confirm_refused_moved":
+    "La hora del servidor ha cambiado desde que esta página la mostró. Comprueba la hora en la fila Reloj y pulsa el botón otra vez.",
   "box_status.clock.admin.confirmed":
     "Este dispositivo coincide, así que la hora del servidor queda confirmada.",
   "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",

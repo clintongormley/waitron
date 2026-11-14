@@ -639,6 +639,64 @@ describe("till-box-time-dialog while the server waits for its time to be confirm
     expect(words(el)).toContain(clockDateTime(Date.parse(moved)));
   });
 
+  describe("pressed ten minutes after the time was shown", () => {
+    const LATER_MS = 10 * 60_000;
+    const keepPressedLater = async (freshAt: number) => {
+      let steady = 5_000;
+      vi.spyOn(performance, "now").mockImplementation(() => steady);
+      const api = waiting(BOX_BEHIND);
+      const el = await open(api);
+      steady += LATER_MS;
+      api.boxClockChallenge.mockResolvedValue({
+        challengeId: "c2",
+        boxAt: new Date(freshAt).toISOString(),
+        keepOffered: true,
+      });
+      await press(el, "server");
+      return { api, el };
+    };
+
+    it("keeps the server's time when the server's clock ran on by those ten minutes", async () => {
+      const { api } = await keepPressedLater(Date.parse(BOX_BEHIND) + LATER_MS);
+      expect(api.boxClockConfirm.mock.calls).toEqual([
+        [{ challengeId: "c2", deviceAt: TILL_AT, keep: true }],
+      ]);
+    });
+
+    it("keeps nothing when the server's clock still reads the time shown", async () => {
+      const { api, el } = await keepPressedLater(Date.parse(BOX_BEHIND));
+      expect(api.boxClockConfirm).not.toHaveBeenCalled();
+      expect(shownError(el)).toBe(en["box_time.refused.stale"]);
+    });
+  });
+
+  it("keeps the server's time when the fresh time is 30 seconds off the one shown, inside the minute shown", async () => {
+    const api = waiting(BOX_BEHIND);
+    const el = await open(api);
+    api.boxClockChallenge.mockResolvedValue({
+      challengeId: "c2",
+      boxAt: new Date(Date.parse(BOX_BEHIND) + 30_000).toISOString(),
+      keepOffered: true,
+    });
+    await press(el, "server");
+    expect(api.boxClockConfirm.mock.calls).toEqual([
+      [{ challengeId: "c2", deviceAt: TILL_AT, keep: true }],
+    ]);
+  });
+
+  it("keeps nothing when the fresh time is a minute and a second off the one shown", async () => {
+    const api = waiting(BOX_BEHIND);
+    const el = await open(api);
+    api.boxClockChallenge.mockResolvedValue({
+      challengeId: "c2",
+      boxAt: new Date(Date.parse(BOX_BEHIND) + 61_000).toISOString(),
+      keepOffered: true,
+    });
+    await press(el, "server");
+    expect(api.boxClockConfirm).not.toHaveBeenCalled();
+    expect(shownError(el)).toBe(en["box_time.refused.stale"]);
+  });
+
   it("sends this till's time, without keep, on This device", async () => {
     const api = waiting(BOX_BEHIND, okConfirm(800_000_000_000));
     const el = await open(api);

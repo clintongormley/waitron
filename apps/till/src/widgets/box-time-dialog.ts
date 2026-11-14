@@ -33,8 +33,8 @@ export interface BoxTimeApi {
 const AGREES_MS = 60_000;
 
 /** How far the box's time at a keep may be from the time shown, carried forward on this till's
- * steady clock: the two challenges' round trips, and no step of the box's clock. */
-const KEEP_WITHIN_MS = 5_000;
+ * steady clock: the dialog shows the box's time to the minute. */
+const KEEP_WITHIN_MS = 60_000;
 
 type Choice = "server" | "device" | "yes";
 

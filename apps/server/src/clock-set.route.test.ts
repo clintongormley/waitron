@@ -586,6 +586,26 @@ it("confirms when the box's clock ran with its steady clock between challenge an
   expect(start.status).toBe("by_person");
 });
 
+it.each([
+  [1_000, 200, "by_person"],
+  [1_001, 409, "waiting"],
+] as const)(
+  "after a step of %i ms between challenge and confirm, answers %i and the start is %s",
+  async (stepMs, status, after) => {
+    const start = startClockState();
+    const box = await stoppedBox(0, { start });
+    const asked = await ask(box, mario.cookie);
+    box.setClock(boxTime(box) + stepMs);
+    const answer = await send(box.app, mario.cookie, "POST", "/api/box/clock-confirm", {
+      challengeId: asked.json.challengeId,
+      asShown: true,
+    });
+    expect(answer.status).toBe(status);
+    if (status === 409) expect(answer.json).toEqual(refused("stale"));
+    expect(start.status).toBe(after);
+  },
+);
+
 it("refuses a confirmation on the box itself, and from anyone but an administrator", async () => {
   const start = startClockState();
   const box = await stoppedBox(0, { start });

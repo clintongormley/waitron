@@ -625,6 +625,26 @@ it("keeps the box's time when its clock ran with its steady clock between challe
   expect(start.status).toBe("by_person");
 });
 
+it.each([
+  [1_000, 200, "by_person"],
+  [1_001, 409, "waiting"],
+] as const)(
+  "after a step of %i ms between challenge and keep, answers %i and the start is %s",
+  async (stepMs, status, after) => {
+    const { box, start } = await waitingBox();
+    const asked = await ask(box, staffCookie);
+    box.setClock(boxTime(box) + stepMs);
+    const answer = await confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box),
+      keep: true,
+    });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(status);
+    if (status === 409) expect(answer.json).toEqual(setRefused("stale"));
+    expect(start.status).toBe(after);
+  },
+);
+
 it("keeps the box's time from a till whose own clock reads 1970", async () => {
   const { box, start } = await waitingBox();
   const asked = await ask(box, staffCookie);
