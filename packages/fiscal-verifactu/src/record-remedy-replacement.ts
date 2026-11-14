@@ -69,14 +69,19 @@ export async function applyReplacementInvoiceRequest(
       action: { operationDate },
       admits: ({ filingCase, delivery, target }) =>
         filingCase.cause === "fiscal.registro_rechazado" &&
-        delivery.estado === "rechazado" &&
         delivery.codigoError === "1112" &&
         target.tipoFactura === "F2",
       async replace(tx, { correctsSaleId, target, clock }) {
         const now = clock.now();
         // The replacement's own issue day, from the reading that dates it.
         const today = formatDateTime(now.instant, now.offsetMinutes).slice(0, 10);
-        if (operationDate > today || operationDate > target.fechaExpedicionFactura)
+        // @waitron/verifactu's FECHA_OPERACION_BEFORE_MINIMUM: not before today twenty years back.
+        const earliest = `${String(Number(today.slice(0, 4)) - 20).padStart(4, "0")}${today.slice(4)}`;
+        if (
+          operationDate > today ||
+          operationDate > target.fechaExpedicionFactura ||
+          operationDate < earliest
+        )
           operationDateInvalid();
         return recordReplacement(tx, backend, {
           origin: jobOrigin("operator_script"),

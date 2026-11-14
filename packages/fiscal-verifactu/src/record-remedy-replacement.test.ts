@@ -407,6 +407,8 @@ it.each([
   ["with a time", "2026-02-28T00:00:00Z"],
   ["not a calendar day", "2026-02-30"],
   ["after today", "2026-03-02"],
+  ["many years back", "1999-01-01"],
+  ["one day more than twenty years before today", "2006-02-28"],
 ])("refuses an operation date %s, using no number", async (_label, operationDate) => {
   const before = await snapshot();
   const res = await send({ ...body, operationDate });
@@ -423,6 +425,17 @@ it("refuses an operation date after the refused invoice's own date, though not a
   // Control: the refused invoice's own date is accepted.
   const res = await send({ ...body, operationDate: "2026-03-01" });
   expect(res.status).toBe(200);
+});
+
+it("accepts an operation date exactly twenty years before today", async () => {
+  const res = await send({ ...body, operationDate: "2006-03-01" });
+  expect(res.status).toBe(200);
+  const { registroId } = (await res.json()) as { registroId: string };
+  const [record] = await suite.db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, registroId));
+  expect(record).toMatchObject({ fechaOperacion: "2006-03-01" });
 });
 
 it("measures today in the venue's zone, from the clock reading that dates the replacement", async () => {
@@ -442,6 +455,17 @@ it("chains the replacement after a refused original stamped tomorrow, the newest
   const tomorrow = await refusedOriginal(new Date("2026-03-02T09:00:00Z"));
   const before = await snapshot();
   expect(before.head.ultimoRegistroId).toBe(tomorrow.registroId);
+  // The refused invoice's own day, which is after today.
+  await refuses(
+    {
+      ...body,
+      caseId: tomorrow.caseId,
+      registroId: tomorrow.registroId,
+      actionKey: "replace-tomorrow",
+      operationDate: "2026-03-02",
+    },
+    "fiscal.operation_date_invalid",
+  );
   const res = await send({
     ...body,
     caseId: tomorrow.caseId,

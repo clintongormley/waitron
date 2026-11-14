@@ -787,7 +787,7 @@ export class FiscalFilingScreen extends LitElement {
     return this.#serverDay() !== localDay(new Date());
   }
 
-  /** What is wrong with the chosen day, checked as the server checks it; empty while none is chosen. */
+  /** What is wrong with the chosen day by the server's upper bounds; empty while none is chosen. */
   #dayProblem(found: FilingCaseView): string {
     const day = this.operationDate;
     if (day === "") return "";

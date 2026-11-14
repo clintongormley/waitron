@@ -1430,7 +1430,6 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
       "fiscal.correction_unsupported",
       "AEAT already holds a version of this invoice, so a replacement would count the sale twice. Nothing was sent, and the case stays open.",
     ],
-    ["fiscal.sale_not_recorded", "Waitron found no invoice record of this sale to replace"],
     ["series.no_rectificative_for_node", "This server has no corrective invoice series"],
   ] as const)("says what %s means under the actions, keeping Send", async (code, words) => {
     const request = replacementServer(futureCase("2026-11-03"), async () => {

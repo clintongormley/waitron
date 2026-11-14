@@ -38,7 +38,6 @@ export const REFUSAL_WORDS: Record<RemedyRefusal, AeatCertificateKey> = {
   "fiscal.operation_date_invalid": "fiscal_filing.refused.operation_date",
   "sale.replacement_not_first": "fiscal_filing.refused.replacement_not_first",
   "fiscal.correction_unsupported": "fiscal_filing.refused.correction_unsupported",
-  "fiscal.sale_not_recorded": "fiscal_filing.refused.sale_not_recorded",
   "series.no_rectificative_for_node": "fiscal_filing.refused.no_corrective_series",
 };
 
