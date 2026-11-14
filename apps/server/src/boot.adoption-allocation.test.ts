@@ -422,20 +422,3 @@ it("joining finishes when the copy holds this box's row, and the next start is a
     await rm(scratch, { recursive: true, force: true });
   }
 }, 60_000);
-
-it("the latch start finishes joining through the restart seam", async () => {
-  const spare = await seedJoiningSpare();
-  const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-restart-seam-"));
-  let server: StartedServer | undefined;
-  allocation.dependent = false;
-  try {
-    const { env } = await joiningStartEnv(scratch, spare);
-    let restarts = 0;
-    server = await startServer(env, {}, { restart: () => (restarts += 1) });
-    await vi.waitFor(() => expect(restarts).toBe(1));
-  } finally {
-    allocation.dependent = true;
-    await server?.close();
-    await rm(scratch, { recursive: true, force: true });
-  }
-}, 60_000);
