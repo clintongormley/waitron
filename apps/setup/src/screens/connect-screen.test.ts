@@ -150,17 +150,20 @@ describe("setup-connect-screen", () => {
   it.each([
     [
       "en-GB",
-      "This server joins the primary and keeps a copy of the restaurant's data. It cannot take over yet. To restore a backup instead, choose Back.",
+      "This server joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. To restore a backup instead, choose Back.",
     ],
     [
       "es-ES",
-      "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo. Para restaurar una copia de seguridad, elige Volver.",
+      "Este servidor se une al principal y guarda una copia de los datos del restaurante. Cuando termina de unirse, puede sustituirlo: con un traspaso desde la página Servidores del principal, o con un cambio de emergencia si el principal falla. Para restaurar una copia de seguridad, elige Volver.",
     ],
-  ] as const)("says a mirror keeps a copy but cannot take over yet (%s)", async (locale, intro) => {
-    setLocale(locale);
-    const { el } = await mount();
-    expect(q(el, "[data-test=connect-intro]")!.textContent!.trim()).toBe(intro);
-  });
+  ] as const)(
+    "says a mirror keeps a copy and can take over once it has joined (%s)",
+    async (locale, intro) => {
+      setLocale(locale);
+      const { el } = await mount();
+      expect(q(el, "[data-test=connect-intro]")!.textContent!.trim()).toBe(intro);
+    },
+  );
 
   it("assembles the adopt body as a STRUCTURED credential object and emits adopt-requested", async () => {
     const { el, host } = await mount();

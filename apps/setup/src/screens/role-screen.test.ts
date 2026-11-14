@@ -32,16 +32,16 @@ describe("setup-role-screen", () => {
   it.each([
     [
       "en-GB",
-      "A mirror cannot take over yet.",
-      "This server joins the primary and keeps a copy of the restaurant's data. It cannot take over yet. To recover a restaurant, choose Restore from backup or Restore from my bucket.",
+      "A mirror can take over only after it has joined a running primary.",
+      "This server joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. To recover a restaurant whose server is already gone, choose Restore from backup or Restore from my bucket.",
     ],
     [
       "es-ES",
-      "Una réplica aún no puede sustituir al principal.",
-      "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
+      "Una réplica solo puede sustituir al principal después de unirse a un principal en marcha.",
+      "Este servidor se une al principal y guarda una copia de los datos del restaurante. Cuando termina de unirse, puede sustituirlo: con un traspaso desde la página Servidores del principal, o con un cambio de emergencia si el principal falla. Para recuperar un restaurante cuyo servidor ya no está, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
     ],
   ] as const)(
-    "says a mirror keeps a copy but cannot take over yet (%s)",
+    "says a mirror keeps a copy and can take over once it has joined (%s)",
     async (locale, intro, copy) => {
       setLocale(locale);
       const { el } = await mountWidget<SetupRoleScreen>("setup-role-screen", {});
@@ -98,7 +98,7 @@ describe("setup-role-screen in Spanish", () => {
     expect(text(q(el, "h1")!)).toBe("Unirse a un restaurante existente o recuperarlo");
     expect(row(el, "choose-mirror")).toEqual({
       heading: "Añadir un nodo réplica",
-      copy: "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
+      copy: "Este servidor se une al principal y guarda una copia de los datos del restaurante. Cuando termina de unirse, puede sustituirlo: con un traspaso desde la página Servidores del principal, o con un cambio de emergencia si el principal falla. Para recuperar un restaurante cuyo servidor ya no está, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
     });
     expect(row(el, "choose-restore")).toEqual({
       heading: "Restaurar desde una copia de seguridad",

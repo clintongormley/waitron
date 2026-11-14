@@ -288,8 +288,9 @@ changes after the join (A1273).
 Owner, 2026-10-02. A second machine can rebuild from the owner's bucket
 (`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
 A joining spare now receives a copy from the primary over the venue's network, puts it in place at
-its next start and finishes joining as a standby (it cannot take over yet); since 3b-F that
-includes a venue that files with Veri*Factu. Wanted: adding
+its next start and finishes joining as a standby; since 3b-F that includes a venue that files
+with Veri*Factu, and a joined spare takes over by handover or by emergency switch in
+`apps/server/src/handover-two-boxes.test.ts` (separate databases, no restarts). Wanted: adding
 a mirror works with the internet down, which is the very case an on-prem mirror exists for. Left: the owner measures it on two boxes with the internet unplugged (3b plan Task 6.11). A cloud mirror needs the internet anyway and is outside this item.
 
 ## A stop made while `cloud/replacement.json` is unreadable is not recorded in it
@@ -393,10 +394,11 @@ that slice 3 has to restore:
   the join without a relay, and the joining server takes a copy of the restaurant's data, puts it in
   place at its next start and finishes joining there. Since 3b-F a venue that files with Veri*Factu
   joins the same way, with nothing fiscal written at the join. The wizard's role and connect
-  wording says a mirror keeps a copy of the restaurant's data but cannot take over yet, and points
-  to restore to recover a restaurant; each refusal's wording says what
+  wording says a mirror keeps a copy of the restaurant's data and, once joined, can take over by a
+  handover or an emergency switch, and points to restore to recover a restaurant whose server is
+  gone; each refusal's wording says what
   happened and either what to fix before pressing Connect again or to choose Back.
-  Removing or disabling the option while a mirror cannot take over is a product call, not a wording one. Whoever takes it should decide for
+  Removing or disabling the option is a product call, not a wording one. Whoever takes it should decide for
   `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` row together.
 
 - **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
@@ -734,10 +736,13 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 
 - **A second live standard series made a sale answer `server.internal` in a test fixture;
   the production cause is untraced.** Left open by A1018 Slice 5 (Ruling R39).
-- **The first hand-back is refused after the giving box has stopped filing; settle before Slice 13
-  or 3b-F.** M2 to M1 answers `sif.allocation_invalid` `standby_already_active` at the first request,
-  because M1's registration stays active (run on a promoted database standing in for the copy).
-  Left open by A1018 Slice 5 (Ruling R40).
+- **The first hand-back to the same box is refused after the giving box has stopped filing; settle
+  before Slice 13.** M2 to M1 answers `sif.allocation_invalid` `standby_already_active` at the first
+  request, because M1's registration stays active (run on a promoted database standing in for the
+  copy). A box that is reset first is not refused: since 3b-F, `apps/server/src/handover-two-boxes.test.ts` resets M1 (two new
+  databases), joins it to M2 under a new id and takes over by emergency switch, selling under a new
+  installation with M2's records unchanged (separate databases and the real routes; no restarts, no
+  wipe, no bucket stream). Left open by A1018 Slice 5 (Ruling R40).
 - **The module preparation file grows with every write, and a handover cannot promise room in it.**
   Every revision repeats all earlier entries under a 1 MiB cap. The handover's size check keeps room
   for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5
