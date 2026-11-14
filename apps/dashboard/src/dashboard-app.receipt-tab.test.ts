@@ -390,7 +390,7 @@ async function editDetails(app: Parameters<typeof departmentForm>[0], name: stri
   await departmentForm(app)!.updateComplete;
 }
 function detailsSave(app: Parameters<typeof departmentForm>[0]) {
-  return departmentForm(app)!.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!;
+  return departmentForm(app)!.saveButton!;
 }
 const settingsAnswer = () =>
   new Response(JSON.stringify(venueServiceModel()), {

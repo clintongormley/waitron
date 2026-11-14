@@ -6,6 +6,8 @@ import {
   mountDepartmentEditor as mount,
   editDepartmentField,
   departmentSave,
+  departmentActions,
+  departmentCancel,
   selectDepartmentTab,
   supplyReceiptEditor,
 } from "../testing/department-edit-fixture.js";
@@ -135,7 +137,7 @@ it("a refused description shows its refusal under the field and stays unsaved wh
   expect(writes).toHaveLength(1);
   expect(editor.descriptionSaves).toEqual(["Rejected service"]);
   expect(form.hasUnsavedChanges).toBe(true);
-  const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
+  const actions = departmentActions(form);
   expect(actions.error).toBe("Correct the highlighted fields to continue.");
   // The settings part is committed: putting the description back leaves nothing unsaved.
   await editDepartmentField(form, "operationDescription", "Dining service");
@@ -184,9 +186,7 @@ it("an invalid description is explained inline and blocks the save", async () =>
   await userEvent.click(page.elementLocator(departmentSave(form)));
   const field = descriptionField(form)!;
   await expect.poll(() => field.error).toBe("Description required");
-  expect(form.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
-    "Correct the highlighted fields to continue.",
-  );
+  expect(departmentActions(form).error).toBe("Correct the highlighted fields to continue.");
   expect(departmentSave(form).disabled).toBe(true);
   await expect
     .poll(() => field.shadowRoot!.activeElement)
@@ -223,7 +223,7 @@ it("Cancel restores the saved description", async () => {
   const cancelled = vi.fn();
   form.addEventListener("cancelled", cancelled);
   await editDepartmentField(form, "operationDescription", "Draft");
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  departmentCancel(form).click();
   await expect.poll(() => cancelled.mock.calls.length).toBe(1);
   expect(form.hasUnsavedChanges).toBe(false);
   await form.updateComplete;

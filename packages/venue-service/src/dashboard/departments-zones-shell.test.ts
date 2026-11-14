@@ -389,7 +389,7 @@ it("closing a dialog opened from the description link returns focus to that row'
   );
   const form = await departmentSettings(shell);
   await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d2");
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  departmentCancel(form).click();
   await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
   const menu = table
     .shadowRoot!.querySelector("[data-test=open-department-d2]")!

@@ -930,7 +930,7 @@ export class DepartmentSettings extends LitElement {
     for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
       if (errors[field]) serviceErrors[field] = errors[field];
     const marked = new Set(Object.keys(errors).map((field) => fieldTab[field as Field]));
-    if (receipt?.invalid) marked.add("receipt");
+    if (this.receipt?.invalid) marked.add("receipt");
     const offered = this.offeredTabs;
     const tabs: TabItem[] = offered.map((key) => ({
       key,
