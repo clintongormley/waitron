@@ -1338,9 +1338,10 @@ export class BackupScreen extends LitElement {
     `;
   }
 
-  // A code with no words of its own gets no generic "try again": the status line's load failure
-  // already explains a settings load that failed, and otherwise the save left backups off.
+  // The status line's load failure already explains the load it names; a code with no words of its
+  // own gets no generic "try again", and otherwise the save left backups off.
   #reloadFailedDetail(s: BackupStatusView, code: string): string {
+    if (code === s.loadErrorCode) return "";
     if (hasCodeMessage(code)) return codeMessage(code);
     return s.loadErrorCode ? "" : t("backup.reload_failed_retry");
   }

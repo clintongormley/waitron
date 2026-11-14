@@ -2345,6 +2345,27 @@ describe("A1089 unreadable archive settings choices", () => {
       }
     });
 
+    it(`a save whose reload left settings unusable shows the code's words once, in the status line (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el, line } = await reloadLineAfterApply({
+          ...OFF,
+          recoveryKeySet: true,
+          loadErrorCode: "backup.archive_settings_invalid",
+          backupStatus: { configured: false, loadErrorCode: "backup.archive_settings_invalid" },
+          reloadErrorCode: "backup.archive_settings_invalid",
+        });
+        expect(line).toBe(t("backup.reload_failed_after_save"));
+        const words = codeMessage("backup.archive_settings_invalid");
+        const body = q(el, "#backup-body")!.textContent!;
+        expect(body.split(words)).toHaveLength(2);
+        expect(q(el, "[data-test=load-failed]")!.textContent).toContain(words);
+      } finally {
+        setLocale(previous);
+      }
+    });
+
     it(`a save whose reload failed with words of its own still shows them (${locale})`, async () => {
       const previous = currentLocale();
       setLocale(locale);
