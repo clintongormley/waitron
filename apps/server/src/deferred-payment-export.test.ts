@@ -18,6 +18,7 @@ import {
   deferredCloseVenue,
   type DeferredCloseKit,
 } from "./testing/deferred-close-fixture.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 import { DEFERRED_PAYMENT_EXPORT_WORDS } from "./i18n/deferred-payment-export.js";
 import { mountReportApi } from "./report-api.js";
 import {
@@ -97,6 +98,7 @@ describe("listDeferredPaymentInvoices", () => {
         total: "18.00",
         correctedBy: [],
         correctionsTotal: "0.00",
+        replacedBy: null,
       },
     ]);
     expect(await list(days.issued, days.issued)).toEqual([]);
@@ -166,6 +168,34 @@ describe("listDeferredPaymentInvoices", () => {
       expect.objectContaining({ issueDate: `${year}-01-02`, closedOn: `${year}-01-01` }),
     ]);
   });
+  it("names a replaced invoice's replacement apart, and totals only the corrections of the two", async () => {
+    const bill = await t.counterOrder("placed", true);
+    await t.close(await t.requestFor(bill, "18.00", null));
+    const numberOf = (id: string) =>
+      t.venue.db.all<{ number: string }>(
+        sql`select sr.code || '/' || s.invoice_number as number from sales s
+          join invoice_series sr on sr.id = s.series_id where s.id = ${id}`,
+      )[0]!.number;
+    const [sale] = t.venue.db.all<{ id: string }>(
+      sql`select id from sales where working_order_id = ${bill}`,
+    );
+    const replacement = await inTx(t.venue, (tx) =>
+      insertCorrective(tx, sale!.id, { replaces: true }),
+    );
+    const refund = await inTx(t.venue, (tx) =>
+      insertCorrective(tx, replacement, { total: "-1.21" }),
+    );
+
+    const day = closedDay(bill);
+    expect(
+      (await list(day, day)).find((row) => row.invoiceNumber === numberOf(sale!.id)),
+    ).toMatchObject({
+      total: "18.00",
+      correctedBy: [numberOf(refund)],
+      correctionsTotal: "-1.21",
+      replacedBy: numberOf(replacement),
+    });
+  });
 });
 
 const F2_ROW: DeferredPaymentInvoice = {
@@ -180,6 +210,7 @@ const F2_ROW: DeferredPaymentInvoice = {
   total: decimal("18.00"),
   correctedBy: ["R/1", "R/2"],
   correctionsTotal: decimal("-1.21"),
+  replacedBy: null,
 };
 const F1_ROW: DeferredPaymentInvoice = {
   invoiceNumber: "F/7",
@@ -193,6 +224,7 @@ const F1_ROW: DeferredPaymentInvoice = {
   total: decimal("96.80"),
   correctedBy: [],
   correctionsTotal: decimal("0.00"),
+  replacedBy: null,
 };
 const HEADER_KEYS = [
   "invoiceNumber",
@@ -206,9 +238,10 @@ const HEADER_KEYS = [
   "total",
   "correctedBy",
   "correctionsTotal",
+  "replacedBy",
 ] as const;
 const EN_HEADER =
-  '"Invoice number","Type","Issue date","Closed on","Customer","Customer tax number","Base (EUR)","VAT (EUR)","Total (EUR)","Corrected by","Corrections total (EUR)"';
+  '"Invoice number","Type","Issue date","Closed on","Customer","Customer tax number","Base (EUR)","VAT (EUR)","Total (EUR)","Corrected by","Corrections total (EUR)","Replaced by"';
 const ES_HEADER = HEADER_KEYS.map((key) => `"${DEFERRED_PAYMENT_EXPORT_WORDS.es[key]}"`).join(",");
 
 function text(bytes: Uint8Array): string {
@@ -219,16 +252,23 @@ describe("renderDeferredPaymentCsv", () => {
   it("writes a header and one quoted line per invoice, guarded against formulas", () => {
     expect(text(renderDeferredPaymentCsv([F2_ROW, F1_ROW], "en"))).toBe(
       `\uFEFF${EN_HEADER}\r\n` +
-        '"A/41","F2","03/11/2026","04/11/2026","","","14.88","3.12","18.00","R/1 R/2","-1.21"\r\n' +
-        '"F/7","F1","05/11/2026","05/11/2026","\'=HYPERLINK(""x"")","B12345674","80.00","16.80","96.80","","0.00"\r\n',
+        '"A/41","F2","03/11/2026","04/11/2026","","","14.88","3.12","18.00","R/1 R/2","-1.21",""\r\n' +
+        '"F/7","F1","05/11/2026","05/11/2026","\'=HYPERLINK(""x"")","B12345674","80.00","16.80","96.80","","0.00",""\r\n',
     );
     expect(text(renderDeferredPaymentCsv([], "en"))).toBe(`\uFEFF${EN_HEADER}\r\n`);
+  });
+
+  it("writes a replaced invoice's replacement in the last column", () => {
+    const lines = text(renderDeferredPaymentCsv([{ ...F2_ROW, replacedBy: "R/3" }], "en")).split(
+      "\r\n",
+    );
+    expect(lines[1]).toMatch(/,"-1\.21","R\/3"$/);
   });
 
   it("writes Spanish words and decimal commas for a Spanish venue", () => {
     expect(text(renderDeferredPaymentCsv([F2_ROW], "es"))).toBe(
       `\uFEFF${ES_HEADER}\r\n` +
-        '"A/41","F2","03/11/2026","04/11/2026","","","14,88","3,12","18,00","R/1 R/2","-1,21"\r\n',
+        '"A/41","F2","03/11/2026","04/11/2026","","","14,88","3,12","18,00","R/1 R/2","-1,21",""\r\n',
     );
   });
 });
@@ -274,7 +314,7 @@ describe("POST /management-api/reports/deferred-payment-export", () => {
     expect(body).toEqual(renderDeferredPaymentCsv(await list(day, day), "es"));
     const lines = text(body).split("\r\n");
     expect(lines).toHaveLength(3);
-    expect(lines[1]).toMatch(/^"A\/1",.*"R\/1","-1,21"$/);
+    expect(lines[1]).toMatch(/^"A\/1",.*"R\/1","-1,21",""$/);
     expect(await downloads()).toEqual([
       {
         personId: manager.id,

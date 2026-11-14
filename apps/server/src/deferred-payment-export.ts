@@ -1,6 +1,12 @@
-import { asc, between, eq } from "drizzle-orm";
+import { and, asc, between, eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { invoiceSeries, sales, deferredClosures, type Transaction } from "@waitron/db";
+import {
+  correctivesOf,
+  invoiceSeries,
+  sales,
+  deferredClosures,
+  type Transaction,
+} from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
 import { centsToDecimal, decimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { csvCell } from "./attendance-export-csv.js";
@@ -25,6 +31,8 @@ export interface DeferredPaymentInvoice {
   total: Decimal;
   correctedBy: string[];
   correctionsTotal: Decimal;
+  /** The replacement's number; its total repeats the invoice's and is in no column. */
+  replacedBy: string | null;
 }
 
 function moneySum(values: readonly string[]): Decimal {
@@ -72,10 +80,32 @@ export async function listDeferredPaymentInvoices(
       total: correction.total,
     })
     .from(deferredClosures)
-    .innerJoin(correction, eq(correction.correctsSaleId, deferredClosures.saleId))
+    .innerJoin(
+      correction,
+      sql`${correction.id} in (${correctivesOf(sql`${deferredClosures.saleId}`)})`,
+    )
     .innerJoin(correctionSeries, eq(correctionSeries.id, correction.seriesId))
     .where(inRange)
     .orderBy(asc(correction.issuedAt), asc(correction.id));
+  const replacements = await tx
+    .select({
+      saleId: deferredClosures.saleId,
+      code: correctionSeries.code,
+      number: correction.invoiceNumber,
+    })
+    .from(deferredClosures)
+    .innerJoin(
+      correction,
+      and(
+        eq(correction.correctsSaleId, deferredClosures.saleId),
+        eq(correction.replacesOriginal, true),
+      ),
+    )
+    .innerJoin(correctionSeries, eq(correctionSeries.id, correction.seriesId))
+    .where(inRange);
+  const replacedBy = new Map(
+    replacements.map((row) => [row.saleId, formatInvoiceNumber(row.code, row.number)]),
+  );
   const bySale = new Map<string, { numbers: string[]; totals: Decimal[] }>();
   for (const row of corrections) {
     const entry = bySale.get(row.saleId) ?? { numbers: [], totals: [] };
@@ -100,6 +130,7 @@ export async function listDeferredPaymentInvoices(
       total: centsToDecimal(row.total),
       correctedBy: corrected?.numbers ?? [],
       correctionsTotal: moneySum(corrected?.totals ?? []),
+      replacedBy: replacedBy.get(row.saleId) ?? null,
     };
   });
 }
@@ -127,6 +158,7 @@ export function renderDeferredPaymentCsv(
       w.total,
       w.correctedBy,
       w.correctionsTotal,
+      w.replacedBy,
     ]
       .map(csvCell)
       .join(","),
@@ -145,6 +177,7 @@ export function renderDeferredPaymentCsv(
         amountCell(row.total, language),
         csvCell(row.correctedBy.join(" ")),
         amountCell(row.correctionsTotal, language),
+        csvCell(row.replacedBy ?? ""),
       ].join(","),
     );
   }

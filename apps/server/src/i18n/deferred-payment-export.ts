@@ -12,6 +12,7 @@ export const DEFERRED_PAYMENT_EXPORT_WORDS = {
     total: "Total (EUR)",
     correctedBy: "Corrected by",
     correctionsTotal: "Corrections total (EUR)",
+    replacedBy: "Replaced by",
   },
   es: {
     invoiceNumber: "Número de factura",
@@ -25,5 +26,6 @@ export const DEFERRED_PAYMENT_EXPORT_WORDS = {
     total: "Total (EUR)",
     correctedBy: "Rectificada por",
     correctionsTotal: "Total rectificado (EUR)",
+    replacedBy: "Sustituida por",
   },
 } as const;
