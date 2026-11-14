@@ -16951,7 +16951,7 @@ export class TillApp extends LitElement {
       }
       if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
       else await this.#onTableRefusal(error, live);
-      if (live()) await this.#refreshHeldOrders().catch(() => undefined);
+      if (live()) await this.#refreshAfterWrite("held", "refresh.held");
       return;
     }
     if (this.#store.id === orderId) {

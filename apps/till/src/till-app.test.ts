@@ -18272,6 +18272,30 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads + 1);
   });
 
+  it("says the held orders could not refresh when they cannot be read again after a refused move", async () => {
+    const { el, c } = await counterWith({
+      moveBill: vi.fn().mockRejectedValue({ code: "table.needs_clearing" }),
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([counterOrder])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
+    await flush(el);
+    await answerCounterMoveIfAsked(el);
+
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads + 1);
+    expect(alert(el)!.textContent).toContain(codeMessage("table.needs_clearing"));
+    expect(toast(el).open).toBe(false);
+    expect(
+      el
+        .shadowRoot!.querySelector('[data-refresh-notice="held"] .refresh-message')
+        ?.textContent?.trim(),
+    ).toBe(t("refresh.held"));
+  });
+
   it("says the table changed when a party sat there since it was read free", async () => {
     const reads = vi
       .fn()
