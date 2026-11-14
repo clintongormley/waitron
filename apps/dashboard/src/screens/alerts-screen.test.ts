@@ -601,12 +601,19 @@ describe("the open alerts at phone width", () => {
           expect(at.right, `row ${index} against the screen`).toBeLessThanOrEqual(
             window.innerWidth,
           );
+          // Scrolled vertically only, so the sideways positions checked above stay as they were.
+          window.scrollBy(0, at.top - 100);
+          const shown = button.getBoundingClientRect();
           // Hit-tested from the table's shadow root: the button's label is slotted text, which a
           // hit test inside the button's own shadow root reports as its host.
-          const hit = table.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+          const hit = table.shadowRoot!.elementFromPoint(
+            shown.x + shown.width / 2,
+            shown.y + shown.height / 2,
+          );
           expect(hit, `row ${index} is covered`).toBe(action);
         }
       } finally {
+        window.scrollTo(0, 0);
         setLocale(before);
         await page.viewport(width, height);
       }
