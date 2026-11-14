@@ -84,8 +84,9 @@ export interface WaitingStart {
   /** What the start answers while it waits; `close` stops the wait and closes the store. */
   server: StartedServer;
   /**
-   * Settles once the listeners and timer are gone; a `checked` or `carried-on` start goes on. Rejects
-   * when the listeners fail to close as the wait ends other than `stopped`.
+   * Settles once the listeners and timer are gone; a `checked` or `carried-on` start goes on.
+   * Rejects when the listeners fail to close as the wait ends other than `stopped` with no stepdown
+   * under way.
    */
   ended: Promise<WaitEnd>;
   /** Takes the carry-on turn, as the carry-on route does. */
@@ -171,7 +172,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     try {
       await listeners.close();
     } catch (error) {
-      if (end.kind !== "stopped") {
+      if (end.kind !== "stopped" && !steppingDown) {
         // A listener still bound would hold the port the full start needs: the start fails.
         log("error", "waiting_start.close_failed", { errorCode: codeOf(error) });
         failEnd(error);
@@ -179,8 +180,8 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
       }
       log("warn", "waiting_start.close_failed", { errorCode: codeOf(error) });
     }
-    // A stepdown still under way once the listeners have closed is restarting the box, so the start
-    // that was about to go on stops instead.
+    // A stepdown under way by now is restarting the box, so the start that was about to go on stops
+    // instead.
     const stopped = end.kind === "stopped" || steppingDown;
     if (stopped) {
       endedWith = { kind: "stopped" };

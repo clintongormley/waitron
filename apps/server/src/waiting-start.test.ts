@@ -428,6 +428,64 @@ describe("the waiting start", () => {
       expect(closeStore).toHaveBeenCalledTimes(1);
       expect(order).toEqual(["closeStore", "restart"]);
     });
+
+    it("a listener that fails to close as a peer's answer ends the wait, with a stepdown in flight, stops the start rather than failing it", async () => {
+      const log = vi.fn();
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      const pending = new Promise<StartPeerCheckOutcome>((done) => (answer = done));
+      let release: () => void = () => {};
+      const held = new Promise<void>((done) => (release = done));
+      let stepAnswered: () => void = () => {};
+      const stepDone = new Promise<void>((done) => (stepAnswered = done));
+      let app: Hono | undefined;
+      const h = harness(() => pending, {
+        node: suite.node,
+        intervalMs: 1,
+        log,
+        listen: (bound) => {
+          app = bound;
+          return {
+            close: async () => {
+              await stepDone;
+              throw new Error("listener remains bound");
+            },
+          };
+        },
+        routes: [
+          (app, hooks) =>
+            app.post("/step", async (c) => {
+              await held;
+              return c.json(
+                await hooks.stepDown({
+                  kind: "superseded",
+                  successorNodeId: SPARE_ID,
+                  membershipTerm: 4,
+                  self: c,
+                }),
+              );
+            }),
+        ],
+      });
+      await new Promise((done) => setTimeout(done, 10));
+      const stepping = Promise.resolve(app!.request("/step", { method: "POST" })).finally(() =>
+        stepAnswered(),
+      );
+      answer(PROCEED);
+      await new Promise((done) => setTimeout(done, 10));
+      release();
+      expect(await (await stepping).json()).toEqual({ restarting: true, replayed: false });
+      expect(await h.waiting.ended).toEqual({ kind: "stopped" });
+      expect(h.closeStore).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith("warn", "waiting_start.close_failed", {
+        errorCode: "unknown",
+      });
+      expect(log).not.toHaveBeenCalledWith(
+        "error",
+        "waiting_start.close_failed",
+        expect.anything(),
+      );
+      await vi.waitFor(() => expect(h.restart).toHaveBeenCalledTimes(1));
+    });
   });
 
   describe("carrying on as the main box", () => {
