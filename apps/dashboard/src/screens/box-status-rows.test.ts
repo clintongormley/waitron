@@ -716,15 +716,17 @@ describe("the Clock row while the start waits for its time", () => {
     expect(other).toBe(0);
   });
 
-  it("says the clock jumped when that is why it waits, and adds no every-start sentence", () => {
+  it("says the clock jumped when that is why it waits, with its own silent-host sentence", () => {
     const line = `The box's clock jumped and it cannot check the time over the internet. Waiting for devices to connect and agree with the box's time (1 of 2 so far): no payments are taken. The box's clock says ${formatIsoMinute(BOX_AT)}.`;
-    for (const hostAnswers of [true, false])
-      expect(
-        row(boxStatusRows(waitingHealth(hostAnswers, "clock_jumped"), []).rows, "clock"),
-      ).toMatchObject({
-        state: "stopped",
-        line,
-      });
+    expect(row(boxStatusRows(waitingHealth(true, "clock_jumped"), []).rows, "clock")).toMatchObject(
+      { state: "stopped", line },
+    );
+    expect(
+      row(boxStatusRows(waitingHealth(false, "clock_jumped"), []).rows, "clock"),
+    ).toMatchObject({
+      state: "stopped",
+      line: `${line} It cannot see its internet time, because the part of the box that reads it is not answering, and its clock cannot be corrected from Waitron until that part answers.`,
+    });
   });
 
   it("tells the Sales row that payments wait, pointing at the Clock row", () => {

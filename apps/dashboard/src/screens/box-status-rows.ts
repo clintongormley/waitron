@@ -159,10 +159,8 @@ function lineOf(
       agreed: String(waiting.agreed),
       boxAt: formatIsoMinute(waiting.boxAt),
     });
-    // The silent-host sentence says the box waits like this at every start, which a jump is not.
-    return waiting.hostAnswers || jumped
-      ? line
-      : `${line} ${t("box_status.clock.waiting_host_silent")}`;
+    if (waiting.hostAnswers) return line;
+    return `${line} ${t(jumped ? "box_status.clock.waiting_host_silent_jumped" : "box_status.clock.waiting_host_silent")}`;
   }
   const first = alerts[0];
   if (notices.length === 0 && first !== undefined)
