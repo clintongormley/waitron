@@ -26,23 +26,26 @@ function openPage(answer: (url: string, init: RequestInit) => Promise<Response>)
   if (script === undefined) throw new Error("the waiting page has no script");
   let now = 0;
   let nextId = 1;
-  let timers: { id: number; at: number; run: () => void; every: number | null }[] = [];
-  const add = (run: () => void, ms: number, every: number | null): number => {
-    timers.push({ id: nextId, at: now + ms, run, every });
+  let timers: { id: number; at: number; run: () => void }[] = [];
+  const add = (run: () => void, ms: number): number => {
+    timers.push({ id: nextId, at: now + ms, run });
     return nextId++;
   };
-  const clear = (id: number): void => {
-    timers = timers.filter((timer) => timer.id !== id);
-  };
+  const deadlines: number[] = [];
   const fetch = vi.fn(answer);
   const replace = vi.fn();
   vm.runInNewContext(script, {
     fetch,
     location: { replace },
-    setTimeout: (run: () => void, ms: number) => add(run, ms, null),
-    setInterval: (run: () => void, ms: number) => add(run, ms, ms),
-    clearTimeout: clear,
-    clearInterval: clear,
+    setTimeout: add,
+    AbortSignal: {
+      timeout: (ms: number) => {
+        deadlines.push(ms);
+        const controller = new AbortController();
+        add(() => controller.abort(new DOMException("timed out", "TimeoutError")), ms);
+        return controller.signal;
+      },
+    },
   });
   /** Runs every timer due in the next `ms`, in order, letting each one's promises settle. */
   const advance = async (ms: number): Promise<void> => {
@@ -53,14 +56,13 @@ function openPage(answer: (url: string, init: RequestInit) => Promise<Response>)
         .sort((a, b) => a.at - b.at || a.id - b.id)[0];
       if (due === undefined) break;
       now = due.at;
-      if (due.every === null) clear(due.id);
-      else due.at += due.every;
+      timers = timers.filter((timer) => timer !== due);
       due.run();
       await new Promise((settled) => setImmediate(settled));
     }
     now = until;
   };
-  return { fetch, replace, advance };
+  return { fetch, replace, deadlines, advance };
 }
 
 describe("the waiting page", () => {
@@ -176,6 +178,27 @@ describe("the waiting page", () => {
     }
     await page.advance(5_000);
     expect(page.replace).toHaveBeenCalledExactlyOnceWith("/");
+  });
+
+  it("asks no more while an answer is still on its way, gives it up after 5 seconds, and asks again 5 seconds later", async () => {
+    const page = openPage((_url, init) =>
+      page.fetch.mock.calls.length === 1
+        ? new Promise((_answered, failed) =>
+            init.signal?.addEventListener("abort", () => failed(init.signal?.reason)),
+          )
+        : Promise.resolve(new Response(null, { status: 200 })),
+    );
+    await page.advance(5_000);
+    expect(page.fetch).toHaveBeenCalledTimes(1);
+    expect(page.deadlines).toEqual([5_000]);
+    await page.advance(5_000);
+    expect(page.fetch).toHaveBeenCalledTimes(1);
+    expect(page.replace).not.toHaveBeenCalled();
+    await page.advance(5_000);
+    expect(page.fetch).toHaveBeenCalledTimes(2);
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith("/");
+    await page.advance(5_000);
+    expect(page.fetch).toHaveBeenCalledTimes(2);
   });
 
   it("with no box to name, waits for the other box", async () => {

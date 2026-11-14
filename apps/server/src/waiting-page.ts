@@ -49,13 +49,17 @@ const WAITING_HEADER = "X-Waitron-Waiting";
 // next start's opening (or a stepdown's restart), so it is tried again. `replace` rather than `reload`, because the carry-on form's
 // answers are drawn from a POST that a reload would send again.
 const LEAVE_WHEN_DONE = `<script>
-setInterval(async () => {
-  try {
-    const response = await fetch("/", { cache: "no-store" });
-    if (response.ok && response.headers.get("${WAITING_HEADER.toLowerCase()}") === null)
-      location.replace("/");
-  } catch {}
-}, 5000);
+(() => {
+  const ask = async () => {
+    try {
+      const response = await fetch("/", { cache: "no-store", signal: AbortSignal.timeout(5000) });
+      if (response.ok && response.headers.get("${WAITING_HEADER.toLowerCase()}") === null)
+        return location.replace("/");
+    } catch {}
+    setTimeout(ask, 5000);
+  };
+  setTimeout(ask, 5000);
+})();
 </script>
 `;
 
