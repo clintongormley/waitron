@@ -253,6 +253,16 @@ answers 409, `record-remedy-routes.ts:37`) **(read)**. A clock confirmation on t
 (`POST /api/box/clock-confirm`, tested in `apps/server/src/clock-confirm.route.test.ts`) lifts the
 stop for one step back (CLAUDE.md §5). Task 3c tests that path and the dialog says what to do.
 
+_2026-11-14, found on rebasing PR 2 onto main: main's #2964 (A1420 PR 5) turned the clock-behind stop
+off (`CLOCK_BEHIND_STOP_ON = false`, `packages/fiscal-verifactu/src/clock-behind.ts:14`), so a record
+dated before the newest one is now written and chained after it with its own time (one dated before
+28-10-2024 is still refused as `clock.unusable`). This paragraph, the clock-behind stop's definition
+under "Words used in this plan", Task 2b's `clock.behind_chain` row, and Task 3c's future-dated case, its
+`clock.behind_chain` sentences and its confirmation step, are rewritten for that before Task 3 is
+dispatched, together with whether a replacement may be dated earlier than the refused record it
+follows. The refusal was raised by `refuseWhileClockBehind`, which `attemptAppend` calls
+(`packages/fiscal-verifactu/src/chain.ts:158`), never by `prepareIssueClock`._
+
 ## How the sale is counted once
 
 A replacement is a second sale row (the corrective) pointing at the first (`sales.corrects_sale_id`)
@@ -859,7 +869,8 @@ Failing tests first:
   code changed, and an `aceptado_con_errores` case → `fiscal.remedy_invalid`; while the start waits
   → 409 `clock.unconfirmed`; **an original with an earlier partial refund** → 400
   `sale.replacement_not_first`, no number used (M4).
-- **A chain that ends in a future-dated record** (I4): the refused original stamped tomorrow, the
+- **A chain that ends in a future-dated record** (I4; out of date since main's #2964, see "A clock
+  that ran ahead"): the refused original stamped tomorrow, the
   clock today → 409 `clock.behind_chain` and nothing written; then a clock confirmation given
   through `POST /api/box/clock-confirm` (or the seat the clock-confirm route tests use) → the same
   request answers 200 with one R5 "S". Put this case where the boot wiring is real, beside
