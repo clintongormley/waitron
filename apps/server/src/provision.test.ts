@@ -134,13 +134,15 @@ describe("provisionVenue", () => {
     await db.execute(sql`create trigger refuse_module_selection before insert on settings
       when new.module = 'modules' begin select raise(abort, 'probe.modules_refused'); end`);
 
-    await expect(provisionVenue(deps, request)).rejects.toThrow("probe.modules_refused");
-    expect((await db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows).toEqual([
-      { n: 0 },
-    ]);
-    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
-
-    await db.execute(sql`drop trigger refuse_module_selection`);
+    try {
+      await expect(provisionVenue(deps, request)).rejects.toThrow("probe.modules_refused");
+      expect(
+        (await db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
+      ).toEqual([{ n: 0 }]);
+      expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
+    } finally {
+      await db.execute(sql`drop trigger refuse_module_selection`);
+    }
     await provisionVenue(
       {
         ...deps,

@@ -134,7 +134,7 @@ describe("POST /api/node/backup-settings", () => {
   it("a mirror writes the settings its main box signed, and answers their digest", async () => {
     await holdOwnSettings();
     await replaceBackupSettings(mainDir, SETTINGS);
-    const mains = await readOfferSettings(mainDir, RING, "handover.settings_unreadable");
+    const mains = await readOfferSettings(mainDir, RING, "handover.settings_unreadable", suite.db);
     expect(mains.backupSettings).not.toBeNull();
     expect(await send(envelopeOf())).toEqual({
       status: 200,
