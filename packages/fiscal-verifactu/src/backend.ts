@@ -117,7 +117,11 @@ type OriginalAlta = Pick<
  */
 type OriginalAltaForCorrection = Pick<
   RegistroRow,
-  "id_emisor_factura" | "num_serie_factura" | "fecha_expedicion_factura" | "tipo_factura"
+  | "id_emisor_factura"
+  | "num_serie_factura"
+  | "fecha_expedicion_factura"
+  | "tipo_factura"
+  | "tipo_rectificativa"
 >;
 
 /**
@@ -459,7 +463,8 @@ export class VerifactuBackend implements FiscalBackend {
   ): Promise<FiscalRecordRef> {
     const chart = await this.admitIssuance(tx, sale.nodeId);
     const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
-      select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura
+      select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura,
+        tipo_rectificativa
       from registros_facturacion
       where sale_id = ${correction.correctsSaleId} and tipo_registro = 'alta'
         and not exists (
@@ -472,9 +477,11 @@ export class VerifactuBackend implements FiscalBackend {
     if (original === undefined) {
       throw new AppError("fiscal.sale_not_recorded", { saleId: correction.correctsSaleId });
     }
-    // A replacement is filed only as "S", which this backend does not build yet; filing its full
-    // amounts as "I" would declare the sale twice.
-    if (original.tipo_factura !== "F2" || correction.replaces === true) {
+    // An R5 by replacement stands in for the simplified invoice it replaced, so a later correction
+    // names it by differences, as for an F2. Filing a replacement itself takes "S", which this
+    // backend does not build yet; filing its full amounts as "I" would declare the sale twice.
+    const replacement = original.tipo_factura === "R5" && original.tipo_rectificativa === "S";
+    if ((original.tipo_factura !== "F2" && !replacement) || correction.replaces === true) {
       throw new AppError("fiscal.correction_unsupported", {
         saleId: correction.correctsSaleId,
         // Non-null on every alta; only an anulación stores NULL.

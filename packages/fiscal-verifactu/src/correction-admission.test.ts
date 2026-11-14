@@ -69,6 +69,7 @@ async function file(
     figures?: Figures;
     estado?: Estado | null;
     tipo?: "F1" | "F2" | "R5";
+    byReplacement?: true;
     on?: SeededNode;
     sale?: SaleId;
     fixes?: { registroId: string; number: number };
@@ -91,7 +92,14 @@ async function file(
               Destinatarios: { IDDestinatario: [{ NombreRazon: "Customer SL", NIF: "B12345674" }] },
             }
           : {}),
-        ...(tipo === "R5" ? { TipoRectificativa: "I" } : {}),
+        ...(tipo === "R5"
+          ? options.byReplacement
+            ? {
+                TipoRectificativa: "S",
+                ImporteRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+              }
+            : { TipoRectificativa: "I" }
+          : {}),
         ...(options.fixes === undefined ? {} : { Subsanacion: "S", RechazoPrevio: "X" }),
         Desglose: (options.figures ?? AT_21).desglose,
         CuotaTotal: (options.figures ?? AT_21).cuota,
@@ -165,6 +173,11 @@ describe("a fixed filing: both judge the newest version; the newest answered is 
       newestAnswered: answered,
     });
   });
+});
+
+it("admits a replacement, an R5 by replacement, as it admits an F2", async () => {
+  const { saleId, number } = await file({ tipo: "R5", byReplacement: true });
+  expect(await admission(saleId)).toEqual(eligible("queued", number));
 });
 
 describe("refusals", () => {
