@@ -1746,12 +1746,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // No cookie — the till app fetches the language menu before any session exists.
+    // No cookie — the till app fetches the language catalogue before any session exists.
     const res = await app.request("/api/locales", {
       headers: { "Accept-Language": "en-GB,en;q=0.9" },
     });
     expect(res.status).toBe(200);
-    // The static menu verbatim (es-ES + en-GB) plus the geography-derived default for this ES
+    // The static catalogue verbatim (es-ES + en-GB) plus the geography-derived default for this ES
     // venue (`deps.venueLocale`, es-ES).
     expect(await res.json()).toEqual({
       locales: SUPPORTED_LOCALES,

@@ -610,12 +610,12 @@ async function offerRowsOn(
  * sets `productPrice`. */
 function offerPrices(row: { grossPrice: number | null; productPrice: number | null }) {
   const override = priceOrNull(row.grossPrice);
-  const variantProductPrice = centsToDecimal(row.productPrice!);
+  const productPrice = centsToDecimal(row.productPrice!);
   const unitPrice = resolveOfferPrice({
     variantMenuPrice: null,
     variantPrice: null,
     parentMenuPrice: override,
-    parentPrice: variantProductPrice,
+    parentPrice: productPrice,
   });
   return { override, unitPrice };
 }
@@ -714,14 +714,14 @@ async function offersOn(
           combined.price.state === "decided"
             ? combined.price.value
             : centsToDecimal(row.productPrice!),
-        variants: offer.variants.map(({ productPrice, ...variant }) => {
+        variants: offer.variants.map(({ productPrice: variantProductPrice, ...variant }) => {
           const decision = combined.variants.find((v) => v.variantId === variant.id)!;
           return {
             ...variant,
             unitPrice:
               decision.price.state === "decided"
                 ? decision.price.value
-                : (productPrice ?? centsToDecimal(row.productPrice!)),
+                : (variantProductPrice ?? centsToDecimal(row.productPrice!)),
           };
         }),
       });

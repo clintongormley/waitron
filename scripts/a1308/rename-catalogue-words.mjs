@@ -52,11 +52,6 @@ export const EXACT = [
 EXACT.push(
   { from: '"catalogue"', to: '"guest_menu"', files: ["packages/menu/src/guest-menu-settings.ts"] },
   {
-    from: "checkImportedSettings({ catalogue:",
-    to: "checkImportedSettings({ guest_menu:",
-    files: ["packages/provisioning/src/settings-transfer.test.ts"],
-  },
-  {
     from: "catalogueVariants",
     to: "productVariants",
     files: ["apps/dashboard/src/widgets/test-helpers.ts"],
@@ -75,6 +70,11 @@ EXACT.push(
   { from: "defaultCatalogue", to: "defaultZoneOffers", files: ["apps/till/src/till-app.test.ts"] },
 );
 export const PROTECTED = [
+  {
+    id: "K10",
+    files: ["apps/server/src/till-api.test.ts"],
+    pattern: /(?:language|static) catalogue/g,
+  },
   {
     id: "K11",
     files: ["apps/server/src/configuration-import.test.ts"],
@@ -133,7 +133,12 @@ export const PROTECTED = [
   },
 ];
 export const LOCAL_RENAMES = [
-  { file: "packages/menu/src/operations.ts", name: "productPrice", to: "variantProductPrice" },
+  {
+    file: "packages/menu/src/operations.ts",
+    name: "cataloguePrice",
+    to: "variantProductPrice",
+    when: "cataloguePrice",
+  },
   {
     file: "apps/dashboard/src/widgets/test-helpers.ts",
     name: "catalogue",

@@ -312,3 +312,13 @@ it("keeps the retired module's refusal fixture historical", () => {
     'expect(versions).not.toHaveProperty("catalogue"); // Catalogue\'s migration count just before the squash\nmodules: { catalogue: 36 }; params: { exportOnly: ["catalogue"], serverOnly: [] };';
   expect(rewrite(text, "apps/server/src/configuration-import.test.ts")).toBe(text);
 });
+
+it("renames the variant binding while retaining the top-level product price", () => {
+  const file = "packages/menu/src/operations.ts";
+  const input =
+    "const productPrice = value; const variants = offers.map(({ cataloguePrice, ...variant }) => cataloguePrice ?? row.cataloguePrice);";
+  const expected =
+    "const productPrice = value; const variants = offers.map(({ productPrice: variantProductPrice, ...variant }) => variantProductPrice ?? row.productPrice);";
+  expect(rewrite(input, file)).toBe(expected);
+  expect(rewrite(expected, file)).toBe(expected);
+});

@@ -6524,3 +6524,12 @@ The source guard is weaker than its name: it sees literal `app.get` and `app.pos
 in server source, in the listed namespaces only. Other method calls, router variable names,
 template-literal or computed paths and new namespaces are outside it. Within the mounts it
 names, the mounted test checks every registered method and path against the shared inventory.
+
+
+### Menu names and configuration format 32 (2026-11-14, A1308 mn3)
+
+Your new export names the `menus` table and `products.menu_id` and uses format 32. A format-31
+export is refused as outdated. The previous format is pinned by the pre-menu-rename case in
+`apps/server/src/configuration-import.test.ts`; the writer and parser are in
+`packages/provisioning/src/configuration-transfer.ts`. Guest sharing uses `settings.guest_menu`;
+menu defaults retain `settings.menu`.
