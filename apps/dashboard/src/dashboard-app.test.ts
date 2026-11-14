@@ -7,7 +7,16 @@ import {
 } from "@waitron/ui";
 import { commands, page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+  type MockInstance,
+} from "vitest";
 import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
@@ -4940,7 +4949,8 @@ describe("dashboard URL navigation", () => {
     async (role, permissions, modules, destination) => {
       history.replaceState(null, "", "/manage/staff");
       history.pushState(null, "", "/manage/printing-rules");
-      const length = history.length;
+      const push = vi.spyOn(history, "pushState");
+      onTestFinished(() => push.mockRestore());
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
@@ -4970,7 +4980,7 @@ describe("dashboard URL navigation", () => {
       });
       await flush(el);
       await expect.poll(() => location.pathname).toBe(destination);
-      expect(history.length).toBe(length);
+      expect(push).not.toHaveBeenCalled();
       expect(navItem(el, "printing-rules")).toBeNull();
       expect(el.shadowRoot!.querySelector("dashboard-printing-rules-screen")).toBeNull();
       const back = new Promise<void>((resolve) =>
@@ -5075,6 +5085,7 @@ describe("dashboard URL navigation", () => {
   it("an old tester link opens the Routing tab", async () => {
     history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager?dev=1#saved");
     const push = vi.spyOn(history, "pushState");
+    onTestFinished(() => push.mockRestore());
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
@@ -5311,10 +5322,11 @@ describe("dashboard URL navigation", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
     await flush(el);
     expect(location.pathname).toBe("/manage/staff");
-    const count = history.length;
+    const push = vi.spyOn(history, "pushState");
+    onTestFinished(() => push.mockRestore());
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
     await flush(el);
-    expect(history.length).toBe(count);
+    expect(push).not.toHaveBeenCalled();
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-catalogue"]')!.click();
     await flush(el);
     const back = new Promise<void>((resolve) =>
@@ -9577,12 +9589,12 @@ describe("mounted public department dialogs", () => {
   it.each(["departments", "zones", "status", "menus", "kitchen"])(
     "a saved %s bookmark opens the list without an extra history entry",
     async (view) => {
-      const count = history.length;
+      const push = vi.spyOn(history, "pushState");
       const app = await mountDepartments(`/manage/venue-operations/view/${view}?source=bookmark`);
       await expect.poll(() => find(app, "departments-list")).not.toBeNull();
       expect(location.pathname).toBe("/manage/venue-operations");
       expect(location.search).toBe("?source=bookmark");
-      expect(history.length).toBe(count);
+      expect(push).not.toHaveBeenCalled();
     },
   );
 

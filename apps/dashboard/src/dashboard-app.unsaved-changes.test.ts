@@ -444,7 +444,7 @@ it("sidebar navigation keeps the profile and URL until Discard accepts one desti
   const m = await mount();
   change(m, "123456");
   await m.screen.updateComplete;
-  const length = history.length;
+  const push = vi.spyOn(history, "pushState");
   selectOrders(m);
   await expect.poll(() => m.question.open).toBe(true);
   expect(location.pathname).toBe("/manage/profile");
@@ -452,7 +452,7 @@ it("sidebar navigation keeps the profile and URL until Discard accepts one desti
   expect(m.screen.isConnected).toBe(true);
   await choose(m, "keep");
   expect(location.pathname).toBe("/manage/profile");
-  expect(history.length).toBe(length);
+  expect(push).not.toHaveBeenCalled();
   expect(telephone(m)).toBe("123456");
   selectOrders(m);
   await expect.poll(() => m.question.open).toBe(true);

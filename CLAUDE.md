@@ -803,7 +803,7 @@ passed while proving nothing.
 - **For a dialog's `wt-close` effects, wait for that event or the screen's resulting close event.**
   Neither `vi.waitFor`'s second nor `open=false` proves it. Nothing guards it.
 - **Observe navigation with spies on `history.pushState`/`replaceState`, never `history.length`.**
-  Nothing guards it.
+  Guard: `scripts/no-history-length.test.ts`, weaker than its name: reads test files as text.
 - **A test waits for a browser grant, such as a Web Lock, by tracking the request until it is
   answered — never by a fixed sleep.** Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-waits-for-a-browser-grant-by-tracking-the-request-never-by-a-fixed-sleep).

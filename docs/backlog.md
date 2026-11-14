@@ -694,12 +694,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Supervisor station read** (bundle of 2, size S, needs the owner). Holds A1079. [Detail](backlog/kitchen.md#bundle-supervisor-station-read)
 
-- **Browser tests still read `history.length` to tell whether a push happened, and Chromium stops
-  it at 50**, so past that a test cannot see a push (`git grep -l 'history\.length;' -- '*.test.ts'`,
-  Prep stations' older address cases among them). Move them to `pushState`/`replaceState` spies, as
-  the retired-address tests do — left open by A506-12.
-
-
 - **A930. The manager's overdue report counts a held dish as late (left open by A757 slice 3).**
   `computeOverdueOrders` (`packages/reporting/src/overdue-orders.ts`) never checks `fired_at`, so a
   dish held 20 minutes is listed Forgotten while the floor counts only fired dishes (A757 Q17). It

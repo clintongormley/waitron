@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -380,11 +380,12 @@ it("opens on the tab the path names", async () => {
 
 it("falls back to Extras for an unknown tab without adding a history entry", async () => {
   history.replaceState(null, "", "/manage/modifiers/view/bogus");
-  const before = history.length;
+  const push = vi.spyOn(history, "pushState");
+  onTestFinished(() => push.mockRestore());
   const el = await mount();
   expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("extras");
   expect(location.pathname).toBe("/manage/modifiers/view/extras");
-  expect(history.length).toBe(before);
+  expect(push).not.toHaveBeenCalled();
 });
 
 describe("a path naming one list", () => {
@@ -407,23 +408,25 @@ describe("a path naming one list", () => {
 
   it("opens nothing for a list it does not hold, and drops it from the path without a history entry", async () => {
     history.replaceState(null, "", "/manage/modifiers/view/options/list/gone");
-    const before = history.length;
+    const push = vi.spyOn(history, "pushState");
+    onTestFinished(() => push.mockRestore());
     const el = await mount();
     await vi.waitFor(() => expect(location.pathname).toBe("/manage/modifiers/view/options"));
     expect(optionForm(el).open).toBe(false);
-    expect(history.length).toBe(before);
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("drops the list from the path, without a history entry, when its editor closes", async () => {
     history.replaceState(null, "", "/manage/modifiers/view/options/list/o1");
-    const before = history.length;
+    const push = vi.spyOn(history, "pushState");
+    onTestFinished(() => push.mockRestore());
     const el = await mount();
     await vi.waitFor(() => expect(optionForm(el).open).toBe(true));
     optionForm(el).dispatchEvent(new CustomEvent("wt-cancel", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(optionForm(el).open).toBe(false);
     expect(location.pathname).toBe("/manage/modifiers/view/options");
-    expect(history.length).toBe(before);
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("drops the list from the path once its editor saves", async () => {
@@ -443,7 +446,8 @@ describe("a path naming one list", () => {
 
   it("leaves the path alone when a row opens an editor", async () => {
     history.replaceState(null, "", "/manage/modifiers/view/options");
-    const before = history.length;
+    const push = vi.spyOn(history, "pushState");
+    onTestFinished(() => push.mockRestore());
     const el = await mount();
     const options = table(el, "option-lists");
     await options.updateComplete;
@@ -454,7 +458,7 @@ describe("a path naming one list", () => {
     await el.updateComplete;
     expect(optionForm(el).open).toBe(true);
     expect(location.pathname).toBe("/manage/modifiers/view/options");
-    expect(history.length).toBe(before);
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("keeps the editor and its shown refusal when the address comes back naming the same list", async () => {

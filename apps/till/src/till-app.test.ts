@@ -21665,7 +21665,6 @@ describe("W69 till shell leave routes", () => {
         }
         expect(schedule(el)).toBe(owner);
         await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Legacy request");
-        const length = history.length;
         const pushes = vi.spyOn(history, "pushState");
         const go = vi.spyOn(history, "go");
         try {
@@ -21692,7 +21691,6 @@ describe("W69 till shell leave routes", () => {
             expect(unload.defaultPrevented).toBe(false);
           }
           expect(history.state.__wtNavigation.index).toBe(0);
-          expect(history.length).toBe(length);
           expect(pushes).not.toHaveBeenCalled();
           expect(go).not.toHaveBeenCalled();
           expect(currentApi.requestAbsence).not.toHaveBeenCalled();
