@@ -1,5 +1,7 @@
 # A949: explicitly retain partly refunded SumUp money
 
+**Do not build or publish.** Watcher 14 November 2026 16:48 has put this proposal to the owner, recommending it be dropped as outside A949’s original ask. Retain this reviewed draft until the owner answers; the existing full-refund route remains. Claude’s completed plan read also identified a post-invoice double-subtraction in the proposed unchanged refund path (`tender-refund-balance.ts:149–174`); no implementation or runtime claim is made.
+
 **Authority.** Lane F queue A949 retains “retained-money allocation after a partial refund”; watcher `questions.md`, 2026-11-14 16:33: “Next: the retained-money allocation after a partial refund, plan first as usual.” The review brief quotes the complete original ask. No owner design approval is claimed.
 
 **Result.** In Card payments, a manager explicitly allocates the remaining money to its original unfiled open/placed bill; staff collect only the outstanding balance. Preserve **Confirm full refund** and the mere-check hold (watcher 9 November 20:08; full-refund-only clearance 13 November 12:14). Retention needs separate watcher clearance.
