@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { RecordSaleInput } from "@waitron/core";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { jobOrigin } from "@waitron/shared";
 import type { NodeId, SeriesId } from "@waitron/shared";
@@ -105,4 +105,12 @@ export async function storedRecord(
     .from(registrosFacturacion)
     .where(eq(registrosFacturacion.id, recordId));
   return row;
+}
+
+/** Leaves every record of `saleId` refused by AEAT, as a drain pass does on its refusal. */
+export async function refusedByAeat(db: Database | Transaction, saleId: string): Promise<void> {
+  await db.execute(sql`
+    update envios set estado = 'rechazado'
+    where registro_id in (select id from registros_facturacion where sale_id = ${saleId})
+  `);
 }

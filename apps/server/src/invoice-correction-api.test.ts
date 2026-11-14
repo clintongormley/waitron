@@ -17,6 +17,7 @@ import { receiptLabelsFor } from "@waitron/country-packs";
 import { listAdjustmentReasons, type AdjustmentReason } from "@waitron/adjustments";
 import { loginWithPin } from "@waitron/identity";
 import { recordReplacement } from "@waitron/core";
+import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { saleId as brandSaleId, seriesId as brandSeriesId, type SaleId } from "@waitron/shared";
 import {
@@ -178,8 +179,10 @@ async function opened(saleId: string): Promise<string> {
 }
 
 /** Replaces the invoice `saleId` through the core writer, as the replacement remedy will. */
+/** Replaces the bill as the administrator would once AEAT has refused it. */
 function replace(saleId: SaleId): Promise<SaleId> {
   return inTx(venue, async (tx) => {
+    await refusedByAeat(tx, saleId);
     const session = await loginWithPin(tx, {
       deviceId: venue.deviceId,
       personId: venue.adminId,
@@ -689,8 +692,7 @@ describe("GET /api/invoice-corrections", () => {
   });
 });
 
-// Skipped until Task 3d: the Veri*Factu backend refuses to file the replacement itself.
-describe.skip("a replaced bill is corrected through its replacement", () => {
+describe("a replaced bill is corrected through its replacement", () => {
   it("files the credit note of a correction opened on the bill against the replacement", async () => {
     const saleId = await sold(["10.00"]);
     const replacementId = await replace(saleId);
@@ -704,7 +706,8 @@ describe.skip("a replaced bill is corrected through its replacement", () => {
   });
 
   it("cancels and credits the bill by crediting the replacement whole", async () => {
-    const saleId = await sold(["10.00"]);
+    // Unpaid: only an unpaid bill is cancelled and credited.
+    const saleId = await sold([]);
     const replacementId = await replace(saleId);
 
     await inTx(venue, async (tx) => {

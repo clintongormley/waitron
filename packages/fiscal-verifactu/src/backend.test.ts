@@ -32,7 +32,13 @@ import { PRODUCER_PENDING, SOFTWARE_IDENTITY } from "./software-identity.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import {
+  fakeClient,
+  refusedByAeat,
+  saleInput,
+  staticResolver,
+  steadyClock,
+} from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
 let deviceId: DeviceId;
@@ -771,10 +777,7 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
         counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
       });
     });
-    await suite.db.execute(sql`
-      update envios set estado = 'rechazado'
-      where registro_id = (select id from registros_facturacion where sale_id = ${original})
-    `);
+    await refusedByAeat(suite.db, original);
 
     await expect(replace(original, laterDay, "2026-03-01")).rejects.toMatchObject({
       code: "fiscal.correction_unsupported",
