@@ -1058,16 +1058,13 @@ tests. Media still validates required image names and translates its refusal to
 
 ## A1517. Allergen points to revisit before go-live
 
-**Before go-live (owner, 2026-11-11).** The original observations below came from reading,
-not running. The [proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
-11 November runtime checks and their limits. The owner accepted its recommendations at 22:01;
-the [recorded decisions](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
-split the implementation into six follow-ups. The guest menu remains open.
-The proposal distinguishes the narrower measured cases from these original observations.
+The remaining guest-menu work is delivery to Cloud and a guest link over mobile data, tracked
+under [A670](#a670--guest-menu-sharing-and-fixed-a4-presets).
 
-1. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was
-   retired), no printed menu (A670) and no online menu yet (A509). The data-protection guide tells
-   venues to put a notice "on the menu or allergen sheet".
+The [11 November proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
+original checks and their limits. The owner accepted its recommendations at 22:01; the
+[recorded decisions](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
+retain the earlier scope and the six follow-ups.
 
 ## Decisions and deliberate limits
 
