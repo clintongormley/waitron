@@ -224,11 +224,11 @@ describe("seedSales", () => {
     const venue = await createDemoVenueProvisioner(() => suite.db, {
       nifBase: 82_000_000,
       nifFormat: "calculated",
-      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+      invoiceLocale: "es-ES",
     })();
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
-      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+      invoiceLocale: "es-ES",
       days: 2,
       products: CENT_SPLIT_PRODUCTS,
     });
