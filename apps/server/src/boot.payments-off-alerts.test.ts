@@ -67,6 +67,11 @@ describe("the running server's alerts with card payments off", () => {
       expect(response.status).toBe(200);
       const { alerts } = (await response.json()) as { alerts: Alert[] };
       expect(alerts.filter((alert) => alert.area === "card_reader")).toEqual([]);
+      expect(
+        suite.db.all(sql`select name from sqlite_master where name in
+        ('payments', 'payment_resolutions', 'payment_holds', 'payment_hold_outcomes',
+         '__drizzle_migrations_payments')`),
+      ).toEqual([]);
     } finally {
       if (server !== undefined) await server.close();
       if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });

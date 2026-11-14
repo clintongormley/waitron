@@ -7,11 +7,11 @@ their full text.
 
 - **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17 00:05, watcher window).**
   Agreement receipt: `~/waitron-campaign-f/archive/questions-to-2026-10-23.md:1169`.
-  [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Administrators can turn card providers on or off after removing their readers; credentials remain available for earlier-payment recovery. Bookings can be switched on or off with a separate administrator restart; the failed-start recovery page can switch it off with an active administrator's password. Workforce, workforce-es, payments and staffing still wait for the append-only protection repair; A646 stays OPEN.
+  [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Administrators can turn card providers on or off after removing their readers; credentials remain available for earlier-payment recovery. Bookings can be switched on or off with a separate administrator restart; the failed-start recovery page can switch it off with an active administrator's password. Workforce-es and Payments switches remain to build; workforce and staffing stay mandatory under A1002. The [remaining-switches plan](../superpowers/plans/2026-11-14-a646-remaining-module-switches.md) was read by Claude and cleared by the watcher on 2026-11-14 at 14:22; A646 stays OPEN.
   [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
   static mockups (removed from the repository on 2026-11-02). The
-  [switched-off modules' append-only protection](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
-  stays OPEN and gates the four remaining switches. Bookings owns no append-only table and has its own set.
+  [switched-off modules' append-only protection](#unselected-fiscal-modules-append-only-tables-are-neither-re-protected-nor-checked)
+  stays OPEN for unselected fiscal modules; retained optional-module tables are protected. Bookings owns no append-only table and has its own set.
   **Owner, 2026-11-11: Google sign-in leaves A646** ("Move google signin to the backlog, with the
   intention of doing it with a single key via waitron, but this is definitely not a go live
   requirement"); it is A1507 in [later.md](later.md#a1507-google-sign-in-built-in-through-one-waitron-owned-google-setup).
@@ -22,7 +22,7 @@ their full text.
   with All states. Rows offer Configure where settings exist (watcher, 2026-11-11 17:15), plus Enable/Disable when switching is available, with persistent red reasons
   when Disable is forbidden. Configure opens a modal and saves settings only; state changes need
   separate confirmation and server checks. Stripe/SumUp remain Payments
-  contributions. The four remaining optional module switches are unavailable. Reuse provider
+  contributions. The two remaining optional module switches are unavailable. Reuse provider
   reader-add checks; Off requires readers removed first, while credentials remain available for refunds and checks.
   Cut live module-code switching, pending-operation records and rerouting every `modules.json` reader
   (watcher, 2026-11-11 14:54).
@@ -198,19 +198,16 @@ behaviour — the drain deliberately collects the rows an orphaned writer left �
 decision, not a cleanup. **Next action:** decide whether a read-only body should take the lock at
 all.
 
-## A switched-off module's append-only tables are neither re-protected nor checked
+## Unselected fiscal modules' append-only tables are neither re-protected nor checked
 
-**Left open by A483.** Boot hands `applyMigrations` the sets of the modules this start migrates
-(`setsToMigrate` in `apps/server/src/boot.ts`: every module in setup mode, the enabled ones when
-trading), and the append-only check and the 10-second watch read the same list
-(`appendOnlyTables`). A module switched off after its tables exist keeps those tables, but no start
-re-installs or checks their triggers. From `packages/composition/src/modules.ts` and each module's
-classification, read 2026-10-11 and not measured on a box: `payment_resolutions` (payments, `toggleable`), and
-`registros_facturacion`, `filing_cases` and `filing_case_events` (fiscal-verifactu,
-`provision-only`) on a box later moved to `fiscal-none`. The alternative is to check every known
-module's tables that exist; its cost is a box that refuses to start after a release marks an
-existing table of a switched-off module `appendOnly()`, because no migration of that module would
-run to install the new trigger. Owner question Q5 of A483.
+**Left open by A483: unselected provision-only fiscal modules.** Boot repairs missing triggers,
+refuses changed definitions and watches existing tables declared append-only by toggleable modules,
+even while Off. The selected migration sets still supply the rest of the protected list. No absent
+optional table is created by that repair.
+
+A box moved from fiscal-verifactu to fiscal-none still does not re-protect or watch the unselected
+fiscal set's retained tables (`registros_facturacion`, filing-case tables and other declarations).
+That fiscal protection decision remains outside A646's optional-module repair.
 
 ## These index and key names still read `tenant`, and the columns they name are gone
 
@@ -618,7 +615,7 @@ reset and operator gates; this entry does not start that job.
 
 OPEN.
 
-- [Switched-off modules' append-only protection](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
+- [Switched-off modules' append-only protection](#unselected-fiscal-modules-append-only-tables-are-neither-re-protected-nor-checked).
 - **Putting back a changed append-only trigger is a hand-typed command.** Retry cannot clear
   `append_only.triggers_changed` for a changed trigger; the installer runs the `node -e` drop in
   `deploy/README.md` (_When the page names `append_only.triggers_changed`_) and then presses

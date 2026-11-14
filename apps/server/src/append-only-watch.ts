@@ -1,3 +1,5 @@
+import type { WaitronModule } from "@waitron/module";
+import { appendOnlyTablesIn } from "@waitron/sync-enrolment";
 import { sql } from "drizzle-orm";
 import { openVenueDatabase, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
@@ -30,20 +32,34 @@ export async function missingBeforeMigration(
 ): Promise<string[]> {
   const probe = await openVenueDatabase(venueDir);
   try {
-    const existing = new Set(
-      probe.venue
-        .execute<{ name: string }>(
-          sql`select lower(name) as name from sqlite_master where type = 'table'`,
-        )
-        .rows.map((row) => row.name),
-    );
-    return appendOnlyTriggerFaults(
-      probe.venue,
-      tables.filter((table) => existing.has(table.toLowerCase())),
-    ).missing;
+    return appendOnlyTriggerFaults(probe.venue, existingAppendOnlyTables(probe.venue, tables))
+      .missing;
   } finally {
     await probe.close();
   }
+}
+
+function existingAppendOnlyTables(db: Database, tables: readonly string[]): string[] {
+  const existing = new Set(
+    db
+      .execute<{ name: string }>(
+        sql`select lower(name) as name from sqlite_master where type = 'table'`,
+      )
+      .rows.map((row) => row.name),
+  );
+  return tables.filter((table) => existing.has(table.toLowerCase()));
+}
+
+export function existingOptionalAppendOnlyTables(
+  db: Database,
+  modules: readonly Pick<WaitronModule, "tier" | "classification">[],
+): string[] {
+  return existingAppendOnlyTables(
+    db,
+    modules
+      .filter((module) => module.tier === "toggleable")
+      .flatMap((module) => appendOnlyTablesIn(module.classification ?? [])),
+  );
 }
 
 export interface RefuseTradingDeps {

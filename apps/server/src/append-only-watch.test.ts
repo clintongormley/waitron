@@ -11,7 +11,12 @@ import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations } from "@waitron/migrations";
 import { installAppendOnlyTriggers } from "@waitron/store";
-import { missingBeforeMigration, refuseTrading, tamperWatchJob } from "./append-only-watch.js";
+import {
+  existingOptionalAppendOnlyTables,
+  missingBeforeMigration,
+  refuseTrading,
+  tamperWatchJob,
+} from "./append-only-watch.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import {
@@ -84,6 +89,32 @@ describe("refuseTrading", () => {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const UPDATE = "sales_append_only_update";
 const DELETE = "sales_append_only_delete";
+
+it.each([
+  { tier: "toggleable", want: ["sales"] },
+  { tier: "mandatory", want: [] },
+  { tier: "provision-only", want: [] },
+] as const)(
+  "selects existing retained tables only from optional descriptors ($tier)",
+  ({ tier, want }) => {
+    expect(
+      existingOptionalAppendOnlyTables(suite.db, [
+        {
+          tier,
+          classification: [
+            { table: "sales", class: "ledger", reason: "Recorded history", appendOnly: true },
+            {
+              table: "never_installed",
+              class: "ledger",
+              reason: "Absent optional history",
+              appendOnly: true,
+            },
+          ],
+        },
+      ]),
+    ).toEqual(want);
+  },
+);
 
 describe("tamperWatchJob", () => {
   let runner: JobRunner;
@@ -222,6 +253,6 @@ describe("missingBeforeMigration", () => {
     } finally {
       raw.close();
     }
-    expect(await missingBeforeMigration(dir, ["sales"])).toEqual([DELETE]);
+    expect(await missingBeforeMigration(dir, ["sales", "never_installed"])).toEqual([DELETE]);
   });
 });

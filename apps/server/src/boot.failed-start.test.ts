@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdir } from "node:fs/promises";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -1251,6 +1252,90 @@ describe("append-only triggers at boot", () => {
     },
     60_000,
   );
+});
+
+describe("retained optional append-only tables at boot", () => {
+  const tables = ["payment_resolutions", "payment_holds", "payment_hold_outcomes"];
+
+  it("repairs Payments-Off triggers, warns, and preserves rows and existing journal entries", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir({ "fiscal-none": false, payments: false }, { leaf: true });
+    tamper(
+      venueDir,
+      `
+      insert into working_orders (id, source, order_number, opened_at)
+        values ('retained-order', 'operator_script', 1, '2026-11-14T10:00:00.000Z');
+      insert into payments (id, working_order_id, source, provider, payment_ref, amount, state, created_at, updated_at)
+        values ('retained-payment', 'retained-order', 'operator_script', 'stripe', 'retained-ref', 1000, 'captured', '2026-11-14T10:00:00.000Z', '2026-11-14T10:00:00.000Z');
+      insert into payment_resolutions (id, payment_id, working_order_id, outcome, cancelled_at_provider, person_id, resolved_at)
+        values ('retained-resolution', 'retained-payment', 'retained-order', 'captured', 0, 'manager', '2026-11-14T10:00:00.000Z');
+      insert into payment_holds (id, payment_id, provider_amount, found_at)
+        values ('retained-hold', 'retained-payment', 1000, '2026-11-14T10:00:00.000Z');
+      insert into payment_hold_outcomes (id, hold_id, outcome, person_id, recorded_at)
+        values ('retained-outcome', 'retained-hold', 'kept', 'manager', '2026-11-14T10:00:00.000Z');
+    `,
+    );
+    const store = await openVenueDatabase(venueDir);
+    let before: unknown[];
+    try {
+      before = store.venue.all(sql`select * from __drizzle_migrations_payments`);
+    } finally {
+      await store.close();
+    }
+    const triggers = tables.flatMap((table) =>
+      ["update", "delete"].map((event) => `${table}_append_only_${event}`),
+    );
+    for (const trigger of triggers) tamper(venueDir, `drop trigger ${trigger}`);
+    expect(await triggerFaults(venueDir, tables)).toEqual({ missing: triggers, altered: [] });
+    const env = await tradingEnv(venueDir, state);
+    const lines = await withLoggedLines(async () => {
+      const server = await startServer(env);
+      try {
+        await listening(Number(env.WAITRON_HTTP_PORT));
+      } finally {
+        await server.close();
+      }
+    });
+    expect(await triggerFaults(venueDir, tables)).toEqual({ missing: [], altered: [] });
+    expect(lines.filter((line) => line.event === "append_only.triggers_restored")).toEqual([
+      expect.objectContaining({ level: "warn", triggers }),
+    ]);
+    for (const table of tables) {
+      expect(() => tamper(venueDir, `update ${table} set id = id`)).toThrow(
+        `${table} is append-only`,
+      );
+      expect(() => tamper(venueDir, `delete from ${table}`)).toThrow(`${table} is append-only`);
+    }
+    const after = await openVenueDatabase(venueDir);
+    try {
+      expect(after.venue.all(sql`select * from __drizzle_migrations_payments`)).toEqual(before);
+      for (const table of tables) {
+        expect(after.venue.all(sql.raw(`select count(*) as n from ${table}`))).toEqual([{ n: 1 }]);
+      }
+    } finally {
+      await after.close();
+    }
+  }, 60_000);
+
+  it("refuses a replaced Payments-Off trigger and gives the venue folder back", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir({ "fiscal-none": false, payments: false });
+    tamper(
+      venueDir,
+      `drop trigger payment_holds_append_only_update;
+      create trigger payment_holds_append_only_update before update on payment_holds begin select 1; end`,
+    );
+    const outcome = await startServer(await tradingEnv(venueDir, state)).then(
+      (server) => server,
+      (error: unknown) => error,
+    );
+    if (isStartedServer(outcome)) await outcome.close();
+    expect(outcome).toMatchObject({
+      code: "append_only.triggers_changed",
+      params: { missing: [], altered: ["payment_holds_append_only_update"] },
+    });
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
 });
 
 describe("which starts watch the append-only triggers", () => {

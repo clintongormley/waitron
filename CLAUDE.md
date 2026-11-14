@@ -936,7 +936,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **`registros_facturacion` is immutable: never work around its append-only update/delete triggers.**
   Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
   on existing tables; boot and the trading watch refuse changed/missing triggers. `append-only-watch`
-  is weaker than its name: stored text only, only tables migrated at start.
+  is weaker than its name: stored text only; selected declarations and existing append-only tables of toggleable modules.
 - **Every start of a box that files records writes no fiscal record and moves no money until its
   time is confirmed: by the box's internet time service being synchronised, by two enrolled devices
   at different addresses reading within 5 seconds of it, or by a person confirming or correcting the

@@ -2,7 +2,12 @@ import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
-import { CLOUD_STAFF_CERT_FILE, SECRETS_ENV_FILE, SERVER_PEM_FILE } from "@waitron/store";
+import {
+  CLOUD_STAFF_CERT_FILE,
+  SECRETS_ENV_FILE,
+  SERVER_PEM_FILE,
+  installAppendOnlyTriggers,
+} from "@waitron/store";
 import {
   boxHostClient,
   boxHostRequests,
@@ -26,6 +31,7 @@ import {
 import {
   APPEND_ONLY_CHECK_MS,
   assertAppendOnlyIntact,
+  existingOptionalAppendOnlyTables,
   missingBeforeMigration,
   refuseTrading,
   tamperWatchJob,
@@ -1285,6 +1291,7 @@ async function bootServer(
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   let attendanceSchemaBeforeMigrations: number | undefined;
+  let retainedOptionalTables: string[];
   let letGoOfCheckedAddresses: () => Promise<void>;
   try {
     // The first moment this start holds a node handle.
@@ -1321,6 +1328,7 @@ async function bootServer(
       config.environment,
       availableModules.flatMap((module) => (module.fiscal === undefined ? [] : [module.fiscal])),
     );
+    retainedOptionalTables = existingOptionalAppendOnlyTables(stampProbe.venue, availableModules);
     attendanceSchemaBeforeMigrations = stampProbe.venue.execute<{ schema_version: number }>(
       sql`pragma schema_version`,
     ).rows[0]!.schema_version;
@@ -1358,8 +1366,12 @@ async function bootServer(
     orderedMigrationSets(setsToMigrate),
     config.migrationsRoot,
   );
-  const appendOnlyTables = migrationOptions.flatMap((set) => set.appendOnlyTables ?? []);
-  // A short-lived open, closed before `applyMigrations`, which puts any of these back.
+  const appendOnlyTables = [
+    ...new Set([
+      ...migrationOptions.flatMap((set) => set.appendOnlyTables ?? []),
+      ...retainedOptionalTables,
+    ]),
+  ];
   const restoredTriggers = [
     ...firstPassRestored,
     ...(await missingBeforeMigration(
@@ -1396,7 +1408,8 @@ async function bootServer(
   const freeSpace = createFreeSpaceState({ log });
   const db = store.venue;
   if (config.node === undefined) moduleConfig = await readModuleConfig(db);
-  // After migrating, which reinstalls a missing trigger but leaves a same-name altered one in place.
+  // Off modules keep their existing tables protected without running their migrations.
+  installAppendOnlyTriggers(db, retainedOptionalTables);
   assertAppendOnlyIntact(db, appendOnlyTables);
   // A missing trigger also shows up after a crash between a set's migration and its trigger
   // install, or on the first start of a release that marks an existing table append-only, so this

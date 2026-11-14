@@ -107,13 +107,37 @@ describe("contained upgrade data checks", () => {
     return { config: loadConfig(env, migrations, root), env };
   }
 
-  it("runs the configured backend and real menu/history readers on migrated data", async () => {
-    const { checkUpgradeData } = await import("./upgrade-checks.js");
-    const { config, env } = await copiedConfig();
-    const report = await checkUpgradeData(config, env);
-    expect(report).toEqual({ mode: "trading", menus: 3, orders: 1, fiscalRecords: 1 });
-    expect(await checkUpgradeData(config, env)).toEqual(report);
-  });
+  it.each([false, true])(
+    "runs the configured backend and real menu/history readers (Payments Off: %s)",
+    async (paymentsOff) => {
+      const { checkUpgradeData } = await import("./upgrade-checks.js");
+      const { config, env } = await copiedConfig();
+      if (paymentsOff) {
+        await seedModuleSettings(config.venueDir, { "fiscal-none": false, payments: false });
+        const file = new DatabaseSync(join(config.venueDir, "venue.db"));
+        try {
+          file.exec("drop trigger payment_holds_append_only_update");
+        } finally {
+          file.close();
+        }
+      }
+      const report = await checkUpgradeData(config, env);
+      expect(report).toEqual({ mode: "trading", menus: 3, orders: 1, fiscalRecords: 1 });
+      expect(await checkUpgradeData(config, env)).toEqual(report);
+      const file = new DatabaseSync(join(config.venueDir, "venue.db"));
+      try {
+        expect(
+          file
+            .prepare(
+              "select name from sqlite_master where name = 'payment_holds_append_only_update'",
+            )
+            .all(),
+        ).toEqual([{ name: "payment_holds_append_only_update" }]);
+      } finally {
+        file.close();
+      }
+    },
+  );
 
   it("loads the saved box configuration, finishes its contained entry and releases its listener", async () => {
     const { runUpgradeChecks } = await import("./upgrade-check-entry.js");
@@ -174,23 +198,35 @@ describe("contained upgrade data checks", () => {
 
   it.each([
     {
+      paymentsOff: false,
       name: "a newer recorded migration",
       sql: "insert into __drizzle_migrations_db (hash,created_at) values ('unknown-release',9999999999999)",
       code: "provisioning.database_ahead",
     },
     {
+      paymentsOff: false,
       name: "changed append-only protection",
       sql: "drop trigger sales_append_only_update; create trigger sales_append_only_update before update on sales begin select 1; end",
       code: "append_only.triggers_changed",
     },
     {
+      paymentsOff: false,
       name: "a menu with missing structure",
       sql: "delete from menu_details",
       code: "catalogue.not_found",
     },
-  ])("refuses $name and releases the venue folder", async ({ sql, code }) => {
+    {
+      paymentsOff: true,
+      name: "changed optional-module protection while Payments Off",
+      sql: "drop trigger payment_holds_append_only_update; create trigger payment_holds_append_only_update before update on payment_holds begin select 1; end",
+      code: "append_only.triggers_changed",
+    },
+  ])("refuses $name and releases the venue folder", async ({ sql, code, paymentsOff }) => {
     const { checkUpgradeData } = await import("./upgrade-checks.js");
     const { config, env } = await copiedConfig();
+    if (paymentsOff) {
+      await seedModuleSettings(config.venueDir, { "fiscal-none": false, payments: false });
+    }
     const file = new DatabaseSync(join(config.venueDir, "venue.db"));
     try {
       file.exec(sql);
