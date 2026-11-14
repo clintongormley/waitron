@@ -512,13 +512,33 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That display name is already in use. Add a surname or nickname.",
     es: "Ese nombre visible ya está en uso. Añade un apellido o apodo.",
   },
+  "role.name_required": {
+    en: "Enter a name for this access role.",
+    es: "Introduce un nombre para este rol de acceso.",
+  },
+  "role.name_taken": {
+    en: "That access role name is already in use. Choose another name.",
+    es: "Ese nombre de rol de acceso ya está en uso. Elige otro nombre.",
+  },
+  "role.permission_unknown": {
+    en: "This permission is no longer available. Reload to see the current permissions.",
+    es: "Este permiso ya no está disponible. Recarga para ver los permisos actuales.",
+  },
+  "role.changed": {
+    en: "Someone changed this access role while you were editing. Reload to see the current role.",
+    es: "Alguien cambió este rol de acceso mientras editabas. Recarga para ver el rol actual.",
+  },
+  "role.built_in": {
+    en: "Built-in role names cannot change and built-in roles cannot be deleted. Admin's permissions are fixed.",
+    es: "Los roles integrados no se pueden renombrar ni eliminar. Los permisos de Admin son fijos.",
+  },
   "role.not_found": {
     en: "This access role is no longer available. Reload to choose from the current roles.",
     es: "Este rol de acceso ya no está disponible. Recarga para elegir entre los roles actuales.",
   },
   "role.not_permitted": {
-    en: "You can only give or take away a role whose permissions you all have.",
-    es: "Solo puedes dar o quitar un rol cuyos permisos tengas todos.",
+    en: "You can only change a role if you hold all of its permissions.",
+    es: "Solo puedes cambiar un rol si tienes todos sus permisos.",
   },
   "person.roles_changed": {
     en: "Someone changed this person's access roles while you were editing. Reload to see them; your changes are kept until you do.",
