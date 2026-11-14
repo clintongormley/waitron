@@ -213,9 +213,7 @@ export function createNetworkChange({
         ]);
         state.previous = null;
         await save(state);
-      } catch {
-        /* Keep unfinished demotion for the next run; publication remains independent. */
-      }
+      } catch {}
     }
     await publish(state);
   }
