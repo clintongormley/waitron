@@ -162,7 +162,19 @@ export async function serverHealth(options, unavailable) {
 }
 
 export async function serverRoute(options) {
-  const { runId, attempt = 1, request, repository, repositoryId } = options;
+  // The run-created cutoff also omits queued retries of older runs.
+  const since = new Date((options.now ?? Date.now()) - 86_400_000).toISOString();
+  const recent = {
+    ...options,
+    request: (path, requestOptions) =>
+      options.request(
+        path.includes("/runs?status=queued")
+          ? `${path}&created=${encodeURIComponent(">=" + since)}`
+          : path,
+        requestOptions,
+      ),
+  };
+  const { runId, attempt = 1, request, repository, repositoryId } = recent;
   const unavailable = [];
   if (attempt > 1) {
     const cancelled = await readInventory(async () => {
@@ -184,7 +196,7 @@ export async function serverRoute(options) {
       };
     }
   }
-  const state = await serverHealth(options, unavailable);
+  const state = await serverHealth(recent, unavailable);
   if (state.stuck.length)
     return {
       route: "hosted",

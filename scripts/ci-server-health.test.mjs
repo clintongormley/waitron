@@ -177,6 +177,10 @@ describe("server health recovery", () => {
       sibling(f, { name, conclusion, status: "completed", runner_id });
       expect((await health.recoverServer(f.options)).retried).toEqual(move ? [12] : []);
       expect(f.calls.some(([, options]) => options.method)).toBe(move);
+      expect(f.calls.filter(([path]) => path.includes("/runs?")).map(([path]) => path)).not.toEqual(
+        [],
+      );
+      expect(f.calls.every(([path]) => !path.includes("created="))).toBe(true);
     },
   );
   it("never moves a later attempt again", async () => {
