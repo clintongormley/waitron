@@ -2220,4 +2220,23 @@ describe("the editor's Save row in a short scroller", () => {
     expect(row.top).toBeGreaterThanOrEqual(view.top);
     expect(row.bottom).toBeLessThanOrEqual(view.bottom + 0.5);
   });
+
+  it("draws Use Waitron's look level with Save when they share a line", async () => {
+    const before = [innerWidth, innerHeight] as const;
+    await page.viewport(1280, 900);
+    try {
+      setLocale("en-GB");
+      const { el } = await mountEditing(inUse(lucia));
+      el.parentElement!.style.width = "1000px";
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      scrollTo(0, document.documentElement.scrollHeight);
+      const use = button(el, "use-waitron").getBoundingClientRect();
+      const save = button(el, "save").getBoundingClientRect();
+      expect(save.left).toBeGreaterThan(use.right);
+      expect(use.top).toBeCloseTo(save.top, 0);
+    } finally {
+      scrollTo(0, 0);
+      await page.viewport(...before);
+    }
+  });
 });

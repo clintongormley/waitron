@@ -275,12 +275,12 @@ test("pads its block ends with the shared space token", async () => {
   expect([bar.paddingTop, style.paddingBottom, style.position]).toEqual(["13px", "13px", "sticky"]);
 });
 
-test("under an ancestor that marks a dialog's footer, keeps the footer's own look: not held, no padding, line or background", async () => {
+test("under an ancestor that marks the row as laid out in place (as a dialog's footer does), keeps its place: not held, no padding, line or background", async () => {
   const el = await mount(
     '<div><wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions></div>',
   );
   host.style.setProperty("--wt-space-2", "13px");
-  host.style.setProperty("--wt-form-actions-in-footer", "true");
+  host.style.setProperty("--wt-form-actions-in-place", "true");
   const row = el.querySelector("wt-form-actions")!;
   const style = getComputedStyle(row);
   const bar = getComputedStyle(row.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!);

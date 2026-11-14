@@ -149,7 +149,7 @@ export class WtDialog extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
-        --wt-form-actions-in-footer: true;
+        --wt-form-actions-in-place: true;
       }
 
       /* A message taller than the room the body leaves scrolls, so the buttons below it stay in

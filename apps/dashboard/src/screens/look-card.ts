@@ -269,7 +269,7 @@ export class LookCard extends LitElement {
         container-type: inline-size;
         display: flex;
         flex-wrap: wrap;
-        align-items: flex-end;
+        align-items: last baseline;
         gap: var(--wt-space-2);
       }
       .fields {

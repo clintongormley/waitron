@@ -65,8 +65,9 @@ export class WtFormActions extends LitElement {
         }
       }
 
-      /* wt-dialog sets this on its footer, which already keeps its rows in view. */
-      @container style(--wt-form-actions-in-footer: true) {
+      /* Set by a container that keeps the row in view itself (wt-dialog's footer), or that places
+         it on a line with other content rather than below a form. */
+      @container style(--wt-form-actions-in-place: true) {
         :host {
           position: static;
           padding-bottom: 0;

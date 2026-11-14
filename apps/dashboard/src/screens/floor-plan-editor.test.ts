@@ -1525,3 +1525,17 @@ it("A671: the desktop list gives the selected short name enough room", async () 
   text.selectNodeContents(name);
   expect(text.getClientRects()).toHaveLength(1);
 });
+
+it.each([
+  [1280, 800],
+  [390, 844],
+])(
+  "draws the header's buttons on its bottom line, with no strip below them (%i px)",
+  async (width, height) => {
+    await viewport(width, height);
+    const el = await open();
+    const header = el.shadowRoot!.querySelector("header")!.getBoundingClientRect();
+    const save = button(el, "save").getBoundingClientRect();
+    expect(save.bottom).toBeCloseTo(header.bottom, 0);
+  },
+);

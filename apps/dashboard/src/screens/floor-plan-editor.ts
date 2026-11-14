@@ -261,6 +261,7 @@ export class FloorPlanEditor extends LitElement {
         align-items: flex-end;
         gap: var(--wt-space-2) var(--wt-space-4);
         margin-block-end: var(--wt-space-4);
+        --wt-form-actions-in-place: true;
       }
       h1 {
         margin: 0;

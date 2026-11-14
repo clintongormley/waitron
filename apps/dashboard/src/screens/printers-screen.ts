@@ -461,6 +461,7 @@ export class PrintersScreen extends LitElement {
         gap: var(--wt-space-3);
         align-items: flex-end;
         max-width: var(--wt-field-max-width);
+        --wt-form-actions-in-place: true;
       }
       .status-grid {
         display: grid;
