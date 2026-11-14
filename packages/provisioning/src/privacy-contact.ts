@@ -46,13 +46,9 @@ export async function savePrivacyContact(
   if (changes.privacyNoticeUrl !== undefined) values.privacyNoticeUrl = changes.privacyNoticeUrl;
   if (changes.privacyEmail !== undefined) values.privacyEmail = changes.privacyEmail;
   if (Object.keys(values).length === 0) return readPrivacyContact(tx);
-  const [row] = await tx
-    .update(taxpayer)
-    .set(values)
-    .where(eq(taxpayer.id, 1))
-    .returning({
-      privacyNoticeUrl: taxpayer.privacyNoticeUrl,
-      privacyEmail: taxpayer.privacyEmail,
-    });
+  const [row] = await tx.update(taxpayer).set(values).where(eq(taxpayer.id, 1)).returning({
+    privacyNoticeUrl: taxpayer.privacyNoticeUrl,
+    privacyEmail: taxpayer.privacyEmail,
+  });
   return row ?? null;
 }

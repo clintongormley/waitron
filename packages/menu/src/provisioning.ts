@@ -1,4 +1,11 @@
-import { catalogues, readTaxpayer, readVenue, readSettings, saveSettings, units } from "@waitron/db";
+import {
+  catalogues,
+  readTaxpayer,
+  readVenue,
+  readSettings,
+  saveSettings,
+  units,
+} from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import {
   getCountryPack,
