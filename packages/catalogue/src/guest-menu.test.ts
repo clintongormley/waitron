@@ -49,3 +49,50 @@ it("exposes no menu when sharing is On but no default exists", async () => {
     expect(await readGuestMenu(tx)).toBeNull();
   });
 });
+
+it("keeps box-local paper appearance with the sharing setting", async () => {
+  const paper = {
+    preset: "bistro",
+    font: "serif",
+    spacing: "compact",
+    ink: "#123456",
+    accent: "#654321",
+    key: "end",
+  } as const;
+  await withTransaction(fx.db, async (tx) => {
+    await saveSettings(tx, GUEST_MENU_SETTINGS, {
+      doc: { enabled: false, paper },
+      expectedRevision: 0,
+      personId: null,
+    });
+    expect((await readSettings(tx, GUEST_MENU_SETTINGS)).doc).toEqual({ enabled: false, paper });
+  });
+});
+it("refuses paper settings that could insert CSS or retain publication-specific choices", () => {
+  const paper = {
+    preset: "lunch-wine",
+    font: "sans",
+    spacing: "comfortable",
+    ink: "#123456",
+    accent: "#654321",
+    key: "inline",
+  };
+  expect(GUEST_MENU_SETTINGS.parse({ enabled: false, paper })).toEqual({
+    ok: true,
+    doc: { enabled: false, paper },
+  });
+  for (const patch of [
+    { ink: "red;display:none" },
+    { preset: null },
+    { font: ["serif"] },
+    { spacing: "wide" },
+    { key: "none" },
+    { logo: "private.png" },
+    { order: [1, 0] },
+    { breaks: [1] },
+  ]) {
+    expect(GUEST_MENU_SETTINGS.parse({ enabled: false, paper: { ...paper, ...patch } }).ok).toBe(
+      false,
+    );
+  }
+});

@@ -194,3 +194,96 @@ it("keeps unknown sharing distinct from Off and explains an unavailable publicat
     cleanupWidgets();
   }
 });
+
+it("shares one settings revision between appearance and sharing actions in either order", async () => {
+  const { DashboardApi } = await import("../api/client.js");
+  const { mountWidget, cleanupWidgets } = await import("./test-helpers.js");
+  let settings = {
+    enabled: false,
+    available: false,
+    revision: 0,
+    paper: undefined as import("@waitron/shared").GuestMenuPaperAppearance | undefined,
+  };
+  const api = new DashboardApi("", async (input, init) => {
+    if (String(input).includes("guest-preview"))
+      return new Response(
+        JSON.stringify({
+          html: "<h1>Lunch</h1>",
+          language: "en",
+          languages: ["en"],
+          versionId: "captured",
+          members: [
+            { name: "Lunch", section: true },
+            { name: "Wine", section: true },
+          ],
+        }),
+      );
+    if (init?.method === "PUT") {
+      const body = JSON.parse(String(init.body));
+      if (body.expectedRevision !== settings.revision)
+        return new Response(JSON.stringify({ error: { code: "settings.out_of_date" } }), {
+          status: 409,
+        });
+      settings = {
+        enabled: body.enabled,
+        available: body.enabled,
+        revision: settings.revision + 1,
+        paper: body.paper ?? settings.paper,
+      };
+    }
+    return new Response(JSON.stringify(settings));
+  });
+  const { el } = await mountWidget<GuestMenuPreview>("dashboard-guest-menu-preview", {
+    api,
+    menuId: "menu",
+  });
+  try {
+    await page.elementLocator(el.shadowRoot!.querySelector("wt-button")!).click();
+    await expect
+      .poll(
+        () =>
+          el
+            .shadowRoot!.querySelector("dashboard-guest-menu-paper")
+            ?.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-button"]>("#preview-paper")
+            ?.disabled,
+      )
+      .toBe(false);
+    const paper = el.shadowRoot!.querySelector("dashboard-guest-menu-paper")!;
+    const root = paper.shadowRoot!;
+    expect((paper as HTMLElement & { versionId: string }).versionId).toBe("captured");
+    const font = root.querySelector('[name="paper-font"]')!;
+    font.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "sans" } }));
+    await page.elementLocator(root.querySelector("#save-paper")!).click();
+    await expect.poll(() => settings.revision).toBe(1);
+    await expect
+      .poll(() => root.querySelector<HTMLElementTagNameMap["wt-button"]>("#save-paper")!.disabled)
+      .toBe(true);
+    await page.elementLocator(el.shadowRoot!.querySelector("#sharing-action")!).click();
+    await expect.poll(() => settings.enabled).toBe(true);
+    await page.elementLocator(el.shadowRoot!.querySelector("#sharing-action")!).click();
+    await expect.poll(() => settings.enabled).toBe(false);
+    font.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "serif" } }));
+    await page.elementLocator(root.querySelector("#save-paper")!).click();
+    await expect.poll(() => settings.revision).toBe(4);
+    await expect
+      .poll(() => root.querySelector<HTMLElementTagNameMap["wt-button"]>("#save-paper")!.disabled)
+      .toBe(true);
+    expect(settings.paper?.font).toBe("serif");
+    expect(el.shadowRoot!.querySelector("#sharing-error")).toBeNull();
+    await el.shadowRoot!.querySelector("wt-modal")!.requestClose("navigation");
+    await expect.poll(() => el.shadowRoot!.querySelector("dashboard-guest-menu-paper")).toBeNull();
+    settings = { ...settings, revision: 5, paper: { ...settings.paper!, font: "sans" } };
+    await page.elementLocator(el.shadowRoot!.querySelector("wt-button")!).click();
+    await expect
+      .poll(
+        () =>
+          el
+            .shadowRoot!.querySelector("dashboard-guest-menu-paper")
+            ?.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="paper-font"]')
+            ?.value,
+      )
+      .toBe("sans");
+  } finally {
+    cleanupWidgets();
+  }
+});

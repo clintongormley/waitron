@@ -117,3 +117,166 @@ it("paints an unavailable page with the shared guest-page typography", async () 
   await p.setContent(renderGuestMenuUnavailable("en", "en"));
   expect(await p.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain("system-ui");
 });
+
+it.each(["bistro", "lunch-wine"] as const)(
+  "prints %s with paper-only order, breaks and written declarations",
+  async (preset) => {
+    const p = await browser!.newPage();
+    onTestFinished(() => p.close());
+    await p.emulateMedia({ media: "print" });
+    const dishes: PublicGuestMenu = {
+      ...menu,
+      members: [...menu.members, { kind: "section", name: "Desserts", members: menu.members }],
+    };
+    await p.setContent(
+      renderGuestMenuPage(dishes, "The Restaurant", "en", false, {
+        preset,
+        font: "serif",
+        spacing: "compact",
+        ink: "#123456",
+        accent: "#654321",
+        key: "end",
+        order: [1, 0],
+        breaks: [0],
+      }),
+    );
+    expect(await p.locator("[data-paper-member] > h2").allTextContents()).toEqual([
+      "Desserts",
+      "Starters",
+    ]);
+    expect(
+      await p
+        .locator("[data-paper-member]")
+        .last()
+        .evaluate((el) => getComputedStyle(el).breakBefore),
+    ).toBe("page");
+    expect(
+      await p
+        .locator("[data-paper-member] > h2")
+        .first()
+        .evaluate((el) => getComputedStyle(el).color),
+    ).toBe("rgb(101, 67, 33)");
+    expect(await p.locator("body").evaluate((el) => getComputedStyle(el).fontFamily)).toContain(
+      "Georgia",
+    );
+    expect(await p.locator("button, [popover], nav").count()).toBe(0);
+    expect(await p.locator("article").first().textContent()).toContain("€3.00–€6.00");
+    expect(await p.locator("article .declarations").first().textContent()).toContain("Wheat");
+    expect(await p.locator("footer").textContent()).toContain("Cereals containing gluten");
+    expect(
+      await p
+        .locator("article")
+        .first()
+        .evaluate((el) => getComputedStyle(el).breakInside),
+    ).toBe("avoid");
+    await p.setContent(renderGuestMenuPage(dishes, "The Restaurant", "en"));
+    expect(await p.locator("[data-paper-member] > h2").allTextContents()).toEqual([
+      "Starters",
+      "Desserts",
+    ]);
+  },
+);
+
+it("prints full declaration words when inline words are selected", async () => {
+  const p = await browser!.newPage();
+  onTestFinished(() => p.close());
+  await p.setContent(
+    renderGuestMenuPage(menu, "The Restaurant", "en", false, {
+      preset: "lunch-wine",
+      font: "sans",
+      spacing: "comfortable",
+      ink: "#123456",
+      accent: "#654321",
+      key: "inline",
+    }),
+  );
+  const declarations = await p.locator("article .declarations").first().textContent();
+  expect(declarations).toContain("Vegan");
+  expect(declarations).toContain("Vegetarian");
+  expect(await p.locator("body").evaluate((el) => getComputedStyle(el).fontFamily)).toContain(
+    "system-ui",
+  );
+});
+
+it("gives Lunch and wine a wider dishes column and a narrow last-section panel", async () => {
+  const p = await browser!.newPage({ viewport: { width: 900, height: 1200 } });
+  onTestFinished(() => p.close());
+  const section = menu.members[0]!;
+  const dishes = {
+    ...menu,
+    members: [section, { kind: "section" as const, name: "Wine", members: [] }],
+  };
+  await p.setContent(
+    renderGuestMenuPage(dishes, "The Restaurant", "en", false, {
+      preset: "lunch-wine",
+      font: "sans",
+      spacing: "comfortable",
+      key: "end",
+      ink: "#123456",
+      accent: "#654321",
+    }),
+  );
+  const boxes = await p.locator("main > section").evaluateAll((nodes) =>
+    nodes.map((n) => ({
+      width: n.getBoundingClientRect().width,
+      top: n.getBoundingClientRect().top,
+    })),
+  );
+  expect(boxes[0]!.width).toBeGreaterThan(boxes[1]!.width * 1.5);
+  expect(Math.abs(boxes[0]!.top - boxes[1]!.top)).toBeLessThan(1);
+});
+
+it("starts a requested Bistro section on a new saved A4 page", async () => {
+  const p = await browser!.newPage();
+  onTestFinished(() => p.close());
+  const dish = {
+    ...menu,
+    members: [menu.members[0]!, { kind: "section" as const, name: "Desserts", members: [] }],
+  };
+  await p.setContent(
+    renderGuestMenuPage(dish, "The Restaurant", "en", false, {
+      preset: "bistro",
+      font: "serif",
+      spacing: "compact",
+      key: "end",
+      ink: "#123456",
+      accent: "#654321",
+      breaks: [1],
+    }),
+  );
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const loading = getDocument({
+    data: Uint8Array.from(await p.pdf({ preferCSSPageSize: true })),
+    useSystemFonts: false,
+  });
+  onTestFinished(() => loading.destroy());
+  const pdf = await loading.promise;
+  expect(pdf.numPages).toBe(2);
+  const first = await (await pdf.getPage(1)).getTextContent();
+  const second = await (await pdf.getPage(2)).getTextContent();
+  const text = (items: typeof first.items) => items.map((i) => ("str" in i ? i.str : "")).join(" ");
+  expect(text(first.items)).toContain("Starters");
+  expect(text(first.items)).not.toContain("Desserts");
+  expect(text(second.items)).toContain("Desserts");
+});
+
+it("keeps a one-section Lunch-and-wine menu in the wide dishes column", async () => {
+  const p = await browser!.newPage({ viewport: { width: 900, height: 1200 } });
+  onTestFinished(() => p.close());
+  await p.setContent(
+    renderGuestMenuPage(menu, "The Restaurant", "en", false, {
+      preset: "lunch-wine",
+      font: "serif",
+      spacing: "compact",
+      key: "end",
+      ink: "#123456",
+      accent: "#654321",
+    }),
+  );
+  const width = await p
+    .locator("main > section")
+    .evaluate((el) => el.getBoundingClientRect().width);
+  expect(width).toBeGreaterThan(
+    (await p.locator("main").evaluate((el) => el.getBoundingClientRect().width)) * 0.6,
+  );
+});
