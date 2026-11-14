@@ -1033,8 +1033,10 @@ refused for a future date, and that the administrator gives the day the sale rea
 Browser tests as Task 3c lists (minus `clock.behind_chain`) plus the date field's prefill, empty
 case and after-today refusal; a11y of the confirmation in both themes; open it and look, both
 themes and phone width. Docs as Task 3c says (CLAUDE.md, conventions-data.md, A1407's backlog line
-keeps only its full-invoice half, A1089 narrowed, the Q37-FIX backlog entry deleted, and one line
-for the R5 "S" test-service probe in an existing fiscal bundle in `docs/backlog/fiscal.md`).
+keeps only its full-invoice half, A1089 narrowed, the Q37-FIX backlog entry deleted, and the R5 "S"
+test-service probe's own backlog entry in the go-live area: "run before the first real R5 'S';
+needs the owner's approval for the new live-aeat mode, by A985's precedent" — watcher 2026-11-14
+18:22; the probe mode is not built here).
 
 Size: about 170 production lines, 260 test lines.
 
@@ -1042,7 +1044,7 @@ Size: about 170 production lines, 260 test lines.
 First lines of the PR: fiscal; resets every venue (core's starting migration rebuilt); `sales`
 gains `supply_day`.
 
-**Still open, asked of the watcher with this rewrite:** "Still open" A's preproduction probe of an
+**Answered by the watcher, 2026-11-14 18:22 (both defaults cleared):** "Still open" A's preproduction probe of an
 R5 "S" with 0 / 0 after a `1112` refusal. Default: PR 3 does not wait for it (no venue is live and
 a preproduction box files to AEAT's test service), and the probe is done before go-live.
 
