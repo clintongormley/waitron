@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
-import { leaveCoordinatorFor, type WtInput } from "@waitron/ui";
+import { leaveCoordinatorFor, navigationGuardFor, type WtInput } from "@waitron/ui";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import {
   mountReceiptApp,
@@ -110,4 +110,22 @@ it("retains the real same-department draft and protects a different department w
   expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
   expect(searchBox(app).value).toBe("");
   expect(app.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(false);
+});
+
+it("Back closes the real chooser when leaving its containing page", async () => {
+  const { app } = await mountReceiptApp({
+    path: "/manage/overview",
+    departments: [
+      { id: "bar", name: "Bar" },
+      { id: "restaurant", name: "Restaurant" },
+    ],
+  });
+  await navigationGuardFor(window)!.write("/manage/venue-operations");
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+  await searchSettings(app, "remind");
+  await userEvent.click(searchResult(app, reminder)!);
+  await expect.poll(() => settingChooser(app)?.querySelector("wt-combobox")).toBeTruthy();
+  history.back();
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => settingChooser(app)).toBeNull();
 });

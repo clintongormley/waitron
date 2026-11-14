@@ -167,8 +167,7 @@ it.each(["cancel", "new activation", "session exit", "disconnect"])(
     await expect.poll(() => settingChooser(app)).toBeTruthy();
     if (mode === "cancel") await cancelSettingSearch(app);
     else if (mode === "new activation") {
-      await cancelSettingSearch(app);
-      await open(app);
+      searchResult(app, "reminder")!.click();
       await expect.poll(() => settingChooser(app)?.textContent).toContain("No available");
     } else if (mode === "session exit")
       window.dispatchEvent(
@@ -177,11 +176,12 @@ it.each(["cancel", "new activation", "session exit", "disconnect"])(
         }),
       );
     else app.remove();
-    finish([row("bar")]);
+    finish(mode === "disconnect" ? [] : [row("bar")]);
     await pending;
     await app.updateComplete;
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     expect(location.pathname).not.toContain("/department/bar");
+    if (mode === "disconnect") expect(settingChooser(app)).toBeNull();
     if (mode === "new activation")
       expect(settingChooser(app)?.textContent).toContain("No available");
   },

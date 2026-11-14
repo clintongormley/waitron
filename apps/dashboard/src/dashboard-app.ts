@@ -2562,6 +2562,7 @@ export class DashboardApp extends LitElement {
   }
 
   readonly #onHistory = (): void => {
+    this.#closeSettingSearch();
     if (
       this.screen === "login" ||
       this.sessionPersonId === undefined ||
