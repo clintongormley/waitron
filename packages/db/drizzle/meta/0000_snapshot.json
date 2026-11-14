@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5bdec11b-fa2f-4e37-9dc7-7c007f757dff",
+  "id": "4a2e7367-da59-4d7b-9d64-4599d51bb424",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8570,6 +8570,14 @@
           "notNull": false,
           "autoincrement": false
         },
+        "replaces_original": {
+          "name": "replaces_original",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "counterparty_tax_id": {
           "name": "counterparty_tax_id",
           "type": "text",
@@ -8663,6 +8671,14 @@
           ],
           "isUnique": false
         },
+        "sales_one_replacement_uq": {
+          "name": "sales_one_replacement_uq",
+          "columns": [
+            "corrects_sale_id"
+          ],
+          "isUnique": true,
+          "where": "\"sales\".\"replaces_original\" = 1"
+        },
         "sales_series_invoice_number_key": {
           "name": "sales_series_invoice_number_key",
           "columns": [
@@ -8749,6 +8765,10 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "sales_replaces_original_ck": {
+          "name": "sales_replaces_original_ck",
+          "value": "\"sales\".\"replaces_original\" = 0 or \"sales\".\"corrects_sale_id\" is not null"
+        },
         "sales_total_ck": {
           "name": "sales_total_ck",
           "value": "\"sales\".\"total\" >= 0 or \"sales\".\"corrects_sale_id\" is not null"

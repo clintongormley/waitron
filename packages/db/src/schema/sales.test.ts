@@ -792,3 +792,45 @@ describe("sale_lines — parent line self-link", () => {
     expect(row!.parent_line_id).toBeNull();
   });
 });
+
+describe("sales — a replacement corrective", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  let originalSaleId = "";
+
+  beforeEach(async () => {
+    await seed(suite.db);
+    originalSaleId = await recordCompleteSale(suite.db);
+  });
+
+  function insert(overrides: Record<string, unknown>) {
+    return suite.db.insert(sales).values(saleValues(overrides)).returning({ id: sales.id });
+  }
+
+  it("refuses a replacement that names no invoice it replaces", async () => {
+    const error = await captureError(() =>
+      insert({ invoiceNumber: 2, replacesOriginal: true, correctsSaleId: null }),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/sales_replaces_original_ck/);
+  });
+
+  it("refuses a second replacement of one invoice, and accepts other correctives beside one", async () => {
+    await insert({ invoiceNumber: 2, replacesOriginal: true, correctsSaleId: originalSaleId });
+    // A by-differences corrective of the same invoice is not a replacement, so it is accepted.
+    await insert({ invoiceNumber: 3, total: -50, correctsSaleId: originalSaleId });
+
+    const error = await captureError(() =>
+      insert({ invoiceNumber: 4, replacesOriginal: true, correctsSaleId: originalSaleId }),
+    );
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/sales\.corrects_sale_id/);
+  });
+
+  it("stores false on an ordinary sale", async () => {
+    const [row] = await suite.db
+      .select({ replacesOriginal: sales.replacesOriginal })
+      .from(sales)
+      .where(eq(sales.id, originalSaleId));
+    expect(row!.replacesOriginal).toBe(false);
+  });
+});

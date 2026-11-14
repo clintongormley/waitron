@@ -4,6 +4,7 @@ import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlit
 import {
   count,
   enumCheck,
+  flag,
   enumType,
   id,
   json,
@@ -93,6 +94,9 @@ export const sales = table(
     // Set on a corrective invoice, NULL on an ordinary sale. Kept here so a Z-report, receipt or
     // till can answer "is this a correction, and of what?" with no cross-boundary join.
     correctsSaleId: id("corrects_sale_id"),
+    // A corrective by replacement ("S"): it carries the invoice's full amounts in place of the
+    // one it corrects, rather than a change to it.
+    replacesOriginal: flag("replaces_original").notNull().default(false),
     // The recipient of a full invoice, NULL when the sale names none. Kept here as well as in the
     // fiscal record because it is a reprint/Z-report fact. Mirrors `Counterparty`
     // (packages/fiscal/src/backend.ts).
@@ -126,6 +130,13 @@ export const sales = table(
       name: "sales_corrects_fk",
     }).onDelete("restrict"),
     index("sales_corrects_idx").on(t.correctsSaleId),
+    uniqueIndex("sales_one_replacement_uq")
+      .on(t.correctsSaleId)
+      .where(sql`${t.replacesOriginal} = 1`),
+    check(
+      "sales_replaces_original_ck",
+      sql`${t.replacesOriginal} = 0 or ${t.correctsSaleId} is not null`,
+    ),
     foreignKey({
       columns: [t.nodeId],
       foreignColumns: [nodes.id],

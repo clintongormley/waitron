@@ -1286,6 +1286,7 @@ CREATE TABLE `sales` (
 	`fiscal_backend` text NOT NULL,
 	`fiscal_state` text NOT NULL,
 	`corrects_sale_id` text,
+	`replaces_original` integer DEFAULT false NOT NULL,
 	`counterparty_tax_id` text,
 	`counterparty_legal_name` text,
 	`counterparty_country_code` text,
@@ -1301,6 +1302,7 @@ CREATE TABLE `sales` (
 	FOREIGN KEY (`corrects_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "sales_replaces_original_ck" CHECK("sales"."replaces_original" = 0 or "sales"."corrects_sale_id" is not null),
 	CONSTRAINT "sales_total_ck" CHECK("sales"."total" >= 0 or "sales"."corrects_sale_id" is not null),
 	CONSTRAINT "sales_invoice_number_ck" CHECK("sales"."invoice_number" >= 1),
 	CONSTRAINT "sales_invoice_locales_ck" CHECK(json_array_length("sales"."invoice_locales") between 1 and 2),
@@ -1314,6 +1316,7 @@ CREATE TABLE `sales` (
 CREATE INDEX `sales_tenant_issued_idx` ON `sales` (`issued_at`);--> statement-breakpoint
 CREATE INDEX `sales_fiscal_state_idx` ON `sales` (`fiscal_state`);--> statement-breakpoint
 CREATE INDEX `sales_corrects_idx` ON `sales` (`corrects_sale_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `sales_one_replacement_uq` ON `sales` (`corrects_sale_id`) WHERE "sales"."replaces_original" = 1;--> statement-breakpoint
 CREATE UNIQUE INDEX `sales_series_invoice_number_key` ON `sales` (`series_id`,`invoice_number`);--> statement-breakpoint
 CREATE UNIQUE INDEX `sales_working_order_id_key` ON `sales` (`working_order_id`);--> statement-breakpoint
 CREATE TABLE `tenders` (
