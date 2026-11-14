@@ -78,6 +78,9 @@ it("imports an edited built-in onto its local id and logs its membership without
     email: "supervisor@example.test",
   });
   const builtIns = await withTransaction(suite.db, identity.ensureBuiltInRoles);
+  const otherRoles = sql`select id, permissions from roles
+    where built_in_key <> 'supervisor' order by id`;
+  const before = await suite.db.execute(otherRoles);
   const roleId = await withTransaction(suite.db, async (tx) => {
     const id = await identity.importAccessRole(tx, {
       id: "source-supervisor",
@@ -90,6 +93,7 @@ it("imports an edited built-in onto its local id and logs its membership without
   expect(roleId).toBe(builtIns.supervisor);
   const stored = await suite.db.execute(sql`select permissions from roles where id = ${roleId}`);
   expect(stored.rows).toEqual([{ permissions: '["report.view"]' }]);
+  expect((await suite.db.execute(otherRoles)).rows).toEqual(before.rows);
   expect((await identity.readPersonAuthority(suite.db, person!.id)).roleIds).toContain(roleId);
   const entries = await suite.db.select().from(activityLog);
   expect(entries).toHaveLength(1);
