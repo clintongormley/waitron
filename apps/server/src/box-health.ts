@@ -3,6 +3,7 @@ import { printers, sales, type Database, type Transaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { persons } from "@waitron/identity";
 import { cardReaders } from "@waitron/payments";
+import type { SpareFollowView } from "./spare-follow.js";
 import type { StreamView } from "@waitron/stream";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { DiskUsage } from "./disk-usage.js";
@@ -30,6 +31,7 @@ export interface BoxHealth {
   /** Null when the box does not file, the seat has no outbox, or its read failed. */
   outbox: (FiscalOutboxState & { awaitingCertificate: boolean }) | null;
   stream: StreamView;
+  spare?: SpareFollowView | null;
   clock: { authority: AuthorityClockStatus; sync: TimeHealth };
   printers: { id: string; name: string }[];
   /** Null when the payments module is off: its table does not exist. */
@@ -52,6 +54,7 @@ export interface BoxHealthReaders {
     log: StaffNoticeLog;
   };
   stream: () => StreamView;
+  spare?: () => Promise<SpareFollowView | null>;
   /** Absent when the fiscal seat has no outbox. `read` must only select. */
   outbox?: {
     read: (tx: Transaction) => Promise<FiscalOutboxState>;
@@ -167,6 +170,7 @@ export async function collectBoxHealth(
     filing,
     outbox,
     stream: readers.stream(),
+    ...(readers.spare === undefined ? {} : { spare: await readers.spare() }),
     clock: { authority: readers.authorityClock(), sync },
     printers: rows.printers,
     readers: rows.readers,

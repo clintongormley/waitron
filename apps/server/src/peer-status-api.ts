@@ -17,6 +17,7 @@ import {
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
+import type { FollowProgress } from "@waitron/stream";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
@@ -27,6 +28,8 @@ export interface PeerStatusApiDeps {
   nodeId: string;
   /** Set only by the latch start: never inferred from a missing chart, which a lost venue.db also has. */
   joining?: boolean;
+  readFollow?: () => FollowProgress | null;
+  followNow?: () => Date;
 }
 
 export type PeerQueryPurpose = "status" | "indicator" | "final-copy";
@@ -64,6 +67,7 @@ export interface PeerStatusBody {
   nonce: string;
   /** A spare still in its latch start: it cannot sell or file, so a start check sets it aside. */
   joining?: true;
+  follow?: FollowProgress & { clockAt: string };
 }
 
 const STATUS = {
@@ -144,6 +148,7 @@ export function mountPeerStatusApi(app: Hono, deps: PeerStatusApiDeps, log: Logg
         query.operationId === undefined
           ? null
           : await readHandoverOperation(deps.node, deps.nodeId, query.operationId);
+      const follow = deps.readFollow?.();
       const body: PeerStatusBody = {
         heldMembership: held,
         restriction:
@@ -157,6 +162,9 @@ export function mountPeerStatusApi(app: Hono, deps: PeerStatusApiDeps, log: Logg
         openOperation: operationStatus(open),
         requestedOperation: operationStatus(requested),
         nonce: query.nonce,
+        ...(follow == null
+          ? {}
+          : { follow: { ...follow, clockAt: (deps.followNow?.() ?? new Date()).toISOString() } }),
         ...(deps.joining === true ? { joining: true as const } : {}),
       };
       return c.json(await signAsThisBox(deps, "status", body as unknown as CanonicalValue), 200);

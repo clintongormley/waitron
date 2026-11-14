@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBucketClient, type BucketConfig } from "./s3-client.js";
-import { prepareBucketEncryption } from "./sse-c.js";
+import { prepareBucketEncryption, verifyStreamKey } from "./sse-c.js";
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -65,6 +65,17 @@ async function provider(behavior: Behavior = {}) {
               md5: String(req.headers["x-amz-server-side-encryption-customer-key-md5"]),
             }),
       });
+      if (url.searchParams.has("list-type")) {
+        const prefix = url.searchParams.get("prefix") ?? "";
+        const keys = [...objects.keys()]
+          .map((path) => path.slice("/venue-copy/".length))
+          .filter((key) => key.startsWith(prefix));
+        res.writeHead(200, xml);
+        res.end(
+          `<ListBucketResult><IsTruncated>false</IsTruncated>${keys.map((key) => `<Contents><Key>${key}</Key></Contents>`).join("")}</ListBucketResult>`,
+        );
+        return;
+      }
       if (url.searchParams.has("encryption")) {
         if (req.method === "GET") {
           if (behavior.dropSettings) {
@@ -373,5 +384,30 @@ describe("Save's encryption capability check over the real S3 client", () => {
       params: { operation: "get", key: "venue-copy", status: null, name: "AbortError" },
     });
     expect(seen).toEqual([]);
+  });
+});
+
+it("cancels generation-key verification after the real read sends headers then stalls", async () => {
+  let headersSent!: () => void;
+  const stalled = new Promise<void>((resolve) => {
+    headersSent = resolve;
+  });
+  const { bucket, objects } = await provider({ alreadyEnabled: true, stallRead: headersSent });
+  const generation = "gen-1-main-20261114T120000Z";
+  const streamKey = Buffer.alloc(32, 7).toString("base64");
+  objects.set(`/venue-copy/waitron/${generation}/0000/0000000000000001-0000000000000001.ltx`, {
+    body: Buffer.of(1),
+    key: streamKey,
+  });
+  const controller = new AbortController();
+  const ended = verifyStreamKey(bucket, generation, streamKey, { signal: controller.signal }).then(
+    () => "resolved",
+    (error) => error,
+  );
+  await stalled;
+  controller.abort();
+  expect(await Promise.race([ended, delay(2000, "still pending")])).toMatchObject({
+    code: "backup.stream_request_failed",
+    params: { name: "AbortError" },
   });
 });

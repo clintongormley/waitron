@@ -54,6 +54,13 @@ Cuando no pasa nada, cada fila dice:
 - **Copia en el bucket**: **Al día**, y cuándo se confirmó el último envío. Dice **No
   configurada** cuando no hay ninguna copia configurada, y cuántos minutos de retraso lleva
   cuando se retrasa.
+- **Equipo de reserva**: cuando el equipo principal copia a una reserva emparejada, esta fila sustituye
+  a **Copia en el bucket**. Muestra el retraso medido en segundos y cuándo se recibió la
+  última copia. Deja ambos equipos encendidos cuando veas **Actualización pendiente** o
+  **Reconstruyendo la copia**.
+  **Actualización desconocida** significa que la principal no puede confirmar su progreso.
+  Abre **Servidores** para comprobar el par. El cambio sigue usando la copia tomada cuando se
+  incorporó este equipo de reserva.
 - **Impresoras**: **Sin problemas**, y los nombres de las impresoras configuradas.
 - **Lectores de tarjetas**: **Sin problemas**, y los nombres de los lectores configurados. Un
   lector que su proveedor de tarjetas da como sin conexión aparece aquí, como **«Barra» está sin

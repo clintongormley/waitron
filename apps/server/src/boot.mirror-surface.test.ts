@@ -32,8 +32,13 @@ import { mintSelfSignedServerCert, reissueServerLeaf } from "./self-signed-cert.
 import { CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
 import { leafHostnamesFor } from "./box-name.js";
 import { resetObserver } from "./testing/connection-reset.js";
+import { startSpareFollow } from "./spare-follow.js";
 import { beginHandover } from "./handover-store.js";
 
+vi.mock("./spare-follow.js", async (original) => {
+  const actual = await original<typeof import("./spare-follow.js")>();
+  return { ...actual, startSpareFollow: vi.fn(actual.startSpareFollow) };
+});
 const served = vi.hoisted(() => [] as { port: number; server: import("node:net").Server }[]);
 const fetchWrap = vi.hoisted(() => ({
   wrap: <T>(fetch: T): T => fetch,
@@ -391,6 +396,21 @@ async function repair(app: Hono): Promise<Answer> {
 }
 
 describe("a spare's network surface", () => {
+  it("starts the mirror follower and awaits its stop on shutdown", async () => {
+    const { server, stateDir } = await boot("mirror", {});
+    try {
+      const started = vi.mocked(startSpareFollow).mock.results.at(-1);
+      expect(started).toBeDefined();
+      expect(vi.mocked(startSpareFollow).mock.calls.at(-1)![0].mirror).toBe(true);
+      const stop = vi.spyOn(started!.value, "stop");
+      await server.close();
+      expect(stop).toHaveBeenCalledOnce();
+    } finally {
+      await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("a mirror serves the network only what D8 lists", async () => {
     const { server, app, stateDir } = await boot("mirror", { fromBox: { current: false } });
     try {

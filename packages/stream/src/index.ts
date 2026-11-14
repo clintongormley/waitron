@@ -71,3 +71,5 @@ export type { RestoreGenerationArgs } from "./restore.js";
 // Side-effect only: keeps errors.ts's registry augmentation reachable from this barrel
 // (guarded tree-wide by scripts/errors-reachable.test.ts).
 import "./errors.js";
+export { followGeneration } from "./follow.js";
+export type { FollowArgs, FollowProgress, Follower } from "./follow.js";

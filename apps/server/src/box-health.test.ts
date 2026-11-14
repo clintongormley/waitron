@@ -349,4 +349,19 @@ describe("collectBoxHealth", () => {
     await collectBoxHealth(suite.db, readers);
     expect(lines).toEqual(["staff_notice.source_unavailable", "staff_notice.source_recovered"]);
   });
+  it("includes the cached spare view without reading a peer", async () => {
+    const spare = {
+      peerNodeId: "spare",
+      generation: null,
+      state: "unknown" as const,
+      appliedTXID: null,
+      uploadedTXID: null,
+      lagMs: null,
+      lastAppliedAt: null,
+      clockAt: null,
+    };
+    expect(
+      (await collectBoxHealth(suite.db, stubReaders({ spare: async () => spare }))).spare,
+    ).toEqual(spare);
+  });
 });

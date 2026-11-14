@@ -80,6 +80,19 @@ class NotYet extends Error {
   }
 }
 
+/** Shared by joining and following: the key comes from this pair's pinned main, never its store. */
+export async function readSpareGeneration(
+  deps: { link: PairLink; pinnedKey: string; readRecoveryKey: () => Promise<string | undefined> },
+  store: ObjectStore,
+) {
+  const { held, key } = await readHeldKey(deps.readRecoveryKey);
+  if (key === undefined) throw new NotYet(held ? "key_too_short" : "no_key");
+  const read = await readPointer(store, deps.link.venueId);
+  if (read === null) throw new NotYet("no_pointer");
+  if (!verifyPointer(read.pointer, deps.pinnedKey)) throw new NotYet("pointer_unverified");
+  return { ...read.pointer.body, streamKey: deriveStreamKey(key, deps.link.venueId) };
+}
+
 /**
  * Every `intervalMs`, restores the generation the main box's signed pointer names from this box's
  * own store into `<state>/pair-copy/venue.db`, until a copy passes its checks; then writes
@@ -137,12 +150,10 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
   }
 
   async function attempt(): Promise<{ bytes: number; ms: number }> {
-    const { held, key } = await readHeldKey(deps.readRecoveryKey);
-    if (key === undefined) throw new NotYet(held ? "key_too_short" : "no_key");
-    const read = await readPointer(objectStore, streamId);
-    if (read === null) throw new NotYet("no_pointer");
-    if (!verifyPointer(read.pointer, pinnedKey)) throw new NotYet("pointer_unverified");
-    const { generation } = read.pointer.body;
+    const { generation, streamKey } = await readSpareGeneration(
+      { ...deps, pinnedKey },
+      objectStore,
+    );
     // Litestream refuses a non-empty output file.
     await rm(folder, { recursive: true, force: true });
     await mkdir(folder, { recursive: true, mode: 0o700 });
@@ -150,7 +161,7 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
     await (deps.restoreGeneration ?? restoreGeneration)({
       litestreamBin: deps.litestreamBin,
       bucket,
-      streamKey: deriveStreamKey(key, streamId),
+      streamKey,
       streamId,
       generation,
       outPath: copyPath,
