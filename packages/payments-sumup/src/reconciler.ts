@@ -115,12 +115,18 @@ export class SumUpReconciler implements PaymentReconciler {
       period,
       now,
     );
+    let unreadableUnlinked = source.unreadableUnlinked;
+    if (unreadableUnlinked > 0) {
+      const originalDay = sumupSettlementReport(client);
+      await originalDay.fetch(period);
+      unreadableUnlinked = originalDay.unreadableUnlinked;
+    }
     return {
       ...result,
       backupMatches,
       backupUnmatched,
       unlinkedCharges:
-        source.unreadableUnlinked +
+        unreadableUnlinked +
         result.missingLocal.filter((row) => row.workingOrderId === null).length,
       ...(candidates.some((row) => row.state === "attempting")
         ? { resweepAfter: new Date(now.getTime() + 86_400_000) }

@@ -340,3 +340,37 @@ it("keeps an original failed attempt's recovered charge even when SumUp dates it
   expect(result.backupMatches).toEqual([]);
   expect(result.backupUnmatched).toEqual([]);
 });
+
+it("counts an unreadable item only in its original UTC audit day", async () => {
+  const client = new FakeSumUp();
+  const timestamp = "2026-06-30T23:55:00.000Z";
+  vi.spyOn(client, "historyPage").mockImplementation(async (query) => {
+    const bounds = new URLSearchParams(query);
+    return {
+      items:
+        timestamp >= bounds.get("oldest_time")! && timestamp < bounds.get("newest_time")!
+          ? [
+              {
+                transaction_id: "payout",
+                type: "PAYOUT",
+                status: "SUCCESSFUL",
+                amount: 10,
+                currency: "EUR",
+                timestamp,
+              },
+            ]
+          : [],
+    };
+  });
+  const audit = new SumUpReconciler({
+    db: suite.db,
+    resolveClient: async () => client,
+    incidents: captureAlerts.raise,
+    heldAlerts,
+  });
+  expect(
+    (await audit.reconcile({ from: new Date("2026-06-30T00:00:00Z"), to: period.from }, now))
+      .unlinkedCharges,
+  ).toBe(1);
+  expect((await audit.reconcile(period, now)).unlinkedCharges).toBe(0);
+});
