@@ -8,7 +8,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import { passwordIcon } from "../password-icon.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
@@ -161,6 +161,7 @@ export class SetupLiveSourceScreen extends LitElement {
           required
           .files=${this.artifact ? [this.artifact] : []}
           .copy=${fileInputCopy()}
+          .locale=${currentLocale()}
           .error=${this.#artifactMissing ? t("live_source.export_missing") : ""}
           ?invalid=${this.#artifactMissing}
           @wt-change=${(event: CustomEvent<{ files: File[] }>) => {

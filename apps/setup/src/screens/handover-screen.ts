@@ -41,7 +41,8 @@ export class SetupHandoverScreen extends LitElement {
         overflow-wrap: anywhere;
       }
       wt-input,
-      wt-textarea {
+      wt-textarea,
+      wt-file-input {
         display: block;
         margin-bottom: var(--wt-space-3);
       }
@@ -620,6 +621,7 @@ export class SetupHandoverScreen extends LitElement {
                 label=${t("handover.emergency.backup_file")}
                 .files=${this.backup ? [this.backup] : []}
                 .copy=${fileInputCopy()}
+                .locale=${currentLocale()}
                 ?disabled=${this.busy}
                 @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
                   event.stopPropagation();

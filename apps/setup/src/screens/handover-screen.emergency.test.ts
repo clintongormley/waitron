@@ -274,6 +274,17 @@ it("draws the backup picker's words in the chooser's language, not the browser's
   expect(words).not.toContain(t("file_input.choose", "en-GB"));
 });
 
+it("writes the chosen backup's size in the chooser's language", async () => {
+  setLocale("es-ES");
+  const { el } = await mount({ backup: true });
+  await authenticate(el);
+  const picker = q<LitElement>(el, 'wt-file-input[name="handover-backup"]');
+  chooseFiles(picker, new File([new Uint8Array(48_200)], "venue.enc"));
+  await el.updateComplete;
+  await picker.updateComplete;
+  expect(picker.shadowRoot!.textContent!).toContain("48,2 kB");
+});
+
 it.each(
   ["en-GB", "es-ES"].flatMap((locale) =>
     ["light", "dark"].map((theme) => ({ locale, theme: theme as "light" | "dark" })),

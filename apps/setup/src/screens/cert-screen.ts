@@ -310,6 +310,7 @@ export class SetupCertScreen extends LitElement {
         data-test="pfx"
         .files=${this.#selectedFile ? [this.#selectedFile] : []}
         .copy=${fileInputCopy()}
+        .locale=${currentLocale()}
         .error=${errors.pfx ?? ""}
         ?invalid=${errors.pfx !== undefined}
         @wt-change=${(event: CustomEvent<{ files: File[] }>) => void this.#onFileChange(event)}

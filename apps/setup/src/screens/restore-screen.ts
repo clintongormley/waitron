@@ -14,7 +14,7 @@ import {
   dispatchRestoreRequested,
   dispatchSetupGoto,
 } from "../events.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
@@ -260,6 +260,7 @@ export class SetupRestoreScreen extends LitElement {
         data-test="artifact"
         .files=${this.artifact ? [this.artifact] : []}
         .copy=${fileInputCopy()}
+        .locale=${currentLocale()}
         .error=${artifactError ?? ""}
         ?invalid=${artifactError !== undefined}
         @wt-change=${(event: CustomEvent<{ files: File[] }>) => {

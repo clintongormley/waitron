@@ -17,7 +17,7 @@ import { SetupApi, type ApiError, type RecoveryBackupPreview } from "../api/clie
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
 import { bucketCodeFromFile, type PackFileRefusal } from "../pack-file-input.js";
-import { t, format } from "../i18n/t.js";
+import { currentLocale, t, format } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
@@ -361,6 +361,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         label=${t("restore_bucket.kit_file")}
         data-test="kit-file"
         .copy=${fileInputCopy()}
+        .locale=${currentLocale()}
         .error=${packError ?? ""}
         ?invalid=${packError !== undefined}
         @wt-change=${(event: CustomEvent<{ files: File[] }>) => void this.#readFile(event)}
