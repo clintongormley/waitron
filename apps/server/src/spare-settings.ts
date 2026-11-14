@@ -97,13 +97,13 @@ export async function sendBackupSettings(
   return { delivered: true, digest };
 }
 
+/** Only a file known to be absent is not there: sending `null` for it removes the spare's. */
 async function present(path: string): Promise<boolean> {
   try {
     await lstat(path);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
+    return (error as NodeJS.ErrnoException).code !== "ENOENT";
   }
 }
 

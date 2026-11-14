@@ -380,6 +380,32 @@ describe("runSpareSettings", () => {
     expect(events("spare-settings.check_failed")).toHaveLength(2);
   });
 
+  it("a send this box cannot sign is logged by its code, and nothing is sent", async () => {
+    await link("streaming");
+    vi.useFakeTimers({ toFake: [...FAKED] });
+    running.push(
+      runSpareSettings({
+        db: mainBox.db,
+        node: mainBox.node,
+        ring: loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x6).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        }),
+        nodeId: MAIN.nodeId,
+        stateDir: mainDir,
+        exchange: { timeoutMs: 5_000, fetch: exchangeFetch },
+        log: logger(),
+      }),
+    );
+    await idle();
+    await tick(RETRY_MS);
+    expect(requests).toEqual([]);
+    expect(events("spare-settings.send_failed")).toEqual([
+      expect.objectContaining({ level: "info", peerNodeId: spareId }),
+    ]);
+    expect(events("spare-settings.send_failed")[0]!.reason).not.toBe("unreadable");
+  });
+
   it("a new start sends once even when nothing changed", async () => {
     await link("streaming");
     const first = await start();
@@ -536,6 +562,15 @@ describe("sendBackupSettings", () => {
       })) as unknown as typeof fetch;
     const outcome = await sendBackupSettings(
       { ...deps(), exchange: { timeoutMs: 5_000, fetch: fetchWrongDigest } },
+      { nodeId: spareId, contactUrl: SPARE_URL },
+    );
+    expect(outcome).toEqual({ delivered: false, reason: "digest_differs" });
+  });
+
+  it("is not delivered when the answer is not JSON", async () => {
+    const fetchText = (async () => new Response("ok", { status: 200 })) as unknown as typeof fetch;
+    const outcome = await sendBackupSettings(
+      { ...deps(), exchange: { timeoutMs: 5_000, fetch: fetchText } },
       { nodeId: spareId, contactUrl: SPARE_URL },
     );
     expect(outcome).toEqual({ delivered: false, reason: "digest_differs" });
