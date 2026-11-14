@@ -64,7 +64,7 @@ const PRIMARY_CERTIFICATE = {
 
 const adoptBody = {
   primaryUrl: "https://waitron.local",
-  credential: { personId: "op-1", password: "correct horse" },
+  credential: { email: "op1@example.com", password: "correct horse" },
   confirmedCaPem: PRIMARY_CERTIFICATE.pem,
 };
 
@@ -345,7 +345,7 @@ async function expectAdoptIncompleteWithReset(el: SetupApp): Promise<void> {
   const text = (await screenText(el, "provisioning", "[data-test=error]"))!.replace(/\s+/g, " ");
   expect(text).toContain("partly set up");
   expect(text).toContain("stopped partway");
-  expect(text).toContain("admin person ID and password you used to connect");
+  expect(text).toContain("admin email and password you used to connect");
   expect(text).not.toContain("Contact support");
   const host = await screenHost(el, "provisioning");
   expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
@@ -2094,6 +2094,28 @@ describe("setup-app", () => {
       }
     });
 
+    it.each([
+      ["en-GB", { retryAfterSeconds: 30 }, "Too many attempts. Wait 30 seconds, then try again."],
+      ["en-GB", { retryAfterSeconds: 1 }, "Too many attempts. Wait 1 second, then try again."],
+      ["en-GB", {}, "Too many attempts. Wait a few minutes, then try again."],
+      [
+        "es-ES",
+        { retryAfterSeconds: 30 },
+        "Demasiados intentos. Espera 30 segundos y vuelve a intentarlo.",
+      ],
+    ] as const)(
+      "asks the person to wait when the primary refuses too many sign-in attempts (%s, %o)",
+      async (locale, params, sentence) => {
+        try {
+          const { connect, control } = await refusedJoin("password.throttled", locale, params);
+          expect(await bottomOf(connect)).toBe(sentence);
+          expect(control("connect")!.disabled).toBe(false);
+        } finally {
+          setLocale("en-GB");
+        }
+      },
+    );
+
     it("shows the generic join failure for a refused module operation, whichever module it names", async () => {
       const { connect } = await refusedJoin("module.operation_invalid", "en-GB", {
         module: "fiscal-verifactu",
@@ -2199,12 +2221,7 @@ describe("setup-app", () => {
       "primaryUrl",
       "Check the primary server address.",
     ],
-    [
-      "setup.request_invalid",
-      { field: "credential.personId" },
-      "personId",
-      "Check the admin login (person id).",
-    ],
+    ["setup.request_invalid", { field: "credential.email" }, "email", "Check the admin email."],
     [
       "setup.request_invalid",
       { field: "credential.password" },
@@ -2416,7 +2433,7 @@ describe("setup-app", () => {
   describe("what the operator typed on the connect form", () => {
     const TYPED = {
       primaryUrl: "https://primary.example",
-      personId: "op-7",
+      email: "op7@example.com",
       password: "  kept secret ",
       totp: "123456",
     };
@@ -2448,7 +2465,7 @@ describe("setup-app", () => {
 
     const sentBody = {
       primaryUrl: "https://primary.example",
-      credential: { personId: "op-7", password: "  kept secret ", totp: "123456" },
+      credential: { email: "op7@example.com", password: "  kept secret ", totp: "123456" },
       confirmedCaPem: PRIMARY_CERTIFICATE.pem,
     };
 
@@ -2470,7 +2487,7 @@ describe("setup-app", () => {
         expect(adopt).toHaveBeenCalledWith(sentBody);
 
         const connect = await screenHost(el, "connect");
-        for (const field of ["primaryUrl", "personId", "password"] as const) {
+        for (const field of ["primaryUrl", "email", "password"] as const) {
           expect(input(connect, field).value).toBe(TYPED[field]);
         }
         expect(input(connect, "totp").value).toBe("");
@@ -2539,13 +2556,13 @@ describe("setup-app", () => {
       ).toBe(OTHER_CERTIFICATE.fingerprint256);
       button(connect, "matches")!.click();
       await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      await userEvent.fill(input(connect, "personId"), "op-1");
+      await userEvent.fill(input(connect, "email"), "op1@example.com");
       await userEvent.fill(input(connect, "password"), "pw");
       button(connect, "connect")!.click();
       await flush(el);
       expect(adopt).toHaveBeenCalledExactlyOnceWith({
         primaryUrl: "https://b.example",
-        credential: { personId: "op-1", password: "pw" },
+        credential: { email: "op1@example.com", password: "pw" },
         confirmedCaPem: OTHER_CERTIFICATE.pem,
       });
     });
@@ -2574,7 +2591,7 @@ describe("setup-app", () => {
       expect(primaryCertificate).toHaveBeenLastCalledWith("https://main.example");
       button(connect, "matches")!.click();
       await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(input(connect, "personId").value).toBe(TYPED.personId);
+      expect(input(connect, "email").value).toBe(TYPED.email);
       await userEvent.fill(input(connect, "totp"), "654321");
       button(connect, "connect")!.click();
       await flush(el);
@@ -2593,6 +2610,22 @@ describe("setup-app", () => {
       await typeAndConnect(el);
       const connect = await screenHost(el, "connect");
       expect(await bottomOf(connect)).toContain("The login failed.");
+      button(connect, "check-address")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(input(connect, "primaryUrl").readOnly).toBe(false);
+      expect(await bottomOf(connect)).toBe("");
+    });
+
+    it("after a join refused for too many attempts, drops the wait message once the person goes back to the address", async () => {
+      const adopt = vi.fn().mockRejectedValue({
+        code: "password.throttled",
+        params: { retryAfterSeconds: 30 },
+        status: 429,
+      });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(await bottomOf(connect)).toBe("Too many attempts. Wait 30 seconds, then try again.");
       button(connect, "check-address")!.click();
       await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
       expect(input(connect, "primaryUrl").readOnly).toBe(false);
@@ -2630,15 +2663,15 @@ describe("setup-app", () => {
       await new Promise((resolve) => setTimeout(resolve));
       const connect = await screenHost(el, "connect");
       expect(await bottomOf(connect)).toBe(
-        "The login failed. Check the admin person ID, password and authenticator code, then try again.",
+        "The login failed. Check the admin email, password and authenticator code, then try again.",
       );
-      for (const field of ["primaryUrl", "personId", "password", "totp"] as const) {
+      for (const field of ["primaryUrl", "email", "password", "totp"] as const) {
         expect(
           connect.shadowRoot!.querySelector(`[data-test=${field}]`)!.getAttribute("error"),
         ).toBe("");
         expect(input(connect, field).getAttribute("aria-invalid")).toBe("false");
       }
-      expect(input(connect, "personId").value).toBe(TYPED.personId);
+      expect(input(connect, "email").value).toBe(TYPED.email);
       expect(input(connect, "password").value).toBe(TYPED.password);
       expect(input(connect, "totp").value).toBe("");
       expect(connect.shadowRoot!.activeElement).toBeNull();
@@ -2652,7 +2685,7 @@ describe("setup-app", () => {
       const el = await mountSetupApp(stubApi({ adopt }));
       await typeAndConnect(el);
       const connect = await screenHost(el, "connect");
-      for (const field of ["personId", "totp"] as const) {
+      for (const field of ["email", "totp"] as const) {
         expect(
           connect.shadowRoot!.querySelector(`[data-test=${field}]`)!.getAttribute("error"),
         ).toBe("");
@@ -2721,7 +2754,7 @@ describe("setup-app", () => {
       await el.updateComplete;
       const connect = await screenHost(el, "connect");
       expect(input(connect, "primaryUrl").value).toBe("");
-      for (const field of ["personId", "password", "totp"]) {
+      for (const field of ["email", "password", "totp"]) {
         expect(connect.shadowRoot!.querySelector(`[data-test=${field}]`)).toBeNull();
       }
     });
@@ -2843,7 +2876,7 @@ describe("setup-app", () => {
 });
 
 describe("resetting a join that stopped partway", () => {
-  const LOGIN = { personId: "op-1", password: "  correct horse  " };
+  const LOGIN = { email: "op1@example.com", password: "  correct horse  " };
 
   async function offerReset(api: SetupApi): Promise<SetupApp> {
     const el = await mountSetupApp(api);
@@ -2985,13 +3018,13 @@ describe("resetting a join that stopped partway", () => {
     },
   );
 
-  it("posts the typed person ID and password to the reset route", async () => {
+  it("posts the typed email and password to the reset route", async () => {
     const resetIncompleteAdopt = vi.fn().mockResolvedValue({ resetStaged: true, restarting: true });
     const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
     expect(resetIncompleteAdopt).toHaveBeenCalledExactlyOnceWith({
-      personId: "op-1",
+      email: "op1@example.com",
       password: "  correct horse  ",
     });
   });
@@ -3009,7 +3042,7 @@ describe("resetting a join that stopped partway", () => {
     const resetIncompleteAdopt = vi.fn();
     const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
-    await submitReset(el, { personId: "", password: "" });
+    await submitReset(el, { email: "", password: "" });
     expect(resetIncompleteAdopt).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("[data-test=screen-reset]")).not.toBeNull();
   });
@@ -3067,7 +3100,7 @@ describe("resetting a join that stopped partway", () => {
     expect(outcome.getAttribute("role")).toBe("alert");
     expect(outcome.textContent!.replace(/\s+/g, " ").trim()).toBe(message);
     expect(await screenText(el, "reset", "[data-test=reload]")).toBe("Reload");
-    expect(screen.shadowRoot!.querySelector("[data-test=personId]")).toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-test=email]")).toBeNull();
   });
 
   it.each(["setup.owner_required", "setup.attempt_uncertain", "setup.attempt_conflict"] as const)(
@@ -3104,14 +3137,14 @@ describe("resetting a join that stopped partway", () => {
     await openReset(el);
     await submitReset(el);
     const screen = await screenHost(el, "reset");
-    expect(screen.shadowRoot!.querySelector("[data-test=personId]")!.hasAttribute("invalid")).toBe(
+    expect(screen.shadowRoot!.querySelector("[data-test=email]")!.hasAttribute("invalid")).toBe(
       false,
     );
     expect(screen.shadowRoot!.querySelector("[data-test=password]")!.hasAttribute("invalid")).toBe(
       false,
     );
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(
-      "That person ID and password are not the admin login used to connect this server. Check them and try again.",
+      "That email and password are not the admin login used to connect this server. Check them and try again.",
     );
     const reset = screen.shadowRoot!.querySelector("[data-test=reset]") as HTMLElement & {
       disabled: boolean;
@@ -3120,7 +3153,7 @@ describe("resetting a join that stopped partway", () => {
   });
 
   it.each([
-    ["personId", "Check the admin person ID."],
+    ["email", "Check the admin email."],
     ["password", "Check the admin password."],
   ])(
     "marks the %s field a setup.request_invalid names, leaving the reset working",
@@ -3149,14 +3182,14 @@ describe("resetting a join that stopped partway", () => {
     const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
-    await submitReset(el, { personId: "op-1", password: "battery staple" });
+    await submitReset(el, { email: "op1@example.com", password: "battery staple" });
     expect(resetIncompleteAdopt).toHaveBeenCalledTimes(2);
     const screen = await screenHost(el, "reset");
     expect(screen.shadowRoot!.querySelector("[data-test=password]")!.getAttribute("error")).toBe(
       "",
     );
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(
-      "That person ID and password are not the admin login used to connect this server. Check them and try again.",
+      "That email and password are not the admin login used to connect this server. Check them and try again.",
     );
   });
 
@@ -3193,7 +3226,7 @@ describe("resetting a join that stopped partway", () => {
     [
       "setup.request_invalid",
       400,
-      "The server rejected the details. Check the admin person ID and password, then try again.",
+      "The server rejected the details. Check the admin email and password, then try again.",
     ],
     ["setup.not_ready", 503, "The server isn't ready yet. Wait a moment, then try again."],
   ])("keeps the form with its own message for %s", async (code, status, message) => {
@@ -3203,7 +3236,7 @@ describe("resetting a join that stopped partway", () => {
     await submitReset(el);
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(message);
     const screen = await screenHost(el, "reset");
-    expect(screen.shadowRoot!.querySelector("[data-test=personId]")).not.toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-test=email]")).not.toBeNull();
     expect(screen.shadowRoot!.querySelector("[data-test=reset]")!.hasAttribute("disabled")).toBe(
       false,
     );

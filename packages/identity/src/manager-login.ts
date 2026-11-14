@@ -50,7 +50,8 @@ async function findPersonLogin(
   return person;
 }
 
-function foldedLoginEmail(email: string): string {
+/** An email folded as sign-in matches it, so two spellings of one address compare equal. */
+export function foldedLoginEmail(email: string): string {
   return foldForUniqueness(normalizeEmail(email));
 }
 

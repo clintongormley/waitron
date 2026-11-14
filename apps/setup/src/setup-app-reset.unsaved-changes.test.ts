@@ -56,12 +56,12 @@ function unload() {
   return event.defaultPrevented;
 }
 async function fill(form: SetupResetScreen) {
-  await edit(form, "personId", "  operator-1  ");
+  await edit(form, "email", "  operator1@example.com  ");
   await edit(form, "password", " secret ");
 }
 
 describe("setup Reset unsaved changes", () => {
-  it.each(["personId", "password"])(
+  it.each(["email", "password"])(
     "Back keeps the edited %s until Discard, restoring only the child",
     async (key) => {
       const { el, form } = await mount();
@@ -95,7 +95,7 @@ describe("setup Reset unsaved changes", () => {
     expect(warning(el).open).toBe(false);
   });
 
-  it.each(["personId"])(
+  it.each(["email"])(
     "%s compares its trimmed request value and clears unload after a revert",
     async (key) => {
       const { el, form } = await mount();
@@ -151,7 +151,7 @@ describe("setup Reset unsaved changes", () => {
       .poll(() => form.shadowRoot!.querySelector("[data-test=outcome]")?.textContent)
       .toContain("resetting");
     expect(api.resetIncompleteAdopt).toHaveBeenCalledExactlyOnceWith({
-      personId: "operator-1",
+      email: "operator1@example.com",
       password: " secret ",
     });
     expect(warning(el).open).toBe(false);
@@ -164,7 +164,7 @@ describe("setup Reset unsaved changes", () => {
     await fill(form);
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]")!.click();
     await expect.poll(() => form.credentialsRejected).toBe(true);
-    expect(field(form, "personId").value).toBe("  operator-1  ");
+    expect(field(form, "email").value).toBe("  operator1@example.com  ");
     expect(field(form, "password").value).toBe(" secret ");
     expect(unload()).toBe(true);
     back(form);

@@ -150,7 +150,7 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         primaryUrl: "https://primary.example",
-        credential: { personId: "88888888-8888-8888-8888-888888888888", password: "a-password" },
+        credential: { email: "owner@example.test", password: "a-password" },
       }),
     });
     expect(response.status).toBe(200);

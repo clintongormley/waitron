@@ -1,10 +1,10 @@
 // `POST /management-api/mirror-bundle`, on the singleton primary. The mirror calls it server-side, so
-// the admin credential rides in the body and is authenticated by person id, not email.
+// the admin's sign-in email, password and code ride in the body.
 import "./errors.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, type ErrorCode } from "@waitron/shared";
+import { AppError, isAppError, type ErrorCode } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewer,
   readNodeMembership,
@@ -24,6 +24,7 @@ import {
   checkManagerPassword,
   endManagementSession,
   loginManagerById,
+  personIdForLoginEmail,
   type TotpKeyRing,
 } from "@waitron/identity";
 import { credentialRevision, writePairLinkTx, type KeyRing } from "@waitron/credentials";
@@ -49,6 +50,7 @@ import {
 import { readNodeIdentityKey } from "./node-identity.js";
 import { withAuthenticatedOperation } from "./operation-authentication.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
+import { createPasswordThrottle } from "./password-throttle.js";
 import { enabledModules, type ModuleOperations } from "@waitron/module";
 import { assertAdoptionModules } from "./finish-adoption.js";
 import { readModuleConfig } from "./module-config.js";
@@ -105,6 +107,7 @@ export const JOIN_REFUSAL_STATUS = Object.fromEntries(
 // `membership.write_contended` is transient, so the caller retries.
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
+  "password.throttled": 429,
   "authorization.not_permitted": 403,
   "mirror.standby_invalid": 400,
   "mirror.standby_removed": 409,
@@ -121,14 +124,15 @@ export function mountMirrorBundleApi(
   log: Logger = () => {},
 ): void {
   const run = createErrorBoundary(STATUS, "mirror.bundle_failed");
+  const throttle = createPasswordThrottle();
 
   app.post("/management-api/mirror-bundle", (c) =>
     run(c, log, async () => {
       // Every malformed credential field answers `password.invalid`, so the response never says which.
       const body = await readJsonBody<{
-        personId?: string;
-        password?: string;
-        totp?: string;
+        email?: unknown;
+        password?: unknown;
+        totp?: unknown;
         standbyNodeId?: string;
         standbyPublicKey?: string;
         standbyContactUrl?: unknown;
@@ -136,15 +140,14 @@ export function mountMirrorBundleApi(
         standbyAt?: unknown;
         moduleOperation?: unknown;
       }>(c);
+      const { email, password, totp } = body;
       if (
-        typeof body.personId !== "string" ||
-        !isUuid(body.personId) ||
-        typeof body.password !== "string" ||
-        (body.totp !== undefined && typeof body.totp !== "string")
+        typeof email !== "string" ||
+        typeof password !== "string" ||
+        (totp !== undefined && typeof totp !== "string")
       ) {
         throw new AppError("password.invalid", {});
       }
-      const { personId, password, totp } = body;
 
       // The contact URL is signed into the org chart and every till dials it, so the primary screens
       // it itself. Checked after the credential screen and before any database work.
@@ -165,6 +168,10 @@ export function mountMirrorBundleApi(
       const standbyContactUrl = body.standbyContactUrl;
       const standbyStoreUrl = body.standbyStoreUrl as string;
       const standbyAt = body.standbyAt;
+
+      // An address with no active account gets an id no person holds, which the sign-in below
+      // refuses after the same hashing work as a wrong password.
+      const personId = await personIdForLoginEmail(deps.appDb, email);
 
       const assemble = async (moduleOperations?: ModuleOperations) => {
         // Before assembly, so a chart too broken to read, or one no stored key vouches for, spends no
@@ -231,42 +238,60 @@ export function mountMirrorBundleApi(
 
         return c.json(bundle);
       };
-      if (body.moduleOperation !== undefined) {
-        const operation = parseStandbyOperationInput(body.moduleOperation);
-        if (operation === null)
-          throw new AppError("module.operation_invalid", { module: "unknown" });
-        if (
-          operation.binding.action !== "reserve" ||
-          operation.binding.sourceId !== deps.designated.nodeId ||
-          operation.binding.targetNodeId !== standby.nodeId
-        )
-          throw new AppError("module.operation_invalid", { module: operation.binding.module });
-        return withAuthenticatedOperation(
-          { db: deps.appDb, credentialKeyRing: deps.credentialKeyRing },
-          { binding: operation.binding, permission: "node.manage" },
-          body,
-          (authority) =>
-            assemble(new Map([[operation.binding.module, { ...operation, authority }]])),
-        );
+      // By the id, which an address keeps whether or not it has an account, so the limit is reached
+      // after the same attempts either way.
+      const finishAttempt = throttle.begin(`person:${personId}`);
+      let signedIn = false;
+      const passed = (): void => {
+        signedIn = true;
+        finishAttempt("success");
+      };
+      try {
+        if (body.moduleOperation !== undefined) {
+          const operation = parseStandbyOperationInput(body.moduleOperation);
+          if (operation === null)
+            throw new AppError("module.operation_invalid", { module: "unknown" });
+          if (
+            operation.binding.action !== "reserve" ||
+            operation.binding.sourceId !== deps.designated.nodeId ||
+            operation.binding.targetNodeId !== standby.nodeId
+          )
+            throw new AppError("module.operation_invalid", { module: operation.binding.module });
+          return await withAuthenticatedOperation(
+            { db: deps.appDb, credentialKeyRing: deps.credentialKeyRing },
+            { binding: operation.binding, permission: "node.manage" },
+            { personId, password, totp },
+            (authority) => {
+              passed();
+              return assemble(new Map([[operation.binding.module, { ...operation, authority }]]));
+            },
+          );
+        }
+        const checked = await checkManagerPassword(deps.appDb, { personId }, password);
+        await withTransaction(deps.appDb, async (tx) => {
+          const session = await loginManagerById(tx, {
+            personId,
+            password,
+            totp,
+            totpKeyRing: deps.credentialKeyRing,
+            checked,
+          });
+          await authorizeManager(tx, {
+            managementSessionId: session.token,
+            permission: "node.manage",
+          });
+          // The session only authorised this request.
+          await endManagementSession(tx, session.token);
+        });
+        passed();
+        return await assemble();
+      } catch (error) {
+        if (!signedIn)
+          finishAttempt(
+            isAppError(error) && error.code === "password.invalid" ? "invalid" : "error",
+          );
+        throw error;
       }
-      const checked = await checkManagerPassword(deps.appDb, { personId }, password);
-      await withTransaction(deps.appDb, async (tx) => {
-        const session = await loginManagerById(tx, {
-          personId,
-          password,
-          totp,
-          totpKeyRing: deps.credentialKeyRing,
-          checked,
-        });
-        await authorizeManager(tx, {
-          managementSessionId: session.token,
-          permission: "node.manage",
-        });
-        // The session only authorised this request.
-        await endManagementSession(tx, session.token);
-      });
-
-      return assemble();
     }),
   );
 }

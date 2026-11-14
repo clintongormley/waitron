@@ -21,6 +21,7 @@ import {
 } from "@waitron/country";
 import { getVenueSetupCountryPack, resolveInstalledCountryLocale } from "@waitron/country-packs";
 import {
+  foldedLoginEmail,
   hashPassword,
   hashPin,
   normalizeAndValidateEmail,
@@ -298,10 +299,11 @@ const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_fail
 /**
  * The adopt route's contract. `mirror.bundle_fetch_failed` is 502, not a client fault: the request
  * was well-formed, but the mirror's upstream — the primary it was pointed at — failed.
- * `password.invalid` is the primary's refusal of the login. `mirror.vault_not_empty` and
- * `mirror.primary_unconfirmed` are this box's own refusals; `JOIN_REFUSAL_STATUS` holds the main
- * box's refusals of the join, each relayed by `fetchMirrorBundle`, and this box raises
- * `mirror.standby_series_unsupported` itself as well for a bundle naming such a module.
+ * `password.invalid` is the primary's refusal of the login, and `password.throttled` its refusal of
+ * too many attempts at it. `mirror.vault_not_empty` and `mirror.primary_unconfirmed` are this box's
+ * own refusals; `JOIN_REFUSAL_STATUS` holds the main box's refusals of the join, each relayed by
+ * `fetchMirrorBundle`, and this box raises `mirror.standby_series_unsupported` itself as well for a
+ * bundle naming such a module.
  * The two ring refusals, `credentials.key_invalid` and `credentials.key_ring_version_collision`,
  * are left unlisted (400, the setup screen's generic words): only a faulty main box raises them.
  */
@@ -313,6 +315,7 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.primary_unconfirmed": 409,
   ...JOIN_REFUSAL_STATUS,
   "password.invalid": 401,
+  "password.throttled": 429,
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,
   "setup.adopt_incomplete": 409,
@@ -344,13 +347,13 @@ const RESET_STATUS: Record<string, ContentfulStatusCode> = {
 const runReset = createErrorBoundary(RESET_STATUS, "setup.reset_failed");
 
 /**
- * Whether `personId` and `password` are the admin login the primary accepted for the adopt that
- * stopped partway. It does NOT establish that the admin is still active on the primary, and the
- * one-time code is not checked again.
+ * Whether `email` and `password` are the admin login the primary accepted for the adopt that
+ * stopped partway, the email compared as sign-in folds it. It does NOT establish that the admin is
+ * still active on the primary, and the one-time code is not checked again.
  */
 async function matchesResetProof(
   proof: unknown,
-  personId: string,
+  email: string,
   password: string,
 ): Promise<boolean> {
   const saved =
@@ -359,7 +362,11 @@ async function matchesResetProof(
     password,
     typeof saved.passwordHash === "string" ? saved.passwordHash : "",
   );
-  return passwordMatches && saved.personId === personId;
+  return (
+    passwordMatches &&
+    typeof saved.email === "string" &&
+    foldedLoginEmail(saved.email) === foldedLoginEmail(email)
+  );
 }
 
 /**
@@ -1061,7 +1068,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       assertSafePrimaryUrl(primaryUrl);
       const cred = asObject(body.credential, "credential");
       const credential: AdoptCredential = {
-        personId: asString(cred.personId, "credential.personId"),
+        email: asString(cred.email, "credential.email"),
         password: asString(cred.password, "credential.password"),
         totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
       };
@@ -1081,7 +1088,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           beforeFirstWrite: async () => {
             await operation?.advance("venue_committed", {
               resetProof: {
-                personId: credential.personId,
+                email: credential.email,
                 passwordHash: hashPassword(credential.password),
               },
             });
@@ -1145,8 +1152,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     return runReset(c, log, async () => {
       let succeeded = false;
       try {
-        const body = await readJsonBody<{ personId?: unknown; password?: unknown }>(c);
-        const personId = asString(body.personId, "personId");
+        const body = await readJsonBody<{ email?: unknown; password?: unknown }>(c);
+        const email = asString(body.email, "email");
         const password = asString(body.password, "password");
         const record = await operations.read();
         if (
@@ -1157,12 +1164,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         ) {
           throw new AppError("setup.reset_unavailable", {});
         }
-        // Keyed by the saved operation, not the submitted person id: only its one saved login can
-        // authorise this, and a key per submitted id lets invented ids crowd the real one out.
+        // Keyed by the saved operation, not the submitted email: only its one saved login can
+        // authorise this, and a key per submitted email lets invented ones crowd the real one out.
         const finish = resetThrottle.begin(record.id);
         let outcome: "success" | "invalid" | "error" = "error";
         try {
-          outcome = (await matchesResetProof(record.data.resetProof, personId, password))
+          outcome = (await matchesResetProof(record.data.resetProof, email, password))
             ? "success"
             : "invalid";
         } finally {

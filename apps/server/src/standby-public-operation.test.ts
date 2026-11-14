@@ -44,6 +44,7 @@ const suite = useVenueDb({
 const PRIMARY = "f1000000-0000-4000-8000-000000000002";
 const TARGET = "f2000000-0000-4000-8000-000000000003";
 const ADMIN = "f1000000-0000-4000-8000-000000000004";
+const ADMIN_EMAIL = "owner@example.test";
 const PASSWORD = "public-test-admin";
 const HASH = hashPassword(PASSWORD);
 const RING = loadKeyRing({
@@ -89,6 +90,7 @@ beforeEach(async () => {
   ]);
   await seedPersons(suite.db, {
     id: ADMIN,
+    email: ADMIN_EMAIL,
     displayName: "Administrator",
     role: "admin",
     passwordHash: HASH,
@@ -216,7 +218,7 @@ function promoteBody(credentials: Record<string, unknown>) {
 }
 function bundleBody() {
   return {
-    personId: ADMIN,
+    email: ADMIN_EMAIL,
     password: PASSWORD,
     standbyNodeId: TARGET,
     standbyPublicKey: generateNodeKeyPair().publicKey,

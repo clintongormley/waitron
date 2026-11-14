@@ -17,17 +17,17 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
-export type ResetField = "personId" | "password";
+export type ResetField = "email" | "password";
 
-const FIELDS: readonly ResetField[] = ["personId", "password"];
+const FIELDS: readonly ResetField[] = ["email", "password"];
 
 const MISSING: Record<ResetField, StringKey> = {
-  personId: "reset.missing.person_id",
+  email: "reset.missing.email",
   password: "reset.missing.password",
 };
 
 const CHECK: Record<ResetField, StringKey> = {
-  personId: "reset.check.person_id",
+  email: "reset.check.email",
   password: "reset.check.password",
 };
 
@@ -68,7 +68,7 @@ export class SetupResetScreen extends LitElement {
 
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
-  @state() private values: Record<ResetField, string> = { personId: "", password: "" };
+  @state() private values: Record<ResetField, string> = { email: "", password: "" };
 
   @state() private attempted = false;
 
@@ -100,7 +100,7 @@ export class SetupResetScreen extends LitElement {
       id: this,
       current: () => this.values,
       snapshot: (form) => ({ ...form }),
-      equal: (a, b) => a.personId.trim() === b.personId.trim() && a.password === b.password,
+      equal: (a, b) => a.email.trim() === b.email.trim() && a.password === b.password,
       restore: (form) => {
         this.values = { ...form };
         this.attempted = false;
@@ -178,7 +178,7 @@ export class SetupResetScreen extends LitElement {
     }
     // `password` is not trimmed: whitespace can be intentional in a secret.
     dispatchResetRequested(this, {
-      personId: this.values.personId.trim(),
+      email: this.values.email.trim(),
       password: this.values.password,
     });
   }
@@ -199,7 +199,7 @@ export class SetupResetScreen extends LitElement {
       error=${error}
       ?invalid=${error !== ""}
       data-test=${key}
-      type=${key === "password" && !this.passwordVisible ? "password" : "text"}
+      type=${key === "email" ? "email" : !this.passwordVisible ? "password" : "text"}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
       >${
@@ -247,7 +247,7 @@ export class SetupResetScreen extends LitElement {
       <h1>${t("reset.heading")}</h1>
       <p>${t("reset.explanation")}</p>
       <p>${t("reset.prompt")}</p>
-      ${this.#field(t("reset.person_id_label"), "personId", missing)}
+      ${this.#field(t("reset.email_label"), "email", missing)}
       ${this.#field(t("reset.password_label"), "password", missing)}
       <wt-form-actions .error=${bottom}>
         <wt-button

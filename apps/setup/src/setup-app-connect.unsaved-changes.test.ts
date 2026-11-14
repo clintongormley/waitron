@@ -22,7 +22,7 @@ const screen = (el: SetupApp) => (el as unknown as { screen: Screen }).screen;
 const PEM = "-----BEGIN CERTIFICATE-----\nAUTHORITY-X\n-----END CERTIFICATE-----\n";
 const body: AdoptBody = {
   primaryUrl: "https://primary.example",
-  credential: { personId: "operator-1", password: " secret ", totp: "123456" },
+  credential: { email: "operator1@example.com", password: " secret ", totp: "123456" },
   confirmedCaPem: PEM,
 };
 
@@ -78,13 +78,13 @@ async function fill(form: SetupConnectScreen) {
   );
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=matches]")!.click();
   await form.updateComplete;
-  await edit(form, "personId", "  operator-1  ");
+  await edit(form, "email", "  operator1@example.com  ");
   await edit(form, "password", " secret ");
   await edit(form, "totp", " 123456 ");
 }
 
 describe("setup Connect unsaved changes", () => {
-  it.each(["primaryUrl", "personId", "password", "totp"])(
+  it.each(["primaryUrl", "email", "password", "totp"])(
     "Back keeps the edited %s until Discard, restoring only the child",
     async (key) => {
       const { el, form } = await mount(undefined, key === "primaryUrl" ? "address" : "login");
@@ -118,7 +118,7 @@ describe("setup Connect unsaved changes", () => {
     expect(warning(el).open).toBe(false);
   });
 
-  it.each(["primaryUrl", "personId", "totp"])(
+  it.each(["primaryUrl", "email", "totp"])(
     "%s compares its trimmed request value and clears unload after a revert",
     async (key) => {
       const { el, form } = await mount(undefined, key === "primaryUrl" ? "address" : "login");
@@ -193,8 +193,8 @@ describe("setup Connect unsaved changes", () => {
     const returned = el.shadowRoot!.querySelector<SetupConnectScreen>("setup-connect-screen")!;
     await returned.updateComplete;
     expect(
-      ["primaryUrl", "personId", "password", "totp"].map((key) => field(returned, key).value),
-    ).toEqual(["https://primary.example", "operator-1", " secret ", ""]);
+      ["primaryUrl", "email", "password", "totp"].map((key) => field(returned, key).value),
+    ).toEqual(["https://primary.example", "operator1@example.com", " secret ", ""]);
     expect(unload()).toBe(true);
     back(returned);
     await expect.poll(() => warning(el).open).toBe(true);

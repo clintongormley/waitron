@@ -211,7 +211,7 @@ controls remain open; no provider work is authorised.
   removal; (vi) a joining standby refused for a removed id (`mirror.standby_removed`) or a full chart
   (`mirror.membership_full`) sees `mirror.bundle_fetch_failed` rather than the primary's reason,
   because `apps/server/src/mirror-bundle-fetch.ts` passes on only a refused login
-  (`password.invalid`) and the codes in `JOIN_REFUSALS` (`apps/server/src/mirror-bundle-api.ts`),
+  (`password.invalid`), a refusal of too many sign-in attempts (`password.throttled`, with its wait) and the codes in `JOIN_REFUSALS` (`apps/server/src/mirror-bundle-api.ts`),
   and turns every other refusal into that code (C95); (vii) if A61's removal ever mis-classifies a live
   standby that an operator later promotes, the old primary refuses the new primary's charts
   (`signer_removed`) and keeps selling; the refusal is logged at warn and raises no alert. No adopt
@@ -1118,7 +1118,7 @@ asking the network, a spare listens on the venue's network, and what it serves t
 test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (the pair link: a spare joins with no Cloud relay,
 the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898); 3b-5b (a spare runs its store behind a listener
 that admits only its main box's client certificate, a venue with a standby refuses bucket-copy settings, and key ring
-rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining) and 3b-6b (a test runs a main box and a spare together over the venue's network, and the Servers guide explains adding a spare). 3b-6c to 3b-F and slices 3c onwards are still open;
+rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining), 3b-6b (a test runs a main box and a spare together over the venue's network, and the Servers guide explains adding a spare) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email). 3b-6c itself to 3b-F and slices 3c onwards are still open;
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).

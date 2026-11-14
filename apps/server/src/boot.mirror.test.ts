@@ -988,7 +988,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       const reset = await fetch(`${base}/setup-api/reset-incomplete-adopt`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ personId: "p", password: "x" }),
+        body: JSON.stringify({ email: "owner@example.test", password: "x" }),
       });
       expect(reset.status).toBe(404);
 

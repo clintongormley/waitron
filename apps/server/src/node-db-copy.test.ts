@@ -163,7 +163,10 @@ beforeAll(async () => {
         });
       },
     },
-    { primaryUrl: "https://primary.test", credential: { personId: "p", password: "x" } },
+    {
+      primaryUrl: "https://primary.test",
+      credential: { email: "owner@example.test", password: "x" },
+    },
     { beforeFirstWrite: async () => {} },
   );
 

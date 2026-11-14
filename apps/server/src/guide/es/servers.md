@@ -26,7 +26,8 @@ Antes de empezar, comprueba dos cosas en el equipo principal:
   esta versión, no puede volver a recibirlos mientras el equipo de reserva siga en el local.
 
 También necesitas una cuenta que pueda abrir **Ajustes → Servidores** en el equipo principal, con
-su ID de persona, su contraseña y el código actual del autenticador, si está configurado.
+el correo con el que inicia sesión, su contraseña y el código actual del autenticador, si está
+configurado.
 
 Conecta el equipo nuevo a la red del local y enciéndelo; no necesita conexión a internet. Como
 `waitron.local` lleva al equipo principal, abre la dirección que la pantalla del equipo nuevo

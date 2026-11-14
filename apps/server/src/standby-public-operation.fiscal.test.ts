@@ -49,6 +49,7 @@ const migrations = migrationOptionsFor(manifestSets(), null);
 const primary = useVenueDb({ migrations });
 const spare = useVenueDb({ migrations });
 const ADMIN = "e1000000-0000-4000-8000-000000000004";
+const ADMIN_EMAIL = "owner@example.test";
 const PASSWORD = "public-synthetic-admin";
 const HASH = hashPassword(PASSWORD);
 const LOCATION = "e1000000-0000-4000-8000-000000000001";
@@ -155,6 +156,7 @@ beforeEach(async () => {
   }
   await seedPersons(primary.db, {
     id: ADMIN,
+    email: ADMIN_EMAIL,
     displayName: "Administrator",
     role: "admin",
     passwordHash: HASH,
@@ -222,7 +224,7 @@ async function reserve(standby = generateStandbyIdentity()) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      personId: ADMIN,
+      email: ADMIN_EMAIL,
       password: PASSWORD,
       standbyNodeId: standby.nodeId,
       standbyPublicKey: standby.publicKey,

@@ -141,6 +141,11 @@ async function joined() {
     }),
   );
   const session = await openManagementSession(mainBox.db, "admin");
+  const [{ email: adminEmail }] = (
+    await mainBox.db.execute<{ email: string }>(
+      sql`select email from persons where id = ${session.personId}`,
+    )
+  ).rows as [{ email: string }];
   await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, session.token));
 
   const bundleApp = new Hono();
@@ -171,7 +176,7 @@ async function joined() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            personId: credential.personId,
+            email: credential.email,
             password: credential.password,
             standbyNodeId: sent.nodeId,
             standbyPublicKey: sent.publicKey,
@@ -201,7 +206,7 @@ async function joined() {
     },
     {
       primaryUrl: MAIN_URL,
-      credential: { personId: session.personId, password: PASSWORD },
+      credential: { email: adminEmail, password: PASSWORD },
     },
     { beforeFirstWrite: async () => {} },
   );

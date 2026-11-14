@@ -215,7 +215,7 @@ describe("SetupApi", () => {
 
   const adoptBody: AdoptBody = {
     primaryUrl: "https://waitron.local",
-    credential: { personId: "op-1", password: "correct horse", totp: "123456" },
+    credential: { email: "op1@example.com", password: "correct horse", totp: "123456" },
   };
 
   it("adopt POSTs the body (credential as a nested object) as JSON and returns the result", async () => {
@@ -264,7 +264,7 @@ describe("SetupApi", () => {
     const result = { resetStaged: true, restarting: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result, true, 202));
     const api = new SetupApi("", fetchImpl);
-    const credential = { personId: "op-1", password: "correct horse" };
+    const credential = { email: "op1@example.com", password: "correct horse" };
     expect(await api.resetIncompleteAdopt(credential)).toEqual(result);
     expect(fetchImpl).toHaveBeenCalledWith("/setup-api/reset-incomplete-adopt", {
       method: "POST",
@@ -285,13 +285,13 @@ describe("SetupApi", () => {
         ),
       );
     const api = new SetupApi("", fetchImpl);
-    await expect(api.resetIncompleteAdopt({ personId: "op-1", password: "wrong" })).rejects.toEqual(
-      {
-        code: "password.throttled",
-        params: { retryAfterSeconds: 30 },
-        status: 429,
-      },
-    );
+    await expect(
+      api.resetIncompleteAdopt({ email: "op1@example.com", password: "wrong" }),
+    ).rejects.toEqual({
+      code: "password.throttled",
+      params: { retryAfterSeconds: 30 },
+      status: 429,
+    });
   });
 
   it("restore POSTs the encrypted artifact as binary with recovery metadata", async () => {

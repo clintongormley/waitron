@@ -126,7 +126,7 @@ export interface ProvisionResult {
 export interface AdoptBody {
   primaryUrl: string;
   /** `totp` is omitted, not `""`, when blank: the server refuses an empty string. */
-  credential: { personId: string; password: string; totp?: string };
+  credential: { email: string; password: string; totp?: string };
   /** The main box's authority certificate the person compared; absent for a plain-http address. */
   confirmedCaPem?: string;
 }
@@ -148,7 +148,7 @@ export interface AdoptOutcome {
 
 /** The admin login used on the connect screen for the join that stopped partway. */
 export interface ResetCredential {
-  personId: string;
+  email: string;
   password: string;
 }
 

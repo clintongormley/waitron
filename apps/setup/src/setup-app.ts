@@ -342,6 +342,7 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
 function adoptErrorWords(code: string, params: Record<string, unknown> | undefined): Message {
   const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
   if (finishKey !== undefined) return say(finishKey);
+  if (code === "password.throttled") return describeThrottle(params);
   const { primaryAt, standbyAt } = params ?? {};
   if (
     code === "mirror.clocks_apart" &&
@@ -411,7 +412,7 @@ function refusedField<F extends string>(
 }
 
 const RESET_FIELD_PATHS: Record<string, ResetField> = {
-  personId: "personId",
+  email: "email",
   password: "password",
 };
 
@@ -421,7 +422,7 @@ const ADOPT_FIELD_CODES: Record<string, ConnectField> = {
 
 const ADOPT_FIELD_PATHS: Record<string, ConnectField> = {
   primaryUrl: "primaryUrl",
-  "credential.personId": "personId",
+  "credential.email": "email",
   "credential.password": "password",
   "credential.totp": "totp",
 };
@@ -2237,7 +2238,7 @@ export class SetupApp extends LitElement {
       );
       if (this.connectInvalidField === undefined) {
         this.connectError = adoptErrorWords(code, error.params);
-        this.connectErrorAboutLogin = code === "password.invalid";
+        this.connectErrorAboutLogin = code === "password.invalid" || code === "password.throttled";
       }
       this.connectRequest = body;
       this.screen = "connect";

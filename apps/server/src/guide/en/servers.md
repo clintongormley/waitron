@@ -24,8 +24,8 @@ Before you start, check two things on the main box:
   bucket then stops receiving the venue's changes, and in this version it cannot receive them again
   while the spare is there.
 
-You also need an account that can open **Settings → Servers** on the main box, with its person ID,
-its password and its current authenticator code, if set up.
+You also need an account that can open **Settings → Servers** on the main box, with the email it
+signs in with, its password and its current authenticator code, if set up.
 
 Connect the new box to the venue's network and switch it on; it needs no internet connection.
 Because `waitron.local` reaches the main box, open the address that the new box's screen lists
