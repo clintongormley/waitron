@@ -1,0 +1,125 @@
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+import { leaveCoordinatorFor, type WtButton } from "@waitron/ui";
+import { clockApp, signIn, working, shellAction } from "../test/clock-app.js";
+import { reportOf, openStrip, editReport, closed, preview, data } from "../test/problem-report.js";
+import { cleanupWidgets } from "./widgets/test-helpers.js";
+import { currentLocale, setLocale } from "./i18n/t.js";
+
+import { SessionActivity } from "./session-activity.js";
+import { ServerRouter } from "./api/server-router.js";
+
+const locale = currentLocale();
+afterEach(() => {
+  cleanupWidgets();
+  vi.restoreAllMocks();
+  setLocale(locale);
+});
+
+it("Escape Keep retains the report; Discard closes only its draft and leaves another edit alone", async () => {
+  const { el } = await clockApp();
+  const dialog = await openStrip(el);
+  const leave = leaveCoordinatorFor(reportOf(el))!;
+  let title = "Saved title";
+  const other = leave.register({
+    id: {},
+    current: () => title,
+    snapshot: (value) => value,
+    equal: (a, b) => a === b,
+    restore: (value) => {
+      title = value;
+    },
+  });
+  other.commit(title);
+  title = "Unfinished title";
+  other.changed();
+  await editReport(dialog, "The screen stopped responding.");
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => question.open).toBe(true);
+  await userEvent.click(question.shadowRoot!.querySelector<WtButton>("[data-choice=keep]")!);
+  await expect.poll(() => question.open).toBe(false);
+  expect(dialog.open).toBe(true);
+  expect(dialog.description).toBe("The screen stopped responding.");
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => question.open).toBe(true);
+  const didClose = closed(dialog);
+  await userEvent.click(question.shadowRoot!.querySelector<WtButton>("[data-choice=discard]")!);
+  await didClose;
+  expect(dialog.open).toBe(false);
+  expect(other.isDirty()).toBe(true);
+  expect(title).toBe("Unfinished title");
+});
+
+it("Cancel discards the report without asking; disconnect disposes its draft and reconnect starts fresh", async () => {
+  const { el } = await clockApp();
+  const dialog = await openStrip(el);
+  const report = reportOf(el);
+  const leave = leaveCoordinatorFor(report)!;
+  await editReport(dialog, "The screen stopped responding.");
+  expect(leave.isDirty()).toBe(true);
+  const didClose = closed(dialog);
+  await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>('[slot="cancel"]')!);
+  await didClose;
+  expect(leave.isDirty()).toBe(false);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  const next = await openStrip(el);
+  const previous = data(preview(next)).id;
+  await editReport(next, "Another problem.");
+  report.remove();
+  expect(leave.isDirty()).toBe(false);
+  el.shadowRoot!.querySelector(".app")!.append(report);
+  const reopened = await openStrip(el);
+  expect(reopened.description).toBe("");
+  expect(data(preview(reopened)).id).not.toBe(previous);
+});
+
+it.each(["idle", "server-change", "device-revoked"] as const)(
+  "%s drops the report and its draft without asking before the next person can see it",
+  async (ending) => {
+    const activity = new SessionActivity();
+    const configured = vi.spyOn(activity, "configure");
+    const router = new ServerRouter({
+      origin: location.origin,
+      fetchImpl: vi.fn().mockRejectedValue(new Error("Offline")),
+      storage: { getItem: () => null, setItem: () => {} },
+    });
+    onTestFinished(() => router.stop());
+    const { el, api } = await clockApp({
+      enabled: false,
+      props: { sessionActivity: activity, router },
+    });
+    await signIn(el);
+    await working(el);
+    await shellAction(el, "[data-report-problem]");
+    const report = reportOf(el);
+    const dialog = report.shadowRoot!.querySelector("wt-report-dialog")!;
+    await expect.poll(() => dialog.open).toBe(true);
+    await editReport(dialog, "Previous operator note");
+    const previousId = data(preview(dialog)).id;
+    if (ending === "idle") configured.mock.calls.at(-1)![0].onIdle();
+    else if (ending === "server-change")
+      router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: "a", to: "b" } }));
+    else {
+      api.getDeviceIdentity.mockRejectedValue({ code: "device.unauthorized" });
+      el.shadowRoot!.querySelector("till-shell")!.dispatchEvent(
+        new CustomEvent("device-unauthorized", { bubbles: true, composed: true }),
+      );
+    }
+    await expect
+      .poll(() =>
+        el.shadowRoot!.querySelector(
+          ending === "device-revoked" ? "till-enrol-screen" : "till-lock-screen",
+        ),
+      )
+      .not.toBeNull();
+    await expect.poll(() => dialog.open).toBe(false);
+    expect(dialog.description).toBe("");
+    expect(dialog.preview).toBe("");
+    expect(leaveCoordinatorFor(report)!.isDirty()).toBe(false);
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    const fresh = await openStrip(el);
+    expect(fresh.description).toBe("");
+    expect(data(preview(fresh)).id).not.toBe(previousId);
+  },
+);

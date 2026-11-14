@@ -9,13 +9,14 @@ import {
 import { TillApi } from "./api/client.js";
 import { withDevDeviceHeader } from "./api/dev-device.js";
 import { ServerRouter, withServerTarget } from "./api/server-router.js";
-import { diag } from "./diagnostics.js";
+import { diag, setReportBuild } from "./diagnostics.js";
 import { isTrustBroken } from "./trust-check.js";
 import { trustInstructions } from "./trust-instructions.js";
 import "./till-app.js";
 
 const watchedFetch = watchBuild(fetch, {
   origin: location.origin,
+  onFirstBuild: setReportBuild,
   onChange: () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT)),
 });
 applyTokens(document.documentElement);

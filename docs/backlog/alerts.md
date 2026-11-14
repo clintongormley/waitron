@@ -12,8 +12,11 @@ is GitHub issues; for now a bundle only needs to be copy-pastable.
 provides browser-only preview and download in the dashboard before sign-in and in setup, including
 before discovery, after a refusal and while an already-loaded page is offline. Its opening
 activity and environment stay fixed while description edits update the exact downloaded preview.
-Nothing is submitted to or stored on the box. Till buttons, richer trail hardening and stored
-capture with manager read/download remain open; the stored slices need separate plans. The
+Nothing is submitted to or stored on the box.
+
+**2026-11-14 update:** the till offers the same preview and download from its More menu and
+above sign-in, enrolment, device choice, clock-in and attendance pages.
+Richer trail hardening and stored capture with manager read/download remain open; the stored slices need separate plans. The
 [2026-10-22 plan](../superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) and older slice
 notes below retain their original context. Cloud forwarding and automatic crash/freeze intake remain
 separate follow-ups.

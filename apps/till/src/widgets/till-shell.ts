@@ -40,6 +40,7 @@ import { PHONE_WIDTH, chooserStyles } from "./chooser-styles.js";
 import { edgeFadeStyles, markOverflow, oncePerFrame } from "./edge-fade.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
+import { reportAvailable } from "../problem-report.js";
 import { aboutHeading, readLegalAbout } from "../legal-about.js";
 import type { LegalAbout } from "@waitron/shared";
 
@@ -1251,12 +1252,30 @@ export class TillShell extends LitElement {
         ${items.zones}${items.equipment}${this.#chooser("group")}${this.#themeChoices()}
       </div>
       <hr class="menu-rule" />
-      ${this.#aboutOption()}
+      ${this.#reportOption()}${this.#aboutOption()}
       <wt-button class="logout" variant="ghost" align="start" @click=${() => this.#emit("logout")}
         >${t("shell.logout")}</wt-button
       >
       ${this.#poweredBy()}
     </wt-row-actions>`;
+  }
+
+  #reportOption(): TemplateResult | typeof nothing {
+    return reportAvailable()
+      ? html`<wt-button
+          data-report-problem
+          class="report-problem"
+          variant="ghost"
+          align="start"
+          @click=${(event: Event) => {
+            const menu = (event.currentTarget as HTMLElement).closest<WtRowActions>(
+              "wt-row-actions",
+            )!;
+            this.#emit("open-problem-report", { opener: menu });
+          }}
+          >${t("problem_report.title")}</wt-button
+        >`
+      : nothing;
   }
 
   #poweredBy(): TemplateResult | typeof nothing {
@@ -1288,7 +1307,7 @@ export class TillShell extends LitElement {
       ${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open"), "help.more.profile") : nothing}
       ${this.#chooser("group")}
       ${action("settings", "open-settings", t("device_zones.settings"), "help.more.settings")}
-      ${this.#aboutOption()} ${action("logout", "logout", t("shell.logout"))}
+      ${this.#reportOption()}${this.#aboutOption()} ${action("logout", "logout", t("shell.logout"))}
       ${
         this.testingKitchen && this.affordances.includes("station")
           ? html`<details data-testing>
