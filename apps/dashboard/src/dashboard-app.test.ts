@@ -1405,7 +1405,16 @@ describe("dashboard-app", () => {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
       await flush(el);
       expect(location.pathname).toBe("/manage/profile");
+      const closed =
+        close === closeProfileButton
+          ? new Promise<void>((resolve) =>
+              el
+                .shadowRoot!.querySelector("wt-modal")!
+                .addEventListener("wt-close", () => resolve(), { once: true }),
+            )
+          : Promise.resolve();
       close(el);
+      await closed;
       await expect.poll(() => el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
       await flush(el);
       await screen.updateComplete;
