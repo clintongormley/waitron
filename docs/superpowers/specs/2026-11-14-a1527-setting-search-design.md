@@ -11,7 +11,7 @@ Type **“Remind to fire the next course after”**, or “remind”, into **Sea
 - **Zones:** `zone-edit-dialog.ts`, including name and all three shared service overrides. Defaults and overrides produce distinct department/zone results.
 - **Hardware:** printer edit/calibration controls, including receipt/kitchen and A4 variants; device settings; card-reader name/slip settings; device-profile controls. Reuse field/role/capability definitions in the four owning `*-screen.ts` files. A1529's profile tabs are **General**, **Where it serves**, **Who can sign in**, **What it can do**, **Printers and card readers**; **Kitchen screens** replaces Where/Who for kitchen profiles. Calibration targets open the step holding the setting, including drawer/portable/pickup on step 3, without running a hardware action. Paper width and Resolution also match their details labels, opening the existing ruler-number and QR-square controls; the completeness check includes those two answers explicitly.
 
-**Shared mechanism.** Add a resolved-setting variant alongside static `DashboardSearchDestination`: stable identity, existing label key, screen/tab/window and row resolver. The shell aggregates exported core/module declarations; rendered labels and search share definitions. No copied central settings list or form framework. At activation, module resolvers receive `DashboardModuleContext`'s request/render-panel context; core resolvers use the dashboard API. Reuse `VenueServiceApi` and Hardware list reads; automatic reads stay passive.
+**Shared mechanism.** Add a resolved-setting variant alongside static `DashboardSearchDestination`: stable identity, existing label key, screen/tab/window and row resolver. The shell aggregates exported core/module declarations. On 14 November at 19:07 the watcher replaced the shared-rendering-definition requirement: declarations reuse the existing translation keys and field/tab definitions, and the mounted two-way check below keeps rendered labels, names and tabs aligned without restructuring rendering. No copied central settings list or form framework. At activation, module resolvers receive `DashboardModuleContext`'s request/render-panel context; core resolvers use the dashboard API. Reuse `VenueServiceApi` and Hardware list reads; automatic reads stay passive.
 
 Keep existing page/child permissions and enabled-module gates. Row eligibility uses receipt-panel availability, `offeredDepartmentTabs` and hardware/profile-kind rules; Transfers requires two active departments. Recheck declaration identity, gates and eligibility on click. Reuse the existing destination screen/path checks at that boundary, with visible refusal for an invalid candidate. Invalid paths get a visible refusal. Keep static-path validation in synchronous `collectSearchDestinations`; validate asynchronous candidates only at activation, without static-href freshness matching.
 
@@ -33,7 +33,7 @@ Reuse department/zone routes and printer/profile row paths. Add `dashboardPath` 
 | Printers | 180–260 | 180–260 |
 | Devices | 180–260 | 180–260 |
 | Card readers | 100–160 | 120–180 |
-| Device profiles | 150–220 | 180–260 |
+| Device profiles, plus one EN/ES guide sentence on finding settings | 150–220 | 180–260 |
 | **Total** | **1,240–1,770** | **1,230–1,790** |
 
 Approximate added/removed totals: production +1,100–1,600/−140–170, tests +1,100–1,600/−130–190; docs +80/−20; no generated files are expected. These are unmeasured estimates, to be refined in each family plan.

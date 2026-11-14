@@ -1366,7 +1366,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   `apps/dashboard/src/dashboard-app.ts`), but not a setting inside a window that opens for one row,
   such as a department's tabs. It should find a setting by its label and open where it lives,
   asking which department when there are several. Needs a design for how the list of settings is
-  kept from going stale. [All-window design](superpowers/specs/2026-11-14-a1527-setting-search-design.md), Claude-read and watcher-cleared; its seven required implementation PRs remain.
+  kept from going stale. [All-window design](superpowers/specs/2026-11-14-a1527-setting-search-design.md), Claude-read and watcher-cleared; its seven required implementation PRs remain. The [first implementation plan](superpowers/plans/2026-11-14-a1527-search-settings-core.md) covers shared search and departments.
 
 - **A1529. A Hardware section in the menu, and its screens brought into line (owner, 2026-11-14).**
   The owner reviewed mock-ups of the first three points and approved them. No migration. Not
