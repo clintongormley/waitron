@@ -45,8 +45,8 @@ every one.
 
 ## Warnings {#warnings}
 
-**Warnings** lists the open alerts about records that went out but deserve a look. Nothing here
-changes a record.
+**Warnings** lists the open alerts about records that deserve a look. Nothing here changes a
+record.
 
 - **AEAT answers that did not match what was sent**: AEAT answered a group of records with a
   different number of lines, so Waitron used none of its answer and sends the records again.

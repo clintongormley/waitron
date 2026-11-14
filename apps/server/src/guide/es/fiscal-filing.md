@@ -49,8 +49,8 @@ todos.
 
 ## Avisos {#warnings}
 
-**Avisos** muestra los avisos abiertos sobre registros que se enviaron pero conviene revisar. Nada
-aquí cambia un registro.
+**Avisos** muestra los avisos abiertos sobre registros que conviene revisar. Nada aquí cambia un
+registro.
 
 - **Respuestas de la AEAT que no cuadran con lo enviado**: la AEAT respondió a un grupo de
   registros con otro número de líneas, así que Waitron no usó su respuesta y vuelve a enviar los

@@ -206,7 +206,7 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:137` and `apps/dashboard/src/i18n/alert-messages.ts:138`.
 
-Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the invoice was still recorded, that sales and sending to AEAT carry on, and to keep the box running and note when it appeared. No page shows this alert's evidence (watcher, 2026-11-14 03:20). Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `chain.verification_failed`.
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the new invoice record was still written, that sales and sending to AEAT carry on, and to keep the box running and note when it appeared. No page shows this alert's evidence (watcher, 2026-11-14 03:20). Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `chain.verification_failed`.
 
 State: A fiscal backend returned stored-chain integrity issues during issuance. This proves an integrity failure was detected, not that a product bug is the only cause. Receipt: `packages/core/src/record-sale.ts:205`; `packages/core/src/record-correction.ts:240`; `packages/core/src/record-void.ts:55`; `packages/core/src/record-substitution.ts:163`.
 
@@ -338,7 +338,7 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:234` and `apps/dashboard/src/i18n/alert-messages.ts:235`.
 
-Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the record went out as usual and the invoice and fields involved are on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.record_flagged`.
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the record is sent to AEAT like any other and the invoice and fields involved are on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.record_flagged`.
 
 State: Local validation returns non-total warnings and records them. Validation warnings alone do not establish a product bug. Receipt: `packages/fiscal-verifactu/src/chain.ts:231`.
 
@@ -359,6 +359,8 @@ State: A reconciliation lookup still finds no authority copy after one resubmiss
 
 Route: The producer is the library reconciliation function; this audit has not established a user-facing invocation for it. Establish that caller before proposing a recovery screen or promising a periodic check.
 
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say Waitron has already queued the invoice to be sent once more and will not send it again by itself, that it asks AEAT again every day, and that the person can look the invoice up with AEAT. Still missing: a page showing this alert's evidence. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.reconcile_no_trace`.
+
 ### `fiscal.reconcile_drift_anulada`
 
 Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-reconcile](#fiscal-reconcile).
@@ -373,6 +375,8 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:246` and `apps/dashboard/src
 State: Reconciliation sees an authority cancellation not represented locally. The authority state is external; bug-only is not established. Receipt: `packages/fiscal-verifactu/src/reconcile.ts:75`; `packages/fiscal-verifactu/src/reconcile.ts:200`.
 
 Route: Same caller caveat as reconcile_no_trace. Missing: evidence inspection and an administrator/asesor decision path if this alert is surfaced.
+
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say Waitron leaves its own record of the invoice as it is and asks AEAT again every day, and that the person can look the invoice up with AEAT. Still missing: evidence inspection and a decision path. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.reconcile_drift_anulada`.
 
 ### `fiscal.filing_cases_open`
 

@@ -203,8 +203,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "Este servidor no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Cada arranque lo vuelve a intentar, así que abre Estado del servidor y pulsa Reiniciar el servidor. Si el mensaje sigue y hay una copia en el bucket configurada, revisa la conexión a internet del servidor y el bucket en la página de Copias de seguridad, porque ese arranque lee el bucket, y después vuelve a pulsar Reiniciar el servidor.",
   },
   "chain.verification_failed": {
-    en: "When an invoice was recorded, Waitron's check of the invoice record before it found a problem. The invoice was still recorded, and sales and sending to the tax agency (AEAT) carry on. Keep the box running and note when this appeared.",
-    es: "Al registrar una factura, la comprobación de Waitron del registro anterior ha encontrado un problema. La factura se ha registrado igualmente, y las ventas y los envíos a la AEAT continúan. Mantén el servidor encendido y anota cuándo ha aparecido esto.",
+    en: "When an invoice record was written, Waitron's check of the previous invoice record found a problem. The new record was still written, and sales and sending to the tax agency (AEAT) carry on. Keep the box running and note when this appeared.",
+    es: "Al escribir un registro de facturación, la comprobación de Waitron del registro anterior ha encontrado un problema. El registro nuevo se ha escrito igualmente, y las ventas y los envíos a la AEAT continúan. Mantén el servidor encendido y anota cuándo ha aparecido esto.",
   },
   "clock.degraded": {
     en: "This device's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds.",
@@ -350,20 +350,20 @@ export const ALERT_MESSAGES: Readonly<
     es: "La subsanación se ha rechazado porque la referencia de la factura o la marca de subsanación no es válida. Comprueba la factura seleccionada y los datos de la subsanación.",
   },
   "fiscal.record_flagged": {
-    en: "An invoice record has something the tax agency (AEAT) accepts, though it may point it out. The record went out as usual; the invoice and the fields involved are on Fiscal filing.",
-    es: "Un registro de facturación tiene algo que la AEAT acepta, aunque puede señalarlo. El registro se ha enviado como siempre; la factura y los campos afectados están en Remisión a la AEAT.",
+    en: "An invoice record has something the tax agency (AEAT) accepts, though it may point it out. It is sent to AEAT like any other record; the invoice and the fields involved are on Fiscal filing.",
+    es: "Un registro de facturación tiene algo que la AEAT acepta, aunque puede señalarlo. Se envía a la AEAT como cualquier otro; la factura y los campos afectados están en Remisión a la AEAT.",
   },
   "fiscal.reconcile_no_trace": {
-    en: "Invoice {numSerieFactura} was sent, but the tax agency (AEAT) has no record of it. Contact support.",
-    es: "La factura {numSerieFactura} se envió, pero la AEAT no tiene constancia de ella. Contacta con soporte.",
+    en: "Invoice {numSerieFactura} was sent, but the tax agency (AEAT) has no record of it. Waitron has already queued it to be sent once more, so it will not send it again by itself; it asks AEAT about it again every day. You can look the invoice up with AEAT yourself.",
+    es: "La factura {numSerieFactura} se envió, pero la AEAT no tiene constancia de ella. Waitron ya la ha vuelto a poner en cola para enviarla una vez más, así que no la volverá a enviar por su cuenta; cada día vuelve a consultarla a la AEAT. Puedes consultarla tú en la AEAT.",
   },
   "fiscal.reconcile_drift_errores": {
     en: "The tax agency (AEAT) now lists invoice {numSerieFactura} as accepted with errors, though it was recorded here as accepted. Waitron has updated its own record to match.",
     es: "La AEAT indica ahora que la factura {numSerieFactura} se aceptó con errores, aunque aquí constaba como aceptada. Waitron ha actualizado su registro para que coincida.",
   },
   "fiscal.reconcile_drift_anulada": {
-    en: "The tax agency (AEAT) lists invoice {numSerieFactura} as cancelled, but it was not voided here. Contact support.",
-    es: "La AEAT indica que la factura {numSerieFactura} está anulada, pero aquí no se anuló. Contacta con soporte.",
+    en: "The tax agency (AEAT) lists invoice {numSerieFactura} as cancelled, but it was not voided here. Waitron leaves its own record of the invoice as it is and asks AEAT about it again every day. You can look the invoice up with AEAT yourself.",
+    es: "La AEAT indica que la factura {numSerieFactura} está anulada, pero aquí no se anuló. Waitron deja su propio registro de la factura tal como está y cada día vuelve a consultarla a la AEAT. Puedes consultarla tú en la AEAT.",
   },
   "fiscal.submission_delayed": {
     en: "{count} fiscal record(s) have been waiting {hours}h to reach the tax agency. If this persists, check that the fiscal certificate is valid.",
