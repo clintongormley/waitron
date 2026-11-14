@@ -387,6 +387,20 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
+- **A1541. The demo's Restaurant and bar has Bar, Lunch and Dinner periods in place of "Open"
+  (owner, 2026-11-14).** Today it seeds one period named "Open" (`menuPeriodName`,
+  `packages/country-es/src/demo/casa-delgado-es.ts`), serving the full menu all day; its name reads
+  as a status wherever periods are listed. Seed instead, in every season's week:
+
+  | Period | Times                                  | Customer menu                  | Staff-only menu |
+  | ------ | -------------------------------------- | ------------------------------ | --------------- |
+  | Bar    | 09:00–13:00, 16:00–20:00, 23:00–00:00 | Drinks menu                    | —               |
+  | Lunch  | 13:00–16:00                            | Casa Delgado (food and drinks) | Set lunch       |
+  | Dinner | 20:00–23:00                            | Casa Delgado (food and drinks) | —               |
+
+  Names in every demo language, as "Open" is today. The Terrace's closure from 23:00 (A1542)
+  lines up with the end of Dinner. No migration. Not started.
+
 - **Recovery operations still buffer whole database files.** First-setup repair snapshots retain
   their 128 MiB budget; Start again's deletion fingerprints and Cloud snapshot creation also read
   whole database files. Replace these buffers with file-based processing while preserving their
@@ -665,13 +679,90 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
+- **A1536. Seasons and Periods get pages of their own in the menu (owner, 2026-11-14).** Periods
+  are important data, hidden today behind the Calendar's "Periods…" button in a small window that
+  packs a table, its menus, floor plan and painted seasons, and a second window to edit one. Seasons
+  and Periods become two pages under Venue operations, next to Calendar, the way Units has its own
+  page under Products and menus. They replace the Seasons and Periods windows
+  (`seasons-window.ts`, `periods-list.ts`, registered as `venue-service:seasons` and
+  `venue-service:periods`); the Calendar's two buttons become links to the pages. Takes in the
+  **Seasons window** bundle ([Detail](backlog/service-periods.md#bundle-seasons-window)) and the
+  **Period dialogs** bundle ([Detail](backlog/service-periods.md#bundle-period-dialogs)): fix each
+  on the new pages, or delete it where the page makes it moot (the phone-width colour names may
+  be). A1539's line about prep-station hours links to the Periods page. No migration. Not started.
+
+- **A1537. Calendar: show opening hours plainly, keep the period detail in the Week, and make the
+  Week's days open (owner, 2026-11-14).** No migration. Not started.
+  - **The day pop-up and the Month view show only the times each department and zone is open, with
+    its periods merged.** Today the pop-up lists every period and closure in turn ("Open
+    09:00–12:30 · Lunch 12:30–16:00 · … · closed 23:00–23:15 · closed 23:15–00:00"); it becomes
+    "09:00–00:00", or "09:00–23:00" for a Terrace closed from 23:00. A zone closed in the middle
+    of the day shows two ranges ("09:00–15:00, 17:00–00:00"). Something closed all day still says
+    "Closed". A zone that today reads "as Restaurant and bar" shows its department's times in grey
+    italics instead. Strings in `packages/venue-service/src/dashboard/strings.ts` (`day.*`,
+    `month.*`), English and Spanish; drawn by `opening-hours-day.ts` and `opening-hours-month.ts`.
+  - **The Week view keeps the detail:** its bars stay coloured and labelled by period ("Lunch
+    12:30–16:00"), and the pop-up's "Open this week" leads there. A zone closure in the Week shows
+    as a gap with no bar, not a "Closed …" block.
+  - **In the "Make a special day" editor, two Closed stretches that touch show as one.** Today a
+    period boundary splits one closure in two ("closed 23:00–23:15 · closed 23:15–00:00").
+  - **Each day in the Week view opens the day pop-up**, its heading or any of its bars, as the Year
+    view's days do; the pop-up there leaves out "Open this week". The bars' hover and click label
+    (`#showTip` in `opening-hours-week.ts`) goes: it repeats the bar and, drawn above the bar
+    pointed at, covers the row above it, so it reads as naming the wrong row.
+  - **In the day pop-up, "Edit Winter's standard week" moves to the top, beside "Winter standard
+    hours"** (or beside "Special day — replaces Winter's standard hours"). "Make a special day"
+    and "Open this week" stay at the bottom.
+
+- **A1538. Calendar: a selection of days leads somewhere, and the painting editors get quieter
+  (owner, 2026-11-14).** No migration. Not started.
+  - **A selection bar, on every device.** While two or more days are picked in the Year or Month
+    view, a bar at the bottom of the Calendar reads, for example, "5 days selected · 20–24 Feb",
+    with **Clear** and **Make a special day**, which opens that editor with every picked day in
+    it. Today nothing says what a selection is for.
+  - **Phone:** while the bar shows, a tap adds or removes a day instead of opening the day pop-up;
+    Clear ends the selection. A long press and drag still picks a run (`day-picking.ts`).
+  - **Computer:** a double-click (or Enter) on a picked day opens "Make a special day" with the
+    whole selection. Today it opens with only the day clicked, although `openDays` in
+    `opening-hours-screen.ts` is written to pass the run: find out why first. Shift-click extends
+    the run; Cmd-click (Ctrl-click on Windows) adds a separate day, so a selection can hold several
+    runs and single days, and the special-day editor receives them all.
+  - **The painting editors' always-shown text becomes a help bubble** (`mode="help-mode"`), written
+    from the code: in "Make a special day", the `special.explain` paragraph and the `painter.hint`
+    line ("Drag down a day to paint · drag over a block to replace it"); in a season's
+    standard-week editor, the `painter.hint` line, with a bubble of its own. Reworded more clearly,
+    English and Spanish. A starting draft for the special day: "Each date starts with its season's
+    usual hours, shown faded. Drag down a day to paint the hours you want instead. Paint Closed to
+    shut part of a day, or tick Closed under a date to shut it all day."
+  - **The "Paint:" row shows a pencil icon in place of the word "Edit"** on each period
+    (`paint-row.ts`), still opening that period's window over the editor and still named "Edit
+    Dinner" to a screen reader and on hover. **The "Periods" link in the editor's top right goes**:
+    leaving the editor would ask to discard the painting. The pencil and "+ New period" stay.
+
+- **A1539. Calendar: prep stations, all at once, and said to be stations (owner, 2026-11-14).**
+  Reads only, no migration. Not started. Easiest after A1537, which changes the same views; the
+  Periods link wants A1536.
+  - **The "Show" dropdown (`calendar-show.ts`) reads "Show all", "All departments" with each
+    department indented beneath, then "All prep stations" with each station beneath.** "All
+    departments" is today's separate first entry, and the "Departments" and "Prep stations"
+    headings become those two pickable entries, using the dropdown's existing indent for nested
+    options. It still starts on "All departments".
+  - **"All prep stations" is new in the Month and Week views:** one row per station, as for
+    departments; today only one station shows at a time. **"Show all" is in the Week view only**:
+    each day lists its department rows, then its station rows.
+  - **A station's hours are worked out, not edited, and the screen says so.** An always-visible
+    line beneath "Show", and in the day pop-up in place of "Make a special day" and "Edit … week",
+    for example "A prep station is open while a period sends it orders. To change its hours, edit
+    the periods and their menus.", linking to A1536's Periods page. Write the sentence from the
+    code that works the hours out (routing rules may count too).
+  - **A station is marked as one wherever the Calendar shows it** (its rows, the pop-up title, the
+    picked "Show" value) with a prep-station icon, because a zone and a station often share a name
+    ("Downstairs bar", "Deli counter"). **The demo's stations get names that differ from its
+    zones'**, in every demo language (`packages/country-es/src/demo/`).
+
 - **Department dialog** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)
-
-- **Seasons window** (bundle of 5, size S). [Detail](backlog/service-periods.md#bundle-seasons-window)
-
-- **Period dialogs** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-period-dialogs)
 
 - **Loose ends left by A755 (#1809).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a755-1809)
@@ -681,7 +772,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Loose ends left by A720.**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 
-- **One rule for zone closures and department hours, after A760's opening_hours** (bundle of 8, size M, waits for the A1308 table hold to lift). The owner's answer: a closure outside its department's hours is ignored when read, and stops being an error. [Detail](backlog/service-periods.md#bundle-one-rule-for-zone-closures-and-department-hours-after-a760s-opening_hours)
+- **One rule for zone closures and department hours, after A760's opening_hours** (bundle of 9, size M). Holds A1542. The owner's answer: a closure outside its department's hours is ignored when read, and stops being an error. [Detail](backlog/service-periods.md#bundle-one-rule-for-zone-closures-and-department-hours-after-a760s-opening_hours)
 
 - **Calendar marks** (bundle of 2, size S). [Detail](backlog/service-periods.md#bundle-calendar-marks)
 
@@ -1391,6 +1482,26 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
     payments against SumUp". It compares each day's recorded card payments with SumUp's own
     charges and lists those that do not match (`apps/dashboard/src/widgets/backup-audit.ts`); it
     is a check, not a setting.
+
+- **A1540. One look for every action menu and every grouped dropdown (owner, 2026-11-14).** "We're
+  clearly not reusing the same styles. Fix this everywhere." No migration. Not started.
+  - **Every "⋮" action menu draws its items the same way, with the text centred.** The menus share
+    `wt-row-actions` (`packages/ui/src/components/wt-row-actions.ts`), but each screen styles the
+    buttons it slots in: of the 36 screens using it, 24 pass `align="start"` and the rest do not,
+    and the component draws a slotted link to match the left-aligned button. The component takes
+    over its items' look (alignment, size and spacing, buttons and links alike), every screen drops
+    its own, and a guard stops a screen setting it again. The till's three menus of its own
+    (`apps/till/src/screens/table-bill-controls.ts`, `apps/till/src/widgets/till-shell.ts`,
+    `apps/till/src/widgets/reader-picker.ts`) move onto the same look. The language and theme
+    choosers, lists with a tick beside the current choice, stay left-aligned. The rule goes in
+    [design-system.md](developers/design-system.md). The owner's example: the day menu of a season's
+    standard-week editor (`paint-grid-parts.ts`).
+  - **A grouped dropdown indents the options under each heading, and the gaps between options are
+    even.** `wt-combobox` draws a group's heading but not its options indented, and options inside
+    a group sit further apart than the rest (seen in the Calendar's "Show"). The change is in the
+    shared component, so routing, the staffing painter, the till's order and ticket screens, the
+    VAT return and the add-language widget change too: screenshot a few of them, both themes and
+    phone width.
 
 - **A1530. Every form's Save bar stays on screen, and every long table can be searched and
   filtered (owner, 2026-11-14).** Both so that every screen works the same way. No migration.

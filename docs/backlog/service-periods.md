@@ -398,7 +398,7 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## Bundle: One rule for zone closures and department hours, after A760's opening_hours
 
-8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06), except A1542 (2026-11-14).
 
 The owner decided the rule on 2026-11-06: a closure outside its department's hours is ignored when read, and stops being an error. Start with a small check that this reading changes nothing a person sees, then take the entries below that the rule makes unnecessary, which should be most of them.
 
@@ -419,10 +419,20 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
   [Detail](service-periods.md#a-cut-away-zone-stroke-hides-another-days-refusal-marker-until-the-next-save)
 - **A season closure on a special date is not cut or checked against that date's shorter hours**
   [Detail](service-periods.md#a-season-closure-on-a-special-date-is-not-cut-or-checked-against-that-dates-shorter-hours)
+- **A1542. The demo closes the Terrace 23:00–05:00 every day, not 23:00–00:00 (owner,
+  2026-11-14).** A special day that keeps Restaurant and bar open past midnight reopens the
+  Terrace today, because its closure stops at 00:00. The owner rejected closing every zone outside
+  standard hours automatically, which would get in the way of extending the standard hours; the
+  demo's closure runs to the end of the business day instead (`replaceZoneClosedWeek` in
+  `apps/server/scripts/demo-seed/seed.ts`). It needs this bundle's rule first: a Terrace closure
+  past Restaurant and bar's 00:00 is refused today as `outside_hours`
+  (`packages/venue-service/src/zone-closure-hours.ts`), so the first save of the Terrace's week
+  from the dashboard would fail.
 
 ## Bundle: Seasons window
 
 5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Taken in by A1536 (owner, 2026-11-14): fixed on the new Seasons page, or deleted where the page makes it moot.
 
 - **A Save refused because a season the person binned was deleted elsewhere says nothing**: the
   window drops the bin's note and the delete, and Save offers the rest of the draft again with no
@@ -439,6 +449,7 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
 ## Bundle: Period dialogs
 
 1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
+Taken in by A1536 (owner, 2026-11-14): fixed on the new Periods page, or deleted where the page makes it moot.
 
 - **The period delete dialog can skip a re-read and show slightly old counts** in a rare order of
   updates; the server still refuses a delete sent with an old clock revision — left open by
