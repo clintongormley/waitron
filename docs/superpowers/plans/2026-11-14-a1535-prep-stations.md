@@ -1,6 +1,6 @@
 # A1535: Prep stations and staff wording
 
-**Authority:** `docs/backlog.md` A1535; watcher queued 17:50, Kitchen-name answer relayed 17:51 (`f1af1f565c`). Separate Sol-high author; Claude read the draft (418s), driver incorporated findings. Watcher clearance pending; no owner design approval or build clearance claimed.
+**Authority:** `docs/backlog.md` A1535; watcher queued 17:50, Kitchen-name answer relayed 17:51 (`f1af1f565c`). Separate Sol-high author; Claude read the draft (418s), driver incorporated findings. Watcher cleared revised `6ba82cc45b` on 2026-11-14 at 19:42 (Lane D `questions.md`) and required docs-only publication before building. No owner design approval claimed.
 
 **Finish line:** One PR delivers the whole review: station/device editing links, the Routes default choice, clearer station settings and station terminology throughout EN/ES. No half-delivered wording slice.
 
