@@ -376,13 +376,6 @@ the environment's key would hide the ring it receives.
   recovery. The only way out is then a
   reinstall. Left open by A1131bc slice 3 (plan, N2).
 
-## The bucket and Waitron Cloud restores have not been run after Start again's deletion
-
-- **The bucket and Waitron Cloud restores have not been run after Start again's deletion.** A1131bc
-  slice 3's server tests run the backup-file restore after the deletion (with the setup database
-  missing, and with a held setup database: `first-setup-start-again-held-wipe.test.ts`); the bucket and Cloud routes were not run on that path.
-  Left open by A1131bc slice 3 (plan, N5).
-
 ## "The saved setup cannot be read. Contact support."
 
 - **"The saved setup cannot be read. Contact support."** (`shell.first_setup.attempt_invalid`,
@@ -437,11 +430,8 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle: Restore paths run
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **The bucket and Waitron Cloud restores have not been run after Start again's deletion.** Left
-  open by A1131bc slice 3.
-  [Detail](setup.md#the-bucket-and-waitron-cloud-restores-have-not-been-run-after-start-agains-deletion)
 - **Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup
   wizard).**
   [Detail](setup.md#loose-ends-left-by-sqlite-slice-2-task-9c-646-restore-from-my-bucket-in-the-setup-wizard)

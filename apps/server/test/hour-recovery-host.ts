@@ -417,8 +417,9 @@ export async function archiveCommand(f: Awaited<ReturnType<typeof archiveHost>>)
   };
 }
 
-export async function bucketCommand() {
-  const f = await archiveHost("stream");
+/** `given`: an archive host already built in this test, whose hour choice this one sits beside. */
+export async function bucketCommand(given?: Awaited<ReturnType<typeof archiveHost>>) {
+  const f = given ?? (await archiveHost("stream"));
   const command = await archiveCommand(f);
   const signer = generateNodeKeyPair();
   const generation = `gen-0-${node.nodeId}-20261016T124000Z`;
