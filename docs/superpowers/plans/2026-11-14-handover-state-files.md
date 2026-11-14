@@ -1,6 +1,6 @@
 # Handover state files implementation plan
 
-**Awaiting watcher clearance.** Lane J's HANDOVER-STATE-FILES assignment,
+**Cleared by the watcher 2026-11-14 09:44, with the five corrections below.** Lane J's HANDOVER-STATE-FILES assignment,
 2026-11-14 08:47, is recorded in `/Users/clintongormley/waitron-campaign-j/queue.md`.
 It asks for complete state-file treatments and the summaries/checks' follow-ups
 in `docs/backlog/replication-cloud.md:496` and `:712`. Claude reviews this plan;
@@ -26,15 +26,17 @@ record, migration, fiscal write, hash, allocation or wire enum. Owner lands.
   Group flows, Cloud and records by folder; add children only for differing
   treatment. Backup-room notes are not transferred; placement deletes the
   destination's note (`apps/server/src/handover-place-copy.ts:286`).
-  Knowingly omit other recovery/setup/reset/adoption operations on both hosts;
-  their presence adds no refusal in this bundle. This is a transfer decision,
+  Give each other recovery/setup/reset/adoption state entry a not-carried
+  source-only or destination-owned row and its reason; presence adds no refusal. This is a transfer decision,
   not proof of runtime admission safety. Entry runs staged reset before start
   (`apps/server/src/node-entry.ts:698,717`); if tracing another state identifies
   a needed new refusal, stop for watcher direction before building it.
   Forward/reverse checks read layout, recovery/optional lists and module backup
   sources. Reverse table checks use the discovered local set, including
   `tenant_credentials` (`packages/db/src/classification.ts:460`). Accept
-  legitimate folder/prefix/template rows; refuse stale names. Preserve existing
+  legitimate folder/prefix/template rows, including fl9 module-records prepared
+  and retained children; refuse stale names. A file inside a declared folder is
+  checked only to that folder; table names are checked exactly. Preserve existing
   class assertions without duplicating every added row. Disposable deletion and
   stale-name controls must fail; document that this checks declarations only.
   Update the manifest's guard-limit comment; accept the existing
@@ -46,14 +48,14 @@ record, migration, fiscal write, hash, allocation or wire enum. Owner lands.
   schema-derived ack identifiers, escaped before SQL interpolation, preserve
   digest tuple order/nulls; reject undefined required values and absent heads.
   Use `BackupQuery` doubles only for those incomplete answers, which a normal
-  frozen copy cannot produce; assert `handover.summary_failed` through the
-  module wrapper. Real-copy tests retain digest/read-only assertions and compare
+  frozen copy cannot produce; assert that `summariseChains` itself rejects; the module wrapper already
+  owns its `handover.summary_failed` behavior test. Real-copy tests retain digest/read-only assertions and compare
   the migrated envio CHECK's values with `ENVIO_STATES` in both directions.
   In `backup-verification-chain.ts`, share table discovery as
   `fiscalChainTables(query: BackupQuery): Promise<readonly string[]>` with
   `handover-chain-check.ts`. Preserve the walk's verdicts and unexpected query
   errors; avoid a new walker mode. The handover checker alone reports a missing
-  `nodes` table in a populated copy as `broken`; add no empty-copy rule.
+  `nodes` table as `broken`, using the same table lookup; prove it with a real copy.
   `handover-chain-check.test.ts` owns that failing case; individual fiscal-table
   drops add coverage and already pass. Preserve generic zero-table acceptance
   in `backup-verification-chain.test.ts`; leave rehashing unchanged.
