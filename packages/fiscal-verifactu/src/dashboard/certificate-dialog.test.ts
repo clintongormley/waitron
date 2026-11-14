@@ -751,7 +751,7 @@ describe("dashboard-aeat-certificate-dialog", () => {
     setLocale("es");
     await dialog.updateComplete;
     await fileField(dialog).updateComplete;
-    expect(fileField(dialog).shadowRoot!.textContent).toContain("1,5 kB");
+    expect(fileField(dialog).shadowRoot!.querySelector(".size")!.textContent).toBe("1,5 kB");
     expect(q(dialog, "wt-dialog").getAttribute("heading")).toBe(
       "Sustituir el certificado de la AEAT",
     );
