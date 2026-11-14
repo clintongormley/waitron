@@ -37,28 +37,6 @@ const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 /** The fiscal passes the restarted box began, and the AEAT submissions they made. */
 const aeat = vi.hoisted(() => ({ drains: 0, submits: 0 }));
 
-// AEAT's clock reading answers nothing, so the restart never asks AEAT's real host for the time.
-
-vi.mock("./clock-watch.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./clock-watch.js")>();
-  return {
-    ...actual,
-    createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) => {
-      const [deps] = args;
-      return actual.createClockWatch({
-        ...deps,
-        backend: new Proxy(deps.backend, {
-          get: (target, key) => {
-            if (key === "readAuthorityTime") return () => Promise.resolve(null);
-            const value: unknown = Reflect.get(target, key);
-            return typeof value === "function" ? value.bind(target) : value;
-          },
-        }),
-      });
-    },
-  };
-});
-
 // The real drain, with AEAT's transport replaced by a fake that counts submissions.
 vi.mock("@waitron/module", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/module")>();

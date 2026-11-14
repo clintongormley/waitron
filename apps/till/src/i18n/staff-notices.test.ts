@@ -36,14 +36,6 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     );
   });
 
-  it("words the clock-behind stop with its own words and the tell-a-manager hint", () => {
-    setLocale(locale);
-    expect(staffNoticeText({ code: "clock.behind_chain", params: {} })).toEqual({
-      main: words["staff_notice.clock.behind_chain"],
-      hint: words["staff_notice.tell_manager"],
-    });
-  });
-
   it.each([{}, { agreed: 2 }, { agreed: -1 }, { agreed: 0.5 }, { agreed: "1" }])(
     "words the waiting start as unknown when its count is %o",
     (params) => {
@@ -182,16 +174,13 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
 describe.each(LANGUAGES)(
   "staffNoticeText while the box offers Check the time, in %s",
   (locale, words) => {
-    it.each(["clock.unusable", "clock.behind_chain"])(
-      "gives %s the Check the time words as its hint",
-      (code) => {
-        setLocale(locale);
-        expect(staffNoticeText({ code, params: {} }, true)).toEqual({
-          main: words[`staff_notice.${code}` as keyof typeof words],
-          hint: words["staff_notice.check_time"],
-        });
-      },
-    );
+    it.each(["clock.unusable"])("gives %s the Check the time words as its hint", (code) => {
+      setLocale(locale);
+      expect(staffNoticeText({ code, params: {} }, true)).toEqual({
+        main: words[`staff_notice.${code}` as keyof typeof words],
+        hint: words["staff_notice.check_time"],
+      });
+    });
 
     it("gives the waiting start the Check the time words as its hint", () => {
       setLocale(locale);

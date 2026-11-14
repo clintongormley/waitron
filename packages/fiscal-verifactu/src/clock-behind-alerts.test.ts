@@ -6,11 +6,11 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
-import { clockBehindSource } from "./clock-behind-alerts.js";
+import { clockUnusableSource } from "./clock-behind-alerts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-describe("clockBehindSource", () => {
+describe("clockUnusableSource", () => {
   const LAST = new Date("2026-10-25T09:00:00.000Z");
 
   async function sellAt(instant: Date): Promise<void> {
@@ -37,24 +37,24 @@ describe("clockBehindSource", () => {
   }
 
   const read = (now: Date) =>
-    withTransaction(suite.db, (tx) => clockBehindSource.read({ tx, now }));
+    withTransaction(suite.db, (tx) => clockUnusableSource.read({ tx, now }));
 
   it("belongs to the box area under system.manage", () => {
-    expect(clockBehindSource.area).toBe("box");
-    expect(clockBehindSource.permission).toBe("system.manage");
-    expect(clockBehindSource.readOutsideTransaction).toBeUndefined();
+    expect(clockUnusableSource.area).toBe("box");
+    expect(clockUnusableSource.permission).toBe("system.manage");
+    expect(clockUnusableSource.readOutsideTransaction).toBeUndefined();
   });
 
-  it("raises nothing a minute before the latest record", async () => {
+  it("raises nothing a day before the latest record", async () => {
     await sellAt(LAST);
-    expect(await read(new Date("2026-10-25T08:59:00.000Z"))).toEqual([]);
+    expect(await read(new Date("2026-10-24T09:00:00.000Z"))).toEqual([]);
   });
 
   it("raises nothing with no records", async () => {
     expect(await read(new Date("2025-01-01T00:00:00.000Z"))).toEqual([]);
   });
 
-  it("raises one clock.unusable error, not clock.behind_chain, while the clock reads before 28 October 2024", async () => {
+  it("raises one clock.unusable error while the clock reads before 28 October 2024", async () => {
     await sellAt(LAST);
     const now = new Date("2001-01-01T11:00:00.000Z");
     expect(await read(now)).toEqual([

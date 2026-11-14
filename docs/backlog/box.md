@@ -1307,7 +1307,7 @@ once released. Belongs with A1016.
 
 ## Bundle: Finish the clock work: a check at every start and every change
 
-3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
   it can still sell.**
@@ -1315,17 +1315,16 @@ once released. Belongs with A1016.
   [Detail](box.md#a798-b-build-degraded-but-trading-what-the-box-does-and-tells-staff-when-a-part-fails-but-it-can-still-sell)
 - **The box's certificate issued under a wrong clock.**
   [Detail](box.md#the-boxs-certificate-issued-under-a-wrong-clock)
-- **What slice 9b leaves to slice 9c and to a restart.**
-  [Detail](box.md#what-slice-9b-leaves-to-slice-9c-and-to-a-restart)
 
 ## Bundle: Qualify clock confirmation through remote access
 
 2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **Qualify a remote administrator's clock confirmation through the staff entrance.** A951-S
+- **Qualify a remote administrator's clock set through the staff entrance.** A951-S
   marks staff requests remote before the own-box check. Its listener test observes `box: false`
   for a remote request and `box: true` for the unmarked control. That boundary check does not
-  exercise the clock-confirm route. Run the real route before closing this qualification.
+  exercise `/api/box/clock-challenge` or `/api/box/clock-set`. Run the real routes before closing
+  this qualification.
   Left open by A798-B slice 9 (#2025), narrowed by the A951-S retirement review on 7 November.
 - **A future cloud or proxied primary needs its own clock-witness rule.** Today a venue has no
   cloud primary. Qualify how a future one distinguishes its own device from remote devices
@@ -1453,14 +1452,10 @@ except the last, added 2026-11-14.
 
 ## Bundle: Box status rows
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S.
 
-- **The Clock row says 'connect the box to the internet' where that may not help.**
-  [Detail](box.md#the-clock-row-says-connect-the-box-to-the-internet-where-that-may-not-help)
-- **The clock stop's look differs from pictures 8 and 9.** The counter refusal shows in the till's
-  top banner, not under the strip; the Clock row's fix advice follows " · " on the comparison line
-  rather than on a line of its own; the Box status page shows the alert sentence "Sort it out on the
-  Box status page" while on that page. Left open by A798-B slice 8 (#2012).
+- **The email about a clock set before 28 October 2024 points to the internet where that may not help.**
+  [Detail](box.md#the-email-about-a-clock-set-before-28-october-2024-points-to-the-internet-where-that-may-not-help)
 - **The Tax agency row does not say since when sends have failed.** Picture 4 draws «los envíos
   fallan desde 17:31»; the row shows the last acceptance. The technical incident's open time could
   carry it. Left open by A798-B slice 7b (#2030).
@@ -1496,20 +1491,12 @@ The owner approved [#2524](https://github.com/clintongormley/waitron/pull/2524) 
 - **What the box does when its clock is wrong (owner, 2026-11-06, for slice 9c and A1407).** Setting the clock from an accepted source counts as confirming it, so trading carries on, and records dated in the future beyond the margin are flagged for correction. AEAT refusing the latest record as too far in the future stops trading until the clock is reset. Any accepted source showing the clock outside the margin stops trading until it is corrected, and AEAT disagreeing during normal trading is such a source. A start with no internet whose latest record is in the future beyond the margin needs the time confirmed first. Being unable to reach AEAT never stops trading. The margin is one minute. A box whose time service says it is in sync raises an alert rather than stopping when AEAT disagrees.
   - **Superseded in part (owner, 2026-11-10, A1420).** "Being unable to reach AEAT never stops trading" is replaced by: AEAT is not asked at a start; on a box that files records, a start whose time service is not synchronised takes no payment until two devices agree with its clock or a person confirms or corrects its date and time. "A start with no internet whose latest record is in the future beyond the margin needs the time confirmed first" is replaced by: every start with no internet needs its time confirmed first, wherever its latest record is. "A box whose time service says it is in sync raises an alert rather than stopping when AEAT disagrees" (never built) is replaced by: a box whose time service is synchronised is trusted; its start is confirmed without asking AEAT, and AEAT refusing a sale as dated in the future does not stop it (owner, 2026-11-10: "NTP is the answer for now"; A1420 D5, D9); a restore still compares AEAT's time until A1420 PR 3. "…and records dated in the future beyond the margin are flagged for correction" is replaced by: invoices AEAT refuses as dated in the future are to be corrected (A1407); a wrong date AEAT accepts or never sees is not (owner, 2026-11-10). Built by A1420 PR 1a: the start's check and its wait ([detail](../developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades)).
   - **Superseded in part (owner, 2026-11-10, A1420 PR 5).** "Any accepted source showing the clock outside the margin stops trading until it is corrected, and AEAT disagreeing during normal trading is such a source" is replaced by: nothing stops trading for the clock once a start's time is confirmed, except a clock reading before 28 October 2024; a synchronised time service may move it any distance (owner, 2026-11-10: "if we successfully sync the clock using ntp then we continue to sell, it doesn't matter how much the clock changes").
-- **A restart may forget that AEAT disagreed with the clock (owner, 2026-11-06).** The disagreement is kept in memory only, and this stays. It matters only if the box's own correction fails, the server restarts, AEAT is out of reach and a device matches the wrong clock, and misdated sales have a remedy (A1407).
 **A798-B clock, disk and printer decisions.**
 
 The owner's four answers: no reserved
   space on the disk (2026-10-28, A1127: the box now keeps an 8 MiB spare file, released by a start on a nearly full disk, by a start emptying a discarded backup recovery and by the setup repair page's Start again (`waitron.sh reset` also deletes it); a release leaves a marker that holds the till stop until the spare is written back; a trading server never releases it. See [conventions-data.md, "The box's spare file"](../developers/conventions-data.md#the-boxs-spare-file)), a warning and an email at 2 GB free; when a printer stops, every till and
-  handheld is told at two minutes; while the box's clock reads earlier than its last recorded
-  sale, every action that takes or gives back money, or would write a fiscal record, stops on every
-  device — reversing D8 and A364 for that case only — until the clock is set (design §4.8; the
-  defaults that answer left open are in §6); and payments restart only on fresh proof that the clock
-  is right. On 2026-10-24 the owner replaced that last answer's manager's restart, at most 24 hours
-  behind (question 4, 2026-10-20): payments restart by themselves, whatever the gap, once AEAT, two
-  devices from two network addresses or an administrator's own device confirms the clock, and the
-  sales a clock running ahead dated wrongly are listed for the owner and the tax adviser (design
-  §4.9).
+  handheld is told at two minutes. The fourth answer, a stop while the clock reads earlier than
+  the last recorded sale, was retired by A1420 (owner, 2026-11-10: "we rely on NTP only").
 
 **Full-disk write stop (owner, 2026-10-21, A798-B slice 3, #1950):** refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21.
 
@@ -1674,12 +1661,6 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   [Detail](box.md#a917--the-owner-chooses-the-servers-local-name-instead-of-waitronlocal)
 - **A device's or an administrator's time is self-reported.**
   [Detail](box.md#a-devices-or-an-administrators-time-is-self-reported)
-- **AEAT's time outranks the devices.**
-  [Detail](box.md#aeats-time-outranks-the-devices)
-- **A malformed confirmation covers nothing.** A row of the append-only `clock_confirmations`
-  whose chain heads are unreadable, not whole numbers of zero or more, or past the chain's current
-  ones lifts no stop; a fresh confirmation of the same record can lift it (slice 9 decision 21).
-  Left open by A798-B slice 9 (#2025).
 - **The email about a clock set before 28 October 2024 rarely leaves the box.**
   [Detail](box.md#the-email-about-a-clock-set-before-28-october-2024-rarely-leaves-the-box)
 - **`resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged, and nothing chmods the
@@ -1982,16 +1963,6 @@ drain's refusal; for `GET /api/till` it was not isolated
 ([conventions-data.md](../developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write)). PIN sign-in is refused on a full disk in every case, with no session
 written.
 
-## AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply
-
-Whether a certificate-authenticated `consultar` reply carries a `Date` header is not measured. The
-`verifactu` repository's live workflow can measure it without filing: a manual run in its
-`consult` mode sends one `consultar` (`scripts/live-aeat.mjs:2567-2578` at `754f633`), and one
-added line in its `certificateFetch` wrapper (`:195-223`) writing the raw reply's
-`response.headers.date` to its output would print it. The wrapper hands back a new `Response`
-built without the reply's headers, so reading `date` from what it returns would print nothing.
-The production QR host was not tried either. Left open by A798-B slice 9 (#2025).
-
 ## Backup data verification and Cloud release
 
 The A850 interface checks a private restored copy without running ordinary restore hooks or
@@ -2020,17 +1991,15 @@ also needs its separately versioned archive contract. Full-history work under th
 resource limits and Cloud's actual isolation, deletion and admission remain joint release checks.
 See [the plan's release gates](../superpowers/plans/2026-10-20-a850-backup-verification.md#exact-remaining-owner-and-release-gates).
 
-## The adviser's file is comma-separated in both languages
+## The accountant's file is comma-separated in both languages
 
-The file for the adviser (`apps/server/src/misdated-sales-csv.ts`) joins its cells with `,` whatever
-the venue's language, and writes a Spanish amount with a decimal comma inside a quoted cell
-(`12,30`). LibreOffice set to es-ES opened the Spanish file in columns (A1088 visual check,
-2026-10-25). A spreadsheet set to expect `;` may open it in one column;
-Excel is not installed on the machine that checked, so Excel in Spain is untested. The working-time
-export (`apps/server/src/attendance-export-csv.ts`) also joins with `,` in every language. The accountant's
-file of deferred payments (`apps/server/src/deferred-payment-export.ts`, A275) is written the
-same way, through the same `csvCell` and `amountCell`. Whether the `es` file should use `;` is the
-owner's decision.
+The accountant's file of deferred payments (`apps/server/src/deferred-payment-export.ts`, A275) joins
+its cells with `,` whatever the venue's language, and writes a Spanish amount with a decimal comma
+inside a quoted cell (`12,30`). The working-time export (`apps/server/src/attendance-export-csv.ts`)
+also joins with `,` in every language. LibreOffice set to es-ES opened a Spanish file written this
+way in columns (A1088 visual check, 2026-10-25, on a file A1420 PR 6 deleted). A spreadsheet set to
+expect `;` may open it in one column; Excel is not installed on the machine that checked, so Excel
+in Spain is untested. Whether the `es` file should use `;` is the owner's decision.
 
 Two smaller points from the same check, in LibreOffice:
 
@@ -2046,11 +2015,9 @@ Left open by A1088.
 ## A device's or an administrator's time is self-reported.
 
 Whatever their browser sends counts:
-  a scripted request can send any time, and "nobody types a time" is true of the screen only. In
-  slice 9 that can lift a stop, never set the clock. What limits it: devices must be enrolled and
-  come from two different network addresses; an administrator must be signed in and, outside
-  development, not on the box;
-  every confirmation is kept with its proof; the sales listed as dated wrongly go to the owner.
+  a scripted request can send any time, and "nobody types a time" is true of the screen only.
+  What limits it: devices must be enrolled and come from two different network addresses; an
+  administrator must be signed in and, outside development, not on the box.
   Slice 9b (#2331) changed what such a time can do: an administrator's time, and during a stop
   found at start-up a till's time confirmed by the staff member signed in on it, can now SET the
   box's clock, while two devices alone no longer can, and slice 9b alerts and emails every step it
@@ -2095,16 +2062,6 @@ prune deletes nothing, every day, and logs nothing (a read that fails logs `stre
 so old generations can pile up in the bucket with no alert. Also not tested: a later generation whose marker cannot be read after an
 earlier one's could (read, not run). Left open by A798-B slice 9b, Task 15.
 
-## What slice 9b leaves to slice 9c and to a restart.
-
-- A clock wrong forward at start, or wrong backward by less than the gap to the last sale, asks
-  nobody until slice 9c's start check (slice 9b plan, decision 14).
-- A node promoted while running gets no start-up window, so no till's time can set its clock, until
-  it restarts; and a start-up window stays open while every read of the stop keeps failing
-  (decision 14; stated, not fixed).
-
-Left open by A798-B slice 9b.
-
 ## timesyncd's clock file after a backward set has not been watched across a reboot.
 
 The host handler moves the time of timesyncd's clock file (`/var/lib/systemd/timesync/clock`) back
@@ -2120,17 +2077,6 @@ repair route reissues a leaf the box itself sees as not healthy; whether a devic
 certificate can reach that route is not checked. Slice 9c should refuse a certificate issue while a
 clock check waits. Read, not run. Left open by A798-B slice 9b, Task 15.
 
-## AEAT's time outranks the devices.
-
-AEAT agreeing with the box restarts payments even if two
-  devices disagree (the bell still shows their `clock.disagrees`); AEAT disagreeing blocks the
-  devices and an administrator until the stop ends or the box next sets its clock (a set the box
-  verifies, or that moves the clock by more than a second, empties the stored readings,
-  `apps/server/src/clock-correction.ts`). Since slice 9b the box sets its clock from
-  AEAT's disagreeing time itself, and an administrator's set is refused `witnessed`. The disagreement is kept in memory,
-  so restarting the server forgets it (kept that way: owner, 2026-11-06, under Decisions). Slice 8's own ways out remain: the clock put right, or real
-  time passing the record. The owner may prefer it to lapse at a step (owner FYI 6). Left open by A798-B slice 9 (#2025).
-
 ## `clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, when A1308 rewrites the starting migrations.
 
 A760 kept every table's shape, so the table survived the squash; A1308's slices edit the starting
@@ -2138,10 +2084,7 @@ migrations ([design](../superpowers/specs/2026-11-02-rationalisation/README.md))
 
 Slice 9 kept the shipped append-only table rather than
   rebuild or drop it; the backup check still checks its links to `nodes` and
-  `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). First
-  move its latest-record query-plan case (`clock-stop-restarts.test.ts`, "reads the latest record
-  through the time index…") into `clock-behind.test.ts`, and update the pointer in
-  `docs/developers/conventions-data.md`. Left open by A798-B slice 9 (#2025).
+  `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left open by A798-B slice 9 (#2025).
 
 ## The bell's printer check reads every print job.
 
@@ -2160,15 +2103,13 @@ its day and is dropped unsent. The alert stays in the bell. A plain relay or the
 local capture does receive it. For the owner to know. Read, not run: no TLS relay with a
 future-dated certificate was used in 3b-ii.
 
-## The Clock row says 'connect the box to the internet' where that may not help.
+## The email about a clock set before 28 October 2024 points to the internet where that may not help.
 
-On a box that
-  does not keep its clock in step with internet time (since A798-B slice 10, `waitron.sh install`
-  switches synchronisation on where the system provides it, and says so where it cannot);
-  and on one that does, the same advice shows where the clock is right and the latest record's time
-  was wrong — neither half clears the stop. The `clock.unusable` email
-  (`apps/server/src/i18n/box-emails.ts`) also tells the managers to connect the box to the internet
-  first. Left open by A798-B slice 8 (#2012).
+The `clock.unusable` email (`apps/server/src/i18n/box-emails.ts`) tells the managers that with the
+internet the box puts its clock right by itself. That may not help on a box that does not keep its
+clock in step with internet time (since A798-B slice 10, `waitron.sh install` switches
+synchronisation on where the system provides it, and says so where it cannot). Left open by A798-B
+slice 8 (#2012).
 
 ## A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but it can still sell.
 

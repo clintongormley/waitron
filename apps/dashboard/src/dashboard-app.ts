@@ -3116,7 +3116,7 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-box-status-screen
           .api=${this.api}
           .canOpen=${this.#canOpenScreen}
-          .canConfirmClock=${this.#sessionPermissions.includes("system.box_admin")}
+          .canCheckClock=${this.#sessionPermissions.includes("system.box_admin")}
           .canRestart=${this.#sessionPermissions.includes("system.manage")}
           @admin-sign-in=${() => void this.#onLogout("box-status")}
           @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {

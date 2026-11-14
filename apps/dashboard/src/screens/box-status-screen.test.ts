@@ -1,4 +1,4 @@
-import { page, userEvent } from "vitest/browser";
+import { userEvent } from "vitest/browser";
 import { setHelpMode } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LiveData, formatBytes } from "@waitron/dashboard-kit";
@@ -6,14 +6,10 @@ import type {
   AlertView,
   AlertsResponse,
   BoxHealth,
-  ClockMisdatedHandledView,
-  ClockMisdatedView,
   DashboardApi,
   FreedSpaceView,
-  MisdatedOpenView,
 } from "../api/client.js";
-import { formatIsoMinute, wallClock } from "../date-utils.js";
-import { ALERT_MESSAGES } from "../i18n/alert-messages.js";
+import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
@@ -67,10 +63,6 @@ function health(overrides: Partial<BoxHealth> = {}, disk: Partial<BoxHealth["dis
       reclaimable: { bytes: 45_000_000, backupRunning: false },
       ...disk,
     },
-    clockStop: null,
-    clockCheckWaiting: null,
-    misdatedOpen: [],
-    misdatedHandledCount: 0,
   } satisfies BoxHealth;
 }
 
@@ -624,135 +616,16 @@ describe("dashboard-box-status-screen's layout", () => {
   });
 });
 
-describe("dashboard-box-status-screen's Clock row during a payment stop", () => {
-  const CLOCK_AT = "2026-10-22T18:10:00.000Z";
-  const LAST_RECORD_AT = "2026-10-22T19:30:00.000Z";
-  const STOP: NonNullable<BoxHealth["clockStop"]> = {
-    clockAt: CLOCK_AT,
-    offsetMinutes: 120,
-    lastRecordAt: LAST_RECORD_AT,
-    lastRecordOffsetMinutes: 120,
-    recordId: "rec-42",
-    gapMs: 4_800_000,
-    startUp: false,
-    proof: "confirmed",
-    agreeing: {
-      authority: {
-        kind: "authority",
-        id: "aeat",
-        boxAt: "2026-10-22T18:05:00.000Z",
-        witnessAt: "2026-10-22T18:05:01.000Z",
-        uncertaintyMs: 500,
-      },
-      devices: [
-        {
-          kind: "device",
-          id: "d1",
-          label: "Bar till",
-          boxAt: "2026-10-22T18:01:00.000Z",
-          witnessAt: "2026-10-22T18:01:00.000Z",
-          uncertaintyMs: 200,
-        },
-      ],
-    },
-    contrary: { authority: null, devices: [] },
-    confirmation: {
-      id: "c-1",
-      source: "devices",
-      personName: null,
-      confirmedAt: "2026-10-22T18:12:00.000Z",
-    },
-  };
-
-  it("never breaks a written time across two lines on the Clock row", async () => {
-    const { innerWidth, innerHeight } = window;
-    onTestFinished(() => page.viewport(innerWidth, innerHeight));
-    // With no notice the row's line is its first alert, and the second is drawn beneath it.
-    const { el } = await mount(
-      stubApi({}, { ...health(), clockStop: STOP }, [
-        alert("clock.behind_chain_restarted", "box", {
-          kind: "event",
-          params: {
-            clockAt: CLOCK_AT,
-            lastRecordAt: LAST_RECORD_AT,
-            confirmedBy: "devices",
-          },
-        }),
-        alert("clock.disagrees", "box", {
-          params: { count: 3, deviceAt: LAST_RECORD_AT, boxAt: CLOCK_AT },
-        }),
-      ]),
-    );
-    const broken: string[] = [];
-    let checked = 0;
-    for (let width = 320; width <= 1280; width += 8) {
-      await page.viewport(width, 900);
-      await el.updateComplete;
-      const found = timesAcrossLines(qa(el, "[data-test=row-clock] .words p"));
-      checked += found.checked;
-      broken.push(...found.broken.map((time) => `${width}px: ${time}`));
-    }
-    // Each width checks the row's line, alert, proof and confirmation times.
-    expect(checked).toBeGreaterThanOrEqual(121 * 6);
-    expect(broken).toEqual([]);
-  });
-
-  // Spanish, where the verb follows the count.
-  it("counts one agreeing device in the singular and two in the plural", async () => {
-    setLocale("es");
-    const time = formatIsoMinute("2026-10-22T18:01:00.000Z");
-    const one = await mount(stubApi({}, { ...health(), clockStop: STOP }));
-    const oneText = text(q(one.el, "[data-test=row-clock] .words"));
-    expect(oneText).toContain(fill("box_status.clock.proof.device_one", { time }));
-    expect(oneText).not.toContain(fill("box_status.clock.proof.devices", { count: "1", time }));
-    cleanupWidgets();
-    const device = STOP.agreeing.devices[0]!;
-    const two = await mount(
-      stubApi(
-        {},
-        {
-          ...health(),
-          clockStop: {
-            ...STOP,
-            agreeing: {
-              ...STOP.agreeing,
-              devices: [device, { ...device, id: "d2", label: "Terrace" }],
-            },
-          },
-        },
-      ),
-    );
-    expect(text(q(two.el, "[data-test=row-clock] .words"))).toContain(
-      fill("box_status.clock.proof.devices", { count: "2", time }),
-    );
-  });
-
-  it("draws no restart button, whatever the proof", async () => {
-    for (const proof of ["none", "contrary", "ready", "confirmed"] as const) {
-      const { el } = await mount(stubApi({}, { ...health(), clockStop: { ...STOP, proof } }));
-      expect(q(el, "[data-test=restart]")).toBeNull();
-      expect(q(el, "[data-test=restart-dialog]")).toBeNull();
-      cleanupWidgets();
-    }
-  });
-});
-
 describe("dashboard-box-status-screen's check of the box's clock with this device", () => {
   const BOX_AT = "2026-10-22T18:10:00.000Z";
-  const STOPPED: NonNullable<BoxHealth["clockStop"]> = {
-    clockAt: BOX_AT,
-    offsetMinutes: 120,
-    lastRecordAt: "2026-10-22T19:30:00.000Z",
-    lastRecordOffsetMinutes: 120,
-    recordId: "rec-42",
-    gapMs: 4_800_000,
-    startUp: false,
-    proof: "none",
-    agreeing: { authority: null, devices: [] },
-    contrary: { authority: null, devices: [] },
-    confirmation: null,
+  const CLOCK_UNUSABLE = {
+    key: "clock.unusable",
+    code: "clock.unusable",
+    severity: "error" as const,
+    params: { clockAt: "2023-01-01T00:00:00.000Z", offsetMinutes: 60 },
+    owner: "fiscal-verifactu",
   };
-  const REFUSED = (reason: string) => ({ code: "clock.confirm_refused", params: { reason } });
+  const REFUSED = (reason: string) => ({ code: "clock.set_refused", params: { reason } });
   const atSeconds = (iso: string) => `${formatIsoMinute(iso)}:${iso.slice(17, 19)}`;
 
   function deviceNow(iso: string): void {
@@ -761,7 +634,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
   }
 
   function clockApi(
-    answer: Partial<BoxHealth> = { clockStop: STOPPED },
+    answer: Partial<BoxHealth> = { notices: [CLOCK_UNUSABLE] },
     overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
   ): DashboardApi {
     const api = stubApi(
@@ -770,11 +643,6 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
           .fn()
           .mockResolvedValueOnce({ challengeId: "ch-1", boxAt: BOX_AT })
           .mockResolvedValue({ challengeId: "ch-2", boxAt: BOX_AT }),
-        clockConfirm: vi.fn().mockResolvedValue({
-          confirmationId: "c-1",
-          source: "admin",
-          confirmedAt: BOX_AT,
-        }),
         ...overrides,
       },
       { ...health(), ...answer },
@@ -783,10 +651,10 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     return api;
   }
 
-  async function mountClock(api: DashboardApi, canConfirmClock = true) {
+  async function mountClock(api: DashboardApi, canCheckClock = true) {
     const mounted = await mountWidget<BoxStatusScreen>("dashboard-box-status-screen", {
       api,
-      canConfirmClock,
+      canCheckClock,
     });
     await flush(mounted.el);
     return mounted.el;
@@ -810,22 +678,10 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     await flush(el);
   }
 
-  it("offers the check only to an administrator, and only during a stop or while a check waits", async () => {
+  it("offers the check only to an administrator, and only while the clock reads before 28-10-2024", async () => {
     expect(openButton(await mountClock(clockApi(), false))).toBeNull();
     cleanupWidgets();
-    expect(openButton(await mountClock(clockApi({ clockStop: null })))).toBeNull();
-    cleanupWidgets();
-    const confirmed = {
-      ...STOPPED,
-      proof: "confirmed" as const,
-      confirmation: {
-        id: "c-1",
-        source: "authority" as const,
-        personName: null,
-        confirmedAt: BOX_AT,
-      },
-    };
-    expect(openButton(await mountClock(clockApi({ clockStop: confirmed })))).toBeNull();
+    expect(openButton(await mountClock(clockApi({ notices: [] })))).toBeNull();
     cleanupWidgets();
     const el = await mountClock(clockApi());
     expect(text(openButton(el))).toBe("Check with this device's time");
@@ -836,7 +692,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
   it("offers a manager an administrator sign-in in place of the check", async () => {
     const signIn = (el: BoxStatusScreen) =>
       q(el, "[data-test=row-clock] [data-test=clock-admin-sign-in]") as HTMLElement | null;
-    expect(signIn(await mountClock(clockApi({ clockStop: null }), false))).toBeNull();
+    expect(signIn(await mountClock(clockApi({ notices: [] }), false))).toBeNull();
     cleanupWidgets();
     const admin = await mountClock(clockApi());
     expect(signIn(admin)).toBeNull();
@@ -892,14 +748,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(Math.abs(y - button.top)).toBeLessThanOrEqual(1);
   });
 
-  it("offers the check while a check waits after the stop ended", async () => {
-    const el = await mountClock(
-      clockApi({ clockStop: null, clockCheckWaiting: { since: "2026-10-22T18:00:00.000Z" } }),
-    );
-    expect(text(openButton(el))).toBe(t("box_status.clock.admin.open"));
-  });
-
-  it("shows the box's time and this device's, and asks to confirm when they agree", async () => {
+  it("shows the box's time and this device's, and offers only Close when they agree", async () => {
     deviceNow("2026-10-22T18:10:20.000Z");
     const api = clockApi();
     const el = await mountClock(api);
@@ -910,13 +759,8 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(text(q(el, "[data-test=clock-check-times]"))).toBe(
       `The box's clock says ${atSeconds(BOX_AT)}. This device says ${atSeconds("2026-10-22T18:10:20.000Z")}.`,
     );
-    expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
-      "They agree. Confirm that the box's clock is right?",
-    );
-    expect(buttons(el)).toEqual([
-      ["clock-check-cancel", "secondary", "Cancel"],
-      ["clock-check-confirm", "primary", "Confirm"],
-    ]);
+    expect(q(el, "[data-test=clock-check-verdict]")).toBeNull();
+    expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
   });
 
   it("says when the two cannot be shown to agree within a minute and offers only Close", async () => {
@@ -941,133 +785,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
         device: atSeconds("2026-10-22T18:10:20.000Z"),
       }),
     );
-    expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(t("box_status.clock.admin.agree"));
-  });
-
-  it("confirms with a fresh challenge answered at once with this device's time, then closes and reads again", async () => {
-    deviceNow("2026-10-22T18:10:20.000Z");
-    const api = clockApi();
-    const el = await mountClock(api);
-    await open(el);
-    const closed = new Promise((resolve) =>
-      dialog(el).addEventListener("wt-close", resolve, { once: true }),
-    );
-    await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
-    await closed;
-    await flush(el);
-    expect(api.clockChallenge).toHaveBeenCalledTimes(2);
-    expect(api.clockConfirm).toHaveBeenCalledExactlyOnceWith({
-      challengeId: "ch-2",
-      deviceAt: Date.parse("2026-10-22T18:10:20.000Z"),
-    });
-    expect(dialog(el).open).toBe(false);
-    expect(api.liveData.refresh).toHaveBeenCalled();
-  });
-
-  it("shows a refused confirmation's sentence above the buttons, keeps Confirm and reads again", async () => {
-    deviceNow("2026-10-22T18:10:20.000Z");
-    const api = clockApi(
-      { clockStop: STOPPED },
-      { clockConfirm: vi.fn().mockRejectedValue(REFUSED("contrary_proof")) },
-    );
-    const el = await mountClock(api);
-    await open(el);
-    await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
-    await flush(el);
-    expect(dialog(el).open).toBe(true);
-    expect(footerMessage(el)).toBe(t("box_status.clock.stop.contrary"));
-    expect(api.liveData.refresh).toHaveBeenCalled();
-    const confirm = q(el, "[data-test=clock-check-confirm]")!;
-    expect(confirm.hasAttribute("disabled")).toBe(false);
-    expect(confirm.getAttribute("variant")).toBe("primary");
-  });
-
-  it("words a differs refusal truthfully when the fresh times are under a minute apart", async () => {
-    // The box adds half the round trip to the difference, so it can refuse times 20 s apart.
-    deviceNow("2026-10-22T18:10:20.000Z");
-    const el = await mountClock(
-      clockApi(
-        { clockStop: STOPPED },
-        { clockConfirm: vi.fn().mockRejectedValue(REFUSED("differs")) },
-      ),
-    );
-    await open(el);
-    await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
-    await flush(el);
-    expect(text(q(el, "[data-test=clock-check-times]"))).toBe(
-      `The box's clock says ${atSeconds(BOX_AT)}. This device says ${atSeconds("2026-10-22T18:10:20.000Z")}.`,
-    );
-    expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
-      "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
-    );
-    expect(text(q(el, "[data-test=clock-check-verdict]"))).not.toContain("more than a minute");
-  });
-
-  it("shows the fresh reading as differing, with only Close, when the box refuses it as differs", async () => {
-    deviceNow("2026-10-22T18:10:20.000Z");
-    const FRESH = "2026-10-22T18:08:00.000Z";
-    const api = clockApi(
-      { clockStop: STOPPED },
-      {
-        clockChallenge: vi
-          .fn()
-          .mockResolvedValueOnce({ challengeId: "ch-1", boxAt: BOX_AT })
-          .mockResolvedValue({ challengeId: "ch-2", boxAt: FRESH }),
-        clockConfirm: vi.fn().mockRejectedValue(REFUSED("differs")),
-      },
-    );
-    const el = await mountClock(api);
-    await open(el);
-    await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
-    await flush(el);
-    expect(dialog(el).open).toBe(true);
-    expect(text(q(el, "[data-test=clock-check-times]"))).toBe(
-      `The box's clock says ${atSeconds(FRESH)}. This device says ${atSeconds("2026-10-22T18:10:20.000Z")}.`,
-    );
-    expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(t("box_status.clock.admin.differ"));
-    expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
-    expect(footerMessage(el)).toBe("");
-    expect(api.liveData.refresh).toHaveBeenCalled();
-  });
-
-  it("says there is nothing left to confirm when the box finds no stop and no waiting check, in each language", async () => {
-    for (const locale of ["en", "es"]) {
-      setLocale(locale);
-      deviceNow("2026-10-22T18:10:20.000Z");
-      const el = await mountClock(
-        clockApi(
-          { clockStop: STOPPED },
-          { clockConfirm: vi.fn().mockRejectedValue(REFUSED("not_stopped")) },
-        ),
-      );
-      await open(el);
-      await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
-      await flush(el);
-      expect(footerMessage(el)).toBe(
-        locale === "en"
-          ? "There is nothing left to confirm. See the Clock row."
-          : es["box_status.clock.admin.refused.not_stopped"],
-      );
-      cleanupWidgets();
-    }
-  });
-
-  it("stops asking to confirm, and offers only Close, once the box says nothing is left to confirm", async () => {
-    deviceNow("2026-10-22T18:10:20.000Z");
-    const api = clockApi(
-      { clockStop: STOPPED },
-      { clockConfirm: vi.fn().mockRejectedValue(REFUSED("not_stopped")) },
-    );
-    const el = await mountClock(api);
-    await open(el);
-    await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
-    await flush(el);
-    expect(dialog(el).open).toBe(true);
-    expect(footerMessage(el)).toBe("There is nothing left to confirm. See the Clock row.");
     expect(q(el, "[data-test=clock-check-verdict]")).toBeNull();
-    expect(q(el, "[data-test=clock-check-times]")).toBeNull();
-    expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
-    expect(api.liveData.refresh).toHaveBeenCalled();
   });
 
   it.each([
@@ -1085,55 +803,24 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
         now += roundTripMs;
         return { challengeId: "ch-1", boxAt: BOX_AT };
       });
-      const el = await mountClock(clockApi({ clockStop: STOPPED }, { clockChallenge }));
+      const el = await mountClock(clockApi({ notices: [CLOCK_UNUSABLE] }, { clockChallenge }));
       await open(el);
-      expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
-        t(agrees ? "box_status.clock.admin.agree" : "box_status.clock.admin.differ"),
-      );
+      const verdict = q(el, "[data-test=clock-check-verdict]");
+      if (agrees) expect(verdict).toBeNull();
+      else expect(text(verdict)).toBe(t("box_status.clock.admin.differ"));
     },
   );
 
-  it("words a check that is missing or took too long", async () => {
-    deviceNow("2026-10-22T18:10:20.000Z");
-    const el = await mountClock(
-      clockApi(
-        { clockStop: STOPPED },
-        {
-          clockConfirm: vi.fn().mockRejectedValue({ code: "clock.check_expired", params: {} }),
-        },
-      ),
-    );
-    await open(el);
-    await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
-    await flush(el);
-    expect(footerMessage(el)).toBe("The check took too long. Try again.");
-    expect(q(el, "[data-test=clock-check-confirm]")).not.toBeNull();
-  });
-
-  it("words any other refusal by its code", async () => {
-    deviceNow("2026-10-22T18:10:20.000Z");
-    const el = await mountClock(
-      clockApi(
-        { clockStop: STOPPED },
-        { clockConfirm: vi.fn().mockRejectedValue(REFUSED("a_new_reason")) },
-      ),
-    );
-    await open(el);
-    await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
-    await flush(el);
-    expect(footerMessage(el)).toBe(codeMessage("clock.confirm_refused"));
-  });
-
-  it("says at once that the box's own screen cannot confirm its clock", async () => {
+  it("says at once that the box's own screen cannot check its clock", async () => {
     const api = clockApi(
-      { clockStop: STOPPED },
+      { notices: [CLOCK_UNUSABLE] },
       { clockChallenge: vi.fn().mockRejectedValue(REFUSED("same_machine")) },
     );
     const el = await mountClock(api);
     await open(el);
     expect(dialog(el).open).toBe(true);
     expect(footerMessage(el)).toBe(
-      "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
+      "This screen is the box itself, so its clock is the box's own. Use your phone or another computer.",
     );
     expect(q(el, "[data-test=clock-check-times]")).toBeNull();
     expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
@@ -1144,12 +831,12 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     setLocale("es");
     const el = await mountClock(
       clockApi(
-        { clockStop: STOPPED },
+        { notices: [CLOCK_UNUSABLE] },
         { clockChallenge: vi.fn().mockRejectedValue(REFUSED("same_machine")) },
       ),
     );
     await open(el);
-    expect(footerMessage(el)).toBe(t("box_status.clock.admin.refused.same_machine"));
+    expect(footerMessage(el)).toBe(t("box_status.clock.admin.set.refused.same_machine"));
   });
 
   it("closes on Escape", async () => {
@@ -1181,7 +868,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     };
 
     function setApi(
-      answer: Partial<BoxHealth> = { clockStop: STOPPED, clock: SETTABLE },
+      answer: Partial<BoxHealth> = { notices: [UNUSABLE], clock: SETTABLE },
       overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
     ): DashboardApi {
       return clockApi(answer, {
@@ -1211,18 +898,13 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       ]);
     });
 
-    it("keeps the agree path when the box can set its clock and the times agree", async () => {
+    it("offers only Close when the box can set its clock and the times agree", async () => {
       deviceNow("2026-10-22T18:10:20.000Z");
       const el = await mountClock(setApi());
       await open(el);
       expect(q(el, "[data-test=clock-set-question]")).toBeNull();
-      expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
-        t("box_status.clock.admin.agree"),
-      );
-      expect(buttons(el)).toEqual([
-        ["clock-check-cancel", "secondary", "Cancel"],
-        ["clock-check-confirm", "primary", "Confirm"],
-      ]);
+      expect(q(el, "[data-test=clock-check-verdict]")).toBeNull();
+      expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
     });
 
     it.each([
@@ -1236,7 +918,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       async (_, sync) => {
         deviceNow(DEVICE_AT);
         const el = await mountClock(
-          setApi({ clockStop: STOPPED, clock: { ...SETTABLE, sync: { ...sync } } }),
+          setApi({ notices: [UNUSABLE], clock: { ...SETTABLE, sync: { ...sync } } }),
         );
         await open(el);
         expect(q(el, "[data-test=clock-set-question]")).toBeNull();
@@ -1247,28 +929,9 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       },
     );
 
-    it("does not offer this device's time for a waiting check after the stop ended", async () => {
-      deviceNow(DEVICE_AT);
-      const el = await mountClock(
-        setApi({
-          clockStop: null,
-          clockCheckWaiting: { since: "2026-10-22T18:00:00.000Z" },
-          clock: SETTABLE,
-        }),
-      );
-      await open(el);
-      expect(q(el, "[data-test=clock-set-question]")).toBeNull();
-      expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
-        t("box_status.clock.admin.differ"),
-      );
-      expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
-    });
-
     it("offers the check, and this device's time, while the box's clock reads before 28-10-2024", async () => {
       deviceNow(DEVICE_AT);
-      const el = await mountClock(
-        setApi({ clockStop: null, notices: [UNUSABLE], clock: SETTABLE }),
-      );
+      const el = await mountClock(setApi({ notices: [UNUSABLE], clock: SETTABLE }));
       expect(text(openButton(el))).toBe(t("box_status.clock.admin.open"));
       await open(el);
       expect(text(q(el, "[data-test=clock-set-question]"))).toBe(QUESTION);
@@ -1285,7 +948,6 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
         challengeId: "ch-2",
         deviceAt: Date.parse(DEVICE_AT),
       });
-      expect(api.clockConfirm).not.toHaveBeenCalled();
       expect(dialog(el).open).toBe(true);
       expect(text(q(el, "[data-test=clock-set-done]"))).toBe("The box's clock is set.");
       expect(q(el, "[data-test=clock-set-question]")).toBeNull();
@@ -1332,43 +994,12 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       expect(api.liveData.refresh).toHaveBeenCalledOnce();
     });
 
-    it.each([
-      ["agreeing with", "agreeing"],
-      ["contradicting", "contrary"],
-    ] as const)(
-      "does not offer this device's time once the tax agency's time is in hand, %s the box",
-      async (_, side) => {
-        deviceNow(DEVICE_AT);
-        const authority = {
-          kind: "authority" as const,
-          id: "aeat-1",
-          boxAt: BOX_AT,
-          witnessAt: "2026-10-22T19:30:00.000Z",
-          uncertaintyMs: 400,
-        };
-        const stop = { ...STOPPED, [side]: { authority, devices: [] } };
-        const el = await mountClock(setApi({ clockStop: stop, clock: SETTABLE }));
-        await open(el);
-        expect(q(el, "[data-test=clock-set-question]")).toBeNull();
-        expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
-          t("box_status.clock.admin.differ"),
-        );
-        expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
-      },
-    );
-
     const REFUSAL_WORDS = [
       [
         "synchronised",
         "box_status.clock.admin.set.refused.synchronised",
         "The box keeps its clock in time over the internet and says it is right, so it does not take a time from a device. If your device's time is right, check the box's internet connection.",
         false,
-      ],
-      [
-        "witnessed",
-        "box_status.clock.admin.set.refused.witnessed",
-        "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from a device's. If a try fails, it tries again later.",
-        true,
       ],
       [
         "stale",
@@ -1379,7 +1010,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       [
         "host_unavailable",
         "box_status.clock.admin.set.refused.host_unavailable",
-        "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Once the box's clock is within a minute of your device's, you can confirm it here.",
+        "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Close this and check again in a few minutes.",
         false,
       ],
       [
@@ -1389,9 +1020,9 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
         false,
       ],
       [
-        "pending_disproofs",
-        "box_status.clock.admin.set.refused.pending_disproofs",
-        "The box has not finished recording what it found about its clock. Try again in a minute.",
+        "pending_step",
+        "box_status.clock.admin.set.refused.pending_step",
+        "The box has not finished saving its last clock change. Try again in a minute.",
         false,
       ],
       [
@@ -1469,8 +1100,8 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       }
     });
 
-    it.each([["same_machine", "box_status.clock.admin.refused.same_machine"]] as const)(
-      "words a challenge refused as %s during a set as the check's own refusal, leaving Close",
+    it.each([["same_machine", "box_status.clock.admin.set.refused.same_machine"]] as const)(
+      "words a challenge refused as %s during a set as a refused set, leaving Close",
       async (reason, key) => {
         deviceNow(DEVICE_AT);
         const api = setApi(undefined, {
@@ -1513,7 +1144,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       );
     });
 
-    it("turns to the agree path when the box finds the fresh times agree", async () => {
+    it("shows the times with only Close when the box finds the fresh times agree", async () => {
       deviceNow(DEVICE_AT);
       const api = setApi(undefined, { clockSet: vi.fn().mockRejectedValue(SET_REFUSED("agrees")) });
       const el = await mountClock(api);
@@ -1522,13 +1153,8 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       await useThisTime(el);
       expect(api.liveData.refresh).toHaveBeenCalled();
       expect(footerMessage(el)).toBe("");
-      expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
-        t("box_status.clock.admin.agree"),
-      );
-      expect(buttons(el)).toEqual([
-        ["clock-check-cancel", "secondary", "Cancel"],
-        ["clock-check-confirm", "primary", "Confirm"],
-      ]);
+      expect(q(el, "[data-test=clock-check-verdict]")).toBeNull();
+      expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
     });
 
     it("stops offering this device's time once the box says nothing is left to set", async () => {
@@ -1789,1066 +1415,6 @@ describe("dashboard-box-status-screen's restart of the box", () => {
     expect(text(q(el, "[data-test=box-restart]"))).toBe(es["box_status.restart.title"]);
     expect(text(q(el, "[data-test=box-restart-what]"))).toBe(es["box_status.restart.what"]);
     expect(text(q(el, "[data-test=box-restart-confirm]"))).toBe(es["box_status.restart.confirm"]);
-  });
-});
-
-describe("dashboard-box-status-screen's sales dated wrongly", () => {
-  const OPEN: MisdatedOpenView = {
-    incidentId: "i1",
-    confirmationId: "c1",
-    count: 2,
-    from: "2026-10-22T19:00:00.000Z",
-    fromOffsetMinutes: 120,
-    to: "2026-10-22T19:05:00.000Z",
-    toOffsetMinutes: 120,
-    partial: false,
-    unconfirmed: false,
-  };
-  const UNCONFIRMED: MisdatedOpenView = {
-    incidentId: "i2",
-    confirmationId: "c2",
-    count: 0,
-    from: "2026-10-22T17:00:00.000Z",
-    fromOffsetMinutes: 120,
-    partial: false,
-    unconfirmed: true,
-  };
-  const LISTS: ClockMisdatedView = {
-    lists: [
-      {
-        confirmationId: "c1",
-        records: [
-          { recordId: "r1", series: "T1", number: 7, at: OPEN.from, offsetMinutes: 120 },
-          { recordId: "r2", series: "T1", number: 8, at: OPEN.to!, offsetMinutes: 120 },
-        ],
-      },
-    ],
-  };
-  const MISDATED = ALERT_MESSAGES["clock.records_misdated"]!;
-
-  const section = (el: BoxStatusScreen) => q(el, "[data-test=misdated]");
-  const tableRows = (el: BoxStatusScreen) => [
-    ...(q(el, "[data-test=misdated-table]")?.shadowRoot?.querySelectorAll("tbody tr") ?? []),
-  ];
-  const cells = (el: BoxStatusScreen) =>
-    tableRows(el).map((row) => [...row.querySelectorAll("td")].map((cell) => text(cell)));
-  const headings = (el: BoxStatusScreen) => [
-    ...q(el, "[data-test=misdated-table]")!.shadowRoot!.querySelectorAll("thead th"),
-  ];
-
-  function withOpen(open: MisdatedOpenView[], lists: unknown = LISTS) {
-    return stubApi(
-      {
-        clockMisdated:
-          lists instanceof Error
-            ? vi.fn().mockRejectedValue(lists)
-            : vi.fn().mockResolvedValue(lists),
-      },
-      { ...health(), misdatedOpen: open },
-    );
-  }
-
-  it("lists each sale's invoice and the time it was recorded, under the title and what to do", async () => {
-    const { el } = await mount(withOpen([OPEN]));
-    expect(text(q(el, "[data-test=misdated] h2"))).toBe(t("box_status.misdated.title"));
-    expect(text(q(el, "[data-test=misdated-line]"))).toBe(t("box_status.misdated.line"));
-    expect(headings(el).map((th) => text(th))).toEqual([
-      t("box_status.misdated.col_invoice"),
-      t("box_status.misdated.col_at"),
-    ]);
-    expect(cells(el)).toEqual([
-      ["T1/7", "2026-10-22 21:00"],
-      ["T1/8", "2026-10-22 21:05"],
-    ]);
-    expect(q(el, "[data-test=misdated-sentence]")).toBeNull();
-    expect(qa(el, "ul.rows > li")).toHaveLength(7);
-  });
-
-  it("draws its words in Spanish from the strings tables", async () => {
-    setLocale("es");
-    const { el } = await mount(withOpen([{ ...OPEN, partial: true }]));
-    expect(text(q(el, "[data-test=misdated] h2"))).toBe(t("box_status.misdated.title"));
-    expect(text(q(el, "[data-test=misdated-line]"))).toBe(t("box_status.misdated.line"));
-    expect(headings(el).map((th) => text(th))).toEqual([
-      t("box_status.misdated.col_invoice"),
-      t("box_status.misdated.col_at"),
-    ]);
-    expect(text(q(el, "[data-test=misdated-sentence]"))).toBe(MISDATED.variants!.partial!.es);
-  });
-
-  it.each(["en", "es"])("names the bell's own button word in what to do, in %s", (locale) => {
-    setLocale(locale);
-    const button = t("alerts.mark_handled").split(" ").at(-1)!.toLocaleLowerCase(locale);
-    expect(t("box_status.misdated.line").toLocaleLowerCase(locale)).toContain(button);
-  });
-
-  it("says a list may be short when the box restarted during the stop", async () => {
-    const { el } = await mount(withOpen([{ ...OPEN, partial: true }]));
-    expect(text(q(el, "[data-test=misdated-sentence]"))).toBe(MISDATED.variants!.partial!.en);
-    expect(cells(el)).toHaveLength(2);
-  });
-
-  it("says the box cannot tell, with no table and no count, and reads no list for it", async () => {
-    const api = withOpen([UNCONFIRMED]);
-    const { el } = await mount(api);
-    const sentence = alertMessage("clock.records_misdated", { ...UNCONFIRMED });
-    expect(sentence).toBe(
-      MISDATED.variants!.unconfirmed!.en.replace(
-        "{from:minute}",
-        formatIsoMinute(UNCONFIRMED.from),
-      ),
-    );
-    expect(text(q(el, "[data-test=misdated-sentence]"))).toBe(sentence);
-    expect(q(el, "[data-test=misdated-table]")).toBeNull();
-    expect(text(section(el))).toBe(
-      [
-        t("box_status.misdated.title"),
-        t("box_status.misdated.line"),
-        sentence,
-        t("alerts.mark_handled"),
-      ].join(" "),
-    );
-    expect(api.clockMisdated).not.toHaveBeenCalled();
-  });
-
-  it("labels each table by its times when two are drawn, and by the title when one is", async () => {
-    const SECOND = {
-      ...OPEN,
-      incidentId: "i3",
-      confirmationId: "c3",
-      from: "2026-10-22T20:00:00.000Z",
-      to: "2026-10-22T20:10:00.000Z",
-    };
-    const lists: ClockMisdatedView = {
-      lists: [
-        ...LISTS.lists,
-        {
-          confirmationId: "c3",
-          records: [
-            { recordId: "r3", series: "T1", number: 9, at: SECOND.from, offsetMinutes: 120 },
-          ],
-        },
-      ],
-    };
-    const labels = (el: BoxStatusScreen) =>
-      qa(el, "[data-test=misdated-table]").map((table) => table.getAttribute("aria-label"));
-    const one = await mount(withOpen([OPEN], lists));
-    expect(labels(one.el)).toEqual(["Sales dated wrongly"]);
-    cleanupWidgets();
-    const two = await mount(withOpen([OPEN, SECOND], lists));
-    const minute = (instant: string, offsetMinutes: number) => {
-      const { date, time } = wallClock(instant, offsetMinutes);
-      return `${date} ${time}`;
-    };
-    const range = (open: MisdatedOpenView) => [
-      minute(open.from, open.fromOffsetMinutes),
-      minute(open.to!, open.toOffsetMinutes!),
-    ];
-    expect(labels(two.el)).toEqual(
-      [OPEN, SECOND].map((open) => {
-        const [from, to] = range(open);
-        return `Sales dated wrongly from ${from} to ${to}`;
-      }),
-    );
-    cleanupWidgets();
-    setLocale("es");
-    const spanish = await mount(withOpen([OPEN, SECOND], lists));
-    const [from, to] = range(OPEN);
-    expect(labels(spanish.el)[0]).toBe(
-      es["box_status.misdated.table_range"].replace("{from}", from!).replace("{to}", to!),
-    );
-  });
-
-  it("reads the open lists again when the screen is taken off the page and put back", async () => {
-    const api = withOpen([OPEN]);
-    const { el } = await mount(api);
-    expect(api.clockMisdated).toHaveBeenCalledTimes(1);
-    const parent = el.parentElement!;
-    el.remove();
-    parent.append(el);
-    await flush(el);
-    const reads = (api.clockMisdated as ReturnType<typeof vi.fn>).mock.calls.length;
-    api.liveData.refresh();
-    await flush(el);
-    expect(api.clockMisdated).toHaveBeenCalledTimes(reads + 1);
-    expect(cells(el)).toHaveLength(2);
-  });
-
-  it("draws a table for a found list beside a sentence for one that cannot tell", async () => {
-    const { el } = await mount(withOpen([UNCONFIRMED, OPEN]));
-    expect(qa(el, "[data-test=misdated-entry]")).toHaveLength(2);
-    expect(qa(el, "[data-test=misdated-table]")).toHaveLength(1);
-    expect(cells(el)).toHaveLength(2);
-  });
-
-  it("shows a sale with no whole number by its series alone", async () => {
-    const lists: ClockMisdatedView = {
-      lists: [
-        {
-          confirmationId: "c1",
-          records: [
-            { recordId: "r9", series: "ODD", number: null, at: OPEN.from, offsetMinutes: 120 },
-          ],
-        },
-      ],
-    };
-    const { el } = await mount(withOpen([{ ...OPEN, count: 1 }], lists));
-    expect(cells(el)).toEqual([["ODD", "2026-10-22 21:00"]]);
-  });
-
-  it("writes a sale's time at its own recorded offset, across midnight, not the browser's zone", async () => {
-    const lists: ClockMisdatedView = {
-      lists: [
-        {
-          confirmationId: "c1",
-          records: [
-            {
-              recordId: "r10",
-              series: "T1",
-              number: 10,
-              at: "2026-10-22T23:30:00.000Z",
-              offsetMinutes: 120,
-            },
-          ],
-        },
-      ],
-    };
-    const { el } = await mount(withOpen([{ ...OPEN, count: 1 }], lists));
-    expect(cells(el)).toEqual([["T1/10", "2026-10-23 01:30"]]);
-  });
-
-  it("draws nothing once the alert is handled", async () => {
-    const api = stubApi({
-      getBoxHealth: vi
-        .fn()
-        .mockResolvedValueOnce({ ...health(), misdatedOpen: [OPEN] })
-        .mockResolvedValue(health()),
-      clockMisdated: vi.fn().mockResolvedValue(LISTS),
-    });
-    const { el } = await mount(api);
-    expect(section(el)).not.toBeNull();
-    api.liveData.refresh();
-    await flush(el);
-    expect(section(el)).toBeNull();
-    expect(qa(el, "ul.rows > li")).toHaveLength(7);
-  });
-
-  it("draws nothing when no alert is open, and reads no list", async () => {
-    const api = withOpen([]);
-    const { el } = await mount(api);
-    expect(section(el)).toBeNull();
-    expect(api.clockMisdated).not.toHaveBeenCalled();
-  });
-
-  it("says the list could not be read, and still draws the rest of the page", async () => {
-    const { el } = await mount(withOpen([OPEN, UNCONFIRMED], new Error("down")));
-    expect(text(q(el, "[data-test=misdated-unavailable]"))).toBe(
-      t("box_status.misdated.read_error"),
-    );
-    expect(q(el, "[data-test=misdated-table]")).toBeNull();
-    expect(text(q(el, "[data-test=misdated] h2"))).toBe(t("box_status.misdated.title"));
-    expect(qa(el, "[data-test=misdated-sentence]")).toHaveLength(1);
-    expect(qa(el, "[data-test=misdated-entry]")).toHaveLength(1);
-    expect(qa(el, "ul.rows > li")).toHaveLength(7);
-    expect(q(el, "[role=alert]")).toBeNull();
-  });
-
-  it("reads a list a later refresh brings through the background client", async () => {
-    const background = {
-      getBoxHealth: vi.fn().mockResolvedValue({ ...health(), misdatedOpen: [OPEN] }),
-      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
-      clockMisdated: vi.fn().mockResolvedValue(LISTS),
-    };
-    const api = stubApi({ background, clockMisdated: vi.fn().mockResolvedValue(LISTS) });
-    const { el } = await mount(api);
-    expect(section(el)).toBeNull();
-    api.liveData.refresh();
-    await flush(el);
-    expect(cells(el)).toHaveLength(2);
-    expect(background.clockMisdated).toHaveBeenCalledTimes(1);
-    expect(api.clockMisdated).not.toHaveBeenCalled();
-  });
-
-  it("leaves the bell's full sentence to the Clock row, not the section", async () => {
-    const sentence = alertMessage("clock.records_misdated", { ...OPEN });
-    const api = stubApi(
-      { clockMisdated: vi.fn().mockResolvedValue(LISTS) },
-      { ...health(), misdatedOpen: [OPEN] },
-      [alert("clock.records_misdated", "box", { kind: "event", params: { ...OPEN } })],
-    );
-    const { el } = await mount(api);
-    expect(text(q(el, "[data-test=row-clock] .words"))).toContain(sentence);
-    expect(text(section(el))).not.toContain(sentence);
-    expect(cells(el)).toHaveLength(2);
-  });
-
-  it("draws no empty block for an entry whose list is gone from a loaded answer", async () => {
-    const { el } = await mount(withOpen([OPEN, UNCONFIRMED], { lists: [] }));
-    expect(qa(el, "[data-test=misdated-entry]")).toHaveLength(1);
-    expect(q(el, "[data-test=misdated-sentence]")).not.toBeNull();
-  });
-
-  it("reads a list the first health answer brings through the foreground client", async () => {
-    const background = {
-      getBoxHealth: vi.fn().mockResolvedValue({ ...health(), misdatedOpen: [OPEN] }),
-      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
-      clockMisdated: vi.fn().mockResolvedValue(LISTS),
-    };
-    const api = stubApi(
-      { background, clockMisdated: vi.fn().mockResolvedValue(LISTS) },
-      { ...health(), misdatedOpen: [OPEN] },
-    );
-    const { el } = await mount(api);
-    expect(cells(el)).toHaveLength(2);
-    expect(api.clockMisdated).toHaveBeenCalledTimes(1);
-    expect(background.clockMisdated).not.toHaveBeenCalled();
-  });
-
-  it("reads a list in the background when it comes after a failed first health read", async () => {
-    const background = {
-      getBoxHealth: vi.fn().mockResolvedValue({ ...health(), misdatedOpen: [OPEN] }),
-      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
-      clockMisdated: vi.fn().mockResolvedValue(LISTS),
-    };
-    const api = stubApi({
-      background,
-      getBoxHealth: vi.fn().mockRejectedValue({ code: "server.internal" }),
-      clockMisdated: vi.fn().mockResolvedValue(LISTS),
-    });
-    const { el } = await mount(api);
-    expect(text(q(el, "[role=alert]"))).toBe(t("box_status.read_error"));
-    api.liveData.refresh();
-    await flush(el);
-    expect(cells(el)).toHaveLength(2);
-    expect(background.clockMisdated).toHaveBeenCalledTimes(1);
-    expect(api.clockMisdated).not.toHaveBeenCalled();
-  });
-
-  it("draws no section when no entry has anything left to show", async () => {
-    const { el } = await mount(withOpen([OPEN], { lists: [] }));
-    expect(section(el)).toBeNull();
-    expect(qa(el, "ul.rows > li")).toHaveLength(7);
-  });
-
-  it("still says a failed list read when the only entry is plain", async () => {
-    const { el } = await mount(withOpen([OPEN], new Error("down")));
-    expect(text(q(el, "[data-test=misdated-unavailable]"))).toBe(
-      t("box_status.misdated.read_error"),
-    );
-    expect(q(el, "[data-test=misdated-entry]")).toBeNull();
-  });
-
-  describe("Handled lists", () => {
-    type Episode = ClockMisdatedHandledView["episodes"][number];
-    const NOTED: Episode = {
-      ...OPEN,
-      incidentId: "h1",
-      confirmationId: "hc1",
-      count: 1,
-      from: "2026-10-20T10:00:00.000Z",
-      to: "2026-10-20T10:00:00.000Z",
-      handledAt: "2026-10-21T09:15:00.000Z",
-      handledBy: { kind: "person", name: "Harriet Quill" },
-      note: "The adviser filed a correction",
-      records: [
-        {
-          recordId: "hr1",
-          series: "T2",
-          number: 3,
-          at: "2026-10-20T10:00:00.000Z",
-          offsetMinutes: 120,
-        },
-      ],
-    };
-    const BY_BOX: Episode = {
-      ...UNCONFIRMED,
-      incidentId: "h2",
-      confirmationId: "hc2",
-      from: "2026-10-18T08:00:00.000Z",
-      handledAt: "2026-10-19T07:40:00.000Z",
-      handledBy: { kind: "box" },
-      note: null,
-      records: null,
-    };
-    const NAMELESS: Episode = {
-      ...NOTED,
-      incidentId: "h3",
-      confirmationId: "hc3",
-      handledAt: "2026-10-17T12:00:00.000Z",
-      handledBy: { kind: "person", name: null },
-      note: null,
-    };
-
-    function withHandled(
-      count: number,
-      answer: ClockMisdatedHandledView | Error,
-      open: MisdatedOpenView[] = [],
-    ) {
-      return stubApi(
-        {
-          clockMisdated: vi.fn().mockResolvedValue(LISTS),
-          clockMisdatedHandled:
-            answer instanceof Error
-              ? vi.fn().mockRejectedValue(answer)
-              : vi.fn().mockResolvedValue(answer),
-        },
-        { ...health(), misdatedOpen: open, misdatedHandledCount: count },
-      );
-    }
-
-    const fold = (el: BoxStatusScreen) =>
-      q(el, "[data-test=misdated-handled]") as
-        (HTMLElement & { heading: string; open: boolean }) | null;
-    async function toggle(el: BoxStatusScreen) {
-      (fold(el)!.shadowRoot!.querySelector("button.header") as HTMLElement).click();
-      await flush(el);
-    }
-    const entries = (el: BoxStatusScreen) => qa(el, "[data-test=misdated-handled-entry]");
-    const lineOf = (entry: Element, name: string) =>
-      text(entry.querySelector(`[data-test=${name}]`));
-    const entryCells = (entry: Element) =>
-      [
-        ...(entry
-          .querySelector("[data-test=misdated-table]")
-          ?.shadowRoot?.querySelectorAll("tbody tr") ?? []),
-      ].map((row) => [...row.querySelectorAll("td")].map((cell) => text(cell)));
-
-    it("shows the count, closed, and reads nothing until it is opened", async () => {
-      const api = withHandled(2, { episodes: [NOTED, BY_BOX] }, [OPEN]);
-      const { el } = await mount(api);
-      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
-      expect(fold(el)!.open).toBe(false);
-      expect(entries(el)).toHaveLength(0);
-      api.liveData.refresh();
-      await flush(el);
-      expect(api.clockMisdatedHandled).not.toHaveBeenCalled();
-    });
-
-    it("opened, shows a handled list's table with who handled it, when, and its note", async () => {
-      const api = withHandled(1, { episodes: [NOTED] });
-      const { el } = await mount(api);
-      await toggle(el);
-      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(1);
-      const [entry] = entries(el);
-      expect(lineOf(entry!, "misdated-handled-by")).toBe(
-        fill("box_status.misdated.handled_by_person", {
-          name: "Harriet Quill",
-          time: formatIsoMinute(NOTED.handledAt),
-        }),
-      );
-      expect(lineOf(entry!, "misdated-note")).toBe(
-        fill("box_status.misdated.note", { note: "The adviser filed a correction" }),
-      );
-      expect(entryCells(entry!)).toEqual([["T2/3", "2026-10-20 12:00"]]);
-    });
-
-    it("draws the episodes newest first, as the answer gives them, and the box's own line", async () => {
-      const { el } = await mount(withHandled(3, { episodes: [NOTED, BY_BOX, NAMELESS] }));
-      await toggle(el);
-      const drawn = entries(el);
-      expect(drawn.map((entry) => entry.getAttribute("data-incident"))).toEqual(["h1", "h2", "h3"]);
-      expect(lineOf(drawn[1]!, "misdated-handled-by")).toBe(
-        fill("box_status.misdated.handled_by_box", { time: formatIsoMinute(BY_BOX.handledAt) }),
-      );
-      expect(lineOf(drawn[1]!, "misdated-sentence")).toBe(
-        alertMessage("clock.records_misdated", { ...BY_BOX }),
-      );
-      expect(drawn[1]!.querySelector("[data-test=misdated-note]")).toBeNull();
-      expect(drawn[1]!.querySelector("[data-test=misdated-table]")).toBeNull();
-      expect(lineOf(drawn[2]!, "misdated-handled-by")).toBe(
-        fill("box_status.misdated.handled_by_unknown", {
-          time: formatIsoMinute(NAMELESS.handledAt),
-        }),
-      );
-    });
-
-    it("draws the section when only handled lists exist, and reads no open list", async () => {
-      const api = withHandled(1, { episodes: [NOTED] });
-      const { el } = await mount(api);
-      expect(text(q(el, "[data-test=misdated] h2"))).toBe(t("box_status.misdated.title"));
-      expect(text(q(el, "[data-test=misdated-line]"))).toBe(t("box_status.misdated.line"));
-      expect(fold(el)).not.toBeNull();
-      expect(q(el, "[data-test=misdated-entry]")).toBeNull();
-      expect(api.clockMisdated).not.toHaveBeenCalled();
-    });
-
-    it("counts the episodes it has read while open, and the box's count while closed", async () => {
-      // The box's count lags the handled lists by up to one health read.
-      const { el } = await mount(withHandled(2, { episodes: [NOTED] }));
-      await toggle(el);
-      expect(entries(el)).toHaveLength(1);
-      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "1" }));
-      await toggle(el);
-      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
-    });
-
-    it("keeps the box's count while open until its read answers", async () => {
-      const answer = deferred<ClockMisdatedHandledView>();
-      const api = withHandled(2, { episodes: [] });
-      (api.clockMisdatedHandled as ReturnType<typeof vi.fn>).mockReturnValue(answer.promise);
-      const { el } = await mount(api);
-      await toggle(el);
-      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
-      answer.resolve({ episodes: [NOTED] });
-      await flush(el);
-      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "1" }));
-    });
-
-    it("closes and forgets the fold when the screen is taken off the page, and reads it only once reopened", async () => {
-      const api = withHandled(1, { episodes: [NOTED] });
-      const { el } = await mount(api);
-      await toggle(el);
-      expect(entries(el)).toHaveLength(1);
-      const parent = el.parentElement!;
-      el.remove();
-      parent.append(el);
-      await flush(el);
-      expect(fold(el)!.open).toBe(false);
-      expect(entries(el)).toHaveLength(0);
-      api.liveData.refresh();
-      await flush(el);
-      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(1);
-      await toggle(el);
-      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
-      expect(entries(el)).toHaveLength(1);
-    });
-
-    it("clears its read failure once a later read answers", async () => {
-      const api = withHandled(1, { episodes: [NOTED] });
-      (api.clockMisdatedHandled as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new Error("down"),
-      );
-      const { el } = await mount(api);
-      await toggle(el);
-      expect(q(el, "[data-test=misdated-handled-unavailable]")).not.toBeNull();
-      api.liveData.refresh();
-      await flush(el);
-      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
-      expect(q(el, "[data-test=misdated-handled-unavailable]")).toBeNull();
-      expect(entries(el)).toHaveLength(1);
-    });
-
-    it("draws no fold when nothing has been handled", async () => {
-      const { el } = await mount(withHandled(0, { episodes: [] }, [OPEN]));
-      expect(fold(el)).toBeNull();
-    });
-
-    it("stops reading when it is closed", async () => {
-      const api = withHandled(1, { episodes: [NOTED] });
-      const { el } = await mount(api);
-      await toggle(el);
-      api.liveData.refresh();
-      await flush(el);
-      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
-      await toggle(el);
-      expect(entries(el)).toHaveLength(0);
-      api.liveData.refresh();
-      await flush(el);
-      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
-    });
-
-    it("says the handled lists could not be read, inside the fold", async () => {
-      const { el } = await mount(withHandled(1, new Error("down"), [OPEN]));
-      await toggle(el);
-      const failed = q(el, "[data-test=misdated-handled] [data-test=misdated-handled-unavailable]");
-      expect(text(failed)).toBe(t("box_status.misdated.handled_read_error"));
-      expect(q(el, "[data-test=misdated-unavailable]")).toBeNull();
-      expect(cells(el)).toHaveLength(2);
-    });
-
-    it("labels every drawn table by its times once a handled one joins an open one", async () => {
-      const { el } = await mount(withHandled(1, { episodes: [NOTED] }, [OPEN]));
-      const labels = () =>
-        qa(el, "[data-test=misdated-table]").map((table) => table.getAttribute("aria-label"));
-      expect(labels()).toEqual([t("box_status.misdated.title")]);
-      await toggle(el);
-      expect(labels()).toEqual([
-        fill("box_status.misdated.table_range", {
-          from: "2026-10-22 21:00",
-          to: "2026-10-22 21:05",
-        }),
-        fill("box_status.misdated.table_range", {
-          from: "2026-10-20 12:00",
-          to: "2026-10-20 12:00",
-        }),
-      ]);
-    });
-
-    it("draws its words in Spanish from the strings tables", async () => {
-      setLocale("es");
-      const { el } = await mount(withHandled(2, { episodes: [NOTED, BY_BOX] }));
-      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
-      // The refusal of a note on an already-handled alert sends the reader to this fold by name.
-      expect(codeMessage("alert.already_handled")).toContain(
-        t("box_status.misdated.handled_heading").replace(" ({count})", ""),
-      );
-      await toggle(el);
-      const [noted, byBox] = entries(el);
-      expect(lineOf(noted!, "misdated-handled-by")).toBe(
-        fill("box_status.misdated.handled_by_person", {
-          name: "Harriet Quill",
-          time: formatIsoMinute(NOTED.handledAt),
-        }),
-      );
-      expect(lineOf(noted!, "misdated-note")).toBe(
-        es["box_status.misdated.note"].replace("{note}", NOTED.note!),
-      );
-      expect(lineOf(byBox!, "misdated-handled-by")).toBe(
-        es["box_status.misdated.handled_by_box"].replace(
-          "{time}",
-          formatIsoMinute(BY_BOX.handledAt),
-        ),
-      );
-    });
-  });
-
-  describe("Download for your adviser", () => {
-    type Episode = ClockMisdatedHandledView["episodes"][number];
-    // Under the browser tests' UTC, a browser-zone date would read 2026-10-24.
-    const NEAR_MIDNIGHT: MisdatedOpenView = {
-      ...OPEN,
-      incidentId: "i9",
-      confirmationId: "c9",
-      count: 1,
-      from: "2026-10-24T22:30:00.000Z",
-      to: "2026-10-24T22:30:00.000Z",
-    };
-    const BOTH_LISTS: ClockMisdatedView = {
-      lists: [
-        ...LISTS.lists,
-        {
-          confirmationId: "c9",
-          records: [
-            {
-              recordId: "r9",
-              series: "T3",
-              number: 1,
-              at: NEAR_MIDNIGHT.from,
-              offsetMinutes: 120,
-            },
-          ],
-        },
-      ],
-    };
-    const HANDLED: Episode = {
-      ...OPEN,
-      incidentId: "h7",
-      confirmationId: "hc7",
-      count: 1,
-      from: "2026-10-19T10:00:00.000Z",
-      to: "2026-10-19T10:00:00.000Z",
-      handledAt: "2026-10-20T09:00:00.000Z",
-      handledBy: { kind: "box" },
-      note: null,
-      records: [
-        {
-          recordId: "hr7",
-          series: "T4",
-          number: 2,
-          at: "2026-10-19T10:00:00.000Z",
-          offsetMinutes: 120,
-        },
-      ],
-    };
-    const HANDLED_UNCONFIRMED: Episode = {
-      ...UNCONFIRMED,
-      incidentId: "h8",
-      confirmationId: "hc8",
-      handledAt: "2026-10-18T09:00:00.000Z",
-      handledBy: { kind: "box" },
-      note: null,
-      records: null,
-    };
-
-    let downloads: string[] = [];
-    beforeEach(() => {
-      downloads = [];
-      const spy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
-        this: HTMLAnchorElement,
-      ) {
-        downloads.push(this.download);
-      });
-      onTestFinished(() => spy.mockRestore());
-    });
-
-    function withDownload(
-      download: unknown,
-      open: MisdatedOpenView[],
-      handled: Episode[] = [],
-    ): DashboardApi {
-      return stubApi(
-        {
-          clockMisdated: vi.fn().mockResolvedValue(BOTH_LISTS),
-          clockMisdatedHandled: vi.fn().mockResolvedValue({ episodes: handled }),
-          downloadMisdatedSales: download,
-        },
-        { ...health(), misdatedOpen: open, misdatedHandledCount: handled.length },
-      );
-    }
-    const openEntries = (el: BoxStatusScreen) => qa(el, "[data-test=misdated-entry]");
-    const handledEntries = (el: BoxStatusScreen) => qa(el, "[data-test=misdated-handled-entry]");
-    const buttonIn = (entry: Element) =>
-      entry.querySelector("[data-test=misdated-download]") as
-        (HTMLElement & { loading: boolean; disabled: boolean }) | null;
-    const errorIn = (entry: Element) => entry.querySelector("[data-test=misdated-download-error]");
-    async function openFold(el: BoxStatusScreen) {
-      const fold = q(el, "[data-test=misdated-handled]") as HTMLElement;
-      (fold.shadowRoot!.querySelector("button.header") as HTMLElement).click();
-      await flush(el);
-    }
-
-    it("asks for the entry's list and saves it named by its first sale's date at its own offset", async () => {
-      const api = withDownload(vi.fn().mockResolvedValue(new Blob(["a,b"])), [NEAR_MIDNIGHT]);
-      const { el } = await mount(api);
-      const [entry] = openEntries(el);
-      const button = buttonIn(entry!)!;
-      expect(text(button)).toBe(t("box_status.misdated.download"));
-      expect(button.getAttribute("variant")).toBe("secondary");
-      expect(button.disabled).toBe(false);
-      await userEvent.click(button);
-      await flush(el);
-      expect(api.downloadMisdatedSales).toHaveBeenCalledWith("i9");
-      expect(downloads).toEqual(["misdated-sales-2026-10-25.csv"]);
-      expect(errorIn(entry!)).toBeNull();
-    });
-
-    it("offers it on a handled list too, and never for an entry that cannot tell, open or handled", async () => {
-      const api = withDownload(
-        vi.fn().mockResolvedValue(new Blob(["a,b"])),
-        [UNCONFIRMED],
-        [HANDLED, HANDLED_UNCONFIRMED],
-      );
-      const { el } = await mount(api);
-      expect(qa(el, "[data-test=misdated-download]")).toHaveLength(0);
-      await openFold(el);
-      const [handled, handledUnconfirmed] = handledEntries(el);
-      expect(buttonIn(handledUnconfirmed!)).toBeNull();
-      expect(qa(el, "[data-test=misdated-download]")).toHaveLength(1);
-      await userEvent.click(buttonIn(handled!)!);
-      await flush(el);
-      expect(api.downloadMisdatedSales).toHaveBeenCalledWith("h7");
-      expect(downloads).toEqual(["misdated-sales-2026-10-19.csv"]);
-    });
-
-    it("shows loading only on the asked entry's button while its file is asked for", async () => {
-      const sent = deferred<Blob>();
-      const api = withDownload(vi.fn().mockReturnValue(sent.promise), [OPEN, NEAR_MIDNIGHT]);
-      const { el } = await mount(api);
-      const [first, second] = openEntries(el);
-      await userEvent.click(buttonIn(second!)!);
-      await el.updateComplete;
-      expect(buttonIn(second!)!.loading).toBe(true);
-      expect(buttonIn(first!)!.loading).toBe(false);
-      expect(buttonIn(first!)!.disabled).toBe(false);
-      buttonIn(second!)!.click();
-      await el.updateComplete;
-      expect(api.downloadMisdatedSales).toHaveBeenCalledTimes(1);
-      sent.resolve(new Blob(["a,b"]));
-      await flush(el);
-      expect(buttonIn(second!)!.loading).toBe(false);
-      expect(downloads).toEqual(["misdated-sales-2026-10-25.csv"]);
-    });
-
-    it("says a refused download under that entry only, until its button is pressed again", async () => {
-      const again = deferred<Blob>();
-      const download = vi
-        .fn()
-        .mockRejectedValueOnce({ code: "alert.not_found" })
-        .mockReturnValueOnce(again.promise);
-      const { el } = await mount(withDownload(download, [OPEN, NEAR_MIDNIGHT]));
-      const [first, second] = openEntries(el);
-      await userEvent.click(buttonIn(first!)!);
-      await flush(el);
-      expect(text(errorIn(first!))).toBe(codeMessage("alert.not_found"));
-      expect(errorIn(second!)).toBeNull();
-      expect(downloads).toEqual([]);
-      await userEvent.click(buttonIn(first!)!);
-      await el.updateComplete;
-      expect(errorIn(first!)).toBeNull();
-      again.resolve(new Blob(["a,b"]));
-      await flush(el);
-      expect(errorIn(first!)).toBeNull();
-      expect(downloads).toEqual(["misdated-sales-2026-10-22.csv"]);
-    });
-
-    it("offers none on a handled entry the box sent with no list, even one not marked as cannot tell", async () => {
-      const { el } = await mount(
-        withDownload(
-          vi.fn(),
-          [],
-          [HANDLED, { ...HANDLED, incidentId: "h9", confirmationId: "hc9", records: null }],
-        ),
-      );
-      await openFold(el);
-      const [listed, listless] = handledEntries(el);
-      expect(buttonIn(listed!)).not.toBeNull();
-      expect(buttonIn(listless!)).toBeNull();
-    });
-
-    it("words its button in Spanish from the strings tables", async () => {
-      setLocale("es");
-      const { el } = await mount(withDownload(vi.fn(), [OPEN]));
-      expect(text(buttonIn(openEntries(el)[0]!))).toBe(es["box_status.misdated.download"]);
-    });
-  });
-
-  describe("Mark handled and Add note", () => {
-    type Episode = ClockMisdatedHandledView["episodes"][number];
-    const NO_NOTE: Episode = {
-      ...OPEN,
-      incidentId: "h5",
-      confirmationId: "hc5",
-      count: 1,
-      from: "2026-10-19T10:00:00.000Z",
-      to: "2026-10-19T10:00:00.000Z",
-      handledAt: "2026-10-20T09:00:00.000Z",
-      handledBy: { kind: "person", name: "Odalys" },
-      note: null,
-      records: [
-        {
-          recordId: "hr5",
-          series: "T4",
-          number: 2,
-          at: "2026-10-19T10:00:00.000Z",
-          offsetMinutes: 120,
-        },
-      ],
-    };
-    const NOTED: Episode = {
-      ...NO_NOTE,
-      incidentId: "h6",
-      confirmationId: "hc6",
-      note: "Adviser filed the correction",
-    };
-
-    function withNotes(
-      open: MisdatedOpenView[],
-      handled: Episode[] = [],
-      overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
-    ): DashboardApi {
-      return stubApi(
-        {
-          clockMisdated: vi.fn().mockResolvedValue(LISTS),
-          clockMisdatedHandled: vi.fn().mockResolvedValue({ episodes: handled }),
-          markIncidentHandled: vi.fn().mockResolvedValue(undefined),
-          addIncidentNote: vi.fn().mockResolvedValue(undefined),
-          ...overrides,
-        },
-        { ...health(), misdatedOpen: open, misdatedHandledCount: handled.length },
-      );
-    }
-    type NoteDialog = HTMLElement & {
-      open: boolean;
-      mode: string;
-      incidentId: string;
-      summary: string;
-    };
-    const noteDialog = (el: BoxStatusScreen) =>
-      q(el, "dashboard-misdated-note-dialog") as NoteDialog | null;
-    const markIn = (entry: Element) =>
-      entry.querySelector("[data-test=misdated-mark-handled]") as HTMLElement | null;
-    const addNoteIn = (entry: Element) =>
-      entry.querySelector("[data-test=misdated-add-note]") as HTMLElement | null;
-    async function openFold(el: BoxStatusScreen) {
-      const fold = q(el, "[data-test=misdated-handled]") as HTMLElement;
-      (fold.shadowRoot!.querySelector("button.header") as HTMLElement).click();
-      await flush(el);
-    }
-
-    it("Mark handled on an open entry opens the dialog to mark that entry's alert handled, with its sales' count and times", async () => {
-      const { el } = await mount(withNotes([OPEN, UNCONFIRMED]));
-      const [listed, cannotTell] = qa(el, "[data-test=misdated-entry]");
-      const mark = markIn(listed!)!;
-      expect(text(mark)).toBe(t("alerts.mark_handled"));
-      expect(mark.getAttribute("variant")).toBe("secondary");
-      expect(markIn(cannotTell!)).not.toBeNull();
-      expect(qa(el, "[data-test=misdated-add-note]")).toHaveLength(0);
-      expect(noteDialog(el)?.open ?? false).toBe(false);
-      await userEvent.click(mark);
-      await flush(el);
-      const dialog = noteDialog(el)!;
-      expect(dialog.open).toBe(true);
-      expect(dialog.mode).toBe("handle");
-      expect(dialog.incidentId).toBe("i1");
-      // The times are the entry's stored offset (+120), not the browser's UTC.
-      expect(dialog.summary).toBe(
-        fill("box_status.misdated.summary", {
-          count: "2",
-          from: "2026-10-22 21:00",
-          to: "2026-10-22 21:05",
-        }),
-      );
-    });
-
-    it("writes an entry's end at its own offset when summer time ends inside it: label, cell and summary", async () => {
-      const ACROSS_CHANGE: MisdatedOpenView = {
-        ...OPEN,
-        incidentId: "i4",
-        confirmationId: "c4",
-        from: "2026-10-24T23:00:00.000Z",
-        to: "2026-10-25T01:30:00.000Z",
-        toOffsetMinutes: 60,
-      };
-      const lists: ClockMisdatedView = {
-        lists: [
-          ...LISTS.lists,
-          {
-            confirmationId: "c4",
-            records: [
-              {
-                recordId: "r4",
-                series: "T1",
-                number: 10,
-                at: ACROSS_CHANGE.from,
-                offsetMinutes: 120,
-              },
-              {
-                recordId: "r5",
-                series: "T1",
-                number: 11,
-                at: ACROSS_CHANGE.to!,
-                offsetMinutes: 60,
-              },
-            ],
-          },
-        ],
-      };
-      const { el } = await mount(
-        withNotes([OPEN, ACROSS_CHANGE], [], { clockMisdated: vi.fn().mockResolvedValue(lists) }),
-      );
-      const across = qa(el, "[data-test=misdated-entry]")[1]!;
-      const table = across.querySelector("[data-test=misdated-table]")!;
-      // At +120 the end would read 03:30.
-      expect(table.getAttribute("aria-label")).toBe(
-        fill("box_status.misdated.table_range", {
-          from: "2026-10-25 01:00",
-          to: "2026-10-25 02:30",
-        }),
-      );
-      expect(
-        [...table.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
-          [...row.querySelectorAll("td")].map((cell) => text(cell)),
-        ),
-      ).toEqual([
-        ["T1/10", "2026-10-25 01:00"],
-        ["T1/11", "2026-10-25 02:30"],
-      ]);
-      await userEvent.click(markIn(across)!);
-      await flush(el);
-      expect(noteDialog(el)!.summary).toBe(
-        fill("box_status.misdated.summary", {
-          count: "2",
-          from: "2026-10-25 01:00",
-          to: "2026-10-25 02:30",
-        }),
-      );
-    });
-
-    it("gives an entry that cannot tell the alert's own sentence for that case", async () => {
-      const { el } = await mount(withNotes([UNCONFIRMED]));
-      await userEvent.click(markIn(qa(el, "[data-test=misdated-entry]")[0]!)!);
-      await flush(el);
-      const dialog = noteDialog(el)!;
-      expect(dialog.incidentId).toBe("i2");
-      expect(dialog.summary).toBe(
-        alertMessage("clock.records_misdated", { ...UNCONFIRMED }, currentLocale()),
-      );
-    });
-
-    it.each(["en", "es"] as const)(
-      "never breaks a time across two lines in the dialog's summary, for a list and for one that cannot tell (%s)",
-      async (locale) => {
-        setLocale(locale);
-        const { innerWidth, innerHeight } = window;
-        onTestFinished(() => page.viewport(innerWidth, innerHeight));
-        const { el } = await mount(withNotes([OPEN, UNCONFIRMED]));
-        const broken: string[] = [];
-        let checked = 0;
-        for (const [index, entry] of qa(el, "[data-test=misdated-entry]").entries()) {
-          await userEvent.click(markIn(entry)!);
-          await flush(el);
-          const dialog = noteDialog(el)!;
-          const summary = () => dialog.shadowRoot!.querySelector("[data-test=note-summary]");
-          expect(summary()).not.toBeNull();
-          // Past phone widths the dialog stops growing, so its summary's lines stop moving.
-          for (let width = 320; width <= 560; width += 8) {
-            await page.viewport(width, 900);
-            await el.updateComplete;
-            const found = timesAcrossLines([summary()!]);
-            checked += found.checked;
-            broken.push(...found.broken.map((time) => `entry ${index}, ${width}px: ${time}`));
-          }
-          (dialog.shadowRoot!.querySelector("[data-test=note-cancel]") as HTMLElement).click();
-          await flush(el);
-          await vi.waitFor(() => expect(dialog.open).toBe(false));
-        }
-        // Each width checks the list's two times and the cannot-tell sentence's one.
-        expect(checked).toBe(31 * 3);
-        expect(broken).toEqual([]);
-      },
-    );
-
-    it("Add note on a handled entry with no note opens the dialog to add its note; one with a note has none", async () => {
-      const { el } = await mount(withNotes([], [NO_NOTE, NOTED]));
-      await openFold(el);
-      const [bare, noted] = qa(el, "[data-test=misdated-handled-entry]");
-      expect(addNoteIn(noted!)).toBeNull();
-      expect(qa(el, "[data-test=misdated-mark-handled]")).toHaveLength(0);
-      const add = addNoteIn(bare!)!;
-      expect(text(add)).toBe(t("box_status.misdated.add_note"));
-      expect(add.getAttribute("variant")).toBe("secondary");
-      await userEvent.click(add);
-      await flush(el);
-      const dialog = noteDialog(el)!;
-      expect(dialog.open).toBe(true);
-      expect(dialog.mode).toBe("note");
-      expect(dialog.incidentId).toBe("h5");
-      expect(dialog.summary).toBe(
-        fill("box_status.misdated.summary_one", { from: "2026-10-19 12:00" }),
-      );
-    });
-
-    it("reads the box again once the dialog has saved, and closes it", async () => {
-      const api = withNotes([OPEN]);
-      const { el } = await mount(api);
-      const refresh = vi.spyOn(api.liveData, "refresh");
-      await userEvent.click(markIn(qa(el, "[data-test=misdated-entry]")[0]!)!);
-      await flush(el);
-      const dialog = noteDialog(el)!;
-      expect(refresh).not.toHaveBeenCalled();
-      (dialog.shadowRoot!.querySelector("[data-test=note-submit]") as HTMLElement).click();
-      await flush(el);
-      expect(api.markIncidentHandled).toHaveBeenCalledWith("i1", undefined);
-      expect(refresh).toHaveBeenCalledTimes(1);
-      expect(dialog.open).toBe(false);
-    });
-
-    it.each(["note-cancel", "note-submit"])(
-      "opens the dialog again when Mark handled is pressed after the dialog closed by %s",
-      async (button) => {
-        const { el } = await mount(withNotes([OPEN]));
-        const mark = () => markIn(qa(el, "[data-test=misdated-entry]")[0]!)!;
-        await userEvent.click(mark());
-        await flush(el);
-        const dialog = noteDialog(el)!;
-        expect(dialog.open).toBe(true);
-        (dialog.shadowRoot!.querySelector(`[data-test=${button}]`) as HTMLElement).click();
-        await flush(el);
-        await vi.waitFor(() => expect(dialog.open).toBe(false));
-        await userEvent.click(mark());
-        await flush(el);
-        await vi.waitFor(() => expect(noteDialog(el)!.open).toBe(true));
-      },
-    );
-
-    it("words Add note in Spanish from the strings tables", async () => {
-      setLocale("es");
-      const { el } = await mount(withNotes([], [NO_NOTE]));
-      await openFold(el);
-      expect(text(addNoteIn(qa(el, "[data-test=misdated-handled-entry]")[0]!))).toBe(
-        es["box_status.misdated.add_note"],
-      );
-    });
   });
 });
 

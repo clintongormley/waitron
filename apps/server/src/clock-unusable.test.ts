@@ -23,12 +23,7 @@ describe("clockUnusableAt", () => {
   });
 
   it("throws any other refusal", () => {
-    const other = new AppError("clock.behind_chain", {
-      clockAt: reading.instant.toISOString(),
-      offsetMinutes: 0,
-      lastRecordAt: "2026-07-20T18:20:30.000Z",
-      lastRecordOffsetMinutes: 0,
-    });
+    const other = new AppError("clock.check_expired", {});
     const backend = {
       assertRecordableAt: () => {
         throw other;

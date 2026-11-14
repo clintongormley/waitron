@@ -64,24 +64,15 @@ describe("NoneBackend records nothing", () => {
       { instant: new Date("2026-03-14T10:00:00.000Z"), offsetMinutes: 60 },
       { instant: new Date("2001-01-01T11:00:00.000Z"), offsetMinutes: 60 },
     ]) {
-      expect(await backend.clockBehindLatestRecord(tx, reading)).toBeNull();
-      await expect(backend.refuseWhileClockBehind(tx, reading)).resolves.toBeUndefined();
+      await expect(backend.refuseUntilRecordable(tx, reading)).resolves.toBeUndefined();
     }
   });
 
   it("offers no clock-stop method, having no stop", () => {
     const backend = make();
-    expect(backend.clockStopState).toBeUndefined();
     expect("restartAfterClockStop" in backend).toBe(false);
-    expect(backend.confirmClockStop).toBeUndefined();
     expect(backend.confirmClockStep).toBeUndefined();
     expect(backend.latestClockStep).toBeUndefined();
-    expect(backend.openClockCheck).toBeUndefined();
-    expect(backend.closeClockCheckByItself).toBeUndefined();
-    expect(backend.waitingClockCheck).toBeUndefined();
-    expect(backend.misdatedRecords).toBeUndefined();
-    expect(backend.misdatedDetail).toBeUndefined();
-    expect(backend.noteClockProvedWrong).toBeUndefined();
   });
 
   it("recordSale writes nothing and returns a recorded ref carrying the sale's own instants", async () => {

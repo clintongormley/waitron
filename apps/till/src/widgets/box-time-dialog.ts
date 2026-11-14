@@ -59,15 +59,12 @@ const PIN_REFUSALS: Record<string, StringKey> = {
 const REASONS: Record<string, { key: StringKey; checkAgain: boolean }> = {
   not_stopped: { key: "box_time.refused.not_stopped", checkAgain: false },
   not_start_up: { key: "box_time.refused.not_start_up", checkAgain: false },
-  authority_pending: { key: "box_time.refused.authority_pending", checkAgain: true },
-  witnessed: { key: "box_time.refused.witnessed", checkAgain: false },
   target_invalid: { key: "box_time.refused.target_invalid", checkAgain: true },
   synchronised: { key: "box_time.refused.synchronised", checkAgain: false },
   host_unavailable: { key: "box_time.refused.host_unavailable", checkAgain: false },
   stale: { key: "box_time.refused.stale", checkAgain: true },
   same_machine: { key: "box_time.refused.same_machine", checkAgain: false },
-  contrary_proof: { key: "box_time.refused.contrary_proof", checkAgain: false },
-  pending_disproofs: { key: "box_time.refused.pending_disproofs", checkAgain: true },
+  pending_step: { key: "box_time.refused.pending_step", checkAgain: true },
   stopped: { key: "box_time.refused.stopped", checkAgain: true },
 };
 
@@ -84,11 +81,7 @@ function refusalOf(error: unknown): { key: StringKey; checkAgain: boolean } {
     return { key: "box_time.refused.not_admitted", checkAgain: false };
   if (code === "clock.set_failed" && (reason === "refused" || reason === "unverified"))
     return { key: `box_time.refused.set_failed_${reason}`, checkAgain: true };
-  if (
-    (code === "clock.set_refused" || code === "clock.confirm_refused") &&
-    typeof reason === "string" &&
-    Object.hasOwn(REASONS, reason)
-  )
+  if (code === "clock.set_refused" && typeof reason === "string" && Object.hasOwn(REASONS, reason))
     return REASONS[reason]!;
   return OTHER;
 }

@@ -5,7 +5,13 @@ import { formatInvoiceNumber } from "@waitron/core";
 import { centsToDecimal, decimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { csvCell } from "./attendance-export-csv.js";
 import { DEFERRED_PAYMENT_EXPORT_WORDS } from "./i18n/deferred-payment-export.js";
-import { amountCell } from "./misdated-sales-csv.js";
+
+/** Written without the shared cell's formula guard, so a negative amount stays a number in a
+ * spreadsheet; the text is digits, a sign and a decimal mark, so it needs no escaping. */
+function amountCell(value: Decimal, language: "en" | "es"): string {
+  const text = toScale(value, 2);
+  return `"${language === "es" ? text.replace(".", ",") : text}"`;
+}
 
 export interface DeferredPaymentInvoice {
   invoiceNumber: string;

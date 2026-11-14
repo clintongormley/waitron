@@ -113,8 +113,6 @@ it("refuses a stored open order under a clock in 2001 before the reader, and lea
   ).toEqual([{ status: "open", attemptAt: null }]);
 });
 
-// Cases recording a later-dated sale run after this one: such a record would trip the clock-behind
-// stop (A798-B slice 8) rather than test the first issue date.
 it("refuses at 23:59:59.999 local on 27-10-2024, and asks the reader at 00:00 local on 28-10-2024", async () => {
   const before = collects();
 

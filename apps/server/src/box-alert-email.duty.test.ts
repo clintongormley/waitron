@@ -16,7 +16,6 @@ import {
 } from "./box-alert-email.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { EmailDelivery } from "./email-delivery.js";
-import { BOX_EMAIL_WORDS } from "./i18n/box-emails.js";
 import type { FreeSpaceReading } from "./free-space-watch.js";
 import type { Logger } from "./logger.js";
 import type { ManagerEmailRecipient } from "./manager-email-recipients.js";
@@ -249,44 +248,16 @@ function notice(code: string): OwnedStaffNotice {
   return { owner: "fiscal-verifactu", key: code, code, severity: "error", params: {} };
 }
 
-const STOP = {
-  clockAt: "2025-03-14T08:12:00.000Z",
-  offsetMinutes: 60,
-  lastRecordAt: "2026-10-18T21:40:00.000Z",
-  lastRecordOffsetMinutes: 120,
+const OLD_BACKUPS: EmailedIncident = {
+  id: "i-old-backups",
+  code: "backup.archives_deleted",
+  params: { count: 2, date: "2026-10-27", lastDate: "2026-10-27", severalDays: false },
 };
 
-const SPANISH_STOP = BOX_EMAIL_WORDS["clock.behind_chain"].es;
-
-function clockStop(params: typeof STOP): OwnedStaffNotice {
-  return { ...notice("clock.behind_chain"), params };
-}
-
-const RESTART: EmailedIncident = {
-  id: "i-restart",
-  code: "clock.behind_chain_restarted",
-  params: {
-    confirmationId: "c-1",
-    confirmedBy: "admin",
-    person: "Anna",
-    clockAt: "2025-03-14T08:12:00.000Z",
-    lastRecordAt: "2026-10-18T21:40:00.000Z",
-  },
-};
-
-const MISDATED: EmailedIncident = {
-  id: "i-misdated",
-  code: "clock.records_misdated",
-  params: {
-    confirmationId: "c-1",
-    count: 3,
-    from: "2026-10-18T19:05:00.000Z",
-    fromOffsetMinutes: 120,
-    to: "2026-10-26T09:30:00.000Z",
-    toOffsetMinutes: 60,
-    partial: false,
-    unconfirmed: false,
-  },
+const MORE_OLD_BACKUPS: EmailedIncident = {
+  id: "i-more-old-backups",
+  code: "backup.archives_deleted",
+  params: { count: 3, date: "2026-10-20", lastDate: "2026-10-26", severalDays: true },
 };
 
 function step(id: string, stepMs: number): EmailedIncident {
@@ -295,8 +266,8 @@ function step(id: string, stepMs: number): EmailedIncident {
     code: "clock.corrected",
     params: {
       confirmationId: `c-${id}`,
-      source: "authority",
-      person: null,
+      source: "admin",
+      person: "Ana",
       deviceId: null,
       device: null,
       before: "2025-03-14T08:12:00.000Z",
@@ -307,7 +278,7 @@ function step(id: string, stepMs: number): EmailedIncident {
       direction: "forward",
       verified: true,
       unverified: false,
-      byAdmin: false,
+      byAdmin: true,
       byStaff: false,
     },
   };
@@ -469,9 +440,9 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
     ]);
   });
 
-  it("still sends nothing for a remembered wrongly dated alert handled before it was sent", async () => {
+  it("still sends nothing for a remembered alert other than a step handled before it was sent", async () => {
     const d = duty();
-    await d.remember(MISDATED);
+    await d.remember(MORE_OLD_BACKUPS);
     await d.tick();
     await d.tick();
     expect(d.send).not.toHaveBeenCalled();
@@ -789,106 +760,52 @@ describe("startBoxEmailDuty", () => {
     expect(d.send).not.toHaveBeenCalled();
   });
 
-  it("emails each manager once per clock stop, with the stop's two times", async () => {
+  it("emails each manager once per open emailed alert, in their own language", async () => {
     const d = duty();
-    d.state.notices = { notices: [clockStop(STOP)], unavailable: [] };
+    d.state.incidents = [OLD_BACKUPS, MORE_OLD_BACKUPS];
     await d.tick();
     await d.tick();
     expect(d.sent()).toEqual([
-      {
-        recipient: ANNA.email,
-        subject: SPANISH_STOP.subject.replaceAll("{venue}", VENUE),
-        text: SPANISH_STOP.text
-          .replaceAll("{clockAt}", "14/03/2025 09:12")
-          .replaceAll("{lastRecordAt}", "18/10/2026 23:40"),
-      },
-      {
-        recipient: BEN.email,
-        subject:
-          "Payments stopped at Corner Bistro: the box's clock reads earlier than its last sale",
-        text: expect.stringContaining(
-          "(14/03/2025 09:12) reads earlier than its last recorded sale (18/10/2026 23:40)",
-        ),
-      },
+      clockEmail(OLD_BACKUPS, ANNA),
+      clockEmail(OLD_BACKUPS, BEN),
+      clockEmail(MORE_OLD_BACKUPS, ANNA),
+      clockEmail(MORE_OLD_BACKUPS, BEN),
     ]);
-  });
-
-  it("a clock stop keeps its first notice's times when a later read differs", async () => {
-    const d = duty();
-    d.state.recipients = [BEN];
-    d.send.mockImplementationOnce(async () => "rejected");
-    d.state.notices = { notices: [clockStop(STOP)], unavailable: [] };
-    await d.tick();
-    d.state.notices = {
-      notices: [clockStop({ ...STOP, clockAt: "2025-03-14T08:13:00.000Z" })],
-      unavailable: [],
-    };
-    await d.tick();
-    await d.tick();
-    expect(d.sent()).toHaveLength(2);
-    expect(d.sent()[1]!.text).toContain("(14/03/2025 09:12)");
-    expect(d.sent()[1]!.text).not.toContain("09:13");
-  });
-
-  it("a clock stop that goes and comes back emails again, with the new stop's times", async () => {
-    const d = duty();
-    d.state.recipients = [BEN];
-    d.state.notices = { notices: [clockStop(STOP)], unavailable: [] };
-    await d.tick();
-    d.state.notices = { notices: [], unavailable: [] };
-    await d.tick();
-    d.state.notices = {
-      notices: [clockStop({ ...STOP, clockAt: "2025-03-14T08:13:00.000Z" })],
-      unavailable: [],
-    };
-    await d.tick();
-    expect(d.sent()).toHaveLength(2);
-    expect(d.sent()[0]!.text).toContain("(14/03/2025 09:12)");
-    expect(d.sent()[1]!.text).toContain("(14/03/2025 09:13)");
-  });
-
-  it("emails each manager once per open restart or wrongly dated alert, in their own language", async () => {
-    const d = duty();
-    d.state.incidents = [RESTART, MISDATED];
-    await d.tick();
-    await d.tick();
-    expect(d.sent()).toEqual([
-      clockEmail(RESTART, ANNA),
-      clockEmail(RESTART, BEN),
-      clockEmail(MISDATED, ANNA),
-      clockEmail(MISDATED, BEN),
-    ]);
-    expect(d.sent()[1]!.text).toContain("confirmed by an administrator");
-    expect(d.sent()[3]!.text).toContain("from 18/10/2026 21:05 to 26/10/2026 10:30");
+    expect(d.sent()[1]!.text).toContain("2 oldest backups");
+    expect(d.sent()[3]!.text).toContain("3 oldest backups");
     expect(d.events("box_email.sent")).toContainEqual([
       "info",
       "box_email.sent",
-      { code: "clock.records_misdated" },
+      { code: "backup.archives_deleted" },
     ]);
   });
 
   it("emails each alert of one code on its own, once", async () => {
     const d = duty();
     d.state.recipients = [BEN];
-    const second = { ...MISDATED, id: "i-misdated-2", params: { ...MISDATED.params, count: 4 } };
-    d.state.incidents = [MISDATED];
+    const second = {
+      ...MORE_OLD_BACKUPS,
+      id: "i-more-old-backups-2",
+      params: { ...MORE_OLD_BACKUPS.params, count: 4 },
+    };
+    d.state.incidents = [MORE_OLD_BACKUPS];
     await d.tick();
-    d.state.incidents = [MISDATED, second];
+    d.state.incidents = [MORE_OLD_BACKUPS, second];
     await d.tick();
     await d.tick();
-    expect(d.sent()).toEqual([clockEmail(MISDATED, BEN), clockEmail(second, BEN)]);
+    expect(d.sent()).toEqual([clockEmail(MORE_OLD_BACKUPS, BEN), clockEmail(second, BEN)]);
   });
 
   it("emails nothing for an alert handled before it was read, nor retries one handled after a failed send", async () => {
     const d = duty();
     d.state.recipients = [BEN];
     d.send.mockImplementationOnce(async () => "rejected");
-    d.state.incidents = [RESTART];
+    d.state.incidents = [OLD_BACKUPS];
     await d.tick();
     d.state.incidents = [];
     await d.tick();
     await d.tick();
-    expect(d.sent()).toEqual([clockEmail(RESTART, BEN)]);
+    expect(d.sent()).toEqual([clockEmail(OLD_BACKUPS, BEN)]);
     expect(d.context).toHaveBeenCalledTimes(1);
   });
 
@@ -896,22 +813,25 @@ describe("startBoxEmailDuty", () => {
     const d = duty();
     d.state.recipients = [BEN];
     d.send.mockImplementationOnce(async () => "unknown");
-    d.state.incidents = [MISDATED];
+    d.state.incidents = [MORE_OLD_BACKUPS];
     await d.tick();
     await d.tick();
     await d.tick();
-    expect(d.sent()).toEqual([clockEmail(MISDATED, BEN), clockEmail(MISDATED, BEN)]);
+    expect(d.sent()).toEqual([
+      clockEmail(MORE_OLD_BACKUPS, BEN),
+      clockEmail(MORE_OLD_BACKUPS, BEN),
+    ]);
   });
 
   it("keeps an alert's episode while the alert read fails, and sends nothing more", async () => {
     const d = duty();
     d.state.recipients = [BEN];
-    d.state.incidents = [RESTART];
+    d.state.incidents = [OLD_BACKUPS];
     await d.tick();
     d.emailedIncidents.mockRejectedValueOnce(new Error("busy"));
     await d.tick();
     await d.tick();
-    expect(d.sent()).toEqual([clockEmail(RESTART, BEN)]);
+    expect(d.sent()).toEqual([clockEmail(OLD_BACKUPS, BEN)]);
     expect(d.events("box_email.check_failed")).toHaveLength(1);
   });
 
@@ -922,7 +842,7 @@ describe("startBoxEmailDuty", () => {
     d.armed[0]!.fn();
     await vi.waitFor(() => expect(d.emailedIncidents).toHaveBeenCalled());
     const stopping = d.handle.stop();
-    read.release([RESTART]);
+    read.release([OLD_BACKUPS]);
     await stopping;
     await turn();
     expect(d.context).not.toHaveBeenCalled();
@@ -1242,17 +1162,17 @@ describe("box email queue episodes", () => {
 
   it("an alert's email queued before a restart is sent after it, once", async () => {
     const a = duty();
-    a.state.incidents = [RESTART];
+    a.state.incidents = [OLD_BACKUPS];
     await a.check();
     await a.handle.stop();
     const before = await a.rows();
     const b = duty({ startedAt: at(2) });
-    b.state.incidents = [RESTART];
+    b.state.incidents = [OLD_BACKUPS];
     await b.drain();
     await b.tick();
     await b.tick();
     expect((await b.rows()).map((row) => row.id)).toEqual(before.map((row) => row.id));
-    expect(b.sent()).toEqual([clockEmail(RESTART, ANNA), clockEmail(RESTART, BEN)]);
+    expect(b.sent()).toEqual([clockEmail(OLD_BACKUPS, ANNA), clockEmail(OLD_BACKUPS, BEN)]);
   });
   it("a restart cancels a disk episode's leftover unsent rows and queues them again", async () => {
     const a = duty();
@@ -1289,10 +1209,10 @@ describe("box email queue episodes", () => {
   it("queues nothing while the disk is full and writes nothing", async () => {
     const d = duty();
     d.state.diskSince = at(1);
-    d.state.incidents = [RESTART];
+    d.state.incidents = [OLD_BACKUPS];
     // Store the alert before observing the duty's write turns.
     await suite.db.insert(incidents).values({
-      ...RESTART,
+      ...OLD_BACKUPS,
       source: "dashboard",
       severity: "warning",
       detectedAt: at(0).toISOString(),

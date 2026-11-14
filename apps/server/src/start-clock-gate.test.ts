@@ -8,9 +8,9 @@ it("asks whether records are filed at each call, so a box that starts filing whi
   const tx = {} as Transaction;
   const reading = { instant: new Date("2026-11-10T10:00:00.000Z"), offsetMinutes: 60 };
   let files = false;
-  const refuseWhileClockBehind = vi.fn(async () => {});
+  const refuseUntilRecordable = vi.fn(async () => {});
   const gated = gateSeatOnStartClock(
-    { refuseWhileClockBehind } as unknown as FiscalBackend,
+    { refuseUntilRecordable } as unknown as FiscalBackend,
     startClockGateHolds(
       startClockState(),
       () => files,
@@ -18,15 +18,15 @@ it("asks whether records are filed at each call, so a box that starts filing whi
     ),
   );
 
-  await expect(gated.refuseWhileClockBehind(tx, reading)).resolves.toBeUndefined();
-  expect(refuseWhileClockBehind).toHaveBeenCalledExactlyOnceWith(tx, reading);
+  await expect(gated.refuseUntilRecordable(tx, reading)).resolves.toBeUndefined();
+  expect(refuseUntilRecordable).toHaveBeenCalledExactlyOnceWith(tx, reading);
 
   files = true;
-  await expect(gated.refuseWhileClockBehind(tx, reading)).rejects.toMatchObject({
+  await expect(gated.refuseUntilRecordable(tx, reading)).rejects.toMatchObject({
     code: "clock.unconfirmed",
     params: {},
   });
-  expect(refuseWhileClockBehind).toHaveBeenCalledTimes(1);
+  expect(refuseUntilRecordable).toHaveBeenCalledTimes(1);
 });
 
 it.each(["by_devices", "by_person", "by_internet"] as const)(

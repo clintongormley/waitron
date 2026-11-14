@@ -1,8 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "../i18n/t.js";
-import { alertMessage } from "../i18n/alerts.js";
-import { formatIsoMinute } from "../date-utils.js";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget, timesAcrossLines } from "./test-helpers.js";
@@ -25,48 +23,21 @@ const event = (id: string, severity: AlertView["severity"] = "error"): AlertView
   since: "2026-09-14T12:00:00.000Z",
   area: "payments",
 });
-const RESTARTED = {
-  confirmationId: "c1",
-  confirmedBy: "devices",
-  person: null,
-  clockAt: "2026-10-19T09:14:00.000Z",
-  lastRecordAt: "2026-10-19T23:40:00.000Z",
-};
-const MISDATED = {
+const STEPPED = {
   confirmationId: "c2",
-  count: 2,
-  from: "2026-10-19T23:41:00.000Z",
-  fromOffsetMinutes: 120,
-  to: "2026-10-20T00:05:00.000Z",
-  toOffsetMinutes: 120,
-  partial: false,
-  unconfirmed: false,
+  source: "admin",
+  person: "Ana",
+  before: "2026-10-19T23:41:00.000Z",
+  beforeOffsetMinutes: 120,
+  after: "2026-10-20T00:05:00.000Z",
+  afterOffsetMinutes: 120,
+  stepMs: 1_440_000,
+  direction: "forward",
+  verified: true,
+  unverified: false,
+  byAdmin: true,
+  byStaff: false,
 };
-const clockAlerts = (): AlertView[] =>
-  [
-    ["clock.behind_chain_restarted", RESTARTED, "warning"],
-    ["clock.records_misdated", MISDATED, "error"],
-    [
-      "clock.records_misdated",
-      {
-        confirmationId: "c3",
-        count: 0,
-        from: MISDATED.from,
-        fromOffsetMinutes: 120,
-        partial: false,
-        unconfirmed: true,
-      },
-      "error",
-    ],
-  ].map(([code, params, severity], n) => ({
-    key: `incident:c${n}`,
-    kind: "event",
-    code: code as string,
-    params: params as Record<string, unknown>,
-    severity: severity as AlertView["severity"],
-    since: "2026-10-20T00:06:00.000Z",
-    area: "box",
-  }));
 const ongoing: AlertView = {
   key: "backup.disabled:local",
   kind: "ongoing",
@@ -170,21 +141,21 @@ describe("dashboard-alerts-bell", () => {
 
   it("never breaks a written time across two lines", async () => {
     setLocale("en-GB");
-    const misdated = (n: number): AlertView => ({
+    const stepped = (n: number): AlertView => ({
       key: `incident:m${n}`,
       kind: "event",
-      code: "clock.records_misdated",
-      params: { ...MISDATED, count: "9".repeat(n) },
+      code: "clock.corrected",
+      params: { ...STEPPED, person: "9".repeat(n) },
       severity: "error",
       since: "2026-10-19T09:16:00.000Z",
       area: "box",
     });
     const broken: string[] = [];
     let checked = 0;
-    // The bell lists five at a time; forty counts slide the times along the whole line.
+    // The bell lists five at a time; forty name lengths slide the times along the whole line.
     for (let first = 1; first <= 40; first += 5) {
       const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
-        alerts: Array.from({ length: 5 }, (_, n) => misdated(first + n)),
+        alerts: Array.from({ length: 5 }, (_, n) => stepped(first + n)),
       });
       el.open();
       await el.updateComplete;
@@ -197,33 +168,6 @@ describe("dashboard-alerts-bell", () => {
     }
     expect(checked).toBe(80);
     expect(broken).toEqual([]);
-  });
-
-  it("words a restart of payments, a list of misdated sales and an unconfirmed stop", async () => {
-    setLocale("en-GB");
-    const alerts = clockAlerts();
-    const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", { alerts });
-    el.open();
-    await el.updateComplete;
-    const at = (iso: string) => formatIsoMinute(iso);
-    expect(
-      qa(el, "[data-test=alert-item]").map((item) => item.firstElementChild!.textContent),
-    ).toEqual([
-      `Payments restarted on the box's clock (${at(RESTARTED.clockAt)}), earlier than the last sale (${at(RESTARTED.lastRecordAt)}), once two tills or handhelds confirmed it.`,
-      `2 sales were recorded with a time later than the real time (from ${at(MISDATED.from)} to ${at(MISDATED.to)}). They stay as recorded. Go through them with your tax adviser; the list is on the Box status page.`,
-      `The payment stop that began at ${at(MISDATED.from)} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales were dated wrongly. Check the box's clock, and go through the sales since then with your tax adviser.`,
-    ]);
-  });
-
-  it("words the same three alerts in Spanish", async () => {
-    setLocale("es-ES");
-    const alerts = clockAlerts();
-    const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", { alerts });
-    el.open();
-    await el.updateComplete;
-    expect(
-      qa(el, "[data-test=alert-item]").map((item) => item.firstElementChild!.textContent),
-    ).toEqual(alerts.map((alert) => alertMessage(alert.code, alert.params, "es")));
   });
 
   it("shows an empty message when nothing is open", async () => {

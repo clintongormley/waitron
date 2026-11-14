@@ -46,16 +46,12 @@ async function sellAt(reading: Reading): Promise<void> {
   );
 }
 
-const behind = (reading: Reading) =>
-  withTransaction(suite.db, (tx) => backend.clockBehindLatestRecord(tx, reading));
-
 const refuse = (reading: Reading) =>
-  withTransaction(suite.db, (tx) => backend.refuseWhileClockBehind(tx, reading));
+  withTransaction(suite.db, (tx) => backend.refuseUntilRecordable(tx, reading));
 
-describe("VerifactuBackend answers whether the clock reads behind the latest record", () => {
+describe("VerifactuBackend refuses only a reading no record could carry", () => {
   it("sells a reading exactly a minute earlier", async () => {
     await sellAt(at(0));
-    expect(await behind(at(-60_000))).toBeNull();
     await expect(refuse(at(-60_000))).resolves.toBeUndefined();
   });
 

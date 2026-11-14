@@ -4028,8 +4028,6 @@ export const en = {
   "box_status.sales.none": "No sales yet",
   "box_status.notice.disk_full": "Nothing can be saved: the box is out of disk space",
   "box_status.notice.clock_unusable": "Sales can't be recorded: the box's clock is wrong",
-  "box_status.notice.clock_behind_chain":
-    "Payments stopped: the box's clock reads earlier than its last sale",
   "box_status.tax.ok": "Sent normally",
   "box_status.tax.not_filing": "This box does not send records to the tax agency",
   "box_status.tax.unsent": "{count} records not yet sent · the box retries by itself",
@@ -4060,43 +4058,20 @@ export const en = {
   "box_status.readers.none": "No card readers set up",
   "box_status.no_problems": "No problems reported",
   "box_status.clock.ok": "Correct",
-  "box_status.clock.unconfirmed": "Not confirmed since the payment stop",
   "box_status.clock.unknown": "Not yet compared with the tax agency",
   "box_status.clock.compared": "Compared with the tax agency at {time} · {seconds} s apart",
   "box_status.clock.compared_ahead":
     "Compared with the tax agency at {time} · the box was {seconds} s ahead",
   "box_status.clock.compared_behind":
     "Compared with the tax agency at {time} · the box was {seconds} s behind",
-  "box_status.clock.proof.authority": "Tax agency: matches (checked {time})",
-  "box_status.clock.proof.devices": "Devices: {count} read {time}",
-  "box_status.clock.proof.device_one": "Devices: 1 read {time}",
-  "box_status.clock.stop.none":
-    "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), or two tills or handhelds.",
-  "box_status.clock.stop.contrary": "Other clocks say the box's clock is wrong.",
-  "box_status.clock.contrary.authority": "Tax agency: does not match (checked {time})",
-  "box_status.clock.contrary.device": "{name}: does not match (read {time})",
-  "box_status.clock.contrary.unnamed_device": "A device",
-  "box_status.clock.stop.ready": "Proof found: payments restart within a few seconds.",
-  "box_status.clock.stop.start_up":
-    "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), “Check the time” on a till if the tax agency does not answer, or an administrator's device. The box started with payments stopped, so two tills or handhelds are not enough.",
-  "box_status.clock.stop.confirmed": "Payments restarted at {time}, confirmed by {who}.",
-  "box_status.clock.check_waiting":
-    "The payment stop that began at {time} has ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute when it sends it records; two tills or handhelds, or an administrator's own device, can confirm it too.",
   "box_status.clock.synced": "Kept in time over the internet",
   "box_status.clock.not_synced": "Not kept in time over the internet",
-  "box_status.clock.behind_chain_fix":
-    "With the internet the box corrects its clock by itself; otherwise an administrator can use “Check with this device's time”.",
   "box_status.clock.admin.open": "Check with this device's time",
   "box_status.clock.admin.sign_in_hint":
     "Only an administrator can check the box's clock with this device's time. Signing in as one signs you out here first.",
   "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
-  "box_status.clock.admin.agree": "They agree. Confirm that the box's clock is right?",
   "box_status.clock.admin.differ":
     "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
-  "box_status.clock.admin.refused.same_machine":
-    "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
-  "box_status.clock.admin.refused.not_stopped":
-    "There is nothing left to confirm. See the Clock row.",
   "box_status.clock.admin.set.question":
     "The box's clock says {box}. Your device says {device}. Use your device's time?",
   "box_status.clock.admin.set.confirm": "Use this time",
@@ -4104,16 +4079,14 @@ export const en = {
   "box_status.clock.admin.set.sign_in_again": "Sign in again to go on.",
   "box_status.clock.admin.set.refused.synchronised":
     "The box keeps its clock in time over the internet and says it is right, so it does not take a time from a device. If your device's time is right, check the box's internet connection.",
-  "box_status.clock.admin.set.refused.witnessed":
-    "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from a device's. If a try fails, it tries again later.",
   "box_status.clock.admin.set.refused.stale":
     "The box's clock changed while this was being checked. Close this and check again.",
   "box_status.clock.admin.set.refused.host_unavailable":
-    "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Once the box's clock is within a minute of your device's, you can confirm it here.",
+    "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Close this and check again in a few minutes.",
   "box_status.clock.admin.set.refused.target_invalid":
     "Your device's date is not one the box can take. Check your device's date and time.",
-  "box_status.clock.admin.set.refused.pending_disproofs":
-    "The box has not finished recording what it found about its clock. Try again in a minute.",
+  "box_status.clock.admin.set.refused.pending_step":
+    "The box has not finished saving its last clock change. Try again in a minute.",
   "box_status.clock.admin.set.refused.same_machine":
     "This screen is the box itself, so its clock is the box's own. Use your phone or another computer.",
   "box_status.clock.admin.set.refused.not_stopped":
@@ -4161,29 +4134,6 @@ export const en = {
   "box_status.other_alerts": "{count} other alerts",
   "box_status.other_alerts_one": "1 other alert",
   "box_status.read_error": "The box's status could not be read.",
-  "box_status.misdated.title": "Sales dated wrongly",
-  "box_status.misdated.table_range": "Sales dated wrongly from {from} to {to}",
-  "box_status.misdated.line":
-    "Download each list for your tax adviser and go through it with them, then mark it handled here with a note of what was done.",
-  "box_status.misdated.col_invoice": "Invoice",
-  "box_status.misdated.col_at": "Time recorded",
-  "box_status.misdated.read_error": "The list of sales dated wrongly could not be read.",
-  "box_status.misdated.handled_heading": "Handled lists ({count})",
-  "box_status.misdated.handled_by_person": "Marked handled by {name} on {time}.",
-  "box_status.misdated.handled_by_box": "Marked handled by the box on {time}.",
-  "box_status.misdated.handled_by_unknown": "Marked handled on {time}.",
-  "box_status.misdated.note": "Note: {note}",
-  "box_status.misdated.handled_read_error": "The handled lists could not be read.",
-  "box_status.misdated.download": "Download for your adviser",
-  "box_status.misdated.add_note": "Add note",
-  "box_status.misdated.summary": "{count} sales from {from} to {to}",
-  "box_status.misdated.summary_one": "One sale at {from}",
-  "misdated_note.add_heading": "Add a note",
-  "misdated_note.label": "Note",
-  "misdated_note.placeholder": "What your tax adviser said, or what was done",
-  "misdated_note.placeholder_optional": "What your tax adviser said, or what was done (optional)",
-  "misdated_note.required": "Write a note.",
-  "misdated_note.too_long": "Write a note of 500 characters or fewer.",
   "box_status.alerts_unavailable":
     "The alerts could not be read, so a part may look fine when it is not.",
 } as const;
@@ -8292,8 +8242,6 @@ export const es: Record<StringKey, string> = {
   "box_status.notice.disk_full": "No se puede guardar nada: el servidor no tiene espacio en disco",
   "box_status.notice.clock_unusable":
     "No se pueden registrar ventas: la hora del servidor es incorrecta",
-  "box_status.notice.clock_behind_chain":
-    "No se puede cobrar: la hora del servidor es anterior a la última venta",
   "box_status.tax.ok": "Se envían con normalidad",
   "box_status.tax.not_filing": "Este servidor no envía registros a Hacienda",
   "box_status.tax.unsent": "{count} registros sin enviar · el servidor reintenta solo",
@@ -8324,43 +8272,21 @@ export const es: Record<StringKey, string> = {
   "box_status.readers.none": "No hay lectores configurados",
   "box_status.no_problems": "Sin problemas",
   "box_status.clock.ok": "Correcto",
-  "box_status.clock.unconfirmed": "Sin confirmar desde la parada de cobros",
   "box_status.clock.unknown": "Aún no se ha comparado con Hacienda",
   "box_status.clock.compared": "Comparado con Hacienda el {time} · diferencia {seconds} s",
   "box_status.clock.compared_ahead":
     "Comparado con Hacienda el {time} · el servidor iba {seconds} s adelantado",
   "box_status.clock.compared_behind":
     "Comparado con Hacienda el {time} · el servidor iba {seconds} s atrasado",
-  "box_status.clock.proof.authority": "Hacienda: coincide (comprobado {time})",
-  "box_status.clock.proof.devices": "Dispositivos: {count} marcan {time}",
-  "box_status.clock.proof.device_one": "Dispositivos: 1 marca {time}",
-  "box_status.clock.stop.none":
-    "Esperando una prueba de que la hora es correcta: la de Hacienda (si el servidor le envía registros), o la de dos cajas o terminales.",
-  "box_status.clock.stop.contrary": "Otros relojes dicen que la hora del servidor está mal.",
-  "box_status.clock.contrary.authority": "Hacienda: no coincide (comprobado {time})",
-  "box_status.clock.contrary.device": "{name}: no coincide (marcó {time})",
-  "box_status.clock.contrary.unnamed_device": "Un dispositivo",
-  "box_status.clock.stop.ready": "Hay prueba: los cobros se reanudan en unos segundos.",
-  "box_status.clock.stop.start_up":
-    "Esperando una prueba de que la hora es correcta: la de Hacienda (si el servidor le envía registros), «Comprobar la hora» en una caja si Hacienda no responde, o el dispositivo de un administrador. El servidor arrancó con los cobros parados, así que no bastan dos cajas o terminales.",
-  "box_status.clock.stop.confirmed": "Cobros reanudados el {time}, confirmado por {who}.",
-  "box_status.clock.check_waiting":
-    "La parada de cobros que empezó el {time} ha terminado, pero nada ha confirmado aún la hora del servidor. El servidor pregunta la hora a Hacienda cada minuto cuando le envía registros; también pueden confirmarla dos cajas o terminales, o el dispositivo de un administrador.",
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
-  "box_status.clock.behind_chain_fix":
-    "Con internet, el servidor corrige la hora solo; si no, un administrador puede usar «Comprobar con la hora de este dispositivo».",
   "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
   "box_status.clock.admin.sign_in_hint":
     "Solo un administrador puede comprobar la hora del servidor con la de este dispositivo. Iniciar sesión como administrador cierra primero tu sesión aquí.",
   "box_status.clock.admin.times":
     "El reloj del servidor marca {box}. Este dispositivo marca {device}.",
-  "box_status.clock.admin.agree": "Coinciden. ¿Confirmas que la hora del servidor es correcta?",
   "box_status.clock.admin.differ":
     "El servidor no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el servidor a internet para que corrija la hora.",
-  "box_status.clock.admin.refused.same_machine":
-    "Esta pantalla es el propio servidor, así que su hora es la del servidor. Confírmalo desde tu móvil o desde otro ordenador.",
-  "box_status.clock.admin.refused.not_stopped": "No queda nada que confirmar. Mira la fila Reloj.",
   "box_status.clock.admin.set.question":
     "El reloj del servidor marca {box}. Tu dispositivo marca {device}. ¿Usar la hora de tu dispositivo?",
   "box_status.clock.admin.set.confirm": "Usar esta hora",
@@ -8368,16 +8294,14 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.admin.set.sign_in_again": "Vuelve a iniciar sesión para seguir.",
   "box_status.clock.admin.set.refused.synchronised":
     "El servidor se pone en hora por internet y dice que su hora es correcta, así que no toma la hora de un dispositivo. Si la hora de tu dispositivo es correcta, comprueba la conexión a internet del servidor.",
-  "box_status.clock.admin.set.refused.witnessed":
-    "El servidor tiene la hora de Hacienda, así que confirma o corrige su reloj con esa hora por sí mismo, no con la de un dispositivo. Si un intento falla, vuelve a intentarlo más tarde.",
   "box_status.clock.admin.set.refused.stale":
     "El reloj del servidor ha cambiado mientras se comprobaba. Cierra esto y vuelve a comprobarlo.",
   "box_status.clock.admin.set.refused.host_unavailable":
-    "Este servidor no puede poner su propio reloj en hora: la parte del servidor que lo hace no responde. Si el servidor tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cuando el reloj del servidor esté a menos de un minuto del de tu dispositivo, podrás confirmarlo aquí.",
+    "Este servidor no puede poner su propio reloj en hora: la parte del servidor que lo hace no responde. Si el servidor tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cierra esto y vuelve a comprobarlo dentro de unos minutos.",
   "box_status.clock.admin.set.refused.target_invalid":
     "La fecha de tu dispositivo no es una que el servidor pueda tomar. Comprueba la fecha y la hora de tu dispositivo.",
-  "box_status.clock.admin.set.refused.pending_disproofs":
-    "El servidor aún no ha terminado de registrar lo que encontró sobre su reloj. Vuelve a intentarlo dentro de un minuto.",
+  "box_status.clock.admin.set.refused.pending_step":
+    "El servidor aún no ha terminado de guardar su último cambio de hora. Vuelve a intentarlo dentro de un minuto.",
   "box_status.clock.admin.set.refused.same_machine":
     "Esta pantalla es el propio servidor, así que su hora es la del servidor. Usa tu móvil u otro ordenador.",
   "box_status.clock.admin.set.refused.not_stopped":
@@ -8428,29 +8352,6 @@ export const es: Record<StringKey, string> = {
   "box_status.other_alerts": "{count} avisos más",
   "box_status.other_alerts_one": "1 aviso más",
   "box_status.read_error": "No se ha podido leer el estado del servidor.",
-  "box_status.misdated.title": "Ventas con fecha incorrecta",
-  "box_status.misdated.table_range": "Ventas con fecha incorrecta de {from} a {to}",
-  "box_status.misdated.line":
-    "Descarga cada lista para tu asesor, revísala con su ayuda y después marca el aviso como resuelto aquí con una nota de lo que se hizo.",
-  "box_status.misdated.col_invoice": "Factura",
-  "box_status.misdated.col_at": "Hora registrada",
-  "box_status.misdated.read_error": "No se ha podido leer la lista de ventas con fecha incorrecta.",
-  "box_status.misdated.handled_heading": "Listas resueltas ({count})",
-  "box_status.misdated.handled_by_person": "Marcada como resuelta por {name} el {time}.",
-  "box_status.misdated.handled_by_box": "Marcada como resuelta por el servidor el {time}.",
-  "box_status.misdated.handled_by_unknown": "Marcada como resuelta el {time}.",
-  "box_status.misdated.note": "Nota: {note}",
-  "box_status.misdated.handled_read_error": "No se han podido leer las listas resueltas.",
-  "box_status.misdated.download": "Descargar para tu asesor",
-  "box_status.misdated.add_note": "Añadir nota",
-  "box_status.misdated.summary": "{count} ventas de {from} a {to}",
-  "box_status.misdated.summary_one": "Una venta el {from}",
-  "misdated_note.add_heading": "Añadir una nota",
-  "misdated_note.label": "Nota",
-  "misdated_note.placeholder": "Lo que dijo tu asesor fiscal, o lo que se hizo",
-  "misdated_note.placeholder_optional": "Lo que dijo tu asesor fiscal, o lo que se hizo (opcional)",
-  "misdated_note.required": "Escribe una nota.",
-  "misdated_note.too_long": "Escribe una nota de 500 caracteres como máximo.",
   "box_status.alerts_unavailable":
     "No se han podido leer los avisos, así que puede parecer que una parte está bien cuando no lo está.",
 };

@@ -1752,9 +1752,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   (`git grep -n -i -E "went backwards|step(s|ped)? back|backward"` outside tests) and the rule each
   applies today; behaviour is kept site by site. Raised by #2331's review, not yet designed.
 
-- **AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply.**
-  [Detail](backlog/box.md#aeats-time-for-a-confirmation-comes-from-its-qr-validation-host-not-from-a-consultar-reply)
-
 - **The start on a full disk deletes backups by stamp alone after a clock step.**
   [Detail](backlog/box.md#the-start-on-a-full-disk-deletes-backups-by-stamp-alone-after-a-clock-step)
 
@@ -1771,11 +1768,11 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Correct the sales dated wrongly once the tax adviser answers Q60.** What the correction is
   waits on [Q60](compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24);
-  A1088 built only the list, the handled lists, the note and the download. Left open by A1088.
+  A1420 PR 6 removed A1088's list, its notes and its download. Left open by A1088.
 
-- **The adviser's file is comma-separated in both languages, and a spreadsheet set to expect
+- **The accountant's file is comma-separated in both languages, and a spreadsheet set to expect
   semicolons may open the Spanish file in one column.**
-  [Detail](backlog/box.md#the-advisers-file-is-comma-separated-in-both-languages)
+  [Detail](backlog/box.md#the-accountants-file-is-comma-separated-in-both-languages)
 
 - **The bell's printer check reads every print job.**
   [Detail](backlog/box.md#the-bells-printer-check-reads-every-print-job)
@@ -1786,7 +1783,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   check against the reader. Left open by A798-B slice 10.
 
 
-- **Box status rows** (bundle of 4, 1 important, size S). [Detail](backlog/box.md#bundle-box-status-rows)
+- **Box status rows** (bundle of 3, 1 important, size S). [Detail](backlog/box.md#bundle-box-status-rows)
 
 - **A transaction opened outside the write queue can let a body's writes after a full disk
   commit.**

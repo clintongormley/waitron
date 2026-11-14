@@ -220,7 +220,7 @@ function providerRefundRefOf(evidence: RefundEvidence): string | null {
  * 28-10-2024). Judged again here because a provider wait since the request's own check can end
  * after the clock moves or the gate starts holding; the refund is then left pending for a later
  * pass. A manager's confirmed outcome (`evidence` attested) is refused instead, by the seat's
- * `refuseWhileClockBehind`, as their route refuses it.
+ * `refuseUntilRecordable`, as their route refuses it.
  */
 export async function clockStopsRefund(
   tx: Transaction,
@@ -229,7 +229,7 @@ export async function clockStopsRefund(
   reading: TrustedReading,
 ): Promise<boolean> {
   if (evidence?.kind === "attested") {
-    await deps.backend.refuseWhileClockBehind(tx, reading);
+    await deps.backend.refuseUntilRecordable(tx, reading);
     return false;
   }
   if (deps.clockUnconfirmed?.() === true) return true;
@@ -700,7 +700,7 @@ export async function refundBillPayment(
             throw new AppError("submission.id_reused", { submissionId: req.submissionId });
           }
           if (earlier.refund.state === "pending") {
-            await deps.backend.refuseWhileClockBehind(tx, deps.clock.now());
+            await deps.backend.refuseUntilRecordable(tx, deps.clock.now());
             await deps.backend.refuseNewRefund(tx, cfg.nodeId);
             return { kind: "resume" as const, refundId: earlier.refund.id };
           }
@@ -713,7 +713,7 @@ export async function refundBillPayment(
           throw new AppError("submission.id_reused", { submissionId: req.submissionId });
         }
         const reading = deps.clock.now();
-        await deps.backend.refuseWhileClockBehind(tx, reading);
+        await deps.backend.refuseUntilRecordable(tx, reading);
         await deps.backend.refuseNewRefund(tx, cfg.nodeId);
 
         if ((await requireRefundableBill(tx, workingOrderId)) === "placed") {

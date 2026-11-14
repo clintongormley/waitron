@@ -307,28 +307,10 @@ describe("till-box-time-dialog", () => {
       ["close"],
     ],
     [
-      "a confirm's not_stopped",
-      { code: "clock.confirm_refused", reason: "not_stopped" },
-      "box_time.refused.not_stopped",
-      ["close"],
-    ],
-    [
       "not_start_up",
       { code: "clock.set_refused", reason: "not_start_up" },
       "box_time.refused.not_start_up",
       ["close", "admin"],
-    ],
-    [
-      "authority_pending",
-      { code: "clock.set_refused", reason: "authority_pending" },
-      "box_time.refused.authority_pending",
-      ["close", "check-again"],
-    ],
-    [
-      "witnessed",
-      { code: "clock.set_refused", reason: "witnessed" },
-      "box_time.refused.witnessed",
-      ["close"],
     ],
     [
       "synchronised",
@@ -361,12 +343,6 @@ describe("till-box-time-dialog", () => {
       ["close"],
     ],
     [
-      "contrary_proof",
-      { code: "clock.confirm_refused", reason: "contrary_proof" },
-      "box_time.refused.contrary_proof",
-      ["close"],
-    ],
-    [
       "a profile that no longer admits the person",
       { code: "device_profile.not_admitted" },
       "box_time.refused.not_admitted",
@@ -391,9 +367,9 @@ describe("till-box-time-dialog", () => {
       ["close", "check-again"],
     ],
     [
-      "pending_disproofs",
-      { code: "clock.set_refused", reason: "pending_disproofs" },
-      "box_time.refused.pending_disproofs",
+      "pending_step",
+      { code: "clock.set_refused", reason: "pending_step" },
+      "box_time.refused.pending_step",
       ["close", "check-again"],
     ],
     [
@@ -449,7 +425,7 @@ describe("till-box-time-dialog", () => {
 
   it("closes on Close after a refusal", async () => {
     const el = await open(
-      fakeApi(BOX_BEHIND, refusing({ code: "clock.set_refused", reason: "witnessed" })),
+      fakeApi(BOX_BEHIND, refusing({ code: "clock.set_refused", reason: "synchronised" })),
     );
     let closed = 0;
     el.addEventListener("box-time-close", () => closed++);

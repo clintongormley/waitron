@@ -27,7 +27,7 @@ import { pointerTo, toRegistroRow } from "./registro-row.js";
 import type { Entorno } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { refuseWhileClockBehind } from "./clock-behind.js";
+import { refuseUntilRecordable } from "./clock-behind.js";
 
 /**
  * Three, not one and not ten. One is not a retry. Ten converts a genuine duplicate — a real bug,
@@ -155,7 +155,7 @@ async function attemptAppend(
   sif: SifRegistration | undefined,
   history: readonly NodeId[] | undefined,
 ): Promise<{ id: string; secuencia: number; huella: string }> {
-  await refuseWhileClockBehind(tx, {
+  await refuseUntilRecordable(tx, {
     instant: registro.input.generadoEn,
     offsetMinutes: registro.input.offsetMinutes,
   });

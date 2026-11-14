@@ -23,7 +23,7 @@ export async function carryNewTenderRefund(
     openDrawer?: (refund: RefundRow) => Promise<void>;
   } = {},
 ): Promise<RefundRow> {
-  await deps.backend.refuseWhileClockBehind(tx, reading);
+  await deps.backend.refuseUntilRecordable(tx, reading);
   await deps.backend.refuseNewRefund(tx, nodeId);
   await steps.beforeCompletion?.(refund);
   if (refund.method === "cash" || refund.manual) {

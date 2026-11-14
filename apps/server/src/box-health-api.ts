@@ -1,14 +1,8 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { readVenue, withTransaction, type Database, type Transaction } from "@waitron/db";
-import type {
-  BootReading,
-  ClockWitness,
-  FiscalBackend,
-  MisdatedRecord,
-  TrustedClock,
-} from "@waitron/fiscal";
-// The registry of `clock.confirm_refused` and `clock.check_expired`, which this file throws.
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+// The registry of `clock.check_expired`, which this file throws.
 import "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import {
@@ -16,22 +10,13 @@ import {
   readRawJsonBody,
   requireManagementSession,
 } from "@waitron/server-kit";
-import { AppError, diskFullIn, isUuid } from "@waitron/shared";
+import { AppError, diskFullIn } from "@waitron/shared";
 import type { ClockSetRefusal, clockCorrection } from "./clock-correction.js";
-import {
-  displayNameOf,
-  readMisdatedEpisode,
-  readMisdatedHandled,
-  readMisdatedOpen,
-  type BoxHealth,
-} from "./box-health.js";
+import { displayNameOf, type BoxHealth } from "./box-health.js";
 import { clockChallenges } from "./clock-challenges.js";
-import { clockUnusableAt } from "./clock-unusable.js";
 import "./errors.js";
 import type { FreedSpace } from "./free-space-now.js";
-import { invoiceNumberParts } from "./invoice-number-parts.js";
 import type { Logger } from "./logger.js";
-import { misdatedSalesFileName, renderMisdatedSalesCsv } from "./misdated-sales-csv.js";
 import { requestFromBox } from "./request-from-box.js";
 import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 
@@ -41,23 +26,16 @@ export interface BoxHealthApiDeps {
   freeSpace: (personId: string) => Promise<FreedSpace>;
   /** Stops this server process; Docker starts it again. */
   restart: () => void;
-  venue: { language: "en" | "es" };
-  /** A seat that cannot confirm a clock stop has no confirmation routes. */
-  clockConfirm: {
+  /** With a correction and a seat that records a step, mounts `POST /api/box/clock-challenge` and
+   * `POST /api/box/clock-set`. */
+  clockSet: {
     backend: FiscalBackend;
-    witnesses: () => readonly ClockWitness[];
-    /** Empties the witness store once a confirmation has committed. */
-    clearWitnesses: () => void;
     clock: TrustedClock;
-    nodeId: string;
     /** Times each challenge; never stepped by a change of the wall clock. */
     steady: () => number;
-    readBoot: () => BootReading;
     requestFromBox?: (c: Context) => boolean;
     devMode: boolean;
-    /** With a seat that records a step, mounts `POST /api/box/clock-set`; the confirmation takes
-     * its one-at-a-time turn. */
-    correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "set" | "steps">;
+    correction?: Pick<ReturnType<typeof clockCorrection>, "set" | "steps">;
   };
 }
 
@@ -66,7 +44,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.expired": 401,
   "person.suspended": 403,
   "authorization.not_permitted": 403,
-  "clock.confirm_refused": 409,
   "clock.check_expired": 400,
   "clock.set_refused": 409,
   "clock.set_failed": 502,
@@ -101,7 +78,7 @@ async function authorizeOnAnyDisk(
 /** Dates beyond this are not times `Date` can hold. */
 const LATEST_DATE_MS = 8.64e15;
 
-export function confirmBody(body: unknown): { challengeId: string; deviceAt: number } {
+export function clockSetBody(body: unknown): { challengeId: string; deviceAt: number } {
   const fields =
     typeof body === "object" && body !== null && !Array.isArray(body)
       ? (body as { challengeId?: unknown; deviceAt?: unknown })
@@ -116,15 +93,6 @@ export function confirmBody(body: unknown): { challengeId: string; deviceAt: num
   )
     throw new AppError("management.request_invalid", { field: "deviceAt" });
   return { challengeId, deviceAt };
-}
-
-function listRecord(record: MisdatedRecord) {
-  return {
-    recordId: record.recordId,
-    ...invoiceNumberParts(record.invoiceNumber),
-    at: record.generatedAt,
-    offsetMinutes: record.offsetMinutes,
-  };
 }
 
 export async function requiredNameOf(tx: Transaction, personId: string): Promise<string> {
@@ -159,206 +127,51 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       return c.json({}, 202);
     }),
   );
-  const clockConfirm = deps.clockConfirm;
-  const misdatedRecords = clockConfirm.backend.misdatedRecords?.bind(clockConfirm.backend);
-  if (misdatedRecords !== undefined) {
-    const misdatedRun = createErrorBoundary(STATUS, "box-clock-misdated.failed");
-    // Each open alert's list, from the values its closing stored; one that cannot tell lists none.
-    app.get("/api/box/clock-misdated", (c) =>
-      misdatedRun(c, log, async () => {
-        await authorizeSystemManager(deps.db, c);
-        // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses.
-        const lists = await deps.db.withWriteLock(async () => {
-          const found = [];
-          for (const { confirmationId } of await readMisdatedOpen(deps.db)) {
-            const answer = await misdatedRecords(deps.db, confirmationId);
-            if (answer === null) {
-              log("warn", "box-clock-misdated.unknown_confirmation", { confirmationId });
-              continue;
-            }
-            if (!answer.known) continue;
-            found.push({
-              confirmationId,
-              records: answer.records.map(listRecord),
-            });
-          }
-          return found;
-        });
-        return c.json({ lists }, 200);
-      }),
-    );
-    // Every handled alert, newest first, with its list; one that cannot tell has none.
-    app.get("/api/box/clock-misdated/handled", (c) =>
-      misdatedRun(c, log, async () => {
-        await authorizeSystemManager(deps.db, c);
-        // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses.
-        const episodes = await deps.db.withWriteLock(async () => {
-          const found = [];
-          for (const episode of await readMisdatedHandled(deps.db)) {
-            const answer = await misdatedRecords(deps.db, episode.confirmationId);
-            if (answer === null)
-              log("warn", "box-clock-misdated.unknown_confirmation", {
-                confirmationId: episode.confirmationId,
-              });
-            found.push({
-              ...episode,
-              records: answer?.known === true ? answer.records.map(listRecord) : null,
-            });
-          }
-          return found;
-        });
-        return c.json({ episodes }, 200);
-      }),
-    );
-  }
-  const misdatedDetail = clockConfirm.backend.misdatedDetail?.bind(clockConfirm.backend);
-  if (misdatedDetail !== undefined) {
-    const downloadRun = createErrorBoundary(STATUS, "box-clock-misdated-download.failed");
-    // One alert's list as a spreadsheet file, open or handled; one that cannot tell has none.
-    app.get("/api/box/clock-misdated/:incidentId/download", (c) =>
-      downloadRun(c, log, async () => {
-        await authorizeSystemManager(deps.db, c);
-        const id = c.req.param("incidentId");
-        // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses.
-        const found = await deps.db.withWriteLock(async () => {
-          const episode = isUuid(id) ? await readMisdatedEpisode(deps.db, id) : null;
-          if (episode === null) return null;
-          const detail = await misdatedDetail(deps.db, episode.confirmationId);
-          if (detail === null) {
-            log("warn", "box-clock-misdated.unknown_confirmation", {
-              confirmationId: episode.confirmationId,
-            });
-            return null;
-          }
-          if (!detail.known) return null;
-          const venue = await readVenue(deps.db);
-          const personId = detail.closing.personId;
-          const confirmedByName = personId === null ? null : await displayNameOf(deps.db, personId);
-          return { episode, detail, venue: venue.name, confirmedByName };
-        });
-        if (found === null) throw new AppError("alert.not_found", { id });
-        const { episode, detail } = found;
-        const bytes = renderMisdatedSalesCsv({
-          venue: found.venue,
-          language: deps.venue.language,
-          confirmedByName: found.confirmedByName,
-          // A closing that lists sales always stores where its list ends.
-          episode: {
-            from: episode.from,
-            fromOffsetMinutes: episode.fromOffsetMinutes,
-            to: episode.to!,
-            toOffsetMinutes: episode.toOffsetMinutes!,
-          },
-          detail,
-        });
-        c.header("Content-Type", "text/csv; charset=utf-8");
-        c.header("Content-Disposition", `attachment; filename="${misdatedSalesFileName(episode)}"`);
-        c.header("Cache-Control", "no-store");
-        c.header("X-Content-Type-Options", "nosniff");
-        return c.body(Uint8Array.from(bytes));
-      }),
-    );
-  }
-  const confirmClockStop = clockConfirm.backend.confirmClockStop?.bind(clockConfirm.backend);
-  if (confirmClockStop === undefined) return;
+  const clockSet = deps.clockSet;
+  const correction = clockSet.correction;
+  const backend = clockSet.backend;
+  if (correction === undefined || backend.confirmClockStep === undefined) return;
   const challenges = clockChallenges({
-    steady: clockConfirm.steady,
-    wall: () => clockConfirm.clock.now().instant.getTime(),
+    steady: clockSet.steady,
+    wall: () => clockSet.clock.now().instant.getTime(),
   });
-  // An administrator confirms or sets the box's clock against a clock that is not the box's.
-  const refuseOnTheBox = (c: Context, code: "clock.confirm_refused" | "clock.set_refused") => {
-    if (!clockConfirm.devMode && (clockConfirm.requestFromBox ?? requestFromBox)(c))
-      throw new AppError(code, { reason: "same_machine" });
+  // An administrator sets the box's clock against a clock that is not the box's.
+  const refuseOnTheBox = (c: Context) => {
+    if (!clockSet.devMode && (clockSet.requestFromBox ?? requestFromBox)(c))
+      throw new AppError("clock.set_refused", { reason: "same_machine" });
   };
   const authorizeAdmin = (tx: Transaction, sessionId: string) =>
     authorizeManager(tx, { managementSessionId: sessionId, permission: "system.box_admin" });
   const challengeRun = createErrorBoundary(STATUS, "box-clock-challenge.failed");
   app.post("/api/box/clock-challenge", (c) =>
     challengeRun(c, log, async () => {
-      refuseOnTheBox(c, "clock.confirm_refused");
+      refuseOnTheBox(c);
       const sessionId = requireManagementSession(c);
       await withTransaction(deps.db, (tx) => authorizeAdmin(tx, sessionId));
       const { challengeId, boxAt } = challenges.issue(sessionId);
       return c.json({ challengeId, boxAt: new Date(boxAt).toISOString() }, 200);
     }),
   );
-  const correction = clockConfirm.correction;
-  // Taken around the whole transaction, never inside it: a set in the turn waits for the write
-  // lock a transaction holds.
-  const inTurn = correction?.inTurn ?? (<T>(fn: () => Promise<T>) => fn());
-  const confirmRun = createErrorBoundary(STATUS, "box-clock-confirm.failed");
-  app.post("/api/box/clock-confirm", (c) =>
-    confirmRun(c, log, async () => {
-      refuseOnTheBox(c, "clock.confirm_refused");
-      const sessionId = requireManagementSession(c);
-      const { challengeId, deviceAt } = confirmBody(await readRawJsonBody<unknown>(c));
-      const confirmation = await inTurn(() =>
-        withTransaction(deps.db, async (tx) => {
-          const { authorizedBy } = await authorizeAdmin(tx, sessionId);
-          // Before the reading: a witness noted after it would be left out as taken after it.
-          const witnesses = clockConfirm.witnesses();
-          const { instant, offsetMinutes } = clockConfirm.clock.now();
-          // Taken at the reading, so the round trip ends there on the steady clock.
-          const challenge = challenges.take(sessionId, challengeId);
-          if (challenge === null) throw new AppError("clock.check_expired", {});
-          const personName = await requiredNameOf(tx, authorizedBy);
-          // The device read its clock somewhere in the round trip: the box's time is taken at its
-          // midpoint, give or take half of it, counted back from this reading rather than from the
-          // challenge's, so a step of the box's clock since the challenge is compared too.
-          const halfMs = challenge.elapsedMs / 2;
-          const answer = await confirmClockStop(tx, {
-            reading: { instant, offsetMinutes },
-            boot: clockConfirm.readBoot(),
-            witnesses,
-            nodeId: clockConfirm.nodeId,
-            admin: {
-              personId: authorizedBy,
-              personName,
-              reading: {
-                boxAt: new Date(Math.round(instant.getTime() - halfMs)).toISOString(),
-                witnessAt: new Date(deviceAt).toISOString(),
-                uncertaintyMs: Math.ceil(halfMs),
-              },
-            },
-          });
-          if (answer.confirmation === null)
-            throw new AppError("clock.confirm_refused", { reason: "not_stopped" });
-          return answer.confirmation;
-        }),
-      );
-      clockConfirm.clearWitnesses();
-      return c.json(
-        {
-          confirmationId: confirmation.id,
-          source: confirmation.source,
-          confirmedAt: confirmation.confirmedAt,
-        },
-        200,
-      );
-    }),
-  );
-  if (correction === undefined || clockConfirm.backend.confirmClockStep === undefined) return;
-  const backend = clockConfirm.backend;
   const setRun = createErrorBoundary(STATUS, "box-clock-set.failed");
   app.post("/api/box/clock-set", (c) =>
     setRun(c, log, async () => {
-      refuseOnTheBox(c, "clock.set_refused");
+      refuseOnTheBox(c);
       const sessionId = requireManagementSession(c);
       const { authorizedBy, personName } = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeAdmin(tx, sessionId);
         return { authorizedBy, personName: await requiredNameOf(tx, authorizedBy) };
       });
-      const { challengeId, deviceAt } = confirmBody(await readRawJsonBody<unknown>(c));
+      const { challengeId, deviceAt } = clockSetBody(await readRawJsonBody<unknown>(c));
       const stepsSeen = correction.steps();
-      const reading = clockConfirm.clock.now();
-      const steadyMs = clockConfirm.steady();
+      const reading = clockSet.clock.now();
+      const steadyMs = clockSet.steady();
       const challenge = challenges.take(sessionId, challengeId);
       if (challenge === null) throw new AppError("clock.check_expired", {});
       // The device read its clock at the round trip's midpoint, give or take half of it.
       const halfMs = challenge.elapsedMs / 2;
       const boxAtMs = reading.instant.getTime() - halfMs;
       const answer = await correction.set({
-        reason: clockUnusableAt(backend, reading) ? "unusable" : "behind_chain",
+        reason: "unusable",
         source: "admin",
         offsetMs: Math.round(deviceAt - boxAtMs),
         measuredAt: { wallMs: boxAtMs, monoMs: steadyMs - halfMs },
@@ -393,7 +206,7 @@ function setRefusal(reason: ClockSetRefusal): Error {
   if (reason === "refused" || reason === "unverified")
     return new AppError("clock.set_failed", { reason });
   // Only a till's admission check answers these, and an administrator's set passes none.
-  if (reason === "not_admitted" || reason === "not_start_up" || reason === "authority_pending")
+  if (reason === "not_admitted" || reason === "not_start_up")
     return new Error(`an administrator's set was refused ${reason}`);
   return new AppError("clock.set_refused", { reason });
 }

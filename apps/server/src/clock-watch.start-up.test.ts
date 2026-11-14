@@ -1,15 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type {
-  AuthorityTimeSample,
-  BootReading,
-  ClockConfirmation,
-  ClockStopState,
-  ClockWitness,
-} from "@waitron/fiscal";
 import type { Transaction } from "@waitron/db";
 import type { ClockServiceStatus } from "./box-host-client.js";
 import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
-import { clockStartUp, type ClockStartUp } from "./clock-start-up.js";
+import type { ClockStartUp } from "./clock-start-up.js";
 import { sharedClockServiceReading } from "./clock-service-reading.js";
 import { CLOCK_WATCH_MS, createClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
@@ -18,60 +11,11 @@ import { startClockState, type StartClockState } from "./start-clock-check.js";
 const TX = { fake: "tx" } as unknown as Transaction;
 const START_MS = Date.parse("2026-10-31T10:00:00.000Z");
 const FIRST_ISSUE_MS = Date.parse("2024-10-28T00:00:00.000Z");
-const BOOT: BootReading = { ms: 9_000_000, id: "boot-start-up-test" };
-
-const STOPPED: ClockStopState = {
-  clockAt: "2026-10-31T10:00:00.000Z",
-  offsetMinutes: 60,
-  lastRecordAt: "2026-10-31T11:00:00.000Z",
-  lastRecordOffsetMinutes: 60,
-  recordId: "record-1",
-  gapMs: 3_600_000,
-  proof: "none",
-  agreeing: { authority: null, devices: [] },
-  contrary: { authority: null, devices: [] },
-  confirmation: null,
-};
-
-function device(id: string, address: string): ClockWitness {
-  return {
-    kind: "device",
-    id,
-    address,
-    boxAt: "2026-10-31T10:00:00.000Z",
-    witnessAt: "2026-10-31T10:00:01.000Z",
-    uncertaintyMs: 100,
-  };
-}
-
-const AUTHORITY: ClockWitness = {
-  kind: "authority",
-  id: "authority",
-  boxAt: "2026-10-31T10:00:00.000Z",
-  witnessAt: "2026-10-31T10:00:00.500Z",
-  uncertaintyMs: 100,
-};
-
-const DEVICES_READY: ClockStopState = {
-  ...STOPPED,
-  proof: "ready",
-  agreeing: {
-    authority: null,
-    devices: [device("till-1", "10.0.0.2"), device("till-2", "10.0.0.3")],
-  },
-};
-
-const AUTHORITY_READY: ClockStopState = {
-  ...DEVICES_READY,
-  agreeing: { ...DEVICES_READY.agreeing, authority: AUTHORITY },
-};
 
 function harness(
   options: {
-    stop?: ClockStopState | null;
     startMs?: number;
-    startUp?: Pick<ClockStartUp, "open" | "noStop" | "authorityAsked"> | null;
-    sample?: AuthorityTimeSample | null;
+    startUp?: Pick<ClockStartUp, "open" | "noStop"> | null;
     /** The host's clock service, read through the shared one-minute reading boot uses. */
     host?: () => Promise<ClockServiceStatus>;
     startState?: StartClockState;
@@ -80,30 +24,10 @@ function harness(
 ) {
   let wallMs = options.startMs ?? START_MS;
   let monoMs = 1_000;
-  const state = { stop: options.stop === undefined ? STOPPED : options.stop };
-  const sample: AuthorityTimeSample | null =
-    options.sample === undefined
-      ? { authorityMs: wallMs, uncertaintyMs: 100, at: { wallMs, monoMs } }
-      : options.sample;
   const backend = {
-    clockStopState: vi.fn(async () => state.stop),
-    readAuthorityTime: vi.fn(async () => sample),
     assertRecordableAt: vi.fn((reading: { instant: Date }) => {
       if (reading.instant.getTime() < FIRST_ISSUE_MS) throw new Error("fiscal.before_first");
     }),
-    noteClockProvedWrong: vi.fn(async () => ({ recorded: [], unused: [], held: [] })),
-    openClockCheck: vi.fn(async () => ({ id: "check-1" })),
-    confirmClockStop: vi.fn(async (): Promise<{ confirmation: ClockConfirmation | null }> => ({
-      confirmation: {
-        id: "confirmation-1",
-        seq: 1,
-        source: state.stop?.agreeing.authority === null ? "devices" : "authority",
-        personId: null,
-        confirmedAt: "2026-10-31T10:00:15.000Z",
-        checkId: "check-1",
-        recordId: "record-1",
-      },
-    })),
   };
   const startUp =
     options.startUp === null
@@ -128,14 +52,7 @@ function harness(
     backend: backend as unknown as Parameters<typeof createClockWatch>[0]["backend"],
     store,
     clock: { now: () => ({ instant: new Date(wallMs), offsetMinutes: 60 }) as never },
-    wall: () => wallMs,
-    monotonic: () => monoMs,
-    boot: { readBoot: () => ({ ...BOOT }), elapsed: () => monoMs },
-    nodeId: "node-1",
     read: (async (fn: (tx: Transaction) => Promise<unknown>) => fn(TX)) as never,
-    transaction: transaction as never,
-    filesRecords: () => true,
-    isPrimary: () => true,
     log: (_level, event, fields) => logs.push({ event, fields }),
     ...(startUp === undefined ? {} : { startUp }),
     ...(clockStatus === undefined ? {} : { start: { state: startState, clockStatus, heads } }),
@@ -154,7 +71,6 @@ function harness(
 
   return {
     backend,
-    state,
     startUp,
     logs,
     tick,
@@ -168,85 +84,6 @@ function harness(
   };
 }
 
-describe("the clock watch and the start-up window", () => {
-  it("closes the window on a look that finds no stop at a recordable reading", async () => {
-    const h = harness({ stop: null });
-    await h.tick();
-    expect(h.startUp!.noStop).toHaveBeenCalledTimes(1);
-  });
-
-  it("closes the window on a look whose stop a confirmation covers", async () => {
-    const h = harness({ stop: { ...STOPPED, proof: "confirmed" } });
-    await h.tick();
-    expect(h.startUp!.noStop).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps the window open on a look at a reading no record could carry", async () => {
-    const h = harness({ stop: null, startMs: Date.parse("2001-01-01T00:00:00.000Z") });
-    await h.tick();
-    expect(h.startUp!.noStop).not.toHaveBeenCalled();
-  });
-
-  it("keeps the window open on a look during the stop proper", async () => {
-    const h = harness();
-    await h.tick();
-    expect(h.backend.clockStopState).toHaveBeenCalledTimes(1);
-    expect(h.startUp!.noStop).not.toHaveBeenCalled();
-  });
-
-  it("tells the window AEAT did not answer when its ask answers nothing", async () => {
-    const h = harness({ sample: null });
-    await h.tick();
-    expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1);
-    expect(h.startUp!.authorityAsked).toHaveBeenCalledExactlyOnceWith(false);
-  });
-
-  it("tells the window AEAT answered when its ask answers a sample", async () => {
-    const h = harness();
-    await h.tick();
-    expect(h.startUp!.authorityAsked).toHaveBeenCalledExactlyOnceWith(true);
-  });
-
-  it("does not confirm on two agreeing devices alone while the window is open", async () => {
-    const h = harness({ stop: DEVICES_READY });
-    await h.tick();
-    expect(h.backend.openClockCheck).toHaveBeenCalledTimes(1);
-    expect(h.backend.confirmClockStop).not.toHaveBeenCalled();
-  });
-
-  it("confirms while the window is open when AEAT is among the agreeing witnesses", async () => {
-    const h = harness({ stop: AUTHORITY_READY });
-    await h.tick();
-    expect(h.backend.confirmClockStop).toHaveBeenCalledTimes(1);
-    expect(h.logs).toContainEqual({
-      event: "clock_watch.confirmed",
-      fields: { confirmationId: "confirmation-1", source: "authority" },
-    });
-  });
-
-  it("confirms on two agreeing devices once the window has closed", async () => {
-    const h = harness({ stop: null, startUp: clockStartUp({ primaryAtStart: true }) });
-    await h.tick();
-    h.state.stop = DEVICES_READY;
-    await h.tick();
-    expect(h.backend.confirmClockStop).toHaveBeenCalledTimes(1);
-    expect(h.logs).toContainEqual({
-      event: "clock_watch.confirmed",
-      fields: { confirmationId: "confirmation-1", source: "devices" },
-    });
-  });
-
-  it("confirms on two agreeing devices with no window, as before", async () => {
-    const h = harness({ stop: DEVICES_READY, startUp: null });
-    await h.tick();
-    expect(h.backend.confirmClockStop).toHaveBeenCalledTimes(1);
-    expect(h.logs).toContainEqual({
-      event: "clock_watch.confirmed",
-      fields: { confirmationId: "confirmation-1", source: "devices" },
-    });
-  });
-});
-
 const NOT_SYNCHRONISED = clockServiceAnswer(false);
 const SYNCHRONISED = clockServiceAnswer(true);
 
@@ -256,7 +93,7 @@ function startLogs(h: { logs: { event: string; fields: unknown }[] }) {
 
 describe("the clock watch and the start check", () => {
   it("reads the time service at each waiting look, starting one host read for four looks 15 s apart and a second a minute after the first", async () => {
-    const h = harness({ stop: null, host: async () => NOT_SYNCHRONISED });
+    const h = harness({ host: async () => NOT_SYNCHRONISED });
     for (let look = 0; look < 4; look++) await h.tick();
     expect(h.clockStatus).toHaveBeenCalledTimes(4);
     expect(h.host).toHaveBeenCalledTimes(1);
@@ -267,7 +104,7 @@ describe("the clock watch and the start check", () => {
 
   it("is confirmed by the internet at the next look once the time service synchronises", async () => {
     let answer = NOT_SYNCHRONISED;
-    const h = harness({ stop: null, host: async () => answer });
+    const h = harness({ host: async () => answer });
     await h.tick();
     expect(h.startState.status).toBe("waiting");
     answer = SYNCHRONISED;
@@ -287,7 +124,7 @@ describe("the clock watch and the start check", () => {
   });
 
   it("reads no chain heads while no devices agree, and is confirmed by two noted between looks, writing no row", async () => {
-    const h = harness({ stop: null, host: async () => NOT_SYNCHRONISED });
+    const h = harness({ host: async () => NOT_SYNCHRONISED });
     await h.tick();
     expect(h.startState.status).toBe("waiting");
     expect(h.heads).not.toHaveBeenCalled();
@@ -297,7 +134,6 @@ describe("the clock watch and the start check", () => {
     expect(h.startState.status).toBe("by_devices");
     expect(h.startState.mark).toEqual({ "node-1": 7 });
     expect(h.transaction).not.toHaveBeenCalled();
-    expect(h.backend.confirmClockStop).not.toHaveBeenCalled();
     expect(startLogs(h)).toEqual([
       {
         event: "clock_start.confirmed",
@@ -313,7 +149,6 @@ describe("the clock watch and the start check", () => {
 
   it("still runs the rest of the look when the chain heads cannot be read", async () => {
     const h = harness({
-      stop: null,
       host: async () => NOT_SYNCHRONISED,
       heads: async () => {
         throw new Error("read failed");
@@ -333,7 +168,7 @@ describe("the clock watch and the start check", () => {
   it("asks nothing for the start check once confirmed by the internet", async () => {
     const startState = startClockState();
     startState.confirm("by_internet", {});
-    const h = harness({ stop: null, host: async () => NOT_SYNCHRONISED, startState });
+    const h = harness({ host: async () => NOT_SYNCHRONISED, startState });
     h.noteDevice("till-1", "10.0.0.2", 3_000);
     h.noteDevice("till-2", "10.0.0.3", 4_000);
     await h.tick();
@@ -341,17 +176,5 @@ describe("the clock watch and the start check", () => {
     expect(h.clockStatus).not.toHaveBeenCalled();
     expect(h.heads).not.toHaveBeenCalled();
     expect(startLogs(h)).toEqual([]);
-  });
-
-  it("asks AEAT on no start-check look, where a look during a stop asks it", async () => {
-    const h = harness({ stop: null, host: async () => NOT_SYNCHRONISED });
-    for (let look = 0; look < 3; look++) await h.tick();
-    expect(h.clockStatus).toHaveBeenCalledTimes(3);
-    expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
-
-    // Control: the same harness with a stop holding asks AEAT at its look.
-    const stopped = harness({ host: async () => NOT_SYNCHRONISED });
-    await stopped.tick();
-    expect(stopped.backend.readAuthorityTime).toHaveBeenCalledTimes(1);
   });
 });

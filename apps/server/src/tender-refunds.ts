@@ -92,7 +92,7 @@ export async function beginSettledTenderRefund(
       );
       if (begun.replayed) {
         if (begun.refund.state === "pending") {
-          await deps.backend.refuseWhileClockBehind(tx, reading);
+          await deps.backend.refuseUntilRecordable(tx, reading);
           await deps.backend.refuseNewRefund(tx, cfg.nodeId);
         }
         return toTenderRefundView(begun.refund);

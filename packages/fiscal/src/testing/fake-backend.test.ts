@@ -43,7 +43,7 @@ describe("assertRecordableAt", () => {
   });
 });
 
-describe("clockBehindLatestRecord and refuseWhileClockBehind", () => {
+describe("refuseUntilRecordable", () => {
   it("never stop a clock, even one a year before a recorded sale or before the first date", () => {
     const fake: FiscalBackend = backend;
     return suite.db.transaction(async (tx) => {
@@ -53,8 +53,7 @@ describe("clockBehindLatestRecord and refuseWhileClockBehind", () => {
         { instant: new Date("2026-03-14T10:00:00.000Z"), offsetMinutes: 60 },
         { instant: new Date("2001-01-01T11:00:00.000Z"), offsetMinutes: 60 },
       ]) {
-        expect(await fake.clockBehindLatestRecord(tx, reading)).toBeNull();
-        await expect(fake.refuseWhileClockBehind(tx, reading)).resolves.toBeUndefined();
+        await expect(fake.refuseUntilRecordable(tx, reading)).resolves.toBeUndefined();
       }
     });
   });
@@ -63,17 +62,9 @@ describe("clockBehindLatestRecord and refuseWhileClockBehind", () => {
 describe("the clock-stop methods", () => {
   it("is absent: the fake never stops a clock", () => {
     const fake: FiscalBackend = backend;
-    expect(fake.clockStopState).toBeUndefined();
     expect("restartAfterClockStop" in fake).toBe(false);
-    expect(fake.confirmClockStop).toBeUndefined();
     expect(fake.confirmClockStep).toBeUndefined();
     expect(fake.latestClockStep).toBeUndefined();
-    expect(fake.openClockCheck).toBeUndefined();
-    expect(fake.closeClockCheckByItself).toBeUndefined();
-    expect(fake.waitingClockCheck).toBeUndefined();
-    expect(fake.misdatedRecords).toBeUndefined();
-    expect(fake.misdatedDetail).toBeUndefined();
-    expect(fake.noteClockProvedWrong).toBeUndefined();
   });
 });
 

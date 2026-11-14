@@ -1,13 +1,7 @@
 import { createFreshSignInGate } from "./fresh-sign-in.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchLike } from "@waitron/dashboard-kit";
-import {
-  DashboardApi,
-  type ClockConfirmView,
-  type ClockSetView,
-  type ClockMisdatedHandledView,
-  type ClockMisdatedView,
-} from "./client.js";
+import { DashboardApi, type ClockSetView } from "./client.js";
 import type { DepartmentReceiptWrite } from "@waitron/shared";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -3093,133 +3087,24 @@ it("reads the box's health and frees its disk through the box routes", async () 
   ]);
 });
 
-it("reads the wrongly dated sales' lists, a record's number possibly missing", async () => {
-  const lists = {
-    lists: [
-      {
-        confirmationId: "c1",
-        records: [
-          {
-            recordId: "r1",
-            series: "T1",
-            number: 7,
-            at: "2026-10-22T19:00:00.000Z",
-            offsetMinutes: 120,
-          },
-          {
-            recordId: "r2",
-            series: "ODD",
-            number: null,
-            at: "2026-10-22T19:05:00.000Z",
-            offsetMinutes: 120,
-          },
-        ],
-      },
-    ],
-  } satisfies ClockMisdatedView;
-  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(lists));
-  const api = new DashboardApi("", fetchImpl);
-  expect(await api.clockMisdated()).toEqual(lists);
-  const [url, init] = fetchImpl.mock.calls[0]! as [string, RequestInit];
-  expect([url, init.method]).toEqual(["/api/box/clock-misdated", "GET"]);
-});
-
-it("marks an alert handled with a note only when one is given, and adds a note later", async () => {
+it("marks an alert handled with no body", async () => {
   const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
   const api = new DashboardApi("", fetchImpl);
-  await api.markIncidentHandled("a b", "Sent to the adviser");
   await api.markIncidentHandled("a b");
-  await api.addIncidentNote("a b", "Adviser filed the correction");
   const calls = fetchImpl.mock.calls as [string, RequestInit][];
   expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
-    ["/management-api/alerts/incidents/a%20b/handled", "POST", '{"note":"Sent to the adviser"}'],
     ["/management-api/alerts/incidents/a%20b/handled", "POST", undefined],
-    [
-      "/management-api/alerts/incidents/a%20b/note",
-      "POST",
-      '{"note":"Adviser filed the correction"}',
-    ],
   ]);
 });
 
-it("reads the handled wrongly dated sales' lists", async () => {
-  const handled = {
-    episodes: [
-      {
-        incidentId: "i1",
-        confirmationId: "c1",
-        count: 1,
-        from: "2026-10-22T19:00:00.000Z",
-        fromOffsetMinutes: 120,
-        partial: false,
-        unconfirmed: false,
-        handledAt: "2026-10-23T09:00:00.000Z",
-        handledBy: { kind: "person", name: "Mario" },
-        note: "Sent to the adviser",
-        records: [
-          {
-            recordId: "r1",
-            series: "T1",
-            number: 7,
-            at: "2026-10-22T19:00:00.000Z",
-            offsetMinutes: 120,
-          },
-        ],
-      },
-      {
-        incidentId: "i2",
-        confirmationId: "c2",
-        count: 0,
-        from: "2026-10-21T19:00:00.000Z",
-        fromOffsetMinutes: 120,
-        partial: false,
-        unconfirmed: true,
-        handledAt: "2026-10-22T09:00:00.000Z",
-        handledBy: { kind: "box" },
-        note: null,
-        records: null,
-      },
-    ],
-  } satisfies ClockMisdatedHandledView;
-  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(handled));
-  const api = new DashboardApi("", fetchImpl);
-  expect(await api.clockMisdatedHandled()).toEqual(handled);
-  const [url, init] = fetchImpl.mock.calls[0]! as [string, RequestInit];
-  expect([url, init.method]).toEqual(["/api/box/clock-misdated/handled", "GET"]);
-});
-
-it("downloads one wrongly dated sales list as a file, its alert id encoded", async () => {
-  const fetchImpl = vi
-    .fn()
-    .mockResolvedValue(new Response(new Blob(["sales"], { type: "text/csv" }), { status: 200 }));
-  const api = new DashboardApi("", fetchImpl);
-  const file = await api.downloadMisdatedSales("a/b");
-  expect(file).toBeInstanceOf(Blob);
-  expect(await file.text()).toBe("sales");
-  const [url, init] = fetchImpl.mock.calls[0]! as [string, RequestInit];
-  expect([url, init.method]).toEqual(["/api/box/clock-misdated/a%2Fb/download", "GET"]);
-});
-
-it("asks the box for a clock challenge and answers it with this device's time", async () => {
+it("asks the box for a clock challenge", async () => {
   const challenge = { challengeId: "ch-1", boxAt: "2026-10-22T18:10:00.000Z" };
-  const confirmed = {
-    confirmationId: "c-1",
-    source: "admin",
-    confirmedAt: "2026-10-22T18:10:02.000Z",
-  } satisfies ClockConfirmView;
-  const fetchImpl = vi
-    .fn()
-    .mockResolvedValueOnce(jsonResponse(challenge))
-    .mockResolvedValueOnce(jsonResponse(confirmed));
+  const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(challenge));
   const api = new DashboardApi("", fetchImpl);
   expect(await api.clockChallenge()).toEqual(challenge);
-  expect(await api.clockConfirm({ challengeId: "ch-1", deviceAt: 1_761_156_601_000 })).toEqual(
-    confirmed,
-  );
   const calls = fetchImpl.mock.calls as [string, RequestInit][];
   expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
     ["/api/box/clock-challenge", "POST", "{}"],
-    ["/api/box/clock-confirm", "POST", '{"challengeId":"ch-1","deviceAt":1761156601000}'],
   ]);
 });
 
@@ -3276,23 +3161,6 @@ it("rejects a refused clock set with its code and reason", async () => {
   await expect(api.clockSet({ challengeId: "ch-1", deviceAt: 1 })).rejects.toMatchObject({
     code: "clock.set_refused",
     params: { reason: "synchronised" },
-  });
-});
-
-it("rejects a refused clock confirmation with its code and reason", async () => {
-  const fetchImpl = vi
-    .fn()
-    .mockResolvedValue(
-      jsonResponse(
-        { error: { code: "clock.confirm_refused", params: { reason: "differs" } } },
-        false,
-        409,
-      ),
-    );
-  const api = new DashboardApi("", fetchImpl);
-  await expect(api.clockConfirm({ challengeId: "ch-1", deviceAt: 1 })).rejects.toMatchObject({
-    code: "clock.confirm_refused",
-    params: { reason: "differs" },
   });
 });
 

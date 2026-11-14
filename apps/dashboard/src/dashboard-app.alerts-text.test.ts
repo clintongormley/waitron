@@ -33,13 +33,14 @@ const refusals: AlertView = {
   area: "fiscal",
 };
 const clock: AlertView = {
-  key: "incident:c1",
-  kind: "event",
-  code: "clock.behind_chain",
-  params: { clockAt: "2026-11-14T08:05:00.000Z", lastRecordAt: "2026-11-14T09:40:00.000Z" },
-  severity: "error",
-  since: "2026-11-14T08:05:00.000Z",
-  area: "fiscal",
+  key: "clock.disagrees",
+  kind: "ongoing",
+  code: "clock.disagrees",
+  params: { count: 2, deviceAt: "2026-11-14T09:40:00.000Z", boxAt: "2026-11-14T08:05:00.000Z" },
+  severity: "warning",
+  since: null,
+  area: "box",
+  screen: "box-status",
 };
 
 const initialUrl = location.href;

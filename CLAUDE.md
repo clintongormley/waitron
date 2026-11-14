@@ -951,7 +951,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   matter how much the clock changes"); a time a person confirms or sets from their own device is
   never compared with the latest record (owner, 2026-11-11 14:34: "if somebody has confirmed the
   time on their device, then we trust that time and move forward"). After replay, call the seat's
-  `refuseWhileClockBehind` (by then: waiting, or before 28-10-2024) before reader/refund/drawer
+  `refuseUntilRecordable` (by then: waiting, or before 28-10-2024) before reader/refund/drawer
   work; pause both refund recovery loops while waiting. Recheck card-refund send/outcome in their
   dating transaction after provider waits, against the same check. Still store money already
   moved. Guards: `packages/fiscal-verifactu/src/chain.earlier-time.test.ts` and
@@ -959,15 +959,17 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   only, and the gate covers the money routes `clock-unconfirmed-gate.test.ts` lists. **The box's
   internet time service keeps its clock; Waitron sets it only through the host service, from a till's
   time (a staff member's while the start waits for its time, or during a stop until the internet
-  confirms that start or during start-up; a Box administration holder's at any time), a Box
-  administration holder's own device, the device showing the clock step of the setup page (under its
-  owner's pass), the restore page (under its recovery key or kit) or the handover page (signed in as
-  a `node.manage` holder), when that person chooses **This device** (owner, 2026-11-10;
-  2026-11-12), or AEAT only inside the clock-behind stop — never from devices alone and never while it
-  keeps time over the internet — and every step it verifies, or sees move the clock by over a second,
-  is alerted and emailed (a step made before the venue exists, at its first full start that is neither a mirror nor fenced, unless the topic file's losses apply)** (owner,
-  2026-11-10).
-  Guards:
+  confirms that start or during start-up; a Box administration holder's while the start waits or
+  the clock reads before 28-10-2024), a Box administration holder's own device, the device showing
+  the clock step of the setup page (under its owner's pass), the restore page (under its recovery
+  key or kit) or the handover page (signed in as a `node.manage` holder), when that person chooses
+  **This device** (owner, 2026-11-10; 2026-11-12) — never from devices alone and never while it
+  keeps time over the internet — and every step it verifies, or sees move the clock by over a
+  second, is alerted and emailed (a step made before the venue exists, at its first full start that
+  is neither a mirror nor fenced, unless the topic file's losses apply)** (owner, 2026-11-10).
+  **Waitron never reads AEAT's time except to warn of drift from its filing replies and, until
+  A1420 PR 4 lands, in the series check at setup, restore and promotion
+  (`hour-clock-internet.ts`)** (owner, 2026-11-11). Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`,
   `apps/server/src/setup-clock-set.test.ts`, `apps/server/src/boot.box-emails.test.ts`, weaker than

@@ -9,7 +9,6 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import {
-  addIncidentNote,
   currentIncidentsOf,
   findIncident,
   listHandledIncidents,
@@ -952,7 +951,7 @@ describe("tenant incident reads", () => {
     expect(await asApp((tx) => recordIncidentOnce(tx, raised))).toBe(true);
   });
 
-  describe("handling notes", () => {
+  describe("marking handled", () => {
     const firstPerson = "00000000-0000-4000-8000-000000000001";
     const firstAt = new Date(BASE.getTime() + 1_000);
 
@@ -974,29 +973,10 @@ describe("tenant incident reads", () => {
       return row;
     }
 
-    it("stores a note beside the handler and time, and answers that it changed the incident", async () => {
-      const id = await openId();
-      expect(
-        await asApp((tx) =>
-          markIncidentHandled(tx, {
-            id,
-            personId: firstPerson,
-            handledAt: firstAt,
-            note: "Checked against the card terminal",
-          }),
-        ),
-      ).toBe(true);
-      expect(await stored(id)).toEqual({
-        acknowledgedAt: firstAt.toISOString(),
-        acknowledgedBy: firstPerson,
-        acknowledgedNote: "Checked against the card terminal",
-      });
-    });
-
-    it("answers false when marking again, and keeps the first handler and note", async () => {
+    it("answers false when marking again, and keeps the first handler and time", async () => {
       const id = await openId();
       await asApp((tx) =>
-        markIncidentHandled(tx, { id, personId: firstPerson, handledAt: firstAt, note: "First" }),
+        markIncidentHandled(tx, { id, personId: firstPerson, handledAt: firstAt }),
       );
       expect(
         await asApp((tx) =>
@@ -1004,18 +984,17 @@ describe("tenant incident reads", () => {
             id,
             personId: "00000000-0000-4000-8000-000000000002",
             handledAt: new Date(BASE.getTime() + 9_000),
-            note: "Second",
           }),
         ),
       ).toBe(false);
       expect(await stored(id)).toEqual({
         acknowledgedAt: firstAt.toISOString(),
         acknowledgedBy: firstPerson,
-        acknowledgedNote: "First",
+        acknowledgedNote: null,
       });
     });
 
-    it("stores no note when marking without one", async () => {
+    it("stores the handler and time, and answers that it changed the incident", async () => {
       const id = await openId();
       expect(
         await asApp((tx) =>
@@ -1027,49 +1006,6 @@ describe("tenant incident reads", () => {
         acknowledgedBy: firstPerson,
         acknowledgedNote: null,
       });
-    });
-
-    it("adds a note to a handled incident that has none", async () => {
-      const id = await openId();
-      await asApp((tx) =>
-        markIncidentHandled(tx, { id, personId: firstPerson, handledAt: firstAt }),
-      );
-      expect(await asApp((tx) => addIncidentNote(tx, { id, note: "Added later" }))).toBe("added");
-      expect(await stored(id)).toEqual({
-        acknowledgedAt: firstAt.toISOString(),
-        acknowledgedBy: firstPerson,
-        acknowledgedNote: "Added later",
-      });
-    });
-
-    it("refuses a second note and keeps the first", async () => {
-      const id = await openId();
-      await asApp((tx) =>
-        markIncidentHandled(tx, { id, personId: firstPerson, handledAt: firstAt }),
-      );
-      await asApp((tx) => addIncidentNote(tx, { id, note: "Added later" }));
-      expect(await asApp((tx) => addIncidentNote(tx, { id, note: "Another" }))).toBe("note_exists");
-      expect((await stored(id))?.acknowledgedNote).toBe("Added later");
-    });
-
-    it("refuses a note on an open incident", async () => {
-      const id = await openId();
-      expect(await asApp((tx) => addIncidentNote(tx, { id, note: "Too early" }))).toBe(
-        "not_handled",
-      );
-      expect(await stored(id)).toEqual({
-        acknowledgedAt: null,
-        acknowledgedBy: null,
-        acknowledgedNote: null,
-      });
-    });
-
-    it("answers not_found for an unknown incident", async () => {
-      expect(
-        await asApp((tx) =>
-          addIncidentNote(tx, { id: "00000000-0000-4000-8000-0000000000ff", note: "Nobody" }),
-        ),
-      ).toBe("not_found");
     });
   });
 });

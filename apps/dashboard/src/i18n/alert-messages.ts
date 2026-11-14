@@ -210,24 +210,9 @@ export const ALERT_MESSAGES: Readonly<
     en: "This device's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds.",
     es: "La hora de este servidor no se ha comprobado con una fuente de hora fiable desde hace {anchorAgeSeconds} segundos.",
   },
-  "clock.behind_chain": {
-    en: "The box's clock ({clockAt:minute}) reads earlier than its last sale ({lastRecordAt:minute}), so no payment can be taken. Orders and the kitchen still work. Sort it out on the Box status page.",
-    es: "La hora del servidor ({clockAt:minute}) es anterior a la última venta ({lastRecordAt:minute}), así que no se puede cobrar. Los pedidos y la cocina siguen funcionando. Resuélvelo en Estado del servidor.",
-  },
-  "clock.behind_chain_restarted": {
-    en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {confirmedBy:clock_confirmed_by} confirmed it.",
-    es: "Se reanudaron los cobros con la hora del servidor ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {confirmedBy:clock_confirmed_by}.",
-    variants: {
-      byStaff: {
-        mode: "replace",
-        en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {person}, a staff member, confirmed it on till {device}.",
-        es: "Se reanudaron los cobros con la hora del servidor ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {person}, miembro del personal, en la caja {device}.",
-      },
-    },
-  },
   "clock.corrected": {
-    en: "The box set its clock from the tax agency's time: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
-    es: "El servidor puso su reloj con la hora de Hacienda: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+    en: "The box's clock was set from {person}'s device: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
+    es: "El reloj del servidor se puso con la hora del dispositivo de {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
     variants: {
       unverified: {
         mode: "replace",
@@ -238,11 +223,6 @@ export const ALERT_MESSAGES: Readonly<
         mode: "replace",
         en: "The box's clock was set from till {device}, confirmed by {person}: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
         es: "El reloj del servidor se puso con la hora de la caja {device}, confirmada por {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
-      },
-      byAdmin: {
-        mode: "replace",
-        en: "The box's clock was set from {person}'s device: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
-        es: "El reloj del servidor se puso con la hora del dispositivo de {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
       },
       bySetupAdmin: {
         mode: "replace",
@@ -255,31 +235,6 @@ export const ALERT_MESSAGES: Readonly<
         es: "El reloj del servidor se puso en hora con el dispositivo que mostraba la página de configuración o restauración: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
       },
     },
-  },
-  "clock.records_misdated": {
-    en: "{count} sales were recorded with a time later than the real time (from {from:minute} to {to:minute}). They stay as recorded. Go through them with your tax adviser; the list is on the Box status page.",
-    es: "Se registraron {count} ventas con una hora posterior a la real (de {from:minute} a {to:minute}). Quedan como se registraron. Revísalas con tu asesor; la lista está en Estado del servidor.",
-    one: {
-      param: "count",
-      en: "One sale was recorded with a time later than the real time, at {from:minute}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page.",
-      es: "Se registró una venta con una hora posterior a la real, el {from:minute}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del servidor.",
-    },
-    variants: {
-      partial: {
-        mode: "append",
-        en: "The box restarted during the stop, so the list may be short.",
-        es: "El servidor se reinició durante la parada, así que puede faltar alguna.",
-      },
-      unconfirmed: {
-        mode: "replace",
-        en: "The payment stop that began at {from:minute} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales were dated wrongly. Check the box's clock, and go through the sales since then with your tax adviser.",
-        es: "La parada de cobros que empezó el {from:minute} terminó sola, pero nada confirmó la hora del servidor, así que el servidor no puede saber qué ventas tienen la fecha mal. Comprueba la hora del servidor y revisa con tu asesor las ventas desde entonces.",
-      },
-    },
-  },
-  "clock.behind_chain_disproved": {
-    en: "Sales recorded between {from:minute} and {to:minute} were dated by a clock that proved wrong. They stay as recorded; ask your tax adviser.",
-    es: "Las ventas registradas entre {from:minute} y {to:minute} se fecharon con un reloj que resultó estar mal. Quedan como se registraron; consúltalo con tu asesor.",
   },
   "clock.unusable": {
     en: "The box's clock reads {clockAt:minute}, before 28 October 2024, so no sale can be recorded for the tax agency. With the internet the box puts it right by itself; otherwise an administrator can usually set it on the Box status page.",
@@ -713,16 +668,5 @@ export const ALERT_WORDS: Readonly<
       back: { en: "moved back", es: "atrasado" },
     },
     otherwise: { en: "moved", es: "cambiado" },
-  },
-  // What confirmed the box's clock when payments restarted, by the `confirmedBy` param of
-  // `clock.behind_chain_restarted`.
-  clock_confirmed_by: {
-    words: {
-      authority: { en: "the tax agency's time", es: "la hora de Hacienda" },
-      devices: { en: "two tills or handhelds", es: "dos cajas o terminales" },
-      admin: { en: "an administrator", es: "un administrador" },
-      staff: { en: "a staff member", es: "un empleado" },
-    },
-    otherwise: { en: "a check recorded on the box", es: "una comprobación anotada en el servidor" },
   },
 };

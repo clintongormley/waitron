@@ -616,51 +616,6 @@ naming that port and the rows there, and checks before discovery that the delete
 only row at the address. With the collision forced, the file passed; with the redraw also removed,
 it failed at that check; with every draw forced to collide, it failed at once with that error. Nothing checks other suites for the same shape.
 
-## A fiscal record dated after a later write's clock makes the chain refuse that write
-
-**Superseded (2026-11-12, A1420 PR 5).** The chain no longer refuses a record dated before the
-latest one, and the root rule this section backed was deleted. What follows records what was true
-before. [Plan](../superpowers/plans/2026-11-09-a1420-start-clock-corrects-itself.md).
-
-The chain refuses to append a record whose time is more than a minute before the latest record in
-the database (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`; the rule is
-[conventions-data.md](conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves)).
-A test database is a database like any other, so two shapes of fixture now fail with
-`clock.behind_chain`:
-
-- **A fixture dated in the past, recorded after a newer record.** Measured for the A798-B slice 8
-  plan (E9, 2026-10-22, macOS, Node v26.11.1): `drain.test.ts`'s Route B lookup case seeds envíos
-  stamped `2026-07-20T19:20:30+01:00` (`packages/fiscal-verifactu/test/drain-fixtures.ts`) and then
-  recorded a sale with `steadyClock`, which reads `2026-03-01T13:05:00+01:00`; the sale was
-  refused. That case now records on a clock reading `2026-07-21T12:00:00+01:00`. In `apps/server`
-  (E8), ten cases recorded an invoice at a fixed past time into a database that already held one
-  recorded at today's time: in nine of them an earlier case in the file's shared database had
-  recorded it; in `orders-api.test.ts`'s case the today-dated bills came earlier in the same case.
-  The slice reordered that one case and moved the rest, unchanged, into `*.issue-clock.test.ts`
-  files with databases of their own.
-- **A case that records ahead of the real clock, before a real-clock write.** The plan review's F9,
-  on `provisionBillVenue`, recorded a sale two minutes ahead, and the next real-clock sale in the
-  same database answered `clock.behind_chain`; the control, a sale 59 s behind the latest record,
-  was served (plan decision 13; the review's log is outside the repository).
-
-The `apps/server/src/clock-behind-stop.*.test.ts` files keep the cases that run during the stop in
-one shared database (`resetPerTest: false`) and every write there on a clock built from the latest
-record time. `clock-behind-stop.open.test.ts` is the exception in layout: it has three databases,
-and its blocks for a database with no records and for a restored database get a fresh database per
-test and record no real-clock sale. In each shared database:
-
-- the setup records one sale at the real clock, so the latest record time has a value from the
-  first case;
-- each case reads that time from `registros_facturacion` and builds its clocks from it (`clockAt`);
-- requests go to `venue.appAt(clock)` (`apps/server/src/testing/bill-venue.ts`), not `venue.app`,
-  which mounts the routes on the real clock; a file's own `placedIssuedOrder` takes a clock
-  (`clock-behind-stop.pay.test.ts`, `clock-behind-stop.charged.test.ts`); a shared helper with no
-  clock parameter, such as `seatedWith`, is handed `{ ...venue, clock, app: venue.appAt(clock) }`
-  (`venueAt` in `clock-behind-stop.records.test.ts`).
-
-A case that must write on a clock not built from the latest record time gets a database of its own.
-Nothing checks other suites for either shape.
-
 ## Locate the unfinished package before diagnosing a silent shard as database contention.
 
 Four inspected `test-light-a` hangs left only Bookings' browser files unfinished while Sync and
@@ -3993,18 +3948,6 @@ earlier test's rows still name**, so a test that finds a row by address checks t
 is its own. Guard: `apps/server/src/print-agent-e2e.test.ts`'s `portsNoPrinterNames` and
 pre-discovery row check, weaker than the rule — they cover that one test. Receipt:
 [testing-guide.md](testing-guide.md#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered).
-
-### A fiscal record in a test's database must not be dated more than a minute after the clock of a later write that records
-
-**Retired (2026-11-12, A1420 PR 5).** The chain no longer refuses a record dated before the latest one.
-
-**A fiscal record in a test's database must not be dated more than a minute after the clock of a
-later write that records**, or the chain refuses that write as `clock.behind_chain`: a fixture
-dated in the past recorded after a newer record, or a case that records ahead of the real clock
-before a real-clock write. In a file that shares one database, every write takes its clock from
-the latest record time, helpers included, or the case gets a database of its own. Nothing guards
-it. Receipt:
-[testing-guide.md](testing-guide.md#a-fiscal-record-dated-after-a-later-writes-clock-makes-the-chain-refuse-that-write).
 
 ### A suite whose test outlasts Vitest's per-test timeout fails HEALTHY runs.
 

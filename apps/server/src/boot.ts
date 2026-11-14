@@ -439,7 +439,7 @@ import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { mountBoxHostApi } from "./box-host-api.js";
-import { clockCheckWaitingReader, clockStopReader, collectBoxHealth } from "./box-health.js";
+import { collectBoxHealth } from "./box-health.js";
 import { sharedClockServiceReading } from "./clock-service-reading.js";
 import { CLOCK_WATCH_MS, createClockWatch, clockWatchJob } from "./clock-watch.js";
 import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
@@ -2379,12 +2379,7 @@ async function bootServer(
   // Before the tills' notice sources, which read it. Closed on a node that is not primary at its
   // start: the watch looks only on the primary, so it would not close it there (plan decision 14).
   const clockStart = clockStartUp({ primaryAtStart: isSingletonPrimary });
-  const authorityClock = createAuthorityClockStatus({
-    onSample: (sample) => {
-      clockWitnesses.noteAuthority(sample);
-      clockStart.authorityAsked(true);
-    },
-  });
+  const authorityClock = createAuthorityClockStatus();
   // Asked on each call, unlike `isSingletonPrimary`: the role can change while the box runs.
   const filesRecords = () =>
     fiscalDrainEnabled(config) && holders.singletonRole.current === "primary";
@@ -2786,12 +2781,8 @@ async function bootServer(
       boxClock: {
         correction,
         startUp: clockStart,
-        witnesses: () => clockWitnesses.witnesses(),
-        clearWitnesses: () => clockWitnesses.clear(),
-        readBoot: boxBoot.readBoot,
         steady: () => performance.now(),
         requestFromBox: seams.requestFromBox,
-        filesRecords,
         start: { state: startClock, heads: recordHeads },
       },
     },
@@ -3038,7 +3029,6 @@ async function bootServer(
               clockCheck: tillClockCheck({
                 startUp: clockStart,
                 backend: nodeBackend,
-                witnesses: () => clockWitnesses.witnesses(),
                 filesRecords,
                 start: startClock,
               }),
@@ -3638,7 +3628,6 @@ async function bootServer(
     );
   // A reading of the time service taken before a set is not served after it.
   correction.addAnchor({
-    stepComing: async () => {},
     reanchor: async () => {
       clockService.clear();
       timeHealthCache.clear();
@@ -3648,19 +3637,13 @@ async function bootServer(
     backend: nodeBackend,
     store: clockWitnesses,
     clock: tillClock,
-    boot: boxBoot,
-    nodeId: tradingContext.nodeId,
     read: (fn) => db.withWriteLock(() => fn(db)),
-    transaction: (fn) => withTransaction(db, fn),
     correction,
     startUp: clockStart,
     start: { state: startClock, clockStatus: readClockService, heads: recordHeads },
-    filesRecords,
-    isPrimary: () => holders.singletonRole.current === "primary",
     log,
   });
   jobRunner.add(clockWatchJob(clockWatch, CLOCK_WATCH_MS));
-  correction.addAnchor(clockWatch);
   const paymentsEnabled = setsToMigrate.some((module) => module.name === "payments");
   const serverAlertSources: AlertSource[] = [
     jobFailingAlertSource({ views: () => jobRunner.views(), now }),
@@ -3674,8 +3657,11 @@ async function bootServer(
     firstStartAlertSource(firstStart),
     appendOnlyRestoredAlertSource(appendOnlyRestored),
     awaitingCertAlertSource(awaitingFiscalCert),
-    authorityClockAlertSource(authorityClock.read, async (_tx, at) =>
-      clockUnusableAt(nodeBackend, { instant: at, offsetMinutes: tillClock.now().offsetMinutes }),
+    authorityClockAlertSource(
+      authorityClock.read,
+      async (_tx, at) =>
+        startClockHolds() ||
+        clockUnusableAt(nodeBackend, { instant: at, offsetMinutes: tillClock.now().offsetMinutes }),
     ),
     clockDisagreesAlertSource(clockWitnesses),
     printingAlertSource(),
@@ -3749,20 +3735,10 @@ async function bootServer(
     setsToMigrate,
   );
   const fiscalOutbox = enabledFiscal.outbox;
-  const readClockStop = clockStopReader({
-    backend: nodeBackend,
-    witnesses: () => clockWitnesses.witnesses(),
-    clock: tillClock,
-    startUp: clockStart,
-  });
-  const readClockCheckWaiting = clockCheckWaitingReader({ backend: nodeBackend, clock: tillClock });
   mountBoxHealthApi(
     app,
     {
       db,
-      venue: {
-        language: venueLocale === "es-ES" ? "es" : "en",
-      },
       readHealth: () =>
         collectBoxHealth(db, {
           now,
@@ -3797,8 +3773,6 @@ async function bootServer(
           leftovers: () => surveyLeftovers(leftoverDeps),
           paymentsEnabled,
           canFree: () => !isReadOnly(),
-          clockStop: readClockStop,
-          clockCheckWaiting: readClockCheckWaiting,
         }),
       restart,
       freeSpace: createSpaceFreer({
@@ -3810,14 +3784,10 @@ async function bootServer(
         // A deletion changes what the disk holds, so the next read walks it afresh.
         onFreed: () => diskUsageCache.clear(),
       }),
-      clockConfirm: {
+      clockSet: {
         backend: nodeBackend,
-        witnesses: () => clockWitnesses.witnesses(),
-        clearWitnesses: () => clockWitnesses.clear(),
         clock: tillClock,
-        nodeId: tradingContext.nodeId,
         steady: () => performance.now(),
-        readBoot: boxBoot.readBoot,
         requestFromBox: seams.requestFromBox,
         devMode: config.devMode,
         correction,

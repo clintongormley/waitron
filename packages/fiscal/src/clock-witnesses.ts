@@ -1,8 +1,7 @@
 export const CLOCK_WITNESS_MARGIN_MS = 60_000;
 
 export interface ClockWitness {
-  readonly kind: "authority" | "device";
-  /** The device's id; "authority" for AEAT readings. */
+  /** The device's id. */
   readonly id: string;
   /** The network address a device's reading came from; devices at one address are one witness. */
   readonly address?: string;
@@ -15,10 +14,8 @@ export interface ClockWitness {
 
 export interface ClockWitnessVerdict {
   /** Each address (or id, for a witness with no address) whose latest device reading agrees with
-   * the box, and the authority's latest agreeing reading. */
+   * the box. */
   readonly agreeing: readonly ClockWitness[];
-  /** Authority witnesses that disagree, the latest first. */
-  readonly authorityDisagrees: readonly ClockWitness[];
   /** The largest group (every pair agrees with each other) of two or more devices, one per
    * address, that all disagree with the box; among groups of one size, the one whose newest `boxAt`
    * is latest. */
@@ -76,7 +73,7 @@ function latestPer(
   return [...latest.values()];
 }
 
-function latestPerId(readings: readonly Reading[], marginMs = CLOCK_WITNESS_MARGIN_MS): Reading[] {
+function latestPerId(readings: readonly Reading[], marginMs: number): Reading[] {
   return latestPer(readings, (reading) => reading.witness.id, marginMs);
 }
 
@@ -130,13 +127,7 @@ function latestDevices(
   readings: readonly Reading[],
   marginMs = CLOCK_WITNESS_MARGIN_MS,
 ): Reading[] {
-  return latestPerAddress(
-    latestPerId(
-      readings.filter((reading) => reading.witness.kind === "device"),
-      marginMs,
-    ),
-    marginMs,
-  );
+  return latestPerAddress(latestPerId(readings, marginMs), marginMs);
 }
 
 function agreeingDevices(witnesses: readonly ClockWitness[], marginMs: number): Reading[] {
@@ -161,16 +152,11 @@ export function agreeingDeviceCount(witnesses: readonly ClockWitness[], marginMs
 }
 
 /** A witness whose times are unreadable, or whose uncertainty is negative or not finite, counts
- * neither way; so does an authority reading too uncertain to agree or disagree. */
+ * neither way. */
 export function judgeClockWitnesses(witnesses: readonly ClockWitness[]): ClockWitnessVerdict {
-  const readings = witnesses.flatMap((witness) => readable(witness) ?? []);
-  const devices = latestDevices(readings);
-  const authorities = readings.filter((reading) => reading.witness.kind === "authority");
+  const devices = latestDevices(witnesses.flatMap((witness) => readable(witness) ?? []));
   return {
-    agreeing: witnessesOf([...devices.filter(agrees), ...latestPerId(authorities.filter(agrees))]),
-    authorityDisagrees: witnessesOf(
-      authorities.filter(disagrees).sort((a, b) => b.boxAtMs - a.boxAtMs),
-    ),
+    agreeing: witnessesOf(devices.filter(agrees)),
     devicesDisagreeing: witnessesOf(largestDeviceGroup(devices.filter(disagrees))),
   };
 }

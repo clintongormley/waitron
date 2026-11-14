@@ -1347,7 +1347,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
   );
 
   for (const locale of ["en-GB", "es-ES"])
-    for (const code of ["clock.behind_chain", "clock.unconfirmed"])
+    for (const code of ["clock.unconfirmed"])
       it.each([
         ["join-tables", { tableId: "t9" }, "joinTables"],
         [

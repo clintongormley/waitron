@@ -1,6 +1,4 @@
-import { judgeClockWitnesses, type AuthorityTimeSample, type ClockWitness } from "@waitron/fiscal";
-
-export type { AuthorityTimeSample };
+import type { ClockWitness } from "@waitron/fiscal";
 
 const FRESH_FOR_MS = 300_000;
 const STEP_TOLERANCE_MS = 1_000;
@@ -22,29 +20,17 @@ export interface ClockWitnessStore {
     deviceMs: number,
     arrived: BoxClockReading,
   ): void;
-  noteAuthority(sample: AuthorityTimeSample): void;
   /** Every fresh reading (at most five minutes old by the steady clock, with no step of the wall
-   * clock since), agreeing or not, and every AEAT disagreement noted since the last `endStop()`,
-   * whatever its age and through steps. */
+   * clock since), agreeing or not. */
   witnesses(): ClockWitness[];
-  /** Each AEAT reading `witnesses()` would hand out that is still fresh, with the box's clocks
-   * when it was noted: what a set measures its offset from. Never a device's. */
-  forSetting(): SettableReading[];
-  /** AEAT witnesses noted since the last call. */
-  takeNewAuthority(): ClockWitness[];
-  /** The stop has ended: forget the kept AEAT disagreements. */
-  endStop(): void;
-  /** The clock was confirmed: forget every reading `witnesses()` would hand out. AEAT readings
-   * not yet taken by `takeNewAuthority` stay, so a disproof among them is still recorded. */
+  /** The clock was set: forget every reading `witnesses()` would hand out. */
   clear(): void;
 }
 
-export interface SettableReading {
+interface Kept {
   readonly witness: ClockWitness;
   readonly at: BoxClockReading;
 }
-
-type Kept = SettableReading;
 
 function writable(ms: number): boolean {
   return Number.isFinite(ms) && Math.abs(ms) <= LATEST_DATE_MS;
@@ -56,9 +42,6 @@ export function createClockWitnessStore(
   const wall = deps.wall ?? (() => Date.now());
   const monotonic = deps.monotonic ?? (() => performance.now());
   const devices = new Map<string, Kept>();
-  let authorities: Kept[] = [];
-  let disagreements: Kept[] = [];
-  let untaken: ClockWitness[] = [];
 
   function fresh(kept: Kept, now: BoxClockReading): boolean {
     const steadyElapsed = now.monoMs - kept.at.monoMs;
@@ -76,7 +59,6 @@ export function createClockWitnessStore(
       if (seen !== undefined && seen.at.monoMs > arrived.monoMs) return;
       devices.set(deviceId, {
         witness: {
-          kind: "device",
           id: deviceId,
           ...(address === undefined || address === "" ? {} : { address }),
           boxAt: new Date(arrived.wallMs).toISOString(),
@@ -86,48 +68,13 @@ export function createClockWitnessStore(
         at: arrived,
       });
     },
-    noteAuthority({ authorityMs, uncertaintyMs, at }) {
-      if (!writable(authorityMs) || !writable(at.wallMs)) return;
-      if (!Number.isFinite(uncertaintyMs) || uncertaintyMs < 0) return;
-      const witness: ClockWitness = {
-        kind: "authority",
-        id: "authority",
-        boxAt: new Date(at.wallMs).toISOString(),
-        witnessAt: new Date(authorityMs).toISOString(),
-        uncertaintyMs,
-      };
-      untaken.push(witness);
-      if (judgeClockWitnesses([witness]).authorityDisagrees.length > 0)
-        disagreements.push({ witness, at });
-      else authorities.push({ witness, at });
-    },
     witnesses() {
       const now = { wallMs: wall(), monoMs: monotonic() };
       for (const [id, kept] of devices) if (!fresh(kept, now)) devices.delete(id);
-      authorities = authorities.filter((kept) => fresh(kept, now));
-      return [
-        ...[...devices.values()].map((kept) => kept.witness),
-        ...authorities.map((kept) => kept.witness),
-        ...disagreements.map((kept) => kept.witness),
-      ];
-    },
-    forSetting() {
-      const now = { wallMs: wall(), monoMs: monotonic() };
-      authorities = authorities.filter((kept) => fresh(kept, now));
-      return [...authorities, ...disagreements.filter((kept) => fresh(kept, now))];
-    },
-    takeNewAuthority() {
-      const taken = untaken;
-      untaken = [];
-      return taken;
-    },
-    endStop() {
-      disagreements = [];
+      return [...devices.values()].map((kept) => kept.witness);
     },
     clear() {
       devices.clear();
-      authorities = [];
-      disagreements = [];
     },
   };
 }

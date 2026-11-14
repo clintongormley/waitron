@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database, Transaction } from "@waitron/db";
-import type { ClockStep, ClockStepRecorded, ClockStopState, TrustedReading } from "@waitron/fiscal";
+import type { ClockStep, ClockStepRecorded, TrustedReading } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import type { BackupManifest } from "./backup-manifest.js";
 import { backupArchiveKey } from "./backup-keys.js";
@@ -16,6 +16,7 @@ import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
 import { STUB_NODE } from "./testing/node-copy.js";
+import { startClockState } from "./start-clock-check.js";
 
 const DAY = 86_400_000;
 const START_MS = Date.parse("2026-09-05T00:00:00.000Z");
@@ -27,19 +28,6 @@ const MANIFEST: BackupManifest = {
   createdAt: "2026-09-05T00:00:00.000Z",
   environment: "preproduction",
   modules: { core: 3 },
-};
-
-const STOPPED: ClockStopState = {
-  clockAt: "2026-09-05T00:00:00.000Z",
-  offsetMinutes: 60,
-  lastRecordAt: "2026-09-05T01:00:00.000Z",
-  lastRecordOffsetMinutes: 60,
-  recordId: "record-1",
-  gapMs: STEP_MS,
-  proof: "contrary",
-  agreeing: { authority: null, devices: [] },
-  contrary: { authority: null, devices: [] },
-  confirmation: null,
 };
 
 class MemoryBackend implements StorageBackend {
@@ -117,7 +105,6 @@ function box(options: { seatFails?: number } = {}) {
       },
     },
     backend: {
-      clockStopState: async () => STOPPED,
       assertRecordableAt: () => {},
       confirmClockStep: async (_tx, input): Promise<ClockStepRecorded> => {
         if (seatFails > 0) {
@@ -128,7 +115,7 @@ function box(options: { seatFails?: number } = {}) {
         return { confirmation: null, corrected: null };
       },
     },
-    store: { clear: () => {}, witnesses: () => [] },
+    store: { clear: () => {} },
     clock: {
       now: () => ({ instant: new Date(wallMs), offsetMinutes: 60 }) as unknown as TrustedReading,
     },
@@ -139,6 +126,7 @@ function box(options: { seatFails?: number } = {}) {
     transaction: (fn) => fn(TX),
     nodeId: BACKUP_NODE_ID,
     log: vi.fn(),
+    start: { state: startClockState(), heads: async () => ({}) },
   });
 
   const backend = new MemoryBackend();
@@ -173,13 +161,13 @@ function box(options: { seatFails?: number } = {}) {
 
   const set = () =>
     correction.set({
-      reason: "behind_chain",
-      source: "authority",
+      reason: "start",
+      source: "staff",
       offsetMs: STEP_MS,
       measuredAt: { wallMs, monoMs },
       stepsSeen: correction.steps(),
       witnesses: [],
-      requester: { source: "authority" },
+      requester: { source: "staff" },
     });
 
   return {

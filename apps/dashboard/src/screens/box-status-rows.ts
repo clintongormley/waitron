@@ -1,7 +1,6 @@
 import { formatBytes } from "@waitron/dashboard-kit";
 import type { AlertView, BoxHealth } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
-import { ALERT_WORDS } from "../i18n/alert-messages.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -46,7 +45,6 @@ const SCREENS: Readonly<Record<PartId, string | null>> = {
 const NOTICE_PARTS: Readonly<Record<string, readonly PartId[]>> = {
   "storage.disk_full": ["sales", "disk"],
   "clock.unusable": ["sales", "clock"],
-  "clock.behind_chain": ["sales", "clock"],
   "storage.space_low": ["disk"],
   "fiscal.records_unsent": ["tax"],
 };
@@ -55,7 +53,6 @@ const NOTICE_PARTS: Readonly<Record<string, readonly PartId[]>> = {
 const STOPPED_WORDS: Readonly<Record<string, StringKey>> = {
   "storage.disk_full": "box_status.notice.disk_full",
   "clock.unusable": "box_status.notice.clock_unusable",
-  "clock.behind_chain": "box_status.notice.clock_behind_chain",
 };
 
 export function partOfAlert(alert: Pick<AlertView, "area" | "code">): PartId | null {
@@ -98,17 +95,14 @@ export function boxStatusRows(
     const state: PartState =
       stopped.length > 0
         ? "stopped"
-        : notices.length > 0 ||
-            rowAlerts.length > 0 ||
-            clockOff(id, health) ||
-            clockAfterStop(id, health)
+        : notices.length > 0 || rowAlerts.length > 0 || clockOff(id, health)
           ? "attention"
           : "ok";
     return {
       id,
       state,
       line: lineOf(id, health, notices, stopped, rowAlerts),
-      details: detailsOf(id, health, notices),
+      details: detailsOf(id, health),
       alerts: rowAlerts,
       screen: SCREENS[id],
     };
@@ -121,13 +115,6 @@ function clockOff(id: PartId, health: BoxHealth): boolean {
   return id === "clock" && health.clock.authority.state === "warning";
 }
 
-/** Payments go on, but on a clock a confirmation covers or nothing has confirmed yet. */
-function clockAfterStop(id: PartId, health: BoxHealth): boolean {
-  return (
-    id === "clock" && (health.clockStop?.proof === "confirmed" || health.clockCheckWaiting !== null)
-  );
-}
-
 function lineOf(
   id: PartId,
   health: BoxHealth,
@@ -136,11 +123,10 @@ function lineOf(
   alerts: readonly AlertView[],
 ): string {
   if (id === "sales") {
-    // A full disk stops everything and a wrong clock every sale, so each wins over the payment stop.
+    // A full disk stops everything, so it wins over a wrong clock.
     const reason =
       stopped.find((notice) => notice.code === "storage.disk_full") ??
-      stopped.find((notice) => notice.code === "clock.unusable") ??
-      stopped.find((notice) => notice.code === "clock.behind_chain");
+      stopped.find((notice) => notice.code === "clock.unusable");
     return reason === undefined ? t("box_status.sales.ok") : t(STOPPED_WORDS[reason.code]!);
   }
   const words = stopped.find((notice) => Object.hasOwn(STOPPED_WORDS, notice.code));
@@ -173,8 +159,6 @@ function factLine(id: PartId, health: BoxHealth, notices: readonly Notice[]): st
           { seconds: Math.abs(authority.driftSeconds) },
           currentLocale(),
         );
-      // The tax agency's last comparison can predate the stop, so it cannot vouch for the clock.
-      if (health.clockCheckWaiting !== null) return t("box_status.clock.unconfirmed");
       return authority.state === "unknown"
         ? t("box_status.clock.unknown")
         : t("box_status.clock.ok");
@@ -226,7 +210,7 @@ function diskLine(disk: BoxHealth["disk"]): string {
   });
 }
 
-function detailsOf(id: PartId, health: BoxHealth, notices: readonly Notice[]): string[] {
+function detailsOf(id: PartId, health: BoxHealth): string[] {
   switch (id) {
     case "sales":
       return [
@@ -253,13 +237,7 @@ function detailsOf(id: PartId, health: BoxHealth, notices: readonly Notice[]): s
     case "readers":
       return names(health.readers!);
     case "clock":
-      return [
-        ...clockDetails(health.clock),
-        ...(notices.some((notice) => notice.code === "clock.behind_chain")
-          ? [t("box_status.clock.behind_chain_fix")]
-          : []),
-        ...clockStopDetails(health),
-      ];
+      return clockDetails(health.clock);
     case "disk":
       return diskDetails(health.disk);
     default:
@@ -292,113 +270,6 @@ function clockDetails(clock: BoxHealth["clock"]): string[] {
   if (clock.sync.source === "timedatectl")
     details.push(t(clock.sync.synced ? "box_status.clock.synced" : "box_status.clock.not_synced"));
   return details;
-}
-
-/** The agreeing witnesses' lines of a payment stop, and the disagreeing ones while they win; a
- * clock that answered both ways is named once, by its latest answer. */
-function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
-  const details: string[] = [];
-  const { agreeing, contrary } =
-    stop.proof === "contrary"
-      ? latestAnswers(stop.agreeing, stop.contrary)
-      : { agreeing: stop.agreeing, contrary: null };
-  const { authority, devices } = agreeing;
-  if (authority !== null)
-    details.push(
-      fill("box_status.clock.proof.authority", { time: formatIsoMinute(authority.boxAt) }),
-    );
-  if (devices.length > 0) {
-    const latest = devices.reduce((a, b) => (b.witnessAt > a.witnessAt ? b : a));
-    const time = formatIsoMinute(latest.witnessAt);
-    details.push(
-      devices.length === 1
-        ? fill("box_status.clock.proof.device_one", { time })
-        : fill("box_status.clock.proof.devices", { count: String(devices.length), time }),
-    );
-  }
-  if (contrary === null) return details;
-  if (contrary.authority !== null)
-    details.push(
-      fill("box_status.clock.contrary.authority", {
-        time: formatIsoMinute(contrary.authority.boxAt),
-      }),
-    );
-  for (const device of contrary.devices)
-    details.push(
-      fill("box_status.clock.contrary.device", {
-        name: device.label ?? t("box_status.clock.contrary.unnamed_device"),
-        time: formatIsoMinute(device.witnessAt),
-      }),
-    );
-  return details;
-}
-
-type Witnesses = NonNullable<BoxHealth["clockStop"]>["agreeing"];
-
-/** Answers are ordered by the box's time when each was taken, as the server orders them; the
- * clock's own time is what is in dispute. A tie goes to the disagreement. */
-function latestAnswers(
-  agreeing: Witnesses,
-  contrary: Witnesses,
-): { agreeing: Witnesses; contrary: Witnesses } {
-  const later = <W extends { boxAt: string }>(a: W, b: W) =>
-    Date.parse(a.boxAt) > Date.parse(b.boxAt);
-  const agreed = agreeing.authority;
-  const disagreed = contrary.authority;
-  const agreedWins = agreed !== null && (disagreed === null || later(agreed, disagreed));
-  const contraryDevices = new Map(contrary.devices.map((device) => [device.id, device]));
-  const agreedDevices = new Map(agreeing.devices.map((device) => [device.id, device]));
-  return {
-    agreeing: {
-      authority: agreedWins ? agreed : null,
-      devices: agreeing.devices.filter((device) => {
-        const other = contraryDevices.get(device.id);
-        return other === undefined || later(device, other);
-      }),
-    },
-    contrary: {
-      authority: agreedWins ? null : disagreed,
-      devices: contrary.devices.filter((device) => {
-        const other = agreedDevices.get(device.id);
-        return other === undefined || !later(other, device);
-      }),
-    },
-  };
-}
-
-function clockStopDetails(health: BoxHealth): string[] {
-  const stop = health.clockStop;
-  const waiting = health.clockCheckWaiting;
-  const details = stop === null ? [] : clockStopProof(stop);
-  // A check can wait while an older confirmation still covers the clock; the wait is the news.
-  if (stop !== null && !(stop.proof === "confirmed" && waiting !== null))
-    details.push(stopLine(stop));
-  if (waiting !== null)
-    details.push(fill("box_status.clock.check_waiting", { time: formatIsoMinute(waiting.since) }));
-  return details;
-}
-
-function stopLine(stop: NonNullable<BoxHealth["clockStop"]>): string {
-  // The watch's own rule: during start-up only the tax agency or a person ends the stop.
-  const waitsForPerson =
-    stop.startUp &&
-    stop.agreeing.authority === null &&
-    (stop.proof === "none" || stop.proof === "ready");
-  if (waitsForPerson) return t("box_status.clock.stop.start_up");
-  if (stop.proof !== "confirmed") return t(`box_status.clock.stop.${stop.proof}`);
-  // The seat says "confirmed" only when a confirmation covers the reading.
-  const confirmation = stop.confirmation!;
-  return fill("box_status.clock.stop.confirmed", {
-    time: formatIsoMinute(confirmation.confirmedAt),
-    who: confirmedBy(confirmation.source),
-  });
-}
-
-/** The bell's words for what confirmed the clock. */
-function confirmedBy(source: string): string {
-  const list = ALERT_WORDS["clock_confirmed_by"]!;
-  const words = Object.hasOwn(list.words, source) ? list.words[source]! : list.otherwise;
-  return currentLocale() === "es" ? words.es : words.en;
 }
 
 function diskDetails(disk: BoxHealth["disk"]): string[] {

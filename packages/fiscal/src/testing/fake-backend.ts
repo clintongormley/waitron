@@ -3,7 +3,6 @@ import { AppError, decimal } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
-  ClockBehindLatestRecord,
   CorrectionAdmission,
   FiledFigures,
   FiscalBackend,
@@ -132,11 +131,7 @@ export class FakeFiscalBackend implements FiscalBackend {
 
   assertRecordableAt(): void {}
 
-  clockBehindLatestRecord(): Promise<ClockBehindLatestRecord | null> {
-    return Promise.resolve(null);
-  }
-
-  refuseWhileClockBehind(): Promise<void> {
+  refuseUntilRecordable(): Promise<void> {
     return Promise.resolve();
   }
 

@@ -274,27 +274,28 @@ describe("till-notice-strip", () => {
   });
 
   describe("while the box offers Check the time", () => {
-    const BEHIND = notice("clock.behind_chain", "error");
     const checkButton = (inside: ParentNode) =>
       inside.querySelector<HTMLElement>("wt-button[data-check-time]");
 
-    it.each([
-      ["clock.behind_chain", BEHIND],
-      ["clock.unusable", CLOCK],
-    ])("draws %s's hint as a Check the time button, its words unchanged", async (code, shown) => {
-      const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
-        notices: [shown],
-        checkTimeOffered: true,
-      });
-      const line = root(el).querySelector<HTMLElement>("[data-notice-tone]")!;
-      expect(flat(line.querySelector(".main"))).toBe(en[`staff_notice.${code}` as keyof typeof en]);
-      expect(flat(checkButton(line))).toBe(en["staff_notice.check_time"]);
-      expect(flat(line)).not.toContain(en["staff_notice.tell_manager"]);
-    });
+    it.each([["clock.unusable", CLOCK]])(
+      "draws %s's hint as a Check the time button, its words unchanged",
+      async (code, shown) => {
+        const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+          notices: [shown],
+          checkTimeOffered: true,
+        });
+        const line = root(el).querySelector<HTMLElement>("[data-notice-tone]")!;
+        expect(flat(line.querySelector(".main"))).toBe(
+          en[`staff_notice.${code}` as keyof typeof en],
+        );
+        expect(flat(checkButton(line))).toBe(en["staff_notice.check_time"]);
+        expect(flat(line)).not.toContain(en["staff_notice.tell_manager"]);
+      },
+    );
 
     it("sends one till-check-time out of its shadow root on a press", async () => {
       const { el, host } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
-        notices: [BEHIND],
+        notices: [CLOCK],
         checkTimeOffered: true,
       });
       let heard = 0;
@@ -305,7 +306,7 @@ describe("till-notice-strip", () => {
 
     it("draws the button in the opened list when the clock notice is the second of two", async () => {
       const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
-        notices: [DISK, BEHIND],
+        notices: [DISK, CLOCK],
         checkTimeOffered: true,
       });
       expect(checkButton(root(el))).toBeNull();
@@ -319,7 +320,7 @@ describe("till-notice-strip", () => {
 
     it("keeps the button out of the toggle when the clock notice is the first of two", async () => {
       const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
-        notices: [BEHIND, DISK],
+        notices: [CLOCK, DISK],
         checkTimeOffered: true,
       });
       const toggle = button(el)!;
@@ -336,11 +337,11 @@ describe("till-notice-strip", () => {
 
     it("draws no button without the offer, and Tell a manager as today", async () => {
       const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
-        notices: [BEHIND],
+        notices: [CLOCK],
       });
       expect(checkButton(root(el))).toBeNull();
       expect(flat(root(el).querySelector("[data-notice-tone]"))).toBe(
-        `${en["staff_notice.clock.behind_chain"]} · ${en["staff_notice.tell_manager"]}`,
+        `${en["staff_notice.clock.unusable"]} · ${en["staff_notice.tell_manager"]}`,
       );
     });
 

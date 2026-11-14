@@ -3273,7 +3273,6 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
         expect(witnessStores).toHaveLength(1);
         expect(witnessStores[0]!.witnesses()).toEqual([
           expect.objectContaining({
-            kind: "device",
             id: deviceId1,
             address: "127.0.0.1",
             witnessAt: new Date(deviceMs).toISOString(),

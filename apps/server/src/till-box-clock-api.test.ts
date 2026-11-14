@@ -140,7 +140,6 @@ interface Box {
   setClock(ms: number): void;
   setSteady(ms: number): void;
   setFromBox(fromBox: boolean): void;
-  setFilesRecords(files: boolean): void;
   /** The route's next read of the step counter answers one fewer, as if a set landed after it. */
   stepAfterReading(): void;
   /** Holds the correction's one-at-a-time turn until the answer's `release`. */
@@ -150,14 +149,13 @@ interface Box {
 }
 
 /** A new latest record, then a box whose clock reads `gapMs` behind it (or `at`), an empty witness
- * store, a correction over a fake host that moves the box's clock, an open start-up window in
- * which AEAT did not answer, and the till API over them. */
+ * store, a correction over a fake host that moves the box's clock, an open start-up window, and
+ * the till API over them. */
 async function stoppedBox(
   gapMs: number,
   options: {
     at?: number;
     devMode?: boolean;
-    authority?: "not_asked" | "answered";
     backend?: FiscalBackend;
     /** The start's clock check, handed to the correction and the routes. */
     start?: StartClockState;
@@ -170,7 +168,6 @@ async function stoppedBox(
   let boxMs = behind;
   let steadyMs = 0;
   let fromBox = false;
-  let filesRecords = true;
   let lag = 0;
   let turnAsks = 0;
   const witnesses = createClockWitnessStore({ wall: () => boxMs, monotonic: () => steadyMs });
@@ -214,8 +211,6 @@ async function stoppedBox(
   });
   const startUp = clockStartUp({ primaryAtStart: true });
   const logs: Box["logs"] = [];
-  if (options.authority === "answered") startUp.authorityAsked(true);
-  else if (options.authority !== "not_asked") startUp.authorityAsked(false);
   const failures: Box["failures"] = [];
   const throttle = createPinThrottle();
   const pinThrottle: PinThrottle = {
@@ -258,12 +253,8 @@ async function stoppedBox(
           },
         },
         startUp,
-        witnesses: () => witnesses.witnesses(),
-        clearWitnesses: () => witnesses.clear(),
-        readBoot: () => BOOT,
         steady: () => steadyMs,
         requestFromBox: () => fromBox,
-        filesRecords: () => filesRecords,
         ...(options.start === undefined
           ? {}
           : { start: { state: options.start, heads: recordHeads } }),
@@ -290,9 +281,6 @@ async function stoppedBox(
     },
     setFromBox: (value) => {
       fromBox = value;
-    },
-    setFilesRecords: (value) => {
-      filesRecords = value;
     },
     stepAfterReading: () => {
       lag = 1;
@@ -400,7 +388,7 @@ async function withdrawAdmission<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 it("sets a clock that reads before 28-10-2024 from a staff member's till", async () => {
-  const box = await stoppedBox(0, { at: IN_2001, authority: "not_asked" });
+  const box = await stoppedBox(0, { at: IN_2001 });
   const answer = await check(box, staffCookie, Date.now() + DAY - IN_2001);
   expect(answer.status).toBe(200);
   expect(box.host.sets).toHaveLength(1);
@@ -461,22 +449,6 @@ it("refuses an override that is not a person's id and a PIN", async () => {
   );
 });
 
-it("has no check routes when the fiscal seat cannot confirm a stop", async () => {
-  const backend = Object.create(venue.backend, {
-    confirmClockStop: { value: undefined },
-  }) as FiscalBackend;
-  const box = await stoppedBox(DAY, { backend });
-  expect((await ask(box, staffCookie)).status).toBe(404);
-});
-
-it("sees no stop behind the chain where the seat reads none", async () => {
-  const backend = Object.create(venue.backend, {
-    clockStopState: { value: undefined },
-  }) as FiscalBackend;
-  const box = await stoppedBox(DAY, { backend });
-  await expectRefused(box, ask(box, staffCookie), 409, setRefused("not_stopped"));
-});
-
 it("answers a seat's own refusal of the box's reading as a failure, setting nothing", async () => {
   const backend = Object.create(venue.backend, {
     assertRecordableAt: {
@@ -502,15 +474,15 @@ it("refuses an override that is not an object as the request's field", async () 
 
 /** A box whose latest record is a minute behind its clock, so no stop holds, with the start check
  * waiting and the start-up window already shut by a read that saw no stop. */
-async function waitingBox(options: { authority?: "not_asked" } = {}) {
+async function waitingBox() {
   const start = startClockState();
-  const box = await stoppedBox(-MINUTE, { start, ...options });
+  const box = await stoppedBox(-MINUTE, { start });
   box.startUp.noStop();
   return { box, start };
 }
 
 it("serves a waiting box's challenge and keep with AEAT never asked", async () => {
-  const { box, start } = await waitingBox({ authority: "not_asked" });
+  const { box, start } = await waitingBox();
   const answer = await check(box, staffCookie, 10 * MINUTE, { keep: true });
   expect(answer.status).toBe(200);
   expect(start.status).toBe("by_person");

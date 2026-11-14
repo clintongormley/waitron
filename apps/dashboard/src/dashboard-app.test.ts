@@ -7739,7 +7739,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   });
 
   it.each([false, true])(
-    "lets Box status confirm the box's clock only for an administrator (%s)",
+    "lets Box status check the box's clock only for an administrator (%s)",
     async (admin) => {
       history.replaceState(null, "", "/manage/box-status");
       const api = Object.assign(faceApi(), {
@@ -7754,7 +7754,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       });
       await flush(el);
       const face = el.shadowRoot!.querySelector("dashboard-box-status-screen")!;
-      expect(face.canConfirmClock).toBe(admin);
+      expect(face.canCheckClock).toBe(admin);
     },
   );
 

@@ -852,10 +852,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Can't be recorded: the server's clock is wrong. Tell a manager.",
     es: "No se puede registrar: la hora del servidor es incorrecta. Avisa al encargado.",
   },
-  "clock.behind_chain": {
-    en: "Can't be recorded: the server's clock reads earlier than its last sale. Tell a manager.",
-    es: "No se puede registrar: la hora del servidor es anterior a la última venta. Avisa al encargado.",
-  },
   "clock.unconfirmed": {
     en: "Can't be recorded: the server is waiting for its time to be confirmed. Use “Check the time” at the top of the screen.",
     es: "No se puede registrar: el servidor espera a que se confirme su hora. Usa «Comprobar la hora» en la parte superior de la pantalla.",
@@ -871,10 +867,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "clock.check_expired": {
     en: "The time check took too long. Check again.",
     es: "La comprobación de la hora ha tardado demasiado. Vuelve a comprobarla.",
-  },
-  "clock.confirm_refused": {
-    en: "The server's time was not confirmed. Use “Check the time” to see why.",
-    es: "No se ha confirmado la hora del servidor. Usa «Comprobar la hora» para ver por qué.",
   },
   "handover.stepping_down": {
     en: "This server no longer runs the venue, so it is not taking requests now. Nothing was changed.",

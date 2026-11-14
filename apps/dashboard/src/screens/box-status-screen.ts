@@ -1,16 +1,9 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { formatBytes, pickLocale } from "@waitron/dashboard-kit";
-import {
-  baseStyles,
-  pageTitleStyles,
-  visuallyHiddenStyles,
-  type DataTableColumn,
-} from "@waitron/ui";
+import { formatBytes } from "@waitron/dashboard-kit";
+import { baseStyles, pageTitleStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -18,21 +11,16 @@ import type {
   AlertView,
   BoxHealth,
   BoxNetwork,
-  ClockMisdatedHandledView,
-  ClockMisdatedView,
   DashboardApi,
   FiscalRetryView,
-  MisdatedOpenView,
 } from "../api/client.js";
-import { formatIsoMinute, wallClock } from "../date-utils.js";
-import { ALERT_MESSAGES } from "../i18n/alert-messages.js";
+import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
-import "../widgets/misdated-note-dialog.js";
 import { boxStatusRows, type PartRow } from "./box-status-rows.js";
 
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
@@ -42,29 +30,18 @@ const LEAST_TO_FREE = 500_000;
  * when no read caught the box away: the whole outage can fall between two health reads. */
 const RESTART_AWAY_MS = 30_000;
 
-const MISDATED = "clock.records_misdated";
-
 /** The server's margin for an administrator's device agreeing with the box. */
 const AGREE_WITHIN_MS = 60_000;
 
-/** The reasons a refused confirmation names that have their own sentence. */
-const CONFIRM_REFUSALS = {
-  same_machine: "box_status.clock.admin.refused.same_machine",
-  contrary_proof: "box_status.clock.stop.contrary",
-  differs: "box_status.clock.admin.differ",
-  not_stopped: "box_status.clock.admin.refused.not_stopped",
-} as const satisfies Record<string, StringKey>;
-
-/** The reasons a refused set names that have their own sentence; `agrees` turns to Confirm. */
+/** The reasons a refused set names that have their own sentence. */
 const SET_REFUSALS = {
   same_machine: "box_status.clock.admin.set.refused.same_machine",
   not_stopped: "box_status.clock.admin.set.refused.not_stopped",
   synchronised: "box_status.clock.admin.set.refused.synchronised",
-  witnessed: "box_status.clock.admin.set.refused.witnessed",
   stale: "box_status.clock.admin.set.refused.stale",
   host_unavailable: "box_status.clock.admin.set.refused.host_unavailable",
   target_invalid: "box_status.clock.admin.set.refused.target_invalid",
-  pending_disproofs: "box_status.clock.admin.set.refused.pending_disproofs",
+  pending_step: "box_status.clock.admin.set.refused.pending_step",
 } as const satisfies Record<string, StringKey>;
 
 const SET_FAILURES = {
@@ -76,13 +53,8 @@ const SET_FAILURES = {
 const SET_ENDS_THE_QUESTION: ReadonlySet<string> = new Set([
   "same_machine",
   "not_stopped",
-  "witnessed",
   "stale",
 ]);
-
-/** The check's own refusals, met by a set's fresh challenge, that a second press could only meet
- * again; the challenge route refuses nothing else. */
-const CHECK_ENDS_THE_QUESTION: ReadonlySet<string> = new Set(["same_machine"]);
 
 /** LOCAL copy of `IDLE_TIMEOUT_MS` (`packages/identity/src/management-session.ts:11`): a step
  * past it either way ends the dashboard session that asked for it. */
@@ -93,9 +65,6 @@ interface ClockReading {
   deviceAt: number;
   agrees: boolean;
 }
-
-type MisdatedRecordView = ClockMisdatedView["lists"][number]["records"][number];
-type HandledEpisode = ClockMisdatedHandledView["episodes"][number];
 
 type ReadName = "getBoxHealth" | "listAlerts";
 
@@ -235,7 +204,6 @@ export class BoxStatusScreen extends LitElement {
         color: var(--wt-color-danger);
         margin: 0 0 var(--wt-space-4);
       }
-      .misdated,
       .box-network,
       .box-restart {
         margin: 0 0 var(--wt-space-4);
@@ -265,7 +233,6 @@ export class BoxStatusScreen extends LitElement {
         color: var(--wt-color-primary-text);
       }
       .box-network h2,
-      .misdated h2,
       .box-restart h2 {
         margin: 0 0 var(--wt-space-2);
         font-size: var(--wt-font-size-md);
@@ -273,25 +240,12 @@ export class BoxStatusScreen extends LitElement {
       .clock-check p {
         margin: 0 0 var(--wt-space-2);
       }
-      .misdated-entry {
-        display: grid;
-        gap: var(--wt-space-2);
-        margin: 0 0 var(--wt-space-3);
-      }
-      .misdated-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
-      .misdated-entry > .error {
-        margin: 0;
-      }
     `,
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;
-  @property({ attribute: false }) canConfirmClock = false;
+  @property({ attribute: false }) canCheckClock = false;
   @property({ attribute: false }) canRestart = false;
 
   @state() private network: BoxNetwork | null = null;
@@ -314,25 +268,10 @@ export class BoxStatusScreen extends LitElement {
   @state() private freedBytes: number | null = null;
   /** After a press the figure on the button is stale until the box is read again. */
   @state() private awaitingFigure = false;
-  /** The wrongly dated sales' lists by confirmation; null until read. */
-  @state() private misdatedLists: ReadonlyMap<string, MisdatedRecordView[]> | null = null;
-  @state() private misdatedFailed = false;
-  #watchingMisdated = false;
-  /** Whether the Handled lists fold is open; its episodes are read only while it is. */
-  @state() private handledOpen = false;
-  /** The handled episodes, newest first as the box sends them; null until read. */
-  @state() private handledEpisodes: HandledEpisode[] | null = null;
-  @state() private handledFailed = false;
-  /** Incident ids whose file is being asked for, and the refusal last shown under each entry. */
-  @state() private downloading: ReadonlySet<string> = new Set();
-  @state() private downloadRefusals: ReadonlyMap<string, string> = new Map();
-  /** The entry the note dialog was last opened for; kept while it closes. */
-  @state() private noteTarget: { mode: "handle" | "note"; entry: MisdatedOpenView } | null = null;
-  @state() private noteOpen = false;
   @state() private clockCheckOpen = false;
   /** The times the open check compares; null while it is asked for, or when it was refused. */
   @state() private clockReading: ClockReading | null = null;
-  @state() private confirmingClock = false;
+  @state() private settingClock = false;
   /** Set once the box has set its clock from this device's; null otherwise. */
   @state() private clockSetDone: { signInAgain: boolean } | null = null;
   /** The check's refusal, shown above the dialog's buttons. */
@@ -345,15 +284,12 @@ export class BoxStatusScreen extends LitElement {
   #restartAccepted: { at: number; outageSeen: boolean } | null = null;
   /** Bumped at every opening, so an answer for a closed check is dropped. */
   #clockCheckRun = 0;
-  /** Whether a health read has finished, answered or failed: any read after it is automatic. */
-  #healthAnswered = false;
 
   // One controller per read: a controller's error callback does not say which query failed.
   readonly #healthQueries = new DashboardQueries(
     this,
     () => this.api,
     () => {
-      this.#healthAnswered = true;
       if (this.#restartAccepted !== null) this.#restartAccepted.outageSeen = true;
       this.#readFailed("getBoxHealth");
     },
@@ -372,17 +308,6 @@ export class BoxStatusScreen extends LitElement {
     () => this.api,
     () => this.#readFailed("listAlerts"),
   );
-  readonly #misdatedQueries = new DashboardQueries(
-    this,
-    () => this.api,
-    () => (this.misdatedFailed = true),
-  );
-  readonly #handledQueries = new DashboardQueries(
-    this,
-    () => this.api,
-    () => (this.handledFailed = true),
-  );
-
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#networkQueries
@@ -397,8 +322,6 @@ export class BoxStatusScreen extends LitElement {
         this.awaitingFigure = false;
         this.awaitingRetryRead = false;
         this.#nothingLeftToRetry = this.#nothingToRetry(health);
-        this.#followMisdated(health, this.#healthAnswered);
-        this.#healthAnswered = true;
         this.#restartAnswered();
         if ((this.retryAnswer?.waiting ?? 0) > 0 && this.#nothingLeftToRetry)
           this.retryAnswer = null;
@@ -411,59 +334,6 @@ export class BoxStatusScreen extends LitElement {
         this.alerts = response.visible ? response.alerts : [];
         this.#readSucceeded("listAlerts");
       })
-      .catch(() => undefined);
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.#closeHandled();
-    this.#watchingMisdated = false;
-  }
-
-  #toggleHandled(open: boolean): void {
-    if (!open) {
-      this.#closeHandled();
-      return;
-    }
-    this.handledOpen = true;
-    void this.#handledQueries
-      .watch("clockMisdatedHandled", [], (answer) => {
-        this.handledEpisodes = answer.episodes;
-        this.handledFailed = false;
-      })
-      .catch(() => undefined);
-  }
-
-  #closeHandled(): void {
-    this.#handledQueries.release("clockMisdatedHandled");
-    this.handledOpen = false;
-    this.handledEpisodes = null;
-    this.handledFailed = false;
-  }
-
-  /** Reads the lists only while an open alert has one; a closing that cannot tell lists none. */
-  #followMisdated(health: BoxHealth, passive: boolean): void {
-    const wanted = health.misdatedOpen.some((open) => !open.unconfirmed);
-    if (wanted === this.#watchingMisdated) return;
-    this.#watchingMisdated = wanted;
-    if (!wanted) {
-      this.#misdatedQueries.release("clockMisdated");
-      this.misdatedLists = null;
-      this.misdatedFailed = false;
-      return;
-    }
-    void this.#misdatedQueries
-      .watch(
-        "clockMisdated",
-        [],
-        (answer) => {
-          this.misdatedLists = new Map(
-            answer.lists.map((list) => [list.confirmationId, list.records]),
-          );
-          this.misdatedFailed = false;
-        },
-        { passive },
-      )
       .catch(() => undefined);
   }
 
@@ -507,19 +377,17 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #clockCheckNeeded(health: BoxHealth): boolean {
-    return stopShowing(health) || health.clockCheckWaiting !== null;
+    return clockUnusable(health);
   }
 
-  /** Whether to offer this device's time, from the last read: the box runs a time service it can
-   * set and is not in time by it, and a stop holds that the tax agency has not spoken on. A
-   * waiting check alone is not a stop. The box judges all of it again when asked. */
+  /** From the last read; the box judges it again when asked. */
   #canSetClock(health: BoxHealth | null): boolean {
     return (
       health !== null &&
-      this.canConfirmClock &&
+      this.canCheckClock &&
       health.clock.sync.source === "timedatectl" &&
       !health.clock.sync.synced &&
-      settableStop(health)
+      clockUnusable(health)
     );
   }
 
@@ -537,7 +405,7 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #clockRefused(error: unknown): void {
-    this.clockCheckError = clockRefusal(error);
+    this.clockCheckError = setRefusal(error);
     this.api.liveData.refresh();
   }
 
@@ -555,36 +423,9 @@ export class BoxStatusScreen extends LitElement {
     }
   }
 
-  async #confirmClock(): Promise<void> {
-    if (this.confirmingClock) return;
-    this.confirmingClock = true;
-    this.clockCheckError = "";
-    let fresh: ClockReading | null = null;
-    try {
-      // A fresh challenge, answered at once: the one the dialog opened with may have expired.
-      const { challengeId, reading } = await this.#readBoxTime();
-      fresh = reading;
-      await this.api.clockConfirm({ challengeId, deviceAt: Date.now() });
-      this.clockCheckOpen = false;
-      this.api.liveData.refresh();
-    } catch (error) {
-      if (fresh !== null && refusalReason(error) === "differs") {
-        // The verdict under the fresh times says it, so the footer does not say it twice.
-        this.clockReading = { ...fresh, agrees: false };
-        this.api.liveData.refresh();
-      } else {
-        // Nothing is left to confirm, so a retry could only be refused again.
-        if (refusalReason(error) === "not_stopped") this.clockReading = null;
-        this.#clockRefused(error);
-      }
-    } finally {
-      this.confirmingClock = false;
-    }
-  }
-
   async #setClock(): Promise<void> {
-    if (this.confirmingClock) return;
-    this.confirmingClock = true;
+    if (this.settingClock) return;
+    this.settingClock = true;
     this.clockCheckError = "";
     let fresh: ClockReading | null = null;
     try {
@@ -597,18 +438,16 @@ export class BoxStatusScreen extends LitElement {
       if (fresh !== null && reason === "agrees") {
         this.clockReading = { ...fresh, agrees: true };
       } else {
-        const checkReason = refusalReason(error);
         if (
           codeOf(error) === "clock.set_failed" ||
-          (reason !== null && SET_ENDS_THE_QUESTION.has(reason)) ||
-          (checkReason !== null && CHECK_ENDS_THE_QUESTION.has(checkReason))
+          (reason !== null && SET_ENDS_THE_QUESTION.has(reason))
         )
           this.clockReading = null;
         this.clockCheckError = setRefusal(error);
       }
     } finally {
       this.api.liveData.refresh();
-      this.confirmingClock = false;
+      this.settingClock = false;
     }
   }
 
@@ -645,17 +484,16 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #renderClockCheckDialog(): TemplateResult | typeof nothing {
-    if (!this.canConfirmClock) return nothing;
+    if (!this.canCheckClock) return nothing;
     const reading = this.clockReading;
     const done = this.clockSetDone;
-    const asking = done === null && reading?.agrees === true;
     const offeringSet =
       done === null && reading !== null && !reading.agrees && this.#canSetClock(this.health);
     const cancel = html`<wt-button
       slot="cancel"
       variant="secondary"
       data-test="clock-check-cancel"
-      ?disabled=${this.confirmingClock}
+      ?disabled=${this.settingClock}
       @click=${() => this.#closeClockCheck()}
       >${t("action.cancel")}</wt-button
     >`;
@@ -663,7 +501,7 @@ export class BoxStatusScreen extends LitElement {
       class="clock-check"
       data-test="clock-check-dialog"
       .open=${this.clockCheckOpen}
-      .dismissible=${!this.confirmingClock}
+      .dismissible=${!this.settingClock}
       heading=${t("box_status.clock.admin.open")}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
@@ -696,9 +534,13 @@ export class BoxStatusScreen extends LitElement {
                       }),
                     )}
                   </p>
-                  <p data-test="clock-check-verdict">
-                    ${t(asking ? "box_status.clock.admin.agree" : "box_status.clock.admin.differ")}
-                  </p>`
+                  ${
+                    reading.agrees
+                      ? nothing
+                      : html`<p data-test="clock-check-verdict">
+                          ${t("box_status.clock.admin.differ")}
+                        </p>`
+                  }`
       }
       <wt-form-actions slot="footer" .error=${this.clockCheckError}>
         ${
@@ -707,28 +549,18 @@ export class BoxStatusScreen extends LitElement {
                 <wt-button
                   variant="primary"
                   data-test="clock-set-confirm"
-                  ?disabled=${this.confirmingClock}
-                  ?loading=${this.confirmingClock}
+                  ?disabled=${this.settingClock}
+                  ?loading=${this.settingClock}
                   @click=${() => void this.#setClock()}
                   >${t("box_status.clock.admin.set.confirm")}</wt-button
                 >`
-            : asking
-              ? html`${cancel}
-                  <wt-button
-                    variant="primary"
-                    data-test="clock-check-confirm"
-                    ?disabled=${this.confirmingClock}
-                    ?loading=${this.confirmingClock}
-                    @click=${() => void this.#confirmClock()}
-                    >${t("action.confirm")}</wt-button
-                  >`
-              : html`<wt-button
-                  slot="cancel"
-                  variant="secondary"
-                  data-test="clock-check-close"
-                  @click=${() => this.#closeClockCheck()}
-                  >${t("action.close")}</wt-button
-                >`
+            : html`<wt-button
+                slot="cancel"
+                variant="secondary"
+                data-test="clock-check-close"
+                @click=${() => this.#closeClockCheck()}
+                >${t("action.close")}</wt-button
+              >`
         }
       </wt-form-actions>
     </wt-dialog>`;
@@ -883,7 +715,7 @@ export class BoxStatusScreen extends LitElement {
             : nothing
         }
         ${
-          row.id === "clock" && !this.canConfirmClock && this.#clockCheckNeeded(health)
+          row.id === "clock" && !this.canCheckClock && this.#clockCheckNeeded(health)
             ? html`<p class="aside" data-test="clock-admin-hint">
                 ${t("box_status.clock.admin.sign_in_hint")}
               </p>`
@@ -924,261 +756,12 @@ export class BoxStatusScreen extends LitElement {
         ${
           row.id !== "clock" || !this.#clockCheckNeeded(health)
             ? nothing
-            : this.canConfirmClock
+            : this.canCheckClock
               ? this.#clockCheckButton()
               : this.#clockAdminSignIn()
         }
       </div>
     </li>`;
-  }
-
-  #misdatedColumns(): DataTableColumn<MisdatedRecordView>[] {
-    return [
-      {
-        key: "invoice",
-        label: t("box_status.misdated.col_invoice"),
-        cell: (record) =>
-          record.number === null ? record.series : `${record.series}/${record.number}`,
-      },
-      {
-        key: "at",
-        label: t("box_status.misdated.col_at"),
-        cell: (record) => wholeTimes(wallMinute(record.at, record.offsetMinutes)),
-      },
-    ];
-  }
-
-  #misdatedSentence(open: MisdatedOpenView): string | null {
-    if (open.unconfirmed) return alertMessage(MISDATED, { ...open }, currentLocale());
-    const partial = ALERT_MESSAGES[MISDATED]?.variants?.partial;
-    return open.partial && partial !== undefined ? pickLocale(partial, currentLocale()) : null;
-  }
-
-  #renderMisdatedEntry(open: MisdatedOpenView, severalTables: boolean): TemplateResult | null {
-    const sentence = this.#misdatedSentence(open);
-    const records = open.unconfirmed ? undefined : this.misdatedLists?.get(open.confirmationId);
-    // The answer leaves out a list it cannot give; a failed read is said once, under the section.
-    if (
-      sentence === null &&
-      records === undefined &&
-      (this.misdatedLists !== null || this.misdatedFailed)
-    )
-      return null;
-    return html`<div class="misdated-entry" data-test="misdated-entry">
-      ${this.#misdatedBody(open, sentence, records, severalTables, this.#noteButton("handle", open))}
-    </div>`;
-  }
-
-  #handledLine(episode: HandledEpisode): string {
-    const time = formatIsoMinute(episode.handledAt);
-    if (episode.handledBy.kind === "box")
-      return fill("box_status.misdated.handled_by_box", { time });
-    const name = episode.handledBy.name;
-    return name === null
-      ? fill("box_status.misdated.handled_by_unknown", { time })
-      : fill("box_status.misdated.handled_by_person", { name, time });
-  }
-
-  #renderHandledEntry(episode: HandledEpisode, severalTables: boolean): TemplateResult {
-    return html`<div
-      class="misdated-entry"
-      data-test="misdated-handled-entry"
-      data-incident=${episode.incidentId}
-    >
-      <p class="detail" data-test="misdated-handled-by">
-        ${wholeTimes(this.#handledLine(episode))}
-      </p>
-      ${
-        episode.note === null
-          ? nothing
-          : html`<p class="detail" data-test="misdated-note">
-              ${fill("box_status.misdated.note", { note: episode.note })}
-            </p>`
-      }
-      ${this.#misdatedBody(
-        episode,
-        this.#misdatedSentence(episode),
-        episode.records ?? undefined,
-        severalTables,
-        episode.note === null ? this.#noteButton("note", episode) : nothing,
-      )}
-    </div>`;
-  }
-
-  #misdatedBody(
-    open: MisdatedOpenView,
-    sentence: string | null,
-    records: MisdatedRecordView[] | undefined,
-    severalTables: boolean,
-    noteButton: TemplateResult | typeof nothing,
-  ): TemplateResult {
-    return html`${
-        sentence === null
-          ? nothing
-          : html`<p class="detail" data-test="misdated-sentence">${wholeTimes(sentence)}</p>`
-      }
-      ${
-        records === undefined
-          ? nothing
-          : html`<wt-data-table
-              data-test="misdated-table"
-              aria-label=${
-                severalTables && open.to !== undefined
-                  ? fill("box_status.misdated.table_range", {
-                      from: wallMinute(open.from, open.fromOffsetMinutes),
-                      to: wallMinute(open.to, open.toOffsetMinutes!),
-                    })
-                  : t("box_status.misdated.title")
-              }
-              .rows=${records}
-              .columns=${this.#misdatedColumns()}
-              .rowKey=${(record: MisdatedRecordView) => record.recordId}
-            ></wt-data-table>`
-      }
-      <div class="misdated-actions">
-        ${records === undefined || open.unconfirmed ? nothing : this.#downloadButton(open)}
-        ${noteButton}
-      </div>
-      ${this.#downloadRefusal(open)}`;
-  }
-
-  #noteButton(mode: "handle" | "note", entry: MisdatedOpenView): TemplateResult {
-    return html`<wt-button
-      size="sm"
-      variant="secondary"
-      data-test=${mode === "handle" ? "misdated-mark-handled" : "misdated-add-note"}
-      @click=${() => {
-        this.noteTarget = { mode, entry };
-        this.noteOpen = true;
-      }}
-      >${t(mode === "handle" ? "alerts.mark_handled" : "box_status.misdated.add_note")}</wt-button
-    >`;
-  }
-
-  #noteSummary(entry: MisdatedOpenView): string {
-    if (entry.unconfirmed) return alertMessage(MISDATED, { ...entry }, currentLocale());
-    const from = wallMinute(entry.from, entry.fromOffsetMinutes);
-    if (entry.count === 1) return fill("box_status.misdated.summary_one", { from });
-    return fill("box_status.misdated.summary", {
-      count: String(entry.count),
-      from,
-      to: wallMinute(entry.to ?? entry.from, entry.toOffsetMinutes ?? entry.fromOffsetMinutes),
-    });
-  }
-
-  #renderNoteDialog(): TemplateResult {
-    const target = this.noteTarget;
-    return html`<dashboard-misdated-note-dialog
-      .api=${this.api}
-      .open=${this.noteOpen}
-      .mode=${target?.mode ?? "handle"}
-      .incidentId=${target?.entry.incidentId ?? ""}
-      .summary=${target === null ? "" : this.#noteSummary(target.entry)}
-      @saved=${() => this.api.liveData.refresh()}
-      @note-close=${() => (this.noteOpen = false)}
-    ></dashboard-misdated-note-dialog>`;
-  }
-
-  #downloadButton(open: MisdatedOpenView): TemplateResult {
-    return html`<wt-button
-      size="sm"
-      variant="secondary"
-      data-test="misdated-download"
-      ?loading=${this.downloading.has(open.incidentId)}
-      @click=${() => void this.#download(open)}
-      >${t("box_status.misdated.download")}</wt-button
-    >`;
-  }
-
-  #downloadRefusal(open: MisdatedOpenView): TemplateResult | typeof nothing {
-    const refusal = this.downloadRefusals.get(open.incidentId);
-    return refusal === undefined
-      ? nothing
-      : html`<p class="error" role="alert" data-test="misdated-download-error">
-          ${codeMessage(refusal)}
-        </p>`;
-  }
-
-  async #download(open: MisdatedOpenView): Promise<void> {
-    const id = open.incidentId;
-    if (this.downloading.has(id)) return;
-    this.downloading = new Set([...this.downloading, id]);
-    const refusals = new Map(this.downloadRefusals);
-    refusals.delete(id);
-    this.downloadRefusals = refusals;
-    try {
-      const file = await this.api.downloadMisdatedSales(id);
-      const url = URL.createObjectURL(file);
-      const link = document.createElement("a");
-      link.href = url;
-      // The server's own name for the file: the first sale's date as the box's clock read it.
-      link.download = `misdated-sales-${wallClock(open.from, open.fromOffsetMinutes).date}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      this.downloadRefusals = new Map([...this.downloadRefusals, [id, codeOf(error)]]);
-    } finally {
-      const asked = new Set(this.downloading);
-      asked.delete(id);
-      this.downloading = asked;
-    }
-  }
-
-  #renderHandled(health: BoxHealth, severalTables: boolean): TemplateResult | typeof nothing {
-    if (health.misdatedHandledCount === 0) return nothing;
-    return html`<wt-disclosure
-      data-test="misdated-handled"
-      heading=${fill("box_status.misdated.handled_heading", {
-        count: String(
-          this.handledOpen && this.handledEpisodes !== null
-            ? this.handledEpisodes.length
-            : health.misdatedHandledCount,
-        ),
-      })}
-      ?open=${this.handledOpen}
-      @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => this.#toggleHandled(event.detail.open)}
-      >${
-        this.handledOpen
-          ? html`${(this.handledEpisodes ?? []).map((episode) =>
-              this.#renderHandledEntry(episode, severalTables),
-            )}${
-              this.handledFailed
-                ? html`<p class="note" data-test="misdated-handled-unavailable">
-                    ${t("box_status.misdated.handled_read_error")}
-                  </p>`
-                : nothing
-            }`
-          : nothing
-      }</wt-disclosure
-    >`;
-  }
-
-  #renderMisdated(health: BoxHealth): TemplateResult | typeof nothing {
-    const handledTables = this.handledOpen
-      ? (this.handledEpisodes ?? []).filter((episode) => episode.records !== null).length
-      : 0;
-    const tables =
-      health.misdatedOpen.filter(
-        (open) => !open.unconfirmed && this.misdatedLists?.has(open.confirmationId) === true,
-      ).length + handledTables;
-    const entries = health.misdatedOpen
-      .map((open) => this.#renderMisdatedEntry(open, tables > 1))
-      .filter((entry) => entry !== null);
-    if (entries.length === 0 && !this.misdatedFailed && health.misdatedHandledCount === 0)
-      return nothing;
-    return html`<section class="misdated" data-test="misdated">
-      <h2>${t("box_status.misdated.title")}</h2>
-      <p class="note" data-test="misdated-line">${t("box_status.misdated.line")}</p>
-      ${entries}
-      ${
-        this.misdatedFailed
-          ? html`<p class="note" data-test="misdated-unavailable">
-              ${t("box_status.misdated.read_error")}
-            </p>`
-          : nothing
-      }
-      ${this.#renderHandled(health, tables > 1)}
-    </section>`;
   }
 
   #renderBody(): TemplateResult | typeof nothing {
@@ -1204,7 +787,6 @@ export class BoxStatusScreen extends LitElement {
       <ul class="rows">
         ${rows.map((row) => this.#renderRow(row, health))}
       </ul>
-      ${this.#renderMisdated(health)}
       ${
         checksUnavailable
           ? html`<p class="note" data-test="checks-unavailable">
@@ -1388,15 +970,9 @@ export class BoxStatusScreen extends LitElement {
     return html`
       <h1 class="title">${t("box_status.title")}</h1>
       ${this.#renderError()} ${this.#renderBody()} ${this.#renderNetwork()} ${this.#renderRestart()}
-      ${this.#renderClockCheckDialog()} ${this.#renderRestartDialog()} ${this.#renderNoteDialog()}
+      ${this.#renderClockCheckDialog()} ${this.#renderRestartDialog()}
     `;
   }
-}
-
-/** A sale's minute on the wall clock at the offset stored beside it, not the browser's zone. */
-function wallMinute(instant: string, offsetMinutes: number): string {
-  const { date, time } = wallClock(instant, offsetMinutes);
-  return `${date} ${time}`;
 }
 
 /** A time to the second, written so `wholeTimes` keeps its date and minute on one line. */
@@ -1405,20 +981,8 @@ function atSeconds(ms: number): string {
   return `${formatIsoMinute(at.toISOString())}:${String(at.getSeconds()).padStart(2, "0")}`;
 }
 
-/** A stop not yet confirmed, or a clock before 28-10-2024. */
-function stopShowing(health: BoxHealth): boolean {
-  return (
-    (health.clockStop !== null && health.clockStop.proof !== "confirmed") ||
-    health.notices.some((notice) => notice.code === "clock.unusable")
-  );
-}
-
-/** A stop the box's set route takes a device's time for: once the tax agency's time is in hand
- * during a clock-behind stop, the box answers `witnessed`. */
-function settableStop(health: BoxHealth): boolean {
-  const stop = health.clockStop;
-  if (stop !== null && stop.proof !== "confirmed")
-    return stop.agreeing.authority === null && stop.contrary.authority === null;
+/** A clock before 28-10-2024. */
+function clockUnusable(health: BoxHealth): boolean {
   return health.notices.some((notice) => notice.code === "clock.unusable");
 }
 
@@ -1426,10 +990,6 @@ function reasonOf(error: unknown, code: string): string | null {
   if (codeOf(error) !== code) return null;
   const reason = (error as { params?: { reason?: unknown } } | null)?.params?.reason;
   return typeof reason === "string" ? reason : null;
-}
-
-function refusalReason(error: unknown): string | null {
-  return reasonOf(error, "clock.confirm_refused");
 }
 
 function setRefusalReason(error: unknown): string | null {
@@ -1444,18 +1004,11 @@ function setRefusal(error: unknown): string {
       ? t(SET_FAILURES[failure as keyof typeof SET_FAILURES])
       : codeMessage(code);
   }
-  if (code !== "clock.set_refused") return clockRefusal(error);
+  if (code !== "clock.set_refused") return codeMessage(code);
   const reason = setRefusalReason(error);
   return reason !== null && Object.hasOwn(SET_REFUSALS, reason)
     ? t(SET_REFUSALS[reason as keyof typeof SET_REFUSALS])
     : codeMessage(code);
-}
-
-function clockRefusal(error: unknown): string {
-  const reason = refusalReason(error);
-  return reason !== null && Object.hasOwn(CONFIRM_REFUSALS, reason)
-    ? t(CONFIRM_REFUSALS[reason as keyof typeof CONFIRM_REFUSALS])
-    : codeMessage(codeOf(error));
 }
 
 declare global {

@@ -269,8 +269,6 @@ const en = {
     "Waitron needs you to sign in again before sending this. Send again to be asked.",
   "fiscal_filing.refused.clock_unconfirmed":
     "The server is waiting for its time to be confirmed. Confirm it on a till or on the Box status page, then send again.",
-  "fiscal_filing.refused.clock_behind":
-    "The server's clock reads earlier than its newest invoice, so nothing was sent. Confirm the time on the Box status page, then send again.",
   "fiscal_filing.refused.clock_unusable":
     "The server's clock is wrong, so nothing was sent. With the internet the server puts it right by itself; otherwise set it on the Box status page, then send again.",
   "fiscal_filing.refused.time_zone":
@@ -625,8 +623,6 @@ const es: Record<AeatCertificateKey, string> = {
     "Waitron necesita que vuelvas a iniciar sesión antes de enviarlo. Envía de nuevo para que te lo pida.",
   "fiscal_filing.refused.clock_unconfirmed":
     "El servidor está esperando a que se confirme su hora. Confírmala en una caja o en Estado del servidor y envía de nuevo.",
-  "fiscal_filing.refused.clock_behind":
-    "La hora del servidor es anterior a su última factura, así que no se ha enviado nada. Confirma la hora en Estado del servidor y envía de nuevo.",
   "fiscal_filing.refused.clock_unusable":
     "La hora del servidor es incorrecta, así que no se ha enviado nada. Con internet, el servidor la corrige solo; si no, ponla en hora en Estado del servidor y envía de nuevo.",
   "fiscal_filing.refused.time_zone":

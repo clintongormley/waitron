@@ -31,13 +31,11 @@ export function recoveryRefusalText(refusal: RecoveryRefusal): string | null {
     const charged = t(
       refusal.reason === "disk_full"
         ? "sale.charged_disk_full"
-        : refusal.reason === "clock_behind_chain"
-          ? "bill_pay.charged_clock_behind"
-          : refusal.reason === "clock_unusable"
-            ? "bill_pay.charged_clock_unusable"
-            : refusal.reason === "clock_unconfirmed"
-              ? "bill_pay.charged_clock_unconfirmed"
-              : "recovery.charged",
+        : refusal.reason === "clock_unusable"
+          ? "bill_pay.charged_clock_unusable"
+          : refusal.reason === "clock_unconfirmed"
+            ? "bill_pay.charged_clock_unconfirmed"
+            : "recovery.charged",
     );
     return `${charged} ${t("bill_pay.card_recovery")}`;
   }

@@ -1,19 +1,16 @@
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, max, sql } from "drizzle-orm";
 import { incidents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { ClockStep, ClockStepRecorded, ClockStepRequest } from "@waitron/fiscal";
+import type {
+  ClockAdminReading,
+  ClockStep,
+  ClockStepRecorded,
+  ClockStepRequest,
+  ClockWitness,
+} from "@waitron/fiscal";
 import type { ErrorParams, NodeId } from "@waitron/shared";
-import { CLOCK_BEHIND_MARGIN_MS, chainHeads, latestRecord } from "./clock-behind.js";
-import {
-  closingProof,
-  nextConfirmationSeq,
-  openCheck,
-  openClockCheck,
-  storedWitnesses,
-  type OpenCheck,
-} from "./clock-checks.js";
-import { recordCorrected, recordMisdated, recordRestarted } from "./clock-stop-incidents.js";
+import { recordCorrected } from "./clock-corrected-incident.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
 /** An unverified step this small is the clock's own drift, not a step worth an alert. */
@@ -23,44 +20,67 @@ const UNVERIFIED_STEP_FLOOR_MS = 1_000;
  * a `setup` step matches no person here, since the regime never records one. */
 function assertPersonMatchesSource(
   input: ClockStepRequest,
-): asserts input is ClockStepRequest & { source: "authority" | "admin" | "staff" } {
+): asserts input is ClockStepRequest & { source: "admin" | "staff" } {
   const { source, admin } = input;
   const matches =
-    source === "authority"
-      ? admin === undefined
-      : source === "admin"
-        ? admin !== undefined && admin.role === undefined
-        : source === "staff"
-          ? admin?.role === "staff" && admin.device !== undefined
-          : false;
+    source === "admin"
+      ? admin !== undefined && admin.role === undefined
+      : source === "staff"
+        ? admin?.role === "staff" && admin.device !== undefined
+        : false;
   if (!matches)
     throw new Error(`confirmClockStep: a ${source} step was given a person that does not match it`);
 }
 
-/** The check this step closes: during a stop, the stop's check at the before reading, opened then
- * if none is open (its closing is then `partial`); with no stop there, the open check if any. */
-async function stepCheck(
-  tx: Transaction,
-  input: ClockStepRequest,
-): Promise<{ check: OpenCheck; openedNow: boolean } | null> {
-  const existing = await openCheck(tx);
-  const opened = await openClockCheck(tx, {
-    reading: input.before,
-    boot: input.bootBefore,
-    nodeId: input.nodeId,
-  });
-  if (opened === null) return existing === null ? null : { check: existing, openedNow: false };
-  const openedNow = existing?.id !== opened.id;
-  // The stop holds at the before reading, so the check just answered is open.
-  return { check: openedNow ? (await openCheck(tx))! : existing!, openedNow };
+/** The `seq` the next confirmation takes, read in the writing transaction. */
+async function nextConfirmationSeq(tx: Transaction): Promise<number> {
+  const [row] = await tx.select({ seq: max(clockConfirmations.seq) }).from(clockConfirmations);
+  return (row?.seq ?? 0) + 1;
+}
+
+interface StepWitnesses {
+  devices: readonly ClockWitness[];
+  /** The person's device's reading: an administrator's, or with `role: "staff"` a staff member's. */
+  admin: ClockAdminReading | null;
+  role?: "staff";
+  device?: { deviceId: string; address: string | null };
+}
+
+/** The witnesses as a confirmation's `proof` stores them. A staff member's reading is stored under
+ * `staff`, with the till's id and address and no `admin` key; an administrator's on a till gets a
+ * `device` key, naming the till, beside `admin`. */
+function storedWitnesses(witnesses: StepWitnesses) {
+  const { admin, device } = witnesses;
+  const person =
+    admin === null
+      ? null
+      : { boxAt: admin.boxAt, witnessAt: admin.witnessAt, uncertaintyMs: admin.uncertaintyMs };
+  const stored = {
+    devices: witnesses.devices.map((witness) => ({
+      deviceId: witness.id,
+      address: witness.address,
+      boxAt: witness.boxAt,
+      witnessAt: witness.witnessAt,
+    })),
+  };
+  if (witnesses.role === "staff")
+    return {
+      ...stored,
+      staff: { deviceId: device?.deviceId ?? null, address: device?.address ?? null, ...person },
+    };
+  return {
+    ...stored,
+    admin: person,
+    ...(device === undefined
+      ? {}
+      : { device: { deviceId: device.deviceId, address: device.address } }),
+  };
 }
 
 /** Records a step of the box's clock from `before` to `after` (decision 7 of the 9b plan): a
- * verified step writes one `clock_confirmations` row, `confirmed_at` the after reading; for the
- * clock-behind stop it closes the stop's check, and names the latest record (a lift, with
- * `clock.behind_chain_restarted`) when the after reading is still more than a minute behind it.
- * An unusable clock's step names no check and no record. Every step records `clock.corrected`; an
- * unverified one writes no row, and nothing at all when the clock moved by a second or less. */
+ * verified step writes one `clock_confirmations` row, `confirmed_at` the after reading, naming no
+ * check and no record. Every step records `clock.corrected`; an unverified one writes no row, and
+ * nothing at all when the clock moved by a second or less. */
 export async function confirmClockStep(
   tx: Transaction,
   input: ClockStepRequest,
@@ -92,19 +112,6 @@ export async function confirmClockStep(
     return { confirmation: null, corrected };
   }
 
-  const stop = input.reason === "behind_chain" ? await stepCheck(tx, input) : null;
-  const latest = stop === null ? undefined : await latestRecord(tx);
-  const named =
-    latest !== undefined && after.instant.getTime() < latest.at.getTime() - CLOCK_BEHIND_MARGIN_MS
-      ? latest
-      : null;
-  const closing =
-    stop === null
-      ? null
-      : closingProof(stop.check, after.instant, input.bootAfter, {
-          unconfirmed: false,
-          openedNow: stop.openedNow,
-        });
   const personId = admin?.personId ?? null;
   const seq = await nextConfirmationSeq(tx);
   const [row] = await tx
@@ -120,8 +127,7 @@ export async function confirmClockStep(
       reason: input.reason,
       proof: {
         ...storedWitnesses({
-          authority: input.witnesses.find((witness) => witness.kind === "authority") ?? null,
-          devices: input.witnesses.filter((witness) => witness.kind === "device"),
+          devices: input.witnesses,
           admin: admin?.reading ?? null,
           ...(admin?.role === undefined ? {} : { role: admin.role }),
           ...(admin?.device === undefined
@@ -134,35 +140,13 @@ export async function confirmClockStep(
           stepMs: input.stepMs,
           targetAt: input.targetAt,
         },
-        ...(stop === null ? {} : { heads: await chainHeads(tx), closing }),
       },
-      checkId: stop?.check.id ?? null,
-      registroId: named?.id ?? null,
-      recordAt: named?.at ?? null,
+      checkId: null,
+      registroId: null,
+      recordAt: null,
     })
     .returning({ id: clockConfirmations.id });
   const confirmationId = row!.id;
-  if (named !== null)
-    await recordRestarted(tx, {
-      recordId: named.id,
-      detectedAt: after.instant,
-      params: {
-        confirmationId,
-        confirmedBy: source,
-        person: params.person,
-        clockAt: after.instant.toISOString(),
-        lastRecordAt: named.at.toISOString(),
-        ...(source === "staff" ? { byStaff: true as const } : {}),
-        ...(admin?.device === undefined ? {} : { device: admin.device.deviceLabel }),
-      },
-    });
-  if (stop !== null)
-    await recordMisdated(tx, {
-      confirmationId,
-      check: stop.check,
-      partial: closing!.partial,
-      reading: after,
-    });
   const corrected = await recordCorrected(tx, {
     detectedAt: after.instant,
     params: { ...params, confirmationId },
@@ -175,8 +159,8 @@ export async function confirmClockStep(
       source,
       personId,
       confirmedAt: after.instant.toISOString(),
-      checkId: stop?.check.id ?? null,
-      recordId: named?.id ?? null,
+      checkId: null,
+      recordId: null,
     },
   };
 }

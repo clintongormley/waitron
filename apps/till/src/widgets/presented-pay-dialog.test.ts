@@ -626,45 +626,8 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
     },
   );
 
-  const clockBehind = {
-    code: "clock.behind_chain",
-    clockAt: "2025-03-14T08:12:00.000Z",
-    offsetMinutes: 60,
-    lastRecordAt: "2026-10-18T21:40:00.000Z",
-    lastRecordOffsetMinutes: 120,
-  };
-
-  it.each(["es", "en-GB"])(
-    "words a clock behind the last sale with both times, each in its own offset (%s)",
-    async (locale) => {
-      setLocale(locale);
-      const el = await mount({ refusal: clockBehind });
-      expect(actions(el).error).toBe(
-        t("sale.clock_behind_chain")
-          .replace("{clockAt}", "14/03/2025\u00a009:12")
-          .replace("{lastRecordAt}", "18/10/2026\u00a023:40"),
-      );
-    },
-  );
-
   it.each([
-    [{ lastRecordAt: undefined }],
-    [{ lastRecordAt: "not a time" }],
-    [{ lastRecordOffsetMinutes: Number.NaN }],
-    [{ clockAt: undefined }],
-    [{ offsetMinutes: undefined }],
-  ])(
-    "words a clock behind the last sale without a usable reading (%o) in the code's sentence",
-    async (broken) => {
-      const el = await mount({ refusal: { ...clockBehind, ...broken } as never });
-      expect(actions(el).error).toBe(codeMessage("clock.behind_chain"));
-    },
-  );
-
-  it.each([
-    ["en-GB", "clock_behind_chain", "sale.charged_clock_behind"],
     ["en-GB", "clock_unusable", "sale.charged_clock_unusable"],
-    ["es", "clock_behind_chain", "sale.charged_clock_behind"],
     ["es", "clock_unusable", "sale.charged_clock_unusable"],
   ] as const)(
     "a charged presented card offers to retry the same payment in %s for %s",
@@ -679,13 +642,6 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
       }
     },
   );
-
-  it("words a card charged as the clock stop begins in its own sentence", async () => {
-    const el = await mount({
-      refusal: { code: "sale.charged_not_recorded", reason: "clock_behind_chain" },
-    });
-    expect(actions(el).error).toBe(t("sale.charged_clock_behind"));
-  });
 
   it("words a person who may not take payments as the till does", async () => {
     const el = await mount({

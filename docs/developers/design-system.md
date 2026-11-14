@@ -3186,9 +3186,6 @@ and nothing guards it across screens:
   (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling `*.unsaved.test.ts`. An A4
   printer's name is edited in the printer details' Edit form (`apps/dashboard/src/screens/printers-screen.ts`,
   A405), whose leave cases are in `printer-details-a4.unsaved.test.ts`;
-- A1088: Box status's note dialog (`apps/dashboard/src/widgets/misdated-note-dialog.ts`); Add
-  note's Save follows the rule. Its leave cases are in `misdated-note-dialog.unsaved.test.ts`
-  beside it;
 - A1321: Servers' Remove dialog (`apps/dashboard/src/screens/servers-screen.ts`) takes no draft
   scope and has no `*.unsaved.test.ts`: its two statements are a confirmation, not staged input,
   and each opening of the dialog starts with both off;
@@ -3252,8 +3249,6 @@ These open already savable:
   `apps/dashboard/src/widgets/page-printer-add.ts`); with nothing found it opens quiet;
 - the theme name dialog's Make a copy and Save as new theme…: pressing Save is the copy
   (`savableAtOpen`, `apps/dashboard/src/widgets/theme-name-dialog.ts`);
-- the note dialog's Mark handled: marking the list handled is the action, and the note is optional
-  (`savableAtOpen`, `apps/dashboard/src/widgets/misdated-note-dialog.ts`);
 - the calibration wizard when an add opened it: after a fresh add it confirms a new printer's
   default settings, and after a re-add pressing Save is what keeps the printer on, because closing
   the wizard switches it off again (`#calibrationOpenedByAdd` in
@@ -6390,7 +6385,7 @@ slot" in `apps/till/src/widgets/till-shell.test.ts`, and `apps/till/src/till-app
 `dashboard-box-status-screen` (`apps/dashboard/src/screens/box-status-screen.ts`, rows worked out
 in `box-status-rows.ts`) is under Settings, before Diagnostics, for people with `system.manage`. It
 reads `GET /api/box/health` every 15 seconds (passively after the first read) and the bell's own
-alert list. Its one staged input is the note in its note dialog, which takes its own draft scope.
+alert list.
 
 - **Network.** A read-only card after the health cards and before Restart, with Wired,
   Current Wi-Fi and Saved Wi-Fi. It reads `/api/box/network` once a minute even with a live
@@ -6413,10 +6408,8 @@ alert list. Its one staged input is the note in its note dialog, which takes its
 - **Dots.** A `--wt-space-3` circle: `--wt-color-success` for fine, `--wt-color-warning` for needs
   attention, `--wt-color-danger` for something can't be saved, with the state's words in visually
   hidden text beside it. Red is a staff notice of severity `error` (`storage.disk_full`,
-  `clock.unusable`, `clock.behind_chain`); amber is any other notice and any bell alert on that row,
-  whatever the alert's own severity, and the Clock row when a confirmation covers the clock (the
-  stop's proof is `confirmed`) or a check of the clock waits (`clockCheckWaiting`) and no red notice
-  is on it, and the Clock row when the box's own read
+  `clock.unusable`); amber is any other notice and any bell alert on that row,
+  whatever the alert's own severity, and the Clock row when the box's own read
   of AEAT's time is at `warning`, because amber means everything still
   works. The legend says "red: something can't be saved", not "nothing", because an unusable clock
   refuses sales while orders still save.
@@ -6454,62 +6447,20 @@ alert list. Its one staged input is the note in its note dialog, which takes its
   record was waiting to be tried again." stays until the next press. The Tax agency row's detail is
   "Last accepted {time}" or "None accepted yet", and nothing while `outbox` is `null`.
 - **Check with this device's time.** On the Clock row, a `secondary` "Check with this device's
-  time" button, drawn only for a person with `system.box_admin` and only while a stop holds that no
-  confirmation covers (the stop's proof is not `confirmed`) or a check of the clock waits. It opens a
-  dialog headed with the same words that asks the box for its time and shows "The box's clock says
-  {box}. This device says {device}.", to the second. When the two agree within a minute, counting
-  half the round trip, it asks "They agree. Confirm that the box's clock is right?" with Cancel
-  (`secondary`) and Confirm (`primary`, with `loading` while it is sent; both disabled, and the
-  dialog not dismissible, while it is sent); Confirm asks the box for a fresh challenge and answers
-  it at once. Otherwise it says "The box could not show that its clock is within a minute of your
+  time" button, drawn only for a person with `system.box_admin` and only while the box carries a
+  `clock.unusable` notice. It opens a dialog headed with the same words that asks the box for its
+  time. When the two differ by more than a minute, counting half the round trip, and the box runs a
+  time service it can set that is not in time, it asks "The box's clock says {box}. Your device
+  says {device}. Use your device's time?" with Cancel (`secondary`) and "Use this time"
+  (`primary`, with `loading` while it is sent; both disabled, and the dialog not dismissible, while
+  it is sent). Otherwise it shows "The box's clock says {box}. This device says {device}.", to the
+  second, with, when they differ, "The box could not show that its clock is within a minute of your
   device's. Check that your device's time is right; if it is, connect the box to the internet so it
-  can correct its clock." with Close alone. The server judges the answer again, and refuses
-  `differs` when it cannot show the two agree; the dialog then shows the fresh times with that same
-  sentence and Close alone, and nothing in its footer. Every other refusal shows in the dialog's
-  footer, above its buttons, in its own sentence for `same_machine` ("This screen is the box
-  itself, …", refused before any times are shown, so with Close alone), `contrary_proof` ("Other
-  clocks say the box's clock is wrong."), which keeps Cancel and Confirm, a check the box no longer
-  holds (`clock.check_expired`, worded by its code: "The check took too long. Try again."), which
-  keeps them too, and `not_stopped` ("There is nothing left to
-  confirm. See the Clock row."), after which the times and the question go and Close is alone; any
-  other reason is worded by its code. Every refusal reads every open read again. A confirmation
-  closes the dialog and reads every open read again. The button carries a `help-mode`
+  can correct its clock.", and Close alone. A refusal shows in the dialog's footer, worded by its
+  reason, and reads every open read again. The button carries a `help-mode`
   `wt-help-tooltip` ("What this check does") that says what the check does and links to the
   guide's `box-status#clock-own-device` section, its badge hung over the button's top trailing corner
   as Free's and Retry now's are.
-- **Sales dated wrongly.** Under the rows, one section headed "Sales dated wrongly", with
-  "Download each list for your tax adviser and go through it with them, then mark it handled here
-  with a note of what was done." under the heading and one entry for each open
-  `clock.records_misdated` alert. An alert that lists sales draws them in a
-  `wt-data-table` (Invoice, Time recorded), read from `GET /api/box/clock-misdated` only while such
-  an alert is open, with a sentence above it when the list may be short (`partial`); an alert that
-  cannot tell draws its sentence and no table. Each entry ends with a row of small secondary
-  buttons that wraps: "Download for your adviser" (only beside a drawn list, so never on an alert
-  that cannot tell), which
-  saves `GET /api/box/clock-misdated/:incidentId/download` as `misdated-sales-<date>.csv` and shows
-  a refusal under the row, and Mark handled. A failed list read says "The list of sales dated
-  wrongly could not be read." under the section. Below the entries, while any alert has been
-  handled, a closed `wt-disclosure` "Handled lists ({count})" counts them from the box read while closed, and the lists it read
-  while open; only
-  while it is open does the page read `GET /api/box/clock-misdated/handled`, again when alerts or
-  people change. Each handled entry, newest first, says who marked it handled and when
-  ("Marked handled by {name} on {time}.", "by the box", or no name), its note ("Note: …") when it
-  has one, and the same sentence, table and Download as an open entry; one with no note offers Add
-  note. A failed read says "The handled lists could not be read." inside the fold. The section is
-  not drawn while no alert has anything to show, none has been handled and the list read has not
-  failed.
-- **The note dialog.** `dashboard-misdated-note-dialog`
-  (`apps/dashboard/src/widgets/misdated-note-dialog.ts`) opens from Mark handled or Add note, with
-  a one-line summary of the alert (how many sales, from when to when) above one `wt-textarea` named
-  `note` (at most 500
-  characters). From Mark handled the note is optional and Mark handled is enabled from the start,
-  an action rather than a save; from Add note ("Add a note") the note is required and Save stays
-  quiet and disabled until it has text (`saveActionState`). Both take a draft scope, so a typed
-  note asks before the dialog closes or the page is left. A refusal naming the `note` field is
-  said under the field, with the form's fix-the-fields line at the bottom; any other refusal
-  (`alert.already_handled`, `alert.note_exists`, `alert.not_handled`) is worded by its code at the
-  bottom, and none disables the button. The bell's and the Alerts screen's Mark handled take no
-  note.
 - **Restart the box.** At the end of the page, after everything under the rows, a section headed
   "Restart the box", drawn whether or not the box's read has answered. For a person with `system.manage` it holds a `secondary` "Restart the
   box" button with a help-mode "?" that opens the guide's `box-status#restart` section. It opens a
@@ -6527,9 +6478,7 @@ alert list. Its one staged input is the note in its note dialog, which takes its
 
 Cases: `apps/dashboard/src/screens/box-status-screen.test.ts`, its `box-status-screen.a11y.test.ts`,
 `box-status-rows.test.ts`, for Retry now `box-status-screen.retry.test.ts`,
-`box-status-screen.retry.a11y.test.ts` and `box-status-rows.tax.test.ts`, and for the note dialog
-`apps/dashboard/src/widgets/misdated-note-dialog.test.ts`, `misdated-note-dialog.unsaved.test.ts`
-and `misdated-note-dialog.a11y.test.ts`.
+`box-status-screen.retry.a11y.test.ts` and `box-status-rows.tax.test.ts`.
 
 ### Counter basket and payment space
 

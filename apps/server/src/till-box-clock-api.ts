@@ -2,14 +2,7 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { devices, withTransaction, type Database, type Transaction } from "@waitron/db";
-import type {
-  BootReading,
-  ClockAdminConfirm,
-  ClockConfirmation,
-  ClockWitness,
-  FiscalBackend,
-  TrustedClock,
-} from "@waitron/fiscal";
+import type { ClockAdminConfirm, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { CLOCK_WITNESS_MARGIN_MS } from "@waitron/fiscal";
 import {
   authorize,
@@ -20,7 +13,7 @@ import {
 } from "@waitron/identity";
 import { codeOf, createErrorBoundary, readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { confirmBody, requiredNameOf } from "./box-health-api.js";
+import { clockSetBody, requiredNameOf } from "./box-health-api.js";
 import { clockChallenges } from "./clock-challenges.js";
 import {
   EARLIEST_TARGET_MS,
@@ -45,17 +38,11 @@ import {
 export interface TillBoxClockDeps {
   correction: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "set" | "steps">;
   startUp: Pick<ClockStartUp, "noStop" | "admit">;
-  witnesses: () => readonly ClockWitness[];
-  /** Empties the witness store once a confirmation has committed. */
-  clearWitnesses: () => void;
-  readBoot: () => BootReading;
   /** Times each challenge; never stepped by a change of the wall clock. */
   steady: () => number;
   requestFromBox?: (c: Context) => boolean;
-  /** Whether the box files records, so could ask AEAT its time. */
-  filesRecords: () => boolean;
   /** The start's clock check. Until it is confirmed by the internet, staff are admitted whatever
-   * the start-up window and AEAT say (plan A1420 D1). */
+   * the start-up window says (plan A1420 D1). */
   start?: {
     state: Pick<StartClockState, "status" | "confirm" | "mark">;
     heads(tx: Transaction): Promise<ChainHeads>;
@@ -73,7 +60,6 @@ const run = createErrorBoundary(
     "pin.throttled": 429,
     "authorization.not_permitted": 403,
     "clock.set_refused": 409,
-    "clock.confirm_refused": 409,
     "clock.check_expired": 400,
     "clock.set_failed": 502,
     "management.request_invalid": 400,
@@ -111,7 +97,8 @@ function overrideOf(body: unknown): { personId: string; pin: string } | undefine
 
 /** "Check the time" on a till: `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
  * (plan decision 15). Any staff member the till's profile admits, during the start-up window or
- * until the internet confirms the start; an administrator, signed in or by PIN, at any time.
+ * until the internet confirms the start; an administrator, signed in or by PIN, while the start
+ * waits or the clock reads before 28-10-2024.
  * Refused on the box itself. */
 export function mountTillBoxClockApi(
   app: Hono,
@@ -119,7 +106,6 @@ export function mountTillBoxClockApi(
     db: Database;
     backend: FiscalBackend;
     clock: TrustedClock;
-    nodeId: string;
     devMode: boolean;
     attemptsFor: (deviceId: string) => PinAttempts;
     boxClock: TillBoxClockDeps;
@@ -127,8 +113,6 @@ export function mountTillBoxClockApi(
   log: Logger,
 ): void {
   const { db, backend, clock, boxClock } = deps;
-  const confirmClockStop = backend.confirmClockStop?.bind(backend);
-  if (confirmClockStop === undefined) return;
   const correction = boxClock.correction;
   const challenges = clockChallenges({
     steady: boxClock.steady,
@@ -139,15 +123,11 @@ export function mountTillBoxClockApi(
   const refuseOnTheBox = (c: Context) => {
     if (!deps.devMode && (boxClock.requestFromBox ?? requestFromBox)(c)) refuse("same_machine");
   };
-  const canAskAuthority = () => boxClock.filesRecords() && backend.readAuthorityTime !== undefined;
   const start = boxClock.start;
   const startWaits = () => start?.state.status === "waiting";
   /** Before the internet confirms the start, staff are admitted whatever the window says. */
   const beforeInternet = () => start !== undefined && start.state.status !== "by_internet";
-  const admitStaff = (input: { unusable: boolean }) =>
-    beforeInternet()
-      ? null
-      : boxClock.startUp.admit({ unusable: input.unusable, canAskAuthority: canAskAuthority() });
+  const admitStaff = () => (beforeInternet() ? null : boxClock.startUp.admit());
 
   /** The till's label, or `device_profile.not_admitted` when its profile no longer admits the
    * session's person. */
@@ -177,20 +157,6 @@ export function mountTillBoxClockApi(
     }
   }
 
-  /** Whether a stop holds at the box's reading now, and whether it is the before-28-10-2024 one. */
-  async function stopAt(
-    tx: Transaction,
-    reading: ReturnType<TrustedClock["now"]>,
-    witnesses: readonly ClockWitness[],
-  ): Promise<{ stopped: boolean; unusable: boolean }> {
-    if (unusableAt(reading)) return { stopped: true, unusable: true };
-    const state =
-      backend.clockStopState === undefined
-        ? null
-        : await backend.clockStopState(tx, reading, witnesses);
-    return { stopped: state !== null && state.proof !== "confirmed", unusable: false };
-  }
-
   /** No stop holds: refused, and the start-up window closes for good (plan decision 14). */
   function noStop(): never {
     boxClock.startUp.noStop();
@@ -206,14 +172,14 @@ export function mountTillBoxClockApi(
       const override = overrideOf(await readJsonBody<unknown>(c));
       const keepOffered = await withTransaction(db, async (tx) => {
         await admitted(tx, session);
-        const stop = await stopAt(tx, clock.now(), boxClock.witnesses());
-        // A waiting start is itself what is checked: no stop need hold. A keep writes no
-        // confirmation, so it cannot lift a stop and is not offered while one holds.
-        if (startWaits()) return !stop.stopped;
+        const unusable = unusableAt(clock.now());
+        // A waiting start is itself what is checked: no stop need hold. A keep cannot lift the
+        // clock before 28-10-2024, so it is not offered then.
+        if (startWaits()) return !unusable;
         const asAdmin = override !== undefined || (await holdsAdmin(tx, session.personId));
-        if (!stop.stopped) noStop();
+        if (!unusable) noStop();
         if (asAdmin) return false;
-        const refusal = admitStaff(stop);
+        const refusal = admitStaff();
         if (refusal !== null) refuse(refusal);
         return false;
       });
@@ -235,7 +201,7 @@ export function mountTillBoxClockApi(
       const session = await requireSession(deps, c);
       await assertRequestDevice(deps, c, session);
       const raw = await readRawJsonBody<unknown>(c);
-      const { challengeId, deviceAt } = confirmBody(raw);
+      const { challengeId, deviceAt } = clockSetBody(raw);
       const override = overrideOf(raw);
       const keep = keepOf(raw);
       const asAdmin = await withTransaction(db, async (tx) => {
@@ -319,7 +285,7 @@ export function mountTillBoxClockApi(
               const now = clock.now();
               if (stale(now)) refuse("stale");
               // Judged first, so a stop that holds never reaches `noStop()`, which shuts the window.
-              if ((await stopAt(tx, now, boxClock.witnesses())).stopped) refuse("stopped");
+              if (unusableAt(now)) refuse("stopped");
               // Keeping the box's time is offered only until the internet confirms the start.
               if (start === undefined || start.state.status === "by_internet") noStop();
               const personId = asAdmin
@@ -339,57 +305,29 @@ export function mountTillBoxClockApi(
       }
 
       if (agrees) {
-        // A waiting start is confirmed by the person, and a stop that holds is confirmed with its
-        // row, in the one transaction; a waiting start with no stop writes no row (D3).
+        // A waiting start is confirmed by the person; it sets nothing, so it writes no row (D3).
         const confirmed = await withPinCheckAhead(db, toCheck, attempts, (checked) =>
           // Taken around the whole transaction, never inside it: a set in the turn waits for
           // the write lock a transaction holds.
           correction.inTurn(() =>
             withTransaction(db, async (tx) => {
-              const deviceLabel = await admitted(tx, session);
-              const witnesses = boxClock.witnesses();
+              await admitted(tx, session);
               const now = clock.now();
               // A set landed, or the wall clock stepped, after the reading: the comparison is void.
               if (stale(now)) refuse("stale");
-              const waiting = startWaits();
-              const stop = await stopAt(tx, now, witnesses);
-              if (!stop.stopped && !waiting) noStop();
-              let personId = session.personId;
-              if (asAdmin) personId = (await authorizeAdmin(tx, checked)).authorizedBy;
-              else {
-                const refusal = admitStaff(stop);
-                if (refusal !== null) refuse(refusal);
-              }
-              let confirmation: ClockConfirmation | null = null;
-              if (stop.stopped) {
-                const answer = await confirmClockStop(tx, {
-                  reading: { instant: now.instant, offsetMinutes: now.offsetMinutes },
-                  boot: boxClock.readBoot(),
-                  witnesses,
-                  nodeId: deps.nodeId,
-                  admin: person(personId, await requiredNameOf(tx, personId), deviceLabel),
-                });
-                // With a person, the seat answers a row or throws.
-                confirmation = answer.confirmation!;
-              }
-              let heads: ChainHeads | null = null;
-              if (waiting) {
-                heads = await start!.heads(tx);
-                start!.state.confirm("by_person", heads);
-              }
-              return { confirmation, personId, now, heads };
+              if (!startWaits()) noStop();
+              const personId = asAdmin
+                ? (await authorizeAdmin(tx, checked)).authorizedBy
+                : session.personId;
+              const heads = await start!.heads(tx);
+              start!.state.confirm("by_person", heads);
+              return { personId, now, heads };
             }),
           ),
         );
-        if (confirmed.confirmation !== null) boxClock.clearWitnesses();
-        if (confirmed.heads !== null)
-          startConfirmed(confirmed.personId, confirmed.now, confirmed.heads);
+        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads);
         return c.json(
-          {
-            confirmationId: confirmed.confirmation?.id ?? null,
-            stepMs: 0,
-            confirmedAt: confirmed.confirmation?.confirmedAt ?? confirmed.now.instant.toISOString(),
-          },
+          { confirmationId: null, stepMs: 0, confirmedAt: confirmed.now.instant.toISOString() },
           200,
         );
       }
@@ -409,9 +347,8 @@ export function mountTillBoxClockApi(
         personName: await requiredNameOf(tx, personId),
         deviceLabel: await admitted(tx, session),
       }));
-      const unusable = unusableAt(reading);
       const answer = await correction.set({
-        reason: startWaits() ? "start" : unusable ? "unusable" : "behind_chain",
+        reason: startWaits() ? "start" : "unusable",
         source: asAdmin ? "admin" : "staff",
         offsetMs: Math.round(deviceAt - boxAtMs),
         measuredAt: { wallMs: boxAtMs, monoMs: steadyMs - halfMs },
@@ -429,7 +366,7 @@ export function mountTillBoxClockApi(
                   if (codeOf(error) === "device_profile.not_admitted") return "not_admitted";
                   throw error;
                 }
-                return admitStaff({ unusable });
+                return admitStaff();
               },
             }),
         requester: {

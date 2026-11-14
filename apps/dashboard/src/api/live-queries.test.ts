@@ -15,7 +15,7 @@ it("quiets only the audited database queries while connected", () => {
     listPendingAbsences listPendingSwaps getRoster listMySwaps listMyAbsences listDeviceProfiles
     getDeviceProfile listProfileKitchenScreens getProfileScopeChoices listDevices listStations
     listCourses listZones getFloorPlan getStationDeleteImpact getCourseDeleteImpact getReceiptLanguage
-    getVenueDefaults getVenuePrivacy listPurchaseInvoices clockMisdated clockMisdatedHandled
+    getVenueDefaults getVenuePrivacy listPurchaseInvoices
     getContentLanguages getContentTranslationGaps getContentTranslationTargets getContentTranslationCells
     getGoogleConfig getLocales getDepartmentReceipt pairingMode`.split(/\s+/);
   const api = new DashboardApi();

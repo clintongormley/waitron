@@ -740,16 +740,6 @@ it("says a booking holds a table back, in both languages", () => {
   ]);
 });
 
-it("says a clock behind the last sale means nothing can be recorded, in both languages", () => {
-  expect([
-    codeMessage("clock.behind_chain", "en-GB"),
-    codeMessage("clock.behind_chain", "es-ES"),
-  ]).toEqual([
-    "Can't be recorded: the server's clock reads earlier than its last sale. Tell a manager.",
-    "No se puede registrar: la hora del servidor es anterior a la última venta. Avisa al encargado.",
-  ]);
-});
-
 it("says a start whose time is unconfirmed means nothing can be recorded, and points at Check the time, in both languages", () => {
   expect([
     codeMessage("clock.unconfirmed", "en-GB"),
@@ -797,12 +787,7 @@ it("words a dish whose period has ended, in both languages", () => {
 
 it("words the box clock's check refusals plainly, in both languages, never as the generic sentence", () => {
   const generic = [codeMessage("no.such_code", "en-GB"), codeMessage("no.such_code", "es-ES")];
-  for (const code of [
-    "clock.set_refused",
-    "clock.set_failed",
-    "clock.check_expired",
-    "clock.confirm_refused",
-  ]) {
+  for (const code of ["clock.set_refused", "clock.set_failed", "clock.check_expired"]) {
     const words = [codeMessage(code, "en-GB"), codeMessage(code, "es-ES")];
     expect(words[0]).not.toBe(generic[0]);
     expect(words[1]).not.toBe(generic[1]);

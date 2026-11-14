@@ -468,7 +468,6 @@ declare module "@waitron/shared" {
       workingOrderId: string;
       reason:
         | "disk_full"
-        | "clock_behind_chain"
         | "clock_unusable"
         | "clock_unconfirmed"
         | "issuance_refused"
@@ -1564,15 +1563,8 @@ declare module "@waitron/shared" {
     // `reason` is a fixed enum string, never a raw input value.
     "diagnostics.invalid_verbosity": { reason: "level" | "ttl" };
     /** No incident with this id exists in this venue. Also answered for a malformed id, to a
-     * session that can see no alerts, to a note sent for an alert whose code takes none, and by the
-     * wrongly dated sales download for an id that names no such alert with a list. */
+     * session that can see no alerts, and to a note sent with marking an alert handled. */
     "alert.not_found": { id: string };
-    /** A note came with marking an incident handled that was already handled, so it was not saved. */
-    "alert.already_handled": { id: string };
-    /** A note was sent for an incident that already has one; the first is kept. */
-    "alert.note_exists": { id: string };
-    /** A note was sent for an incident not yet marked handled. */
-    "alert.not_handled": { id: string };
     /** An alert source failed while being read. Its alerts are replaced by this one, under the
      * source's own area and permission. Built as data, never thrown. */
     "alert.source_unavailable": { area: string };
@@ -1674,27 +1666,25 @@ declare module "@waitron/shared" {
     "clock.sync_off": { reason: "off" | "stopped" | "unsynchronised" | "unreachable" };
     /** The box did not set or confirm its clock from an administrator's device or a till, and
      * asked its host to set nothing: the request came from the box itself, no stop holds, the host
-     * service did not answer, the time service says the clock is synchronised, AEAT has spoken
-     * during the stop, the person's device is within a minute of the box (`agrees`),
-     * the device's time was measured before a step of the box's clock, the time would be before
-     * 28-10-2024 or from 2100 on (`target_invalid`), the readings taken before an earlier step are
-     * not yet recorded (`pending_disproofs`), a till asked the box to keep its time while a stop
-     * holds (`stopped`), or, for a staff member on a till, the box's start-up is over
-     * (`not_start_up`) or AEAT has not yet been asked (`authority_pending`). */
+     * service did not answer, the time service says the clock is synchronised, the person's
+     * device is within a minute of the box (`agrees`), the device's time was measured before a
+     * step of the box's clock, the time would be before 28-10-2024 or from 2100 on
+     * (`target_invalid`), an earlier step's record could not yet be written
+     * (`pending_step`), a till asked the box to keep its time while a stop holds
+     * (`stopped`), or, for a staff member on a till, the box's start-up is over
+     * (`not_start_up`). */
     "clock.set_refused": {
       reason:
         | "same_machine"
         | "stopped"
         | "not_stopped"
         | "not_start_up"
-        | "authority_pending"
         | "host_unavailable"
         | "synchronised"
-        | "witnessed"
         | "agrees"
         | "stale"
         | "target_invalid"
-        | "pending_disproofs";
+        | "pending_step";
     };
     /** The box asked its host to set the clock: `refused`, the clock moved by a second or less;
      * `unverified`, it moved further, but the box could not confirm it landed where it was asked

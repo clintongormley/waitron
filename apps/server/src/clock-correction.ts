@@ -36,10 +36,8 @@ export function wallMovedAgainstSteady(
   return !(Math.abs(now.wallMs - then.wallMs - (now.monoMs - then.monoMs)) <= STALE_MS);
 }
 
-/** Told before and after every set. A throw from `stepComing` refuses the set; a throw from
- * `reanchor` keeps the step's row pending. */
+/** Told after every set. A throw from `reanchor` keeps the step's row pending. */
 export interface ClockAnchor {
-  stepComing(): Promise<void>;
   reanchor(): Promise<void>;
 }
 
@@ -48,33 +46,29 @@ export type ClockSetRefusal =
   | "target_invalid"
   | "not_stopped"
   | "not_start_up"
-  | "authority_pending"
   | "not_admitted"
   | "host_unavailable"
   | "synchronised"
-  | "witnessed"
   | "agrees"
-  | "pending_disproofs"
+  | "pending_step"
   | "refused"
   | "unverified";
 
 export interface ClockSetInput {
-  reason: "behind_chain" | "unusable" | "start";
-  source: "authority" | "admin" | "staff" | "setup";
+  reason: "unusable" | "start";
+  source: "admin" | "staff" | "setup";
   offsetMs: number;
   /** The box's wall and steady clocks when the witness's reading arrived. */
   measuredAt: { wallMs: number; monoMs: number };
   /** `steps()` when the caller measured. */
   stepsSeen: number;
   witnesses: readonly ClockWitness[];
-  /** For `admin` and `staff`, and `setup` on first setup; for `staff`, with `role: "staff"`. */
+  /** For `staff`, with `role: "staff"`, and for `setup` on first setup. */
   admin?: ClockAdminConfirm;
   /** How close, uncertainty included, a person's offset counts as agreeing; a minute when absent. */
   agreesWithinMs?: number;
   /** Asked in the write-lock turn that judges the stop, after it. */
-  admit?: (
-    tx: Transaction,
-  ) => Promise<"not_admitted" | "not_start_up" | "authority_pending" | null>;
+  admit?: (tx: Transaction) => Promise<"not_admitted" | "not_start_up" | null>;
   /** Ids only: the host writes it to its journal. */
   requester: Record<string, string | null>;
 }
@@ -88,12 +82,13 @@ export function moduleClockSetAnswer(answer: ClockSetAnswer): ModuleClockSetAnsw
   return answer.set ? { status: "set" } : { status: "refused", reason: answer.reason };
 }
 
-/** Sets the box's clock during a stop, one set at a time: judges the stop again, asks the host,
- * verifies the step on the boot-time clock and records it. */
+/** Sets the box's clock while the start waits or the clock reads before 28-10-2024, one set at a
+ * time: judges the stop again, asks the host, verifies the step on the boot-time clock and
+ * records it. */
 export function clockCorrection(deps: {
   host: BoxHostClient;
-  backend: Pick<FiscalBackend, "confirmClockStep" | "clockStopState" | "assertRecordableAt">;
-  store: Pick<ClockWitnessStore, "clear" | "witnesses">;
+  backend: Pick<FiscalBackend, "confirmClockStep" | "assertRecordableAt">;
+  store: Pick<ClockWitnessStore, "clear">;
   clock: Pick<TrustedClock, "now">;
   wall?: () => number;
   monotonic?: () => number;
@@ -151,35 +146,6 @@ export function clockCorrection(deps: {
     }
   }
 
-  /** Whether the stop still holds, and whether AEAT has a reading taken during it. */
-  async function judge(
-    tx: Transaction,
-    reason: ClockSetInput["reason"],
-  ): Promise<{ stopped: boolean; authoritySpoke: boolean }> {
-    const at = reading();
-    if (reason === "unusable") {
-      // The store keeps AEAT's disagreements until a usable reading ends the stop, so one taken
-      // before the clock read a date before 28-10-2024 was not taken during this stop.
-      return {
-        stopped: unusable(at),
-        authoritySpoke: deps.store
-          .witnesses()
-          .some(
-            (witness) =>
-              witness.kind === "authority" && Date.parse(witness.boxAt) < EARLIEST_TARGET_MS,
-          ),
-      };
-    }
-    if (deps.backend.clockStopState === undefined) return { stopped: false, authoritySpoke: false };
-    const state = await deps.backend.clockStopState(tx, at, deps.store.witnesses());
-    if (state === null || state.proof === "confirmed")
-      return { stopped: false, authoritySpoke: false };
-    return {
-      stopped: true,
-      authoritySpoke: state.agreeing.authority !== null || state.contrary.authority !== null,
-    };
-  }
-
   function agrees(input: ClockSetInput): boolean {
     const uncertaintyMs = input.admin?.reading.uncertaintyMs ?? 0;
     return (
@@ -231,41 +197,17 @@ export function clockCorrection(deps: {
     );
   }
 
-  /** The stop and the till's check, judged in one write-lock turn. `rowReason` is the reason the
-   * step's row is written under: at reason `start`, `behind_chain` while that stop also holds, so
-   * the row ends it as a set at that reason does — and then, as for that reason, AEAT's reading
-   * taken during the stop refuses a person. */
-  async function admission(input: ClockSetInput): Promise<{
-    refusal: ClockSetRefusal | null;
-    authoritySpoke: boolean;
-    rowReason: ClockSetInput["reason"];
-  }> {
-    if (input.reason === "start") {
-      if (input.source === "authority")
-        return { refusal: "not_admitted", authoritySpoke: false, rowReason: input.reason };
-      if (deps.start === undefined || deps.start.state.status === "by_internet")
-        return { refusal: "not_stopped", authoritySpoke: false, rowReason: input.reason };
-    }
+  /** The stop and the till's check, judged in one write-lock turn: at reason `start`, while the
+   * start is not confirmed by the internet; at reason `unusable`, while the clock reads before
+   * 28-10-2024. */
+  async function admission(input: ClockSetInput): Promise<ClockSetRefusal | null> {
+    const start = deps.start;
+    if (input.reason === "start" && (start === undefined || start.state.status === "by_internet"))
+      return "not_stopped";
     return deps.read(async (tx) => {
-      let rowReason = input.reason;
-      let stop: { stopped: boolean; authoritySpoke: boolean };
-      if (input.reason === "start") {
-        const behind = await judge(tx, "behind_chain");
-        stop = { stopped: true, authoritySpoke: behind.authoritySpoke };
-        if (behind.stopped) rowReason = "behind_chain";
-      } else stop = await judge(tx, input.reason);
-      if (!stop.stopped)
-        return { refusal: "not_stopped" as const, authoritySpoke: false, rowReason };
-      const refusal = input.admit === undefined ? null : await input.admit(tx);
-      return { refusal, authoritySpoke: stop.authoritySpoke, rowReason };
+      if (input.reason === "unusable" && !unusable(reading())) return "not_stopped";
+      return input.admit === undefined ? null : input.admit(tx);
     });
-  }
-
-  function personRefusal(input: ClockSetInput, authoritySpoke: boolean): ClockSetRefusal | null {
-    if (input.source === "authority") return null;
-    if (authoritySpoke) return "witnessed";
-    if (agrees(input)) return "agrees";
-    return null;
   }
 
   /** A step the host moved but did not verify leaves the clock where nothing confirmed it, so a
@@ -289,50 +231,27 @@ export function clockCorrection(deps: {
   }
 
   async function setInTurn(input: ClockSetInput): Promise<ClockSetAnswer> {
-    // A later step's row written before an earlier one's would be judged against the wrong check.
-    if (pending.length > 0) return { set: false, reason: "pending_disproofs" };
+    // The latest step is read by the order rows were written, so a later step's row written
+    // before an earlier one's would leave the earlier step read as the latest.
+    if (pending.length > 0) return { set: false, reason: "pending_step" };
     if (stale(input)) return { set: false, reason: "stale" };
     const planned = wall() + input.offsetMs;
     if (!(planned >= EARLIEST_TARGET_MS && planned < LATEST_TARGET_MS))
       return { set: false, reason: "target_invalid" };
 
-    const judged = await admission(input);
-    if (judged.refusal !== null) return { set: false, reason: judged.refusal };
+    const refusal = await admission(input);
+    if (refusal !== null) return { set: false, reason: refusal };
 
     const status = await deps.host.clockStatus();
     if (!status.available) return { set: false, reason: "host_unavailable" };
     if (status.synchronised) return { set: false, reason: "synchronised" };
-    const person = personRefusal(input, judged.authoritySpoke);
-    if (person !== null) return { set: false, reason: person };
+    if (agrees(input)) return { set: false, reason: "agrees" };
 
-    for (const anchor of anchors) {
-      try {
-        await anchor.stepComing();
-      } catch (error) {
-        deps.log("warn", "clock_correction.step_refused", { errorCode: codeOf(error) });
-        await reanchorAll();
-        return { set: false, reason: "pending_disproofs" };
-      }
-    }
-
-    // AEAT can answer, or the stop end, while the host's status and the anchors are awaited.
-    let rejudged: Awaited<ReturnType<typeof admission>>;
-    try {
-      rejudged = await admission(input);
-    } catch (error) {
-      await reanchorAll();
-      throw error;
-    }
-    const late = rejudged.refusal ?? personRefusal(input, rejudged.authoritySpoke);
-    if (late !== null) {
-      await reanchorAll();
-      return { set: false, reason: late };
-    }
-    // The waits leave time for a step by the time service.
-    if (stale(input)) {
-      await reanchorAll();
-      return { set: false, reason: "stale" };
-    }
+    // The stop can end while the host's status is awaited.
+    const late = await admission(input);
+    if (late !== null) return { set: false, reason: late };
+    // The wait leaves time for a step by the time service.
+    if (stale(input)) return { set: false, reason: "stale" };
 
     const wallBefore = wall();
     const monoBefore = monotonic();
@@ -384,7 +303,7 @@ export function clockCorrection(deps: {
         targetAt: new Date(targetMs).toISOString(),
         stepMs,
         verified,
-        reason: rejudged.rowReason,
+        reason: input.reason,
         source: input.source,
         witnesses: input.witnesses,
         ...(input.admin === undefined ? {} : { admin: input.admin }),

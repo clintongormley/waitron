@@ -2846,9 +2846,8 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   it (`sayCardChargedNotRecorded`, set in `till-api.ts`'s `POST /api/pay` and
   `bill-payments-api.ts`); every other caller, the dashboard's stuck-payment resolve route among
   them, still answers `storage.disk_full`. On those two routes the same 507 answers a card charged
-  while the box's clock comes to read behind the latest fiscal record, with
-  `reason: "clock_behind_chain"`, or `"clock_unusable"` when the clock reads before
-  28 October 2024 (`apps/server/src/clock-behind-stop.charged.test.ts`). The same answer covers a charge whose capture the
+  while the box's clock comes to read before 28 October 2024, with `reason: "clock_unusable"`
+  (`apps/server/src/clock-behind-stop.charged.test.ts`). The same answer covers a charge whose capture the
   provider could not save: SumUp's and Stripe's `collect` throw `ChargeNotSavedError`
   (`packages/payments/src/charge-not-saved.ts`) when the processor reported the card charged and
   that save failed for a full disk, and the two routes translate only that error
@@ -2868,16 +2867,15 @@ seat's `FiscalBackend.assertRecordableAt` (`packages/fiscal/src/backend.ts`). Th
 the issue reading, `issueMoment` (`apps/server/src/issue-moment.ts`), whose clock every
 `recordSale` call in `apps/server/src`, outside its tests and `src/testing/`, takes; before the
 reader for a new sale (`payIntegrated`); and on every bill payment, cash included
-(`beginBillPayment`). `refuseWhileClockBehind` (`packages/fiscal-verifactu/src/clock-behind.ts`)
-checks this rule before the clock-behind one, so each route check
-[the clock-behind section](#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves)
-lists, refunds and the dashboard's resolutions among them, refuses `clock.unusable` under such a
+(`beginBillPayment`). The function `refuseUntilRecordable` (`packages/fiscal-verifactu/src/clock-behind.ts`)
+checks this rule, and the seat's
+`refuseUntilRecordable` calls it, so each route that calls the seat, refunds and the dashboard's resolutions among them, refuses `clock.unusable` under such a
 clock; the refund loops' check at the start of each pass (`refundsPaused`) and `clockStopsRefund`
 (`apps/server/src/bill-refunds.ts`) ask `assertRecordableAt`, so under such a clock a pass asks the
 provider nothing and an outcome the provider answers is not written
 (`apps/server/src/tender-refund-recovery.test.ts`, "refund recovery under a clock before
 28-10-2024"); and the chain's append (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`) refuses
-any record dated before it (`chain.earlier-time.test.ts`). Run 2026-10-23 on a 2001 clock, on
+any record dated before 28-10-2024 (`chain.earlier-time.test.ts`). Run 2026-10-23 on a 2001 clock, on
 `provisionBillVenue`'s venue: a tender refund, a bill payment's refund and a bill card payment each
 answered `409 clock.unusable`, and neither refund reached the provider.
 
@@ -2979,10 +2977,6 @@ status; this route was read, not run. The sign-in page, and the pages an email's
 show no privacy link, and the sign-in page offers no working Google sign-in. This is accepted: the
 page's locales read and password sign-in already go through `withTransaction` there (the S1b plan's
 decision 3).
-
-Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
-one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in
-`apps/server/src/box-health-api.ts`, read in one `withWriteLock` turn with no drain.
 
 Since A1127 slice 3, the full-disk bar's read (`GET /management-api/disk-stop`,
 `apps/server/src/disk-stop-api.ts`) resolves the session with `touch: false` and reads in one
@@ -4309,397 +4303,17 @@ pass, and the case in `apps/server/src/boot.test.ts` that returns a previous run
 to `pendiente` on a start's first pass — weaker than the rule, because nothing checks that a tool
 opening the folder with `exclusive: false` never files.
 
-## While the box's clock reads behind the latest fiscal record, no record is written and no new money moves
+## The box's clock and fiscal records
 
-**Switched off (2026-11-12, A1420 PR 5).** `clockBehindChain` and `clockStopState` now answer
-nothing, so this stop never holds; a record dated before the latest one is written and chained after
-it (`packages/fiscal-verifactu/src/chain.earlier-time.test.ts`). The refund loops, `clockStopsRefund`
-and the AEAT drift alert's suppression ask the seat's `assertRecordableAt` instead
-(`apps/server/src/clock-unusable.ts`). The code below goes in A1420 PR 6.
-[Plan](../superpowers/plans/2026-11-09-a1420-start-clock-corrects-itself.md).
-
-**The comparison.** `clockBehindChain` (`packages/fiscal-verifactu/src/clock-behind.ts`) reads the
-latest `fecha_hora_huso_gen_registro` in `registros_facturacion`, across every chain, and answers
-the four params `clockAt`, `offsetMinutes`, `lastRecordAt` and `lastRecordOffsetMinutes` when the
-reading is more than `CLOCK_BEHIND_MARGIN_MS` (60 000 ms) earlier — unless a confirmation of the clock
-covers the reading ([below](#a-confirmation-of-the-clock-lifts-the-stop-for-one-step-back)), when it
-answers null or names the latest record written under the confirmation; a database with no record never stops. A reading exactly a minute earlier still sells, a millisecond more stops
-(`clock-behind.test.ts`, "sells a reading exactly a minute earlier" and "stops a reading a
-millisecond more than a minute earlier"). `refuseWhileClockBehind` checks the 28-10-2024 rule
-first (`clock.unusable`), then throws `clock.behind_chain` with those params. Only the Veri\*Factu
-module stops: `NoneBackend` (`packages/fiscal-none/src/backend.ts`) and `FakeFiscalBackend`
-(`packages/fiscal/src/testing/fake-backend.ts`) answer `null` and return.
-
-**The index.** `registros_generado_idx` on `fecha_hora_huso_gen_registro`
-(`packages/fiscal-verifactu/src/schema/registros.ts`) serves the read. `latestRecord` runs the
-query `latestRecordQuery` (`packages/fiscal-verifactu/src/clock-behind.ts`) builds — ordered by
-the time, then by `id`, both descending, with the limit sent as a bound value — and
-`packages/fiscal-verifactu/src/clock-stop-restarts.test.ts`, "reads the latest record through the
-time index, sorting only the ties by id", explains that same query and pins its two plan lines,
-`SCAN registros_facturacion USING INDEX registros_generado_idx` and
-`USE TEMP B-TREE FOR LAST TERM OF ORDER BY`: the index gives the time order, and only rows that
-share a time are sorted by `id`. The plan holds only while the limit is a bound value. Measured
-2026-10-23 (macOS, Node v26.11.1, SQLite 3.54.0, the test's empty database): the same query with
-`limit 1` written into its text, and the query with the index dropped, each planned
-`SCAN registros_facturacion` and `USE TEMP B-TREE FOR ORDER BY` — the whole table read and
-sorted. The test also checks that the emitted text ends `limit ?`.
-
-**The append refuses on its own.** `attemptAppend` (`packages/fiscal-verifactu/src/chain.ts`)
-calls `refuseWhileClockBehind` with the record's own time as its first statement, so a sale, a
-correction or an anulación dated more than a minute before the latest record is refused and
-nothing is written (`chain.clock-behind.test.ts`, deleted 2026-11-12, A1420 PR 5).
-
-**Where a route's named check goes** (plan decision 3). After the route's replay answer and before
-any card reader, refund send or drawer job, in the request's first transaction; some routes refuse
-a full disk or a reused submission id first. Where a route has no replay
-(`recordUnpaidDeparture`), it comes right after the route's authorization. A replay answered before the check is one that moves no money: a settled order,
-a bill payment's first row, a completed or failed refund. A pending refund's resend is checked
-before it resumes, and the tender-refund retry route checks only a pending refund. The check
-judges the reading the route already takes. Four places date the invoice they issue from that same
-reading, through `pinnedAt` (`apps/server/src/issue-moment.ts`): `runPayWorkingOrder`,
-`runCollectOrder`, `payIntegrated`'s branch for an order whose total is zero, and
-`recordUnpaidDeparture`. Elsewhere the issue takes its own later reading through `issueMoment`
-(`beginBillPayment`'s reached through `issueWhenFullyPaid` in `apps/server/src/bill-payments.ts`),
-which the append's check judges again. The places: `runPayWorkingOrder`, `payIntegrated` and
-`runCollectOrder` (`apps/server/src/till-sale.ts`); `beginBillPayment`
-(`apps/server/src/bill-payments.ts`); `refundBillPayment` (`apps/server/src/bill-refunds.ts`, twice:
-the pending replay, and every new refund); `beginSettledTenderRefund`
-(`apps/server/src/tender-refunds.ts`, twice the same way: the pending replay there, and every new
-refund through `carryNewTenderRefund` in `apps/server/src/tender-refund-completion.ts`);
-`checkCorrectionOpenable` (`apps/server/src/invoice-corrections.ts`, for opening a correction and
-its preview); `giveCorrectionCash` (`apps/server/src/invoice-correction-cash.ts`, for each cash
-refund through `carryNewTenderRefund`, before the last one files the corrective in the same
-transaction); the retry route
-(`apps/server/src/tender-refund-api.ts`); `recordUnpaidDeparture`
-(`apps/server/src/unpaid-departure.ts`); and the eight dashboard resolutions in
-`apps/server/src/payments-api.ts`, first inside each authorized callback.
-
-**The refund recovery loops pause.** `recoverTenderRefunds`
-(`apps/server/src/tender-refund-recovery.ts`) and the refund half of the bill-payments pass
-(`settlePendingBillRefunds`, `apps/server/src/bill-payments-loop.ts`) ask
-`clockBehindLatestRecord` once at their top and, during the stop, touch no refund row and raise no
-unresolved alert, because a completed refund's time places it in a cash-up window
-(`clock-behind-stop.refunds.test.ts`). While paused, `recoverTenderRefunds` still runs
-`sweepInvoiceCorrections` (`apps/server/src/invoice-correction-alerts.ts`) with `fileSettled: false`,
-which files nothing, raises `invoice_correction.unfinished` and touches no refund row; an unpaused
-pass also tries to file every open correction whose money is all back (`fileCorrectionAutomatically`),
-raising `invoice_correction.filing_refused` when refused. A pass that began before the stop still looks refunds up
-and can raise an unresolved alert while the stop is on; the next paragraph's check holds only the
-outcomes it would record. The pass, `settlePendingBillPayments`, runs its payment half
-first and then its refund half; the payment half has no check of its own and keeps running. A
-completion that would file is refused by the append, and the pass then raises
-`payment.bill_settle_failed` for it (plan decision 17; `raiseSettleFailed` in
-`apps/server/src/bill-payments-loop.ts`, reached for any refusal that is not an `IssuanceRefusal`).
-
-**A card refund's send and its outcome are judged again after a provider wait.** A route's check
-and a loop's top check come before provider calls that can end after the clock has stepped back.
-So the transaction that stamps a send (`send` in `apps/server/src/tender-refund-sends.ts`,
-`sendCardRefund` in `apps/server/src/bill-refunds.ts`) and the one that records a completed or
-failed outcome (`recordOutcomeIn`, `recordRefundOutcome`) ask `clockStopsRefund`
-(`bill-refunds.ts`), and date the row from that same reading. During
-the stop nothing is sent, no outcome is recorded and the refund stays pending; a failed outcome is
-held as well, as the loops' top check holds it. A manager's confirmed outcome is refused by
-`refuseWhileClockBehind` instead. Cases in `clock-behind-stop.refunds.test.ts`, each with the clock
-stepping back while the fake provider answers: the tender-refund retry and the bill refund's resend
-send nothing; each loop leaves a refund the provider made pending; a new tender refund the provider
-made stays pending, and a tender loop pass once the clock reads ahead again completes it, dated
-by that pass's reading.
-
-**A payment whose money has already moved is still stored as a payment** (plan decision 17). The Stripe webhook stores a
-hosted payment during the stop (`apps/server/src/webhook.test.ts`, "records a hosted payment while
-the box's clock reads behind its last sale"). A card charged as the stop begins, after the route's
-check, on an already-invoiced order or as a part payment that leaves a bill part-paid writes no
-fiscal record and is stored as a payment, dated by the provider (`clock-behind-stop.charged.test.ts`, "a card charged
-as the stop begins on an already-invoiced order is recorded, dated by the provider" and "a card
-part payment charged as the stop begins is received, dated by the provider"). A card charged as the
-stop begins whose sale would file answers `507 sale.charged_not_recorded` with
-`reason: "clock_behind_chain"`, or `"clock_unusable"` when the clock moves before
-28 October 2024, on the till's two card routes. The two "clock becomes unusable"
-cases in `apps/server/src/clock-behind-stop.charged.test.ts` move the clock while
-the reader is held, then check one charge and one record after recovery. An early
-whole-order retry under the unusable clock keeps that charged-card answer; a bill
-payment remains pending for its own recovery step. The same cases check both. See
-[A full disk stops the till's writes](#a-full-disk-stops-the-tills-writes).
-
-**Why the routes need their own check** (plan E10, measured 2026-10-22 with only the append's check
-in place, on `provisionBillVenue`'s venue and its `FakePaymentProvider`, every request on a clock a
-day behind a recorded card sale): a counter card sale on `POST /api/pay` called the provider's
-`collect` once and was then refused `400 clock.behind_chain`; a placed order whose invoice was
-already filed, paid by card on `POST /api/pay`, called `collect` once and answered `200 captured`;
-the same kind of order collected in cash answered `200`. Settling a filed invoice writes no record,
-so the append never saw the last two.
-
-Guards: `apps/server/src/clock-behind-stop.*.test.ts` and
-`apps/server/src/payments-api.clock-behind.test.ts` — weaker than the rule, because they
-cover the routes they name; a new money route is seen by none.
-
-### A confirmation of the clock lifts the stop for one step back
-
-Built by A798-B slice 9 (#2025) from revision 8 of [the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md),
-whose decisions and measurements are named here: a confirmation of the clock lifts the stop by
-itself, with no limit on the gap. Every Q and S label below is a run made for the plan against a
-PROTOTYPE of `clock-behind.ts` — the Q labels against revision 2's, the S labels against revision
-3's, both reading the retired restart row rather than `clock_confirmations` — in a throwaway
-worktree, not against this branch's code; the P labels are requests to AEAT's hosts. Where a
-shipped test checks the same sequence on this branch, it is named beside the label; the test file
-is `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` unless another is named.
-
-**The tables** (owner FYI 4). Two append-only `ledger` tables, declared `appendOnly()` in
-`packages/fiscal-verifactu/src/classification.ts` and created by
-`packages/fiscal-verifactu/drizzle/0000_baseline.sql`. `clock_checks` holds
-one row each time a check of the clock opens: the reading, the boot-time clock's reading and boot
-id, the latest record and every chain's largest `secuencia` (`detail.heads`).
-`clock_confirmations` holds one row each time a check closes, and since slice 9b one for each
-verified step the box makes to its clock ([below](#the-box-sets-its-own-clock)): its `source`
-(`authority`, `devices`, `admin`, `staff` or `elapsed`), the person for `admin` and `staff` (a
-CHECK requires a person id on those rows, refuses one on any other, and refuses an empty one;
-slice 9b's `0012_clock_confirmations_staff.sql` widened both CHECKs), the witnesses and the chain heads
-as `proof`, the corrected start of the stop as `proof.closing`, and, for a closing that lifted a
-stop, the record it names (`registro_id`, `record_at`). A unique index on `check_id` allows one
-closing per check; `registro_id` is indexed but not unique, so a second confirmation of the same
-record is normal.
-`seq` orders both tables, never a time, because the clock is what is in doubt. Only
-`openClockCheck` (`clock-checks.ts`) inserts into `clock_checks`, always with `reason:
-"behind_chain"`; the CHECK also allows `start`, `change` and `disagrees`, which nothing on this
-branch writes. Only `writeClosing` (`clock-checks.ts`), `confirmClockStop`
-(`clock-confirmation.ts`) and, since slice 9b, `confirmClockStep` (`clock-step.ts`) insert into
-`clock_confirmations` (`git grep -n 'insert(clockChecks)\|insert(clockConfirmations)'` over the
-non-test sources, re-run 2026-11-01).
-`clock_stop_restarts`, the restart's table, stays in the schema and the append-only list, written
-by nothing; A760's squash kept it, and dropping it waits for A1308's rewrite of the starting
-migrations.
-
-**One latest record** (plan decision 8a). `latestRecord` (`packages/fiscal-verifactu/src/clock-behind.ts`)
-orders by `fecha_hora_huso_gen_registro desc, id desc`, and it is the only way the stop and a
-confirmation find the latest record: `clockBehindChain` calls it, and so do `judge`
-(`packages/fiscal-verifactu/src/clock-confirmation.ts`), which both `clockStopState` and
-`confirmClockStop` run, and `openClockCheck`. The id is a random UUID, so a tie between two records
-at one instant is broken arbitrarily but always the same way. A restart naming the other of two
-same-instant records lifted nothing (plan Q5; shipped: "lifts only for the one of two same-instant
-records that latestRecord names"); ordering one caller by `id asc` picked the other record in all
-eight runs (S13).
-
-**The cover** (decisions 8b, 21). `clockBehindChain` answers `null`, lifting every reader of the
-stop at once, when the raw comparison is behind and the latest confirmation naming the latest record
-— the one with the largest `seq` (`uncoveredBy`) — covers the reading: its `record_at` equals the
-record's own time; its `proof.heads` is an object of safe integers `≥ 0`, none larger than its
-chain's current largest `secuencia`; and the gap is at most the gap that confirmation accepted
-(`record_at` less `confirmed_at`) plus a minute. There is no upper limit on the gap (shipped: "covers
-a 400-day gap", and in `clock-confirmation.test.ts` "a 400-day gap with proof is confirmed: there is
-no cap"). Anything else covers nothing and throws nothing — a proof that is not JSON, JSON `null`,
-`heads` missing or an array, a value that is not a safe integer `≥ 0` or is past its chain's head
-(S6, S7; the bound check's deletion let a `1e12` row cover, S12; shipped: the cases under "a confirmation
-whose stored heads a correct writer never stores covers nothing"); a confirmation that names no
-record ("covers nothing with a confirmation that names no record"); and an earlier confirmation of
-the record once a later one fails ("keeps the stop when the later of two confirmations naming the
-latest record fails"). The row's `node_id` is never read, so a wrong one cannot widen the cover
-(S9; shipped: "answers the same when the row names the other node"). The readers that lift
-together all reach `clockBehindChain`: `refuseWhileClockBehind` (the append's own check and every
-route's named check), the till's staff notice (`staff-notices.ts`), the bell's alert
-(`clock-behind-alerts.ts`), and the seat's `clockBehindLatestRecord`, which the refund paths and the
-AEAT drift alert's suppression (wired in `apps/server/src/boot.ts`) call. `clock-confirmation.ts`,
-`clock-checks.ts`, `clock-misdated.ts` and `clock-stop-incidents.ts` read `clock_confirmations` too,
-for the Box status page's Clock row, the checks, the wrongly dated list and the alerts; none of them
-decides whether a sale is refused. `chain.ts` is not edited.
-
-**One step back, then the ordinary rule** (decision 8c). `proof.heads` holds every chain's largest
-`secuencia` at the confirmation, so a record is "written under it" when its `secuencia` is past its
-chain's stored head (a chain the map leaves out counts from 0, which can only narrow the cover,
-S10). Before any record is written under the confirmation, the first step may go a minute further
-back than accepted. Once one is written, every reading is held to the ordinary minute against the
-LATEST TIME among the records written under it, on any chain (`latestWrittenAfter`) — a running
-maximum by time, not the record written last — and the refusal names the record holding that time.
-On the prototype, with a sale at `T = 21:40Z` and a restart with `clock_at R = 07:12Z` (Q1 and S1):
-sales at R + 1 min, R + 10 h, R + 30 min, R + 10 h − 59 s and R + 10 h − 2 min answered recorded,
-recorded, `clock.behind_chain`, recorded, `clock.behind_chain` (shipped: "stops again at a second
-step back of more than a minute"). A clock walking back 59 s at a time was refused at its second
-step (S5; shipped: "stops a clock walking back 59 s at a time at its second step"); with the read
-ordered by `secuencia` instead, the walk was admitted (S11, a deletion run on the prototype only).
-Deleting the check against records written under the restart recorded all five of Q1's sales (Q7,
-prototype only). Forward control: R + 1 min, R + 10 h, R + 10 h + 5 min all recorded (Q2; shipped:
-"keeps recording while the clock only moves forward"). The first step's margin: R − 61 s refused,
-R − 59 s recorded (Q3; shipped: "lets the first step go a minute further back than accepted, and no
-later step", and "covers a reading a minute further back than the confirmed time, not 61 s"). A map
-leaving out the older chain kept the stop (S10; shipped: "keeps the stop when heads leave out the
-older chain"). The fiscal core's suites, the golden huella test and `inmutabilidad` among them,
-passed unedited with the prototype in place (Q8, re-run as S14). A further step back stops payments
-again, and a fresh confirmation lifts them (owner FYI 10; shipped: "lifts a further step back with a
-fresh confirmation"). Once a later record's time passes the named one, the confirmation no longer
-applies: the stop then compares against a new latest record that no confirmation names (shipped:
-"does not lift a new stop once real time has passed the record it names").
-
-**When a check opens and how it closes** (plan R5–R7). In this slice a check opens only during a
-stop. The clock watch (`apps/server/src/clock-watch.ts`) looks every 15 seconds (`CLOCK_WATCH_MS`),
-on the primary; on each look during a stop it calls `openClockCheck`, which opens a `behind_chain`
-check while `clockBehindChain` answers and none is open, and answers the open one otherwise. A
-check closes in one of three ways:
-
-- **A lift, during the stop.** `confirmClockStop` (`clock-confirmation.ts`) writes a confirmation
-  naming the latest record and closing this stop's check, and records `clock.behind_chain_restarted`
-  beside it. The watch calls it on a look whose `clockStopState` proof is `ready` (since slice 9b,
-  not on devices alone while the start-up window is open, [below](#the-box-sets-its-own-clock)); the
-  administrator's route calls it too (below), and so does a till's agreeing check. A confirmation that finds no open check, or one whose
-  stop came back, closes that one and opens one in its own transaction, whose closing is then
-  `partial` (`closingProof`, `clock-checks.ts`).
-- **By itself, after the stop ends** (real time passes the record, or the clock is put right). The
-  check waits (`waitingCheck`) until a witness taken after the stop ended answers, and the Box status
-  page says so (`clockCheckWaiting`). `closeClockCheckByItself` (`clock-checks.ts`), on each look:
-  AEAT disagreeing closes it `elapsed` and unconfirmed — first, so readings that both agree and
-  disagree close it unconfirmed (ruling R4a2-2); AEAT agreeing closes it `authority`; with no AEAT
-  reading, a group of two or more devices from two addresses disagreeing closes it `elapsed`, even
-  beside an agreeing group (ruling C27); else an agreeing group closes it `devices`; with none it
-  waits on. An administrator can close it too (`closeWaitingAsAdmin`, `clock-confirmation.ts`). Such
-  a closing names no record and records no restarted alert.
-- **By the stop coming back** while the check waits, once a record has been written since it opened
-  (a node's head past the check's `detail.heads`): `openClockCheck` closes it `elapsed` and
-  unconfirmed and opens a new one, in one transaction (`clock-checks.ts`, "closes a check whose stop
-  came back after a sale, and opens a new one, in one transaction").
-
-**Which witnesses count** (decisions 4–6). `apps/server/src/clock-witnesses.ts` keeps each device's
-latest reading, with the network address it came from, and every AEAT reading, with the box's wall
-and steady clocks. `GET /api/device/equipment` notes a device's clock only when the request does not
-come from the box itself (`requestFromBox`, `apps/server/src/device-api.ts`), in development too. A
-device reading, and an AEAT reading that agrees or says nothing, is handed out only while it is at
-most five minutes old by the steady clock and the wall clock has moved with the steady clock since,
-to within 1 000 ms. An AEAT reading that disagrees is kept with no age limit and through clock steps
-until the clock watch finds the raw comparison no longer behind, which calls `endStop`. After a
-confirmation or a closing, the watch, and the administrator's route, call `clear()`, which forgets
-every reading `witnesses()` would hand out (ruling R9b-2); a server restart forgets every witness.
-`judgeClockWitnesses` (`packages/fiscal/src/clock-witnesses.ts`): a witness agrees when
-`|witnessAt − boxAt| + uncertaintyMs ≤ 60 000`, disagrees when `|witnessAt − boxAt| − uncertaintyMs >
-60 000`, and otherwise says nothing, so an AEAT reading too uncertain to decide neither confirms nor
-blocks (ruling R3a-M2); a device's uncertainty is 0. Devices count by their latest reading, one per
-network address (a device with no address counts as itself), so two devices behind one address are
-one witness (`clock-confirmation.test.ts`, "the same two device ids from one address are not
-proof"). A group of devices is one in which every pair agrees with each other; the largest of two or
-more wins, and among groups of one size the one whose newest `boxAt` is latest. During a stop
-(`judge`, `clock-confirmation.ts`) a witness counts only when its own `boxAt` was more than a minute
-earlier than the latest record's time, and an agreeing one only when taken no later than the
-reading. The proof is, in order: AEAT disagreeing is contrary; AEAT agreeing is ready, even beside
-devices that disagree (owner FYI 6); a group of devices disagreeing is contrary; a group agreeing is
-ready; otherwise none.
-
-**An administrator's own device** (owner FYI 7, 8, 13, 14). `POST /api/box/clock-challenge` and then
-`POST /api/box/clock-confirm` (`apps/server/src/box-health-api.ts`), both `system.box_admin`. Each is
-refused `409 clock.confirm_refused` with `reason: "same_machine"` when the request comes from the box
-(`requestFromBox`), unless the server runs in development mode. A challenge belongs to the
-management session that asked for it, is taken once, and holds for 5 000 ms on the steady clock
-(`CHALLENGE_MS`, `apps/server/src/clock-challenges.ts`); otherwise the confirm is refused
-`400 clock.check_expired`, with no params (owner, 2026-10-25). The box's time is
-taken at the round trip's midpoint, counted back on the steady clock from the reading the
-confirmation lifts rather than from the challenge's time, so a step of the box's clock during the
-round trip counts as a difference. Half the round trip is its uncertainty, and the device
-agrees when the difference plus that uncertainty is at most 60 000 ms (`adminAgrees`); otherwise
-`differs`. During a stop the seat refuses `contrary_proof` when AEAT, or a group of two or more
-devices from two addresses, disagrees — even when AEAT agrees (ruling R3b-1); with no stop it closes
-a waiting check, refused `contrary_proof` on a disagreeing witness taken after the stop ended, or is
-refused `not_stopped`, as it is once a confirmation already covers the reading. The route holds the
-authorization, the reading, the checks, the row and the alerts in one `withTransaction`, and answers
-`{ confirmationId, source, confirmedAt }`. The device's time is whatever its browser sends.
-
-**Sales dated wrongly** (owner FYI 9). `misdatedRecords` (`packages/fiscal-verifactu/src/clock-misdated.ts`)
-lists, for one closing, every record written before its check opened (at most each node's entry in
-the check's `detail.heads`) and stamped more than a minute after the stop's corrected start,
-oldest first. The corrected start, stored in `proof.closing.correctedStart`, is the closing's time
-less the boot-time clock's elapsed time since the check opened, when both readings carry the same
-boot id; otherwise it is the closing's time and the closing is `partial` (`correctedStart`,
-`clock-checks.ts`). The list reads only stored values, so it never changes once written. A closing
-stored unconfirmed, or one whose check, start, flag or heads cannot be read, answers "cannot tell"
-rather than an empty list, and never throws (ruling R4b-1-1). `recordMisdated`
-(`clock-stop-incidents.ts`) records one `clock.records_misdated` for each closing that lists any
-record or cannot tell. A list's alert names the earliest listed record's sale; a "cannot tell" alert
-names no sale. `recordIncident` drops an alert whose source, device, code and sale match one still
-open, so **at most one "cannot tell" is open**, whatever sales the checks opened on. It asks for
-every sale since its start to be checked, so it keeps the earlier of the two starts: a "cannot tell" whose
-check opened before the open one's start has the open one marked handled by the system and is
-recorded in its place, which the managers' email duty emails as a new alert (it keeps one
-episode per alert id: "emails each alert of one code on its own, once",
-`apps/server/src/box-alert-email.duty.test.ts`); one whose check opened at or after that start
-folds into the open one, unchanged ("stays one open alert, naming no sale, when a second closing cannot tell", "folds a
-second closing that cannot tell into the open one when a sale came between them", "replaces the
-open one with a second closing that cannot tell whose check opened earlier" and "keeps the open
-one when a second closing that cannot tell opened at the same reading",
-`clock-stop-incidents.test.ts`). A list never folds into a "cannot tell": it has a sale and the
-"cannot tell" has none ("lists a later closing's wrongly dated sales beside an open alert that
-cannot tell, whatever sale each names", `apps/server/src/clock-confirm.route.test.ts`). A list
-still folds into an open list whose earliest record is the same sale; `GET /api/box/clock-misdated`
-gives a list only for a confirmation an open alert names (`readMisdatedOpen`,
-`apps/server/src/box-health.ts`), and `GET /api/box/clock-misdated/handled` only for one a handled
-alert names (`readMisdatedHandled`), so the later list is then not shown by either. The download,
-`GET /api/box/clock-misdated/:incidentId/download` (`apps/server/src/box-health-api.ts`), serves
-the list of the alert it names, open or handled, and answers `alert.not_found` for one that cannot
-tell. Every closing stays in
-`clock_confirmations`. The managers' email duty emails each open `clock.behind_chain_restarted` and
-`clock.records_misdated` once (`INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`).
-
-**A jump** (decision 14). The clock watch takes the wall clock to have jumped when, between two
-checks, it moved more than 60 000 ms further than an elapsed-time clock; `trustedUntil` is the
-earlier check's wall time plus the elapsed time since. The elapsed-time clock is `bootReader`'s
-(`apps/server/src/boot-reader.ts`), which the watch takes as its steady clock: Linux's
-`/proc/uptime`, and `performance.now()` where that file gives no number when the reader is made. proc_uptime(5) describes the file's first number as "the uptime of the
-system (including time spent in suspend)"; the kernel fills it from `ktime_get_boottime_ts64`, to the
-hundredth of a second (`fs/proc/uptime.c`), the clock clock_gettime(2) calls `CLOCK_BOOTTIME`, "A
-nonsettable system-wide clock that is identical to CLOCK_MONOTONIC, except that it also includes any
-time that the system is suspended." Those three were read on 2026-10-23, not run. `performance.now()` alone read a resume from suspend as a jump: on Linux it follows
-`CLOCK_MONOTONIC`, which clock_gettime(2) says "does not count time that the system is suspended",
-so an hour asleep looked like the wall clock stepping an hour forward and recorded a
-`clock.behind_chain_disproved` for the sales under a lift (the review's simulated timings; the
-"sleeps an hour" case in `apps/server/src/clock-watch.elapsed.test.ts`, which failed before this).
-Across a setting of the wall clock, `/proc/uptime` moved 0.020 s while the wall clock moved
-120.25 s (slice 9b's M3, a GitHub Linux runner,
-[run 41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824)). Not
-measured on Linux: what it reads across a real suspend; the tests replace the file. On macOS,
-`os.uptime()` was not used: measured 2026-10-23 (Node v26.11.1), it read whole seconds and equalled
-`date +%s` less `sysctl kern.boottime`, so it is derived from the wall clock there. The witness store
-(`clock-witnesses.ts`) still judges freshness by `performance.now()`, so after a suspend it stops
-handing out the device readings and the agreeing AEAT readings taken before it, as it does after a
-step of the wall clock; a device whose equipment poll runs reports every 15 seconds (`apps/till/src/state/equipment-poll.ts`).
-
-A step the box makes itself is not a jump (slice 9b). The watch is one of the correction's anchors:
-`stepComing` and `reanchor` each first turn every disagreeing AEAT reading not yet taken into a
-disproof and record it, and from `stepComing` until `reanchor` has finished that recording no look
-compares the wall clock with the one before; `reanchor` then makes the clock as it finds it the
-next look's starting point (`apps/server/src/clock-watch.ts`). So no reading measured on the old
-clock is left to disprove the lift the step writes. Either throws when it cannot record (and, once
-the watch has stopped, when a disproof is left unrecorded): a throw from `stepComing` refuses the
-set `pending_disproofs`, one from `reanchor` keeps the step's row waiting
-(`clock-watch.anchor.test.ts`).
-
-**AEAT's time** (decision 1, P3, P5, P11). Two sources feed AEAT witnesses: a submission reply's
-`TimestampPresentacion` (`apps/server/src/time-health.ts`, plus 500 ms, its uncertainty half the
-round trip plus 500 ms), and the `Date` header of an HTTPS `HEAD` to the environment's QR validation
-host (`readAuthorityTime`, `packages/fiscal-verifactu/src/authority-time.ts`), which the clock watch
-runs at most once a minute, on the primary, on a box that files records, while the raw comparison
-is behind and while a check waits after its stop ended (`askAuthority` and `closeWaiting`). Measured
-on 2026-10-23: `curl -I` to `https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR` printed `HTTP/2 200`
-and a `date:` line matching `date -u` to the second, with no `age`, `cache-control` or `x-cache`
-(P3); the repository's own TLS-verified HEAD (`authenticatedHourHead`, no client certificate) to the
-same host, three times, answered 200 with a round-tripping `date`, round trips of 177–206 ms and
-the box's midpoint 858, 52 and 229 ms from the header's instant, while the submission host answered
-`302` with no `date` (P5). Not measured: production's QR host, and the `Date` header of a
-certificate-authenticated `consultar` reply (P11) — no AEAT certificate was used for this slice.
-
-
-Guards: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
-`packages/fiscal-verifactu/src/clock-confirmation.test.ts`, `clock-checks.test.ts`,
-`clock-misdated.test.ts` and `clock-stop-incidents.test.ts` beside them, and
-`apps/server/src/clock-confirm.route.test.ts` — weaker than the rule, because they cover the readings,
-closings and presses they name. What nothing checks:
-
-- that the stop reads `clock_confirmations` only through `clockBehindChain`. A new file that reads
-  the table to decide a refusal, or a reader of the stop that bypasses `clockBehindChain`, goes
-  unnoticed;
-- that a new reader of the stop lifts with the others: the "answers the same from the stop, the
-  staff notice and the bell" case names those three;
-- that only `writeClosing`, `confirmClockStop` and `confirmClockStep` write the table: nothing refuses another writer,
-  and a row it wrote that passes the cover's checks would cover.
+_Removed 2026-11-12 by A1420 PRs 5 and 6:_ the stop while the box's clock read behind the latest
+fiscal record, and the confirmation that lifted it. See the
+[A1420 plan](../superpowers/plans/2026-11-09-a1420-start-clock-corrects-itself.md) and the
+[A1506 plan](../superpowers/plans/2026-11-12-a1506-clock-rules.md).
 
 ### Every start confirms the box's time before it trades
 
 Built by A1420 PR 1a ([plan](../superpowers/plans/2026-11-09-a1420-start-clock-corrects-itself.md)).
-A box's clock dates every invoice, and a misdated invoice cannot be repaired by editing it. Until
-PR 1a an ordinary start never looked at the clock: only a clock behind the latest record, or
-before 28-10-2024, was caught. The owner's rule (2026-11-10): "we rely on NTP only, we don't bother about AEAT … If we
+A box's clock dates every invoice, and a misdated invoice cannot be repaired by editing it. The owner's rule (2026-11-10): "we rely on NTP only, we don't bother about AEAT … If we
 are not on the internet then we either wait for two devices … Or we stop and ask a user to confirm
 that our current date+time is correct (or we ask them to correct it)". Asked whether orders wait
 too: "Orders still go".
@@ -4741,14 +4355,12 @@ How it moves (plan D3):
   set's reason. The watch's device check runs in the correction's turn, so it never confirms while a
   set is in flight.
 
-A confirmation that sets nothing writes a log line, and no row unless a clock stop also holds:
-while the clock-behind stop holds it writes that stop's confirmation row as before; while the clock
-reads a date before 28-10-2024 it is refused and writes nothing (below). Each confirmation keeps the chain
+A confirmation that sets nothing writes a log line and no row. Each confirmation keeps the chain
 heads it was made at, read through the seat's optional `recordHeads?(tx)` (`packages/fiscal/src/backend.ts`).
 
 **The gate** (`apps/server/src/start-clock-gate.ts`, plan D4 and R6). Boot wraps the one fiscal
 seat. The gate holds on a box that files records while the start waits, and also while a clock set
-is with the host, whatever the start's status. While the gate holds, its `refuseWhileClockBehind` throws `clock.unconfirmed` (409, no
+is with the host, whatever the start's status. While the gate holds, its `refuseUntilRecordable` throws `clock.unconfirmed` (409, no
 params), so every route that calls it refuses before any card reader, refund send or drawer job;
 and its four writers (`recordSale`, `recordVoid`, `recordCorrection`, `recordSubstitution`) throw
 the same, so no path through the seat writes a record. Both wrappers are needed: the plan's R6 run
@@ -4760,7 +4372,11 @@ gate holds is left pending by `clockStopsRefund` (boot hands `clockUnconfirmed` 
 mounts, which `boot.start-clock-gate.test.ts` checks; the refund-wait rows in
 `clock-unconfirmed-gate.test.ts` pass it themselves), and the bill payments loop leaves a card payment charged before the start
 pending and raises no `payment.bill_settle_failed` for it, also when the gate starts holding
-partway through a pass; it records it at its first pass once the gate opens (`bill-payments-loop.test.ts`). The gate holds while the box files records (`filesRecords()`) and the start
+partway through a pass; it records it at its first pass once the gate opens (`bill-payments-loop.test.ts`). While paused, `recoverTenderRefunds` still runs
+`sweepInvoiceCorrections` (`apps/server/src/invoice-correction-alerts.ts`) with `fileSettled: false`,
+which files nothing, raises `invoice_correction.unfinished` and touches no refund row; an unpaused
+pass also tries to file every open correction whose money is all back (`fileCorrectionAutomatically`),
+raising `invoice_correction.filing_refused` when refused. The gate holds while the box files records (`filesRecords()`) and the start
 is `waiting` or a clock set is with the host, each asked at each call, so a box that starts filing while it waits is gated from
 that call. Orders still reach the kitchen (the owner's "Orders still go"): sending one is not among
 the wrapped calls (read, not run). The administrator's record remedies call the chain directly, so their route asks the gate before
@@ -4771,38 +4387,27 @@ any remedy runs (`packages/fiscal-verifactu/src/record-remedy-routes.ts`, `requi
 `apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,
 staff signed in on a till see `clock.unconfirmed`, "Payments wait: the server is waiting for
 devices to connect and agree with its time (… of 2 so far)", with “Check the time”, whatever the
-start-up window and AEAT say. The PIN screen shows the same line, without the action. The count shows at most 1, since two confirm at the next look. While
-the start waits, the challenge needs no stop and asks neither the start-up window nor AEAT; it
-answers `keepOffered: true` unless the clock-behind stop or the before-28-10-2024 stop holds. The
+start-up window says. The PIN screen shows the same line, without the action. The count shows at most 1, since two confirm at the next look. While
+the start waits, the challenge needs no stop and does not ask the start-up window; it
+answers `keepOffered: true` unless the clock reads before 28-10-2024. The
 till's profile and the person are still checked. The confirm then takes one of three paths:
 
 - `keep: true` ("The server") confirms the box's time as it stands, whatever the
   till reads: no host call, no row, state `by_person`, one `clock_start.confirmed` line with
-  source `staff` or `admin`. While either stop holds it is refused `clock.set_refused` with reason
-  `stopped`, writing nothing: a keep writes no confirmation, so it could not end the stop;
-- a till within a minute confirms the same way ("Yes"); while either stop holds, it calls
-  `confirmClockStop` in the same transaction, which writes the clock-behind stop's confirmation.
-  On a clock reading before 28-10-2024 a "Yes" is refused, leaving the start waiting: the till then
-  reads before that date too, so the confirm refuses it `target_invalid` (run, in
-  `till-box-clock-api.test.ts`); a till reading that passes that check, within a minute of that
-  date, reaches `confirmClockStop`, which refuses it `clock.unusable` (read, not run);
+  source `staff` or `admin`. While the clock reads before 28-10-2024 it is refused
+  `clock.set_refused` with reason `stopped`, writing nothing;
+- a till within a minute confirms the same way ("Yes"). On a clock reading before 28-10-2024 a
+  "Yes" is refused, leaving the start waiting: the till then reads before that date too, so the
+  confirm refuses it `target_invalid` (run, in `till-box-clock-api.test.ts`);
 - a till further out ("This device") sets the clock through the host with reason `start`, which
   writes the row every set writes and raises `clock.corrected` with its email, then, when the set is
   verified, confirms `by_person`; if the chain heads cannot be read then, the start stays
-  waiting and `clock_start.mark_failed` is logged. While the clock-behind stop also holds at the
-  set, judged in the correction's turn, the row is written at reason `behind_chain`, so it ends
-  that stop as a set outside the start does, and, as at that reason, a person is then refused
-  `witnessed` once AEAT has a reading taken during that stop, agreeing or not. With no clock-behind
-  stop (the seat answers none for a reading before 28-10-2024 either) the row is at reason `start`
-  and AEAT's readings refuse nothing. A set that moves a clock not behind the latest record to more
-  than a minute behind it writes its row at reason `start`, so the clock-behind stop then holds
-  after the start is confirmed `by_person`; a person's "Yes" lifts it, while the till offers
-  “Check the time” (`till-box-clock-api.test.ts`).
+  waiting and `clock_start.mark_failed` is logged.
 
-Once the start is `by_devices` or `by_person`, the notice and the challenge follow the clock-behind
-stop's paths again, except that staff are admitted whatever the start-up window and AEAT say until
-the start is `by_internet`. `keep: true` is refused `stopped` while a stop holds, and otherwise
-`not_stopped` once the start is `by_internet`.
+Once the start is `by_devices` or `by_person`, the challenge is refused `not_stopped` unless the
+clock reads before 28-10-2024, and staff are admitted whatever the start-up window says until the
+start is `by_internet`. `keep: true` is refused `stopped` while the clock reads before 28-10-2024,
+and `not_stopped` once the start is `by_internet`.
 A box whose host service does not answer waits at every start and cannot be set through it, so
 devices or a person confirm its time as it stands (plan D12).
 
@@ -4819,8 +4424,7 @@ covered only once that file lists it.
 Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
 The app's container cannot set the clock, so a small root program on the box's own system, outside
 the container — the **host service** — sets it when the server asks. The box sets its clock
-inside a stop it already has (the clock behind the latest record, or before 28-10-2024,
-`clock.unusable`), and, from a till's time, while a start waits for its time to be
+inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time, while a start waits for its time to be
 confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), and from the setup,
 restore and handover pages' clock step. It opens no stop of its own.
 
@@ -4874,16 +4478,14 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
 **Who may set it** (`apps/server/src/clock-correction.ts`, one correction per server, built in
 `boot.ts`; setup mode builds its own, in the last item):
 
-- the clock watch, from AEAT's time, by itself, when AEAT disagrees during the clock-behind stop
-  (`setFromAuthority`, `apps/server/src/clock-watch.ts`); `clock.unusable` has no automatic set;
-- an administrator, from their own device, at any time during either stop:
-  `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `system.box_admin`), after the same
-  challenge as slice 9's confirmation;
+- an administrator, from their own device, while the clock reads before 28-10-2024:
+  `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `system.box_admin`), after
+  `POST /api/box/clock-challenge`;
 - on a till, `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
   (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, while
   the start has not been confirmed by the internet (during a stop, or while the start waits) or
   during the start-up window (below), or an administrator signed in on the till or named with their
-  PIN, at any time;
+  PIN, while the start waits or the clock reads before 28-10-2024;
 - the person on the first-setup, restore or handover page, from their own device, when the clocks
   differ and they choose **This device** (A1482,
   [plan](../superpowers/plans/2026-11-12-a1482-this-device-in-setup.md)). The page sends
@@ -4925,30 +4527,23 @@ host service does not answer. A person's set hands the correction no witnesses: 
 is that person's device, stored as their reading; a setup or restore set stores no reading, only
 the before and after times in the note, and a restore set names nobody.
 
-**The order** (`setInTurn`). Every set, and every confirmation that can lift or close a stop (the
-watch's `confirm` and `closeWaiting`, `POST /api/box/clock-confirm`, a till's agreeing check), runs
-in the correction's one-at-a-time **turn**, so nothing lifts or closes the stop between a set's
-judging and its row. The turn is always taken around a whole transaction, never inside one:
+**The order** (`setInTurn`). Every set, and every confirmation of the start (the watch's two
+devices, a till's keep or agreeing check), runs in the correction's one-at-a-time **turn**. The turn is always taken around a whole transaction, never inside one:
 `withTransaction` holds the write lock (`packages/db/src/tenancy.ts`), and a set holding the turn
 waits for that lock, so a caller waiting for the turn inside a transaction would never finish.
 Inside the turn, each refusal asking nothing further:
 
-1. `pending_disproofs` while an earlier step's row is still waiting to be written;
+1. `pending_step` while an earlier step's row is still waiting to be written;
 2. `stale` (below), then `target_invalid` (the target before 2024-10-28 or from 2100 on);
-3. in one write-lock turn with no change-list drain: `not_stopped` unless the stop still holds;
-   for a staff member, then the till's admission and the window (`not_admitted`, `not_start_up`,
-   `authority_pending`). A set at reason `start` needs no stop and is refused `not_stopped` once
-   the start is confirmed by the internet, and `not_admitted` from source `authority`; until the start is confirmed
-   by the internet, a staff member is asked only the till's admission
+3. `not_stopped`: at reason `start` once the start is confirmed by the internet, and at reason
+   `unusable` unless the clock still reads before 28-10-2024; then, for a staff member, the till's
+   admission and the window (`not_admitted`, `not_start_up`); until the start is confirmed by the
+   internet, a staff member is asked only the till's admission
    ([above](#every-start-confirms-the-boxs-time-before-it-trades));
 4. the host's status: `host_unavailable`, then `synchronised`;
-5. for a person: `witnessed` when AEAT has a reading taken during this stop, agreeing or not, so the
-   box sets or confirms from AEAT itself (at reason `start`, only while the clock-behind stop also
-   holds); then `agrees` when the device is within a minute (or the caller's
-   `agreesWithinMs`), so confirming is the way;
-6. each anchor's `stepComing` (a throw refuses `pending_disproofs`); then steps 3 and 5 again,
-   because AEAT can answer or the stop end during the waits (a refusal there re-anchors every
-   anchor; so does an error thrown there, which is then passed on); then `stale` again;
+5. `agrees` when the device is within a minute (or the caller's `agreesWithinMs`), so confirming
+   is the way;
+6. step 3 again, because the stop can end while the host's status is awaited; then `stale` again;
 7. the set: read the wall and boot-time clocks, raise the step counter, ask the host, read both
    again. It is verified when the host answered and the wall clock is within 2 000 ms of the target
    plus the boot-time clock's elapsed time;
@@ -4969,14 +4564,9 @@ by hand): an offset is valid only while the clock has not stepped since it was m
 **A step's row and alert** (`confirmClockStep`, `packages/fiscal-verifactu/src/clock-step.ts`). A
 verified step writes one `clock_confirmations` row: `box_clock_at` the reading before,
 `confirmed_at` the reading after (the time the cover takes as adopted), `step_ms` the measured step
-rounded, `source` `authority`, `admin` or `staff`, `person_id` the person, `reason` `behind_chain`,
-`unusable` or `start`, and in `proof` what set the clock (AEAT's reading, or the person's reading with
-`device` naming the till when there was one) plus `step: { beforeAt, afterAt, stepMs, targetAt }`.
-For the clock-behind stop it also closes the open check (opening one at the before reading if none
-is open), stores `heads` and `closing` as slice 9 does, lists the wrongly dated sales
-(`recordMisdated`), and names the latest record — a lift, with `clock.behind_chain_restarted` — when
-the after reading is still more than a minute behind it. A `clock.unusable` step names no check and
-no record. Every verified step, and every unverified one that moved the clock by more than a second,
+rounded, `source` `admin` or `staff`, `person_id` the person, `reason` `unusable` or `start`, and in
+`proof` what set the clock (the person's reading, with `device` naming the till when there was one)
+plus `step: { beforeAt, afterAt, stepMs, targetAt }`. Every verified step, and every unverified one that moved the clock by more than a second,
 records `clock.corrected` (a warning, `system.manage`): who, which till, both readings with their
 offsets, the step, and whether it verified; recording it first marks any open `clock.corrected`
 handled. An unverified step writes no row and lifts nothing. The managers' email duty queues one
@@ -4988,15 +4578,11 @@ is not tried again; and a send cut off after the email was handed over is never 
 (3a-ii's rule).
 
 **A step whose row cannot be written** (a full disk, or an anchor whose `reanchor` failed) is kept in
-memory and written by `writePending()` on the watch's next look, only after that look has recorded
-its disproofs; until then every set answers `pending_disproofs`. A restart loses the row and its alert;
+memory, and every later set answers `pending_step` until the clock watch's next look, every 15
+seconds, writes it (`writePending()`, `apps/server/src/clock-watch.ts`). A restart before then loses
+the row and its alert;
 the step then shows only in the box's logs: the host's journal line and Waitron's own
 `clock_correction.row_pending`.
-
-**The watch's backoff.** After an automatic set answered `refused` or `unverified`, the watch asks for
-no automatic set in that check for 10 minutes by the steady clock, doubling after each further one
-up to 4 hours; a new check starts again with none. Refusals that ask the host nothing are not backed
-off, and a person's set never is.
 
 **Backups across a step** (Tasks 14 and 14a). A backup's age is the stamp in its name, so after a
 step forward every archive taken under the slow clock looks old, and after a step back the archives
@@ -5037,13 +4623,10 @@ Guards: `packages/workforce/src/clocking-step.test.ts`, `apps/server/src/till-cl
 the box cannot check the time on the internet at a start, a till proposes the likely time and a
 person confirms it. A server process that is the primary when it starts opens a window as boot
 creates it; on any other node it starts closed. It closes for good the first time any reader of the
-stop finds none holding — the watch's look, the tills' notice read, or a till route — counting a stop
-a confirmation has lifted. It has no time limit, and a reading before 28-10-2024 keeps it open. It
-also keeps what AEAT said during it: not asked, unanswered or answered (the watch's ask, and an AEAT
-time noted from a filing reply).
+stop finds none holding — the watch's look, the tills' notice read, or a till route. It has no time
+limit, and a reading before 28-10-2024 keeps it open.
 
-- **The till's offer.** While the window is open, a stop holds and AEAT cannot help (the clock reads
-  before 28-10-2024, the box does not file or cannot ask AEAT, or AEAT has not answered), the box
+- **The till's offer.** While the window is open and the clock reads before 28-10-2024, the box
   sends the tills `clock.check_time` from a source of its own (`clockCheckNoticeSource`, owner
   `box-clock`, `apps/server/src/box-staff-notices.ts`); the till's clock line then offers “Check
   the time”. While the start check waits on a box that files records, the same source sends
@@ -5052,26 +4635,16 @@ time noted from a filing reply).
 - **The till's check.** Both routes are refused `same_machine` from the box itself outside
   development, `device_profile.not_admitted` when the till's profile does not admit the person
   (checked again inside the write), and `not_stopped` with no stop; for a staff member also
-  `not_start_up` once the window has closed and `authority_pending` while AEAT has not been asked
-  and could be. Until the start check is confirmed by the internet, a staff member is refused
-  neither, and while it waits no stop is needed
+  `not_start_up` once the window has closed. Until the start check is confirmed by the internet, a
+  staff member is not refused it, and while it waits no stop is needed
   ([above](#every-start-confirms-the-boxs-time-before-it-trades)). The confirm carries the till's own clock, never a typed time, and the box takes its
-  time at the round trip's midpoint. A till within a minute, uncertainty included, confirms the
-  box's time with no step through slice 9's `confirmClockStop` with the person — refused `stale`
-  when the clock stepped while it waited, and `contrary_proof` when AEAT or a group of devices
-  disagrees; a till that differs sets the clock through the correction. An administrator is checked
+  time at the round trip's midpoint. A till within a minute, uncertainty included, confirms a
+  waiting start with no step and is otherwise refused `not_stopped`, and `stale` when the clock
+  stepped while it waited; a till that differs sets the clock through the correction. An administrator is checked
   as the drawer route checks its override and is not bounded by the window.
-- **No devices-only lift during start-up** (decision 18). While the window is open, the watch lifts
-  on a `ready` proof only when AEAT is among the agreeing witnesses; two agreeing devices alone
-  lift nothing until it closes, and Box status's Clock row does not say "Proof found" for them (its
-  read carries `startUp`).
 
-Limits, stated, not fixed: a node promoted while running has no window until it restarts; on a node
-demoted while running the watch's looks, which stop off the primary, no longer close it; while every
-read of the stop fails, the window stays as it was. Until slice 9c, a clock wrong forward at a
-start, or wrong backward by less than the gap to the last sale, raises no stop; since A1420 PR 1a,
-a start the internet cannot confirm on a box that files records waits for its time whatever the
-clock reads ([above](#every-start-confirms-the-boxs-time-before-it-trades)).
+Limits, stated, not fixed: a node promoted while running has no window until it restarts; while
+every read of the stop fails, the window stays as it was.
 
 **The `staff` source and its one migration** (Task 8-0). (2026-11-07, A1422: the two old
 migration files named here were deleted with the frozen history; read one with
@@ -5115,10 +4688,9 @@ time service; every printed line is in the plan's "Measured for 9b" table):
 Not measured: what timesyncd does with its clock file at the next boot (the runners run chrony), and
 Docker Desktop (M7).
 
-Guards: `apps/server/src/clock-correction.test.ts`, `clock-watch.correction.test.ts`,
-`clock-watch.anchor.test.ts`, `clock-watch.start-up.test.ts`, `clock-start-up.test.ts`,
-`clock-set.route.test.ts`, `till-box-clock-api.test.ts`, `boot.clock-correction.test.ts` and
-`boot.clock-start-up.test.ts` beside them; `packages/fiscal-verifactu/src/clock-step.test.ts`;
+Guards: `apps/server/src/clock-correction.test.ts`, `clock-watch.start-up.test.ts`,
+`clock-start-up.test.ts`, `clock-set.route.test.ts`, `till-box-clock-api.test.ts` and
+`boot.clock-correction.test.ts` beside them; `packages/fiscal-verifactu/src/clock-step.test.ts`;
 `apps/server/src/backup-sweep.test.ts`, `backup-room.test.ts`, `low-space-backups.test.ts`; and
 `scripts/waitron-box-sh.test.mjs` — weaker than the rule: the handler's suite runs it against stub
 `timedatectl`, `systemctl` and the rest, never systemd; the route suites cover the routes they name.
@@ -5174,7 +4746,7 @@ out.
 | Account-action links (`packages/identity/src/account-action.ts`: `inspectAccountAction`, `completeAccountAction`, `confirmEmailChangeByCode`) | every outstanding link refused | a password-reset, invitation or email-change link stays usable for 400 days plus its limit | fixed: a link whose expiry lies further ahead than its purpose's lifetime is refused `account_action.invalid`, and the next issue deletes it as it deletes an expired one (test: `account-action.test.ts`, "an account action issued before a backward clock step") |
 | Join requests (`apps/server/src/join-requests.ts`: `sweepLapsed`, `returningOf`) | every pending request deleted; devices ask again | a request stays approvable for 400 days plus 15 minutes | fixed for −400: a request made further ahead than its 15 minutes has lapsed, swept as an old one is, and is no returning device's request (tests: `join-requests.test.ts`, "a request stamped ahead of the clock" and "is not a returning device's request once it lies further ahead"). Accepted: a device request stamped less than 15 minutes ahead survives the window reopening, since it is not earlier than the new opening (Task 15c-3's review, M3, run); it still needs its number matched and lapses within 15 minutes. +400 accepted: the device asks again |
 | Google sign-in state, authenticator enrolment (`packages/identity/src/google-oidc.ts`, `claimGoogleState`; `profile.ts`, `finishOwnTotpEnrollment`) | refused | usable for 400 days plus 10 minutes | fixed: an expiry further ahead than its 10 minutes is refused (`google.invalid`, `totp.invalid`), and the next Google sign-in or link to begin sweeps such a state (tests: `google-oidc.test.ts`, "stored before a backward clock step"; `profile.test.ts`, "begun before a backward clock step") |
-| Card-refund resend window (`apps/server/src/bill-refunds.ts`, `resumeCardRefund`) | never resent; waits for a manager | resent under the same key past the provider's window, once a clock confirmation lifts the stop | fixed: a first send stamped ahead of now at all is of unknown age and is not resent, as the tender-refund path already did (`tender-refund-sends.ts`); the refund waits for a manager (tests: `bill-refunds.card.test.ts`, "stamped 25 hours ahead" and "stamped a minute ahead") |
+| Card-refund resend window (`apps/server/src/bill-refunds.ts`, `resumeCardRefund`) | never resent; waits for a manager | resent under the same key past the provider's window | fixed: a first send stamped ahead of now at all is of unknown age and is not resent, as the tender-refund path already did (`tender-refund-sends.ts`); the refund waits for a manager (tests: `bill-refunds.card.test.ts`, "stamped 25 hours ahead" and "stamped a minute ahead") |
 | Pairing window (`apps/server/src/pairing-mode.ts`, `prune`, in memory) | shuts | stays open for 400 days plus 3 minutes | fixed: a hold further ahead than its 3 minutes has lapsed, so a backward step longer than the time since the hold was opened or last renewed ends it (the control: a step back of exactly that time keeps it) (test: `pairing-mode.test.ts`, "shuts when the clock steps back") |
 | Payments reconcile scheduler (`packages/payments/src/reconciliation-schedule/derive.ts`: `retryDue`, `claimLapsed`; `store.ts`: `claimRow`, `reclaimStale`; `run.ts`: `longestWait`) | runs due at once | a stuck run is not reclaimed and a failed one not retried for 400 days | fixed for −400: a retry time further ahead than the duty's longest wait (the last backoff before a park, a parked day's retry, or the longest re-sweep the duty declares as `longestResweepMs`) is due, and a run started further ahead than its hour is reclaimed; a re-sweep a duty asks for later than its longest wait is enqueued at that limit, so it cannot read as stamped ahead (tests: `derive.test.ts`, `store.test.ts`, `run.test.ts`, "…stamped ahead of the clock"; `resweep.test.ts`, "…later than the duty declares…"; `reconcile-duty.test.ts` pins the declaration) |
 | Cloud snapshots (`apps/server/src/cloud-snapshot-worker.ts`: `isDue`, `pendingExpired`) | due at once; a pending capture over a day old is abandoned and its local file deleted | no snapshot for 400 days | fixed for −400: a deadline further ahead than 49 hours is due (a day start moved up to 23:59 later across the night the clocks go back put a deadline 48.73 hours ahead with no step; the longest found), and a capture made more than a day ahead is abandoned as an old one is (tests: `cloud-snapshot-worker.test.ts`, "a backward clock step"); +400 accepted: only an unpublished local capture goes |
@@ -6141,32 +5713,6 @@ trigger whose table is still there) and a 10 s check while trading refuse to tra
 or changed trigger (`apps/server/src/append-only-watch.ts`) — weaker than its name: stored text
 only, and only the tables the start migrated.
 
-### While the box's clock reads more than a minute earlier than the latest fiscal record, no record is written and no route takes or gives back new money, unless a confirmation of the clock covers the reading (below).
-
-**Switched off (2026-11-12, A1420 PR 5).** This stop never holds; the code goes in A1420 PR 6.
-
-**While the box's clock reads more than a minute earlier than the latest fiscal record, no record
-is written and no route takes or gives back new money, unless a confirmation of the clock covers
-the reading (below).** The append refuses on its own
-(`clock.behind_chain`, `packages/fiscal-verifactu/src/chain.ts`); a money route calls the fiscal
-seat's `refuseWhileClockBehind` after its replay answer and before any reader, refund or drawer,
-and both refund recovery loops pause. A card refund's send and outcome are judged again in the
-transaction that dates them, after any provider wait. A payment whose money has already moved is
-still stored. Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
-`apps/server/src/payments-api.clock-behind.test.ts` and
-`chain.clock-behind.test.ts`, weaker than the rule — they cover the
-routes they name; a new money route is seen by none. Receipt:
-[conventions-data.md](conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
-**A confirmation of the clock (`clock_confirmations`: AEAT's time, two agreeing devices from two
-addresses, or an administrator's own device, never one on the box outside development) lifts it
-for one step back**, with no limit on the gap; once a record is written under it every reading is
-held to the minute against the latest time written since. Guards:
-`packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
-`packages/fiscal-verifactu/src/clock-confirmation.test.ts` and
-`apps/server/src/clock-confirm.route.test.ts`, weaker than the rule — they cover the readings and
-requests they name. Receipt:
-[conventions-data.md](conventions-data.md#a-confirmation-of-the-clock-lifts-the-stop-for-one-step-back).
-
 ### Never put our own metadata into a hash.
 
 **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
@@ -6582,7 +6128,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   matter how much the clock changes"); a time a person confirms or sets from their own device is
   never compared with the latest record (owner, 2026-11-11 14:34: "if somebody has confirmed the
   time on their device, then we trust that time and move forward"). After replay, call the seat's
-  `refuseWhileClockBehind` (by then: waiting, or before 28-10-2024) before reader/refund/drawer
+  `refuseUntilRecordable` (by then: waiting, or before 28-10-2024) before reader/refund/drawer
   work; pause both refund recovery loops while waiting. Recheck card-refund send/outcome in their
   dating transaction after provider waits, against the same check. Still store money already
   moved. Guards:
@@ -6590,15 +6136,19 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule: the chain case covers sales
   only, and the gate covers the money routes `clock-unconfirmed-gate.test.ts` lists. **The box's internet time service keeps its clock; Waitron sets it only through the host
   service, from a till's time (a staff member's while the start waits for its time, or during a stop
-  until the internet confirms that start or during start-up; a Box administration holder's at any time), a
-  Box administration holder's own device, the device showing the clock step of the setup page (under its
-  owner's pass), the restore page (under its recovery key or kit) or the handover page (signed in as
-  a `node.manage` holder), when that person chooses **This device** (owner, 2026-11-10: "yes";
-  2026-11-12: "add \"This device\" to #2693 now"), or AEAT only inside the clock-behind stop — never from devices alone
+  until the internet confirms that start or during start-up; a Box administration holder's while the
+  start waits or the clock reads before 28-10-2024), a Box administration holder's own device, the
+  device showing the clock step of the setup page (under its owner's pass), the restore page (under
+  its recovery key or kit) or the handover page (signed in as a `node.manage` holder), when that
+  person chooses **This device** (owner, 2026-11-10: "yes"; 2026-11-12: "add \"This device\" to
+  #2693 now") — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
   clock by over a second, is alerted and emailed (a step made before the venue exists, at its first
   full start that is neither a mirror nor fenced, unless the topic file's losses apply)** (owner,
-  2026-11-10: "we rely on NTP only, we don't bother about AEAT"). Guards:
+  2026-11-10: "we rely on NTP only, we don't bother about AEAT"). **Waitron never reads AEAT's time
+  except to warn of drift from its filing replies and, until A1420 PR 4 lands, in the series check
+  at setup, restore and promotion (`hour-clock-internet.ts`)** (owner, 2026-11-11 14:34: "Instead
+  we rely on NTP"). Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`,
   `apps/server/src/setup-clock-set.test.ts`, `apps/server/src/boot.box-emails.test.ts`, weaker than
