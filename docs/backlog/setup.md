@@ -415,11 +415,15 @@ A second build with the same profile and revision measured 1,296,785,408 databas
 `dbstat` assigns 782,790,656 bytes (60.36%) to `print_jobs`, or 789,913,600 (60.91%)
 with its indexes. Attendance source state and operation facts, each with indexes, use
 11.69% and 7.89%. Its encrypted backup is 1,268,463,897 bytes (1,209.70 MiB).
-Compressing that artifact with gzip -6 took 29.54 seconds and produced 1,268,669,345 bytes
-(output/input 1.000162); zstd -3 took 0.67 seconds and produced 1,268,492,945 bytes
-(1.000023). Both were larger, and both decompressed to the original SHA-256.
-Their linear 360-day estimates are 14,518.77 and 14,516.75 MiB respectively.
-The backup format is unchanged. A1532's one-week print-payload retention comes before the
+The useful compression measurement is before encryption: encrypted bytes no longer expose
+the database's repeated patterns. On the plain `venue.db`, gzip -6 took 14.48 seconds and
+produced 230,623,991 bytes (output/input 0.177843); zstd -3 took 0.57 seconds and produced
+152,964,251 bytes (0.117956). Both decompressed to the original SHA-256. Their linear
+360-day estimates are 2,639.28 and 1,750.54 MiB respectively, still above the upload limit.
+The current writer passes `packArchiveStream` directly to `encryptArtifactFile`
+(`apps/server/src/backup-sweep.ts`); the packer reads raw file chunks and the cipher encrypts
+them without a compression step. Compression before encryption is an opportunity for the
+streamed-upload plan, not a format change made by this measurement. A1532's one-week print-payload retention comes before the
 streamed-upload plan, whose size figures must be measured again afterwards.
 
 An oversized committed attempt's Finish request now passes the readable-database gate and refuses
