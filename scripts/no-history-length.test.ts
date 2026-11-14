@@ -75,14 +75,23 @@ describe("historyLengthReads", () => {
   });
 });
 
-test("no test reads the browser's history.length", () => {
-  const found: string[] = [];
-  for (const root of ROOTS) {
-    for (const file of testFilesIn(join(ROOT, root))) {
-      for (const line of historyLengthReads(readFileSync(file, "utf8"))) {
+describe("the tree", () => {
+  const files = ROOTS.flatMap((root) => testFilesIn(join(ROOT, root)));
+
+  test("reaches both roots", () => {
+    for (const root of ROOTS)
+      expect(files.some((file) => relative(ROOT, file).startsWith(`${root}/`))).toBe(true);
+  });
+
+  test("no test reads the browser's history.length", () => {
+    const found: string[] = [];
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      if (!source.includes("history") && !source.includes("\\u")) continue;
+      for (const line of historyLengthReads(source)) {
         found.push(`${relative(ROOT, file)}:${line}`);
       }
     }
-  }
-  expect(found).toEqual([]);
+    expect(found).toEqual([]);
+  });
 });
