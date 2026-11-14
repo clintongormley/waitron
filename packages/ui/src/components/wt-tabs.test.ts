@@ -1141,31 +1141,44 @@ test("a selected tab that grows leaves a strip the reader scrolled where it is",
   expect(tablist(el).scrollLeft).toBe(0);
 });
 
+function selectedTab(el: WtTabs) {
+  return buttons(el).find((tab) => tab.getAttribute("aria-selected") === "true")!;
+}
 function expectWholeSelectedFits(el: WtTabs, width: number) {
   const strip = tablist(el).getBoundingClientRect();
-  const selected = buttons(el)[2]!.getBoundingClientRect();
   expect(strip.width).toBe(width);
-  expect(selected.width).toBeLessThanOrEqual(strip.width);
+  expect(selectedTab(el).getBoundingClientRect().width).toBeLessThanOrEqual(strip.width);
   expectSelectedInView(el);
+}
+/** Runs `grow` and checks the selected tab got wider and the strip scrolled further from its start. */
+async function expectGrowthScrolledIn(el: WtTabs, grow: () => Promise<void>) {
+  const width = tablist(el).getBoundingClientRect().width;
+  const tabBefore = selectedTab(el).getBoundingClientRect().width;
+  const scrollBefore = Math.abs(tablist(el).scrollLeft);
+  await grow();
+  expect(selectedTab(el).getBoundingClientRect().width).toBeGreaterThan(tabBefore);
+  expect(Math.abs(tablist(el).scrollLeft)).toBeGreaterThan(scrollBefore);
+  expectWholeSelectedFits(el, width);
+}
+async function relabelSelected(el: WtTabs, own: { label: string }[], label: string) {
+  own[2]!.label = label;
+  el.requestUpdate();
+  await el.updateComplete;
+  await frames();
 }
 
 test("a selected tab that grows by its font-size, in a strip whose width stays, is scrolled back so all of it is in view", async () => {
   const { el } = await selectedWithLittleRoom();
-  const width = tablist(el).getBoundingClientRect().width;
-  buttons(el)[2]!.style.fontSize = "18px";
-  await frames();
-  expectWholeSelectedFits(el, width);
+  await expectGrowthScrolledIn(el, async () => {
+    buttons(el)[2]!.style.fontSize = "18px";
+    await frames();
+  });
 });
 
 test("a selected tab whose label grows, with the same list of tabs, is scrolled back so all of it is in view", async () => {
   const own = items.map((item) => ({ ...item }));
   const { el } = await selectedWithLittleRoom(own);
-  const width = tablist(el).getBoundingClientRect().width;
-  own[2]!.label = "Preparation routes too";
-  el.requestUpdate();
-  await el.updateComplete;
-  await frames();
-  expectWholeSelectedFits(el, width);
+  await expectGrowthScrolledIn(el, () => relabelSelected(el, own, "Preparation routes too"));
 });
 
 test("stops watching a tab once another is selected, and watches the new one", async () => {
