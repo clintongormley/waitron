@@ -759,15 +759,16 @@ describe("backupAlertSource and the copy to the standby server", () => {
     ]);
   });
 
-  it("marks a stopped copy, another box's copy and unusable settings as the standby's", async () => {
+  it("marks a stopped copy, another box's copy and unusable settings as the standby's, not backup.stream_behind", async () => {
+    const lagMs = 2 * 60_000;
     expect(
-      await codesAndParams(toSpare({ state: "off", reason: "supervisor_failed", lagMs: 0 })),
+      await codesAndParams(toSpare({ state: "off", reason: "supervisor_failed", lagMs })),
     ).toEqual([["backup.stream_stopped", { reason: "supervisor_failed", toSpare: true }]]);
     expect(
-      await codesAndParams(toSpare({ state: "refused", reason: "pointer_changed", lagMs: 0 })),
+      await codesAndParams(toSpare({ state: "refused", reason: "pointer_changed", lagMs })),
     ).toEqual([["backup.stream_refused", { toSpare: true }]]);
     expect(
-      await codesAndParams(toSpare({ state: "refused", reason: "config_unsafe", lagMs: 0 })),
+      await codesAndParams(toSpare({ state: "refused", reason: "config_unsafe", lagMs })),
     ).toEqual([["backup.stream_settings_unusable", { toSpare: true }]]);
   });
 

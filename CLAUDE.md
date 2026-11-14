@@ -935,9 +935,11 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   `boot.node-state-missing.test.ts`, weaker than the rule: named cases only.
   [Detail](docs/superpowers/plans/2026-11-02-a1018-handover-build.md#slice-3-as-built-2026-11-03).
 - **The bucket stream never waits on the bucket to sell or fails `/health`; its local checkpoint
-  can hold the write lock and delay sales.** Fifteen minutes behind raises `backup.stream_behind`
-  unless a stopped/refused/unusable-settings alert explains it. Guards: stream loop/pause e2e and
-  health bucket-copy cases, weaker than the rule: named cases only; stream cases skip without binaries.
+  can hold the write lock and delay sales.** Fifteen minutes behind (a paired spare's copy:
+  over 60 seconds) raises `backup.stream_behind` unless a stopped/refused/unusable-settings alert
+  explains it. Guards: stream loop/pause e2e, health bucket-copy cases and the threshold cases in
+  `apps/server/src/alert-sources.test.ts`, weaker than the rule: named cases only; stream cases skip
+  without binaries.
 - **`registros_facturacion` is immutable: never work around its append-only update/delete triggers.**
   Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
   on existing tables; boot and the trading watch refuse changed/missing triggers. `append-only-watch`
