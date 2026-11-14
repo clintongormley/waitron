@@ -31,8 +31,10 @@ Estimate: production +90/-5, tests +180/-10, temporary probe/support including f
 ## Review corrections, 2026-11-14
 
 The two Claude run-it reads found an unused wire field, inaccurate standby/retry advice, and a
-false earlier-generation test. Keep the warning internal to ongoing alerts by projecting it out of
-both status answers. The existing exact response assertions exercise that projection. Wording
+questioned earlier-generation test. Keep the warning internal to ongoing alerts by projecting it out of
+all four status answers (backup, stream, Box status and Box health). Existing exact response
+assertions exercise those projections. The fresh read found Box status, and following every
+reader found Box health; each assertion failed on the extra field before its fix. Wording
 offers the real restart action after service, says it starts a full copy, and qualifies daily retries
 to normal running. Failed marker listings remain explicitly open in the existing error-report bundle.
 

@@ -78,6 +78,9 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     backup = await readers.backup();
   }
 
+  const stream: StreamView & { pruneBlockedSince?: string } = { ...readers.stream() };
+  delete stream.pruneBlockedSince;
+
   return {
     mode,
     environment: readers.environment,
@@ -87,7 +90,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     chain,
     singletonRole,
     backup,
-    stream: readers.stream(),
+    stream,
     ...(readers.spare === undefined ? {} : { spare: await readers.spare() }),
     duties: readers.duties(),
     jobs: readers.jobs(),

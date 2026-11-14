@@ -128,13 +128,13 @@ export const ALERT_MESSAGES: Readonly<
     },
   },
   "backup.stream_retention_blocked": {
-    en: "The backup bucket is not being tidied: its marker could not be found, so old copies are being kept. Waitron tries again daily while the copy is running normally. After service, use Box status → Restart the box to request a fresh marker.",
-    es: "No se está limpiando el bucket de copias: no se ha encontrado su marcador, así que se conservan las copias antiguas. Waitron lo intenta de nuevo cada día mientras la copia funciona con normalidad. Tras el servicio, usa Estado del servidor → Reiniciar el servidor para pedir un marcador nuevo.",
+    en: "The backup bucket is not being tidied: its marker could not be found, so old copies are being kept. Waitron tries again daily while the copy is running normally. After service, open Box status and press Restart the box to request a fresh marker.",
+    es: "No se está limpiando el bucket de copias: no se ha encontrado su marcador, así que se conservan las copias antiguas. Waitron lo intenta de nuevo cada día mientras la copia funciona con normalidad. Tras el servicio, abre Estado del servidor y pulsa Reiniciar el servidor para pedir un marcador nuevo.",
     variants: {
       toSpare: {
         mode: "replace",
-        en: "Old copies on the standby server are not being tidied because their marker could not be found. Waitron tries again daily while the copy is running normally. After service, use Box status → Restart the box to request a fresh marker.",
-        es: "No se están limpiando las copias antiguas del servidor en espera porque no se ha encontrado su marcador. Waitron lo intenta de nuevo cada día mientras la copia funciona con normalidad. Tras el servicio, usa Estado del servidor → Reiniciar el servidor para pedir un marcador nuevo.",
+        en: "Old copies on the standby server are not being tidied because their marker could not be found. Waitron tries again daily while the copy is running normally. After service, open Box status and press Restart the box to request a fresh marker.",
+        es: "No se están limpiando las copias antiguas del servidor en espera porque no se ha encontrado su marcador. Waitron lo intenta de nuevo cada día mientras la copia funciona con normalidad. Tras el servicio, abre Estado del servidor y pulsa Reiniciar el servidor para pedir un marcador nuevo.",
       },
     },
   },
