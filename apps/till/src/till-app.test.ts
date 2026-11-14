@@ -18322,6 +18322,25 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
 
     expect(alert(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
   });
+
+  it("says the parked orders could not refresh when they cannot be read after one is brought back", async () => {
+    const { el, c } = await counterWith({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([heldSummary])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    expect(c.store.id).toBe("wo-1");
+    expect(
+      el
+        .shadowRoot!.querySelector('[data-refresh-notice="held"] .refresh-message')!
+        .textContent!.trim(),
+    ).toBe(t("refresh.held"));
+  });
 });
 
 describe("the counter's waiting orders (sent and not paid, or settled and not handed over)", () => {
@@ -18798,6 +18817,50 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
 
     const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="station"]')!;
     expect(notice.textContent).toContain(t("refresh.station_after_hand_over"));
+  });
+
+  it.each([
+    ["advanced", () => Promise.resolve(), null],
+    ["refused", () => Promise.reject({ code: "server.internal" }), "station.advance_error"],
+  ] as const)(
+    "a kitchen queue that cannot be read after a dish is %s says the queue could not refresh",
+    async (_how, advanceTicketItem, error) => {
+      const { el, c } = await counterWaiting({
+        ...invoiceFirst,
+        advanceTicketItem: vi.fn(advanceTicketItem),
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValueOnce({ items: [], notices: [] })
+          .mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+
+      emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-1", to: "preparing" });
+      await flush(el);
+
+      const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="station"]')!;
+      expect(notice.textContent).toContain(t("refresh.station"));
+      if (error !== null) expect(alert(el)!.textContent).toContain(t(error));
+    },
+  );
+
+  it("a kitchen queue that cannot be read after a refused Collect says so and reads the waiting list again", async () => {
+    const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
+    const listCounterWaiting = vi.fn().mockResolvedValue([paidOrder]);
+    const { el, c } = await counterWaiting({
+      ...invoiceFirst,
+      markCollected: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      getStationQueue,
+      listCounterWaiting,
+    });
+    const reads = listCounterWaiting.mock.calls.length;
+    getStationQueue.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(c, "mark-collected", { orderId: "wo-paid" });
+    await flush(el);
+
+    expect(listCounterWaiting).toHaveBeenCalledTimes(reads + 1);
+    const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="station"]')!;
+    expect(notice.textContent).toContain(t("refresh.station"));
   });
 
   it.each([

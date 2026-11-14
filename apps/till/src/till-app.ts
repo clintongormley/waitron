@@ -9159,7 +9159,7 @@ export class TillApp extends LitElement {
           : "station.advance_error";
     }
     if (session !== this.#operatorSession) return;
-    await this.#refreshStationQueue();
+    await this.#refreshAfterWrite("station", "refresh.station");
   }
 
   async #onMarkCollected(event: Event): Promise<void> {
@@ -9192,11 +9192,8 @@ export class TillApp extends LitElement {
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_hand_over");
       return;
     }
-    try {
-      await this.#refreshStationQueue();
-    } finally {
-      if (session === this.#operatorSession) await this.#refreshWaiting();
-    }
+    await this.#refreshAfterWrite("station", "refresh.station");
+    if (session === this.#operatorSession) await this.#refreshWaiting();
   }
 
   /**
@@ -9469,7 +9466,7 @@ export class TillApp extends LitElement {
       this.#counterRetrievals.delete(read);
     }
     if (session !== this.#operatorSession) return;
-    await this.#refreshHeldOrders();
+    await this.#refreshAfterWrite("held", "refresh.held");
   }
 
   /** Loads the order again after a save was refused for an out-of-date copy, or (`sentDish`) for a
