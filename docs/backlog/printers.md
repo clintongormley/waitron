@@ -639,10 +639,8 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Bundle: Receipt language loose ends
 
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- The refusal's count of blocking orders is not shown on Venue settings' Defaults card: `codeMessage` fills
-  in no values.
 - The provisioning command (`waitron-provision`) can still store two languages, or one no pack
   offers; the first entry is the default receipt language. It does not hold Catalonia to Catalan:
   only the Receipts route and setup do.
