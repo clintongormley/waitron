@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { NODE_LOCAL_MANIFEST } from "../packages/handover/src/manifest.js";
+import { STATE_LAYOUT, VENUE_LITESTREAM_DIR } from "../packages/store/src/state-layout.js";
 import { NODE_CLASSIFICATION } from "../packages/node-db/src/classification.js";
 import { OPTIONAL_BACKUP_STATE } from "../apps/server/src/backup-optional-state.js";
 import { RECOVERY_FILES } from "../apps/server/src/state-secrets.js";
 
 /**
- * A box's own state that the handover manifest does not name is state nobody decided about: M2
- * would silently keep, drop or inherit it. Reads its lists from their sources, so a new `node.db`
- * or `local` table, or a new name in `RECOVERY_FILES` or `OPTIONAL_BACKUP_STATE`, fails here until
- * the manifest has a row for it, and a module backup source of a kind this guard does not map
- * fails until the guard maps it. A state-folder file outside those lists is not seen.
+ * Checks declared local tables and state entries in both directions. Tables match exactly;
+ * a file inside a declared folder is checked only to that folder. This does not inspect runtime
+ * files, child names, resumption behavior or whether every writer declares its state entry.
  */
 
 type Where = (typeof NODE_LOCAL_MANIFEST)[number]["where"];
@@ -28,23 +27,49 @@ function missing(names: readonly string[], where: Where): string[] {
   return names.filter((name) => !named(name, where));
 }
 
+const nodeTables = new Set(NODE_CLASSIFICATION.map((entry) => entry.table));
+const venueTables = new Set<string>();
+for (const module of ALL_MODULES) {
+  const target = module.migrations?.database === "node" ? nodeTables : venueTables;
+  for (const entry of module.classification ?? [])
+    if (entry.class === "local") target.add(entry.table);
+}
+
+function declaredState(item: string): boolean {
+  return STATE_LAYOUT.some((entry) => {
+    if (entry.kind === "folder") return item.startsWith(`${entry.name}/`);
+    if (entry.kind === "prefix") return item.startsWith(entry.name);
+    return item === entry.name;
+  });
+}
+
 describe("the handover manifest names every piece of a box's own state", () => {
-  it("names every node.db table and every venue.db table classified local", () => {
-    const nodeTables = NODE_CLASSIFICATION.map((c) => c.table);
-    const venueLocal: string[] = [];
-    const nodeLocal: string[] = [];
-    for (const module of ALL_MODULES) {
-      const tables = (module.classification ?? [])
-        .filter((c) => c.class === "local")
-        .map((c) => c.table);
-      if (module.migrations?.database === "node") nodeLocal.push(...tables);
-      else venueLocal.push(...tables);
-    }
-    // A floor, so a discovery that silently read nothing cannot pass.
-    expect(nodeTables.length).toBeGreaterThan(0);
-    expect(venueLocal.length).toBeGreaterThan(0);
-    expect(missing([...new Set([...nodeTables, ...nodeLocal])], "node.db")).toEqual([]);
-    expect(missing(venueLocal, "venue.db")).toEqual([]);
+  it("names every node.db table and every venue.db table classified local, without stale tables", () => {
+    expect(nodeTables.size).toBeGreaterThan(0);
+    expect(venueTables.size).toBeGreaterThan(0);
+    expect(missing([...nodeTables], "node.db")).toEqual([]);
+    expect(missing([...venueTables], "venue.db")).toEqual([]);
+    const stale = NODE_LOCAL_MANIFEST.filter((row) =>
+      row.where === "node.db"
+        ? !nodeTables.has(row.item)
+        : row.where === "venue.db" && !venueTables.has(row.item),
+    );
+    expect(stale).toEqual([]);
+  });
+
+  it("names every declared top-level state entry", () => {
+    const items = STATE_LAYOUT.map(
+      (entry) => entry.name + (entry.kind === "folder" ? "/" : entry.kind === "prefix" ? "*" : ""),
+    );
+    expect(missing(items, "state")).toEqual([]);
+    expect(
+      NODE_LOCAL_MANIFEST.filter((row) => row.where === "state" && !declaredState(row.item)),
+    ).toEqual([]);
+    expect(
+      NODE_LOCAL_MANIFEST.filter(
+        (row) => row.where === "venue-folder" && row.item !== `${VENUE_LITESTREAM_DIR}/`,
+      ),
+    ).toEqual([]);
   });
 
   it("names every recovery file and every optional backup state file", () => {

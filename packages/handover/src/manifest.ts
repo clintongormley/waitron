@@ -2,12 +2,9 @@ import type { CanonicalValue } from "@waitron/membership";
 import type { OperationBinding } from "@waitron/module";
 
 /**
- * A box's own state — its `node.db` tables, the `local` tables inside `venue.db`, named files in its
- * state folder, and Litestream's folder beside `venue.db` — and what the receiving box (M2) does
- * with each after a handover. The root guard
- * `scripts/handover-manifest-complete.test.ts` fails when a `node.db` or `local` table, a recovery
- * file, an optional backup file or a file behind a module's backup source has no row; other
- * state-folder files are not checked.
+ * Handover decisions for the box's tables and declared state entries. The root manifest guard
+ * checks table names exactly, and files inside a declared folder only to that folder; it checks
+ * declarations, not what files exist at runtime or how an operation resumes.
  */
 export interface NodeLocalManifestRow {
   readonly item: string;
@@ -179,6 +176,163 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     class: "source-only",
     treatment:
       "the retained public history a restore placed, read from its module record by the module's backup source; M2 keeps its own",
+  },
+  {
+    item: "fiscal-readiness-db-*",
+    where: "state",
+    class: "source-only",
+    treatment:
+      "Not carried: isolated preproduction chains belong to the box that ran the readiness test",
+  },
+  {
+    item: "flows/",
+    where: "state",
+    class: "destination-owned",
+    treatment:
+      "Not carried: each box retains its own setup, restore and TLS-repair operation records and attachments",
+  },
+  {
+    item: "environment-recovery-move.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: each box retains its own interrupted environment-recovery move",
+  },
+  {
+    item: "spare-space",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: each box reserves its own filesystem space",
+  },
+  {
+    item: "spare-space.released",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: each box retains its own full-disk sale stop",
+  },
+  {
+    item: "backup-room-note.json",
+    where: "state",
+    class: "source-only",
+    treatment:
+      "Not carried: the note describes M1's backup ownership; copy placement deletes M2's note",
+  },
+  {
+    item: "backup-room-start-deleted.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: each box retains the record of its own start cleanup",
+  },
+  {
+    item: "reset-request.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: each box retains its own request for its next start",
+  },
+  {
+    item: "pending-adoption.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: each box retains its own unfinished adoption",
+  },
+  {
+    item: "recovery.lock",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: recovery is serialised separately on each box",
+  },
+  {
+    item: "scratch/",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: temporary working copies belong to each box",
+  },
+  {
+    item: "setup-clock-step.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: the pending notice describes this box's own clock step",
+  },
+  {
+    item: "checked-addresses.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: each box retains addresses it has reached",
+  },
+  {
+    item: "recovery.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: recovery progress belongs to each box",
+  },
+  {
+    item: "module-evidence/",
+    where: "state",
+    class: "source-only",
+    treatment: "Not carried: M1's retained evidence stays on M1; M2 keeps its own",
+  },
+  {
+    item: "stream/",
+    where: "state",
+    class: "rebuildable",
+    treatment: "Not carried: the new primary starts its own bucket stream",
+  },
+  {
+    item: "handover/",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: each box retains its own handover operation files and copies",
+  },
+  {
+    item: "pair-store/",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: each spare holds its own received stream",
+  },
+  {
+    item: "pair-copy/",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: each box retains its own staged incoming copy",
+  },
+  {
+    item: "tls/",
+    where: "state",
+    class: "destination-owned",
+    treatment:
+      "Not carried: each box retains its own TLS keys, certificates and installation state",
+  },
+  {
+    item: "venue/",
+    where: "state",
+    class: "destination-owned",
+    treatment:
+      "Not carried as a folder: the handover places venue.db separately; M2 keeps its own node.db",
+  },
+  {
+    item: "records/",
+    where: "state",
+    class: "source-only",
+    treatment:
+      "Not carried: start-again choices and set-aside files remain on the box that made them",
+  },
+  {
+    item: "cloud/",
+    where: "state",
+    class: "destination-owned",
+    treatment:
+      "Not carried: each box retains its own Cloud connection, recovery, replacement, staff authority and snapshots",
+  },
+  {
+    item: "logs/",
+    where: "state",
+    class: "source-only",
+    treatment: "Not carried: each box retains its own logs",
+  },
+  {
+    item: "trading.env.replaced",
+    where: "state",
+    class: "source-only",
+    treatment: "Not carried: settings set aside during M1's restore are not M2's trading identity",
   },
   {
     item: ".venue.db-litestream/",

@@ -4349,3 +4349,11 @@ not run), and its test drives the real host. Task 7.4's approval test is worded 
 version 1 shape, since a version 1 approval carries no `oldMachineRelinquished` key. The check ran
 finding 11's control in a throwaway copy (`conflict-recovery-contract.ts:111`) and confirmed the
 round-7 correction, and typechecked the required fields against Tasks 5a.1 and 5a.3's file lists.
+
+
+## Handover manifest and summary follow-ups — 2026-11-14
+
+The state-entry decisions and summary/check follow-ups from Slice 4 are covered by
+[the handover state-files plan](2026-11-14-handover-state-files.md).
+The completeness guard checks table names exactly, but a file inside a declared
+folder only to that folder; it does not prove runtime admission or operation resumption.

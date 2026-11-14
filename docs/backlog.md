@@ -123,7 +123,6 @@ no design yet.
 - [One rule for what holds a table back at a reset](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
 - [The key ring after a join](backlog/setup.md#bundle-the-key-ring-after-a-join)
 - [Qualify clock confirmation through remote access](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
-- [Which state files a handover carries; summary checks](backlog/replication-cloud.md#bundle-which-state-files-a-handover-carries-summary-checks)
 - [Recheck that a spare gets later charts](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 - [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
@@ -1749,7 +1748,6 @@ Not in any track until the standalone primary is done.
 
 - **Check everything at the offer, while the old box still sells** (bundle of 2, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-check-everything-at-the-offer-while-the-old-box-still-sells)
 
-- **Which state files a handover carries; summary checks** (bundle of 2, 1 important, size S, waits for the A1308 table hold to lift). [Detail](backlog/replication-cloud.md#bundle-which-state-files-a-handover-carries-summary-checks)
 
 - **A venue with no module that can prepare a promotion cannot hand over.** A venue without
   Veri\*Factu is refused `handover.venue_not_supported` before anything is recorded, because no

@@ -108,7 +108,7 @@ export async function readOfferSettings(
   return { backupSettings, moduleSettings, ringVersions: ringVersions(ring) };
 }
 
-/** Also accepts the modules settings item: the refusal's `file` field names either source. */
+/** State decisions include folders and templates; the refusal also accepts the modules settings item. */
 export function isManifestStateFile(file: unknown): boolean {
   return NODE_LOCAL_MANIFEST.some(
     (row) => (row.where === "state" || row.item === "settings:modules") && row.item === file,

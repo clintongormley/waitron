@@ -35,7 +35,7 @@ function nullableText(value: BackupValue | undefined): string | null {
 
 /**
  * Each ordered by id, reading only: payments in `attempting` or `initiated`;
- * `tender_refunds` that are card and pending; every pending `bill_payment_refunds` row (only a
+ * `tender_refunds` that are connected card and pending; every pending `bill_payment_refunds` row (only a
  * card refund is ever saved pending), with its bill payment's provider row when there is one.
  */
 export async function summariseOpenPayments(query: BackupQuery): Promise<OpenPayments> {
@@ -52,10 +52,11 @@ export async function summariseOpenPayments(query: BackupQuery): Promise<OpenPay
       state: String(row.state) as OpenPaymentState,
     });
 
+  // Only connected refunds are recovered on the receiving box.
   const refunds: OpenPayments["refunds"][number][] = [];
   for await (const row of query.rows(
     `select id, provider, provider_payment_ref from tender_refunds
-     where method = 'card' and state = 'pending' order by id`,
+     where method = 'card' and state = 'pending' and manual = false order by id`,
   ))
     refunds.push({
       refundId: String(row.id),

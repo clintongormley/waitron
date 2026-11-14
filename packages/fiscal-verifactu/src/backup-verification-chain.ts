@@ -3,7 +3,7 @@ import type { BackupQuery, BackupRow, BackupValue } from "@waitron/store";
 import { validate, verifyHuella } from "@waitron/verifactu";
 import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro-row.js";
 
-const TABLES = ["registros_facturacion", "registro_sif", "cadenas"];
+export const FISCAL_CHAIN_TABLES = ["registros_facturacion", "registro_sif", "cadenas"];
 
 function integer(value: BackupValue | undefined): number | null {
   const number = typeof value === "bigint" ? Number(value) : value;
@@ -49,14 +49,21 @@ function record(raw: BackupRow): RegistroRow | null {
   }
 }
 
-async function walk(query: BackupQuery): Promise<boolean> {
-  const tables = [];
+export async function fiscalChainTables(query: BackupQuery): Promise<readonly string[]> {
+  const tables: string[] = [];
+  const names = [...FISCAL_CHAIN_TABLES, "nodes"];
   for await (const row of query.rows(
-    "select name from sqlite_schema where type = 'table' and name in ('registros_facturacion', 'registro_sif', 'cadenas')",
+    `select name from sqlite_schema where type = 'table' and name in (${names.map(() => "?").join(", ")})`,
+    names,
   ))
-    tables.push(row.name);
+    tables.push(String(row.name));
+  return tables;
+}
+
+async function walk(query: BackupQuery): Promise<boolean> {
+  const tables = (await fiscalChainTables(query)).filter((name) => name !== "nodes");
   if (tables.length === 0) return true;
-  if (tables.length !== 3) return false;
+  if (tables.length !== FISCAL_CHAIN_TABLES.length) return false;
 
   for await (const node of query.rows(
     "select node_id from registros_facturacion union select node_id from registro_sif union select node_id from cadenas order by node_id",
@@ -162,7 +169,7 @@ export async function verifyBackupFiscalChains(
     (await compareBackupTables({
       before,
       after,
-      policies: TABLES.map((table) => ({ table, immutable: true, addedColumns: {} })),
+      policies: FISCAL_CHAIN_TABLES.map((table) => ({ table, immutable: true, addedColumns: {} })),
     }))
   );
 }

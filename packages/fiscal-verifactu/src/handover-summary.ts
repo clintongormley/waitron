@@ -1,3 +1,5 @@
+import { getTableName } from "drizzle-orm";
+import { acks } from "./schema/acks.js";
 import { absentInvoiceIds, markReturnedInvoices } from "./returned-invoices.js";
 import { FISCAL_REMEDY } from "./permissions.js";
 import { createHash } from "node:crypto";
@@ -30,8 +32,13 @@ export type ChainSummary = {
   readonly enviandoIds: readonly string[];
 };
 
+function required(value: BackupValue | undefined): BackupValue {
+  if (value === undefined) throw new Error("incomplete fiscal summary row");
+  return value;
+}
+
 function text(value: BackupValue | undefined): string {
-  return String(value);
+  return String(required(value));
 }
 
 function nullableText(value: BackupValue | undefined): string | null {
@@ -41,6 +48,13 @@ function nullableText(value: BackupValue | undefined): string | null {
 function isEnvioState(value: string): value is EnvioState {
   return (ENVIO_STATES as readonly string[]).includes(value);
 }
+
+const ACK_COLUMNS = [acks.registroId, acks.submittedAt, acks.csv, acks.state, acks.deliveredAt];
+const ACK_SELECT = ACK_COLUMNS.map((column) => `a."${column.name.replaceAll('"', '""')}"`).join(
+  ", ",
+);
+const ACK_TABLE = `"${getTableName(acks).replaceAll('"', '""')}"`;
+const ACK_REGISTRO = `a."${acks.registroId.name.replaceAll('"', '""')}"`;
 
 /** One entry per (node, SIF) pair that has a record, ordered by those two. Reads only. */
 export async function summariseChains(query: BackupQuery): Promise<ChainSummary[]> {
@@ -58,11 +72,13 @@ export async function summariseChains(query: BackupQuery): Promise<ChainSummary[
     let headHuella = "";
     for await (const head of query.rows(
       "select id, huella from registros_facturacion where node_id = ? and secuencia = ?",
-      [nodeId, chain.head!],
+      [nodeId, required(chain.head)],
     )) {
       headRegistroId = text(head.id);
       headHuella = text(head.huella);
     }
+
+    if (headRegistroId === "") throw new Error("missing fiscal summary head");
 
     const envios = Object.fromEntries(ENVIO_STATES.map((state) => [state, 0])) as Record<
       EnvioState,
@@ -83,25 +99,23 @@ export async function summariseChains(query: BackupQuery): Promise<ChainSummary[
 
     const acks: (string | null)[][] = [];
     for await (const ack of query.rows(
-      `select a.registro_id, a.submitted_at, a.csv, a.state, a.delivered_at from acks a
-       join registros_facturacion r on r.id = a.registro_id
-       where r.node_id = ? and r.sif_id = ? order by a.registro_id`,
+      `select ${ACK_SELECT} from ${ACK_TABLE} a
+       join registros_facturacion r on r.id = ${ACK_REGISTRO}
+       where r.node_id = ? and r.sif_id = ? order by ${ACK_REGISTRO}`,
       [nodeId, sifId],
     ))
-      acks.push([
-        text(ack.registro_id),
-        text(ack.submitted_at),
-        nullableText(ack.csv),
-        text(ack.state),
-        nullableText(ack.delivered_at),
-      ]);
+      acks.push(
+        ACK_COLUMNS.map((column) =>
+          column.notNull ? text(ack[column.name]) : nullableText(ack[column.name]),
+        ),
+      );
 
     summaries.push({
       nodeId,
       sifId,
       idSistemaInformatico: text(chain.id_sistema_informatico),
       numeroInstalacion: text(chain.numero_instalacion),
-      count: Number(chain.records),
+      count: Number(required(chain.records)),
       headRegistroId,
       headHuella,
       envios,

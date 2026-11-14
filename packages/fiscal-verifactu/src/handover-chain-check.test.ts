@@ -147,6 +147,22 @@ describe("checkFiscalChains", () => {
     expect(await check(dropped)).toBe("broken");
   });
 
+  it.each(["registros_facturacion", "registro_sif", "cadenas", "nodes"])(
+    "a populated copy missing %s is broken",
+    async (table) => {
+      await twoChains();
+      const path = await copy();
+      damage(path, `drop table "${table}"`);
+      expect(await check(path)).toBe("broken");
+    },
+  );
+
+  it("an empty copy missing nodes is broken", async () => {
+    const path = await copy();
+    damage(path, "drop table nodes");
+    expect(await check(path)).toBe("broken");
+  });
+
   it("reads only", async () => {
     await twoChains();
     const path = await copy();
