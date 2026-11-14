@@ -664,9 +664,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **A1528. Department window: the owner's review (owner, 2026-11-14).** Parts 1, 2 and 5 landed
-  with A1525; part 1 was the development stack reloading the page when `main` moved under it, not
-  the product.
+- **A1528. Department window: the owner's review (owner, 2026-11-14).**
   - **"Invoice operation description" moves from the Receipts tab to the Details tab.** It prints
     on no receipt or invoice PDF; it is the description filed in each Veri\*Factu record. Its
     label and hint say it goes to AEAT and does not print. The Details tab's Save also sends the
@@ -703,9 +701,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   record keeps the name it was written with, so one written before the change but sent after it
   carries the old name, and a later cancellation of an earlier invoice carries the new one. Waits
   on the asesor's answer to Q37(d), S18 in `docs/compliance/asesor-questions.md`.
-
-- **A department or zone delete's preview never counts a special day's painted hours**
-  [Detail](backlog/service-periods.md#a-department-or-zone-deletes-preview-never-counts-a-special-days-painted-hours)
 
 - **Holidays yearly** (bundle of 3, size S). [Detail](backlog/service-periods.md#bundle-holidays-yearly)
 
