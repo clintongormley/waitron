@@ -178,7 +178,9 @@ syncBuiltinESMExports();\n`,
     await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
   ).attempt;
   expect(state).toMatchObject({ status: "claimed", consumptionIntent: false, inputs: {} });
-  await expect(readFile(join(stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
+  await expect(
+    readFile(join(stateDir, "module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({
     code: "ENOENT",
   });
   const stored = await openVenueDatabase(target);

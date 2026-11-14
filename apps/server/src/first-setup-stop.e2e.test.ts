@@ -1,4 +1,5 @@
 import { seedModuleSettings } from "../test/module-settings.js";
+import { readModuleRecord } from "@waitron/provisioning";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Hono } from "hono";
@@ -59,10 +60,17 @@ async function repairIds(app: Hono) {
 async function onlyLockFiles(s: Server) {
   for (const dir of [s.stateDir, s.venueDir])
     expect(
-      (await readdir(dir)).filter((name) => !name.endsWith(".lock")),
+      (await readdir(dir)).filter(
+        (name) => !name.endsWith(".lock") && (dir !== s.stateDir || name !== "module-records"),
+      ),
       dir,
     ).toEqual(dir === s.stateDir ? ["flows"] : []);
   expect(await readdir(join(s.stateDir, "flows"))).toEqual([]);
+  expect(await readModuleRecord(s.stateDir, "fiscal-verifactu")).toEqual({
+    version: 1,
+    prepared: [],
+    retained: {},
+  });
 }
 
 const STOPPABLE: [string, () => Promise<Server>][] = [

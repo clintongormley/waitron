@@ -88,7 +88,7 @@ import { ARCHIVE_VALIDATE_PREFIX, RESTORE_ADMISSION_PREFIX } from "./restore-sta
 import { unpackStateFiles } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
-import { type StagedSecrets, stageSecrets } from "./restore-secrets.js";
+import { type StagedSecrets, stageSecrets, moduleRecordEntries } from "./restore-secrets.js";
 import "./errors.js";
 import { currentBackupVerificationTarget } from "./backup-verification-target.js";
 import {
@@ -832,7 +832,7 @@ export async function restoreSecrets(args: {
   durable?: boolean;
 }): Promise<void> {
   const files: StateSecretFiles = {};
-  for (const entry of args.entries) {
+  for (const entry of await moduleRecordEntries(args.entries, args.stateDir)) {
     if (entry.name === TRADING_ENV_ENTRY) continue;
     files[entry.name.slice(SECRETS_PREFIX.length)] = Buffer.from(entry.bytes).toString("utf8");
   }

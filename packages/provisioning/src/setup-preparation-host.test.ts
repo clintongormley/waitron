@@ -67,7 +67,7 @@ async function fixture() {
         ...(hold === undefined ? {} : { currentHold: () => hold }),
       }),
     coordinator,
-    path: join(options.stateDir, "module-preparation-state.json"),
+    path: join(options.stateDir, `module-records/${binding.module}.json`),
     deny: () => {
       allowed = false;
     },
@@ -93,7 +93,8 @@ it("reopens the same durable module preparation from a new host", async () => {
   });
   expect(JSON.parse(await readFile(f.path, "utf8"))).toEqual({
     version: 1,
-    revisions: [{ binding, value: { selectedIdentity: "06RB" } }],
+    prepared: [{ binding, value: { selectedIdentity: "06RB" } }],
+    retained: {},
   });
 });
 
@@ -175,7 +176,7 @@ it("uses a caller's existing coordinator hold and expires it after the caller ex
   await expect(
     host.withPreparationState(binding, async (state) => state.value),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  expect(JSON.parse(await readFile(f.path, "utf8")).revisions).toHaveLength(1);
+  expect(JSON.parse(await readFile(f.path, "utf8")).prepared).toHaveLength(1);
 });
 
 it("does not persist a candidate when the replacement authority refuses it", async () => {

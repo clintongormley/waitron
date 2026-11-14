@@ -45,7 +45,7 @@ const migrations = migrationOptionsFor(manifestSets(), null);
 const mainBox = useVenueDb({ migrations, timeoutMs: 60_000 });
 const spareBefore = useVenueDb({ migrations, timeoutMs: 60_000 });
 
-const FILE = "module-preparation-state.json";
+const FILE = "module-records/fiscal-verifactu.json";
 
 let root: string;
 let placed: PlacedSpare | undefined;

@@ -406,7 +406,7 @@ describe("selected-hour admission before archive placement", () => {
         before.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),
       ).toEqual([125, 123, 123]);
       const journal = await readFile(
-        join(f.roots.stateDir, "module-preparation-state.json"),
+        join(f.roots.stateDir, "module-records/fiscal-verifactu.json"),
         "utf8",
       );
       for (const [index, set] of manifestSets().entries())
@@ -462,7 +462,7 @@ describe("selected-hour admission before archive placement", () => {
         ).rejects.toMatchObject({ code: "ENOENT" });
         expect(await snapshot()).toEqual(before);
         expect(
-          await readFile(join(f.roots.stateDir, "module-preparation-state.json"), "utf8"),
+          await readFile(join(f.roots.stateDir, "module-records/fiscal-verifactu.json"), "utf8"),
         ).toBe(journal);
       }
     },

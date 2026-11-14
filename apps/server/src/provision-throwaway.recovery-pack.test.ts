@@ -161,8 +161,13 @@ it("makes the PDF recovery pack, fiscal page included, for a venue set up with a
 
 it("control: the same venue with unreadable fiscal evidence makes the pack with the fiscal page failed", async () => {
   const { response, record } = await makePack({
-    beforeMaking: () =>
-      writeFile(join(roots.stateDir, "module-preparation-state.json"), "{not valid JSON"),
+    beforeMaking: async () => {
+      await mkdir(join(roots.stateDir, "module-records"), { recursive: true });
+      await writeFile(
+        join(roots.stateDir, "module-records/fiscal-verifactu.json"),
+        "{not valid JSON",
+      );
+    },
   });
   expect(response.status).toBe(200);
   expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");

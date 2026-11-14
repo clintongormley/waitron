@@ -1,3 +1,4 @@
+import { seedModuleRecord } from "../test/module-records.js";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -53,27 +54,29 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 async function retain(stateDir: string, identity = "0CNSM") {
-  await mkdir(join(stateDir, "module-evidence", module.name), { recursive: true });
-  await writeFile(
-    join(stateDir, "module-evidence", module.name, "hour-history.json"),
-    JSON.stringify({
-      reference: "prepared-hours",
-      complete: true,
-      records: [{ ...record, reference: `retained/${identity}`, identity }],
-    }),
-  );
+  await seedModuleRecord(stateDir, module.name, {
+    retained: {
+      "hour-history": {
+        reference: "prepared-hours",
+        complete: true,
+        records: [{ ...record, reference: `retained/${identity}`, identity }],
+      },
+    },
+  });
 }
 it("exports current journal and retained public hour evidence without private preparation fields", async () => {
-  const path = join(roots.stateDir, "module-preparation-state.json");
+  const path = join(roots.stateDir, "module-records/fiscal-verifactu.json");
+  await mkdir(join(roots.stateDir, "module-records"), { recursive: true });
   await writeFile(
     path,
     JSON.stringify({
       version: 1,
-      revisions: [{ binding, value: { version: 1, entries: [intent] } }],
+      prepared: [{ binding, value: { version: 1, entries: [intent] } }],
+      retained: {},
     }),
   );
-  const before = await readFile(path);
   await retain(roots.stateDir);
+  const before = await readFile(path);
   const result = await readRecoveryDocumentEvidence(roots, module);
   expect(result).toEqual({
     "hour-history": {
@@ -121,9 +124,10 @@ it.each(["../outside", "BadName"])(
   },
 );
 it("refuses a corrupt journal instead of omitting spent hours", async () => {
+  await mkdir(join(roots.stateDir, "module-records"), { recursive: true });
   await writeFile(
-    join(roots.stateDir, "module-preparation-state.json"),
-    JSON.stringify({ version: 2, revisions: [] }),
+    join(roots.stateDir, "module-records/fiscal-verifactu.json"),
+    JSON.stringify({ version: 2, prepared: [], retained: {} }),
   );
   await expect(readRecoveryDocumentEvidence(roots, module)).rejects.toMatchObject({
     code: "setup.attempt_invalid",

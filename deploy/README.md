@@ -511,7 +511,8 @@ re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue da
   certificate authority with that server's, so a plain `reset` empties `tls/` there, and the box
   mints a new authority on its next boot. Devices then have to trust it again.
 - `records/`, the record of each Keep or Move choice made at Start again (`records/choices/`)
-  and the files a Move set aside (`records/set-aside/`). Each Move's folder also holds
+  and the files a Move set aside or unreadable module records that Start again kept
+  (`records/set-aside/`). Each Move's folder also holds
   `secrets.env`, a copy of the box's key ring file as it was at the Move, because the moved
   databases' sealed rows open only with it. Anyone who copies this folder off the box copies that
   key ring too.
@@ -567,7 +568,7 @@ It is the way to put a branch on a test box whose database that branch cannot us
 
 ```bash
 sudo bash waitron.sh --reset install <branch-or-ref>
-sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate, the start-again records, and the files a Move set aside
+sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate, the start-again records, and the files Start again set aside
 ```
 
 The full form is `waitron.sh --reset [--all] [--yes] [--force-production] install [ref]`. The script

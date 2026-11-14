@@ -24,7 +24,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules } from "@waitron/module";
 import { readHandoverOperation, readNodeMode } from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { MODULE_PREPARATION_STATE_FILE } from "@waitron/store";
+import { MODULE_RECORDS_DIR } from "@waitron/store";
 import {
   acceptFinalCopy,
   readStoredAcceptance,
@@ -414,7 +414,7 @@ describe("a controlled handover to the joined spare, then the old box back by em
       expect((await readNodeMode(resetBox.node, newId)).mode).toBe("mirror");
       expect(await fiscalRows(c.venue)).toEqual(cFiscalAtJoin);
       for (const rows of Object.values(await fiscalRows(resetBox.db))) expect(rows).toEqual([]);
-      expect(await readdir(resetState)).not.toContain(MODULE_PREPARATION_STATE_FILE);
+      expect(await readdir(resetState)).not.toContain(MODULE_RECORDS_DIR);
 
       // The main box's join duty writes the new box's row once its store answers (`spare-join.ts`);
       // here the test writes it. The mirror's copy of the venue is a vacuum of the main box's file.

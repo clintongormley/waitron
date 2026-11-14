@@ -1,11 +1,12 @@
+import { seedModuleRecord } from "../test/module-records.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 // Does a spare promoted from M1's database copy avoid every minute name M1 used, without M1's
-// module-preparation-state.json? The cases asking this put the spare's clock on the minute of
+// module-records/fiscal-verifactu.json? The cases asking this put the spare's clock on the minute of
 // M1's later name, where a reused name prints `selected` with that name and an avoided one prints
 // `waiting`.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -429,13 +430,21 @@ describe("a merged file close to its limit", () => {
       value: { text },
     });
     const bytes = Buffer.byteLength(
-      JSON.stringify({ version: 1, revisions: [...m1Revisions, padding(""), ...own] }),
+      JSON.stringify({ version: 1, prepared: [...m1Revisions, padding(""), ...own], retained: {} }),
     );
     return [...m1Revisions, padding("x".repeat(size - bytes))];
   };
   const mergeTo = async (size: number) => {
     await mergeModulePreparationRevisions({ stateDir: stateDir() }, await paddedTo(size));
-    expect((await stat(join(stateDir(), "module-preparation-state.json"))).size).toBe(size);
+    expect(
+      Buffer.byteLength(
+        JSON.stringify({
+          version: 1,
+          prepared: await readModulePreparationRevisions({ stateDir: stateDir() }),
+          retained: {},
+        }),
+      ),
+    ).toBe(size);
   };
   /** The clock on M1's name, so `select` writes a wait and then an intent before promotion. */
   const onAbandonedMinute = async () => {
@@ -636,7 +645,7 @@ describe("a merged file close to its limit", () => {
 });
 
 // Pins today's behaviour, not a wanted one.
-it("M1's history placed as the restore path places it (module-evidence) is not read by the promotion: the name is reused", async () => {
+it("M1's history placed as the restore path places it (the retained section) is not read by the promotion: the name is reused", async () => {
   const s = spareService();
   await admit(s);
   const abandoned = await selectOnM1("abandoned", false);
@@ -647,9 +656,9 @@ it("M1's history placed as the restore path places it (module-evidence) is not r
     retained: [],
   }) as { records: { identity: string }[] };
   expect(evidence.records.map((row) => row.identity)).toContain(abandoned.identity);
-  const folder = join(root, "state", "module-evidence", "fiscal-verifactu");
-  await mkdir(folder, { recursive: true });
-  await writeFile(join(folder, "hour-history.json"), JSON.stringify(evidence));
+  await seedModuleRecord(join(root, "state"), "fiscal-verifactu", {
+    retained: { "hour-history": evidence },
+  });
   vi.setSystemTime(minuteOf(abandoned.identity));
   expect(await spareSelects(s)).toMatchObject({ status: "selected", identity: abandoned.identity });
 });

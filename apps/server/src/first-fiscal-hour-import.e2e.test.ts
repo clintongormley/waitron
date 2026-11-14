@@ -250,7 +250,10 @@ it.each([
         { configurationImport: true, newTaxpayer },
         testClock,
       );
-      const preparation = await readFile(join(stateDir, "module-preparation-state.json"), "utf8");
+      const preparation = await readFile(
+        join(stateDir, "module-records/fiscal-verifactu.json"),
+        "utf8",
+      );
       const live = {
         mode: "live",
         ...(environment !== "production"
@@ -307,7 +310,7 @@ it.each([
             },
           },
         });
-      expect(await readFile(join(stateDir, "module-preparation-state.json"), "utf8")).toBe(
+      expect(await readFile(join(stateDir, "module-records/fiscal-verifactu.json"), "utf8")).toBe(
         preparation,
       );
       await server.close();

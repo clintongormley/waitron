@@ -6,7 +6,7 @@ import type { BackupManifest } from "./backup-manifest.js";
 import { OPTIONAL_BACKUP_STATE, collectOptionalStateFiles } from "./backup-optional-state.js";
 import { collectModuleNonDbState } from "./backup-sources.js";
 import { collectStateSecrets } from "./state-secrets.js";
-import { readModulePreparationHistory, readDurableHostJson } from "@waitron/provisioning";
+import { readModulePreparationHistory, readModuleRecord } from "@waitron/provisioning";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -41,9 +41,9 @@ export async function collectStateParts(
           { stateDir: deps.stateDir, venueDir: deps.venueDir ?? deps.stateDir },
           module,
         ),
-      readRetained: async (name) => {
-        const value = await readDurableHostJson(join(deps.stateDir, name), 1024 * 1024);
-        return value === null ? [] : [value];
+      readRetained: async (module, source) => {
+        const value = (await readModuleRecord(deps.stateDir, module)).retained[source];
+        return value === undefined ? [] : [value];
       },
     }),
     collectOptionalStateFiles(deps.stateDir, OPTIONAL_BACKUP_STATE, budget),

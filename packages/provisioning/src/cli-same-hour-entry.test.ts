@@ -184,9 +184,9 @@ it("the built command waits and takes its name in the same run, and completes th
   expect(after.ownerGeneration).toBe(1);
   await expect(readFile(pdfPath)).resolves.toBeInstanceOf(Buffer);
   const journal = JSON.parse(
-    await readFile(join(stateDir, "module-preparation-state.json"), "utf8"),
+    await readFile(join(stateDir, "module-records/fiscal-verifactu.json"), "utf8"),
   );
-  expect(journal.revisions.at(-1).value.entries).toMatchObject([
+  expect(journal.prepared.at(-1).value.entries).toMatchObject([
     { kind: "wait", targetMs: Date.parse("2026-10-18T11:40:00Z") },
     { kind: "intent", identity: "0CRFW" },
   ]);

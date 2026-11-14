@@ -133,10 +133,10 @@ it.each(["production", "preproduction"] as const)(
       },
     });
     const journal = JSON.parse(
-      await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
+      await readFile(join(f.stateDir, "module-records/fiscal-verifactu.json"), "utf8"),
     );
-    expect(journal.revisions[0].value.entries[0].kind).toBe("wait");
-    expect(journal.revisions.at(-1).value.entries.at(-1).identity).toBe("0CNNY");
+    expect(journal.prepared[0].value.entries[0].kind).toBe("wait");
+    expect(journal.prepared.at(-1).value.entries.at(-1).identity).toBe("0CNNY");
     expect(external.internet).toHaveBeenCalledWith(environment);
   },
 );
@@ -148,7 +148,9 @@ it("an unavailable browser and TLS comparison refuse the name for want of a seco
     code: "sif.allocation_invalid",
     params: { reason: "second_clock_missing" },
   });
-  await expect(readFile(join(f.stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
+  await expect(
+    readFile(join(f.stateDir, "module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({
     code: "ENOENT",
   });
 });

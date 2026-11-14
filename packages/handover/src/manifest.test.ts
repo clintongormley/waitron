@@ -35,15 +35,18 @@ describe("the node-local manifest", () => {
       "tls/server.pem|state|destination-owned",
       "backup.env|state|transferred",
       "settings:modules|venue.db|transferred",
-      "module-preparation-state.json|state|transferred",
-      "module-evidence/<module>/<source>.json|state|source-only",
+      "module-records/<module>.json#prepared|state|transferred",
+      "module-records/<module>.json#retained|state|source-only",
       ".venue.db-litestream/|venue-folder|rebuildable",
     ]);
   });
 
   it("names exact file names, a template only for a module's kept file", () => {
     const patterned = NODE_LOCAL_MANIFEST.filter((row) => /[*<]/.test(row.item)).map((r) => r.item);
-    expect(patterned).toEqual(["module-evidence/<module>/<source>.json"]);
+    expect(patterned).toEqual([
+      "module-records/<module>.json#prepared",
+      "module-records/<module>.json#retained",
+    ]);
   });
 
   it("never sends M1's private signing key, and carries the key ring and the venue's credentials", () => {

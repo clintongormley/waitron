@@ -1,3 +1,4 @@
+import { seedModuleRecord } from "../test/module-records.js";
 import { mkdtempSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { chmod, lstat, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
@@ -464,5 +465,83 @@ describe("stageSecrets", () => {
     expect((await readdir(stateDir, { recursive: true })).map(String).sort()).toEqual(before);
     for (const [rel, text] of Object.entries(OLD))
       expect(await readFile(join(stateDir, rel), "utf8")).toBe(text);
+  });
+});
+
+describe("restored module records", () => {
+  it("stages an archive's retained sources with the box's prepared kept, replacing only the named source", async () => {
+    const stateDir = await seedState();
+    await seedModuleRecord(stateDir, "fiscal-verifactu", {
+      prepared: [{ selection: "AAAAA" }],
+      retained: { archive: { names: ["BBBBB"] }, other: { names: ["CCCCC"] } },
+    });
+    const path = join(stateDir, "module-records/fiscal-verifactu.json");
+    const before = await readFile(path);
+    const staged = await stageSecrets({
+      stateDir,
+      log: vi.fn(),
+      entries: [
+        entry("secrets/module-evidence/fiscal-verifactu/archive.json", '{"names":["DDDDD"]}'),
+      ],
+    });
+    expect(await readFile(path)).toEqual(before);
+    expect(JSON.parse(await readFile(`${path}.incoming`, "utf8"))).toEqual({
+      version: 1,
+      prepared: [{ selection: "AAAAA" }],
+      retained: { archive: { names: ["DDDDD"] }, other: { names: ["CCCCC"] } },
+    });
+    await staged.publish();
+    await staged.finish();
+    expect(JSON.parse(await readFile(path, "utf8")).retained).toEqual({
+      archive: { names: ["DDDDD"] },
+      other: { names: ["CCCCC"] },
+    });
+    await expect(stat(join(stateDir, "module-evidence"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it("an archive with no history for a module keeps its retained bytes", async () => {
+    const stateDir = await seedState();
+    await seedModuleRecord(stateDir, "fiscal-verifactu", { retained: { archive: "kept" } });
+    const path = join(stateDir, "module-records/fiscal-verifactu.json");
+    const before = await readFile(path);
+    const staged = await stageSecrets({ stateDir, log: vi.fn(), entries: ENTRIES });
+    await staged.publish();
+    await staged.finish();
+    expect(await readFile(path)).toEqual(before);
+  });
+  it("a failed restore puts every module record back as it was", async () => {
+    const stateDir = await seedState();
+    const before = new Map<string, Buffer>();
+    for (const module of ["fiscal-verifactu", "payments"]) {
+      await seedModuleRecord(stateDir, module, {
+        prepared: [module],
+        retained: { archive: "old" },
+      });
+      before.set(module, await readFile(join(stateDir, `module-records/${module}.json`)));
+    }
+    const staged = await stageSecrets({
+      stateDir,
+      log: vi.fn(),
+      entries: [
+        ...ENTRIES,
+        ...["fiscal-verifactu", "payments"].map((module) =>
+          entry(`secrets/module-evidence/${module}/archive.json`, '{"names":["DDDDD"]}'),
+        ),
+      ],
+    });
+    for (const module of before.keys())
+      expect(
+        JSON.parse(await readFile(join(stateDir, `module-records/${module}.json.incoming`), "utf8"))
+          .retained,
+      ).toEqual({ archive: { names: ["DDDDD"] } });
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      if (String(from) === join(stateDir, "trading.env.incoming"))
+        throw new Error("publish refused");
+      await real.rename(from, to);
+    });
+    await expect(staged.publish()).rejects.toThrow("publish refused");
+    for (const [module, bytes] of before)
+      expect(await readFile(join(stateDir, `module-records/${module}.json`))).toEqual(bytes);
+    expect(await leftovers(stateDir)).toEqual([]);
   });
 });

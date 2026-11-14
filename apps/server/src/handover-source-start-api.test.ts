@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createServer as createHttpsServer } from "node:https";
 import { TLSSocket } from "node:tls";
 import { serve } from "@hono/node-server";
@@ -1306,7 +1306,10 @@ describe("two requests at once", () => {
 describe("the settings the offer carries", () => {
   const BACKUP = "ARCHIVE_RETAIN=5\nWAITRON_BACKUP_SCHEDULE=hourly\n";
   const write = async (state: string, file: string, text: string) => {
-    if (file !== "settings:modules") return writeFile(join(state, file), text);
+    if (file !== "settings:modules") {
+      await mkdir(dirname(join(state, file)), { recursive: true });
+      return writeFile(join(state, file), text);
+    }
     let doc: Record<string, unknown>;
     try {
       doc = JSON.parse(text);
@@ -1442,14 +1445,14 @@ describe("the settings the offer carries", () => {
   const DAMAGED = [
     ["settings:modules", "text that is not JSON", "not json"],
     ["settings:modules", "a value of the wrong kind", JSON.stringify({ modules: "every one" })],
-    ["module-preparation-state.json", "text that is not JSON", "not json"],
+    ["module-records/fiscal-verifactu.json", "text that is not JSON", "not json"],
     [
-      "module-preparation-state.json",
+      "module-records/fiscal-verifactu.json",
       "the wrong shape",
-      JSON.stringify({ version: 2, revisions: [] }),
+      JSON.stringify({ version: 2, prepared: [], retained: {} }),
     ],
   ] as const;
-  const FILES = ["backup.env", "module-preparation-state.json"] as const;
+  const FILES = ["backup.env", "module-records/fiscal-verifactu.json"] as const;
 
   const unreadableByPermission = async (state: string, file: string) => {
     await write(state, file, "{}");
@@ -1486,7 +1489,11 @@ describe("the settings the offer carries", () => {
       expect(await readHandoverRestriction(mainBox.node, self)).toBeNull();
       expect(gate.isClosed()).toBe(false);
       expect(restart).not.toHaveBeenCalled();
-      expect(answer).toEqual(refusal(409, "handover.settings_unreadable", { file }));
+      expect(answer).toEqual(
+        refusal(409, "handover.settings_unreadable", {
+          file: file.startsWith("module-records/") ? "module-records/<module>.json#prepared" : file,
+        }),
+      );
       expect(exchanged).not.toContain(OFFER_PATH);
       expect(existsSync(join(mainState, "handover", OP))).toBe(false);
       await expectNothingRecorded(on);
@@ -1506,6 +1513,7 @@ describe("the settings the offer carries", () => {
     );
 
     it.each(FILES)("%s being a folder refuses before any offer", async (file) => {
+      await mkdir(dirname(join(mainState, file)), { recursive: true });
       await mkdir(join(mainState, file));
       await expectStillSellingNoOfferNoCopy(realBox(), file);
     });
@@ -1539,20 +1547,27 @@ describe("the settings the offer carries", () => {
       "a damaged %s holding %s refuses, recording nothing on the spare",
       async (file, _name, text) => {
         await write(spareState, file, text);
-        await expectRefusedByTheSpare("handover.destination_settings_unreadable", { file });
+        await expectRefusedByTheSpare("handover.destination_settings_unreadable", {
+          file: file.startsWith("module-records/") ? "module-records/<module>.json#prepared" : file,
+        });
       },
     );
 
     it.each(FILES)("%s being a folder refuses the same way", async (file) => {
+      await mkdir(dirname(join(spareState, file)), { recursive: true });
       await mkdir(join(spareState, file));
-      await expectRefusedByTheSpare("handover.destination_settings_unreadable", { file });
+      await expectRefusedByTheSpare("handover.destination_settings_unreadable", {
+        file: file.startsWith("module-records/") ? "module-records/<module>.json#prepared" : file,
+      });
     });
 
     it.skipIf(noPermissionToReadIt).each(FILES)(
       "%s with no read permission refuses the same way",
       async (file) => {
         await unreadableByPermission(spareState, file);
-        await expectRefusedByTheSpare("handover.destination_settings_unreadable", { file });
+        await expectRefusedByTheSpare("handover.destination_settings_unreadable", {
+          file: file.startsWith("module-records/") ? "module-records/<module>.json#prepared" : file,
+        });
       },
     );
 
@@ -1592,7 +1607,9 @@ describe("the settings the offer carries", () => {
       async (file, _name, text) => {
         await startedThenForgotten();
         await write(mainState, file, text);
-        await expectRefusedUnsent("handover.settings_unreadable", { file });
+        await expectRefusedUnsent("handover.settings_unreadable", {
+          file: file.startsWith("module-records/") ? "module-records/<module>.json#prepared" : file,
+        });
       },
     );
 

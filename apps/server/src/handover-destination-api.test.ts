@@ -1,7 +1,7 @@
 import { seedModuleDocument } from "../test/module-settings.js";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -59,7 +59,10 @@ const suite = useVenueDb({
 });
 
 async function writeSettingsSource(file: string, text: string) {
-  if (file !== "settings:modules") return writeFile(join(stateDir, file), text);
+  if (file !== "settings:modules") {
+    await mkdir(dirname(join(stateDir, file)), { recursive: true });
+    return writeFile(join(stateDir, file), text);
+  }
   let doc: Record<string, unknown>;
   try {
     doc = JSON.parse(text);
@@ -756,13 +759,25 @@ describe("POST /api/node/handover/offer", () => {
       it.each([
         ["settings:modules", "not json"],
         ["settings:modules", JSON.stringify({ modules: "every one" })],
-        ["module-preparation-state.json", "not json"],
-        ["module-preparation-state.json", JSON.stringify({ version: 2, revisions: [] })],
+        ["module-records/fiscal-verifactu.json", "not json"],
+        [
+          "module-records/fiscal-verifactu.json",
+          JSON.stringify({ version: 2, prepared: [], retained: {} }),
+        ],
       ])("a damaged %s refuses and records nothing: %s", async (file, text) => {
         await writeSettingsSource(file, text);
         expect(await post(envelopeOf())).toEqual({
           ...unreadableFile,
-          body: { error: { ...unreadableFile.body.error, params: { file } } },
+          body: {
+            error: {
+              ...unreadableFile.body.error,
+              params: {
+                file: file.startsWith("module-records/")
+                  ? "module-records/<module>.json#prepared"
+                  : file,
+              },
+            },
+          },
         });
         await expectNothingRecorded();
       });
@@ -776,24 +791,36 @@ describe("POST /api/node/handover/offer", () => {
         await expectNothingRecorded();
       });
 
-      it.each(["backup.env", "module-preparation-state.json"])(
+      it.each(["backup.env", "module-records/fiscal-verifactu.json"])(
         "%s being a folder rather than a file refuses and records nothing",
         async (file) => {
+          await mkdir(dirname(join(stateDir, file)), { recursive: true });
           await mkdir(join(stateDir, file));
           expect(await post(envelopeOf())).toEqual(
-            refusal(409, "handover.destination_settings_unreadable", { file }),
+            refusal(409, "handover.destination_settings_unreadable", {
+              file: file.startsWith("module-records/")
+                ? "module-records/<module>.json#prepared"
+                : file,
+            }),
           );
           await expectNothingRecorded();
         },
       );
 
-      it.skipIf(process.getuid?.() === 0).each(["backup.env", "module-preparation-state.json"])(
+      it
+        .skipIf(process.getuid?.() === 0)
+        .each(["backup.env", "module-records/fiscal-verifactu.json"])(
         "%s with no read permission refuses and records nothing",
         async (file) => {
+          await mkdir(dirname(join(stateDir, file)), { recursive: true });
           await writeFile(join(stateDir, file), "{}");
           await chmod(join(stateDir, file), 0o000);
           expect(await post(envelopeOf())).toEqual(
-            refusal(409, "handover.destination_settings_unreadable", { file }),
+            refusal(409, "handover.destination_settings_unreadable", {
+              file: file.startsWith("module-records/")
+                ? "module-records/<module>.json#prepared"
+                : file,
+            }),
           );
           await expectNothingRecorded();
         },

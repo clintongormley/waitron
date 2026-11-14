@@ -246,8 +246,18 @@ it("places real data and private declared material without hooks, series settlem
     for (const entry of f.entries.filter(
       (e) => e.name.startsWith("secrets/") && e.name !== "secrets/backup.env",
     )) {
-      const path = join(f.stateDir, entry.name.slice("secrets/".length));
-      expect(await readFile(path)).toEqual(entry.bytes);
+      const history = entry.name === "secrets/module-evidence/catalogue/probe.json";
+      const path = join(
+        f.stateDir,
+        history ? "module-records/catalogue.json" : entry.name.slice("secrets/".length),
+      );
+      if (history)
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+          version: 1,
+          prepared: [],
+          retained: { probe: { kept: true } },
+        });
+      else expect(await readFile(path)).toEqual(entry.bytes);
       expect((await stat(path)).mode & 0o777).toBe(0o600);
       expect((await stat(dirname(path))).mode & 0o777).toBe(0o700);
     }

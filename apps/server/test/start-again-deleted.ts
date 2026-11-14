@@ -20,12 +20,7 @@ const DELETED = {
     "venue.db-journal",
     "node.db-journal",
   ],
-  state: [
-    "module-preparation-state.json",
-    "flows/setup/documents",
-    "first-setup-resolutions",
-    "flows/setup/record.json",
-  ],
+  state: ["flows/setup/documents", "first-setup-resolutions", "flows/setup/record.json"],
 } as const;
 
 export async function expectStartAgainDeleted(roots: Roots): Promise<void> {
@@ -35,6 +30,14 @@ export async function expectStartAgainDeleted(roots: Roots): Promise<void> {
   ] as const)
     for (const name of names)
       await expect(lstat(join(dir, name)), name).rejects.toMatchObject({ code: "ENOENT" });
+  const record = await readFile(
+    join(roots.stateDir, "module-records/fiscal-verifactu.json"),
+    "utf8",
+  ).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+    return null;
+  });
+  if (record !== null) expect(JSON.parse(record).prepared).toEqual([]);
   expect(await readStartAgainMarker(roots.venueDir)).toBeNull();
 }
 

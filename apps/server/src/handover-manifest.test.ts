@@ -1,6 +1,7 @@
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
+import { dirname } from "node:path";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -84,7 +85,7 @@ function expectedManifest(
     if (entry.item === "backup.env" || entry.item === "settings:modules") {
       return { ...entry, sha256: digests[entry.item] };
     }
-    if (entry.item === "module-preparation-state.json") return { ...entry, revisions: [] };
+    if (entry.item === "module-records/<module>.json#prepared") return { ...entry, revisions: [] };
     return { ...entry };
   });
 }
@@ -343,21 +344,27 @@ describe("buildNodeLocalManifest", () => {
       { binding, value: { selected: "AAAAA" } },
       { binding: { ...binding, eventId: "e0" }, value: null },
     ];
+    await mkdir(dirname(join(stateDir, "module-records/fiscal-verifactu.json")), {
+      recursive: true,
+    });
     await writeFile(
-      join(stateDir, "module-preparation-state.json"),
-      JSON.stringify({ version: 1, revisions }),
+      join(stateDir, "module-records/fiscal-verifactu.json"),
+      JSON.stringify({ version: 1, prepared: revisions, retained: {} }),
     );
     const items = await buildNodeLocalManifest(stateDir, ringWithRotation(), databaseFor(stateDir));
-    expect(row(items, "module-preparation-state.json").revisions).toEqual(revisions);
+    expect(row(items, "module-records/<module>.json#prepared").revisions).toEqual(revisions);
   });
 
   it("carries no retained selections for a box without the file, and needs no copy to do so", async () => {
     const items = await buildNodeLocalManifest(stateDir, ringWithRotation(), databaseFor(stateDir));
-    expect(row(items, "module-preparation-state.json").revisions).toEqual([]);
+    expect(row(items, "module-records/<module>.json#prepared").revisions).toEqual([]);
   });
 
   it("refuses a retained-selections file it cannot read, rather than signing none", async () => {
-    await writeFile(join(stateDir, "module-preparation-state.json"), "{ not json");
+    await mkdir(dirname(join(stateDir, "module-records/fiscal-verifactu.json")), {
+      recursive: true,
+    });
+    await writeFile(join(stateDir, "module-records/fiscal-verifactu.json"), "{ not json");
     const error = await buildNodeLocalManifest(
       stateDir,
       ringWithRotation(),

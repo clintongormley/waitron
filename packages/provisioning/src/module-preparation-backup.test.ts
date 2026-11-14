@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -64,10 +65,15 @@ it("reports no revisions when this host has no journal", async () => {
 });
 it.each([
   "{",
-  JSON.stringify({ version: 2, revisions: [] }),
-  JSON.stringify({ version: 1, revisions: [{ binding: { ...binding, sourceId: "" }, value: {} }] }),
+  JSON.stringify({ version: 2, retained: {}, prepared: [] }),
+  JSON.stringify({
+    version: 1,
+    retained: {},
+    prepared: [{ binding: { ...binding, sourceId: "" }, value: {} }],
+  }),
 ])("refuses a damaged host journal instead of reporting empty history %#", async (value) => {
-  await writeFile(join(stateDir, "module-preparation-state.json"), value);
+  await mkdir(dirname(join(stateDir, "module-records/one.json")), { recursive: true });
+  await writeFile(join(stateDir, "module-records/one.json"), value);
   await expect(readModulePreparationHistory({ stateDir, venueDir }, "one")).rejects.toMatchObject({
     code: "setup.attempt_invalid",
   });

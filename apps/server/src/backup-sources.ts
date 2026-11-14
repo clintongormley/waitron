@@ -43,7 +43,7 @@ export async function collectModuleNonDbState(
   budget?: ArchiveReadBudget,
   preparation?: {
     read(module: string): Promise<readonly unknown[]>;
-    readRetained(name: string): Promise<readonly unknown[]>;
+    readRetained(module: string, source: string): Promise<readonly unknown[]>;
   },
 ): Promise<ArchiveEntry[]> {
   const entries: ArchiveEntry[] = [];
@@ -56,7 +56,7 @@ export async function collectModuleNonDbState(
           throw new AppError("backup.source_unresolved", { source: ref.source });
         const name = `secrets/module-evidence/${mod.name}/${ref.source}.json`;
         const values = await preparation.read(mod.name);
-        const retained = await preparation.readRetained(name.slice("secrets/".length));
+        const retained = await preparation.readRetained(mod.name, ref.source);
         if (values.length === 0 && retained.length === 0) continue;
         const bytes = Buffer.from(JSON.stringify(ref.project({ preparations: values, retained })));
         budget?.addEntry(name, bytes.length);

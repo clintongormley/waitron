@@ -145,9 +145,9 @@ it("prepares a real owned name after the terminal's wait, asking no question, wi
     },
   });
   const journal = JSON.parse(
-    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+    await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"), "utf8"),
   );
-  expect(journal.revisions.at(-1).value.entries).toMatchObject([
+  expect(journal.prepared.at(-1).value.entries).toMatchObject([
     { kind: "wait", targetMs: Date.parse("2026-10-16T11:40:00Z") },
     { kind: "intent", identity: "0CNNW" },
   ]);
@@ -172,9 +172,9 @@ it("retains its settle wait, says why and until when, and exposes no activation 
   expect(state.inputs).toEqual({});
   expect(state.frozen.modules.find((entry) => entry.module === MODULE)!.request).toBeNull();
   const journal = JSON.parse(
-    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+    await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"), "utf8"),
   );
-  const entries = journal.revisions.at(-1).value.entries;
+  const entries = journal.prepared.at(-1).value.entries;
   expect(entries).toMatchObject([{ kind: "wait", targetMs: Date.parse("2026-10-16T11:42:00Z") }]);
   expect(entries[0]).not.toHaveProperty("answer");
   expect(f.output).toContain("Waiting to confirm the time, so no invoice series is ever repeated.");
@@ -200,9 +200,9 @@ it("with only the box's clock the terminal explains and cancels without a questi
     "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
   );
   expect(f.prompts).toEqual([]);
-  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
-    { code: "ENOENT" },
-  );
+  await expect(
+    readFile(join(f.root, "state/module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("when the internet's clock disagrees the terminal explains and cancels without a question", async () => {
@@ -226,9 +226,9 @@ it("when the internet's clock disagrees the terminal explains and cancels withou
     "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
   );
   expect(f.prompts).toEqual([]);
-  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
-    { code: "ENOENT" },
-  );
+  await expect(
+    readFile(join(f.root, "state/module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 function withSeat(
@@ -272,9 +272,9 @@ it("rejects a wrong password before persisting a selected hour", async () => {
     code: "setup.owner_required",
   });
   expect((await f.runtime.store.read())!.status).toBe("claimed");
-  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
-    { code: "ENOENT" },
-  );
+  await expect(
+    readFile(join(f.root, "state/module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("reuses the exact prepared state without another question or another spent hour", async () => {
@@ -283,14 +283,16 @@ it("reuses the exact prepared state without another question or another spent ho
     STOPPED_DURING_WAIT,
   );
   const first = await f.runtime.store.read();
-  const before = await readFile(join(f.root, "state/module-preparation-state.json"));
+  const before = await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"));
   f.prompts.splice(0);
   await expect(
     prepareFirstSetupCommand(f.runtime, await ownerAfterStop(f), f.io, stopDuringWait),
   ).rejects.toBe(STOPPED_DURING_WAIT);
   expect(await f.runtime.store.read()).toEqual(first);
   expect(f.prompts).toEqual([]);
-  expect(await readFile(join(f.root, "state/module-preparation-state.json"))).toEqual(before);
+  expect(await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"))).toEqual(
+    before,
+  );
 });
 
 it("imports an already selected request without selecting another hour", async () => {
@@ -316,7 +318,7 @@ it("imports an already selected request without selecting another hour", async (
     if (round === 3) throw new Error("still waiting after 3 clock moves");
     moveFakeClockPast(waiting.targetMs!);
   }
-  const before = await readFile(join(f.root, "state/module-preparation-state.json"));
+  const before = await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"));
   const result = await prepareFirstSetupCommand(
     f.runtime,
     { ...f.owner, revision: selected.state.revision },
@@ -328,7 +330,9 @@ it("imports an already selected request without selecting another hour", async (
     allocation: { installationIdentity: "0CNNY" },
   });
   expect(f.prompts).toEqual([]);
-  expect(await readFile(join(f.root, "state/module-preparation-state.json"))).toEqual(before);
+  expect(await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"))).toEqual(
+    before,
+  );
 });
 
 it("rejects changed module versions even on an already imported request", async () => {
@@ -402,9 +406,9 @@ it("refuses a corrected box clock while the operator is answering", async () => 
     params: { reason: "clock_corrected" },
   });
   expect((await f.runtime.store.read())!.status).toBe("claimed");
-  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
-    { code: "ENOENT" },
-  );
+  await expect(
+    readFile(join(f.root, "state/module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 function twoCommandModules() {
@@ -534,7 +538,7 @@ it("retains the same hour wait when the owner runs the command again", async () 
   await expect(prepareFirstSetupCommand(f.runtime, f.owner, f.io, stopDuringWait)).rejects.toBe(
     STOPPED_DURING_WAIT,
   );
-  const before = await readFile(join(f.root, "state/module-preparation-state.json"));
+  const before = await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"));
   f.prompts.splice(0);
   await expect(prepareFirstSetupCommand(f.runtime, f.owner, f.io, stopDuringWait)).rejects.toBe(
     STOPPED_DURING_WAIT,
@@ -543,7 +547,9 @@ it("retains the same hour wait when the owner runs the command again", async () 
   expect(resumed.ownerGeneration).toBe(1);
   expect(resumed.frozen.modules.find((entry) => entry.module === MODULE)!.request).toBeNull();
   expect(f.prompts).toEqual([]);
-  expect(await readFile(join(f.root, "state/module-preparation-state.json"))).toEqual(before);
+  expect(await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"))).toEqual(
+    before,
+  );
 });
 
 async function recoveryDeliveryFixture() {
@@ -673,7 +679,7 @@ async function resumptionFixture() {
 it("a module's last check before activation relays its question and refuses a new selection, writing nothing", async () => {
   const f = await resumptionFixture();
   const before = (await f.runtime.store.read())!;
-  const journal = await readFile(join(f.root, "state/module-preparation-state.json"));
+  const journal = await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"));
   const asked: string[] = [];
   const io = {
     ...f.io,
@@ -699,7 +705,9 @@ it("a module's last check before activation relays its question and refuses a ne
   expect(heard).toEqual(["synthetic answer"]);
   expect(refusal).toMatchObject({ code: "setup.attempt_conflict" });
   expect(await f.runtime.store.read()).toEqual(before);
-  expect(await readFile(join(f.root, "state/module-preparation-state.json"))).toEqual(journal);
+  expect(await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"))).toEqual(
+    journal,
+  );
 });
 
 it("an expired kept grant cannot authorize resumption", async () => {

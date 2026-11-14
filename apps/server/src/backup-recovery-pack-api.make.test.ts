@@ -3,7 +3,7 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mountMeApi } from "./me-api.js";
 import { randomInt } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -557,7 +557,8 @@ describe("a made pack", () => {
   it("a damaged fiscal evidence file fails the server-key page alone, keeping the key", async () => {
     const scratch = await mkdtemp(join(tmpdir(), "pack-evidence-"));
     try {
-      await writeFile(join(scratch, "module-preparation-state.json"), "{not valid JSON");
+      await mkdir(join(scratch, "module-records"), { recursive: true });
+      await writeFile(join(scratch, "module-records/fiscal-verifactu.json"), "{not valid JSON");
       const verifier = await readRecoveryKeyVerifier(suite.node, node.nodeId);
       const response = await fixture({
         evidence: (module) =>

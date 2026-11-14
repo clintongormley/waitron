@@ -34,7 +34,7 @@ it.each(["archive", "stream"] as const)(
     f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const retained = f.journal();
     await expect(f.run()).resolves.toBe(true);
-    expect(JSON.parse(retained).revisions.at(-1).value.entries.at(-1)).toMatchObject({
+    expect(JSON.parse(retained).prepared.at(-1).value.entries.at(-1)).toMatchObject({
       kind: "intent",
       identity: "0CNQT",
       binding: f.binding,
@@ -126,7 +126,7 @@ it.each(["archive", "stream"] as const)(
       if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu") {
         const text = readFileSync(f!.journalPath, "utf8");
         expect(text).toBe(retained);
-        expect(JSON.parse(text).revisions.at(-1).value.entries.at(-1)).toMatchObject({
+        expect(JSON.parse(text).prepared.at(-1).value.entries.at(-1)).toMatchObject({
           kind: "intent",
           identity: "0CNQT",
           binding: f!.binding,

@@ -491,13 +491,21 @@ it.each(["activation-started", "uncertain"] as const)(
     await f.actions().startAgainFirstSetup(await f.ids());
     await expectStartAgainDeleted(f.folders);
     const left = await files(f.folders.stateDir);
-    expect(left).toEqual(
-      Object.fromEntries(
+    expect(left).toEqual({
+      ...Object.fromEntries(
         Object.entries(kept).filter(
           ([name]) => name === "flows/" || name.startsWith("fiscal-readiness-db-"),
         ),
       ),
-    );
+      ...(kept["module-records/fiscal-verifactu.json"] === undefined
+        ? {}
+        : {
+            "module-records/": "",
+            "module-records/fiscal-verifactu.json": createHash("sha256")
+              .update(JSON.stringify({ version: 1, prepared: [], retained: {} }))
+              .digest("hex"),
+          }),
+    });
     for (const name of ["flows/setup/", "flows/setup/readiness.json", "flows/setup/import/"])
       expect(left[name], name).toBeUndefined();
     expect(await files(f.folders.venueDir)).toEqual({});

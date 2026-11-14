@@ -194,7 +194,7 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
   const before = await f.host.resolution.captureFirstSetupOriginals();
   expect(before.inspection.emptyDatabase).toBe(true);
-  await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8");
+  await readFile(join(f.stateDir, "module-records/fiscal-verifactu.json"), "utf8");
   const actions = createFirstSetupResolutionActions({
     stateDir: f.stateDir,
     venueDir: f.venueDir,
@@ -206,9 +206,9 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
     ownerGeneration: before.inspection.ownerGeneration!,
   };
   await actions.startAgainFirstSetup(restart as Parameters<typeof actions.startAgainFirstSetup>[0]);
-  await expect(
-    readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
-  ).rejects.toMatchObject({ code: "ENOENT" });
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, "module-records/fiscal-verifactu.json"), "utf8")),
+  ).toEqual({ version: 1, prepared: [], retained: {} });
   await expectStartAgainDeleted(f);
   const next = createFirstSetupModuleHost({
     stateDir: f.stateDir,

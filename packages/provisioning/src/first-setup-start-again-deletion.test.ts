@@ -374,3 +374,27 @@ it.each(["staged", "placing"] as const)(
     expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(true);
   },
 );
+
+it("Start again empties prepared and keeps every module's retained history", async () => {
+  const roots = await box();
+  const { writeDurableHostJson } = await import("./durable-host-json.js");
+  const path = (module: string) => join(roots.stateDir, `module-records/${module}.json`);
+  for (const module of ["fiscal-verifactu", "payments"])
+    await writeDurableHostJson(
+      path(module),
+      {
+        version: 1,
+        prepared: [{ selected: "AAAAA" }],
+        retained: { archive: { names: [module] } },
+      },
+      1024 * 1024,
+    );
+  const marker = await startAgainMarkerFor(roots, attempt);
+  await deleteMarkedAttempt(roots, marker);
+  for (const module of ["fiscal-verifactu", "payments"])
+    expect(JSON.parse(await readFile(path(module), "utf8"))).toEqual({
+      version: 1,
+      prepared: [],
+      retained: { archive: { names: [module] } },
+    });
+});

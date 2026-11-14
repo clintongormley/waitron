@@ -395,7 +395,7 @@ it("ordinary hour preparation retains earlier abandoned events for later", async
     input: unknown;
   };
   expect(selected.identity).toBe("0CR6J");
-  const path = join(f.state.stateDir, "module-preparation-state.json");
+  const path = join(f.state.stateDir, "module-records/fiscal-verifactu.json");
   const journal = await readFile(path);
   const restart = createFirstSetupModuleHost({
     stateDir: f.state.stateDir,

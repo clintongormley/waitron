@@ -323,7 +323,7 @@ for (const kind of ["archive", "stream"] as const)
       await killRestore(f, phase);
       const journal = f.journal();
       expect(journal).toContain("0CNQR");
-      const priorIntent = JSON.parse(journal).revisions;
+      const priorIntent = JSON.parse(journal).prepared;
       if (phase === "before-commit") {
         const original = await f.snapshot();
         expect(original.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW"]);
@@ -342,7 +342,7 @@ for (const kind of ["archive", "stream"] as const)
       expect(f.journal()).toBe(journal);
       await f.freshStage();
       await expect(f.run()).resolves.toBe(true);
-      expect(JSON.parse(f.journal()).revisions.slice(0, priorIntent.length)).toEqual(priorIntent);
+      expect(JSON.parse(f.journal()).prepared.slice(0, priorIntent.length)).toEqual(priorIntent);
       const active = await f.snapshot();
       expect(active.allocations).toHaveLength(2);
       expect(active.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNSM"]);

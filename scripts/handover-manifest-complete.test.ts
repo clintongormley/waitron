@@ -68,8 +68,8 @@ describe("the handover manifest names every piece of a box's own state", () => {
         // (`apps/server/src/backup-sources.ts`).
         const fill = { module: module.name, source: source.source };
         for (const file of [
-          "module-preparation-state.json",
-          `module-evidence/${module.name}/${source.source}.json`,
+          `module-records/${module.name}.json#prepared`,
+          `module-records/${module.name}.json#retained`,
         ])
           if (!named(file, "state", fill))
             unnamed.push(`${module.name}:${source.source} → ${file}`);

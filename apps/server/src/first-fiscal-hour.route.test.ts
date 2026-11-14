@@ -161,12 +161,12 @@ it("real candidate routing reuses the shared hold and persists an owned hour bef
   };
   expect(selected.selection.identity).toBe("0CNNY");
   const ledger = JSON.parse(
-    await readFile(join(f.options.stateDir, "module-preparation-state.json"), "utf8"),
+    await readFile(join(f.options.stateDir, "module-records/fiscal-verifactu.json"), "utf8"),
   );
-  expect(ledger.revisions).toHaveLength(2);
-  expect(ledger.revisions[0].value.entries[0].kind).toBe("wait");
-  expect(ledger.revisions[1].binding).toEqual(selected.selection.binding);
-  expect(ledger.revisions[1].value.entries.at(-1).identity).toBe("0CNNY");
+  expect(ledger.prepared).toHaveLength(2);
+  expect(ledger.prepared[0].value.entries[0].kind).toBe("wait");
+  expect(ledger.prepared[1].binding).toEqual(selected.selection.binding);
+  expect(ledger.prepared[1].value.entries.at(-1).identity).toBe("0CNNY");
 }, 5000);
 it("the real host refuses foreign preparation bindings under the shared lock", async () => {
   const f = await fixture(true);
@@ -185,7 +185,7 @@ it("the real host refuses foreign preparation bindings under the shared lock", a
     ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await expect(
-    readFile(join(f.options.stateDir, "module-preparation-state.json")),
+    readFile(join(f.options.stateDir, "module-records/fiscal-verifactu.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
 });
 
@@ -194,7 +194,7 @@ it("an invalid password reconfirmation cannot spend an hour through asynchronous
   const response = await f.post("x");
   expect(response.status).toBe(403);
   await expect(
-    readFile(join(f.options.stateDir, "module-preparation-state.json")),
+    readFile(join(f.options.stateDir, "module-records/fiscal-verifactu.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
   expect(
     (await f.host.store.read())!.frozen.modules.find((entry) => entry.module === MODULE)!.request,

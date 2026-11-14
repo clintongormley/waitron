@@ -16,7 +16,6 @@ export interface NodeLocalManifestRow {
   readonly treatment: string;
 }
 
-/** One entry of a box's `module-preparation-state.json`. */
 export interface RetainedRevision {
   readonly binding: OperationBinding;
   readonly value: CanonicalValue;
@@ -28,6 +27,8 @@ export interface NodeLocalItem extends NodeLocalManifestRow {
   readonly ringVersions?: number[];
   readonly revisions?: readonly RetainedRevision[];
 }
+
+export const MODULE_PREPARED_ITEM = "module-records/<module>.json#prepared";
 
 const KEEPS_OWN = "M2 keeps its own; M1's never travel";
 const OWN_HANDOVER = "each box keeps its own";
@@ -166,18 +167,18 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     treatment: "compared: the indicator carries a digest of the modules it switches off",
   },
   {
-    item: "module-preparation-state.json",
+    item: MODULE_PREPARED_ITEM,
     where: "state",
     class: "transferred",
     treatment:
       "the indicator carries M1's retained selections, which are not in the copy; M2 merges them into its own file before the copy is placed, because a minute name M1 selected and never activated still counts as used",
   },
   {
-    item: "module-evidence/<module>/<source>.json",
+    item: "module-records/<module>.json#retained",
     where: "state",
     class: "source-only",
     treatment:
-      "the retained public history a restore placed, read beside module-preparation-state.json by the module's backup source; M2 keeps its own",
+      "the retained public history a restore placed, read from its module record by the module's backup source; M2 keeps its own",
   },
   {
     item: ".venue.db-litestream/",

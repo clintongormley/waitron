@@ -548,3 +548,18 @@ export async function resumeStartAgainSetAside(
     hold.release();
   }
 }
+
+export async function setAsideUnreadableModuleRecord(
+  stateDir: string,
+  path: string,
+): Promise<void> {
+  if (!(await fs.lstat(path)).isFile()) throw failed("unexpected", path);
+  for (const name of [RECORDS_DIR, START_AGAIN_SET_ASIDE_DIR])
+    if ((await notAFolder(join(stateDir, name), defaultIo)) !== null)
+      throw failed("unexpected", name);
+  const folder = join(stateDir, START_AGAIN_SET_ASIDE_DIR, `${Date.now()}-${randomUUID()}`);
+  await mkdirDurable(folder, MODE);
+  await fs.rename(path, join(folder, basename(path)));
+  await syncFolder(folder);
+  await syncFolder(dirname(path));
+}

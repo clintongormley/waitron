@@ -254,3 +254,11 @@ export {
   type SetupFlowRecord,
   type SetupFlowSection,
 } from "./setup-flow-record.js";
+
+export {
+  readModuleRecord,
+  updateModulePrepared,
+  replaceModuleRetained,
+  clearModulePrepared,
+  moduleRecordBytes,
+} from "./module-records.js";
