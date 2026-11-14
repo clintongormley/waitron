@@ -2,10 +2,8 @@ import type { CanonicalValue } from "@waitron/membership";
 import type { OperationBinding } from "@waitron/module";
 
 /**
- * Handover decisions for the box's tables and declared state entries. The root guard checks
- * tables exactly and settings rows only for staleness. A child file or prefix-matched name is
- * checked only to its declared folder or prefix; runtime files and operation resumption are
- * not inspected.
+ * Handover decisions for the box's tables and declared state entries.
+ * Declaration checks and their limits: scripts/handover-manifest-complete.test.ts.
  */
 export interface NodeLocalManifestRow {
   readonly item: string;

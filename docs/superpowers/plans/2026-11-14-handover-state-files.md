@@ -32,11 +32,13 @@ record, migration, fiscal write, hash, allocation or wire enum. Owner lands.
   (`apps/server/src/node-entry.ts:698,717`); if tracing another state identifies
   a needed new refusal, stop for watcher direction before building it.
   Forward/reverse checks read layout, recovery/optional lists and module backup
-  sources. Settings rows are checked only for staleness against declared keys\n  (main fl10 stores module selection there). Reverse table checks use the discovered local set, including
+  sources. Settings rows are checked only for staleness against declared keys
+  (main fl10 stores module selection there). Reverse table checks use the discovered local set, including
   `tenant_credentials` (`packages/db/src/classification.ts:460`). Accept
   legitimate folder/prefix/template rows, including fl9 module-records prepared
   and retained children; refuse stale names. A file inside a declared folder is
-  checked only to that folder, and a prefix-matched name only to that prefix;\n  table names are checked exactly. Preserve existing
+  checked only to that folder, and a prefix-matched name only to that prefix;
+  table names are checked exactly. Preserve existing
   class assertions without duplicating every added row. Disposable deletion and
   stale-name controls must fail; document that this checks declarations only.
   Update the manifest's guard-limit comment; accept the existing
