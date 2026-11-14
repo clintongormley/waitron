@@ -77,6 +77,20 @@ describe("printer Bluetooth commands", () => {
     expect(sent.some((command) => "pin" in command)).toBe(false);
   });
 
+  it("keeps a failure's reason code beside its error", () => {
+    const { commands } = store();
+    commands.enqueue("agent-1", "pair", A, "1234");
+    commands.accept("agent-1", [{ id: "c1", ok: false, error: "wrong PIN", reason: "wrong_pin" }]);
+    expect(commands.latest("agent-1", A)).toEqual({
+      id: "c1",
+      kind: "pair",
+      address: A,
+      state: "failed",
+      error: "wrong PIN",
+      reason: "wrong_pin",
+    });
+  });
+
   it("keeps a failure's reason and records a success without one", () => {
     const { commands } = store();
     commands.enqueue("agent-1", "forget", A);

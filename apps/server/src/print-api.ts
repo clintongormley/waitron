@@ -50,6 +50,7 @@ import {
 import { authorizeManager, withPassiveManagementRead, type Permission } from "@waitron/identity";
 import {
   BLUETOOTH_COMMAND_LIMIT,
+  BLUETOOTH_FAILURE_REASONS,
   isBluetoothAddress,
   isBluetoothPin,
   type BluetoothCommandOutcome,
@@ -446,11 +447,15 @@ function screenBluetoothOutcomes(raw: unknown): BluetoothCommandOutcome[] {
   const out: BluetoothCommandOutcome[] = [];
   for (const entry of raw.slice(0, BLUETOOTH_COMMAND_LIMIT)) {
     if (typeof entry !== "object" || entry === null) continue;
-    const { id, ok, error } = entry as Record<string, unknown>;
+    const { id, ok, error, reason } = entry as Record<string, unknown>;
     if (typeof id !== "string" || typeof ok !== "boolean") continue;
     if (error !== undefined && typeof error !== "string") continue;
-    // Unbounded here: the store withholds a reason that carries the PIN before bounding it.
-    out.push(error === undefined ? { id, ok } : { id, ok, error });
+    // Unbounded here: the store withholds an error that carries the PIN before bounding it.
+    const outcome: BluetoothCommandOutcome = error === undefined ? { id, ok } : { id, ok, error };
+    // A code a newer agent sends that this server does not know is dropped; the outcome stands.
+    const known = BLUETOOTH_FAILURE_REASONS.find((code) => code === reason);
+    if (known !== undefined) outcome.reason = known;
+    out.push(outcome);
   }
   return out;
 }
