@@ -15,7 +15,7 @@ import type {
 } from "@waitron/verifactu";
 import { deleteAck, writeAck } from "./acks.js";
 import { openAcceptedWithErrorsCase } from "./filing-cases.js";
-import { toAeatDate } from "./registro-row.js";
+import { imputationMonth, toAeatDate } from "./registro-row.js";
 import { retainLookupConflict } from "./reconcile-conflicts.js";
 import {
   liveLookupHeader,
@@ -266,12 +266,11 @@ export async function reconcile(
 }
 
 /**
- * Our envios for the expedition month, joined to their registros. The period filter uses
- * fecha_expedicion_factura, also for a replacement corrective that carries a FechaOperacion.
+ * Our envios for the month AEAT files them under (`imputationMonth`), joined to their registros.
  *
  * Plain text work on the stored `YYYY-MM-DD` string, no engine date parsing near a value AEAT will
- * judge. The prefix filter relies on the stored month always being two digits: the column's only
- * writer is `toIsoDate` (./registro-row.ts), which reorders the digits of AEAT's fixed-width
+ * judge. The prefix filter relies on the stored month always being two digits: both date columns'
+ * only writer is `toIsoDate` (./registro-row.ts), which reorders the digits of AEAT's fixed-width
  * `DD-MM-YYYY`. `toAeatDate` is its exact inverse, so an incident's `IDFactura` triple reads as the
  * digits AEAT received. Guard: reconcile.period.test.ts.
  */
@@ -323,7 +322,7 @@ async function rowsForPeriod(
       r.fecha_expedicion_factura
     from envios e
     join registros_facturacion r on r.id = e.registro_id
-    where substr(r.fecha_expedicion_factura, 1, 7) = ${`${period.year}-${period.month}`}
+    where ${imputationMonth(sql`r.fecha_operacion`, sql`r.fecha_expedicion_factura`)} = ${`${period.year}-${period.month}`}
       and not exists (
         select 1 from registros_facturacion replacement
         where replacement.corrects_registro_id = r.id
@@ -383,7 +382,8 @@ async function fetchAuthority(
     signal?.throwIfAborted();
     for (const r of resp.registros) {
       if (compareContents) {
-        const date = r.IDFactura.FechaExpedicionFactura;
+        const operation = r.DatosRegistroFacturacion.FechaOperacion;
+        const date = typeof operation === "string" ? operation : r.IDFactura.FechaExpedicionFactura;
         if (
           !/^\d{2}-\d{2}-\d{4}$/.test(date) ||
           date.slice(6) !== period.year ||

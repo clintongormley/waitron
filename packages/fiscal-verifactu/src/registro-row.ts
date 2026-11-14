@@ -1,5 +1,6 @@
 import "./errors.js";
-import { getTableColumns } from "drizzle-orm";
+import { getTableColumns, sql } from "drizzle-orm";
+import type { SQL, SQLWrapper } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { formatDateTime } from "@waitron/verifactu";
 import type {
@@ -95,6 +96,17 @@ function toIsoDate(ddMmYyyy: string): string {
 export function toAeatDate(isoDate: string): string {
   const [yyyy, mm, dd] = isoDate.split("-");
   return `${dd}-${mm}-${yyyy}`;
+}
+
+/**
+ * The month AEAT files a record under and looks it up by: its operation date's when it has one,
+ * else its issue date's (AEAT service specification v1.0.3, p. 31, `PeriodoImputacion`).
+ */
+export function imputationMonth(
+  fechaOperacion: SQLWrapper,
+  fechaExpedicion: SQLWrapper,
+): SQL<string> {
+  return sql<string>`substr(coalesce(${fechaOperacion}, ${fechaExpedicion}), 1, 7)`;
 }
 
 /**

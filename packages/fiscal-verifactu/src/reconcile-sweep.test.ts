@@ -6,7 +6,13 @@ import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { randomUUID } from "node:crypto";
-import { insertPendingAlta, seedPendingEnvios, seedPinnedChain } from "../test/drain-fixtures.js";
+import {
+  answersFechaOperacion,
+  appendPendingAlta,
+  insertPendingAlta,
+  seedPendingEnvios,
+  seedPinnedChain,
+} from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { envios } from "./schema/envios.js";
 import { readActiveConflicts } from "./conflict-evidence.js";
@@ -397,4 +403,47 @@ it("a month only the old box filed in is still a candidate", async () => {
 
   // The control: without the old box in its history, the spare box has no month to check.
   expect((await sweepFor([spare.nodeId])(START)).periods).toEqual([]);
+});
+
+it("checks a replacement in its sale's month when that month holds nothing else", async () => {
+  const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+  const { registroId: replacement } = await appendPendingAlta(suite.db, seeded, 2, {
+    replacement: { fechaOperacion: "2026-06-30" },
+  });
+  const now = new Date("2026-07-21T00:01:00Z");
+  const real = createFakeAeat({ serverNow: now }).client();
+  await drain(
+    {
+      db: suite.db,
+      resolveClient: staticResolver(real),
+      environment: "production",
+      skipRetryMs: RETRY,
+    },
+    now,
+  );
+  const sweep = createReconciliationSweep({
+    db: suite.db,
+    clock: seeded.clock,
+    retryMs: RETRY,
+    scope: {
+      nodeId: seeded.nodeId,
+      historyNodeIds: [seeded.nodeId],
+      taxpayerId: seeded.nif,
+      environment: "production",
+    },
+    resolveClient: staticResolver(answersFechaOperacion(real, replacement, "30-06-2026")),
+  });
+
+  const { periods } = await sweep(now);
+
+  expect(
+    periods.map(({ year, month, outcome, result }) => ({
+      period: `${year}-${month}`,
+      outcome,
+      checked: result?.checked,
+    })),
+  ).toEqual([
+    { period: "2026-06", outcome: "observed", checked: 1 },
+    { period: "2026-07", outcome: "observed", checked: 1 },
+  ]);
 });

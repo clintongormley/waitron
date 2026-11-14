@@ -4,6 +4,7 @@ import type { Cabecera, RegistroConsultado } from "@waitron/verifactu";
 import type { ReconcileScope } from "./reconcile.js";
 import type { LookupConflictEvidence } from "./conflict-types.js";
 import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
+import { imputationMonth } from "./registro-row.js";
 
 type ReconciliationSeries = { sif_id: string; series_id: string; code: string };
 export async function readLiveReconciliationSeries(
@@ -71,7 +72,7 @@ export async function retainUnheldSeriesConflicts(
     from registros_facturacion r
     where ${inArray(sql`r.node_id`, scope.historyNodeIds)} and r.id_emisor_factura = ${scope.taxpayerId}
       and r.entorno = ${scope.environment}
-      and substr(r.fecha_expedicion_factura, 1, 7) = ${`${period.year}-${period.month}`}
+      and ${imputationMonth(sql`r.fecha_operacion`, sql`r.fecha_expedicion_factura`)} = ${`${period.year}-${period.month}`}
   `);
   const held = new Set(local.rows.map((row) => JSON.stringify([row.number, row.date])));
   for (const record of observed) {
