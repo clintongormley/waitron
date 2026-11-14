@@ -572,6 +572,10 @@ called weaker than its name, the topic file lists what it does not see.
   or `rawCentsToDecimal` for raw SQL (`cast(x as text)`).** Above it use exact `Decimal`; sum JSON
   amounts in JavaScript at money scale. Nothing guards this boundary or makes mistakes loud.
   Narrower guards: `packages/db/src/schema/columns.test.ts`, `packages/shared/src/conventions.test.ts`.
+- **A reader that sums, counts or tests for a sale's correctives goes through `correctivesOf`
+  (`@waitron/db`), which leaves a replacement out and takes in its refunds: the original carries
+  the sale.** Guard: `scripts/corrective-sums.test.ts`, weaker than its name: reads lines of text,
+  not queries. [Limits](docs/developers/conventions-data.md#a-sales-correctives-are-summed-through-correctivesof).
 - **Quantity columns hold whole thousandths and rates whole basis points, never money scale.**
   Use `packages/shared/src/scales.ts` converters for bounds; raw total readers bound exact-number
   capacity, and rate CHECKs use 10000. Guard: `packages/db/src/testing/schema-conformance.ts`,

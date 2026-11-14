@@ -1,8 +1,9 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import type { ReconcileResult } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
 import { reconcile, type ReconcileDeps, type ReconcileScope } from "./reconcile.js";
+import { imputationMonth } from "./registro-row.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { envios } from "./schema/envios.js";
 import { readLiveReconciliationSeries } from "./reconcile-series.js";
@@ -44,7 +45,10 @@ export function createReconciliationSweep(
     // A wall-clock correction must not postpone a daily check until the old clock catches up.
     if (lastTick !== undefined && now.getTime() < lastTick) next.clear();
     lastTick = now.getTime();
-    const month = sql<string>`substr(${registrosFacturacion.fechaExpedicionFactura}, 1, 7)`;
+    const month = imputationMonth(
+      registrosFacturacion.fechaOperacion,
+      registrosFacturacion.fechaExpedicionFactura,
+    );
     const stored = await withTransaction(deps.db, (tx) =>
       tx
         .selectDistinct({ month })

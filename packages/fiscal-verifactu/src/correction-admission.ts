@@ -16,7 +16,8 @@ const FILING: Record<string, Filing | undefined> = {
 
 /**
  * Judges the sale's newest alta version, the one a correction is filed against
- * (`VerifactuBackend.recordCorrection`), and that version's submission. Any other submission
+ * (`VerifactuBackend.recordCorrection`), and that version's submission: an F2, or an R5 by
+ * replacement. Any other submission
  * state, including one this code does not know, refuses. `issuingNodeId` is the box that would
  * issue the correction.
  */
@@ -30,6 +31,7 @@ export async function correctionAdmissionFor(
       id: registrosFacturacion.id,
       tipoRegistro: registrosFacturacion.tipoRegistro,
       tipoFactura: registrosFacturacion.tipoFactura,
+      tipoRectificativa: registrosFacturacion.tipoRectificativa,
       nodeId: registrosFacturacion.nodeId,
       correctsRegistroId: registrosFacturacion.correctsRegistroId,
       numSerieFactura: registrosFacturacion.numSerieFactura,
@@ -51,7 +53,11 @@ export async function correctionAdmissionFor(
   if (latest.length !== 1) return { eligible: false, reason: "filing_versions_unusable" };
   const alta = latest[0]!;
   if (alta.nodeId !== issuingNodeId) return { eligible: false, reason: "wrong_node" };
-  if (alta.tipoFactura !== "F2") return { eligible: false, reason: "not_simplified" };
+  // A replacement (an R5 by replacement) stands in for the simplified invoice it replaced.
+  const replacement = alta.tipoFactura === "R5" && alta.tipoRectificativa === "S";
+  if (alta.tipoFactura !== "F2" && !replacement) {
+    return { eligible: false, reason: "not_simplified" };
+  }
   if (alta.estado === null) return { eligible: false, reason: "missing" };
   const filing = FILING[alta.estado];
   if (filing === undefined) return { eligible: false, reason: "filing_refused" };

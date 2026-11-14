@@ -30,6 +30,7 @@ import {
   readCorrectionAmountHistory,
 } from "./correction-history.js";
 import { recordCorrection, type RecordCorrectionInput } from "./record-correction.js";
+import { recordReplacement } from "./record-replacement.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
@@ -415,6 +416,30 @@ it("previews an admitted correction with the admission's filing and the lines to
   });
 });
 
+it("previews a correction of a replaced invoice from its replacement's lines", async () => {
+  const { saleId } = await sellSteak();
+  const { saleId: replacementId } = await withTransaction(suite.db, (tx) =>
+    recordReplacement(tx, backend, {
+      origin: deviceOrigin(deviceId),
+      nodeId,
+      seriesId: rectSeriesId,
+      correctsSaleId: saleId,
+      authz: { sessionId },
+      clock,
+    }),
+  );
+  const [copy] = await suite.db
+    .select({ id: saleLines.id })
+    .from(saleLines)
+    .where(eq(saleLines.saleId, replacementId));
+
+  expect(await preview(saleId)).toMatchObject({
+    gross: "6.05",
+    vatBreakdown: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
+    lines: [{ lineTotal: "-5.00", lineGross: "-6.05", correctsLineId: copy!.id }],
+  });
+});
+
 it("refuses an invoice with a named customer, as the writer does", async () => {
   const [full] = await suite.db
     .insert(invoiceSeries)
@@ -459,6 +484,31 @@ it("refuses a substituted invoice as replaced before asking the regime", async (
     .insert(saleSubstitutions)
     .values({ substitutionSaleId: substitute.saleId, substitutedSaleId: saleId });
   backend.setCorrectionAdmission({ eligible: false, reason: "filing_refused" });
+
+  expect(await captureError(() => preview(saleId))).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason: "replaced" },
+  });
+});
+
+it("refuses a replaced invoice that was also exchanged for a full invoice, as replaced", async () => {
+  const { saleId } = await sellSteak();
+  await withTransaction(suite.db, (tx) =>
+    recordReplacement(tx, backend, {
+      origin: deviceOrigin(deviceId),
+      nodeId,
+      seriesId: rectSeriesId,
+      correctsSaleId: saleId,
+      authz: { sessionId },
+      clock,
+    }),
+  );
+  // Written directly: `recordSubstitution` refuses a replaced ticket, so this is the history
+  // check's own refusal.
+  const substitute = await sellSteak();
+  await suite.db
+    .insert(saleSubstitutions)
+    .values({ substitutionSaleId: substitute.saleId, substitutedSaleId: saleId });
 
   expect(await captureError(() => preview(saleId))).toMatchObject({
     code: "sale.correction_not_admitted",

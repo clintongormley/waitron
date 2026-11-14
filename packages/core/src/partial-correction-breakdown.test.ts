@@ -17,6 +17,7 @@ import { seedDevice } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { eq } from "drizzle-orm";
 import { recordCorrection } from "./record-correction.js";
+import { recordReplacement } from "./record-replacement.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
@@ -512,4 +513,46 @@ it("refuses a split that disagrees with its own lines before looking for the sal
   await expectRefused("sale.correction_breakdown_invalid", draft, {
     correctsSaleId: "00000000-0000-4000-8000-000000000000" as SaleId,
   });
+});
+
+it("files partial refunds of a replaced sale against its replacement, the second seeing the first", async () => {
+  const { saleId: replacementId } = await withTransaction(suite.db, (tx) =>
+    recordReplacement(tx, backend, {
+      origin: deviceOrigin(deviceId),
+      nodeId,
+      seriesId: rectSeriesId,
+      correctsSaleId: invoice.saleId,
+      authz: { sessionId },
+      clock,
+    }),
+  );
+  const replacement: Invoice = {
+    saleId: replacementId,
+    lineIds: (
+      await suite.db
+        .select({ id: saleLines.id })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, replacementId))
+        .orderBy(saleLines.lineNo)
+    ).map((row) => row.id),
+  };
+  // All of the second line's €12.10 at 21%, asked of the original's bill.
+  const draft = firstWhole();
+  at(draft, 0).corrects = 1;
+  const asked = { to: replacement, correctsSaleId: invoice.saleId };
+  const spy = vi.spyOn(backend, "recordCorrection");
+
+  const { saleId: refundId } = await file(draft, asked);
+
+  expect(spy.mock.calls[0]![2]).toEqual({ correctsSaleId: replacementId });
+  expect(spy.mock.calls[0]![1].vatBreakdown).toEqual([
+    { rate: "21.00", base: "-10.00", tax: "-2.10" },
+  ]);
+  const [refund] = await suite.db
+    .select({ correctsSaleId: sales.correctsSaleId })
+    .from(sales)
+    .where(eq(sales.id, refundId));
+  expect(refund!.correctsSaleId).toBe(replacementId);
+  spy.mockRestore();
+  await expectRefused("sale.correction_breakdown_invalid", draft, asked);
 });

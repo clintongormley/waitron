@@ -422,8 +422,8 @@ The generated storage migration adds the column and replaces indexes; it does no
 the table.
 Correction payload persistence, administrator-only remedy operations, held-case
 resolution and the real AEAT second-correction proof remain part of Task 8 before publication.
-Of the disputed production remedies, the corrective invoice (the replacement) waits on Q37-FIX
-Task 3, which waits on the owner's answers to questions A–E (lane L, 2026-11-14); the others stay
+Of the disputed production remedies, the corrective invoice (the replacement) is built to file as
+an R5 "S" (owner's answers A–E, 2026-11-14), and offering it waits on Q37-FIX Task 3c; the others stay
 disabled pending Q35/Q38/Q40 or a case-specific owner decision. Q37-FIX enables the correction
 record for rejected records only.
 
@@ -1110,6 +1110,9 @@ A663 Part 2: no. The work built for the bill-close date stays parked on
 `feat/a444-fiscal-operation-day` and `feat/a444-close-day-capture`, branches in lane L's local
 worktrees that were never pushed, and its plan on `docs/a444-revised-plan`.
 [Plan](../superpowers/plans/2026-11-12-a444-creation-date-only.md).
+_2026-11-14 (owner's answer B, Q37-FIX): the one exception is a replacement corrective (R5 "S") of
+a refused simplified invoice, which files the original sale's real day as `FechaOperacion` when it
+differs from its own date._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 

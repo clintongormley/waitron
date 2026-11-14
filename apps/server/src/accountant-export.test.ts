@@ -277,6 +277,30 @@ describe("accountant workbook", () => {
     expect(strFromU8(files["xl/styles.xml"]!)).toContain('numFmtId="2"');
   });
 
+  it.each([
+    ["en", "Replacement corrective — do not add (repeats the original)"],
+    ["es", ACCOUNTANT_EXPORT_WORDS.es.replacement],
+  ] as const)(
+    "types a replaced invoice as its ordinary type and tells the reader not to add its replacement, in %s",
+    async (language, replacementType) => {
+      const files = unzipSync(
+        await renderAccountantWorkbook(
+          {
+            invoices: [
+              { ...invoice, invoiceType: "F2", vatBreakdown: [] },
+              { ...invoice, id: "replacement-1", invoiceType: "replacement", vatBreakdown: [] },
+            ],
+            purchases: [],
+            outsidePayments: [],
+          },
+          language,
+        ),
+      );
+      const xml = strFromU8(files["xl/worksheets/sheet1.xml"]!);
+      expect([row(xml, 2)[3], row(xml, 3)[3]]).toEqual(["F2", replacementType]);
+    },
+  );
+
   it("keeps entered purchase VAT and gross, marking negative and unreconciled totals independently", async () => {
     const files = unzipSync(
       await renderAccountantWorkbook(
@@ -531,6 +555,94 @@ describe("accountant period selection", () => {
       vatBreakdown: [{ rate: "21.00", base: "-10.00", tax: "-2.10" }],
     });
     expect(rows[1]).toMatchObject({ total: "12.10", voidedAt: "2026-12-05T12:34:56.789Z" });
+  });
+
+  it("keeps a replaced ticket's own type and types its replacement `replacement`", async () => {
+    const original = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-01T12:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    const [series] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .returning({ id: invoiceSeries.id });
+    const replacement = await seedSale(
+      suite.db,
+      { ...venue, seriesId: series!.id as SeededVenue["seriesId"] },
+      {
+        invoiceNumber: 1,
+        issuedAt: "2026-11-02T12:00:00.000Z",
+        total: "12.10",
+        correctsSaleId: original,
+        replacesOriginal: true,
+        lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+      },
+    );
+    const refund = await seedSale(
+      suite.db,
+      { ...venue, seriesId: series!.id as SeededVenue["seriesId"] },
+      {
+        invoiceNumber: 2,
+        issuedAt: "2026-11-03T12:00:00.000Z",
+        total: "-3.30",
+        correctsSaleId: replacement,
+        lines: [{ vatRate: "10.00", lineTotal: "-3.00" }],
+      },
+    );
+
+    const rows = (await list()).invoices;
+    expect(rows.map((row) => [row.id, row.invoiceType])).toEqual([
+      [original, "F2"],
+      [replacement, "replacement"],
+      [refund, "corrective"],
+    ]);
+    expect(rows[1]).toMatchObject({
+      invoiceNumber: "R/1",
+      total: "12.10",
+      correctsSaleId: original,
+      originalInvoiceNumber: "A/1",
+    });
+  });
+
+  it("lists a sale with ordinary refunds once, under its own type", async () => {
+    const [series] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .returning({ id: invoiceSeries.id });
+    const refundSeries = { ...venue, seriesId: series!.id as SeededVenue["seriesId"] };
+    const once = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-01T12:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    const twice = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-11-01T13:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    const refunds = [];
+    for (const [number, correctsSaleId] of [once, twice, twice].entries()) {
+      refunds.push(
+        await seedSale(suite.db, refundSeries, {
+          invoiceNumber: number + 1,
+          issuedAt: `2026-11-0${number + 2}T12:00:00.000Z`,
+          total: "-3.30",
+          correctsSaleId,
+          lines: [{ vatRate: "10.00", lineTotal: "-3.00" }],
+        }),
+      );
+    }
+
+    const rows = (await list()).invoices;
+    expect(rows.map((row) => [row.id, row.invoiceType])).toEqual([
+      [once, "F2"],
+      [twice, "F2"],
+      ...refunds.map((refund) => [refund, "corrective"]),
+    ]);
   });
 
   it("uses inclusive receipt dates for purchases and retains recorded scales and discrepancies", async () => {

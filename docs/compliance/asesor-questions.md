@@ -2926,6 +2926,8 @@ That is not decided, and it should be settled before the correction screen is de
 already settled and not asked here. A void (*anulación*) is only for an invoice that should never
 have existed ([verifactu-findings.md](verifactu-findings.md) §7; Q25 asks about its VAT period).
 And tickets and full invoices need separate series (Q5).
+*(2026-11-14, Q37-FIX: the backend also files "S", a replacement, for a simplified invoice AEAT
+refused — Q37; a correction of an accepted invoice is still by differences.)*
 
 > Nuestro TPV podrá corregir un ticket ya emitido (factura simplificada) mediante una factura
 > rectificativa (R5). Hoy la rectificativa se emite por diferencias: sólo recoge el importe que
@@ -2952,7 +2954,8 @@ with nothing to collect it. On 2026-10-02 (lane C item C126, built in lane B) th
 without the asesor, that the cancel issues a corrective invoice for the whole amount in the same
 step: an R5, *por diferencias*, through `recordCorrection`
 (`packages/core/src/record-correction.ts`), the only kind the Veri\*Factu backend files
-(`TipoRectificativa: "I"`, `packages/fiscal-verifactu/src/backend.ts`).
+(`TipoRectificativa: "I"`, `packages/fiscal-verifactu/src/backend.ts`). *(2026-11-14: it also
+files a replacement, "S", for a simplified invoice AEAT refused — Q37.)*
 The original invoice is then settled at nothing owed. The same cancel reaches a bill recorded as
 *left without paying* (Q28). The credit note's VAT breakdown is the original's, negated.
 
@@ -3357,6 +3360,10 @@ Consequence (owner, 2026-11-11 14:12, option A): a correction record (subsanaci�
 invoice never changes its amounts — the VAT rate, the base, the VAT or the total.
 _2026-11-11 19:11 (owner, "Yes"): nor what a line is — its tax type, regime, taxed or not-subject
 class or exemption reason (`fiscal.remedy_class_changed`; A1481 in `docs/backlog/fiscal.md`)._
+_2026-11-14: the corrective for (1) and (2) is built as a replacement (R5, `TipoRectificativa` "S",
+rectified amounts 0.00, and the sale's real day as `FechaOperacion` when it differs from the
+replacement's date). Waitron files it only when AEAT refused every record Waitron sent under that
+invoice's number, none with code 3000 (AEAT already holds one). No screen offers it yet._
 
 **Proposed interim treatment:** preserve the rejected record and response, show the invoice as
 unresolved, and require an explicit corrective action. D2 proposes continuing later submissions

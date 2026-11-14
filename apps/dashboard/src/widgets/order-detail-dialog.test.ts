@@ -196,6 +196,33 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
+it.each([
+  ["en-GB", "Replaced by"],
+  ["es-ES", "Sustituida por"],
+])("names an invoice's replacement as what replaced it, in %s", async (locale, words) => {
+  setLocale(locale);
+  const api = {
+    getOrder: vi.fn().mockResolvedValue({
+      ...detail,
+      invoices: [
+        detail.invoices[0]!,
+        { ...detail.invoices[0]!, kind: "replacement", number: "R/3", total: "30.00" },
+      ],
+    }),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("R/3"));
+  const invoices = [...el.shadowRoot!.querySelectorAll("li")]
+    .map((item) => item.textContent!.replace(/\s+/g, " ").trim())
+    .filter((text) => text.includes("R/3"));
+  expect(invoices).toHaveLength(1);
+  expect(invoices[0]).toMatch(new RegExp(`^${words} R/3 `));
+});
+
 it("keeps the historical declaration block off an unsent line", async () => {
   const api = {
     getOrder: vi

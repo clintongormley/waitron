@@ -102,6 +102,44 @@ describe("computeVatReturn", () => {
     expect(ret.byRate).toEqual([{ rate: "21.00", base: "90.00", tax: "18.89" }]);
   });
 
+  describe("a sale replaced by a corrective by replacement", () => {
+    const ticket = { total: "12.10", lines: [{ vatRate: "10.00", lineTotal: "11.00" }] };
+
+    async function replace(originalAt: string, replacementAt: string): Promise<void> {
+      const original = await seedSale(suite.db, venue, {
+        invoiceNumber: 1,
+        issuedAt: originalAt,
+        ...ticket,
+      });
+      await seedSale(suite.db, venue, {
+        invoiceNumber: 2,
+        issuedAt: replacementAt,
+        correctsSaleId: original,
+        replacesOriginal: true,
+        ...ticket,
+      });
+    }
+
+    it("counts it once in a quarter holding both", async () => {
+      await replace(augNoonUtc, new Date("2026-09-10T10:00:00Z").toISOString());
+      const ret = await runPeriod({ kind: "quarter", quarter: 3 });
+      expect(ret.byRate).toEqual([{ rate: "10.00", base: "11.00", tax: "1.10" }]);
+      expect(ret).toMatchObject({ baseTotal: "11.00", taxTotal: "1.10" });
+    });
+
+    it("counts it in the original's period, not the replacement's", async () => {
+      await replace(
+        new Date("2026-12-31T10:00:00Z").toISOString(),
+        new Date("2027-01-05T10:00:00Z").toISOString(),
+      );
+      const q4 = await runPeriod({ kind: "quarter", quarter: 4 }, { year: 2026 });
+      expect(q4.byRate).toEqual([{ rate: "10.00", base: "11.00", tax: "1.10" }]);
+      const q1 = await runPeriod({ kind: "quarter", quarter: 1 }, { year: 2027 });
+      expect(q1.byRate).toEqual([]);
+      expect(q1).toMatchObject({ baseTotal: "0.00", taxTotal: "0.00" });
+    });
+  });
+
   it("excludes a voided sale", async () => {
     const s = await seedSale(suite.db, venue, {
       invoiceNumber: 1,

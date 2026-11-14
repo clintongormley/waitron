@@ -4,11 +4,18 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { insertPendingAlta, seedPendingEnvios, seedSecondChain } from "../test/drain-fixtures.js";
+import {
+  answersFechaOperacion,
+  appendPendingAlta,
+  insertPendingAlta,
+  seedPendingEnvios,
+  seedSecondChain,
+} from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { envios } from "./schema/envios.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { reconcile } from "./reconcile.js";
+import { readActiveConflicts } from "./conflict-evidence.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const PERIOD = { year: "2026", month: "07" };
@@ -166,5 +173,72 @@ describe("a runtime reconciliation's node, taxpayer and environment", () => {
     expect(after.deliveries.map((row) => row.estado)).toEqual(["aceptado", "aceptado", "aceptado"]);
     expect(after.records).toEqual(before.records);
     expect(after.heads).toEqual(before.heads);
+  });
+});
+
+describe("a replacement whose sale was made the month before its issue date", () => {
+  async function filedReplacement() {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const { registroId: replacement } = await appendPendingAlta(suite.db, seeded, 2, {
+      replacement: { fechaOperacion: "2026-06-30" },
+    });
+    const aeat = createFakeAeat({ serverNow: NOW });
+    const real = aeat.client();
+    await drain(
+      {
+        db: suite.db,
+        resolveClient: staticResolver(real),
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+    const client = answersFechaOperacion(real, replacement, "30-06-2026");
+    const deps = {
+      db: suite.db,
+      resolveClient: staticResolver(client),
+      clock: seeded.clock,
+      scope: {
+        nodeId: seeded.nodeId,
+        historyNodeIds: [seeded.nodeId],
+        taxpayerId: seeded.nif,
+        environment: "production" as const,
+      },
+    };
+    return { seeded, replacement, deps };
+  }
+
+  it("is checked in the sale's month, where AEAT holds it, and found held", async () => {
+    const { seeded, replacement, deps } = await filedReplacement();
+    const before = await snapshot();
+
+    const result = await reconcile(deps, { year: "2026", month: "06" });
+
+    expect(await withTransaction(suite.db, (tx) => readActiveConflicts(tx, seeded.nodeId))).toEqual(
+      [],
+    );
+
+    expect(result).toMatchObject({ checked: 1, noTrace: [], lostAck: [], drift: [] });
+    expect(result.deferred).toBeUndefined();
+    expect(result.conflicts).toBeUndefined();
+    expect((await snapshot()).deliveries).toEqual(before.deliveries);
+    expect(before.deliveries.find((row) => row.registro_id === replacement)).toMatchObject({
+      estado: "aceptado",
+    });
+  });
+
+  it("is not counted missing from its issue month", async () => {
+    const { seeded, deps } = await filedReplacement();
+    const before = await snapshot();
+
+    const result = await reconcile(deps, PERIOD);
+
+    expect(result).toMatchObject({ checked: 1, noTrace: [], lostAck: [], drift: [] });
+    expect(result.deferred).toBeUndefined();
+    expect(result.conflicts).toBeUndefined();
+    expect((await snapshot()).deliveries).toEqual(before.deliveries);
+    expect(
+      before.deliveries.find((row) => row.registro_id === seeded.registroIds[0]),
+    ).toMatchObject({ estado: "aceptado" });
   });
 });

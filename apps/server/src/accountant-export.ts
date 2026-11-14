@@ -27,7 +27,7 @@ export interface AccountantInvoice {
   id: string;
   nodeId: string;
   invoiceNumber: string;
-  invoiceType: "F1" | "F2" | "corrective";
+  invoiceType: "F1" | "F2" | "corrective" | "replacement";
   issueDate: string;
   customerName: string | null;
   customerTaxId: string | null;
@@ -95,7 +95,9 @@ export async function renderAccountantWorkbook(
         invoice.id,
         invoice.nodeId,
         invoice.invoiceNumber,
-        invoice.invoiceType === "corrective" ? words.corrective : invoice.invoiceType,
+        invoice.invoiceType === "F1" || invoice.invoiceType === "F2"
+          ? invoice.invoiceType
+          : words[invoice.invoiceType],
         invoice.issueDate,
         invoice.customerName,
         invoice.customerTaxId,
@@ -212,6 +214,7 @@ export async function listAccountantExport(
       total: sales.total,
       vatBreakdown: sales.vatBreakdown,
       correctsSaleId: sales.correctsSaleId,
+      replacesOriginal: sales.replacesOriginal,
       originalCode: originalSeries.code,
       originalNumber: original.invoiceNumber,
       voidedAt: saleVoids.voidedAt,
@@ -225,11 +228,16 @@ export async function listAccountantExport(
     .where(and(between(civilDate, range.from, range.to), isNull(saleSubstitutions.id)))
     .orderBy(asc(civilDate), asc(sales.issuedAt), asc(sales.id));
   const invoices: AccountantInvoice[] = rows.map(
-    ({ code, number, originalCode, originalNumber, ...row }) => ({
+    ({ code, number, originalCode, originalNumber, replacesOriginal, ...row }) => ({
       ...row,
       invoiceNumber: formatInvoiceNumber(code, number),
-      invoiceType:
-        row.correctsSaleId !== null ? "corrective" : row.customerTaxId === null ? "F2" : "F1",
+      invoiceType: replacesOriginal
+        ? "replacement"
+        : row.correctsSaleId !== null
+          ? "corrective"
+          : row.customerTaxId === null
+            ? "F2"
+            : "F1",
       originalInvoiceNumber:
         originalCode === null || originalNumber === null
           ? null

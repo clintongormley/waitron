@@ -536,6 +536,7 @@ A1406, A1407 and A1408.
   or split-shift rule.
 - **A part-timer's extra hours show as overtime**, which is the wrong legal label.
 - **A wrongly dated invoice needs R4 on a full invoice**, but `recordCorrection` handles only F2 to R5.
+  *(2026-11-14: still no corrective writer files an R4; Q37-FIX added an R5 by replacement.)*
 - **The VAT return sorts by issue date** (`computeVatReturn`), so a misdated sale lands in the wrong
   period in that report.
 - **Three identical refusals hold the rest of a chain**, so a clock a day ahead could stop later filings.

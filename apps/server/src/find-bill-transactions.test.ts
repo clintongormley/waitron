@@ -173,6 +173,29 @@ describe("Find Transactions SQL paging", () => {
     expect(bills.rows.some((r) => r.workingOrderId === unpaidOrder)).toBe(true);
   });
 
+  it("types a replacement `replacement`, a refund of it `correction`, both scoped to the original's bill", async () => {
+    const order = await placedIssuedBill(venue, "Caña");
+    const original = await saleOf(order);
+    const replacement = await invoice({
+      correctsSaleId: original,
+      replacesOriginal: true,
+      total: 300,
+    });
+    const refund = await invoice({ correctsSaleId: replacement, total: -121 });
+    const rows = (await list()).rows;
+    expect(rows.find((r) => r.saleId === replacement)).toMatchObject({
+      type: "replacement",
+      amount: "3.00",
+      scopeOrderIds: [order],
+    });
+    expect(rows.find((r) => r.saleId === refund)).toMatchObject({
+      type: "correction",
+      amount: "-1.21",
+      scopeOrderIds: [order],
+    });
+    expect((await list({ type: "replacement" })).rows.map((r) => r.saleId)).toEqual([replacement]);
+  });
+
   it("pages 101 invoices with stable ties and exact counts despite repeated tenders and attempts", async () => {
     const order = await parked(venue, "Caña");
     const ids: string[] = [];

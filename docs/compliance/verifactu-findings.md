@@ -732,6 +732,8 @@ The rules that fall out of AEAT's worked examples:
 
 Rectifying a *simplified* invoice, by contrast, is `TipoFactura` **R5** with `TipoRectificativa` `I`
 (por diferencias) and a negative `ImporteTotal`, followed by a fresh F3 if the customer had one.
+*(2026-11-14: a simplified invoice AEAT refused is instead replaced, R5 with `TipoRectificativa`
+`S` — Q37 in [asesor-questions.md](asesor-questions.md).)*
 
 **Where we stand.** `packages/verifactu` already types `F3` and both `FacturasRectificadas` and
 `FacturasSustituidas`. Nothing above them uses either: `fiscal-verifactu/src/backend.ts:257` emits

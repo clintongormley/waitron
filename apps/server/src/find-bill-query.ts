@@ -94,7 +94,13 @@ export function parseTransactionsQuery(params: URLSearchParams): TransactionsQue
     dates = { preset };
   }
   const method = choice(params, "method", ["cash", "card", "voucher", "deferred", "other"]);
-  const type = choice(params, "type", ["sale", "full-invoice", "correction", "refund"]);
+  const type = choice(params, "type", [
+    "sale",
+    "full-invoice",
+    "correction",
+    "replacement",
+    "refund",
+  ]);
   return {
     ...base(params, transactionSorts, "when"),
     dates,

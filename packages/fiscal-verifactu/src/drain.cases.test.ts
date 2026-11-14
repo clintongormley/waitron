@@ -1291,6 +1291,35 @@ describe("drain — an unknown outcome says whether a duplicate lookup failed", 
   });
 });
 
+describe("drain — a duplicate replacement whose sale was made the month before", () => {
+  it("looks it up under the sale's month, where AEAT holds it, and settles it", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const { registroId: replacement } = await appendPendingAlta(suite.db, seeded, 2, {
+      replacement: { fechaOperacion: "2026-06-30" },
+    });
+    await drain(deps(aeat.client()), FIRST);
+    await suite.db.execute(sql`
+      update envios set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
+      where registro_id = ${replacement}
+    `);
+    const real = aeat.client();
+    const periods: string[] = [];
+    const watched: VerifactuClient = {
+      submit: (cabecera, registros) => real.submit(cabecera, registros),
+      consultar: (cabecera, filtro) => {
+        periods.push(`${filtro.Ejercicio}-${filtro.Periodo}`);
+        return real.consultar(cabecera, filtro);
+      },
+    };
+
+    await drain(deps(watched), SECOND);
+
+    expect(periods).toEqual(["2026-06"]);
+    expect((await envioOf(replacement)).estado).toBe("aceptado");
+  });
+});
+
 describe("drain — a cancellation answered Anulada whose lookup finds nothing", () => {
   it("stays pending as unknown, opens no case and holds nothing behind it", async () => {
     const aeat = fakeAeat();

@@ -31,12 +31,18 @@ const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
 
 /**
  * Inserts one `sales` row directly. `total` is a decimal, converted to whole cents as `recordSale`
- * does. Pass `correctsSaleId` to seed a corrective invoice.
+ * does. Pass `correctsSaleId` to seed a corrective invoice, and `replacesOriginal` to make it the
+ * replacement.
  */
 async function seedSale(
   db: Database,
   seed: { deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
-  overrides: { total?: string; invoiceNumber?: number; correctsSaleId?: SaleId } = {},
+  overrides: {
+    total?: string;
+    invoiceNumber?: number;
+    correctsSaleId?: SaleId;
+    replacesOriginal?: boolean;
+  } = {},
 ): Promise<SaleId> {
   const [row] = await db
     .insert(sales)
@@ -56,6 +62,7 @@ async function seedSale(
       fiscalBackend: "fake",
       fiscalState: "recorded",
       correctsSaleId: overrides.correctsSaleId,
+      replacesOriginal: overrides.replacesOriginal,
     })
     .returning({ id: sales.id });
   return brandSaleId(row!.id);
@@ -629,5 +636,44 @@ describe("settleSale nets corrections into the due", () => {
       .from(saleSettlements)
       .where(eq(saleSettlements.saleId, originalId));
     expect(settled).toHaveLength(1);
+  });
+});
+
+describe("settleSale on a replaced sale", () => {
+  it("is due what the original owed, and 3.00 less after a 3.00 refund of the replacement", async () => {
+    const seed = await seedTenant(suite.db);
+    const replaced = await seedSale(suite.db, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedSale(suite.db, seed, {
+      total: "70.00",
+      invoiceNumber: 2,
+      correctsSaleId: replaced,
+      replacesOriginal: true,
+    });
+    const refunded = await seedSale(suite.db, seed, { total: "70.00", invoiceNumber: 3 });
+    const replacement = await seedSale(suite.db, seed, {
+      total: "70.00",
+      invoiceNumber: 4,
+      correctsSaleId: refunded,
+      replacesOriginal: true,
+    });
+    await seedSale(suite.db, seed, {
+      total: "-3.00",
+      invoiceNumber: 5,
+      correctsSaleId: replacement,
+    });
+
+    const pay = (saleId: SaleId) =>
+      settle(suite.db, {
+        saleId,
+        tenders: [{ method: "cash", amount: "1.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      });
+    await expect(pay(replaced)).rejects.toMatchObject({
+      code: "sale.tender_shortfall",
+      params: { due: "70.00" },
+    });
+    await expect(pay(refunded)).rejects.toMatchObject({
+      code: "sale.tender_shortfall",
+      params: { due: "67.00" },
+    });
   });
 });

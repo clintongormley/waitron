@@ -189,3 +189,70 @@ it("a void retains the issued sale's origin after corrections from another origi
     ).slice(0, 3),
   ).toEqual(before);
 });
+
+/** The original's F2 and a corrective of it, an R5 written straight to the chain: by replacement
+ * ("S", with the 0.00 rectified amounts AEAT takes for a refused original) or by differences. */
+async function correctiveOfOriginal(tipoRectificativa: "S" | "I"): Promise<SaleId> {
+  const correctiveId = await seedSale(suite.db, node, 3);
+  await withTransaction(suite.db, async (tx) => {
+    await appendToChain(tx, node.nodeId, altaFor(node, originalSaleId, 1, 1, "preproduction"));
+    const pending = altaFor(node, correctiveId, 3, 2, "preproduction");
+    await appendToChain(tx, node.nodeId, {
+      ...pending,
+      input: {
+        ...pending.input,
+        TipoFactura: "R5",
+        TipoRectificativa: tipoRectificativa,
+        ...(tipoRectificativa === "S"
+          ? { ImporteRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" } }
+          : {}),
+        FacturasRectificadas: [
+          {
+            IDEmisorFactura: "89890001K",
+            NumSerieFactura: "A/1",
+            FechaExpedicionFactura: new Date("2026-07-20T00:00:00+02:00"),
+          },
+        ],
+      },
+    });
+  });
+  return correctiveId;
+}
+
+it("corrects a replacement by differences, naming the replacement in an R5 'I'", async () => {
+  const replacementId = await correctiveOfOriginal("S");
+  const sale = await operationSale("credit");
+
+  const result = await withTransaction(suite.db, (tx) =>
+    backend.recordCorrection(tx, sale, { correctsSaleId: replacementId }),
+  );
+
+  const [stored] = await suite.db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, result.recordId));
+  expect(stored).toMatchObject({ tipoFactura: "R5", tipoRectificativa: "I" });
+  expect(stored!.facturasRectificadas).toEqual({
+    IDFacturaRectificada: [
+      {
+        IDEmisorFactura: "89890001K",
+        NumSerieFactura: "A/3",
+        FechaExpedicionFactura: "20-07-2026",
+      },
+    ],
+  });
+});
+
+it("still refuses to correct an R5 by differences", async () => {
+  const creditNoteId = await correctiveOfOriginal("I");
+  const sale = await operationSale("credit");
+
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      backend.recordCorrection(tx, sale, { correctsSaleId: creditNoteId }),
+    ),
+  ).rejects.toMatchObject({
+    code: "fiscal.correction_unsupported",
+    params: { saleId: creditNoteId, tipoFactura: "R5" },
+  });
+});

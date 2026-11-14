@@ -253,8 +253,10 @@ export function buildReceiptDocument({
     if (result.corrects) text(label.correctiveInvoice, 0, { bold: true });
     dated(result);
     if (result.corrects) {
-      text(label.correctsInvoice);
+      text(result.corrects.inFull ? label.replacesInvoiceInFull : label.correctsInvoice);
       dated(result.corrects);
+      // Invoicing regulation art. 15.5: a replacement states the rectification's amount, zero.
+      if (result.corrects.inFull) row(label.rectificationAmount, formatMoney("0.00", locale));
     }
   } else {
     row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });

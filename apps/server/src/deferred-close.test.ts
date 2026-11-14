@@ -19,6 +19,7 @@ import {
   deferredCloseVenue,
   type DeferredCloseKit,
 } from "./testing/deferred-close-fixture.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { readDeferredClosure } from "./deferred-close.js";
@@ -185,6 +186,21 @@ describe("closeBillDeferredTx, new work", () => {
       total: "18.00",
       party: { state: "not_applicable", blockers: [] },
     });
+    expect(await tendersOfBill(t.venue, billId)).toMatchObject([
+      { method: "deferred", amount: 1800, tip: 0 },
+    ]);
+  });
+
+  it("closes an issued invoice that only its replacement has corrected, at its own total", async () => {
+    const billId = await t.counterOrder("placed", true);
+    const [issued] = await inTx(t.venue, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
+    );
+    await inTx(t.venue, (tx) => insertCorrective(tx, issued!.id, { replaces: true }));
+
+    const result = await t.close(await t.requestFor(billId, "18.00", null));
+
+    expect(result).toMatchObject({ saleId: issued!.id, total: "18.00" });
     expect(await tendersOfBill(t.venue, billId)).toMatchObject([
       { method: "deferred", amount: 1800, tip: 0 },
     ]);

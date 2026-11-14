@@ -29,8 +29,8 @@ declare module "@waitron/shared" {
      * retryable. `recordSale`'s immediate settlement runs the same `settleSale`. */
     "sale.tender_unsettled": { deviceId: string | null; saleId: string; unsettledCount: number };
     /** Every tender has settled, but `sum(amount) = total + sum(corrections) + sum(tip_amount)`
-     * does not hold, where the corrections are the signed totals of this sale's corrective
-     * invoices. Fires on overpayment as well as shortfall. The `sale_settlements_check_coverage`
+     * does not hold, where the corrections are the signed totals of the correctives
+     * `correctivesOf` lists (a replacement left out, its own correctives in). Fires on overpayment as well as shortfall. The `sale_settlements_check_coverage`
      * trigger checks the same identity. */
     "sale.tender_shortfall": {
       deviceId: string | null;
@@ -54,6 +54,10 @@ declare module "@waitron/shared" {
     "fiscal.taxpayer_domicile_missing": Record<string, never>;
     /** The current corrective path files R5, which applies only to a simplified original. */
     "sale.correction_unsupported": { saleId: string };
+    /** Thrown by `recordReplacement` when a corrective already names the invoice: a replacement
+     * carries the whole invoice, so it must be the first corrective of it. Refused before a number
+     * is allocated. */
+    "sale.replacement_not_first": { saleId: string };
     /** Thrown by `recordCorrection` when a negative correction would take the invoice below zero:
      * `remaining` is the invoice's total net of the corrections already recorded against it, and
      * `correction` is the amount the row would store, rounded to the cent. A correction down to
@@ -123,6 +127,13 @@ declare module "@waitron/shared" {
      * exchanged by two F3s. A duplicate id within one call's list is refused earlier, as a plain
      * Error. */
     "sale.already_substituted": { saleId: string };
+    /** Thrown by `recordSubstitution`, before a number is allocated, for a ticket a replacement
+     * corrective already takes the place of (`has_replacement`) or that is itself a replacement
+     * (`is_replacement`). */
+    "sale.substitution_not_admitted": {
+      saleId: string;
+      reason: "has_replacement" | "is_replacement";
+    };
     /** A sale with no named customer (a simplified invoice) whose total is over the fiscal
      * regime's `simplifiedInvoiceLimit`. Thrown by `refuseOverSimplifiedLimit` before anything
      * commits or money moves: by `recordSale`, on the base plus VAT it files, and by the till's paths

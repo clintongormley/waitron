@@ -1,5 +1,6 @@
 import "./errors.js";
-import { getTableColumns } from "drizzle-orm";
+import { getTableColumns, sql } from "drizzle-orm";
+import type { SQL, SQLWrapper } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { formatDateTime } from "@waitron/verifactu";
 import type {
@@ -98,6 +99,17 @@ export function toAeatDate(isoDate: string): string {
 }
 
 /**
+ * The month AEAT files a record under and looks it up by: its operation date's when it has one,
+ * else its issue date's (AEAT service specification v1.0.3, p. 31, `PeriodoImputacion`).
+ */
+export function imputationMonth(
+  fechaOperacion: SQLWrapper,
+  fechaExpedicion: SQLWrapper,
+): SQL<string> {
+  return sql<string>`substr(coalesce(${fechaOperacion}, ${fechaExpedicion}), 1, 7)`;
+}
+
+/**
  * Flattens a built record into columns. Every hashed field is stored as the EXACT literal
  * `computeHuella` folded in, because AEAT recomputes the huella from the literal it receives, and a
  * re-derived value that merely equals the original is not good enough.
@@ -117,7 +129,6 @@ export function toRegistroRow(
   const unsupported = isAlta(record)
     ? ([
         "RefExterna",
-        "FechaOperacion",
         "FacturaSimplificadaArt7273",
         "FacturaSinIdentifDestinatarioArt61d",
         "Macrodato",
@@ -128,9 +139,13 @@ export function toRegistroRow(
         "IdAcuerdoSistemaInformatico",
       ] as const)
     : (["RefExterna", "GeneradoPor", "Generador"] as const);
-  const fields = unsupported.filter(
-    (field) => field in record && Reflect.get(record, field) !== undefined,
-  );
+  // Only a replacement corrective files the sale's real day apart from its own issue date.
+  const operationDateRefused =
+    isAlta(record) && (record.TipoFactura !== "R5" || record.TipoRectificativa !== "S");
+  const fields = [
+    ...unsupported,
+    ...(operationDateRefused ? (["FechaOperacion"] as const) : []),
+  ].filter((field) => field in record && Reflect.get(record, field) !== undefined);
   if (fields.length > 0) {
     throw new AppError("fiscal.record_invalid", {
       fields,
@@ -180,6 +195,7 @@ export function toRegistroRow(
       facturasRectificadas: record.FacturasRectificadas ?? null,
       facturasSustituidas: record.FacturasSustituidas ?? null,
       importeRectificacion: record.ImporteRectificacion ?? null,
+      fechaOperacion: record.FechaOperacion !== undefined ? toIsoDate(record.FechaOperacion) : null,
       // The recipient, stored as-built so the drainer re-serialises the mandatory Destinatarios.
       // Not a huella input (`@waitron/verifactu` hashes 8 named fields, none of them the
       // recipient). NULL on a simplified F2 alta; set on an F3 canje and on an F1 full invoice.
@@ -208,6 +224,7 @@ export function toRegistroRow(
     facturasRectificadas: null,
     facturasSustituidas: null,
     importeRectificacion: null,
+    fechaOperacion: null,
     // A RegistroAnulacion carries no recipient either — Destinatarios belongs to a registro de alta
     // whose TipoFactura is a full invoice (F1/F3), never to an anulación.
     destinatarios: null,
@@ -278,6 +295,8 @@ export type RegistroRow = {
   facturas_rectificadas: RegistroAlta["FacturasRectificadas"] | null;
   facturas_sustituidas: RegistroAlta["FacturasSustituidas"] | null;
   importe_rectificacion: DesgloseRectificacion | null;
+  /** `YYYY-MM-DD`; not a huella input. */
+  fecha_operacion: string | null;
   // The recipient. NULL on a simplified F2 alta and on an anulación; set on an F3 canje and on an
   // F1 full invoice so the drainer can re-serialise it. Not a huella input, so rehydrating it
   // cannot change a recomputed huella.
@@ -424,6 +443,9 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
     }),
     ...(row.importe_rectificacion !== null && {
       ImporteRectificacion: row.importe_rectificacion,
+    }),
+    ...(row.fecha_operacion !== null && {
+      FechaOperacion: toAeatDate(row.fecha_operacion),
     }),
     // The recipient, spread back on ONLY when stored non-null, for the same reason as the four
     // rectificativa fields above. Not a huella input; it exists so the drainer files a complete F3

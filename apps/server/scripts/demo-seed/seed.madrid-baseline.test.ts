@@ -659,6 +659,19 @@ for (const locale of ["en", "es"] as const) {
         records.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
         for (const row of Object.values(records.rows)) row[name] = null;
       }
+      records.columns.splice(
+        records.columns.findIndex((column) => column.name === "destinatarios"),
+        0,
+        { name: "fecha_operacion", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(records.rows)) row.fecha_operacion = null;
+      const salesTable = expected[phase].tables.sales!;
+      salesTable.columns.splice(
+        salesTable.columns.findIndex((column) => column.name === "corrects_sale_id") + 1,
+        0,
+        { name: "replaces_original", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
+      );
+      for (const row of Object.values(salesTable.rows)) row.replaces_original = 0;
       records.foreignKeys.push({
         id: 4,
         seq: 0,

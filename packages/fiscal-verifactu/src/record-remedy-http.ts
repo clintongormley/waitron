@@ -215,6 +215,9 @@ export async function applyCorrectedRecordFacts(
     ...(correctionAmounts !== undefined && {
       ImporteRectificacion: correctionAmounts,
     }),
+    ...(original.FechaOperacion !== undefined && {
+      FechaOperacion: day(original.FechaOperacion),
+    }),
     ...(recipients !== undefined && { Destinatarios: recipients }),
     DescripcionOperacion: facts.description ?? original.DescripcionOperacion,
     Desglose: facts.breakdown ?? original.Desglose,

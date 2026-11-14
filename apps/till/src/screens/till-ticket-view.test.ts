@@ -14,6 +14,7 @@ import type {
 } from "../api/client.js";
 import type { ReceiptConfig } from "../layout.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
+import { formatMoney } from "@waitron/shared";
 
 // es-ES currency formatting separates the amount and € with a non-breaking space (U+00A0, or a
 // narrow no-break U+202F on some ICU builds); normalise both to a plain space before asserting.
@@ -3382,6 +3383,60 @@ describe("a corrective invoice", () => {
       expect(order).toEqual([...order].sort((a, b) => a - b));
     },
   );
+
+  it.each(["en-GB", "es-ES"])(
+    "in %s, shows a replacement as replacing the invoice in full, with a zero rectification",
+    async (locale) => {
+      const labels = receiptLabelsFor(locale);
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        result: {
+          ...result,
+          locale,
+          invoiceType: "R5",
+          invoiceNumber: "R/3",
+          corrects: {
+            invoiceNumber: "A/1",
+            issuedAt: "2026-08-04T10:05:00.000Z",
+            issuedOffsetMinutes: 120,
+            inFull: true,
+          },
+        },
+        issuer,
+      });
+      const meta = norm(el.shadowRoot!.querySelector(".meta")!.textContent ?? "").replace(
+        /\s+/g,
+        " ",
+      );
+      const order = [
+        labels.correctiveInvoice,
+        "R/3",
+        labels.replacesInvoiceInFull,
+        "A/1",
+        `${labels.rectificationAmount} ${norm(formatMoney("0.00", locale))}`,
+      ].map((part) => meta.indexOf(part));
+      expect(
+        order.every((at) => at >= 0),
+        meta,
+      ).toBe(true);
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+      expect(meta).not.toContain(labels.correctsInvoice);
+    },
+  );
+
+  it("shows neither replacement word on a by-differences corrective", async () => {
+    const labels = receiptLabelsFor("es-ES");
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result: {
+        ...result,
+        invoiceType: "R5",
+        corrects: { invoiceNumber: "A/1", issuedAt: "2026-08-04T10:05:00.000Z" },
+      },
+      issuer,
+    });
+    expect(text(el)).toContain(labels.correctsInvoice);
+    expect(text(el)).not.toContain(labels.replacesInvoiceInFull);
+    expect(text(el)).not.toContain(labels.rectificationAmount);
+  });
 
   it("marks nothing on an invoice that corrects none", async () => {
     const { el } = await mount();

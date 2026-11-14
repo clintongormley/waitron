@@ -164,6 +164,7 @@ export async function readTransactionReceipt(
             invoiceNumber: formatInvoiceNumber(corrected.code, corrected.invoiceNumber),
             issuedAt: new Date(corrected.issuedAt).toISOString(),
             issuedOffsetMinutes: corrected.issuedOffsetMinutes,
+            ...(sale.replacesOriginal ? { inFull: true as const } : {}),
           },
         }),
     ...(sale.counterpartyTaxId === null

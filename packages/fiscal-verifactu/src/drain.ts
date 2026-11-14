@@ -1743,14 +1743,14 @@ async function raiseIncident(
  * can confirm our record. An absent record or fingerprint leaves the answer unresolved; when the
  * fingerprint matches, missing installation identity also leaves it unresolved.
  *
- * `Ejercicio`/`Periodo` come from `fecha_expedicion_factura`: our records never carry a separate
- * `FechaOperacion`, so the operation month is the expedition month.
+ * `Ejercicio`/`Periodo` come from `fecha_operacion` when set, else `fecha_expedicion_factura`, as
+ * AEAT files the record (service specification v1.0.3, p. 31, `PeriodoImputacion`).
  */
 async function routeB(
   client: VerifactuClient,
   row: DueRow,
 ): Promise<Exclude<Lookup, { failed: unknown }>> {
-  const [ejercicio, periodo] = row.fecha_expedicion_factura.split("-");
+  const [ejercicio, periodo] = (row.fecha_operacion ?? row.fecha_expedicion_factura).split("-");
   const fecha = toAeatDate(row.fecha_expedicion_factura);
   let page: RespuestaConsulta["ClavePaginacion"];
   const seenPages = new Set<string>();

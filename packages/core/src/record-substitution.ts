@@ -2,7 +2,7 @@ import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
 import { operationDescriptionFor } from "./operation-description.js";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   insertInChunks,
   allocateInvoiceNumber,
@@ -84,13 +84,41 @@ export async function recordSubstitution(
 
   // The first missing id in input order is the one reported.
   const found = await tx
-    .select({ id: sales.id })
+    .select({ id: sales.id, replacesOriginal: sales.replacesOriginal })
     .from(sales)
     .where(inArray(sales.id, input.substitutedSaleIds));
   const foundIds = new Set(found.map((row) => row.id));
   for (const substitutedSaleId of input.substitutedSaleIds) {
     if (!foundIds.has(substitutedSaleId)) {
       throw new AppError("sale.not_found", { saleId: substitutedSaleId });
+    }
+  }
+
+  // A replacement already stands in the ticket's place, so neither it nor the ticket it replaced
+  // is exchanged. The first such ticket in input order is named.
+  const replaced = await tx
+    .select({ id: sales.correctsSaleId })
+    .from(sales)
+    .where(
+      and(
+        inArray(sales.correctsSaleId, input.substitutedSaleIds),
+        eq(sales.replacesOriginal, true),
+      ),
+    );
+  const replacedIds = new Set(replaced.map((row) => row.id));
+  const replacementIds = new Set(found.filter((row) => row.replacesOriginal).map((row) => row.id));
+  for (const substitutedSaleId of input.substitutedSaleIds) {
+    if (replacedIds.has(substitutedSaleId)) {
+      throw new AppError("sale.substitution_not_admitted", {
+        saleId: substitutedSaleId,
+        reason: "has_replacement",
+      });
+    }
+    if (replacementIds.has(substitutedSaleId)) {
+      throw new AppError("sale.substitution_not_admitted", {
+        saleId: substitutedSaleId,
+        reason: "is_replacement",
+      });
     }
   }
 

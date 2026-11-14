@@ -17,6 +17,8 @@ A full invoice (F1) shows one date, the moment it was created, on paper, on the 
 in the A4/email document and in the accountant export. AEAT already receives only that date:
 `toRegistroRow` refuses an alta carrying `FechaOperacion`
 (`packages/fiscal-verifactu/src/registro-row.ts:117–121`), so nothing filed changes.
+_(2026-11-14, Q37-FIX: a replacement corrective, R5 "S", now files `FechaOperacion`; every other
+alta is still refused one.)_
 
 ## What main does today (read on main d4520c53f2)
 

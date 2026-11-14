@@ -162,6 +162,22 @@ Sources are in the sibling `verifactu` repo, `sources/archive/`. PDFs were read 
   `:145-153`), copied from the record (`registro-row.ts:176-182`) **(read)**. No fiscal table
   changes.
 
+## Answers (2026-11-14), which override the questions below
+
+The owner, relayed by the watcher in lane L's `questions.md` ("WATCHER 2026-11-14 09:50 — OWNER
+answers Q37-FIX Task 3"): **A–D as recommended** — A: the rectified amounts are 0.00 / 0.00 when AEAT
+holds nothing for the refused original; B: the replacement's operation date is the original's real
+date; C: the printed copy says "Replaces invoice X in full" and "Amount of the rectification: 0,00 €";
+D: a later refund's credit note names the replacement. **E: the sale's period** — Waitron's VAT
+return counts a replaced sale in the ORIGINAL sale's period, not the replacement's (to be confirmed
+with the adviser in the Q53 batch; built as answered meanwhile). So "the original carries the sale"
+holds for every local reader, the VAT return included: `activeSalesClause` leaves out the
+replacement, and no reader leaves out a replaced original. Task 3b-1 below is amended to match.
+
+No owner approval is recorded for the new `replacement-invoice` kind, the `sales.replaces_original`
+column, or "the original carries the sale"; the watcher let Task 3 proceed on this plan at 09:50
+("Task 3 may proceed under the plan's normal path"). The PR says so.
+
 ## Still open (posted to the watcher 2026-11-14, lane L `questions.md`)
 
 The build follows each answer. Where the plan builds before an answer, it builds the recommended
@@ -279,7 +295,7 @@ lifted on 2026-11-07 (`~/waitron-campaign-shared/a1308-hold.md`), and A1308's ta
   the original. Every reader of what a sale owes, and every day report, leaves the replacement out,
   as they already leave out an F3 (`notSubstituteClause`, `packages/reporting/src/business-day.ts:207-209`).
   This keeps every closed day's figures as frozen (`issuedSalesClause`'s comment, `:222-228`).
-- **The VAT return (question E): the replacement carries the sale.** It counts the replacement, in
+- **The VAT return (question E): _superseded by the owner's answer E, see "Answers": the original carries the sale here too._** As first written: it counts the replacement, in
   its own period, and leaves out the refused original, so Waitron's return matches what AEAT holds
   (FAQ §27: the 303 counts R5s). Consequence: the daily VAT summary puts the sale on the original's
   day while the 303 puts it in the replacement's period; they differ only for a replaced sale, and
@@ -296,10 +312,10 @@ lines, grouped):
 
 | Reader | What it does with correctives | Decision | Task |
 | --- | --- | --- | --- |
-| `packages/reporting/src/vat-return.ts:39` via `activeSalesClause` (`business-day.ts:217-220`) | counts every sale, correctives included | count the replacement, leave out a replaced original (E) | 3b-1 |
+| `packages/reporting/src/vat-return.ts:39` via `activeSalesClause` (`business-day.ts:217-220`) | counts every sale, correctives included | leave out the replacement; the original carries the sale (owner's answer E) | 3b-1 |
 | `issuedSalesClause` / `reversedSalesClause` (`business-day.ts:229-244`): `vat-summary.ts:111,127`, `counts.ts:18-21`, `category-sales.ts:208,216`, `top-sellers.ts:71,78` | count correctives as rows on their day | leave out the replacement | 3b-1 |
 | `top-sellers.ts:105` | nets corrective lines against the invoice line they name | none needed: replacement lines name no line (`correctsLineId` null, Task 3a); a later refund names the replacement's lines, which are counted on the replacement's day — the replacement itself is out, so test that a refund of a replaced sale nets against nothing it should not | 3b-1 |
-| `apps/server/src/accountant-export.ts:194-212`, `:110` | one row per invoice, type "corrective" | replacement row typed `replacement`, replaced original typed `replaced` (M8 below) | 3b-1 |
+| `apps/server/src/accountant-export.ts:194-212`, `:110` | one row per invoice, type "corrective" | replacement row typed `replacement`, whose label says not to add it; the replaced original keeps its own type (M8 below) | 3b-1 |
 | `apps/server/src/sale-due.ts:17` (`correctionsCents`) | adds correctives' totals to what is due | `correctivesOf` | 3b-2 |
 | `packages/core/src/settle-sale.ts:51` | same, at settlement | `correctivesOf` | 3b-2 |
 | `packages/core/src/list-outstanding-sales.ts:47` | same, for unpaid sales | `correctivesOf` | 3b-2 |
@@ -324,8 +340,10 @@ lines, grouped):
 (`accountant-export.ts:95-112`; its only sum is a purchase's own lines, `:120`) **(read)**. So a
 "replacement" row counts toward any total only if the accountant sums the column. Both rows stay
 in the file — the refused original and its replacement are both invoices the venue keeps (owner,
-Q37(c)) — typed `replaced` and `replacement`, so a sum over the column leaves one out; the export's
-guide sentence says which.
+Q37(c)). Amended 2026-11-14 after review, to follow answer E: the original keeps its ordinary type,
+and the replacement's type reads "Replacement corrective — do not add (repeats the original)" / "Rectificativa
+por sustitución — no sumar (repite la original)", so the file itself says which row counts; the
+"Original invoice number" column names the original.
 
 ## Protected files this plan touches, and why
 
@@ -690,19 +708,19 @@ count its lines in the PR description).
 
 Files: `packages/reporting/src/business-day.ts` (two clauses beside `notSubstituteClause()`:
 `notReplacementClause()`, used by `issuedSalesClause` and `reversedSalesClause`, and
-`notReplacedClause()`, used by `activeSalesClause` — question E's default);
-`apps/server/src/accountant-export.ts:194-212` (types `replacement` and `replaced`).
+used by `activeSalesClause` too — the owner's answer E; there is no `notReplacedClause()`);
+`apps/server/src/accountant-export.ts:194-212` (types `replacement`; the original keeps its type, M8).
 
 Failing tests first (each fails today because the replacement's 12.10 is added):
 
 - `packages/reporting/src/vat-return.test.ts`: a 12.10 sale at 10% and its replacement in one
   quarter → base 11.00, VAT 1.10 (today 22.00 / 2.20); the original in Q4 and its replacement in the
-  next Q1 → Q1 counts it and Q4 does not (E's default; one assertion flips if E says otherwise).
+  next Q1 → Q4 counts it and Q1 does not (the owner's answer E: the original's period).
 - `counts.test.ts`, `category-sales.test.ts`, `top-sellers` and the VAT summary's test: the
   replacement's day shows no extra sale, correction, VAT or quantity; the original's day is
   unchanged; a later by-differences refund of the replacement still counts on its own day.
 - `apps/server/src/accountant-export.test.ts`: the replacement's row reads `replacement` and the
-  original's `replaced`.
+  original keeps its own type (M8, amended 2026-11-14).
 
 Docs: `vat-return.ts:10-16`'s «corrections netted» and the three clauses' comments say how a
 replacement is counted.

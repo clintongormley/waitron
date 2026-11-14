@@ -29,6 +29,7 @@ export type {
 // For a contract that hands a query fragment across a package boundary.
 export type { SQL } from "drizzle-orm";
 export { runMigrations } from "./migrate.js";
+export { correctivesOf } from "./correctives-of.js";
 export { tableExists } from "./table-exists.js";
 export { tableInService } from "./table-in-service.js";
 export { needsMoving, resetRowMoves } from "./joined-parts.js";

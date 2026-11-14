@@ -50,7 +50,8 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
   ), invoices as (
     select s.id, s.working_order_id, s.issued_at, sr.code as series_code, s.invoice_number as number,
       sr.code || '/' || s.invoice_number as invoice_number,
-      case when s.corrects_sale_id is not null then 'correction'
+      case when s.replaces_original = 1 then 'replacement'
+        when s.corrects_sale_id is not null then 'correction'
         when s.counterparty_tax_id is not null then 'full-invoice' else 'sale' end as type,
       s.counterparty_legal_name as customer_name, s.operator_id, person.display_name as staff_name,
       s.total as amount_cents,

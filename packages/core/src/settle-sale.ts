@@ -2,6 +2,7 @@
 import "./errors.js";
 import { eq, sql } from "drizzle-orm";
 import {
+  correctivesOf,
   isUniqueViolation,
   POST_SETTLEMENT_REFUSAL,
   saleSettlements,
@@ -48,7 +49,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
       source: sales.source,
       deviceId: sales.deviceId,
       total: sales.total,
-      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
+      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where ${correctivesOf(sql`c`, sql`${sales}.id`)}), 0) as text)`,
     })
     .from(sales)
     .where(eq(sales.id, input.saleId));
@@ -85,7 +86,6 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     });
   }
 
-  // The printed total, net of every corrective invoice, plus the tips.
   const due = sumDecimals([
     centsToDecimal(sale.total),
     rawCentsToDecimal(sale.corrections),

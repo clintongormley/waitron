@@ -27,10 +27,11 @@ let otherSaleId: SaleId;
 let nodeId: string;
 let deviceId: string;
 let input: Omit<RecordCorrectionInput, "authz">;
+let seed: Awaited<ReturnType<typeof seedTenant>>;
 let backend: FakeFiscalBackend;
 beforeEach(async () => {
   backend = new FakeFiscalBackend(suite.db);
-  const seed = await seedTenant(suite.db);
+  seed = await seedTenant(suite.db);
   nodeId = seed.nodeId;
   deviceId = seed.deviceId;
   const originalId = await seedBareSale(suite.db, seed);
@@ -154,6 +155,36 @@ it("files on an open correction's approval with no session, recording its approv
     total: -605,
     invoiceNumber: 1,
   });
+});
+it("files an approval opened on a replaced invoice's bill against its replacement", async () => {
+  const replacementId = await seedBareSale(suite.db, seed, {
+    invoiceNumber: 3,
+    correctsSaleId: input.correctsSaleId,
+    replacesOriginal: true,
+  });
+  await withTransaction(suite.db, (tx) =>
+    backend.recordCorrection(
+      tx,
+      {
+        origin: deviceOrigin(seed.deviceId),
+        nodeId: seed.nodeId,
+        saleId: replacementId,
+        seriesId: seed.seriesId,
+        seriesCode: "A",
+        invoiceNumber: 3,
+        issuedAt: new Date("2026-03-01T12:30:00Z"),
+        offsetMinutes: 0,
+        descriptionOfOperation: "Food and drink",
+        total: decimal("65.00"),
+        vatBreakdown: [],
+        counterparty: null,
+      },
+      { correctsSaleId: input.correctsSaleId, replaces: true },
+    ),
+  );
+  const result = await apply(await openCorrection());
+  const [row] = await suite.db.select().from(sales).where(eq(sales.id, result.saleId));
+  expect(row).toMatchObject({ authorizedBy: approverId, correctsSaleId: replacementId });
 });
 it("refuses a correction row of another sale", async () => {
   const correctionId = await openCorrection({ originalSaleId: otherSaleId });

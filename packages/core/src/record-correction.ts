@@ -3,14 +3,7 @@ import { saleLineRows } from "./sale-line-rows.js";
 import "./errors.js";
 import { operationDescriptionFor } from "./operation-description.js";
 import { eq, sql } from "drizzle-orm";
-import {
-  insertInChunks,
-  allocateInvoiceNumber,
-  invoiceSeries,
-  saleLines,
-  saleVoids,
-  sales,
-} from "@waitron/db";
+import { insertInChunks, allocateInvoiceNumber, saleLines, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -31,11 +24,13 @@ import type {
 } from "@waitron/fiscal";
 import { authorize, authorizeManager, type AuthzInput } from "@waitron/identity";
 import { insertSale } from "./insert-sale.js";
+import { requireCorrectiveSeries } from "./corrective-series.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
 import { requireSupportedCorrection } from "./correction-eligibility.js";
 import { authorizeCorrectionApproval } from "./correction-approval.js";
+import { correctionTargetFor } from "./correction-target.js";
 import {
   checkPartialCorrectionBreakdown,
   checkPartialCorrectionHistory,
@@ -61,7 +56,8 @@ export interface RecordCorrectionInput {
   nodeId: NodeId;
   /** Must name a `rectificative` series (`sale.series_wrong_purpose`); none is provisioned here. */
   seriesId: SeriesId;
-  /** The earlier sale being corrected. */
+  /** The earlier sale being corrected; a replaced sale is corrected through its replacement
+   * (`correctionTargetFor`), whose lines `correctsLineId` then names. */
   correctsSaleId: SaleId;
   /**
    * The corrective invoice's own, already-signed total: negative for a reversal, which
@@ -136,6 +132,8 @@ export async function recordCorrection(
     partial ??
     (input.wholeInvoice === true ? undefined : deriveVatBreakdown(input.total, input.lines));
 
+  const correctsSaleId = await correctionTargetFor(tx, input.correctsSaleId);
+
   // The corrective inherits the original's `locale` and `invoiceLocales`.
   // `${sales}.id`, not `${sales.id}`: see the same subquery in `settleSale`.
   const [original] = await tx
@@ -149,63 +147,28 @@ export async function recordCorrection(
       correctionCount: sql<number>`(select count(*) from sales c where c.corrects_sale_id = ${sales}.id)`,
     })
     .from(sales)
-    .where(eq(sales.id, input.correctsSaleId));
+    .where(eq(sales.id, correctsSaleId));
 
   if (original === undefined) {
-    throw new AppError("sale.not_found", { saleId: input.correctsSaleId });
+    throw new AppError("sale.not_found", { saleId: correctsSaleId });
   }
 
-  // A voided sale is not corrected: it was annulled.
   const [voided] = await tx
     .select({ saleId: saleVoids.saleId })
     .from(saleVoids)
-    .where(eq(saleVoids.saleId, input.correctsSaleId));
+    .where(eq(saleVoids.saleId, correctsSaleId));
 
   if (voided !== undefined) {
-    throw new AppError("sale.voided", { saleId: input.correctsSaleId });
+    throw new AppError("sale.voided", { saleId: correctsSaleId });
   }
 
-  const [series] = await tx
-    .select({
-      code: invoiceSeries.code,
-      nodeId: invoiceSeries.nodeId,
-      purpose: invoiceSeries.purpose,
-      retiredAt: invoiceSeries.retiredAt,
-    })
-    .from(invoiceSeries)
-    .where(eq(invoiceSeries.id, input.seriesId));
-
-  if (series === undefined) {
-    throw new AppError("sale.series_not_found", {
-      seriesId: input.seriesId,
-    });
-  }
-  if (series.nodeId !== input.nodeId) {
-    throw new AppError("sale.series_wrong_node", {
-      seriesId: input.seriesId,
-      expected: series.nodeId,
-      actual: input.nodeId,
-    });
-  }
-  if (series.purpose !== "rectificative") {
-    throw new AppError("sale.series_wrong_purpose", {
-      seriesId: input.seriesId,
-      expected: "rectificative",
-      actual: series.purpose,
-    });
-  }
-  if (series.retiredAt !== null) {
-    throw new AppError("sale.series_retired", {
-      seriesId: input.seriesId,
-      retiredAt: series.retiredAt.toISOString(),
-    });
-  }
+  const series = await requireCorrectiveSeries(tx, input.seriesId, input.nodeId);
 
   const authorization =
     "invoiceCorrectionId" in input.authz
       ? await authorizeCorrectionApproval(tx, {
           invoiceCorrectionId: input.authz.invoiceCorrectionId,
-          correctsSaleId: input.correctsSaleId,
+          correctsSaleId,
           total: input.total,
         })
       : "managementSessionId" in input.authz
@@ -219,7 +182,7 @@ export async function recordCorrection(
             override: input.authz.override,
           });
 
-  requireSupportedCorrection(original.counterpartyTaxId, input.correctsSaleId);
+  requireSupportedCorrection(original.counterpartyTaxId, correctsSaleId);
 
   // After the gate, so a session that may not correct is not told what is left on the invoice.
   // Compared, stored and filed at the cent amount the row stores, not the unrounded input.
@@ -234,7 +197,7 @@ export async function recordCorrection(
     compareDecimal(sumDecimals([remaining, correction]), ZERO) < 0
   ) {
     throw new AppError("sale.correction_exceeds_total", {
-      saleId: input.correctsSaleId,
+      saleId: correctsSaleId,
       remaining,
       correction,
     });
@@ -242,7 +205,7 @@ export async function recordCorrection(
 
   // The stored `sales.vat_breakdown` and the filed breakdown are this one value.
   const vatBreakdown =
-    derived ?? wholeInvoiceBreakdown(input.correctsSaleId, original, totalCents, input.lines);
+    derived ?? wholeInvoiceBreakdown(correctsSaleId, original, totalCents, input.lines);
   // A whole-invoice credit converts its lines before a number is allocated, so a line value the
   // converters refuse (overflow, or not a decimal) is refused with nothing written; the sale's id
   // is filled in once it exists.
@@ -263,7 +226,7 @@ export async function recordCorrection(
                 lineGross: saleLines.lineGross,
               })
               .from(saleLines)
-              .where(eq(saleLines.saleId, input.correctsSaleId))
+              .where(eq(saleLines.saleId, correctsSaleId))
               .orderBy(saleLines.lineNo)
           ).map((row) => [row.id, row]),
         )
@@ -272,14 +235,14 @@ export async function recordCorrection(
     for (const line of input.lines) {
       if (line.correctsLineId != null && !onInvoice.has(line.correctsLineId)) {
         throw new AppError("sale.correction_line_not_on_invoice", {
-          saleId: input.correctsSaleId,
+          saleId: correctsSaleId,
           lineNo: line.lineNo,
           correctsLineId: line.correctsLineId,
         });
       }
     }
     if (wholeLineRows !== undefined) {
-      assertReversesLineForLine(input.correctsSaleId, wholeLineRows, onInvoice);
+      assertReversesLineForLine(correctsSaleId, wholeLineRows, onInvoice);
     }
   }
   if (partial !== undefined) {
@@ -291,7 +254,7 @@ export async function recordCorrection(
         await tx
           .select({ vatBreakdown: sales.vatBreakdown })
           .from(sales)
-          .where(eq(sales.correctsSaleId, input.correctsSaleId))
+          .where(eq(sales.correctsSaleId, correctsSaleId))
       ).map((row) => row.vatBreakdown),
       earlierLines: await tx
         .select({
@@ -301,7 +264,7 @@ export async function recordCorrection(
         })
         .from(saleLines)
         .innerJoin(sales, eq(sales.id, saleLines.saleId))
-        .where(eq(sales.correctsSaleId, input.correctsSaleId)),
+        .where(eq(sales.correctsSaleId, correctsSaleId)),
     });
   }
 
@@ -345,7 +308,7 @@ export async function recordCorrection(
     invoiceLocales: original.invoiceLocales,
     fiscalBackend: backend.id,
     fiscalState: "recorded",
-    correctsSaleId: input.correctsSaleId,
+    correctsSaleId,
     // Written at insert: `sales` is append-only, so the authorizer cannot be added later.
     authorizedBy: authorization.authorizedBy,
   });
@@ -385,7 +348,7 @@ export async function recordCorrection(
       vatBreakdown,
       counterparty: null,
     },
-    { correctsSaleId: input.correctsSaleId },
+    { correctsSaleId },
   );
 
   return { saleId, fiscal };

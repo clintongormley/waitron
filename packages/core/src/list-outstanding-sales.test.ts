@@ -93,6 +93,34 @@ describe("listOutstandingSales", () => {
     });
   });
 
+  it("lists a replaced sale once, owing what it owed, and 3.00 less after a refund of its replacement", async () => {
+    const seed = { deviceId, nodeId, seriesId };
+    const replaced = await seedBareSale(suite.db, seed, { total: "12.10", invoiceNumber: 1 });
+    const replacement = await seedBareSale(suite.db, seed, {
+      total: "12.10",
+      invoiceNumber: 2,
+      correctsSaleId: replaced,
+      replacesOriginal: true,
+    });
+    expect((await list()).map((sale) => [sale.saleId, sale.amountDue])).toEqual([
+      [replaced, "12.10"],
+    ]);
+
+    await seedBareSale(suite.db, seed, {
+      total: "-3.00",
+      invoiceNumber: 3,
+      correctsSaleId: replacement,
+    });
+    expect(await list()).toEqual([
+      expect.objectContaining({
+        saleId: replaced,
+        total: "12.10",
+        correctionTotal: "-3.00",
+        amountDue: "9.10",
+      }),
+    ]);
+  });
+
   it("hides a settled sale", async () => {
     const saleId = await seedBareSale(
       suite.db,

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b6daa0da-845b-48af-bb70-9b26a7f0e24b",
+  "id": "3179891d-9b68-4ed0-91c7-57d0f7058aaa",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -1933,6 +1933,13 @@
         },
         "importe_rectificacion": {
           "name": "importe_rectificacion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "fecha_operacion": {
+          "name": "fecha_operacion",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

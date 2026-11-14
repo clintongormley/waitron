@@ -104,6 +104,8 @@ export async function insertPendingAlta(
     producerNif?: string | undefined;
     /** Defaults to none, as on a simplified F2. */
     destinatarios?: unknown;
+    /** An R5 by replacement of the chain's previous record, for a sale made on `fechaOperacion`. */
+    replacement?: { fechaOperacion: string };
   },
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
@@ -179,7 +181,22 @@ export async function insertPendingAlta(
       numSerieFactura,
       fechaExpedicionFactura: params.fecha,
       nombreRazonEmisor: params.nombreRazonEmisor ?? "Waitron SL",
-      tipoFactura: "F2",
+      tipoFactura: params.replacement === undefined ? "F2" : "R5",
+      ...(params.replacement !== undefined &&
+        previous !== undefined && {
+          tipoRectificativa: "S",
+          facturasRectificadas: {
+            IDFacturaRectificada: [
+              {
+                IDEmisorFactura: previous.id_emisor_factura,
+                NumSerieFactura: previous.num_serie_factura,
+                FechaExpedicionFactura: toAeatDate(previous.fecha_expedicion_factura),
+              },
+            ],
+          },
+          importeRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+          fechaOperacion: params.replacement.fechaOperacion,
+        }),
       descripcionOperacion: "Venta en establecimiento",
       destinatarios: params.destinatarios ?? null,
       desglose,
@@ -289,7 +306,12 @@ export async function appendPendingAlta(
   db: Database,
   seeded: SeededDrain,
   secuencia: number,
-  options: { nombreRazonEmisor?: string; generadoEn?: string; destinatarios?: unknown } = {},
+  options: {
+    nombreRazonEmisor?: string;
+    generadoEn?: string;
+    destinatarios?: unknown;
+    replacement?: { fechaOperacion: string };
+  } = {},
 ): Promise<{ registroId: string; facturaKey: string }> {
   const huella = String(secuencia).padStart(64, "0");
   // `DEFAULT_ENTORNO`, so the appended row agrees with the chain it extends.
@@ -304,6 +326,7 @@ export async function appendPendingAlta(
     nombreRazonEmisor: options.nombreRazonEmisor,
     generadoEn: options.generadoEn,
     destinatarios: options.destinatarios,
+    replacement: options.replacement,
   });
   await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
@@ -607,3 +630,32 @@ export const consultaNames = (client: VerifactuClient, codigo: number): Verifact
 
 export const seedNonproductionHistory = (db: Database) =>
   seedPendingEnvios(db, { count: 1, entorno: "preproduction" });
+
+/**
+ * AEAT's response schema carries a stored record's FechaOperacion (RespuestaConsultaLR.xsd,
+ * `RespuestaDatosRegistroFacturacionType`); the fake leaves it out, so this adds it to `ref`'s record.
+ */
+export const answersFechaOperacion = (
+  client: VerifactuClient,
+  ref: string,
+  fechaOperacion: string,
+): VerifactuClient => ({
+  submit: (cabecera, registros) => client.submit(cabecera, registros),
+  consultar: async (cabecera, filtro) => {
+    const answer = await client.consultar(cabecera, filtro);
+    return {
+      ...answer,
+      registros: answer.registros.map((record) =>
+        record.DatosRegistroFacturacion.RefExterna === ref
+          ? {
+              ...record,
+              DatosRegistroFacturacion: {
+                ...record.DatosRegistroFacturacion,
+                FechaOperacion: fechaOperacion,
+              },
+            }
+          : record,
+      ),
+    };
+  },
+});

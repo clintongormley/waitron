@@ -32,6 +32,7 @@ import { recordSubstitution } from "./record-substitution.js";
 import type { RecordSubstitutionInput } from "./record-substitution.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
+import { recordReplacement } from "./record-replacement.js";
 import { recordVoid } from "./record-void.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
@@ -311,6 +312,58 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
     await expect(substitute(backend, [saleId])).rejects.toMatchObject({
       code: "sale.already_substituted",
       params: { saleId },
+    });
+  });
+
+  describe("a ticket a replacement corrective takes the place of", () => {
+    async function replaceTicket(backend: FiscalBackend, saleId: SaleId) {
+      const rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
+      return withTransaction(suite.db, (tx) =>
+        recordReplacement(tx, backend, {
+          origin: deviceOrigin(deviceId),
+          nodeId,
+          seriesId: rectSeriesId,
+          correctsSaleId: saleId,
+          authz: { sessionId: voidSessionId },
+          clock: steadyClock,
+        }),
+      );
+    }
+
+    async function expectRefusedUsingNoNumber(
+      backend: FiscalBackend,
+      substituted: SaleId,
+      refusal: { code: string; params: Record<string, unknown> },
+    ) {
+      await expect(substitute(backend, [substituted])).rejects.toMatchObject(refusal);
+      const [full] = await suite.db
+        .select({ n: invoiceSeries.nextNumber })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.id, fullSeriesId));
+      expect(full?.n).toBe(1);
+      expect(await countRows("sale_substitutions")).toBe(0);
+    }
+
+    it("refuses the replaced ticket before using a number", async () => {
+      const backend = new FakeFiscalBackend(suite.db);
+      const { saleId } = await sellTicket(backend);
+      await replaceTicket(backend, saleId);
+
+      await expectRefusedUsingNoNumber(backend, saleId, {
+        code: "sale.substitution_not_admitted",
+        params: { saleId, reason: "has_replacement" },
+      });
+    });
+
+    it("refuses the replacement itself before using a number", async () => {
+      const backend = new FakeFiscalBackend(suite.db);
+      const { saleId } = await sellTicket(backend);
+      const replacement = await replaceTicket(backend, saleId);
+
+      await expectRefusedUsingNoNumber(backend, replacement.saleId, {
+        code: "sale.substitution_not_admitted",
+        params: { saleId: replacement.saleId, reason: "is_replacement" },
+      });
     });
   });
 });

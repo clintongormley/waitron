@@ -3,16 +3,18 @@ import { eq } from "drizzle-orm";
 import { invoiceCorrections } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { authorizeApproval, type Authorization } from "@waitron/identity";
+import { correctionTargetFor } from "./correction-target.js";
 import { AppError, stringToCents } from "@waitron/shared";
 import type { SaleId } from "@waitron/shared";
 
 /** Reads the invoice_corrections row and refuses `sale.correction_approval_invalid`
- * { invoiceCorrectionId, reason } unless it exists (`not_found`), is open (`not_open`), corrects
- * `correctsSaleId` (`other_sale`), and the R5's amount, −total, is no more than its gross
+ * { invoiceCorrectionId, reason } unless it exists (`not_found`), is open (`not_open`), names a
+ * sale whose correction target (`correctionTargetFor`) is `correctsSaleId` (`other_sale`), and the R5's amount, −total, is no more than its gross
  * (`over_amount`); then authorizeApproval(authorized_by, "sale.rectify"). Callers pass the
  * corrective's negative total, so −total is the amount credited. */
 export async function authorizeCorrectionApproval(
   tx: Transaction,
+  /** `correctsSaleId` is already a correction target: a replacement is never itself replaced. */
   args: { invoiceCorrectionId: string; correctsSaleId: SaleId; total: string },
 ): Promise<Authorization> {
   const { invoiceCorrectionId } = args;
@@ -29,7 +31,8 @@ export async function authorizeCorrectionApproval(
     new AppError("sale.correction_approval_invalid", { invoiceCorrectionId, reason });
   if (row === undefined) throw refuse("not_found");
   if (row.state !== "open") throw refuse("not_open");
-  if (row.originalSaleId !== args.correctsSaleId) throw refuse("other_sale");
+  if ((await correctionTargetFor(tx, row.originalSaleId as SaleId)) !== args.correctsSaleId)
+    throw refuse("other_sale");
   // At the cent, as recordCorrection stores and files the total.
   if (-stringToCents(args.total) > row.gross) throw refuse("over_amount");
   return authorizeApproval(tx, { personId: row.authorizedBy, permission: "sale.rectify" });

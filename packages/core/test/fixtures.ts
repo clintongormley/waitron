@@ -77,6 +77,7 @@ export async function seedBareSale(
     total?: string;
     invoiceNumber?: number;
     correctsSaleId?: SaleId;
+    replacesOriginal?: boolean;
     vatBreakdown?: { rate: string; base: string; tax: string }[];
   } = {},
 ): Promise<SaleId> {
@@ -99,6 +100,7 @@ export async function seedBareSale(
       fiscalBackend: "fake",
       fiscalState: "recorded",
       correctsSaleId: overrides.correctsSaleId,
+      replacesOriginal: overrides.replacesOriginal,
     })
     .returning({ id: sales.id });
   return brandSaleId(row!.id);

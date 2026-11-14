@@ -1,7 +1,8 @@
-import { and, eq, exists, or } from "drizzle-orm";
+import { and, eq, exists, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { createHash } from "node:crypto";
 import {
+  correctivesOf,
   dailyCloses,
   saleSettlements,
   saleSubstitutions,
@@ -273,7 +274,7 @@ function touchedSaleQuery(tx: Transaction, saleId: string) {
         tx
           .select({ id: corrections.id })
           .from(corrections)
-          .where(eq(corrections.correctsSaleId, saleId)),
+          .where(correctivesOf(sql`${corrections}`, sql`${saleId}`)),
       ),
       tendered: any(tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, saleId))),
       settled: any(

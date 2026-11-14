@@ -2490,7 +2490,7 @@ export interface OrderDetailDto {
     sentNutrition: { allergens: AllergenDeclaration; dietaryDeclarations: string[] } | null;
   }[];
   invoices: {
-    kind: "invoice" | "credit_note" | "substitution";
+    kind: "invoice" | "credit_note" | "replacement" | "substitution";
     invoiceType?: "F1" | "F2";
     recipient?: {
       taxId: string;

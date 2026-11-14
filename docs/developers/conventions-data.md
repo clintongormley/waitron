@@ -1165,6 +1165,29 @@ reader refuses.
 `packages/shared/src/conventions.test.ts` (reads `cents.ts` as TEXT, and nothing outside
 `packages/shared/src`, so a second file crossing into the number type is seen by nobody).
 
+## A sale's correctives are summed through `correctivesOf`
+
+A corrective by replacement repeats its original's full total, and the original carries the sale:
+its payments and settlement stay on it, and a later refund corrects the replacement (Q37-FIX plan,
+`docs/superpowers/plans/2026-11-13-q37-fix-put-right.md`, "How the sale is counted once"). So what
+a sale owes is its total plus its own correctives except the replacement, plus the replacement's
+correctives. `correctivesOf(corrective, saleId)` in `packages/db/src/correctives-of.ts` is that
+set, as a condition on the caller's own `sales` row named `corrective`. Money readers and "has it been credited" tests use it. The lines the guard below
+allows instead, each with its reason there: the correction target's own sums and history in
+`packages/core/src/record-correction.ts` and `correction-history.ts`, the order list's number
+search, the lines that find a replacement itself, the first-corrective check in
+`record-replacement.ts`, and top-sellers' line netting.
+
+`scripts/corrective-sums.test.ts` holds the rule, and is weaker than its name. It reads non-test
+`.ts` files under `apps/*/src` and `packages/*/src`, leaving out `testing/` folders, one LINE at a
+time, and flags an SQL equality on `corrects_sale_id` and a Drizzle `eq(` or `inArray(` whose
+first argument is a `correctsSaleId` column. Everything else passes it: a comparison split across
+lines, a column reached through an alias the pattern does not spell, a helper it does not
+recognise, and SQL outside those folders. The `sale_settlements_check_coverage` trigger in
+`packages/db/triggers/core.sql` is such SQL: it spells the same rule out by hand, and
+`scripts/behavioural-triggers.test.ts` tests it with a refunded replacement. Each allowlist entry carries its reason and the number of lines it matches; any other number
+fails the guard.
+
 ## A quantity counts whole thousandths and a rate whole basis points, and neither is the money scale
 
 Task P6, 2026-09-21. Seven columns followed money out of `numeric`: two quantities

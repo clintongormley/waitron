@@ -181,7 +181,8 @@ function toTotal(node: Node, depth: number): CategoryTotal {
  *
  * Inclusion is the other reports' (`issuedSalesClause`, `reversedSalesClause`): a void in the range
  * of a sale issued outside it subtracts, at time of sale under the voided line's own recorded
- * snapshot, and corrections net in with their signed lines. Every amount is summed in whole cents.
+ * snapshot, and corrections other than a replacement net in with their signed lines. Every amount
+ * is summed in whole cents.
  *
  * Invalid inputs, and current mode without a classifier, are a caller precondition and throw a
  * plain `Error` before any query runs.

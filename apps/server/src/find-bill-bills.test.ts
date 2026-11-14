@@ -42,6 +42,7 @@ import { assignProductUnit, setProductVariants, units } from "@waitron/catalogue
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { readOrderStateCounts } from "./order-state-counts.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
@@ -827,6 +828,42 @@ describe("Find Bills SQL paging", () => {
     expect((await list({ q: debt.tables[0]! })).rows.map((r) => r.workingOrderId)).toEqual([
       party.tabId,
     ]);
+  });
+  it("reads a replaced bill as owing what it owed, and less after a refund of its replacement", async () => {
+    const id = await placedIssuedBill(venue, "Caña");
+    const owed = async () => {
+      const row = await inTx(venue, (tx) => readFindBill(tx, id));
+      const issued = await inTx(venue, (tx) => readIssuedSales(tx, [id]));
+      return [row.stillOwed, issued.get(id)?.amountDue];
+    };
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
+    );
+    const replacement = await inTx(venue, (tx) =>
+      insertCorrective(tx, sale!.id, { replaces: true }),
+    );
+    expect(await owed()).toEqual(["3.00", "3.00"]);
+
+    await inTx(venue, (tx) => insertCorrective(tx, replacement, { total: "-1.21" }));
+    expect(await owed()).toEqual(["1.79", "1.79"]);
+  });
+  it("collects a replaced bill whose replacement was refunded at what is left", async () => {
+    const id = await placedIssuedBill(venue, "Caña");
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
+    );
+    const replacement = await inTx(venue, (tx) =>
+      insertCorrective(tx, sale!.id, { replaces: true }),
+    );
+    await inTx(venue, (tx) => insertCorrective(tx, replacement, { total: "-1.21" }));
+
+    const answer = await collect(venue, id, "1.79");
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({
+      paid: "1.79",
+      stillOwed: "0.00",
+    });
   });
   it("marks earlier days at the venue business boundary rather than midnight", async () => {
     const id = await parked(venue, "Caña");

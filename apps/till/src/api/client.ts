@@ -1024,8 +1024,13 @@ export interface TillSaleResult extends ReceiptPresentation {
   invoiceEvidence?: InvoiceEvidence;
   issuedOffsetMinutes?: number;
   invoiceType?: "F1" | "F2" | "R5";
-  /** On a corrective invoice (R5), the invoice it corrects. */
-  corrects?: { invoiceNumber: string; issuedAt: string; issuedOffsetMinutes?: number };
+  /** On a corrective invoice (R5), the invoice it corrects; `inFull` when it replaces it whole. */
+  corrects?: {
+    invoiceNumber: string;
+    issuedAt: string;
+    issuedOffsetMinutes?: number;
+    inFull?: true;
+  };
   recipient?: {
     taxId: string;
     legalName: string;

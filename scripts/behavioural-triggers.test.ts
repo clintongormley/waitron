@@ -233,6 +233,13 @@ function sale(id, total, correctsSaleId = null) {
   );
 }
 
+/** A corrective of `correctsSaleId` that replaces it in full. */
+function replacement(id, total, correctsSaleId) {
+  return sale(id, total, correctsSaleId)
+    .replace("corrects_sale_id)", "corrects_sale_id, replaces_original)")
+    .replace(/\)$/, ", 1)");
+}
+
 /** An open party. Check constraints are off here, so `closed_at` need not follow `state`. */
 function party(id) {
   return (
@@ -308,6 +315,9 @@ function seed(connection) {
     sale("sale-tip-swallowed", 1000),
     sale("sale-corrected", 1000),
     sale("sale-rectifies", -300, "sale-corrected"),
+    sale("sale-replaced", 1000),
+    replacement("sale-replacement", 1000, "sale-replaced"),
+    sale("sale-replacement-refund", -300, "sale-replacement"),
     tender("tender-covered", "sale-covered", 1000),
     tender("tender-settled", "sale-settled", 500),
     // Amount covers the sale AND the tip: 1000 + 100.
@@ -317,6 +327,9 @@ function seed(connection) {
     tender("tender-tip-swallowed", "sale-tip-swallowed", 1000, 100),
     // 1000 sale less a 300 rectificativa: a formula that ignored corrections would want 1000.
     tender("tender-corrected", "sale-corrected", 700),
+    // A replacement repeats the 1000 and is left out; the 300 refunding it is netted in. Adding
+    // every corrective would want 1700, leaving out the refund too would want 1000.
+    tender("tender-replaced", "sale-replaced", 700),
     `insert into sale_settlements (id, sale_id, settled_at) values ('ss-seed', 'sale-settled', '${STAMP}')`,
 
     // Bill payments: one each to move, to decline, and to hold a tender, which blocks a decline.
@@ -546,6 +559,15 @@ describe("sale_settlements_check_coverage", () => {
       refusalFor(
         connection,
         `insert into sale_settlements (id, sale_id, settled_at) values ('ss-corr', 'sale-corrected', '${STAMP}')`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("leaves out a replacement and nets in the refunds of it", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into sale_settlements (id, sale_id, settled_at) values ('ss-replaced', 'sale-replaced', '${STAMP}')`,
       ),
     ).toBeUndefined();
   });

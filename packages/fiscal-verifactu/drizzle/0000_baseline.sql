@@ -281,6 +281,7 @@ CREATE TABLE `registros_facturacion` (
 	`facturas_rectificadas` text,
 	`facturas_sustituidas` text,
 	`importe_rectificacion` text,
+	`fecha_operacion` text,
 	`destinatarios` text,
 	`descripcion_operacion` text,
 	`desglose` text,

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { saleLines, sales, saleSubstitutions, type Transaction } from "@waitron/db";
 import type { CorrectionAdmission, FiledFigures, FiscalBackend } from "@waitron/fiscal";
 import {
@@ -21,6 +21,7 @@ import {
   remainingLines,
 } from "./correction-allocation.js";
 import { requireSupportedCorrection } from "./correction-eligibility.js";
+import { correctionTargetFor } from "./correction-target.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import "./errors.js";
 
@@ -31,10 +32,12 @@ export type CorrectionPreview = CorrectionAmountPreview &
 
 /**
  * What a correction of `selection.gross` from the invoice `saleId`, issued by `issuingNodeId`, would
- * file, as the lines and split `recordCorrection` takes. Refused with
- * `sale.correction_not_admitted` when the invoice was replaced by a full invoice, its regime does
- * not admit a correction of it, or the regime's newest filed figures of it or of an earlier
- * correction cannot be read or differ from the stored ones; refused with
+ * file, as the lines and split `recordCorrection` takes; a replaced invoice is read through its
+ * replacement (`correctionTargetFor`), as `recordCorrection` files it. Refused with
+ * `sale.correction_not_admitted` when the invoice was exchanged for a full invoice (an F3; reason
+ * `replaced`), its regime does not admit a correction of it, or the
+ * regime's newest filed figures of it or of an earlier correction cannot be read or differ from the
+ * stored ones; refused with
  * `sale.correction_unsupported`, as `recordCorrection` is, when the invoice names a customer.
  */
 export async function previewCorrectionAmounts(
@@ -90,13 +93,15 @@ export async function readCorrectableLines(
 async function admittedHistory(
   tx: Transaction,
   backend: FiscalBackend,
-  saleId: SaleId,
+  invoiceId: SaleId,
   issuingNodeId: NodeId,
 ) {
+  const saleId = await correctionTargetFor(tx, invoiceId);
+  // The requested invoice as well as its replacement: an exchange names the invoice it took.
   const [substituted] = await tx
     .select({ id: saleSubstitutions.id })
     .from(saleSubstitutions)
-    .where(eq(saleSubstitutions.substitutedSaleId, saleId));
+    .where(inArray(saleSubstitutions.substitutedSaleId, [invoiceId, saleId]));
   if (substituted !== undefined) {
     throw new AppError("sale.correction_not_admitted", { reason: "replaced" });
   }
@@ -116,7 +121,7 @@ async function admittedHistory(
  * What a paid invoice holds and what every earlier correction of it took, whatever that
  * correction's filing state, for `allocateCorrectionAmounts`. Refused with
  * `sale.correction_history_unusable` when what is stored cannot be read as amounts: the sale is
- * itself a correction, a line has no stored gross, an earlier correction's line names no invoice
+ * itself a correction other than a replacement, a line has no stored gross, an earlier correction's line names no invoice
  * line, or an earlier correction's lines disagree with its own stored split, which the writer
  * would later check a new split against.
  */
@@ -130,7 +135,7 @@ export async function readCorrectionAmountHistory(
 type StoredFigures = Pick<typeof sales.$inferSelect, "id" | "total" | "vatBreakdown">;
 
 /** The invoice's and its earlier corrections' stored figures; refused when the sale is unknown or
- * is itself a correction. */
+ * is itself a correction other than a replacement. */
 async function readStored(
   tx: Transaction,
   saleId: SaleId,
@@ -143,12 +148,13 @@ async function readStored(
     .select({
       ...figures,
       correctsSaleId: sales.correctsSaleId,
+      replacesOriginal: sales.replacesOriginal,
       counterpartyTaxId: sales.counterpartyTaxId,
     })
     .from(sales)
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("sale.not_found", { saleId });
-  if (sale.correctsSaleId !== null) unusable();
+  if (sale.correctsSaleId !== null && !sale.replacesOriginal) unusable();
   const corrections = await tx.select(figures).from(sales).where(eq(sales.correctsSaleId, saleId));
   return { sale, corrections };
 }

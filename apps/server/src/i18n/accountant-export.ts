@@ -28,6 +28,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     invoiceSheet: "Issued invoices",
     purchaseSheet: "Recorded purchases",
     corrective: "Corrective",
+    replacement: "Replacement corrective — do not add (repeats the original)",
     regimes: { general: "General regime", equivalence_surcharge: "Equivalence surcharge" },
     vatKinds: { ordinary: "Ordinary goods", capital: "Capital goods" },
     identifierTypes: {
@@ -58,7 +59,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       "Original invoice id",
       "Original invoice number",
       "Voided at (UTC)",
-      "Notes: F3 replacements omitted; original tickets retained; voids flagged, not netted",
+      "Notes: F3 replacements omitted; original tickets retained; voids flagged, not netted; replacement correctives flagged, not added",
     ],
     purchaseColumns: [
       "Invoice number",
@@ -110,6 +111,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     invoiceSheet: "Facturas emitidas",
     purchaseSheet: "Compras registradas",
     corrective: "Rectificativa",
+    replacement: "Rectificativa por sustitución — no sumar (repite la original)",
     regimes: { general: "Régimen general", equivalence_surcharge: "Recargo de equivalencia" },
     vatKinds: { ordinary: "Bienes corrientes", capital: "Bienes de inversión" },
     identifierTypes: {
@@ -140,7 +142,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       "Id. de factura original",
       "Número de factura original",
       "Anulada el (UTC)",
-      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones se indican, no se restan",
+      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones se indican, no se restan; las rectificativas por sustitución se indican, no se suman",
     ],
     purchaseColumns: [
       "Número de factura",
