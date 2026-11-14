@@ -5,7 +5,6 @@ import { eq } from "drizzle-orm";
 import { nodeSigningPublicKey, setPairLinkStateTx, type KeyRing } from "@waitron/credentials";
 import { nodes, withNodeTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import "@waitron/module";
-import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -14,14 +13,6 @@ import type { StandbyPublicIdentity } from "./reserved-identity.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import type { Logger } from "./logger.js";
 import { readNodeIdentityKey } from "./node-identity.js";
-
-export function assertAdoptionModules(modules: readonly WaitronModule[]): void {
-  for (const module of modules) {
-    // The adoption latch carries no live authority for a separately prepared allocation.
-    if (module.operations !== undefined && module.provisioning?.standby?.series === "on-activation")
-      throw new AppError("mirror.standby_series_unsupported", { module: module.name });
-  }
-}
 
 /** What a joining spare records when it adopts; the file stays until the spare finishes joining. */
 export interface PendingAdoption {
@@ -67,14 +58,12 @@ export async function runFinishAdoption(deps: {
   ring: KeyRing;
   nodeId: string;
   stateDir: string;
-  modules: readonly WaitronModule[];
   restart: () => void;
   log: Logger;
 }): Promise<void> {
   const pending = await readPendingAdoption(deps.stateDir);
   if (pending === null) return;
   try {
-    assertAdoptionModules(deps.modules);
     const [row] = await deps.ownerDb
       .select({ publicKey: nodes.publicKey })
       .from(nodes)

@@ -10,7 +10,6 @@ import type { AdoptCredential } from "./adopt.js";
 import { checkBackupSettings } from "./backup-env-writer.js";
 import { writeFileDurable } from "./fs-atomic.js";
 import { lookupBoxName, RememberedAnswers, type BoxAddresses } from "./box-lookup.js";
-import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { JOIN_REFUSALS } from "./mirror-bundle-api.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
@@ -85,7 +84,7 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
   return true;
 }
 
-const RELAYED_WITH_PARAMS = ["mirror.clocks_apart", "mirror.standby_series_unsupported"] as const;
+const RELAYED_WITH_PARAMS = ["mirror.clocks_apart"] as const;
 
 type RelayedBare =
   | "password.invalid"
@@ -109,8 +108,7 @@ function isIsoTime(value: unknown): value is string {
 /**
  * A refusal from the main box is passed on only when it is `password.invalid`, `password.throttled`
  * or one of `JOIN_REFUSALS`, and each is rebuilt here so nothing the main box wrote travels on: with
- * no parameters, except `mirror.standby_series_unsupported` with `{ module }` only when it names a
- * module in `ALL_MODULES`, `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both are
+ * no parameters, except `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both are
  * ISO times, and `password.throttled` with `{ retryAfterSeconds }` only when it is a whole number of
  * seconds above zero. Every other code, and any of these whose parameters fail their check, is
  * `mirror.bundle_fetch_failed`.
@@ -126,10 +124,6 @@ async function refusalFrom(response: Response): Promise<AppError> {
   const { code } = error;
   const params = isRecord(error.params) ? error.params : {};
   if (isRelayedBare(code)) return new AppError(code, {});
-  if (code === "mirror.standby_series_unsupported") {
-    const named = ALL_MODULES.find((module) => module.name === params.module);
-    if (named !== undefined) return new AppError(code, { module: named.name });
-  }
   if (
     code === "mirror.clocks_apart" &&
     isIsoTime(params.primaryAt) &&

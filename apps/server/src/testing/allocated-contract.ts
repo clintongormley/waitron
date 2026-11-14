@@ -38,20 +38,6 @@ export async function standbyContract(
 
 export type StandbyContract = Awaited<ReturnType<typeof standbyContract>>;
 
-/**
- * The modules with every standby reservation's `on-activation` mark dropped: such a module reserves
- * at a join, so the main box does not refuse it as a Veri*Factu venue's (D12).
- */
-export function withoutActivationMark(modules: readonly WaitronModule[]): WaitronModule[] {
-  return modules.map((module) => {
-    const standby = module.provisioning?.standby;
-    if (standby === undefined) return module;
-    const unmarked = { ...standby };
-    delete unmarked.series;
-    return { ...module, provisioning: { ...module.provisioning, standby: unmarked } };
-  });
-}
-
 export function allocatedStandbyModules(
   modules: readonly WaitronModule[],
   fixture: StandbyContract,

@@ -80,12 +80,10 @@ afterEach(async () => {
 
 /**
  * A main box and a spare on two separate databases, joined by the real bundle route and the real
- * `adoptFromPrimary`. Adoption refuses a Veri*Factu venue today (`assertAdoptionModules`), so the
- * filing module is switched off. It does not copy the venue either, so the spare is given by hand
- * the taxpayer and the chart its first copy will bring (A947 3b's Task 6.3).
+ * `adoptFromPrimary`, with Veri*Factu switched on. It does not copy the venue, so the spare is given
+ * by hand the taxpayer and the chart its first copy will bring (A947 3b's Task 6.3).
  */
 async function joined() {
-  await writeModuleConfig(mainBox.db, { overrides: new Map([["fiscal-verifactu", false]]) }, null);
   const moduleConfig = await readModuleConfig(mainBox.db);
   const modules = enabledModules(ALL_MODULES, moduleConfig);
   const venue = await applyAllocatedTestVenue(

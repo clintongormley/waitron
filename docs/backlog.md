@@ -1864,8 +1864,9 @@ outstanding on code that exists.
   and 3b-5b (a spare runs its store, which admits only its main box) landed, and so did 3b-G (a box trusts only the venue's authority when it asks another box at start and sets aside a spare still joining ([3b plan](superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's decision, which the owner may overrule); its chart check at start reaches a real box under the venue's authority, which still refuses it for want of a credential; and a box that lost its own record does not start selling or filing), and so did 3b-6a (the first copy and finishing joining), 3b-6b (a two-box test of joining, and the guide's Add a spare box) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email), and so did 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off); later slices are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
   venue's network), one step **Hand over the venue** needs on real boxes. It is not live yet: a spare
   of a venue that does not file with Veri*Factu now receives a copy over the venue's network, puts
-  it in place at its next start and finishes joining as a standby, but it cannot take over yet, and
-  a Veri*Factu venue is still refused until 3b-F. A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+  it in place at its next start and finishes joining as a standby, but it cannot take over yet. With
+  3b-F a Veri*Factu venue's spare joins too, with nothing fiscal written at the join; the activation
+  writes the spare's dormant setup first (A947 3b-F, 2026-11-14). A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. Since 3b-5b, `waitron-credentials rotate` refuses while a pair link

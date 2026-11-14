@@ -197,6 +197,10 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
         for (const m of modules) {
           if (m.provisioning?.standby === undefined) continue;
           const operation = moduleOperationFor(prepared, m.name, standby.nodeId, "reserve");
+          // Such a module writes its dormant setup when the spare is switched on, under that
+          // person's sign-in; a join with no prepared operation reserves nothing for it.
+          if (operation === undefined && m.provisioning.standby.series === "on-activation")
+            continue;
           const r = await m.provisioning.standby.reserve(tx, primary, standby, operation);
           moduleOperationFor(prepared, m.name, standby.nodeId, "reserve");
           if (m.provisioning.standby.series === "on-activation" && (r.series?.length ?? 0) !== 0)

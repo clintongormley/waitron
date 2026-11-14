@@ -46,8 +46,6 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { startServer, httpPort } = ephemeralServerFixture();
-// Whether `fiscal-none` stands in for a module whose spare needs its own allocation.
-const allocation = vi.hoisted(() => ({ dependent: true }));
 
 vi.mock("./modules.js", async (original) => {
   const real = await original<typeof import("./modules.js")>();
@@ -58,16 +56,13 @@ vi.mock("./modules.js", async (original) => {
         ? module
         : ({
             ...module,
-            get operations() {
-              if (!allocation.dependent) return undefined;
-              return {
-                async prepare<T>(
-                  operation: ModuleOperationInput,
-                  run: (prepared: ModuleOperationInput) => Promise<T>,
-                ): Promise<T> {
-                  return run(operation);
-                },
-              };
+            operations: {
+              async prepare<T>(
+                operation: ModuleOperationInput,
+                run: (prepared: ModuleOperationInput) => Promise<T>,
+              ): Promise<T> {
+                return run(operation);
+              },
             },
             provisioning: {
               standby: {
@@ -149,7 +144,7 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
         {
           level: "error",
           event: "adoption.establish_failed",
-          code: "mirror.standby_series_unsupported",
+          code: "mirror.venue_not_copied",
         },
       ]);
     });
@@ -386,7 +381,6 @@ it("joining finishes when the copy holds this box's row, and the next start is a
   const spare = await seedJoiningSpare();
   const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-finishes-"));
   let server: StartedServer | undefined;
-  allocation.dependent = false;
   try {
     const { env, tls } = await joiningStartEnv(scratch, spare);
     let restarts = 0;
@@ -406,7 +400,6 @@ it("joining finishes when the copy holds this box's row, and the next start is a
       await close();
     }
   } finally {
-    allocation.dependent = true;
     await server?.close();
     await rm(scratch, { recursive: true, force: true });
   }

@@ -32,7 +32,7 @@ import {
   readTenantIdentities,
   hasOperationalVenue,
 } from "@waitron/provisioning";
-import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitron/module";
+import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
@@ -41,7 +41,7 @@ import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
-import { assertAdoptionModules, writePendingAdoption } from "./finish-adoption.js";
+import { writePendingAdoption } from "./finish-adoption.js";
 import type { TradingConfig } from "./trading-config.js";
 import { leafHostnamesFor, ownContactUrl } from "./box-name.js";
 import "./errors.js";
@@ -203,8 +203,6 @@ export async function adoptFromPrimary(
       requested: bundle.environment,
     });
   }
-
-  assertAdoptionModules(enabledModules(ALL_MODULES, moduleConfig));
 
   // Joining replaces this box's ring with the main box's, so a row sealed under its own would
   // never open again.

@@ -1319,6 +1319,8 @@ first local write, and the setup route returns `409 module.operation_invalid` (s
 logs that refusal and keeps the complete adoption file. A booted pending mirror returns only its
 pending status, with no ambient viewer session, sealed node key or selling identity created by
 that step. A disabled allocation module does not prevent adoption.
+_2026-11-14 (A947 3b-F):_ that refusal and its code are gone; a join writes nothing fiscal, and the
+activation writes the spare's dormant setup first.
 
 **Review clarification, 2026-10-14:** the defaults now select allocated hooks, so a fiscal
 standby's public adoption deliberately refuses rather than completing. No shipped caller supplies

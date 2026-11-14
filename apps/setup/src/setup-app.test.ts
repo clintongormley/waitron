@@ -2070,31 +2070,6 @@ describe("setup-app", () => {
     );
 
     it.each([
-      [
-        "en-GB",
-        "The restaurant files its invoices with Veri*Factu, and this version of Waitron cannot yet add a standby server to a restaurant that does. Nothing was changed on either server, and the primary keeps working as before. Choose Back to set this server up another way, or leave it switched off and join it after an update that adds this.",
-      ],
-      [
-        "es-ES",
-        "El restaurante presenta sus facturas con Veri*Factu, y esta versión de Waitron aún no puede añadir un servidor en espera a un restaurante que lo hace. No se ha cambiado nada en ninguno de los dos servidores, y el principal sigue funcionando como antes. Elige Volver para configurar este servidor de otra forma, o déjalo apagado y únelo después de una actualización que lo permita.",
-      ],
-    ] as const)("shows the Veri*Factu refusal and Back (%s)", async (locale, sentence) => {
-      try {
-        const { el, connect, control } = await refusedJoin(
-          "mirror.standby_series_unsupported",
-          locale,
-          {
-            module: "fiscal-verifactu",
-          },
-        );
-        expect(await bottomOf(connect)).toBe(sentence);
-        await backLeadsToRole(el, control);
-      } finally {
-        setLocale("en-GB");
-      }
-    });
-
-    it.each([
       ["en-GB", { retryAfterSeconds: 30 }, "Too many attempts. Wait 30 seconds, then try again."],
       ["en-GB", { retryAfterSeconds: 1 }, "Too many attempts. Wait 1 second, then try again."],
       ["en-GB", {}, "Too many attempts. Wait a few minutes, then try again."],

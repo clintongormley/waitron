@@ -7,10 +7,15 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
-import { stampDeployment, withTransaction, writeNodeMembership, type Database } from "@waitron/db";
+import {
+  invoiceSeries,
+  stampDeployment,
+  withTransaction,
+  writeNodeMembership,
+  type Database,
+} from "@waitron/db";
 import { migratedTableNames, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALLOCATED_FISCAL_STANDBY, FISCAL_CLASSIFICATION } from "@waitron/fiscal-verifactu";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -219,7 +224,9 @@ describe("a Veri*Factu venue's spare joins", () => {
           spareId = args.nodeId;
         },
         persistBackupSettings: (settings) => replaceBackupSettings(spareState, settings),
-        persistModuleConfig: (config) => writeModuleConfig(spareState, config),
+        persistModuleConfig: async (config) => {
+          await writeModuleConfig(spareState, config);
+        },
         stateDir: spareState,
         database: "spare",
         listIpv4: () => [],
@@ -240,7 +247,7 @@ describe("a Veri*Factu venue's spare joins", () => {
       mainFile: await preparation(mainState),
       spareFile: await preparation(spareState),
     };
-    expect(before.main.registro_sif).toHaveLength(1);
+    expect(before.main.invoice_series).not.toEqual([]);
 
     const { bundle, spareId } = await join_(main);
 
@@ -449,10 +456,16 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
       status: 200,
       body: { alreadyPrimary: false },
     });
-    const [sif] = await store.venue
+    const opened = await store.venue
       .select()
-      .from(registroSif)
-      .where(eq(registroSif.nodeId, standby.nodeId));
-    expect(sif?.numeroInstalacion).toBe(selected.body.identity);
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.nodeId, standby.nodeId));
+    expect(opened.map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber }))).toEqual(
+      bases.map((base) => ({
+        ...base,
+        code: `${base.code}-${String(selected.body.identity)}`,
+        nextNumber: 1,
+      })),
+    );
   }, 60_000);
 });

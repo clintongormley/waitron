@@ -268,8 +268,8 @@ async function joinedPair() {
     }),
   );
 
-  // The join refuses a Veri*Factu venue (`assertAdoptionModules`); the main box starts under the
-  // filing module its node was set up with, as `boot.start-check.test.ts`'s main box does.
+  // The main box starts under the filing module its node was set up with, as
+  // `boot.start-check.test.ts`'s main box does.
   await writeModuleConfig(mainBox.db, { overrides: new Map([["fiscal-none", false]]) }, null);
 
   const venueDirOf = (db: typeof mainBox.db) =>

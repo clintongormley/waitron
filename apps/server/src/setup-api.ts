@@ -302,8 +302,7 @@ const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_fail
  * `password.invalid` is the primary's refusal of the login, and `password.throttled` its refusal of
  * too many attempts at it. `mirror.vault_not_empty` and `mirror.primary_unconfirmed` are this box's
  * own refusals; `JOIN_REFUSAL_STATUS` holds the main box's refusals of the join, each relayed by
- * `fetchMirrorBundle`, and this box raises `mirror.standby_series_unsupported` itself as well for a
- * bundle naming such a module.
+ * `fetchMirrorBundle`.
  * The two ring refusals, `credentials.key_invalid` and `credentials.key_ring_version_collision`,
  * are left unlisted (400, the setup screen's generic words): only a faulty main box raises them.
  */

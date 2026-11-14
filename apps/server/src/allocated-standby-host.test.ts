@@ -445,6 +445,7 @@ it("a refused public adoption retains its independently signed reservation witho
   let originalReservation = "";
   const adoptionDir = join(stateDir!, "empty-adoption");
   await mkdir(adoptionDir);
+  // This suite's box authority is placeholder text, so the spare refuses the bundle at that check.
   await expect(
     adoptFromPrimary(
       {
@@ -495,10 +496,7 @@ it("a refused public adoption retains its independently signed reservation witho
       },
       { beforeFirstWrite: async () => {} },
     ),
-  ).rejects.toMatchObject({
-    code: "mirror.standby_series_unsupported",
-    params: { module: "fiscal-verifactu" },
-  });
+  ).rejects.toMatchObject({ code: "mirror.bundle_fetch_failed", params: {} });
   expect(target).not.toBe("");
   expect(await readFile(configuration().confirmationPath, "utf8")).toBe(originalConfirmation);
   expect(JSON.stringify(joinRequest(target, "reserve").input)).toBe(originalReservation);
