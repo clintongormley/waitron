@@ -411,6 +411,17 @@ a day, seed 1, produced 1,061,224 rows and a 1,268,463,901-byte encrypted backup
 The backup used synthetic identity files and empty media folders. Even the measured month
 exceeds the setup upload limit of 256 MiB. The streamed-upload plan still needs watcher clearance.
 
+A second build with the same profile and revision measured 1,296,785,408 database bytes.
+`dbstat` assigns 782,790,656 bytes (60.36%) to `print_jobs`, or 789,913,600 (60.91%)
+with its indexes. Attendance source state and operation facts, each with indexes, use
+11.69% and 7.89%. Its encrypted backup is 1,268,463,897 bytes (1,209.70 MiB).
+Compressing that artifact with gzip -6 took 29.54 seconds and produced 1,268,669,345 bytes
+(output/input 1.000162); zstd -3 took 0.67 seconds and produced 1,268,492,945 bytes
+(1.000023). Both were larger, and both decompressed to the original SHA-256.
+Their linear 360-day estimates are 14,518.77 and 14,516.75 MiB respectively.
+The backup format is unchanged. A1532's one-week print-payload retention comes before the
+streamed-upload plan, whose size figures must be measured again afterwards.
+
 An oversized committed attempt's Finish request now passes the readable-database gate and refuses
 later with `setup.not_ready` (HTTP 503); the old size classification refused
 `setup.attempt_uncertain` (409). The whole-branch review ran both versions and found no publication
