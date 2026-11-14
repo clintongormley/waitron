@@ -89,6 +89,7 @@ class NotYet extends Error {
 export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
   const intervalMs = deps.intervalMs ?? INTERVAL_MS;
   const { link } = deps;
+  // Both boxes derive the stream key from this pair's copy identifier.
   const { venueId: streamId } = link;
   const pin = await readPinnedPrimaryKey(deps.node, deps.nodeId);
   // Adopt pins the main box's key in the transaction that writes the link.

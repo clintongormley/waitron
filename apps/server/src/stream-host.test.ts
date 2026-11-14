@@ -60,6 +60,7 @@ import * as sparePipe from "./spare-pipe.js";
 import { startStoreListener, type StoreListener } from "./spare-pipe.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 import { pauseListingPrefix } from "./testing/stream-pause-scenario.js";
+import { deriveStreamKey } from "./stream-key.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
@@ -1349,6 +1350,10 @@ describe("the live copy's wiring", () => {
         expect(litestream.running()!.env).toMatchObject({
           WAITRON_STREAM_ACCESS_KEY_ID: PAIR.accessKeyId,
           WAITRON_STREAM_SECRET_ACCESS_KEY: PAIR.secretAccessKey,
+          WAITRON_STREAM_ENCRYPTION_KEY: deriveStreamKey(
+            "backup-key-for-test-0123456789",
+            "venue-7",
+          ),
         });
         expect(await getThrough(endpoint)).toBe("200 stored");
         expect(reached).toEqual(["/waitron/probe"]);
