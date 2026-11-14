@@ -401,6 +401,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       [custardLine!.id, heldDesserts!.id],
       [cakeLine!.id, heldMains!.id],
     ]);
+    const checkedGroups = new Set<string>();
     for (const held of [heldMains!, heldDesserts!]) {
       expect(await eventsOf(held.id)).toEqual([
         {
@@ -410,7 +411,14 @@ describe("dishes arriving in a party (A96, P16)", () => {
           detail: { workingOrderId: originalParty.tabId, arrived: true },
         },
       ]);
+      checkedGroups.add(held.id);
     }
+    expect([...checkedGroups].sort()).toEqual(
+      groups
+        .filter((g) => g.state === "held")
+        .map((g) => g.id)
+        .sort(),
+    );
 
     const fireMains = await command(receivingParty.partyId);
     await inTx(v, (tx) => fireGroup(tx, v.cfg, receivingParty.partyId, heldMains!.id, fireMains));

@@ -679,42 +679,6 @@ did not reach a wrong-sale outcome, so they establish neither a product defect n
 control that creates an unwanted sale or record on the new bill and reaches those assertions,
 while retaining the dish-name, sale-count, record-count and open-status checks.
 
-Keep the parent-category and variant-category fixture destinations distinct in the working-order
-variant-routing case. On 5 November 2026, the driver changed only the glasses-category route from
-`glassStation.id` to `barStation.id` in an installed disposable checkout; all 240 working-order
-cases still passed. The two routes then share the destination the case expects, so that fixture
-cannot distinguish choosing the variant's category from choosing the parent's. This is a fixture
-check limitation, not a demonstrated product failure. Preserve the existing routing assertions and
-add a check that the competing fixture destinations differ before exercising parent-category routing.
-
-Strengthen the no-kitchen served-refusal setup in `till-api.groups.test.ts` and the extras/replay
-checks in `till-api.fiscal-sale-paths.test.ts`. In the naming review’s installed disposable checkout,
-these simultaneous substitutions left the seven selected cases passing: omit the no-preparation
-routing write; rename the parent product instead of the cheese extra; supply the extras-list id
-instead of the cheese product id in the refused frozen input; read the settled working-order
-count instead of the fiscal-record count. These observations identify gaps in those checks,
-not demonstrated product failures. Retain every existing refusal, frozen-name and count assertion;
-add observations that distinguish the intended setup and each relevant result.
-
-Repeat the controlled substitutions with the two complete suites, or first select
-`-t 'needs no kitchen|files an extras pick|a sale cannot hand over|park & retrieve'`.
-The private-name AST replay and types caught reference mistakes that the current value-only
-checks did not.
-
-The arriving-dishes and receipt-guest suites also need distinct-identity observations.
-Driver probes on 5 November 2026 copied each complete suite and changed one reference:
-checking `[heldDesserts!, heldDesserts!]` instead of both held groups left all 29 arriving-dish
-cases passing; passing `table4` instead of `table5` to the guest-count case's `splitTable`
-left all 39 receipt-guest cases passing. A third copy changed the second no-count payment
-check to pay the first bill again and also passed all 39 cases. Add a check of each distinct
-group's event, the split's table membership and each bill's payment, while retaining every
-existing event, guest-count and payment assertion. These are observed assertion gaps, not demonstrated product failures. Other
-reference substitutions from the naming review need triage before treating them as gaps:
-some changes can legitimately preserve the observation a case makes.
-
-In `made-here.routes.test.ts`, the cancellation case's quantity-two branch needs an observed count;
-the helper's constant status is not evidence of the write.
-
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.**
@@ -1363,23 +1327,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   (declarations and same-named test wrappers included): `offerProducts` 284, `createTable` 187,
   `defaultLayout` 68, `readDrafts` 49, `setLineCourse` 20, mostly in tests, plus 11 `void cfg;`
   lines.
-
-## Bundle: Tighten the checks the A974 review probed
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Strengthen the server group and fiscal-sale fixture checks.** The named no-kitchen
-  setup and several fixture/reference substitutions survived the A974 review’s probes.
-  [Detail](architecture.md#a974-review-assertion-gaps).
-- **Keep variant-routing fixture destinations distinct.** Routing both categories to the same
-  station leaves all working-order cases passing and removes the distinction that checks the
-  parent's category takes precedence. Preserve the routing assertions and check the competing setup.
-  [Detail](architecture.md#a974-review-assertion-gaps).
-- **Strengthen arriving-dish event and receipt-guest split checks.** Checking one held
-  group twice, choosing the other split table or paying one bill twice can leave the two
-  complete suites passing.
-  Add observations that distinguish those identities without changing the existing checks.
-  [Detail](architecture.md#a974-review-assertion-gaps).
 
 ## Bundle: Recovery wording into `i18n`, with table names to match
 

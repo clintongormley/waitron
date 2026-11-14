@@ -8,7 +8,7 @@ import {
   placeGroupedRound,
 } from "./testing/group-composition-fixture.js";
 import { deleteCourse } from "./course-delete.js";
-import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
+import { clearRoutingCell, resolveMakers, setRoutingCell } from "@waitron/venue-service";
 import { sessions, setProfileAdmission } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
@@ -1328,6 +1328,13 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
     };
     await inTx(venue, (tx) => setRoutingCell(tx, octopusRoutingCell, { kind: "no_preparation" }));
     try {
+      const makers = await inTx(venue, (tx) =>
+        resolveMakers(tx, null, [octopusProduct!.id], new Date()),
+      );
+      expect(makers.get(octopusProduct!.id)).toMatchObject({
+        kind: "made",
+        route: { kind: "no_preparation" },
+      });
       await inTx(venue, (tx) =>
         addTabRound(tx, venue.cfg, party.tabId, [{ ...dish("Octopus"), hold: true }]),
       );

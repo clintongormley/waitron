@@ -32,6 +32,8 @@ import {
 } from "./receipt-guests.js";
 import {
   OPERATOR,
+  activeTablesOf,
+  billRow,
   commandFor,
   counterOrder,
   inTx,
@@ -45,6 +47,7 @@ import {
   seat,
   setupPartyVenue,
   split,
+  statusOf,
   type PartyVenue,
 } from "./testing/party-venue.js";
 import "./errors.js";
@@ -129,6 +132,7 @@ describe("the default guests (readReceiptGuests)", () => {
 
     expect(await guestsOnPaying(second, "30.00")).toBeUndefined();
     expect(await guestsOnPaying(tabId, "12.00")).toBeUndefined();
+    expect([await statusOf(v, second), await statusOf(v, tabId)]).toEqual(["settled", "settled"]);
   });
 
   it("prints the count again once the split bill is merged back", async () => {
@@ -220,6 +224,8 @@ describe("the default guests (readReceiptGuests)", () => {
         guestCounts: { staying: 3, leaving: 1 },
       }),
     );
+    expect(await activeTablesOf(v, partyId)).toEqual([table4]);
+    expect(await activeTablesOf(v, (await billRow(v, second)).partyId!)).toEqual([table5]);
 
     expect(await guestsOnPaying(tabId, "12.00")).toBe(3);
     expect(await guestsOnPaying(second, "30.00")).toBe(1);

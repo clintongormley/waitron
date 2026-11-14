@@ -2139,8 +2139,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   they can fail; no product defect has been demonstrated.
   [Detail](backlog/architecture.md#a974-review-assertion-gaps).
 
-- **Tighten the checks the A974 review probed** (bundle of 3, size S). [Detail](backlog/architecture.md#bundle-tighten-the-checks-the-a974-review-probed)
-
 - **A976. Finish the server's English test-venue defaults.**
   The VAT-class, issue-rate, line-transfer and move/merge filing suites use Administrator for their staff sample; their location and dish samples remain.
   Local invoice-correction and fiscal-sale route staff samples use Martha, Administrator, Cashier and Supervisor.

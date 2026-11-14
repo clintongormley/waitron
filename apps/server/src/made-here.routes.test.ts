@@ -884,10 +884,11 @@ describe("made-here route wiring", () => {
       const noticesBefore = venue.db.all(sql`select id from kitchen_notices`);
       const [line] = await inTx(venue, (tx) =>
         tx
-          .select({ lineNo: workingOrderLines.lineNo })
+          .select({ lineNo: workingOrderLines.lineNo, quantity: workingOrderLines.quantity })
           .from(workingOrderLines)
           .where(eq(workingOrderLines.id, item!.workingOrderLineId)),
       );
+      expect(line!.quantity).toBe(quantity * 1000);
       const cancelled = await cancelItemHttp(
         venue.db,
         venue.app,
@@ -904,6 +905,13 @@ describe("made-here route wiring", () => {
         ),
       ).toHaveLength(jobsBefore.length);
       expect(venue.db.all(sql`select id from kitchen_notices`)).toHaveLength(noticesBefore.length);
+      const left = await inTx(venue, (tx) =>
+        tx
+          .select({ quantity: workingOrderLines.quantity })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, party.tabId)),
+      );
+      expect(left.map((row) => row.quantity)).toEqual(quantity > 1 ? [(quantity - 1) * 1000] : []);
       const remaining = await inTx(venue, (tx) =>
         ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
       );
