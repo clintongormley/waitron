@@ -42,8 +42,6 @@ for each payment. After a part payment, check **Still to pay** before taking the
 
 Add an item before paying or sending an order.
 
-For a payment taken on another machine, see [Use another card machine](table-service.md#outside-card).
-
 ## Use another card machine {#outside-card}
 
 Take the card payment on the separate machine first. In **Pay**, choose **Other card machine**

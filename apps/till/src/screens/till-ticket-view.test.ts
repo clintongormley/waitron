@@ -1227,6 +1227,41 @@ describe("till-ticket-view", () => {
   });
 
   describe("a bill paid in parts before its invoice", () => {
+    it("pairs each outside-card detail with its payment and operation number", async () => {
+      const { el } = await mount({
+        total: "30.00",
+        payments: [
+          {
+            method: "card",
+            amount: "10.00",
+            tip: "0.00",
+            reference: "OP-A",
+            externalProvider: "other",
+            externalMachine: "Bank counter",
+            refunds: [],
+          },
+          {
+            method: "card",
+            amount: "20.00",
+            tip: "0.00",
+            reference: "OP-B",
+            externalProvider: "sumup",
+            externalMachine: "Spare Solo",
+            refunds: [],
+          },
+        ],
+      });
+      const facts = [...el.shadowRoot!.querySelectorAll("[data-outside-payment-fact]")];
+      expect(facts).toHaveLength(2);
+      expect(facts[0]!.textContent).toContain("OP-A");
+      expect(facts[0]!.textContent).toContain("Bank counter");
+      expect(facts[1]!.textContent).toContain("OP-B");
+      expect(facts[1]!.textContent).toContain("Spare Solo");
+      expect(
+        el.shadowRoot!.querySelector("article")!.querySelector("[data-outside-card-details]"),
+      ).toBeNull();
+    });
+
     const tenderRows = (el: TillTicketView): string[] =>
       [...el.shadowRoot!.querySelectorAll(".tender .tender-row")].map((row) =>
         norm(row.textContent ?? "")

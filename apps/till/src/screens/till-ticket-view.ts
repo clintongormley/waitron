@@ -1407,8 +1407,18 @@ export class TillTicketView extends LitElement {
       <section data-outside-payment-facts>
         ${
           r.payments?.length
-            ? r.payments.map((payment) =>
-                outsideCardSummary(payment.method === "card" ? payment : {}),
+            ? r.payments.map((payment, index) =>
+                payment.method === "card" && (payment.externalProvider || payment.externalMachine)
+                  ? html`<div data-outside-payment-fact>
+                      <p>
+                        ${t("bill_pay.payment")
+                          .replace("{n}", String(index + 1))
+                          .replace("{method}", t("tender.card"))}
+                        ${payment.reference === null ? nothing : html` · ${t("tender.operation_number")} ${payment.reference}`}
+                      </p>
+                      ${outsideCardSummary(payment)}
+                    </div>`
+                  : nothing,
               )
             : outsideCardSummary(r.tender.method === "card" ? r.tender : {})
         }

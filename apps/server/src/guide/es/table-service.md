@@ -45,8 +45,6 @@ antes de cobrar el siguiente.
 
 Añade un artículo antes de cobrar o enviar un pedido.
 
-Si cobras con otro datáfono, consulta [Usar otro datáfono](table-service.md#outside-card).
-
 ## Usar otro datáfono {#outside-card}
 
 Cobra primero la tarjeta en el otro datáfono. En **Cobrar**, elige **Otro datáfono** e introduce
