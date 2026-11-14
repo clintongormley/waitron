@@ -658,8 +658,7 @@ export class OpeningHoursWeekView extends LitElement {
             html`<span
               class="block"
               @click=${() => this.#openBarDay(day.date)}
-              data-kind=${block.kind}
-              data-colour=${(block.periodId && names.period(block.periodId).colour) || nothing}
+              data-colour=${names.period(block.periodId).colour || nothing}
               ?data-faded=${block.faded}
               style=${styleMap({
                 left: `${(block.start / span) * 100}%`,
@@ -748,10 +747,7 @@ export class OpeningHoursWeekView extends LitElement {
                   (block) =>
                     html`<span
                       class="block"
-                      data-kind=${block.kind}
-                      data-colour=${
-                        (block.periodId && names.period(block.periodId).colour) || nothing
-                      }
+                      data-colour=${names.period(block.periodId).colour || nothing}
                       ?data-faded=${block.faded}
                       @click=${() => this.#openBarDay(day.date)}
                       style=${styleMap({

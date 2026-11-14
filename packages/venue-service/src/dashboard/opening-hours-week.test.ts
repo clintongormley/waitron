@@ -108,7 +108,7 @@ describe("Opening hours week", () => {
     const width = terrace.getBoundingClientRect().width;
     const left = dinner.getBoundingClientRect().left - terrace.getBoundingClientRect().left;
     expect(Math.abs((left / width) * 100 - 66.67)).toBeLessThan(0.1);
-    expect(terrace.querySelector('.block[data-kind="closed"]')).toBeNull();
+    expect(blocks.map(text)).toEqual(["", "", "Dinner 22:00–23:00"]);
   });
 
   it("names a special day and a holiday; only a date closed all day says so in its track", async () => {
@@ -384,7 +384,7 @@ describe("Opening hours week on a phone", () => {
     expect(blocks.length).toBeGreaterThan(0);
     for (const b of blocks) expect(text(b)).toBe("");
     expect(terraceTrack.querySelectorAll(".block[data-faded]")).toHaveLength(2);
-    expect(terraceTrack.querySelector('.block[data-kind="closed"]')).toBeNull();
+    expect(blocks).toHaveLength(3);
     expect(root(el).querySelector(".ruler")).toBeNull();
     expect(testId(el, "block-tip")).toBeNull();
 

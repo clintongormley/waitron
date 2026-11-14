@@ -71,14 +71,13 @@ describe("weekRows", () => {
     expect(terrace!.key).toBe("terrace");
     expect(terrace!.zone).toBe(true);
     expect(terrace!.strong).toBe(true);
-    const open = terrace!.blocks.filter((b) => b.kind === "open");
+    const open = terrace!.blocks;
     expect(open.map((b) => [b.periodId, b.faded, b.text])).toEqual([
       ["breakfast", true, ""],
       ["lunch", true, ""],
       ["dinner", false, "Dinner 22:00–23:00"],
     ]);
     expect(open[2]!.start).toBe(960);
-    expect(terrace!.blocks.every((b) => b.kind === "open")).toBe(true);
     expect(terrace!.words).toBe(
       "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 22:00–23:00 · closed 20:00–22:00",
     );
@@ -120,7 +119,6 @@ describe("weekRows", () => {
     const [bar] = rowsOn("2026-12-02", "bar");
     expect(bar!.blocks).toHaveLength(1);
     expect(bar!.blocks[0]).toMatchObject({
-      kind: "open",
       periodId: "allday",
       start: 240,
       end: 1200,
@@ -136,7 +134,6 @@ describe("weekRows", () => {
       "rest",
       terraceClosed("2026-12-02", [{ startsAt: "22:00", endsAt: "05:00" }]),
     )[1]!;
-    expect(late.blocks.every((b) => b.kind === "open")).toBe(true);
     expect(late.words).toContain("closed 22:00–23:00");
     expect(
       late.blocks.filter((b) => b.periodId === "dinner").map((b) => [b.faded, b.text]),
@@ -214,9 +211,9 @@ describe("weekStationRows", () => {
     const [rest, bar, ...more] = weekStationRows(grillDay(), names);
     expect(more).toEqual([]);
     expect(rest).toMatchObject({ key: "rest", name: "Restaurant", zone: false, strong: true });
-    expect(rest!.blocks.map((b) => [b.kind, b.periodId, b.text, b.faded])).toEqual([
-      ["open", "breakfast", "Breakfast 08:00–10:30", false],
-      ["open", "lunch", "Lunch 13:00–15:30", false],
+    expect(rest!.blocks.map((b) => [b.periodId, b.text, b.faded])).toEqual([
+      ["breakfast", "Breakfast 08:00–10:30", false],
+      ["lunch", "Lunch 13:00–15:30", false],
     ]);
     expect(rest!.blocks[1]).toMatchObject({ start: 420, end: 570 });
     expect(rest!.empty).toBe("");

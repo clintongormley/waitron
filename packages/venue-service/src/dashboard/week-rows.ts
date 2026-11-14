@@ -46,7 +46,6 @@ export function weekDays(model: OpeningHoursMonth, date: LocalDate): Day[] | und
 }
 
 export interface WeekBlock {
-  kind: "open";
   periodId: string;
   /** Minutes after the day's changeover, as `placeOnDay` gives. */
   start: number;
@@ -81,7 +80,6 @@ function departmentBlocks(
   return read.ranges.map((range) => {
     const text = serviceRangeText(range, names);
     return {
-      kind: "open",
       periodId: range.periodId,
       ...place(range),
       text,
@@ -121,7 +119,6 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
               range.endsAt === piece.endsAt,
           );
           return {
-            kind: "open",
             periodId: piece.periodId,
             start: piece.start,
             end: piece.end,
