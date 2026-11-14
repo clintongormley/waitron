@@ -486,6 +486,86 @@ describe("the waiting start", () => {
       );
       await vi.waitFor(() => expect(h.restart).toHaveBeenCalledTimes(1));
     });
+
+    /**
+     * A peer's answer ends the wait and the listeners begin to close; a stepdown then starts, the
+     * close settles, and only then is the stepdown refused, before it has closed the gate.
+     */
+    async function refusedAfterTheListenersClose(closeFailure: Error | null) {
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      const pending = new Promise<StartPeerCheckOutcome>((done) => (answer = done));
+      let refuse: (error: Error) => void = () => {};
+      const read = new Promise<never>((_, fail) => (refuse = fail));
+      // Stands in for node.db: the stepdown's read of the stored restriction waits for `refuse`.
+      const node = { select: () => ({ from: () => ({ where: () => read }) }) } as never;
+      let closeNow: () => void = () => {};
+      const closing = new Promise<void>((done) => (closeNow = done));
+      let closeSettled = false;
+      let app: Hono | undefined;
+      const h = harness(() => pending, {
+        node,
+        intervalMs: 1,
+        listen: (bound) => {
+          app = bound;
+          return {
+            close: async () => {
+              try {
+                await closing;
+                if (closeFailure !== null) throw closeFailure;
+              } finally {
+                closeSettled = true;
+              }
+            },
+          };
+        },
+        routes: [
+          (app, hooks) =>
+            app.post("/step", async (c) => {
+              try {
+                return c.json(
+                  await hooks.stepDown({
+                    kind: "superseded",
+                    successorNodeId: SPARE_ID,
+                    membershipTerm: 4,
+                    self: c,
+                  }),
+                );
+              } catch (error) {
+                return c.json({ refused: (error as Error).message }, 409);
+              }
+            }),
+        ],
+      });
+      // A failed start is asserted by the caller, after this rejection lands.
+      h.waiting.ended.catch(() => {});
+      await new Promise((done) => setTimeout(done, 10));
+      answer(PROCEED);
+      await new Promise((done) => setTimeout(done, 10));
+      const stepping = Promise.resolve(app!.request("/step", { method: "POST" }));
+      await new Promise((done) => setTimeout(done, 10));
+      closeNow();
+      await vi.waitFor(() => expect(closeSettled).toBe(true));
+      await new Promise((done) => setTimeout(done, 10));
+      refuse(new Error("refused"));
+      expect(await (await stepping).json()).toEqual({ refused: "refused" });
+      return h;
+    }
+
+    it("a stepdown refused after the listeners failed to close, as a peer's answer ended the wait, fails the start", async () => {
+      const failure = new Error("listener remains bound");
+      const h = await refusedAfterTheListenersClose(failure);
+      await expect(h.waiting.ended).rejects.toBe(failure);
+      expect(h.closeStore).not.toHaveBeenCalled();
+      expect(h.restart).not.toHaveBeenCalled();
+    });
+
+    it("a stepdown refused after the listeners closed, as a peer's answer ended the wait, lets the start go on", async () => {
+      const h = await refusedAfterTheListenersClose(null);
+      expect(await h.waiting.ended).toEqual({ kind: "checked", outcome: PROCEED });
+      expect(h.closeStore).not.toHaveBeenCalled();
+      expect(h.health.takesNoSales).toBe(false);
+      expect(h.restart).not.toHaveBeenCalled();
+    });
   });
 
   describe("carrying on as the main box", () => {

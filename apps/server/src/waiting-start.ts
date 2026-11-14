@@ -85,8 +85,8 @@ export interface WaitingStart {
   server: StartedServer;
   /**
    * Settles once the listeners and timer are gone; a `checked` or `carried-on` start goes on.
-   * Rejects when the listeners fail to close as the wait ends other than `stopped` with no stepdown
-   * under way.
+   * Rejects when the listeners fail to close as the wait ends other than `stopped`, unless a
+   * stepdown went ahead.
    */
   ended: Promise<WaitEnd>;
   /** Takes the carry-on turn, as the carry-on route does. */
@@ -147,6 +147,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   let timer: NodeJS.Timeout | undefined;
   let inAsk = false;
   let stepdownsInFlight = 0;
+  const stepdowns = new Set<Promise<StepDownResult>>();
   // The latest re-ask, settled once it has decided whether the wait ends (`endedWith` is then
   // set). The store stays open until it has settled, and a carry-on waits for it.
   let asking: Promise<void> = Promise.resolve();
@@ -169,18 +170,26 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     endedWith = end;
     clearTimeout(timer);
     timer = undefined;
+    let closeFailure: { error: unknown } | null = null;
     try {
       await listeners.close();
     } catch (error) {
+      closeFailure = { error };
+    }
+    // A stepdown under way can still be refused before it closes the gate, so `steppingDown` is
+    // read only once each has gone ahead or been refused. None waits for this close: its close and
+    // restart run after its answer.
+    while (stepdowns.size > 0) await Promise.allSettled([...stepdowns]);
+    if (closeFailure !== null) {
       if (end.kind !== "stopped" && !steppingDown) {
         // A listener still bound would hold the port the full start needs: the start fails.
-        log("error", "waiting_start.close_failed", { errorCode: codeOf(error) });
-        failEnd(error);
+        log("error", "waiting_start.close_failed", { errorCode: codeOf(closeFailure.error) });
+        failEnd(closeFailure.error);
         return;
       }
-      log("warn", "waiting_start.close_failed", { errorCode: codeOf(error) });
+      log("warn", "waiting_start.close_failed", { errorCode: codeOf(closeFailure.error) });
     }
-    // A stepdown under way by now is restarting the box, so the start that was about to go on stops
+    // A stepdown that went ahead is restarting the box, so the start that was about to go on stops
     // instead.
     const stopped = end.kind === "stopped" || steppingDown;
     if (stopped) {
@@ -191,35 +200,42 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     resolveEnd(stopped ? { kind: "stopped" } : end);
   };
 
-  const hooks: WaitingHooks = {
-    stepDown: async (request) => {
-      steppingDown = true;
-      stepdownsInFlight += 1;
-      try {
-        return await stepDown(
-          {
-            node: deps.node,
-            nodeId: deps.nodeId,
-            gate,
-            // Nothing runs in the background while the box waits but the re-ask, which
-            // `steppingDown` stops.
-            duties: { aborts: [], closers: [] },
-            close: () => leave({ kind: "stopped" }),
-            restart: deps.restart,
-            log,
-          },
-          request,
-        );
-      } catch (error) {
-        // Refused before the gate closed: nothing was stopped and no restart is coming.
-        if (stepdownsInFlight === 1 && !gate.isClosed()) {
-          steppingDown = false;
-          resume();
-        }
-        throw error;
-      } finally {
-        stepdownsInFlight -= 1;
+  const stepDownWhileWaiting = async (request: StepDownRequest): Promise<StepDownResult> => {
+    steppingDown = true;
+    stepdownsInFlight += 1;
+    try {
+      return await stepDown(
+        {
+          node: deps.node,
+          nodeId: deps.nodeId,
+          gate,
+          // Nothing runs in the background while the box waits but the re-ask, which
+          // `steppingDown` stops.
+          duties: { aborts: [], closers: [] },
+          close: () => leave({ kind: "stopped" }),
+          restart: deps.restart,
+          log,
+        },
+        request,
+      );
+    } catch (error) {
+      // Refused before the gate closed: nothing was stopped and no restart is coming.
+      if (stepdownsInFlight === 1 && !gate.isClosed()) {
+        steppingDown = false;
+        resume();
       }
+      throw error;
+    } finally {
+      stepdownsInFlight -= 1;
+    }
+  };
+  const hooks: WaitingHooks = {
+    stepDown: (request) => {
+      const stepping = stepDownWhileWaiting(request);
+      stepdowns.add(stepping);
+      const forget = (): void => void stepdowns.delete(stepping);
+      stepping.then(forget, forget);
+      return stepping;
     },
   };
   for (const mount of deps.routes) mount(app, hooks);

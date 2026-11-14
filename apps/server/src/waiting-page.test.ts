@@ -152,7 +152,7 @@ describe("the waiting page", () => {
     expect(res.headers.get("x-waitron-waiting")).toBe("1");
   });
 
-  it("asks every 5 seconds whether it is still the waiting page, and leaves for the box's page once a successful answer is not", async () => {
+  it("asks 5 seconds after opening whether it is still the waiting page, and leaves for the box's page once a successful answer is not", async () => {
     const page = openPage(() => Promise.resolve(new Response(null, { status: 200 })));
     await page.advance(4_999);
     expect(page.fetch).not.toHaveBeenCalled();
