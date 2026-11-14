@@ -3972,7 +3972,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect(bystanderRow).not.toHaveProperty("printerLike");
   });
 
-  it("sends a Forget without a PIN, and keeps a failed outcome's reason bounded to 500 characters", async () => {
+  it("sends a Forget without a PIN, and keeps a failed outcome's error bounded to 500 characters", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const mac = randomMac();
@@ -4003,6 +4003,51 @@ describe("Bluetooth Pair and Forget commands", () => {
         state: "failed",
         error: reason.slice(0, 500),
       },
+    });
+  });
+
+  it("keeps a failed outcome's known reason code and drops one it does not know", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const known = randomMac();
+    const unknown = randomMac();
+    const paired = [
+      { localKey: known, name: "Pocket" },
+      { localKey: unknown, name: "Kitchen" },
+    ];
+    await pull(app, token, { pairedBluetooth: paired });
+    const ids: string[] = [];
+    for (const address of [known, unknown]) {
+      const res = await command(app, agentId, "forget", { address });
+      ids.push(((await res.json()) as { command: { id: string } }).command.id);
+    }
+    await pull(app, token, {
+      pairedBluetooth: paired,
+      bluetoothOutcomes: [
+        {
+          id: ids[0],
+          ok: false,
+          error: "No default controller available",
+          reason: "bluetooth_unavailable",
+        },
+        { id: ids[1], ok: false, error: "printer melted", reason: "printer_melted" },
+      ],
+    });
+    const rows = await discoveredRows(app);
+    expect(rows.find((r) => r.localKey === known)?.bluetoothCommand).toEqual({
+      id: ids[0],
+      kind: "forget",
+      address: known,
+      state: "failed",
+      error: "No default controller available",
+      reason: "bluetooth_unavailable",
+    });
+    expect(rows.find((r) => r.localKey === unknown)?.bluetoothCommand).toEqual({
+      id: ids[1],
+      kind: "forget",
+      address: unknown,
+      state: "failed",
+      error: "printer melted",
     });
   });
 
@@ -4106,7 +4151,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     }
   });
 
-  it("withholds a failed Pair's whole reason when the agent's outcome carries the PIN", async () => {
+  it("withholds a failed Pair's whole error when the agent's outcome carries the PIN", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const plain = randomMac();

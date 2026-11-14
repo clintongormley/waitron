@@ -1,4 +1,11 @@
-import type { PageFormat, PageHold, PageMedia, ServerEntry, WireJob } from "./client.js";
+import type {
+  BluetoothFailureReason,
+  PageFormat,
+  PageHold,
+  PageMedia,
+  ServerEntry,
+  WireJob,
+} from "./client.js";
 import type { PrintTransport, PrinterTarget, Transport, TransportKind } from "./transport.js";
 
 export type { TransportKind } from "./transport.js";
@@ -107,6 +114,7 @@ export interface PairResult {
   ok: boolean;
   localKey?: string;
   error?: string;
+  reason?: BluetoothFailureReason;
 }
 
 /** A device BlueZ holds a bond with, whether or not the agent can deliver to it yet. */
@@ -120,6 +128,7 @@ export interface PairedBluetoothDevice {
 export interface BluetoothCommandResult {
   ok: boolean;
   error?: string;
+  reason?: BluetoothFailureReason;
 }
 
 /** A manager-requested address check, carrying the server's remaining lifetime. */

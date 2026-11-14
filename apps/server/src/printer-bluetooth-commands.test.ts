@@ -77,7 +77,21 @@ describe("printer Bluetooth commands", () => {
     expect(sent.some((command) => "pin" in command)).toBe(false);
   });
 
-  it("keeps a failure's reason and records a success without one", () => {
+  it("keeps a failure's reason code beside its error", () => {
+    const { commands } = store();
+    commands.enqueue("agent-1", "pair", A, "1234");
+    commands.accept("agent-1", [{ id: "c1", ok: false, error: "wrong PIN", reason: "wrong_pin" }]);
+    expect(commands.latest("agent-1", A)).toEqual({
+      id: "c1",
+      kind: "pair",
+      address: A,
+      state: "failed",
+      error: "wrong PIN",
+      reason: "wrong_pin",
+    });
+  });
+
+  it("drops a success's error, and records a failure that sent no error with none", () => {
     const { commands } = store();
     commands.enqueue("agent-1", "forget", A);
     commands.enqueue("agent-1", "forget", B);
@@ -294,7 +308,7 @@ describe("printer Bluetooth commands", () => {
     ]);
   });
 
-  it("withholds a failed pair's whole reason when it contains the PIN, before bounding its length", () => {
+  it("withholds a failed pair's whole error when it contains the PIN, before bounding its length", () => {
     const { commands } = store();
     const pin = "Zq7#Pw";
     commands.enqueue("agent-1", "pair", A, pin);
@@ -311,7 +325,7 @@ describe("printer Bluetooth commands", () => {
     }
   });
 
-  it("bounds a failure's reason to 500 characters", () => {
+  it("bounds a failure's error to 500 characters", () => {
     const { commands } = store();
     commands.enqueue("agent-1", "forget", A);
     commands.accept("agent-1", [{ id: "c1", ok: false, error: "y".repeat(600) }]);

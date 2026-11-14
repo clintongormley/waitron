@@ -6,6 +6,7 @@ import {
   type BluetoothCommand,
   type BluetoothCommandKind,
   type BluetoothCommandOutcome,
+  type BluetoothFailureReason,
 } from "@waitron/print-agent";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -18,6 +19,7 @@ export interface BluetoothCommandStatus {
   /** On a pending command only: how long until the server drops it unanswered. */
   expiresInMs?: number;
   error?: string;
+  reason?: BluetoothFailureReason;
 }
 
 interface Pending {
@@ -156,6 +158,7 @@ export function createPrinterBluetoothCommands(
               MAX_OUTCOME_ERROR_LENGTH,
             );
           }
+          if (!outcome.ok && outcome.reason !== undefined) status.reason = outcome.reason;
           agent.results.set(address, { status, expiresAt: instant + RESULT_TTL_MS });
           if (agent.results.size > MAX_RESULTS_PER_AGENT)
             agent.results.delete(agent.results.keys().next().value!);

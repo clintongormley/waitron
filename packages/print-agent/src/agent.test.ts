@@ -2655,6 +2655,35 @@ describe("createAgent — Bluetooth commands", () => {
     );
   });
 
+  it("a failed Pair or Forget sends the host's reason code beside its error", async () => {
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      pair: async () => ({ ok: false, error: "wrong PIN", reason: "wrong_pin" }),
+      forgetBluetooth: async () => ({
+        ok: false,
+        error: "No default controller available",
+        reason: "bluetooth_unavailable",
+      }),
+    });
+    const c = client({
+      pullJobs: scripted(reply({ bluetoothCommands: [pair("c1", PIN), forget("c2")] })),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    await agent.runOnce();
+    expect(outcomesOn(c, 1)).toStrictEqual([
+      { id: "c1", ok: false, error: "wrong PIN", reason: "wrong_pin" },
+      {
+        id: "c2",
+        ok: false,
+        error: "No default controller available",
+        reason: "bluetooth_unavailable",
+      },
+    ]);
+  });
+
   it("an outcome's error is always a string or absent, whatever the host produced", async () => {
     const unprintable = Object.create(null) as object;
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
@@ -2687,6 +2716,26 @@ describe("createAgent — Bluetooth commands", () => {
       { id: "c4", ok: false, error: "wrapped" },
       { id: "c5", ok: false, error: expect.any(String) },
       { id: "c6", ok: false },
+    ]);
+  });
+
+  it("an outcome carries a reason only when the host's is a known code", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const results: (() => Promise<unknown>)[] = [
+      async () => ({ ok: false, error: "melted", reason: "printer_melted" }),
+      async () => ({ ok: false, error: "melted", reason: 7 }),
+    ];
+    host.forgetBluetooth = vi.fn(() => results.shift()!()) as Host["forgetBluetooth"];
+    const c = client({
+      pullJobs: scripted(reply({ bluetoothCommands: ["c1", "c2"].map(forget) })),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    await agent.runOnce();
+    expect(outcomesOn(c, 1)).toStrictEqual([
+      { id: "c1", ok: false, error: "melted" },
+      { id: "c2", ok: false, error: "melted" },
     ]);
   });
 

@@ -353,14 +353,6 @@ waiting behind that pair can therefore expire on the server before it runs; its 
 then ignored and the screen says "No answer from the print agent — try again" whatever
 actually happened.
 
-## A failed Pair or Unpair shows the agent's reason as the agent wrote it, in English on both languages' screens
-
-- **A failed Pair or Unpair shows the agent's reason as the agent wrote it, in English on both
-  languages' screens** (a wrong PIN would read "No se pudo emparejar: wrong PIN"). Most of what the
-  agent reports for a pair is a fixed phrase (`apps/print-agent/src/bluetooth-command.ts`). A
-  follow-up could translate the known phrases into dashboard wording in both languages and keep the
-  raw text as a detail; nothing here says what a given BlueZ error always means on a real printer.
-
 ## An Unpair outcome that reaches the server after it dropped the command leaves the printer on
 
 - **An Unpair outcome that reaches the server after it dropped the command leaves the printer on**
@@ -576,16 +568,13 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Bundle: Bluetooth pairing commands
 
-5 entries, size M.
+4 entries, size M.
 
 - **A device unpaired outside Waitron still reads as paired for a short while** — found in C103's review, narrowed in A405's, read, not run. A successful Unpair from Waitron now clears the paired report; one done elsewhere keeps it for up to 45 seconds. [Detail](printers.md#a-device-unpaired-outside-waitron-still-reads-as-paired-for-a-short-while)
 - **A command queued behind a slow pair can run out of time.** A second command waiting behind that
   pair can therefore expire on the server before it runs; its outcome is then ignored and the screen
   says "No answer from the print agent — try again" whatever actually happened.
   [Detail](printers.md#a-command-queued-behind-a-slow-pair-can-run-out-of-time)
-- **A failed Pair or Unpair shows the agent's reason as the agent wrote it, in English on both
-  languages' screens** (a wrong PIN would read "No se pudo emparejar: wrong PIN").
-  [Detail](printers.md#a-failed-pair-or-unpair-shows-the-agents-reason-as-the-agent-wrote-it-in-english-on-both-languages-screens)
 - **An Unpair outcome that reaches the server after it dropped the command leaves the printer on**
   (120 seconds, `COMMAND_TTL_MS` in `apps/server/src/printer-bluetooth-commands.ts`); the owner can
   delete the printer to stop it and end its waiting jobs.

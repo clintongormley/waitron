@@ -136,7 +136,8 @@ export function parseRemoveResult(
   for (const line of cleanLines(text)) {
     if (line === "Device has been removed" && exitCode === 0) return { ok: true };
     if (line.toUpperCase() === gone && exitCode === 1) return { ok: true };
-    if (line === NO_CONTROLLER) return { ok: false, error: NO_CONTROLLER };
+    if (line === NO_CONTROLLER)
+      return { ok: false, error: NO_CONTROLLER, reason: "bluetooth_unavailable" };
     const failed = /^Failed to remove device:\s*(.+)$/.exec(line);
     if (failed !== null) return { ok: false, error: failed[1]! };
   }

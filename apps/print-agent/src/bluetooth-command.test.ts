@@ -174,6 +174,7 @@ describe("pairWithBluetoothctl — the conversation", () => {
     await expect(result).resolves.toStrictEqual({
       ok: false,
       error: "the printer stopped waiting for the PIN",
+      reason: "pin_too_slow",
     });
   });
 
@@ -191,7 +192,11 @@ describe("pairWithBluetoothctl — the conversation", () => {
     const { child, result } = registered(undefined);
     child.say(PIN_PROMPT);
     expect(child.input).toStrictEqual([`pair ${MAC}\n`, END]);
-    await expect(result).resolves.toStrictEqual({ ok: false, error: "this printer needs a PIN" });
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: "this printer needs a PIN",
+      reason: "pin_needed",
+    });
   });
 
   // Prompt texts READ from bluez 5.82 client/agent.c; not measured.
@@ -206,6 +211,7 @@ describe("pairWithBluetoothctl — the conversation", () => {
     await expect(result).resolves.toStrictEqual({
       ok: false,
       error: "this printer asked for a pairing method we do not support",
+      reason: "unsupported_method",
     });
   });
 
@@ -221,7 +227,11 @@ describe("pairWithBluetoothctl — outcomes", () => {
   it("reads AuthenticationFailed after the PIN was written as a wrong PIN", async () => {
     const { child, result } = registered("9999");
     child.say(PIN_PROMPT, "9999\n", event("Failed to pair: org.bluez.Error.AuthenticationFailed"));
-    await expect(result).resolves.toStrictEqual({ ok: false, error: "wrong PIN" });
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: "wrong PIN",
+      reason: "wrong_pin",
+    });
     expect(child.input.slice(-2)).toStrictEqual(["quit\n", END]);
   });
 
@@ -240,6 +250,7 @@ describe("pairWithBluetoothctl — outcomes", () => {
     await expect(result).resolves.toStrictEqual({
       ok: false,
       error: "printer is off or out of range",
+      reason: "out_of_range",
     });
   });
 
@@ -276,6 +287,7 @@ describe("pairWithBluetoothctl — outcomes", () => {
     await expect(result).resolves.toStrictEqual({
       ok: false,
       error: "printer not found — scan first",
+      reason: "not_found",
     });
   });
 
@@ -299,6 +311,7 @@ describe("pairWithBluetoothctl — outcomes", () => {
     await expect(result).resolves.toStrictEqual({
       ok: false,
       error: "No default controller available",
+      reason: "bluetooth_unavailable",
     });
   });
 
@@ -319,7 +332,11 @@ describe("pairWithBluetoothctl — outcomes", () => {
     const result = pairWithBluetoothctl(MAC, "1234", { spawn: child.spawn });
     child.say(START[0]!);
     child.emit("close", 1, null);
-    await expect(result).resolves.toStrictEqual({ ok: false, error: "bluetooth unavailable" });
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: "bluetooth unavailable",
+      reason: "bluetooth_unavailable",
+    });
   });
 
   it("reports a pairing that ended without an outcome, with the last thing printed", async () => {
@@ -471,7 +488,11 @@ describe("pairWithBluetoothctl — the PIN never leaves the runner", () => {
   it("never alters the runner's own words, even when the PIN occurs in them", async () => {
     const { child, result } = registered("PIN");
     child.say(PIN_PROMPT, "PIN\n", event("Failed to pair: org.bluez.Error.AuthenticationFailed"));
-    await expect(result).resolves.toStrictEqual({ ok: false, error: "wrong PIN" });
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: "wrong PIN",
+      reason: "wrong_pin",
+    });
   });
 
   it("does not put a refused PIN in the error it reports", async () => {
@@ -536,7 +557,11 @@ describe("pairWithBluetoothctl — deadlines", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(child.input).toStrictEqual([`pair ${MAC}\n`, END]);
     expect(run.settled()).toBe(true);
-    await expect(result).resolves.toStrictEqual({ ok: false, error: "pairing timed out" });
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: "pairing timed out",
+      reason: "timed_out",
+    });
   });
 
   it("kills a bluetoothctl that has not exited 5 seconds after being told to quit", async () => {
@@ -562,7 +587,11 @@ describe("pairWithBluetoothctl — deadlines", () => {
     expect(child.kill).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(child.kill).toHaveBeenCalledWith("SIGKILL");
-    await expect(result).resolves.toStrictEqual({ ok: false, error: "bluetooth unavailable" });
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: "bluetooth unavailable",
+      reason: "bluetooth_unavailable",
+    });
   });
 
   it("never kills a bluetoothctl that exited on quit", async () => {

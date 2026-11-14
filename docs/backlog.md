@@ -1152,7 +1152,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Measure one-job print pulls on the box.** Physical throughput, authentication and large retained queues remain unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
 
-- **Bluetooth pairing commands** (bundle of 5, 1 important, size M). [Detail](backlog/printers.md#bundle-bluetooth-pairing-commands)
+- **Bluetooth pairing commands** (bundle of 4, 1 important, size M). [Detail](backlog/printers.md#bundle-bluetooth-pairing-commands)
 
 - **Cross-box print-agent TLS** — an agent trusts only its local box CA, so a mirror's agent cannot
   reach the primary; gates the mirror's print agent (_Afterwards_). The vouch slots into the same
