@@ -1844,13 +1844,14 @@ describe("a Litestream left running by a server that died", () => {
     const leftover = await processNamed(binDir, "litestream", join(configDir, "litestream.yml"), {
       ignoresTerm: true,
     });
+    const gone = once(leftover, "exit");
     let signal: string | null | undefined;
     leftover.on("exit", (_code, received) => (signal = received));
     writeFileSync(join(configDir, "litestream.pid"), `${leftover.pid}\n`);
     await h.supervisor.start();
-    await h.clock.until(() => signal !== undefined);
-    expect(signal).toBe("SIGKILL");
     await h.clock.until(() => h.litestream.running() !== undefined);
+    await gone;
+    expect(signal).toBe("SIGKILL");
   });
 
   it("does not SIGKILL a PID whose command line changed during the grace", async () => {
