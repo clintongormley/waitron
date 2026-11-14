@@ -1,6 +1,6 @@
 # A1527: Find settings inside windows through Search pages
 
-You should find a setting without knowing its window. **All four families below are required in the first released version.** Scope authority is the owner's **"3"**, recorded in `~/waitron-campaign-i/questions.md`, WATCHER 2026-11-14 18:02, answering “departments first / plus receipts / everything at once”. This approves scope only, not this design.
+You should find a setting without knowing its window. **All four families below are required in the first released version.** Scope authority is the owner's **"3"**, recorded in `~/waitron-campaign-i/questions.md`, WATCHER 2026-11-14 18:02, answering “departments first / plus receipts / everything at once”. This approves scope only. Claude read the design (180 s) and its revision (143 s); the watcher cleared the corrected design for docs-only publication on 14 November at 18:17.
 
 Type **“Remind to fire the next course after”**, or “remind”, into **Search pages**. The result shows the current-language label and **Departments and zones / Service**. Spanish finds **“Avisar para marchar el siguiente curso tras”**. Preserve `nav-search.ts` matching: labels rank ahead of location-only matches. Enter opens the first page match before falling back to a destination; clicking opens the selected result. Only settings gain a tab/window suffix. Existing page, Venue settings, Calendar and module results retain their formats.
 
