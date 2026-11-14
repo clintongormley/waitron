@@ -67,7 +67,7 @@ describe("till-device-chooser", () => {
     expect(text).toContain("Pass screen");
     // Human kind labels — never the raw machine token.
     expect(text).toContain("Handheld");
-    expect(text).toContain("Kitchen display");
+    expect(text).toContain("Prep station display");
     expect(text).not.toContain("kds_station");
   });
 

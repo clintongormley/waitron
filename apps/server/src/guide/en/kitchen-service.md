@@ -1,8 +1,8 @@
-# Kitchen service
+# Station service
 
 When a guest needs special care, you need to know which dish is theirs and what to avoid.
 Record the guest and assign their dishes through the table's
-[allergy window](products.md#table-allergies). The kitchen receives those instructions with its work.
+[allergy window](products.md#table-allergies). The station receives those instructions with its work.
 
 In Demo or Preparation, the counter payment controls and bill-payment window offer
 **Approve**, **Decline** or **No answer** before you press **Card**. No real card is charged. **No answer** keeps the payment
@@ -20,17 +20,17 @@ After the final payment, follow [Choose documents after paying](table-service.md
 
 If the till cannot confirm a counter send, retry with the basket unchanged. When the first send
 already reached the server, the retry returns its original result and moves the till on as placed.
-It adds no second kitchen ticket or collection-number slip. While the server is out of disk space,
+It adds no second station ticket or collection-number slip. While the server is out of disk space,
 the retry is refused and the till says the order was not saved, even if the first send already
 reached the server.
 
 If you edit the basket after the first send, the till must save those edits before placing it.
 When the order has already been placed, it keeps your edits on screen and shows an error instead
-of pretending the kitchen received them. Check the placed order before continuing.
+of pretending the station received them. Check the placed order before continuing.
 
 ## Read the allergy copy with its dish {#allergy-copies}
 
-An assigned dish carries the guest's name, the allergens they avoid and their kitchen note.
+An assigned dish carries the guest's name, the allergens they avoid and their station note.
 For example, Alex avoids Milk and asks for a separate pan. Alex's dish shows that block beneath it,
 and its ticket or screen card has an allergy marker. A separately routed extra carries the same
 guest's instructions to its own station.
@@ -42,7 +42,7 @@ station lists them on that station's ticket. No **Contains** line, like missing
 nutritional information, does not establish that a dish is suitable. Check it with the waiter
 before preparing it.
 
-The guest's block keeps the instructions the kitchen first received: later guest or catalogue
+The guest's block keeps the instructions the station first received: later guest or catalogue
 edits do not silently replace it on the dish card, the pass or a reprint. A dish's **Contains**
 line shows what the dish declared when the ticket was made; a reprint reads it again.
 
@@ -50,7 +50,7 @@ line shows what the dish declared when the ticket was made; a reprint reads it a
 
 If the waiter changes instructions for a dish your station still has to prepare or hand over,
 you receive an **Allergy changed** notice with the new block. Removing the assignment, deleting
-its guest or choosing No allergies produces **Allergy removed** instead. Configured kitchen
+its guest or choosing No allergies produces **Allergy removed** instead. Configured station
 printers receive a correction slip as well.
 
 Adding or removing an extra can change a dish's clash warning too. If the warning changes for work
@@ -65,15 +65,15 @@ A correction covers only the quantity still to serve. Fully served or cancelled 
 new allergy notice. If a dish moves to another station, its original copy follows it, together
 with a correction when its current instructions differ.
 
-Changing or removing the order's kitchen note gives your station one notice listing every dish it
-affects, and **Got it** clears it. Each kitchen printer prints one slip listing the dishes of the
+Changing or removing the order's station note gives your station one notice listing every dish it
+affects, and **Got it** clears it. Each station printer prints one slip listing the dishes of the
 stations it serves. A party with more than one affected bill gets one notice per station and one
 slip per printer, listing those bill numbers. Read the list before acknowledging it.
 
 ## Match changed names to the original orders {#party-names}
 
 Correction slips show the party's current name beside the order number. If staff name, rename or
-clear the name of a party with kitchen work still outstanding, each affected printer receives a
+clear the name of a party with station work still outstanding, each affected printer receives a
 **NAME CHANGED** slip. Match its order numbers to the original tickets and use the name shown after
 **Now**. This slip changes the name; it does not ask you to cook the food again.
 
@@ -92,16 +92,16 @@ including on a shared printer: only the sections that already received HOLD pape
 
 Firing held work at the same station does not duplicate an existing allergy correction.
 
-## Read a group's heading on kitchen paper {#group-headings}
+## Read a group's heading on station paper {#group-headings}
 
-On kitchen paper, a group's heading names the courses of the dishes printed under it, in course
+On station paper, a group's heading names the courses of the dishes printed under it, in course
 order: **GROUP 3 · STARTERS, MAINS**. A reprint shows them as they are when you reprint.
 
 ## Reprint the original, then check its notices {#reprints}
 
 A reprint repeats the original allergy block. It does not issue another correction notice, so
 check the station's outstanding notices separately. Splitting dishes between bills keeps the
-copies with the resulting kitchen work; it does not replace the guest's instructions.
+copies with the resulting station work; it does not replace the guest's instructions.
 
 A reprint's heading shows when it was reprinted (`*** REPRINT 15:20 ***`). The time under the
 order number stays the time the first of its dishes was sent. Read both times in your venue's
@@ -123,7 +123,7 @@ If a dish has parts at two stations, collect them from both; each station counts
 In **Sent**, wait for **Ready** to see when all its parts are ready.
 
 When you serve one of two dishes on a line, the pass shows the one still to serve. Undo restores
-the served quantity without restarting the kitchen's preparation or ready time. A cancelled
+the served quantity without restarting the station's preparation or ready time. A cancelled
 quantity no longer counts as food to serve, even when its charge stays on the bill.
 
 A counter order stays visible after payment until you collect or close it. When a paid table
@@ -135,28 +135,28 @@ assigned to it; another station's dish on one of its cards shows dimmed, unless 
 other stations' dishes (see [Work the pass](kitchen-service.md#pass-screen)).
 
 You choose when to request cooking from the till; there is no venue-wide firing mode. Each prep
-station sets whether its kitchen screen moves preparation on one item at a time or a whole
-ticket at once, under **Done on the screen** when you edit it in **Prep stations**. On the kitchen
+station sets whether its station screen moves preparation on one item at a time or a whole
+ticket at once, under **Done on the screen** when you edit it in **Prep stations**. On the station
 screen, a card from a whole-ticket station shows **Whole ticket** while a tap can still move it
 on, and a tap on one of its dishes moves the card's dishes at the same stage.
 Each prep station sets
 its own late flags, and a **Ready warning** time of 3 minutes unless you change it, when you add it
-with **Add station**, and under **Late flags (minutes)** when you edit it in **Prep stations**. On a
+with **Add a station**, and under **Late flags (minutes)** when you edit it in **Prep stations**. On a
 phone or tablet, the Ready bar turns amber once a ready dish has waited that long: see
 [See which tables have food ready](table-service.md#ready-bar). Each
 prep station also sets how identical dishes print on its tickets,
 whether it prints held groups in advance, and whether a dish already sent to it can be
-changed, under **Identical dishes on a kitchen ticket**, **Print held groups in advance** and
+changed, under **Identical dishes on a station ticket**, **Print held groups in advance** and
 **Changes after sending**: **Not allowed**, **While held**, or
 **While held or waiting**. It also sets whether its dishes wait for the pass to fire them, under
-**Waits for the pass**: see [Make a station wait for the pass](kitchen-service.md#station-waits).
-**Close for today** starts with the station chosen under **When closed, send to**.
-A dish the kitchen has started cannot be changed. A dish that went to no station, with no extra
+**Held at the pass**: see [Make a station wait for the pass](kitchen-service.md#station-waits).
+**Close for today** starts with the station chosen under **When closed for the day, send its dishes to**.
+A dish the station has started cannot be changed. A dish that went to no station, with no extra
 that went to a station of its own, can be changed whatever the stations allow.
 
-## Work the kitchen screen {#kitchen-screen}
+## Work the station screen {#kitchen-screen}
 
-The kitchen screen shows a card for each group of dishes a table sent, and one for each counter
+The station screen shows a card for each group of dishes a table sent, and one for each counter
 order. A card names its table by the table's short name; a counter order with no table reads
 **Counter #12**. A card sits in the column of its least advanced dish, **Waiting**, **Preparing** or
 **Ready**, with the card that has waited longest first. Its minutes count from when its first dish
@@ -193,7 +193,7 @@ has one across its top.
 
 A row above the columns shows how many dishes are still to make and how many cards are late, and
 **Columns** at its end; above a single station's columns it also shows whether the station is open
-today, and on a kitchen screen that nobody signs in on, the station's name (unless the station is no
+today, and on a station screen that nobody signs in on, the station's name (unless the station is no
 longer available: then the line above its columns names it). Tap **Columns** to arrange the columns.
 It lists **Overview**, **Waiting + Held**, **Waiting**, **Held**, **Preparing** and **Ready**: the
 arrows move a column up or down the list, which is the order the screen shows them in, and **Show**
@@ -206,11 +206,11 @@ shows at once; **Done** closes the window. This device keeps the order, the colu
 collapsed ones, for each board, even after the screen restarts. A hidden column's cards still count
 in the row. With every column hidden, the row and **Columns** stay, so you can bring a column back.
 
-Each card carries its order's kitchen note and any printing problem. On a till, a card also offers
-**Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
+Each card carries its order's station note and any printing problem. On a till, a card also offers
+**Reprint**, and **Collect** once its order is paid and waiting to be collected; a station screen
 that nobody signs in on shows neither.
 
-A dish leaves the kitchen screens as soon as the waiter marks it served; one served in part stays,
+A dish leaves the station screens as soon as the waiter marks it served; one served in part stays,
 showing only what is left.
 
 When a card has a dish that started without waiting for the pass, and its group has dishes for the
@@ -227,7 +227,7 @@ card moves along them as its dishes do. A card whose dishes are all held sits at
 **Held** column, it sits there too. A card is in **To fire** while it has dishes waiting for this
 pass to fire them, in **In progress** while its dishes are at their stations, and in **Ready** once
 every dish is ready. **Overview** is hidden until you show it in **Columns**, and then comes first.
-It leaves out dimmed dishes and counts the rest as the kitchen screen's does, with dishes held or
+It leaves out dimmed dishes and counts the rest as the station screen's does, with dishes held or
 waiting for the pass after the **+**.
 
 A card's heading says what the waiter sent, **New order**, **Next course** or **Added** (a held card
@@ -261,15 +261,15 @@ dish from a station or service zone this pass does not cover shows only on a car
 dish this pass covers, and is dimmed when drawn; while it waits for its own pass it says **Bar: waiting
 for its pass**. Dimmed dishes are there for information only.
 
-On a pass screen or a pass monitor, **Columns** also offers **Other stations' dishes**: **Use the
+On a pass view or a pass display (view only), **Columns** also offers **Other stations' dishes**: **Use the
 profile's setting**, **Show** or **Hide**. **Hide** takes the dimmed dishes off the cards; while
 nothing this pass covers is dimmed, that is only dishes from stations and service zones it does not
 cover. A card stays in its column with its buttons even when **Hide** leaves it no dish. **Hide**
 changes only which dishes are drawn: a card's colour and the overdue count are the same as with
 **Show**. The choice is this device's own and replaces the one a manager chose for the device in the
-dashboard. There, under **Device profiles**, a profile's pass screen and pass monitor each have
+dashboard. There, under **Device profiles**, a profile's pass view and pass display (view only) each have
 **Show other stations' dishes on the pass**, on at first; under **Devices**, a device's **Edit**
-window has the same setting for its pass screen or pass monitor, with **Use the profile's setting**,
+window has the same setting for its pass view or pass display (view only), with **Use the profile's setting**,
 **Show** and **Hide**.
 
 On each card **In progress**, tap **Ready** to mark its sent dishes ready at every station,
@@ -278,9 +278,9 @@ without a course. Dishes still held or waiting for the pass stay as they are. **
 need **Runs the pass** on the device's profile.
 On a till, a card that is not held also offers **Reprint** for each of its bills.
 
-A pass monitor shows the same board for watching, with no **Fire**, Ready or **Reprint** buttons. A
-till whose device has no pass screen or pass monitor opens **Pass** on every station and service
-zone, without **Fire**: only a pass screen fires.
+A pass display (view only) shows the same board for watching, with no **Fire**, Ready or **Reprint** buttons. A
+till whose device has no pass view or pass display (view only) opens **Pass** on every station and service
+zone, without **Fire**: only a pass view fires.
 
 Tap a column's heading to collapse it to a narrow strip that keeps its name and count; tap it again
 to open it. **Columns**, at the end of the row above the columns, lists **Overview**, **Held + To
@@ -295,9 +295,9 @@ shown and the collapsed ones, for each board. Only when the columns switched on 
 screen does the pass show them as sections of one list, in the same order; you collapse a section by
 tapping its heading.
 
-## Get help on a kitchen screen {#kitchen-help}
+## Get help on a station screen {#kitchen-help}
 
-Tap **?** at the top right of a kitchen screen, before the theme and language buttons, to turn help
+Tap **?** at the top right of a station screen, before the theme and language buttons, to turn help
 on. **?** marks then show on the first card and on **Columns** of each board, on **Changes to
 orders** while there are changes to read, and on **Merged** or **Stacked** on a screen with more
 than one station. On the pass they also show on the first **Ready**. Tap
@@ -306,17 +306,17 @@ about that part; some notes link to this guide. The rest of the screen works as 
 on.
 
 Help goes off by itself two minutes after the screen was last touched, and a guide page opened from
-a note closes with it. Tap **?** again to turn it off sooner. A till's **Kitchen** and **Pass**
+a note closes with it. Tap **?** again to turn it off sooner. A till's **Prep station** and **Pass**
 screens show the same marks, apart from **Merged** and **Stacked**; there help goes off when the till
 locks.
 
 ## Identical dishes share a row {#identical-dishes}
 
-An order of 2 × Burger, from a table or the counter, reaches the kitchen as two dishes, so at a table the till can serve or move each
-one on its own. The kitchen still reads them together: the station ticket, the kitchen screen and
+An order of 2 × Burger, from a table or the counter, reaches the station as two dishes, so at a table the till can serve or move each
+one on its own. The station still reads them together: the station ticket, the station screen and
 the pass show them as one row of 2 while they are the same, and the ticket's **Also on this order** list and
 correction slips such as **HOLD CHANGED** print them once. Dishes stay on separate rows when their
-extras or notes differ, or when one is further along than the other. On the kitchen screen, tapping
+extras or notes differ, or when one is further along than the other. On the station screen, tapping
 a row, or moving it to another station, takes every dish in it. Weighed dishes always show and
 print one by one, since each is weighed on its own.
 
@@ -324,9 +324,9 @@ print one by one, since each is weighed on its own.
 
 On the till, an unsent dish whose period ended earlier the same business day shows a warning sign
 and **Lunch ended**. When you send it from a table, or pay for, send or park the order at the
-counter, the till first lists such dishes and asks you to check with the kitchen.
-**Kitchen agreed — send** sends them, and **Remove them** takes them off the order. On a park the
-button reads **Kitchen agreed — save**. The same window opens when the server finds such a dish before
+counter, the till first lists such dishes and asks you to check with the station.
+**Station agreed — send** sends them, and **Remove them** takes them off the order. On a park the
+button reads **Station agreed — save**. The same window opens when the server finds such a dish before
 the till has marked it.
 
 If the till says a dish's period has ended without listing dishes, review the order and remove
@@ -337,15 +337,15 @@ an earlier business day shows **Last orders have ended** and cannot be sent: at 
 takes it off and **Keep** leaves it in the order unsent, and at the counter you can take payment
 only once it is removed.
 
-A dish sent after its period ended earlier the same business day, once the kitchen agreed, carries a mark
-with its period's name. On its kitchen ticket a line above it reads `** AFTER LUNCH — AGREED **`.
+A dish sent after its period ended earlier the same business day, once the station agreed, carries a mark
+with its period's name. On its station ticket a line above it reads `** AFTER LUNCH — AGREED **`.
 A divider ends that run before the next unmarked dish; a new group or station heading also ends it.
-On the kitchen screen, the card shows **After Lunch — agreed** above it.
+On the station screen, the card shows **After Lunch — agreed** above it.
 
 Each department sets whether sending such a dish needs a manager, or a manager's PIN, with
-**Manager's PIN to send after a period ends** under **Courses and the kitchen** on its **Service**
-tab in the dashboard. Off, anyone who can send confirms with the kitchen. When it is on and the
-person sending is not a manager, the till asks for a manager's PIN after **Kitchen agreed**.
+**Manager's PIN to send after a period ends** under **Courses and stations** on its **Service**
+tab in the dashboard. Off, anyone who can send confirms with the station. When it is on and the
+person sending is not a manager, the till asks for a manager's PIN after **Station agreed**.
 
 ## Request cooking from the till {#request-cooking}
 
@@ -366,19 +366,19 @@ While the server is out of disk space, moving a dish on is refused. The station 
 **Not saved: the server is out of disk space. Tell a manager.** and the dish stays where it was.
 
 Confirm allergy instructions in the table's allergy window before requesting cooking. At a
-station or the pass, read the copy already attached to each dish. The kitchen screens do not open
+station or the pass, read the copy already attached to each dish. The station screens do not open
 the table's allergy editor. At the station, acknowledge any corrections.
 
 A held group falls due a set number of minutes after the dishes fired before it have been
-served. Set the delay under **Courses and the kitchen** on the department’s **Service** tab
+served. Set the delay under **Courses and stations** on the department’s **Service** tab
 in the dashboard. Choose **At once** to remind you as soon as those dishes are served, or **Off**
 to turn the reminder off.
 
 ## Make a station wait for the pass {#station-waits}
 
 To have the pass decide when a station's dishes are cooked, edit the station in **Prep stations**
-and switch on **Waits for the pass**, under **Printers**. The stations table shows **Yes** or **No**
-in its **Waits for the pass** column. When the waiter then requests cooking, the station's dishes go
+and switch on **Held at the pass** in **The pass**. The stations table shows **Yes** or **No**
+in its **Held at the pass** column. When the waiter then requests cooking, the station's dishes go
 to the pass's **To fire** column, and they wait on the station's screen until the pass fires them.
 Switching it on or off decides only where dishes requested afterwards go; a dish already requested
 stays where it is. A configuration export carries the setting.
@@ -393,23 +393,23 @@ screen say **Goes with** and the names of those dishes' stations, such as **Goes
 Pastry**: send it out with those dishes, not on its own. An advance HOLD
 ticket never says it. A ticket says it as things stand when it prints; a reprint checks again.
 
-Only a pass screen whose device can press **Fire** releases the dishes. For a station's dishes in a
+Only a pass view whose device can press **Fire** releases the dishes. For a station's dishes in a
 service zone, that takes both of these:
 
-- Under **Device profiles**, the device's profile offers a pass screen with the station and the zone
-  in its lists: **Pass screen** in **Kitchen screens its devices may run** on a kitchen display,
+- Under **Device profiles**, the device's profile offers a pass view with the station and the zone
+  in its lists: **Pass** in **Station screens its devices may run** on a prep station display,
   **Pass button** in **Screens it shows** on a till or handheld. It also has **Prepares orders** on
   in **What it can do**, and **Runs the pass** on in **Screens it shows**. On a till or handheld
   profile with a department, the zone must also be one it serves, under **Where it serves**.
-- Under **Devices**, the device is enabled and its **Edit** window chooses the pass screen
-  (**Screen** on a kitchen display, **Pass screen shows** on a till or handheld), with the station
-  and the zone in its lists. A dish whose order has no service zone needs a pass screen on every
+- Under **Devices**, the device is enabled and its **Edit** window chooses the pass view
+  (**Screen** on a prep station display, **Pass shows** on a till or handheld), with the station
+  and the zone in its lists. A dish whose order has no service zone needs a pass view on every
   zone.
 
-You can save a station that waits even when no pass screen covers it. Until one does, **Prep
+You can save a station that waits even when no pass covers it. Until one does, **Prep
 stations** says so above its tabs, zone by zone, for example: **Nothing fires dishes from Grill in
-Terrace: no pass screen covers them there. Set one up under Devices.** When the venue has more than
-one zone, a station no pass screen covers in any of them gets a single line: **No pass screen covers
+Terrace: no pass covers them there. Set one up under Devices.** When the venue has more than
+one zone, a station no pass covers in any of them gets a single line: **No pass covers
 Grill in any zone. Set one up under Devices.** The warning also names a station whose dishes are
 already waiting for the pass with nothing to fire them, even once the station no longer waits. It
 checks again when stations, zones, devices or profiles change, and every minute.
@@ -420,14 +420,14 @@ Choose **Delete** from the station's row menu. The window shows **Checking what 
 while it reads the impact. Review **Work that ends** and **Settings that are removed**
 when those sections appear, then decide whether to delete the station.
 
-## Choose the language on kitchen paper {#paper-language}
+## Choose the language on station paper {#paper-language}
 
-To change the fixed words on kitchen tickets and collection-number slips, change the default
+To change the fixed words on station tickets and collection-number slips, change the default
 under **System**, then **Content languages**. A Spanish default prints Spanish headings; other
-defaults use English until their kitchen wording is available. With no saved content language,
-kitchen paper uses English. Your dashboard language and receipt language have their own choices.
+defaults use English until their station wording is available. With no saved content language,
+station paper uses English. Your dashboard language and receipt language have their own choices.
 
-The next new ticket, correction or kitchen reprint uses the saved default immediately. Changing
+The next new ticket, correction or station reprint uses the saved default immediately. Changing
 the default prints nothing by itself. Resending a failed job keeps its original words.
 Dish names, table names and your notes stay as recorded. A reprint keeps the original allergy
 instructions and selects their recorded English or Spanish wording to match its headings.
@@ -435,3 +435,13 @@ instructions and selects their recorded English or Spanish wording to match its 
 To print a card slip when taking payment, select **Print card slip** before Card. It starts off for each payer.
 
 To recover a card slip before the bill is fully paid, use [Print a copy in Payments](table-service.md#reader-slips).
+
+## Choose where unrouted dishes go {#default-station}
+
+In **Prep stations**, open **Routes** and choose **Dishes with no route go to**.
+This station receives dishes no route places. To delete it, choose another default here first.
+
+On **Stations**, select a row to edit its settings. Follow a name under **Shown on** to edit
+that device. The editor separates **Station**, **When it is closed**, **The pass** and
+**Station screen**. Under **When closed for the day, send its dishes to**, choose the station
+offered first when you close this one for the day, or leave **Ask each time** selected.

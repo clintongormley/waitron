@@ -2162,9 +2162,9 @@ it("deletes only completely summarised empty folders without asking", async () =
   expect(count(el)).toBe("0 selected");
 });
 it.each([
-  ["en-GB", 2, "2 kitchen routing rules name these categories and are removed."],
-  ["en-GB", 1, "1 kitchen routing rule names these categories and is removed."],
-  ["es", 2, "2 reglas de envío a cocina nombran estas categorías y se eliminan."],
+  ["en-GB", 2, "2 station routing rules name these categories and are removed."],
+  ["en-GB", 1, "1 station routing rule names these categories and is removed."],
+  ["es", 2, "2 reglas de envío a la estación nombran estas categorías y se eliminan."],
 ] as const)(
   "asks before deleting a category whose only contents are routing rules, saying how many go with it and asking nothing about contents (%s, %i rules)",
   async (locale, rules, sentence) => {
@@ -2213,7 +2213,7 @@ it("still asks what happens to the contents when a category holding only routing
   expect(el.shadowRoot!.querySelector("input[value=move_up]")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull();
   expect(el.shadowRoot!.textContent).toContain(
-    "2 kitchen routing rules name these categories and are removed.",
+    "2 station routing rules name these categories and are removed.",
   );
 });
 it.each(["network", "missing", "partial"])(
@@ -2243,7 +2243,7 @@ it("shows folder contents and routes, defaults to moving up, and sends delete ch
   await selectKeys(el, ["folder:d"]);
   await press(el, "delete");
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
-  expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names");
+  expect(el.shadowRoot!.textContent).toContain("1 station routing rule names");
   const radio = el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!;
   expect(el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.checked).toBe(
     true,
@@ -2304,13 +2304,13 @@ it.each([
     "en-GB",
     { b: contents(1, 3, 3, 1) },
     "1 category and 3 products move to Drinks",
-    "Also: deletes 1 category and 2 kitchen routing rules and archives 3 products. They move to Drinks.",
+    "Also: deletes 1 category and 2 station routing rules and archives 3 products. They move to Drinks.",
   ],
   [
     "en-GB",
     { b: contents(1, 0, 2, 1) },
     "1 category moves to Drinks",
-    "Also: deletes 1 category and 1 kitchen routing rule.",
+    "Also: deletes 1 category and 1 station routing rule.",
   ],
   [
     "en-GB",
@@ -2342,13 +2342,13 @@ it.each([
     "es",
     { b: contents(1, 3, 4, 1) },
     "1 categoría y 3 productos pasan a Drinks",
-    "También: elimina 1 categoría y 3 reglas de envío a cocina y archiva 3 productos. Pasan a Drinks.",
+    "También: elimina 1 categoría y 3 reglas de envío a la estación y archiva 3 productos. Pasan a Drinks.",
   ],
   [
     "es",
     { b: contents(1, 0, 2, 1) },
     "1 categoría pasa a Drinks",
-    "También: elimina 1 categoría y 1 regla de envío a cocina.",
+    "También: elimina 1 categoría y 1 regla de envío a la estación.",
   ],
   [
     "es",
@@ -2406,7 +2406,7 @@ it.each([
   [
     "en-GB",
     contents(0, 0, 1, 1, 1),
-    "1 kitchen routing rule names these categories and is removed.",
+    "1 station routing rule names these categories and is removed.",
     /disabl/i,
   ],
   ["es", contents(0, 0, 0, 0, 1), "", /deshabilit/i],
@@ -2444,13 +2444,13 @@ it.each([
 it.each([
   [
     "en-GB",
-    "1 kitchen routing rule names these categories and is removed.",
-    "Also: deletes 1 category and 2 kitchen routing rules and archives 2 products. They move to No category.",
+    "1 station routing rule names these categories and is removed.",
+    "Also: deletes 1 category and 2 station routing rules and archives 2 products. They move to No category.",
   ],
   [
     "es",
-    "1 regla de envío a cocina nombra estas categorías y se elimina.",
-    "También: elimina 1 categoría y 2 reglas de envío a cocina y archiva 2 productos. Pasan a Sin categoría.",
+    "1 regla de envío a la estación nombra estas categorías y se elimina.",
+    "También: elimina 1 categoría y 2 reglas de envío a la estación y archiva 2 productos. Pasan a Sin categoría.",
   ],
 ] as const)(
   "names the selected categories' own routing rules under either answer, and lists the rules inside among what deleting the contents removes (%s)",
@@ -2468,7 +2468,7 @@ it.each([
     el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(moveUp);
-    expect(el.shadowRoot!.textContent).not.toMatch(/3 (kitchen routing rules|reglas)/);
+    expect(el.shadowRoot!.textContent).not.toMatch(/3 (station routing rules|reglas)/);
     el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(moveUp);
@@ -2487,7 +2487,7 @@ it("warns of no routing rules under either answer when the selected category nam
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("form")!.textContent).not.toContain("name these categories");
   expect(contentsLabels(el)[1]).toBe(
-    "Also: deletes 1 category and 2 kitchen routing rules and archives 2 products. They move to No category.",
+    "Also: deletes 1 category and 2 station routing rules and archives 2 products. They move to No category.",
   );
 });
 it("counts the own rules of every selected category under either answer, a subcategory selected with its parent included", async () => {
@@ -2501,15 +2501,15 @@ it("counts the own rules of every selected category under either answer, a subca
   await press(el, "delete");
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   expect(el.shadowRoot!.textContent).toContain(
-    "3 kitchen routing rules name these categories and are removed.",
+    "3 station routing rules name these categories and are removed.",
   );
   el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
   await el.updateComplete;
   expect(el.shadowRoot!.textContent).toContain(
-    "3 kitchen routing rules name these categories and are removed.",
+    "3 station routing rules name these categories and are removed.",
   );
   expect(contentsLabels(el)[1]).toBe(
-    "Also: deletes 1 category and 1 kitchen routing rule and archives 2 products. They move to No category.",
+    "Also: deletes 1 category and 1 station routing rule and archives 2 products. They move to No category.",
   );
 });
 it("shows the new counts instead of deleting when only the category's own routing rules changed", async () => {
@@ -2526,7 +2526,7 @@ it("shows the new counts instead of deleting when only the category's own routin
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names"),
+    expect(el.shadowRoot!.textContent).toContain("1 station routing rule names"),
   );
   expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
 });
@@ -2839,7 +2839,7 @@ it.each(["the read at Delete", "the server's refusal"])(
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
     expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
     expect(dialog(el)?.textContent).toContain(
-      "2 kitchen routing rules name these categories and are removed.",
+      "2 station routing rules name these categories and are removed.",
     );
     vi.mocked(el.api.deleteCatalogueItems).mockClear();
     await press(el, "confirm");
@@ -3531,7 +3531,7 @@ it("counts overlapping selected folders once in the delete consent", async () =>
   await selectKeys(el, ["folder:d", "folder:b"]);
   await press(el, "delete");
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
-  expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names");
+  expect(el.shadowRoot!.textContent).toContain("1 station routing rule names");
   await press(el, "confirm");
   await vi.waitFor(() =>
     expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
@@ -4367,7 +4367,7 @@ it("says above the list that routing could not be read, when there are categorie
   expect(line!.getAttribute("slot")).toBe("toolbar-bottom");
   expect(line!.parentElement!.localName).toBe("dashboard-product-list");
   expect(line!.textContent!.trim()).toBe(
-    "Kitchen routing unavailable: categories with no station are not marked. Try again later.",
+    "Station routing unavailable: categories with no station are not marked. Try again later.",
   );
   expect(line!.getAttribute("role")).toBe("status");
   const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="catalogue-search"]')!;

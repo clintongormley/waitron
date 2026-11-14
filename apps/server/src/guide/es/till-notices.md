@@ -21,7 +21,7 @@ la lista de todos los avisos, del más grave al menos grave. La lista aparece ba
 desplaza la pantalla hacia abajo, así que nunca tapa el pedido. Vuelve a tocar el número para
 cerrarla.
 
-No hay botón para cerrar un aviso. Una pantalla de cocina no muestra la línea de avisos.
+No hay botón para cerrar un aviso. Una pantalla de estación no muestra la línea de avisos.
 
 ## Qué significa cada aviso {#notices}
 
@@ -98,7 +98,7 @@ encargado**.
 
 **Impresora «Cocina» no imprime · desde 21:16** es ámbar. Una comanda enviada a esa impresora a
 las 21:16 lleva dos minutos o más sin imprimirse, o el servidor ha dejado de intentar enviarla. El
-aviso de una impresora de cocina aparece en todas las cajas registradoras y todos los terminales de
+aviso de una impresora de estación aparece en todas las cajas registradoras y todos los terminales de
 camarero; el de cualquier otra impresora, solo en los que imprimen en ella sus recibos, sus
 justificantes de pago o sus facturas completas. Revisa el papel, la corriente y el cable de la
 impresora. El aviso desaparece cuando la impresora imprime algo que se le envió después de esa

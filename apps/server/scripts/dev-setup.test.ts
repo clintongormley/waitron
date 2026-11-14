@@ -383,15 +383,15 @@ describe("devSetup against a real venue directory", () => {
         every_zone: null,
       },
       {
-        label: "Kitchen screen",
+        label: "Pass",
         form_factor: "kds",
-        screen: "station",
+        screen: "pass",
         every_station: 0,
-        station_names: "Kitchen",
-        every_zone: 0,
+        station_names: "Deli counter,Kitchen",
+        every_zone: 1,
       },
       {
-        label: "Pass monitor",
+        label: "Pass display (view only)",
         form_factor: "kds",
         screen: "pass_monitor",
         every_station: 1,
@@ -399,12 +399,12 @@ describe("devSetup against a real venue directory", () => {
         every_zone: 1,
       },
       {
-        label: "Pass screen",
+        label: "Station screen",
         form_factor: "kds",
-        screen: "pass",
+        screen: "station",
         every_station: 0,
-        station_names: "Deli counter,Kitchen",
-        every_zone: 1,
+        station_names: "Kitchen",
+        every_zone: 0,
       },
     ]);
   });
@@ -418,9 +418,9 @@ describe("devSetup against a real venue directory", () => {
     for (const label of labels) expect(printed).toContain(label);
     expect(printed).toContain("Counter (till)");
     expect(printed).toContain("Handheld 1 (handheld)");
-    expect(printed).toContain("Kitchen screen (station screen)");
-    expect(printed).toContain("Pass screen (pass screen)");
-    expect(printed).toContain("Pass monitor (pass monitor)");
+    expect(printed).toContain("Station screen");
+    expect(printed).toContain("Pass");
+    expect(printed).toContain("Pass display (view only)");
     expect(printed).not.toMatch(/watcher/i);
   });
 

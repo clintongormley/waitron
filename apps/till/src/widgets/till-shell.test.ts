@@ -888,7 +888,7 @@ describe("a handheld's More", () => {
         "Fix my hours",
         "—",
         "Pass",
-        "Kitchen",
+        "Stations",
         "Find a bill",
         "My schedule",
         "Profile",
@@ -948,7 +948,7 @@ describe("a handheld's More", () => {
       expect(more.querySelector(".operator")).toBeNull();
       expect(contents(more)).toEqual([
         "Pass",
-        "Kitchen",
+        "Stations",
         "Find a bill",
         "My schedule",
         "Profile",

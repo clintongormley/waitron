@@ -56,6 +56,8 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 
+const spanish = kitchenTicketWords("es");
+
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let v: PartyVenue;
 let stationId: string;
@@ -273,7 +275,7 @@ describe("saved kitchen note corrections", () => {
       });
       const firstJobs = await v.db.select().from(printJobs);
       expect(firstJobs).toHaveLength(original.length + 1);
-      expect(printedLines(firstJobs.at(-1)!.payload)).toContain("Para cocina: New time");
+      expect(printedLines(firstJobs.at(-1)!.payload)).toContain(`${spanish.forKitchen}New time`);
       expect(await set(scope, "New time", submissionId, before)).toEqual(saved);
       expect(await v.db.select().from(printJobs)).toEqual(firstJobs);
       await set(scope, null);
@@ -287,7 +289,7 @@ describe("saved kitchen note corrections", () => {
       const allJobs = await v.db.select().from(printJobs);
       expect(allJobs).toHaveLength(original.length + 2);
       expect(allJobs.slice(0, firstJobs.length)).toEqual(firstJobs);
-      expect(printedLines(allJobs.at(-1)!.payload)).toContain("Nota para cocina eliminada");
+      expect(printedLines(allJobs.at(-1)!.payload).join(" ")).toContain(spanish.noteRemovedBody);
     },
   );
 
@@ -452,7 +454,7 @@ describe("saved kitchen note corrections", () => {
     const kitchenSlips = (await jobsAt(stations.kitchen.printerId!)).slice(1);
     expect(kitchenSlips).toHaveLength(1);
     expect(kitchenSlips[0]).toContain(`${kitchenTicketWords("es").group} 1`);
-    expect(kitchenSlips[0]).toContain("Para cocina: Bring together");
+    expect(kitchenSlips[0]).toContain(`${spanish.forKitchen}Bring together`);
     expect(await jobsAt(stations.bar.printerId!)).toEqual([]);
     const noticeAt = async (id: string) =>
       v.db
@@ -511,7 +513,7 @@ describe("effective kitchen headings", () => {
       ),
     );
     const correction = (await v.db.select().from(printJobs)).at(-1)!;
-    expect(printedLines(correction.payload)).toContain("Para cocina: Old time");
+    expect(printedLines(correction.payload)).toContain(`${spanish.forKitchen}Old time`);
     const expectedPartyRevision = await revisionOf(v, p.partyId);
     const to = await v.table("Moved destination");
     await inTx(v, (tx) =>
@@ -531,7 +533,7 @@ describe("effective kitchen headings", () => {
     const moved = (await v.db.select().from(printJobs)).at(-1)!;
     const lines = printedLines(moved.payload);
     expect(lines).toContain("*** MOVIDO ***");
-    expect(lines).toContain("Para cocina: Old time");
+    expect(lines).toContain(`${spanish.forKitchen}Old time`);
   });
 
   it("corrects the source and destination work when their parties combine", async () => {
@@ -572,11 +574,11 @@ describe("effective kitchen headings", () => {
     await printer();
     const p = await sent();
     const first = (await v.db.select().from(printJobs))[0]!;
-    expect(printedLines(first.payload)).toContain("Para cocina: Old time");
+    expect(printedLines(first.payload)).toContain(`${spanish.forKitchen}Old time`);
     await set({ partyId: p.partyId }, "New time");
     await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, p.tabId));
     const jobs = await v.db.select().from(printJobs);
-    expect(printedLines(jobs.at(-1)!.payload)).toContain("Para cocina: New time");
+    expect(printedLines(jobs.at(-1)!.payload)).toContain(`${spanish.forKitchen}New time`);
     expect((await v.db.select().from(printJobs))[0]).toEqual(first);
   });
 
@@ -602,7 +604,7 @@ describe("effective kitchen headings", () => {
     );
     const jobs = await v.db.select().from(printJobs);
     expect(jobs.length).toBeGreaterThan(0);
-    expect(printedLines(jobs[0]!.payload)).toContain("Para cocina: Send together");
+    expect(printedLines(jobs[0]!.payload)).toContain(`${spanish.forKitchen}Send together`);
   });
 
   it("corrects a retained paid bill when its combined party's shared note changes", async () => {
@@ -701,7 +703,7 @@ it("A807 prints one slip per printer for stations that share one", async () => {
 
   const shared = (await jobsAt(s.shared)).slice(before.shared);
   expect(shared).toHaveLength(1);
-  expect(shared[0]!.slice(0, 2)).toEqual(["*** NOTA PARA COCINA CAMBIADA ***", "Grill · Pastry"]);
+  expect(shared[0]!.slice(0, 2)).toEqual([`*** ${spanish.noteChanged} ***`, "Grill · Pastry"]);
   expect(shared[0]!.slice(-5)).toEqual(["Grill", "2 x BURG", "Pastry", "1 x FLAN", ""]);
   const own = (await jobsAt(s.own)).slice(before.own);
   expect(own).toHaveLength(1);

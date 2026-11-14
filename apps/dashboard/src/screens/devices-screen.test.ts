@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import type { DeleteImpact } from "@waitron/shared";
-import { LeaveController } from "@waitron/ui";
+import { LeaveController, UrlStateController } from "@waitron/ui";
+import { dashboardPath } from "../navigation.js";
 import { registerCatalogue, type CardProviderPanel } from "@waitron/dashboard-kit";
 import {
   chooseOption,
@@ -343,6 +344,14 @@ const text = (el: DevicesScreen, sel: string) => q(el, sel)?.textContent?.trim()
 /** The screen inside an application that asks before unsaved changes are lost. */
 class DevicesLeaveHost extends LitElement {
   readonly leave = new LeaveController(this);
+  readonly url = new UrlStateController(this, () => {}, {
+    ...dashboardPath,
+    leave: {
+      isDirty: () => this.leave.coordinator.isDirty(),
+      request: (proceed, signal) =>
+        this.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    },
+  });
   api!: DashboardApi;
   override render() {
     return html`<dashboard-devices-screen
@@ -1176,6 +1185,103 @@ describe("the Edit dialog", () => {
     wtChange(el, "[data-test=edit-name]", name);
     await flush(el);
   }
+
+  it("opens a linked device after the complete read and clears its address on close", async () => {
+    history.replaceState(null, "", "/manage/devices/device/t1");
+    let answer!: (profiles: DeviceProfile[]) => void;
+    const api = editApi({
+      listDeviceProfiles: vi.fn(
+        () => new Promise<DeviceProfile[]>((resolve) => (answer = resolve)),
+      ),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+    });
+    await vi.waitFor(() => expect(dq(el.shadowRoot!, "[data-test=edit-device-t1]")).not.toBeNull());
+    expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
+    answer(editProfiles);
+    await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
+    expect(field(el, "edit-profile").value).toBe("pa");
+    await clickAndAwaitClose(el, "edit-device-modal", "edit-cancel");
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(location.pathname).toBe("/manage/devices");
+    expect(document.activeElement).toBe(el);
+    expect(el.shadowRoot!.activeElement).not.toBeNull();
+  });
+
+  it.each(["initial", "history"] as const)(
+    "opens a linked device when an initial failed read recovers (%s)",
+    async (entry) => {
+      history.replaceState(
+        null,
+        "",
+        entry === "initial" ? "/manage/devices/device/t1" : "/manage/devices",
+      );
+      const liveData = new LiveData();
+      const api = Object.assign(
+        editApi({
+          [entry === "initial" ? "listPrinters" : "listDevices"]: vi
+            .fn()
+            .mockRejectedValueOnce(Object.assign(new Error(), { code: "connection.failed" }))
+            .mockResolvedValue(entry === "initial" ? [] : [till, kitchen]),
+        }),
+        { liveData },
+      );
+      const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+      await vi.waitFor(() => expect(q(el, "[data-test=page-error]")?.textContent).toBeTruthy());
+      expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
+      if (entry === "history") {
+        history.pushState(null, "", "/manage/devices/device/t1");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        await flush(el);
+        expect(location.pathname).toBe("/manage/devices/device/t1");
+        expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
+      }
+      liveData.refresh();
+      await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
+      expect(location.pathname).toBe("/manage/devices/device/t1");
+    },
+  );
+
+  it("closes a linked editor when the address returns to Devices", async () => {
+    history.replaceState(null, "", "/manage/devices/device/t1");
+    const { el: host } = await mountWidget<DevicesLeaveHost>("devices-screen-leave-test-host", {
+      api: editApi(),
+    });
+    const el = host.shadowRoot!.querySelector<DevicesScreen>("dashboard-devices-screen")!;
+    await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
+    await host.url.write({ device: null });
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(location.pathname).toBe("/manage/devices");
+  });
+
+  it("clears an unknown linked device after loading the list", async () => {
+    history.replaceState(null, "", "/manage/devices/device/missing");
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api: editApi() });
+    await vi.waitFor(() => expect(location.pathname).toBe("/manage/devices"));
+    expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
+  });
+
+  it("keeps a linked draft through live reads and clears its address when the device goes", async () => {
+    history.replaceState(null, "", "/manage/devices/device/t1");
+    const liveData = new LiveData();
+    const api = Object.assign(editApi(), { liveData });
+    const { el: host } = await mountWidget<DevicesLeaveHost>("devices-screen-leave-test-host", {
+      api,
+    });
+    const el = host.shadowRoot!.querySelector<DevicesScreen>("dashboard-devices-screen")!;
+    await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
+    await rename(el, "Front counter");
+    vi.mocked(api.listDevices).mockResolvedValue([{ ...till, label: "Saved name" }, kitchen]);
+    liveData.invalidate([{ type: "devices", id: "t1" }]);
+    await vi.waitFor(() => expect(deepText(el, "[data-test=device-label-t1]")).toBe("Saved name"));
+    expect(field(el, "edit-name").value).toBe("Front counter");
+    vi.mocked(api.listDevices).mockResolvedValue([kitchen]);
+    liveData.invalidate([{ type: "devices", id: "t1" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(location.pathname).toBe("/manage/devices");
+  });
 
   // At 1280px wide the standard size is not capped by the window: 42rem (672px).
   it("is the standard width on desktop", async () => {

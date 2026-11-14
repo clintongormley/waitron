@@ -16,6 +16,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-colour-chooser.js";
@@ -304,10 +305,19 @@ export class StationEditor extends LitElement {
       :host {
         display: block;
       }
-      .form {
+      .form,
+      section {
         display: grid;
         gap: var(--wt-space-4);
         padding-block: var(--wt-space-3);
+      }
+      h2 {
+        margin: 0;
+        font-size: var(--wt-font-size-lg);
+      }
+      .pass-setting {
+        position: relative;
+        width: fit-content;
       }
       .readout,
       .note,
@@ -642,7 +652,6 @@ export class StationEditor extends LitElement {
     const generation = this.generation;
     // Fields stay editable while a save is sent: a newer edit stays as the draft once it is written.
     const current = () => generation === this.generation && this.isConnected && this.open;
-    const waitsHint = t("prep.waits_for_pass_hint");
     const restHint = t("prep.shows_rest_of_order_hint");
     const heldHint = t("prep.print_held_work_hint");
     return keyed(
@@ -662,190 +671,223 @@ export class StationEditor extends LitElement {
         }}
       >
         <div class="form">
-          <wt-input
-            name="stationName"
-            label=${t("prep.name")}
-            required
-            .value=${this.draft.name}
-            .error=${nameError || (refusedField === "name" ? fieldMessage : "")}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current()) this.changed({ ...this.draft, name: event.detail.value }, "name");
-            }}
-            @keydown=${(event: KeyboardEvent) =>
-              submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-station-edit]"))}
-          ></wt-input>
-          <wt-colour-chooser
-            name="colour"
-            label=${t("prep.colour")}
-            required
-            .value=${this.draft.colour}
-            .choices=${stationColourChoices(this.stations, this.station!.id)}
-            .usedByLabel=${this.colourUsedByLabel}
-            .error=${refusedField === "colour" ? fieldMessage : ""}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current() && isStationColour(event.detail.value))
-                this.changed({ ...this.draft, colour: event.detail.value }, "colour");
-            }}
-          ></wt-colour-chooser>
-          ${
-            this.station.isDefault
-              ? nothing
-              : html`<wt-combobox
-                  name="whenClosedSendsTo"
-                  label=${t("prep.when_closed_sends_to")}
-                  hint=${t("prep.when_closed_sends_to_hint")}
-                  search="auto"
-                  .value=${this.draft.whenClosedSendsTo}
-                  .options=${whenClosedOptions(
-                    this.stations,
-                    this.station.id,
-                    this.draft.whenClosedSendsTo,
-                  )}
-                  .error=${refusedField === "whenClosedSendsTo" ? fieldMessage : ""}
-                  .searchPlaceholder=${t("prep.when_closed_sends_to")}
-                  .noResultsLabel=${t("venue.combobox_no_results")}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    event.stopPropagation();
-                    if (current())
-                      this.changed(
-                        { ...this.draft, whenClosedSendsTo: event.detail.value },
-                        "whenClosedSendsTo",
-                      );
-                  }}
-                ></wt-combobox>`
-          }
-          ${this.printersField(current, refusedField === "printers" ? fieldMessage : "")}
-          ${
-            this.canManagePrinters && !this.station.active
-              ? html`<p class="note">${t("prep.printers_need_active")}</p>`
-              : nothing
-          }
-          <wt-switch
-            name="waitsForPass"
-            label=${t("prep.waits_for_pass")}
-            .description=${waitsHint}
-            .checked=${this.draft.waitsForPass}
-            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-              event.stopPropagation();
-              if (current())
-                this.changed({ ...this.draft, waitsForPass: event.detail.checked }, "waitsForPass");
-            }}
-          ></wt-switch>
-          <p class="note" data-test="waits-for-pass-hint" aria-hidden="true">${waitsHint}</p>
-          <fieldset>
-            <legend>${t("prep.late_flags")}</legend>
-            <div class="timing-fields">
-              ${TIMING_FIELDS.map(
-                (field) =>
-                  html`<wt-input
-                    name=${field}
-                    label=${t(TIMING_LABELS[field])}
-                    type="number"
-                    required
-                    .value=${this.draft[field]}
-                    .error=${errors[field] || (refusedField === field ? fieldMessage : "")}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      event.stopPropagation();
-                      if (current())
-                        this.changed({ ...this.draft, [field]: event.detail.value }, field);
-                    }}
-                    @keydown=${(event: KeyboardEvent) =>
-                      submitOnEnter(
-                        event,
-                        this.shadowRoot!.querySelector("[data-test=save-station-edit]"),
-                      )}
-                  ></wt-input>`,
-              )}
-            </div>
-          </fieldset>
-          <wt-combobox
-            name="bumpMode"
-            label=${t("prep.bump_mode")}
-            search="never"
-            .value=${this.draft.bumpMode}
-            .options=${bumpOptions()}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              const value = event.detail.value;
-              if (current() && isBumpMode(value))
-                this.changed({ ...this.draft, bumpMode: value }, "bumpMode");
-            }}
-          ></wt-combobox>
-          <wt-switch
-            name="showsRestOfOrder"
-            label=${t("prep.shows_rest_of_order")}
-            .description=${restHint}
-            .checked=${this.draft.showsRestOfOrder}
-            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-              event.stopPropagation();
-              if (current())
-                this.changed({ ...this.draft, showsRestOfOrder: event.detail.checked }, "rest");
-            }}
-          ></wt-switch>
-          <p class="note" data-test="rest-of-order-hint" aria-hidden="true">${restHint}</p>
-          <fieldset class="moved-slips" data-test="moved-slips-group">
-            <legend>${t("prep.moved_slips")}</legend>
-            <wt-combobox
-              name="printMovedSlips"
-              label=${t("prep.moved_slips")}
-              hide-label
-              search="never"
-              .value=${movedChoice(this.draft.printMovedSlips)}
-              .options=${movedOptions()}
+          <section>
+            <h2>${t("prep.section.station")}</h2>
+            <wt-input
+              name="stationName"
+              label=${t("prep.name")}
+              required
+              .value=${this.draft.name}
+              .error=${nameError || (refusedField === "name" ? fieldMessage : "")}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                if (current()) this.changed({ ...this.draft, name: event.detail.value }, "name");
+              }}
+              @keydown=${(event: KeyboardEvent) =>
+                submitOnEnter(
+                  event,
+                  this.shadowRoot!.querySelector("[data-test=save-station-edit]"),
+                )}
+            ></wt-input>
+            <wt-colour-chooser
+              name="colour"
+              label=${t("prep.colour")}
+              required
+              .value=${this.draft.colour}
+              .choices=${stationColourChoices(this.stations, this.station!.id)}
+              .usedByLabel=${this.colourUsedByLabel}
+              .error=${refusedField === "colour" ? fieldMessage : ""}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                if (current() && isStationColour(event.detail.value))
+                  this.changed({ ...this.draft, colour: event.detail.value }, "colour");
+              }}
+            ></wt-colour-chooser>
+            ${this.printersField(current, refusedField === "printers" ? fieldMessage : "")}
+            ${
+              this.canManagePrinters && !this.station.active
+                ? html`<p class="note">${t("prep.printers_need_active")}</p>`
+                : nothing
+            }
+            <fieldset class="moved-slips" data-test="moved-slips-group">
+              <legend>${t("prep.moved_slips")}</legend>
+              <wt-combobox
+                name="printMovedSlips"
+                label=${t("prep.moved_slips")}
+                hide-label
+                search="never"
+                .value=${movedChoice(this.draft.printMovedSlips)}
+                .options=${movedOptions()}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  if (current())
+                    this.changed(
+                      { ...this.draft, printMovedSlips: event.detail.value === "print" },
+                      "printMovedSlips",
+                    );
+                }}
+              ></wt-combobox>
+            </fieldset>
+            <wt-combobox
+              name="ticketGrouping"
+              label=${t("prep.ticket_grouping")}
+              hint=${t("prep.ticket_grouping_hint")}
+              search="never"
+              .value=${this.draft.ticketGrouping}
+              .options=${groupingOptions()}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                const value = event.detail.value;
+                if (current() && isTicketGrouping(value))
+                  this.changed({ ...this.draft, ticketGrouping: value }, "ticketGrouping");
+              }}
+            ></wt-combobox>
+            <wt-switch
+              name="printHeldWork"
+              label=${t("prep.print_held_work")}
+              .description=${heldHint}
+              .checked=${this.draft.printHeldWork}
+              @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                 event.stopPropagation();
                 if (current())
                   this.changed(
-                    { ...this.draft, printMovedSlips: event.detail.value === "print" },
-                    "printMovedSlips",
+                    { ...this.draft, printHeldWork: event.detail.checked },
+                    "printHeldWork",
+                  );
+              }}
+            ></wt-switch>
+            <p class="note" data-test="held-work-hint" aria-hidden="true">${heldHint}</p>
+            <wt-combobox
+              name="changesAfterSending"
+              label=${t("prep.changes_after_sending")}
+              search="never"
+              .value=${this.draft.changesAfterSending}
+              .options=${changesOptions()}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                const value = event.detail.value;
+                if (current() && isChangesAfterSending(value))
+                  this.changed(
+                    { ...this.draft, changesAfterSending: value },
+                    "changesAfterSending",
                   );
               }}
             ></wt-combobox>
-          </fieldset>
-          <wt-combobox
-            name="ticketGrouping"
-            label=${t("prep.ticket_grouping")}
-            hint=${t("prep.ticket_grouping_hint")}
-            search="never"
-            .value=${this.draft.ticketGrouping}
-            .options=${groupingOptions()}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              const value = event.detail.value;
-              if (current() && isTicketGrouping(value))
-                this.changed({ ...this.draft, ticketGrouping: value }, "ticketGrouping");
-            }}
-          ></wt-combobox>
-          <wt-switch
-            name="printHeldWork"
-            label=${t("prep.print_held_work")}
-            .description=${heldHint}
-            .checked=${this.draft.printHeldWork}
-            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-              event.stopPropagation();
-              if (current())
-                this.changed(
-                  { ...this.draft, printHeldWork: event.detail.checked },
-                  "printHeldWork",
-                );
-            }}
-          ></wt-switch>
-          <p class="note" data-test="held-work-hint" aria-hidden="true">${heldHint}</p>
-          <wt-combobox
-            name="changesAfterSending"
-            label=${t("prep.changes_after_sending")}
-            search="never"
-            .value=${this.draft.changesAfterSending}
-            .options=${changesOptions()}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              const value = event.detail.value;
-              if (current() && isChangesAfterSending(value))
-                this.changed({ ...this.draft, changesAfterSending: value }, "changesAfterSending");
-            }}
-          ></wt-combobox>
+          </section>
+          ${
+            this.station.isDefault
+              ? nothing
+              : html`<section>
+                  <h2>${t("prep.section.closed")}</h2>
+                  <wt-combobox
+                    name="whenClosedSendsTo"
+                    label=${t("prep.when_closed_sends_to")}
+                    show-empty-option
+                    search="auto"
+                    .value=${this.draft.whenClosedSendsTo}
+                    .options=${whenClosedOptions(
+                      this.stations,
+                      this.station.id,
+                      this.draft.whenClosedSendsTo,
+                    )}
+                    .error=${refusedField === "whenClosedSendsTo" ? fieldMessage : ""}
+                    .searchPlaceholder=${t("prep.when_closed_sends_to")}
+                    .noResultsLabel=${t("venue.combobox_no_results")}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      event.stopPropagation();
+                      if (current())
+                        this.changed(
+                          { ...this.draft, whenClosedSendsTo: event.detail.value },
+                          "whenClosedSendsTo",
+                        );
+                    }}
+                    ><wt-help-tooltip
+                      slot="help"
+                      mode="help-mode"
+                      aria-label=${t("prep.when_closed_sends_to")}
+                      >${t("prep.when_closed_sends_to_hint")}</wt-help-tooltip
+                    ></wt-combobox
+                  >
+                </section>`
+          }
+          <section>
+            <h2>${t("prep.section.pass")}</h2>
+            <div class="pass-setting">
+              <wt-switch
+                name="waitsForPass"
+                label=${t("prep.waits_for_pass")}
+                .checked=${this.draft.waitsForPass}
+                @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                  event.stopPropagation();
+                  if (current())
+                    this.changed(
+                      { ...this.draft, waitsForPass: event.detail.checked },
+                      "waitsForPass",
+                    );
+                }}
+              ></wt-switch>
+              <wt-help-tooltip
+                data-test="waits-for-pass-help"
+                mode="help-mode"
+                aria-label=${t("prep.waits_for_pass")}
+                >${t("prep.waits_for_pass_hint")}</wt-help-tooltip
+              >
+            </div>
+          </section>
+          <section>
+            <h2>${t("prep.section.screen")}</h2>
+            <fieldset>
+              <legend>${t("prep.late_flags")}</legend>
+              <div class="timing-fields">
+                ${TIMING_FIELDS.map(
+                  (field) =>
+                    html`<wt-input
+                      name=${field}
+                      label=${t(TIMING_LABELS[field])}
+                      type="number"
+                      required
+                      .value=${this.draft[field]}
+                      .error=${errors[field] || (refusedField === field ? fieldMessage : "")}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        event.stopPropagation();
+                        if (current())
+                          this.changed({ ...this.draft, [field]: event.detail.value }, field);
+                      }}
+                      @keydown=${(event: KeyboardEvent) =>
+                        submitOnEnter(
+                          event,
+                          this.shadowRoot!.querySelector("[data-test=save-station-edit]"),
+                        )}
+                    ></wt-input>`,
+                )}
+              </div>
+            </fieldset>
+            <wt-combobox
+              name="bumpMode"
+              label=${t("prep.bump_mode")}
+              search="never"
+              .value=${this.draft.bumpMode}
+              .options=${bumpOptions()}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                const value = event.detail.value;
+                if (current() && isBumpMode(value))
+                  this.changed({ ...this.draft, bumpMode: value }, "bumpMode");
+              }}
+            ></wt-combobox>
+            <wt-switch
+              name="showsRestOfOrder"
+              label=${t("prep.shows_rest_of_order")}
+              .description=${restHint}
+              .checked=${this.draft.showsRestOfOrder}
+              @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                event.stopPropagation();
+                if (current())
+                  this.changed({ ...this.draft, showsRestOfOrder: event.detail.checked }, "rest");
+              }}
+            ></wt-switch>
+            <p class="note" data-test="rest-of-order-hint" aria-hidden="true">${restHint}</p>
+          </section>
         </div>
         <wt-form-actions
           slot="footer"

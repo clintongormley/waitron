@@ -5965,8 +5965,8 @@ it.each([
 );
 
 it.each([
-  ["en-GB", "Kitchen name: BAR · Course: Starters"],
-  ["es-ES", "Nombre de cocina: BAR · Curso: Starters"],
+  ["en-GB", "Prep station name: BAR · Course: Starters"],
+  ["es-ES", "Nombre de estación de preparación: BAR · Curso: Starters"],
 ] as const)("draws the Kitchen line's field names in bold, in %s", async (locale, line) => {
   setLocale(locale);
   try {
@@ -6104,13 +6104,13 @@ async function foldedLines(el: ProductEditor): Promise<Record<string, string>> {
 it.each([
   {
     locale: "en-GB",
-    kitchen: "Kitchen name: None specified · Course: None specified",
+    kitchen: "Prep station name: None specified · Course: None specified",
     descriptors: "Name: None specified / Description: None specified",
     nutrition: "Allergens: Not yet reviewed · Dietary: None",
   },
   {
     locale: "es-ES",
-    kitchen: "Nombre de cocina: Sin especificar · Curso: Sin especificar",
+    kitchen: "Nombre de estación de preparación: Sin especificar · Curso: Sin especificar",
     descriptors: "Nombre: Sin especificar / Descripción: Sin especificar",
     nutrition: "Alérgenos: Sin revisar todavía · Dietética: Ninguna",
   },

@@ -1,3 +1,5 @@
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
+import { setHelpMode } from "@waitron/ui/src/help-mode.js";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -12,6 +14,7 @@ import {
 } from "./station-editor.js";
 
 afterEach(() => {
+  setHelpMode(false);
   cleanup();
   setLocale("en");
 });
@@ -83,7 +86,7 @@ const heldSwitch = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-switch"]>(el, "wt-switch[name=printHeldWork]")!;
 const waitsSwitch = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-switch"]>(el, "wt-switch[name=waitsForPass]")!;
-const waitsHint = (el: StationEditor) => $(el, "[data-test=waits-for-pass-hint]")!;
+const waitsHint = (el: StationEditor) => $(el, "[data-test=waits-for-pass-help]")!;
 async function flipWaits(el: StationEditor, checked: boolean) {
   waitsSwitch(el).dispatchEvent(new CustomEvent("wt-change", { detail: { checked } }));
   await el.updateComplete;
@@ -189,7 +192,7 @@ it.each([
   const seen = saves(el);
   expect(printersField(el)).toBeNull();
   const readout = $(el, "[data-test=station-printers]")!;
-  expect(readout.textContent).toContain("Printers");
+  expect(readout.textContent).toContain("Ticket printers");
   expect(readout.textContent).toContain("Epson, Star");
   await rename(el, "Hot grill");
   await flipRest(el, true);
@@ -276,7 +279,7 @@ it("closes once saved, or stays open on an edit made while saving", async () => 
 it("reads in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
   expect($(el, "wt-modal")!.getAttribute("heading")).toBe("Editar estación");
-  expect(printersField(el)!.label).toBe("Impresoras");
+  expect(printersField(el)!.label).toBe(VENUE_SERVICE_STRINGS.es["prep.printers"]);
   expect(restSwitch(el).label).toBe("Mostrar también los platos del pedido de otras estaciones");
 });
 
@@ -562,7 +565,7 @@ it("offers another station's colour with its name, and never names the station b
   expect(tile(el, "orange").getAttribute("aria-label")).toBe("Orange, used by Pizza oven");
   expect(tile(el, "blue").getAttribute("aria-label")).toBe("Blue, used by Bar");
   expect(picker(el).shadowRoot!.textContent).not.toContain("Grill");
-  expect($(el, ".form > wt-input[name=stationName] + wt-colour-chooser")).not.toBeNull();
+  expect($(el, "section > wt-input[name=stationName] + wt-colour-chooser")).not.toBeNull();
 });
 
 it("puts a colour refusal under Colour", async () => {
@@ -578,7 +581,7 @@ it("puts a colour refusal under Colour", async () => {
   expect(formMessage(el)).toBe("");
 });
 
-it("offers Print a slip when sent dishes move table as Print or Don't print, right after the rest-of-order switch", async () => {
+it("offers Print a slip when sent dishes move table as Print or Don't print, in the Station section", async () => {
   const on = await mount();
   expect(movedField(on).label).toBe("Print a slip when sent dishes move table");
   expect(movedField(on).value).toBe("print");
@@ -586,19 +589,18 @@ it("offers Print a slip when sent dishes move table as Print or Don't print, rig
     ["print", "Print"],
     ["dont-print", "Don't print"],
   ]);
-  const fields = [...on.shadowRoot!.querySelectorAll("wt-switch, wt-combobox")];
-  expect(fields.indexOf(movedField(on))).toBe(fields.indexOf(restSwitch(on)) + 1);
+  expect(movedField(on).closest("section")).toBe(printersField(on)!.closest("section"));
 });
 
 it("opens on the station's ticket grouping and held printing, after MOVED slips", async () => {
   const el = await mount({ ...GRILL, ticketGrouping: "separate", printHeldWork: true });
-  expect(groupingField(el).label).toBe("Identical dishes on a kitchen ticket");
+  expect(groupingField(el).label).toBe("Identical dishes on a station ticket");
   expect(groupingField(el).value).toBe("separate");
   expect(groupingField(el).options.map(({ value, label }) => [value, label])).toEqual([
     ["combined", "One line: 3 x Burger"],
     ["separate", "A line each: 1 x Burger, three times"],
   ]);
-  expect(groupingField(el).hint).toBe("Applies to new kitchen tickets and to reprints.");
+  expect(groupingField(el).hint).toBe("Applies to new station tickets and to reprints.");
   expect(heldSwitch(el).label).toBe("Print held groups in advance");
   expect(heldSwitch(el).checked).toBe(true);
   expect($(el, "[data-test=held-work-hint]")!.textContent).toBe(
@@ -646,13 +648,13 @@ it("sends only a changed ticket grouping or held printing, and nothing for a cho
 
 it("reads the ticket grouping and held printing in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
-  expect(groupingField(el).label).toBe("Platos iguales en una comanda de cocina");
+  expect(groupingField(el).label).toBe("Platos iguales en una comanda de estación");
   expect(groupingField(el).options.map(({ label }) => label)).toEqual([
     "Una línea: 3 x Hamburguesa",
     "Una por plato: 1 x Hamburguesa, tres veces",
   ]);
   expect(groupingField(el).hint).toBe(
-    "Se aplica a las comandas de cocina nuevas y a las reimpresiones.",
+    "Se aplica a las comandas de estación nuevas y a las reimpresiones.",
   );
   expect(heldSwitch(el).label).toBe("Imprimir por adelantado los grupos en espera");
   expect($(el, "[data-test=held-work-hint]")!.textContent).toBe(
@@ -660,24 +662,29 @@ it("reads the ticket grouping and held printing in Spanish", async () => {
   );
 });
 
-it("A773 station policy: opens on the station's pass waiting, after the printers", async () => {
+it("groups the station settings and explains Held at the pass in a help bubble", async () => {
   const el = await mount({ ...GRILL, waitsForPass: true });
-  expect(waitsSwitch(el).label).toBe("Waits for the pass");
+  expect(
+    [...el.shadowRoot!.querySelectorAll("h2")].map((heading) => heading.textContent!.trim()),
+  ).toEqual(["Station", "When it is closed", "The pass", "Station screen"]);
+  expect(nameField(el).closest("section")).toBe(printersField(el)!.closest("section"));
+  expect(timingField(el, "warmAfterMinutes").closest("section")).toBe(
+    restSwitch(el).closest("section"),
+  );
+  expect(waitsSwitch(el).label).toBe("Held at the pass");
   expect(waitsSwitch(el).checked).toBe(true);
-  expect(waitsHint(el).textContent).toBe("Its dishes wait at the pass until the pass fires them.");
-  expect(waitsHint(el).matches("p.note")).toBe(true);
-  expect(waitsSwitch(el).previousElementSibling).toBe(printersField(el));
-  expect(waitsSwitch(el).nextElementSibling).toBe(waitsHint(el));
-  expect(waitsHint(el).nextElementSibling!.tagName).toBe("FIELDSET");
-  expect(waitsHint(el).nextElementSibling!.querySelector("legend")!.textContent).toBe(
-    "Late flags (minutes)",
+  expect(waitsHint(el).getAttribute("mode")).toBe("help-mode");
+  expect(waitsHint(el).textContent).toBe(
+    "Its dishes wait at the pass until the pass sends them out.",
   );
-  cleanup();
-  const removed = await mount({ ...GRILL, active: false });
-  expect(waitsSwitch(removed).checked).toBe(false);
-  expect(waitsSwitch(removed).previousElementSibling!.textContent).toBe(
-    "Enable the station to change its printers.",
-  );
+  expect($(el, "[data-test=waits-for-pass-hint]")).toBeNull();
+  setHelpMode(true);
+  const help = waitsHint(el) as HTMLElementTagNameMap["wt-help-tooltip"];
+  await help.updateComplete;
+  const bubble = help.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+  const toggle = waitsSwitch(el).getBoundingClientRect();
+  expect(Math.abs(bubble.left + bubble.width / 2 - toggle.right)).toBeLessThan(1);
+  expect(Math.abs(bubble.top + bubble.height / 2 - toggle.top)).toBeLessThan(1);
 });
 
 it("A773 station policy: sends only a changed pass waiting, and nothing once put back", async () => {
@@ -694,10 +701,8 @@ it("A773 station policy: sends only a changed pass waiting, and nothing once put
 
 it("A773 station policy: reads the switch in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
-  expect(waitsSwitch(el).label).toBe("Espera al pase");
-  expect(waitsHint(el).textContent).toBe(
-    "Sus platos esperan en el pase hasta que el pase los marcha.",
-  );
+  expect(waitsSwitch(el).label).toBe(VENUE_SERVICE_STRINGS.es["prep.waits_for_pass"]);
+  expect(waitsHint(el).textContent).toBe(VENUE_SERVICE_STRINGS.es["prep.waits_for_pass_hint"]);
 });
 
 it("A773 station policy: a refusal naming waitsForPass keeps the draft and shows above the buttons", async () => {
@@ -778,20 +783,23 @@ async function pickClosed(el: StationEditor, value: string) {
   await el.updateComplete;
 }
 
-it("A1510: offers every other active station as where its dishes go when closed, after the colour", async () => {
+it("offers other active stations when closed, with a normal empty choice and contextual help", async () => {
   const el = await mount({ ...GRILL, whenClosedSendsTo: "bar" });
   const field = closedField(el)!;
-  expect(field.label).toBe("When closed, send to");
+  expect(field.label).toBe("When closed for the day, send its dishes to");
   expect(field.required).toBe(false);
-  expect(field.hint).toBe("Close for today starts with this station chosen.");
+  expect(field.hint).toBe("");
+  expect(field.showEmptyOption).toBe(true);
+  expect(field.querySelector('wt-help-tooltip[slot="help"]')!.textContent).toContain(
+    "offered first",
+  );
   expect(field.value).toBe("bar");
   expect(field.options.map(({ value, label }) => [value, label])).toEqual([
-    ["", "Not set"],
+    ["", "Ask each time"],
     ["bar", "Bar"],
     ["pizza", "Pizza oven"],
   ]);
-  expect(field.previousElementSibling).toBe(picker(el));
-  expect(field.nextElementSibling).toBe(printersField(el));
+  expect(field.closest("section")!.querySelector("h2")!.textContent).toBe("When it is closed");
   cleanup();
   const unset = await mount();
   expect(closedField(unset)!.value).toBe("");
@@ -800,13 +808,16 @@ it("A1510: offers every other active station as where its dishes go when closed,
 it("A1510: the default station has no when-closed choice", async () => {
   const el = await mount({ ...GRILL, isDefault: true, whenClosedSendsTo: "bar" });
   expect(closedField(el)).toBeNull();
+  expect([...el.shadowRoot!.querySelectorAll("h2")].map((h) => h.textContent)).not.toContain(
+    "When it is closed",
+  );
 });
 
 it("A1510: a chosen station that has since been disabled stays chosen, named as disabled", async () => {
   const el = await mount({ ...GRILL, whenClosedSendsTo: "old-station" });
   expect(closedField(el)!.value).toBe("old-station");
   expect(closedField(el)!.options.map(({ value, label }) => [value, label])).toEqual([
-    ["", "Not set"],
+    ["", "Ask each time"],
     ["bar", "Bar"],
     ["pizza", "Pizza oven"],
     ["old-station", "A disabled station"],
@@ -857,9 +868,9 @@ it("A1510: a refused when-closed choice shows under its field until it changes",
 it("A1510: reads the when-closed choice in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
   const field = closedField(el)!;
-  expect(field.label).toBe("Al cerrar, enviar a");
-  expect(field.hint).toBe("Cerrar por hoy empieza con esta estación elegida.");
-  expect(field.options[0]!.label).toBe("Sin elegir");
+  expect(field.label).toBe(VENUE_SERVICE_STRINGS.es["prep.when_closed_sends_to"]);
+  expect(field.hint).toBe("");
+  expect(field.options[0]!.label).toBe(VENUE_SERVICE_STRINGS.es["prep.when_closed_not_set"]);
   await pickClosed(el, "bar");
   el.refusal = { code: "station.destination_invalid", params: { reason: "self" } };
   await el.updateComplete;
@@ -1000,10 +1011,12 @@ it("A725 paints the station dot token and translates a retained chooser", async 
   expect(chooser.shadowRoot!.querySelector("[data-value=blue]")!.getAttribute("aria-label")).toBe(
     "Azul, en uso por Bar",
   );
-  expect($(el, "fieldset legend")!.textContent).toBe("Avisos de demora (minutos)");
+  expect($(el, ".timing-fields")!.closest("fieldset")!.querySelector("legend")!.textContent).toBe(
+    "Avisos de demora (minutos)",
+  );
   expect(restSwitch(el).label).toBe("Mostrar también los platos del pedido de otras estaciones");
   expect($(el, "[data-test=rest-of-order-hint]")!.textContent).toBe(
-    "En las comandas y la pantalla de cocina de esta estación",
+    "En las comandas y la pantalla de estación de esta estación",
   );
 });
 
@@ -1135,7 +1148,7 @@ it.each([390, 1280])("A725 draws the four minutes two to a row at %ipx", async (
     expect(fields.map((field) => field.hint)).toEqual(["", "", "", ""]);
     expect(restSwitch(el).label).toBe("Also list the order's dishes from other stations");
     expect($(el, "[data-test=rest-of-order-hint]")!.textContent).toBe(
-      "On this station's tickets and kitchen screen",
+      "On this station's tickets and station screen",
     );
     expect(movedField(el).label).toBe("Print a slip when sent dishes move table");
     expect(movedField(el).options.map(({ label }) => label)).toEqual(["Print", "Don't print"]);
@@ -1161,7 +1174,7 @@ it.each([
         ),
       ];
       expect(blocks.filter((block) => block.matches(".note"))).toHaveLength(
-        canManagePrinters ? 4 : 3,
+        canManagePrinters ? 3 : 2,
       );
       expect(blocks.some((block) => block.matches(".readout"))).toBe(true);
       const name = nameField(el).getBoundingClientRect();
@@ -1230,7 +1243,6 @@ it.each(["en", "es"] as const)(
 it("A1319 reads each switch's visible hint to screen readers as its description", async () => {
   const el = await mount();
   const pairs = [
-    [waitsSwitch(el), "waits-for-pass-hint"],
     [restSwitch(el), "rest-of-order-hint"],
     [heldSwitch(el), "held-work-hint"],
   ] as const;

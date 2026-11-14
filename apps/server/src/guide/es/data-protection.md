@@ -143,8 +143,8 @@ aviso de privacidad.
 Copia y adapta el párrafo siguiente:
 
 **Alergias.** _Razón social del local_ anota a quién afecta una alergia, los alérgenos y la nota
-para cocina que nos indique, para preparar su comida con seguridad. Estos datos se comunican a
-la cocina. Puede pedirnos que le mostremos, rectifiquemos o suprimamos sus datos, o ejercer sus
+para la estación que nos indique, para preparar su comida con seguridad. Estos datos se comunican a
+la estación. Puede pedirnos que le mostremos, rectifiquemos o suprimamos sus datos, o ejercer sus
 otros derechos de protección de datos. Más información: _correo de privacidad del local_,
 _dirección de la página de privacidad_.
 
@@ -339,7 +339,7 @@ datos, y Waitron puede enviarle la factura por correo.
   del cliente de cada una de esas facturas. **Descargar para tu gestor (XLSX)** en la misma pantalla
   también incluye la dirección registrada del cliente. Comparte estos archivos solo con su destinatario.
 - Plazo de conservación: _fijar con tu asesor_. Waitron nunca cambia ni borra una factura emitida.
-  También guarda cada recibo y cada comanda que envía a una impresora de recibos o de cocina y no
+  También guarda cada recibo y cada comanda que envía a una impresora de recibos o de estación y no
   borra ninguno, así que los datos del cliente de una factura impresa en la caja también quedan en
   la base de datos. Una factura A4 se genera de nuevo cada vez que se imprime, y esa copia impresa
   no se guarda.
@@ -368,36 +368,36 @@ el nombre y el NIF del proveedor son datos personales si el proveedor es autóno
   escriba solo lo que necesita el servicio.
 
 **Nombres de mesa y notas.** El personal puede dar un nombre a una mesa, o a una de sus cuentas, en
-la caja y escribir notas en un pedido o en un plato para la cocina.
+la caja y escribir notas en un pedido o en un plato para la estación.
 
-- Finalidad: encontrar la mesa correcta y decir a la cocina lo que necesita cada pedido.
+- Finalidad: encontrar la mesa correcta y decir a la estación lo que necesita cada pedido.
 - Interesados: los clientes de una mesa, y cualquier persona que nombre una nota.
-- Datos: el nombre escrito para la mesa, que se imprime en las comandas de cocina y en los recibos y
+- Datos: el nombre escrito para la mesa, que se imprime en las comandas de estación y en los recibos y
   facturas de la mesa, también en el PDF que se envía por correo; el nombre escrito para una cuenta,
   que solo muestra la caja; y las notas escritas en pedidos y platos, que se imprimen en las comandas
-  de cocina. Una nota es texto libre y puede mencionar la
+  de estación. Una nota es texto libre y puede mencionar la
   salud, como una dieta, así que pregunta a tu asesor cómo tratarla.
 - Destinatarios: tu proveedor de correo, por cada factura que envías por correo; _cualquier otro con
   quien los compartas_.
 - Plazo de conservación: _fijar con tu asesor_. Waitron guarda cada recibo y cada comanda que envía
-  a una impresora de recibos o de cocina y no borra ninguno, así que los nombres y las notas
+  a una impresora de recibos o de estación y no borra ninguno, así que los nombres y las notas
   impresos en ellos también quedan en la base de datos.
 - Seguridad: como en todas las entradas. Las notas son texto libre, así que pide al personal que
   escriba solo lo que necesita el servicio.
 
-**Alergias.** Antes del primer envío a cocina, el personal debe responder si alguien de la mesa
-tiene alergias. Anota los detalles para que la cocina prepare la comida con seguridad.
+**Alergias.** Antes del primer envío a la estación, el personal debe responder si alguien de la mesa
+tiene alergias. Anota los detalles para que la estación prepare la comida con seguridad.
 
 - Finalidad: preparar con seguridad la comida de cada cliente.
 - Interesados: los clientes de una mesa.
 - Datos: quién tiene la alergia, que puede ser el nombre del cliente, los alérgenos y una nota.
-  Waitron guarda una copia con cada comanda de cocina. Los datos de alergias vinculados a un
+  Waitron guarda una copia con cada comanda de estación. Los datos de alergias vinculados a un
   cliente son datos relativos a la salud; acuerda con tu asesor su base jurídica y su plazo de
   conservación antes de usar las notas.
 - Destinatarios: _cualquiera con quien los compartas_.
 - Plazo de conservación: _fijar con tu asesor_. Waitron guarda cada comanda que envía a una
-  impresora de cocina y no borra ninguna, así que los datos de alergias impresos en las comandas de
-  cocina también quedan en la base de datos.
+  impresora de estación y no borra ninguna, así que los datos de alergias impresos en las comandas de
+  la estación también quedan en la base de datos.
 - Seguridad: como en todas las entradas.
 
 **Pagos con tarjeta.** Cuando un cliente paga con tarjeta, Waitron guarda los datos del pago.

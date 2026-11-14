@@ -18,7 +18,7 @@ la misma manera.
 
 Durante la configuración, elige **Idioma de trabajo** en **Tu tienda**. Elige **Inglés** o **Español**
 para los nombres del menú inicial, los pases y los demás elementos iniciales, y para los nombres
-del personal y la cocina en la demostración. El idioma de la pantalla, el del recibo y los idiomas
+del personal y la estación en la demostración. El idioma de la pantalla, el del recibo y los idiomas
 para el cliente tienen sus propias opciones.
 
 Puedes cambiar esos nombres después. Para cambiar un nombre de una configuración importada,
@@ -116,7 +116,7 @@ proceden del pedido guardado. Editar traducciones o cambiar el predeterminado no
 de un ticket ya emitido. Si el idioma del ticket no está entre los idiomas del contenido, esta
 página y la tarjeta de valores predeterminados muestran un aviso.
 
-Las pantallas de cocina, los pedidos recuperados y los informes conservan sus nombres registrados,
+Las pantallas de estación, los pedidos recuperados y los informes conservan sus nombres registrados,
 aunque elimines ese idioma del contenido. El idioma de los botones y pantallas sigue siendo una
 preferencia aparte. Estos ajustes también ofrecen los idiomas para futuro contenido en línea;
 no crean un sitio de pedidos en línea.
@@ -125,11 +125,11 @@ Pedir de nuevo el ticket original conserva el trabajo de impresión existente. P
 hoja cuando haya terminado, abre **Imprimir/Reimprimir**, elige una impresora para **Recibo** y pulsa
 **Imprimir una copia en {printer}**. La copia lleva el mismo número de factura y la marca de duplicado.
 
-Los tickets de cocina y los comprobantes del número de recogida también usan tu idioma del
+Los tickets de estación y los comprobantes del número de recogida también usan tu idioma del
 contenido predeterminado en sus cabeceras. Con español salen en español; con otros idiomas, en
-inglés. El papel nuevo y las reimpresiones de cocina siguen el cambio al momento; un reenvío
+inglés. El papel nuevo y las reimpresiones de estación siguen el cambio al momento; un reenvío
 conserva sus cabeceras originales. Los nombres de platos, las notas y las instrucciones sobre alergias
-conservan su texto registrado. Consulta [el papel de cocina](kitchen-service.md#paper-language).
+conservan su texto registrado. Consulta [el papel de estación](kitchen-service.md#paper-language).
 
 ## Sube una fotografía una sola vez {#upload}
 

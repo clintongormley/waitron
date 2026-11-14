@@ -1,8 +1,8 @@
-# Servicio de cocina
+# Servicio de estaciones
 
 Cuando una persona necesita atención especial, tienes que saber qué plato es suyo y qué debe
 evitar. Registra a la persona y asígnale sus platos en la
-[ventana de alergias](products.md#table-allergies) de la mesa. Cocina recibe esas instrucciones
+[ventana de alergias](products.md#table-allergies) de la mesa. Estaciones recibe esas instrucciones
 junto con su trabajo.
 
 En Demostración o Preparación, los controles de cobro del mostrador y la ventana de pago de
@@ -22,17 +22,17 @@ Después del último pago, sigue [Elegir documentos después de cobrar](table-se
 
 Si el terminal no puede confirmar un envío de mostrador, reinténtalo sin cambiar la cesta. Si el
 primer envío ya llegó al servidor, el reintento devuelve su resultado original y el terminal
-continúa con el pedido enviado. No añade otra comanda de cocina ni otro resguardo con el número
+continúa con el pedido enviado. No añade otra comanda de estación ni otro resguardo con el número
 de recogida. Si el servidor no tiene espacio en disco, el reintento se rechaza y el terminal dice
 que no se ha guardado, aunque el primer envío ya llegara al servidor.
 
 Si cambias la cesta después del primer envío, el terminal debe guardar esos cambios antes de
 enviarla. Si el pedido ya está enviado, conserva tus cambios en pantalla y muestra un error en
-vez de dar a entender que la cocina los recibió. Revisa el pedido enviado antes de continuar.
+vez de dar a entender que la estación los recibió. Revisa el pedido enviado antes de continuar.
 
 ## Lee la copia de alergias junto al plato {#allergy-copies}
 
-Un plato asignado lleva el nombre de la persona, los alérgenos que evita y su nota para cocina.
+Un plato asignado lleva el nombre de la persona, los alérgenos que evita y su nota para la estación.
 Por ejemplo, Alex evita Leche y pide una sartén aparte. Su plato muestra ese bloque debajo, y el
 ticket o la tarjeta de la pantalla lleva una marca de alergia. Un extra enviado a otra estación
 lleva las mismas instrucciones de la persona a su propia estación.
@@ -44,7 +44,7 @@ suyos tras su nombre; uno que se prepara en otra estación los indica en el tick
 Que no haya línea **Contiene**, igual que la falta de información nutricional, no establece que un
 plato sea apto. Consúltalo con quien atiende la mesa antes de prepararlo.
 
-El bloque de la persona conserva las instrucciones que cocina recibió primero: los cambios
+El bloque de la persona conserva las instrucciones que la estación recibió primero: los cambios
 posteriores de la persona o del catálogo no lo sustituyen silenciosamente en la tarjeta del
 plato, el pase o una reimpresión. La línea **Contiene** de un plato muestra lo que declaraba al
 hacerse el ticket; una reimpresión lo vuelve a leer.
@@ -53,7 +53,7 @@ hacerse el ticket; una reimpresión lo vuelve a leer.
 
 Si se cambian las instrucciones de un plato que tu estación aún tiene que preparar o entregar,
 recibes un aviso de **Alergia cambiada** con el bloque nuevo. Quitar la asignación, eliminar a la
-persona o elegir Sin alergias genera **Alergia eliminada**. Las impresoras de cocina configuradas
+persona o elegir Sin alergias genera **Alergia eliminada**. Las impresoras de estación configuradas
 también reciben un ticket de corrección.
 
 Añadir o quitar un extra también puede cambiar el aviso de conflicto de un plato. Si cambia para
@@ -70,8 +70,8 @@ Una corrección abarca solo la cantidad que queda por servir. El trabajo ya serv
 completo no recibe un aviso de alergia nuevo. Si un plato pasa a otra estación, conserva su copia
 original y lleva una corrección cuando las instrucciones actuales son distintas.
 
-Cambiar o quitar la nota para cocina del pedido da a tu estación un solo aviso con todos los platos
-afectados, y **Entendido** lo retira. Cada impresora de cocina imprime un solo ticket con los
+Cambiar o quitar la nota para la estación del pedido da a tu estación un solo aviso con todos los platos
+afectados, y **Entendido** lo retira. Cada impresora de estación imprime un solo ticket con los
 platos de las estaciones a las que sirve. Un grupo de comensales con varias cuentas afectadas recibe
 un aviso por estación y un ticket por impresora, con los números de esas cuentas. Lee la lista antes
 de confirmar.
@@ -79,7 +79,7 @@ de confirmar.
 ## Relaciona los nombres cambiados con los pedidos originales {#party-names}
 
 Los tickets de corrección muestran el nombre actual del grupo de comensales junto al número de
-pedido. Si se añade, cambia o quita el nombre de un grupo con trabajo pendiente en cocina, cada
+pedido. Si se añade, cambia o quita el nombre de un grupo con trabajo pendiente en la estación, cada
 impresora afectada recibe un ticket **NOMBRE CAMBIADO**. Relaciona sus números de pedido con los
 tickets originales y usa el nombre que aparece después de **Ahora**. Este ticket cambia el nombre;
 no pide que vuelvas a preparar la comida.
@@ -103,9 +103,9 @@ solo las secciones que ya recibieron lo impreso en espera llevan la marca MARCHA
 Enviar a preparar el trabajo en espera en la misma estación no duplica una corrección de alergia
 existente.
 
-## Lee el encabezado de un grupo en el papel de cocina {#group-headings}
+## Lee el encabezado de un grupo en el papel de estación {#group-headings}
 
-En el papel de cocina, el encabezado de un grupo nombra los cursos de los platos impresos debajo, en
+En el papel de estación, el encabezado de un grupo nombra los cursos de los platos impresos debajo, en
 el orden de los cursos: **GRUPO 3 · ENTRANTES, PRINCIPALES**. Una reimpresión los muestra como estén
 al reimprimir.
 
@@ -113,7 +113,7 @@ al reimprimir.
 
 Una reimpresión repite el bloque de alergias original. No genera otro aviso de corrección, así que
 comprueba por separado los avisos pendientes de la estación. Dividir los platos entre cuentas
-conserva las copias con el trabajo de cocina resultante; no sustituye las instrucciones de la
+conserva las copias con el trabajo de estación resultante; no sustituye las instrucciones de la
 persona.
 
 La cabecera de una reimpresión indica cuándo se reimprimió (`*** REIMPRESIÓN 15:20 ***`). La hora
@@ -153,30 +153,30 @@ se muestra atenuado, salvo si el pase oculta los platos de otras estaciones (con
 [Trabaja en el pase](kitchen-service.md#pass-screen)).
 
 Tú decides cuándo pedir la preparación desde el terminal; no hay un modo de marcha para todo el
-local. Cada estación de preparación fija si su pantalla de cocina avanza la preparación un plato cada vez
+local. Cada estación de preparación fija si su pantalla de estación avanza la preparación un plato cada vez
 o toda la comanda a la vez, en **Marcado en la pantalla** al editarla en **Estaciones de preparación**. En la
-pantalla de cocina, una tarjeta de una estación que avanza toda la comanda muestra **Toda la
+pantalla de estación, una tarjeta de una estación que avanza toda la comanda muestra **Toda la
 comanda** mientras un toque aún pueda avanzarla, y un toque en uno de sus platos avanza los platos de
 la tarjeta que están en la misma fase.
 Cada
 estación de preparación fija sus propios avisos de demora, y un tiempo de **Listo sin recoger** de 3
-minutos si no lo cambias, al crearla con **Añadir estación**, y en **Avisos de demora (minutos)** al
+minutos si no lo cambias, al crearla con **Añadir una estación**, y en **Avisos de demora (minutos)** al
 editarla en **Estaciones de preparación**. En un móvil o una tableta, la barra Listo se vuelve
 ámbar cuando un plato listo ha esperado ese tiempo: consulta
 [Ver qué mesas tienen comida lista](table-service.md#ready-bar). Cada estación de
 preparación fija también cómo se imprimen los platos iguales en sus comandas, si imprime por
 adelantado los grupos en espera y si un plato ya enviado a ella se puede cambiar, en
-**Platos iguales en una comanda de cocina**, **Imprimir por adelantado los grupos en espera** y
+**Platos iguales en una comanda de estación**, **Imprimir por adelantado los grupos en espera** y
 **Cambios tras el envío**: **No permitidos**, **Solo en
 espera** o **En espera o sin empezar**. También fija si sus platos esperan a que el pase los marche,
-en **Espera al pase**: consulta [Haz que una estación espere al pase](kitchen-service.md#station-waits).
-**Cerrar por hoy** empieza con la estación elegida en **Al cerrar, enviar a**.
-Un plato que la cocina ha empezado no se puede cambiar. Un plato que no fue a ninguna estación,
+en **En espera en el pase**: consulta [Haz que una estación espere al pase](kitchen-service.md#station-waits).
+**Cerrar por hoy** empieza con la estación elegida en **Al cerrar por hoy, enviar sus platos a**.
+Un plato que la estación ha empezado no se puede cambiar. Un plato que no fue a ninguna estación,
 sin ningún extra que fuera a una estación propia, se puede cambiar sea cual sea el ajuste de las estaciones.
 
-## Trabaja con la pantalla de cocina {#kitchen-screen}
+## Trabaja con la pantalla de estación {#kitchen-screen}
 
-La pantalla de cocina muestra una tarjeta por cada grupo de platos que envió una mesa, y una por
+La pantalla de estación muestra una tarjeta por cada grupo de platos que envió una mesa, y una por
 cada pedido de mostrador. Una tarjeta nombra su mesa por su nombre corto; un pedido de mostrador sin
 mesa dice **Mostrador #12**. Una tarjeta está en la columna de su plato menos avanzado,
 **Esperando**, **Preparando** o **Listo**, y primero va la que lleva más tiempo esperando. Sus
@@ -217,7 +217,7 @@ con una tarjeta con retraso la lleva en su parte superior.
 
 Una fila encima de las columnas muestra cuántos platos quedan por hacer y cuántas tarjetas van con
 retraso, y **Columnas** al final; encima de las columnas de una sola estación muestra también si la
-estación está abierta hoy y, en una pantalla de cocina en la que nadie inicia sesión, el nombre de
+estación está abierta hoy y, en una pantalla de estación en la que nadie inicia sesión, el nombre de
 la estación (salvo si la estación ya no está disponible: entonces la nombra la línea encima de sus
 columnas). Toca **Columnas** para ordenar las columnas. Lista **Resumen**, **Esperando + En
 espera**, **Esperando**, **En espera**, **Preparando** y **Listo**: las flechas suben o bajan una
@@ -233,12 +233,12 @@ que se muestran y las plegadas, para cada tablero, incluso después de reiniciar
 tarjetas de una columna oculta siguen contando en la fila. Con todas las columnas ocultas, la fila y
 **Columnas** siguen ahí, para que puedas mostrar una de nuevo.
 
-Cada tarjeta lleva la nota para cocina de su pedido y cualquier problema de impresión. En un
+Cada tarjeta lleva la nota para la estación de su pedido y cualquier problema de impresión. En un
 terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pedido está pagado y
-pendiente de recoger; una pantalla de cocina en la que nadie inicia sesión no muestra ninguno de los
+pendiente de recoger; una pantalla de estación en la que nadie inicia sesión no muestra ninguno de los
 dos.
 
-Un plato desaparece de las pantallas de cocina en cuanto el camarero lo marca como servido; si se
+Un plato desaparece de las pantallas de estación en cuanto el camarero lo marca como servido; si se
 sirve solo en parte, se queda con lo que falta.
 
 Cuando una tarjeta tiene un plato que se empezó sin esperar al pase y su grupo tiene platos para el
@@ -256,7 +256,7 @@ haya algo en espera; si el pase muestra la columna **En espera**, también está
 está en **Por marchar** mientras tiene platos que esperan a que este pase los marche, en **En
 curso** mientras sus platos están en sus estaciones y en **Listo** cuando todos están listos.
 **Resumen** está oculta hasta que la muestras en **Columnas**, y entonces va primero. No cuenta los
-platos atenuados y cuenta los demás como el de la pantalla de cocina, con los que están en espera o
+platos atenuados y cuenta los demás como el de la pantalla de estación, con los que están en espera o
 esperan al pase tras el **+**.
 
 La cabecera de una tarjeta dice qué envió el camarero, **Nuevo pedido**, **Siguiente pase** o
@@ -292,17 +292,17 @@ Barra**. Un plato de una estación o zona de servicio que este pase no cubre sol
 tarjeta que también lleva un plato que este pase cubre, y, cuando se muestra, se atenúa; mientras espera a su
 propio pase dice **Barra: esperando a su pase**. Los platos atenuados son solo información.
 
-En una pantalla de pase o un monitor de pase, **Columnas** ofrece también **Platos de otras
+En una vista de pase o una pantalla de pase (solo lectura), **Columnas** ofrece también **Platos de otras
 estaciones**: **Usar la configuración del perfil**, **Mostrar** u **Ocultar**. **Ocultar** quita de
 las tarjetas los platos atenuados; mientras nada de lo que cubre este pase está atenuado, solo son
 platos de estaciones y zonas de servicio que no cubre. Una tarjeta se queda en su columna con sus
 botones aunque **Ocultar** la deje sin ningún plato. **Ocultar** solo cambia qué platos se dibujan:
 el color de la tarjeta y el número de tarjetas con retraso son los mismos que con **Mostrar**. La
 elección es de este dispositivo y sustituye la que un encargado eligió para el dispositivo en el
-panel. Allí, en **Perfiles de dispositivo**, la pantalla de pase y el monitor de pase de un perfil
+panel. Allí, en **Perfiles de dispositivo**, la vista de pase y la pantalla de pase (solo lectura) de un perfil
 tienen cada uno **Mostrar en el pase los platos de otras estaciones**, activado al principio; en
 **Dispositivos**, la ventana **Editar** de un dispositivo tiene el mismo ajuste para su pantalla de
-pase o su monitor de pase, con **Usar la configuración del perfil**, **Mostrar** y **Ocultar**.
+pase o su pantalla de pase (solo lectura), con **Usar la configuración del perfil**, **Mostrar** y **Ocultar**.
 
 En cada tarjeta en **En curso**, toca **Listo** para marcar como listos sus platos enviados en todas
 las estaciones, también los que oculta este pase. El botón cubre toda la tarjeta, incluidos los
@@ -310,8 +310,8 @@ pedidos de mostrador y los platos sin curso. Los platos en espera o esperando al
 como están. **Marchar** y **Listo** requieren **Lleva el pase** en el perfil del dispositivo.
 En un terminal, una tarjeta que no está en espera ofrece además **Reimprimir** por cada una de sus cuentas.
 
-Un monitor de pase muestra el mismo tablero para mirarlo, sin **Marchar**, botones de listo ni
-**Reimprimir**. Un terminal cuyo dispositivo no tiene pantalla de pase ni monitor de pase abre
+Una pantalla de pase (solo lectura) muestra el mismo tablero para mirarlo, sin **Marchar**, botones de listo ni
+**Reimprimir**. Un terminal cuyo dispositivo no tiene vista de pase ni pantalla de pase (solo lectura) abre
 **Pase** con todas las estaciones y zonas de servicio, sin **Marchar**: solo marcha una pantalla
 de pase.
 
@@ -329,9 +329,9 @@ guarda el orden, las columnas que se muestran y las plegadas, para cada tablero.
 columnas activadas no caben en la pantalla, el pase las muestra como secciones de una sola lista, en
 el mismo orden; una sección se pliega tocando su cabecera.
 
-## Ayuda en la pantalla de cocina {#kitchen-help}
+## Ayuda en la pantalla de estación {#kitchen-help}
 
-Toca **?** arriba a la derecha de una pantalla de cocina, antes de los botones de tema e idioma,
+Toca **?** arriba a la derecha de una pantalla de estación, antes de los botones de tema e idioma,
 para activar la ayuda. Aparecen marcas **?** en la primera tarjeta y en **Columnas** de cada
 tablero, en **Cambios en los pedidos** mientras haya cambios por leer, y en **Todo junto** o **Por
 estación** en una pantalla con más de una estación. En el pase aparecen también en el primer **Listo**. Toca una marca para leer una nota breve sobre esa parte; algunas notas enlazan
@@ -339,17 +339,17 @@ con esta guía. El resto de la pantalla funciona como siempre mientras la ayuda 
 
 La ayuda se desactiva sola dos minutos después de la última vez que se tocó la pantalla, y una
 página de la guía abierta desde una nota se cierra con ella. Toca **?** otra vez para desactivarla
-antes. Las pantallas **Cocina** y **Pase** de un terminal muestran las mismas marcas, salvo **Todo
+antes. Las pantallas **Estaciones** y **Pase** de un terminal muestran las mismas marcas, salvo **Todo
 junto** y **Por estación**; allí la ayuda se desactiva cuando el terminal se bloquea.
 
 ## Los platos iguales comparten fila {#identical-dishes}
 
-Un pedido de 2 × Hamburguesa, de una mesa o del mostrador, llega a cocina como dos platos, para que en una mesa el terminal pueda
-servir o mover cada uno por separado. La cocina los sigue viendo juntos: la comanda de la estación,
-la pantalla de cocina y el pase los muestran como una fila de 2 mientras son iguales, y la lista
+Un pedido de 2 × Hamburguesa, de una mesa o del mostrador, llega a la estación como dos platos, para que en una mesa el terminal pueda
+servir o mover cada uno por separado. La estación los sigue viendo juntos: la comanda de la estación,
+la pantalla de estación y el pase los muestran como una fila de 2 mientras son iguales, y la lista
 **También en este pedido** de la comanda y las comandas de corrección como **EN ESPERA CAMBIADO** los
 imprimen una sola vez. Los platos quedan en filas distintas cuando cambian sus extras o sus notas, o
-cuando uno va más avanzado que el otro. En la pantalla de cocina, tocar una fila, o moverla a otra
+cuando uno va más avanzado que el otro. En la pantalla de estación, tocar una fila, o moverla a otra
 estación, lleva todos sus platos. Los platos al peso siempre se muestran e imprimen uno a uno, porque
 cada uno se pesa por separado.
 
@@ -358,8 +358,8 @@ cada uno se pesa por separado.
 En el terminal, un plato sin enviar cuyo periodo acabó antes en el mismo día de servicio muestra un
 signo de aviso y **Ha terminado Almuerzo**. Cuando lo envías desde una mesa, o cobras, envías o
 aparcas el pedido en el mostrador, el terminal primero lista esos platos y te pide que lo consultes con
-la cocina. **La cocina acepta — enviar** los envía y **Quitarlos** los quita del pedido. Al aparcar,
-el botón dice **La cocina acepta — guardar**. La misma ventana se abre cuando el servidor encuentra un
+la estación. **La estación acepta — enviar** los envía y **Quitarlos** los quita del pedido. Al aparcar,
+el botón dice **La estación acepta — guardar**. La misma ventana se abre cuando el servidor encuentra un
 plato así antes de que el terminal lo haya marcado.
 
 Si el terminal dice que ha terminado el periodo de un plato sin mostrar una lista, revisa el
@@ -371,15 +371,15 @@ una mesa, **Quitar** lo quita y **Dejar** lo deja en el pedido sin enviar, y en 
 puedes cobrar cuando lo has quitado.
 
 Un plato enviado después de que su periodo acabara antes en el mismo día de servicio, una vez que la
-cocina lo ha aceptado, lleva una marca con el nombre de su periodo. En su comanda de cocina, una
+la estación lo ha aceptado, lleva una marca con el nombre de su periodo. En su comanda de estación, una
 línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En el papel, una línea separadora termina ese
 bloque antes del siguiente plato sin marca; un nuevo encabezado de grupo o estación también lo
-termina. En la pantalla de cocina, la tarjeta muestra **Tras Almuerzo — aceptado** encima del plato.
+termina. En la pantalla de estación, la tarjeta muestra **Tras Almuerzo — aceptado** encima del plato.
 
 Cada departamento fija si enviar un plato así necesita un encargado, o el PIN de un encargado,
-con **PIN de encargado para enviar tras acabar el periodo** en **Cursos y cocina**, en su pestaña
-**Servicio** del panel. Desactivado, quien puede enviar lo confirma con la cocina. Si está activado y
-quien envía no es encargado, el terminal pide el PIN de un encargado tras **La cocina acepta**.
+con **PIN de encargado para enviar tras acabar el periodo** en **Cursos y estaciones**, en su pestaña
+**Servicio** del panel. Desactivado, quien puede enviar lo confirma con la estación. Si está activado y
+quien envía no es encargado, el terminal pide el PIN de un encargado tras **La estación acepta**.
 
 ## Pide la preparación desde el terminal {#request-cooking}
 
@@ -402,19 +402,19 @@ Si el servidor no tiene espacio en disco, no se puede avanzar un plato. La estac
 queda donde estaba.
 
 Confirma las instrucciones de alergia en la ventana de alergias de la mesa antes de pedir la
-preparación. En una estación o en el pase, lee la copia que acompaña a cada plato. Las pantallas de cocina
+preparación. En una estación o en el pase, lee la copia que acompaña a cada plato. Las pantallas de estación
 no abren el editor de alergias de la mesa. En la estación, confirma las correcciones.
 
 Un grupo en espera vence unos minutos después de que se hayan servido los platos marchados antes
-que él. Fija el tiempo en **Cursos y cocina**, en la pestaña **Servicio** del departamento en el
+que él. Fija el tiempo en **Cursos y estaciones**, en la pestaña **Servicio** del departamento en el
 panel. Elige **Al momento** para recibir el aviso en cuanto se hayan servido esos platos, o
 **Deshabilitado** para desactivarlo.
 
 ## Haz que una estación espere al pase {#station-waits}
 
 Para que el pase decida cuándo se preparan los platos de una estación, edítala en **Estaciones de
-preparación** y activa **Espera al pase**, bajo **Impresoras**. La tabla de estaciones muestra **Sí**
-o **No** en su columna **Espera al pase**. Cuando el camarero pide después la preparación, los
+preparación** y activa **En espera en el pase** en **El pase**. La tabla de estaciones muestra **Sí**
+o **No** en su columna **En espera en el pase**. Cuando el camarero pide después la preparación, los
 platos de la estación van a la columna **Por marchar** del pase, y esperan en la pantalla de la
 estación hasta que el pase los marcha. Activarlo o desactivarlo solo decide adónde van los platos
 que se piden después; un plato ya pedido se queda donde está. Una exportación de la configuración
@@ -431,26 +431,26 @@ con Parrilla y Pastelería**: sácalo con esos platos, no por separado. Un
 ticket anticipado de espera nunca lo dice. Una comanda lo dice según estén las cosas al imprimirse;
 una reimpresión lo vuelve a comprobar.
 
-Solo una pantalla de pase cuyo dispositivo puede pulsar **Marchar** envía los platos. Para los
+Solo una vista de pase cuyo dispositivo puede pulsar **Marchar** envía los platos. Para los
 platos de una estación en una zona de servicio, hacen falta las dos cosas:
 
-- En **Perfiles de dispositivo**, el perfil del dispositivo ofrece una pantalla de pase con la
-  estación y la zona en sus listas: **Pantalla de pase** en **Pantallas de cocina que pueden usar
-  sus dispositivos** en una pantalla de cocina, **Botón Pase** en **Pantallas que muestra** en una
+- En **Perfiles de dispositivo**, el perfil del dispositivo ofrece una vista de pase con la
+  estación y la zona en sus listas: **Pase** en **Pantallas de estación que pueden usar
+  sus dispositivos** en una pantalla de estación, **Botón Pase** en **Pantallas que muestra** en una
   caja o un terminal de camarero. También tiene activado **Prepara pedidos** en **Qué puede hacer**,
   y **Lleva el pase** en **Pantallas que muestra**. En un perfil de caja o de terminal de camarero
   con un departamento, la zona también tiene que ser una de las que sirve, en **Dónde sirve**.
 - En **Dispositivos**, el dispositivo está habilitado y su ventana **Editar** elige la pantalla de
-  pase (**Pantalla** en una pantalla de cocina, **La pantalla de pase muestra** en una caja o un
+  pase (**Pantalla** en una pantalla de estación, **La vista de pase muestra** en una caja o un
   terminal de camarero), con la estación y la zona en sus listas. Un plato cuyo pedido no tiene zona
-  de servicio necesita una pantalla de pase con todas las zonas.
+  de servicio necesita una vista de pase con todas las zonas.
 
-Puedes guardar una estación que espera al pase aunque ninguna pantalla de pase la cubra. Hasta que
-alguna la cubra, **Estaciones de preparación** lo dice encima de sus pestañas, zona por zona, por
-ejemplo: **Nadie marcha los platos de Parrilla en Terraza: ninguna pantalla de pase los cubre allí.
-Configura una en Dispositivos.** Si el local tiene más de una zona, una estación que ninguna
-pantalla de pase cubre en ninguna de ellas recibe una sola línea: **Ninguna pantalla de pase
-cubre Parrilla en ninguna zona. Configura una en Dispositivos.** El aviso también nombra una
+Puedes guardar una estación que espera al pase aunque ningún pase la cubra. Hasta que
+alguno la cubra, **Estaciones de preparación** lo dice encima de sus pestañas, zona por zona, por
+ejemplo: **Nadie marcha los platos de Parrilla en Terraza: ningún pase los cubre allí.
+Configura uno en Dispositivos.** Si el local tiene más de una zona, una estación que ningún
+pase cubre en ninguna de ellas recibe una sola línea: **Ningún pase
+cubre Parrilla en ninguna zona. Configura uno en Dispositivos.** El aviso también nombra una
 estación con platos que ya esperan al pase sin nada que los marche, aunque la estación ya no
 espere. Vuelve a comprobarlo cuando cambian las estaciones, las zonas, los dispositivos o los
 perfiles, y cada minuto.
@@ -461,15 +461,15 @@ Elige **Eliminar** en el menú de la estación. La ventana muestra **Comprobando
 mientras consulta las consecuencias. Revisa **Trabajo que finaliza** y **Configuración que se
 elimina** cuando aparezcan esas secciones, y decide si quieres eliminar la estación.
 
-## Elige el idioma del papel de cocina {#paper-language}
+## Elige el idioma del papel de estación {#paper-language}
 
-Para cambiar las palabras fijas de los tickets de cocina y los comprobantes del número de recogida,
+Para cambiar las palabras fijas de los tickets de estación y los comprobantes del número de recogida,
 cambia el idioma predeterminado en **Sistema**, **Idiomas del contenido**. Con español como
 predeterminado, las cabeceras salen en español; con otros idiomas, salen en inglés hasta que esté
-disponible su traducción de cocina. Sin un idioma del contenido guardado, el papel sale en inglés.
+disponible su traducción de estación. Sin un idioma del contenido guardado, el papel sale en inglés.
 El panel y los recibos tienen sus propias opciones de idioma.
 
-El siguiente ticket, corrección o reimpresión de cocina usa el predeterminado guardado al momento.
+El siguiente ticket, corrección o reimpresión de estación usa el predeterminado guardado al momento.
 Cambiarlo no imprime nada por sí solo. Reenviar un trabajo fallido conserva su texto original.
 Los nombres de platos y mesas y tus notas siguen como se registraron. Una reimpresión conserva las
 instrucciones originales sobre alergias y elige su texto guardado en inglés o español para que
@@ -478,3 +478,13 @@ coincida con las cabeceras.
 Para imprimir un justificante al cobrar, activa **Imprimir justificante de tarjeta** antes de Tarjeta. Empieza desactivado para cada pago.
 
 Para recuperar un justificante de tarjeta antes de completar la cuenta, usa [Imprimir una copia en Pagos](table-service.md#reader-slips).
+
+## Elige adónde van los platos sin ruta {#default-station}
+
+En **Estaciones de preparación**, abre **Rutas** y elige **Los platos sin ruta van a**.
+Esta estación recibe los platos que ninguna ruta asigna. Para eliminarla, elige antes otra aquí.
+
+En **Estaciones**, pulsa una fila para editar sus ajustes. Sigue un nombre de **Se muestra en**
+para editar ese dispositivo. El editor separa **Estación**, **Cuando está cerrada**, **El pase**
+y **Pantalla de la estación**. En **Al cerrar por hoy, enviar sus platos a**, elige la estación
+que se ofrece primero al cerrar esta por hoy, o deja **Preguntar cada vez**.

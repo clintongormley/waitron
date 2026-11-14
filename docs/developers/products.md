@@ -14,7 +14,7 @@ So a product carries up to three names, and so does each of its variants.
 | --- | --- | --- |
 | **Name** | `products.name` — plain text, `not null` | Staff. The dashboard, the till's product buttons and basket, a table tab's line list, the sales reports, the image library's "what uses this photo" list |
 | **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt, invoice and published guest menu |
-| **Kitchen name** | `products.kitchen_name` — plain text, nullable | Cooks. The kitchen ticket and the kitchen display |
+| **Prep station name** | `products.kitchen_name` — plain text, nullable | Cooks. The station ticket and the prep station display |
 
 A variant is itself a `products` row whose `parent_id` names its parent, so it carries the same
 three in the same three columns.
@@ -24,17 +24,17 @@ Two rules govern how those six fields become one displayed string, and both of t
 resolver for their list and label separately; recorded answers use the snapshot readers described
 under _What a sold line freezes_ below.
 
-**Each name falls back on its own.** A blank customer-facing name falls back to Name; a blank kitchen
+**Each name falls back on its own.** A blank customer-facing name falls back to Name; a blank prep station
 name falls back to Name. For a newly selected product, `customerPresentationText` prepares its
 default customer text or its staff name before pricing; a relative variant resolves from its own
 fields. `defaultLanguageDescriptions` then repeats the prepared default wording under the receipt
-keys. Stored snapshots use the readers described below. Customer and kitchen names do not fall
-back to each other: a product with a customer-facing name but no kitchen name still prints its
-staff Name to the kitchen.
+keys. Stored snapshots use the readers described below. Customer and prep station names do not fall
+back to each other: a product with a customer-facing name but no prep station name still prints its
+staff Name to the station.
 
 **Name a variant relative to its product.** Give Seagrams Gin and London Gin variants called
 Single or Double. A standalone line shows `Seagrams Gin (Single)`: the product and variant's
-staff names on the till and tab, customer names on the receipt, and kitchen names on kitchen
+staff names on the till and tab, customer names on the receipt, and prep station names on station
 paper and screens. Each half falls back independently to its own staff name. A product without
 a variant keeps its name. Where the product is already shown — a variant picker, editor table,
 or nested top-sellers row — the variant's own relative name is enough.
@@ -68,9 +68,9 @@ The three resolvers, one per audience:
   names, so a caller holding a row with nothing else on it does not have to invent four empty fields.
 - `customerPresentationText` — applies the blank-falls-back-to-Name rule to the customer-facing
   maps, and hands back the product's map and the variant's map still separate.
-- `kitchenPresentationName` — the product and relative variant's kitchen names in the same format,
+- `kitchenPresentationName` — the product and relative variant's prep station names in the same format,
   each falling back to its own staff name. Like `staffPresentationName` it takes no
-  locale: a kitchen name carries no per-language text, so there is nothing to resolve against.
+  locale: a prep station name carries no per-language text, so there is nothing to resolve against.
 
 Turning the two frozen customer maps of a sold line into the one label a receipt prints is
 `joinCustomerPresentationText`, which is separate because its callers are rendering something
@@ -80,7 +80,7 @@ already *sold* — see below.
 
 When several items lack the same language, open Edit translations from Content languages.
 Missing in starts with that language, and the same editor lets you edit other enabled languages
-beside it. You enter customer-facing text without changing staff or kitchen names. With English
+beside it. You enter customer-facing text without changing staff or prep station names. With English
 as the default, you can save Spanish “Limonada para clientes” and leave English blank. Each
 missing language remains reported until you enter its own text; a fallback hint does not fill it.
 
@@ -122,7 +122,7 @@ comes from the published menu, and the rate from the day the invoice is issued, 
 - `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the chosen
   variant's own three names (`variant_name` and `variant_kitchen_name` as the variant row holds
   them, `variant_descriptions` resolved and stored like `descriptions` above), plus the product's
-  (the parent's) kitchen name. A variant with no customer text in any language resolves its own
+  (the parent's) prep station name. A variant with no customer text in any language resolves its own
   staff name, never the parent's (`customerPresentationText`,
   `packages/shared/src/menu-document/product-presentation.ts`). A staff name containing only spaces resolves
   to empty customer entries; the receipt still takes its separately frozen `variant_name`.
@@ -178,7 +178,7 @@ classification then (`working_order_lines.classification`), and issuance copies 
 Because both customer maps (`descriptions` and `variant_descriptions`) had their fallback applied
 *before* being frozen, neither falls back again at render time, except that
 `joinCustomerPresentationText` falls back to the variant's frozen staff name for a variant map with
-no text at all. The kitchen names are frozen raw and fall back when drawn, through
+no text at all. The prep station names are frozen raw and fall back when drawn, through
 `kitchenPresentationName`.
 
 **A new options answer resolves its list and label independently.** `buildLineExtras` and
@@ -187,7 +187,7 @@ the current default content language, using that language's text or that half's 
 They use `newCustomerText`, as does the till's `optionSnapshotOf`
 (`apps/till/src/state/held-options.ts`). With English as the default and only French customer
 text stored, a new answer freezes the staff wording. Its staff maps also keep one entry under
-that default; kitchen names stay raw.
+that default; prep station names stay raw.
 
 An unchanged answer can retain a null customer map or a map under an earlier language. The
 server's retained-answer comparison and the till's selection matching recognize these recorded
@@ -197,7 +197,7 @@ The recorded-answer reader, `customerOptionSnapshotLabels`
 (`packages/menu/src/option-snapshot-labels.ts`), keeps its own fallback for those older
 forms. It takes a nonblank customer map or otherwise the frozen staff map, then resolves the
 requested locale, the default captured in the staff map's key, and finally another stored value.
-It does not consult today's catalogue. `optionSnapshotLabels` uses the frozen kitchen name or
+It does not consult today's catalogue. `optionSnapshotLabels` uses the frozen prep station name or
 the frozen staff name; `staffOptionSnapshotLabels` supplies staff wording. The till reaches
 these readers through `apps/till/src/widgets/option-snapshot.ts`.
 
@@ -221,27 +221,27 @@ Where each one surfaces:
 | --- | --- | --- |
 | Receipt line — the goods identification, art. 7.1.e | the product and relative variant's frozen customer maps joined in parentheses | `apps/server/src/receipt-lines.ts` |
 | Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/menu/src/option-snapshot-labels.ts` |
-| Kitchen ticket | dishes, split-off extras and following extras read frozen kitchen names, falling back to staff names; cross-references read kitchen names; options answers read kitchen names, falling back to staff names | `buildTicketItems`, `apps/server/src/kitchen-print.ts` |
-| The rest of the order — "Also on this order" on a station's own ticket, on a ticket a printer shares between stations, and on the kitchen screen's card — listing dishes at stations not on the ticket or card | the kitchen names, through `kitchenPresentationName` | `readRestOfOrder`, `apps/server/src/rest-of-order.ts` |
-| Kitchen display and the expediter's pass | dishes, split-off extras and following extras read frozen kitchen names, falling back to staff names; cross-references read kitchen names | `readQueueSubItems`, `listStationQueue` and `readPassRows`, `apps/server/src/working-order.ts`; the pass reads `readPassRows` through `readScopedPassBoard`, `apps/server/src/pass-board.ts` |
+| Station ticket | dishes, split-off extras and following extras read frozen prep station names, falling back to staff names; cross-references read prep station names; options answers read prep station names, falling back to staff names | `buildTicketItems`, `apps/server/src/kitchen-print.ts` |
+| The rest of the order — "Also on this order" on a station's own ticket, on a ticket a printer shares between stations, and on the station screen's card — listing dishes at stations not on the ticket or card | the prep station names, through `kitchenPresentationName` | `readRestOfOrder`, `apps/server/src/rest-of-order.ts` |
+| Prep station display and the expediter's pass | dishes, split-off extras and following extras read frozen prep station names, falling back to staff names; cross-references read prep station names | `readQueueSubItems`, `listStationQueue` and `readPassRows`, `apps/server/src/working-order.ts`; the pass reads `readPassRows` through `readScopedPassBoard`, `apps/server/src/pass-board.ts` |
 | Make now, on the till that sent made-here items | the staff names through `staffPresentationName`, each option answer's staff wording, and each extra's frozen staff name — followed by ` x<n>` when counted, or by its amount in the screen language's decimal mark and its recorded unit abbreviation when measured | `readMadeHereItems`, `apps/server/src/made-here.ts`, which sends each extra as data; written by `dishLine` and `extraLine`, `apps/till/src/widgets/dish-format.ts`; shown by `apps/till/src/widgets/make-now.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
 | Sent on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts`, rendered by `apps/till/src/widgets/sent-orders.ts` |
 | The floor's informational chip for a held dish that cannot be added anew ("Unavailable: Steak") | the staff names, resolved server-side | `readPartySignals`, `apps/server/src/table-signals.ts` |
-| Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the kitchen screen and the pass, customer on the settled ticket, staff in the basket and the Sent dish window | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
+| Till screens showing an options ANSWER | the reader each one names at the call site — station on the station screen and the pass, customer on the settled ticket, staff in the basket and the Sent dish window | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |
 | An adjustment record's `line_name` | the line's frozen staff names through `staffPresentationName`: the product and any relative variant joined in parentheses | `recordAdjustment`, `packages/adjustments/src/record.ts`, given it by `applyAdjustment`, `apps/server/src/adjustments-apply.ts` |
 
 Two of those rows are worth reading twice.
 
 A cook sees the same dish name, options answers and extras whether the order arrives on paper or
-on a screen: the ticket, the station queue and the pass resolve those through their kitchen
+on a screen: the ticket, the station queue and the pass resolve those through their station
 wording. Each dish is
-added from a zone's menu offer, which carries the product's and the variant's kitchen names as the
+added from a zone's menu offer, which carries the product's and the variant's prep station names as the
 menu's published version holds them (`priceOrderLines`, `apps/server/src/working-order.ts`), so a
-short dish kitchen name typed after publishing reaches all three surfaces on lines added once the
-menu is published again. A blank kitchen name shows the staff name, including the variant's staff
+short dish prep station name typed after publishing reaches all three surfaces on lines added once the
+menu is published again. A blank prep station name shows the staff name, including the variant's staff
 name on a variant line. A
 venue with no service zone sells nothing: sent lines with no zone, the till's three line-carrying
 routes, `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders`, take the starting zone of
@@ -269,7 +269,7 @@ name, including any sold as the product itself with no variant, and the report's
 products, not variants. It is a staff-facing report, so it shows the names staff use, not the
 wording a diner reads on a receipt.
 
-**Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a
+**Each surface shows ONE of a product's three names — staff, customer-facing or station — and a
 fixture gives the three DIFFERENT text**, or the test passes whether the surface reads the right
 name or the wrong one. Cost: a report reading the diner's wording, recorded above the fixtures in
 `packages/reporting/src/top-sellers.test.ts`.
@@ -556,8 +556,8 @@ null. `updateProduct` (`packages/menu/src/operations.ts`) given a colour answers
 id with `product.not_found`. A published offer carries one colour, its product's; its variants carry none.
 
 Its extras and options
-lists are always its parent's. Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
-kitchen name falls back to the variant's own staff name (_The three names_, above).
+lists are always its parent's. Its Name, customer-facing name and prep station name are never inherited: a blank customer or
+prep station name falls back to the variant's own staff name (_The three names_, above).
 
 A variant's published allergens stay blank, and so read as its parent's, until it sets allergens of
 its own, and its published diet likewise until it sets a diet override of its own; once set, each keeps its own
@@ -729,7 +729,7 @@ and keeps the rest at their stored prices.
 A line sold as a variant has the variant as its `product_id`. It is priced and taxed at the
 variant's effective values above, and freezes the parent's names beside the variant's own
 (_What a sold line freezes_, above), so reports can group it under its parent. The filed
-`sale_lines` row names the variant and its parent only as plain values, never as keys. In the kitchen, the variant is routed by its parent's
+`sale_lines` row names the variant and its parent only as plain values, never as keys. In the station, the variant is routed by its parent's
 row in the routing grid: the parent's product cells first, then its effective category's cells and
 each parent category's, or the No category cells when the parent has no category, then All
 categories (`selectRoutingCell`). Its course, category, allergens and dietary labels
@@ -822,14 +822,14 @@ photo that exists was accepted.
 
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
-section with a summary on its closed line. Kitchen, Descriptors and Nutritional info name each
+section with a summary on its closed line. Prep station, Descriptors and Nutritional info name each
 field they hold, with "None specified" (`modifiers.none_specified`) for one left blank; the Pricing
 fold leaves a blank base price, and a VAT class the form does not offer, off its line. The
 Descriptors rows are cut after one and two lines, which can hide a later language's value, so
 opening the section is what shows every value. Top to bottom: the category path, Name, with the
 photo beside it as a small button that opens the image library (absent when the editor is given no
 `api`), the colour chooser (absent on a variant's page), Available, Standalone ordering by (absent on
-a variant's page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some
+a variant's page), ▸ Prep station, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some
 variant is Active), Variants, Modifiers, then Cancel and Save. An archived product opens a plain-text details panel through View, not this editor. Opened on a
 variant, the same form is the variant's own page: it has no colour chooser and no Standalone
 ordering by, Modifiers or Variants section. The course and description show the parent's value as
@@ -899,7 +899,7 @@ served offer and extras item, and `priceOrderLines` in `apps/server/src/working-
 what it marks) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or
 an extra has since become archived or Unavailable (a raise is checked in `updateHeldOrder`, and a
-change to the note, options or extras of a line the kitchen already has is refused
+change to the note, options or extras of a line the station already has is refused
 `product.unavailable` too: `applyLineEdits` treats that change as new work).
 Stored-order pricing ignores the sold-out flag for recorded lines. A stored line never sent whose
 product or parent is archived is refused `product.unavailable`
@@ -939,7 +939,7 @@ A null allergen declaration draws no icons. Sent counter and table rows use `sen
 `working_line_contexts`, captured at the first `sent_at` through the effective current product
 read, including variant inheritance. `readDisplayLineNutrition` keeps unstamped rows live and
 never substitutes current declarations for a missing sent snapshot. Each extra stays separate.
-Kitchen reads retain their current-product declarations. Orders history detail reads the same saved
+Stations reads retain their current-product declarations. Orders history detail reads the same saved
 contexts, keeps each extra separate and folds portions only with matching declaration values.
 A missing capture stays distinct from an unreviewed or reviewed-empty allergen declaration.
 This sent-order/history exception follows the owner's 11-November decision 6 in
@@ -954,7 +954,7 @@ and the venue's province select the data. The Valencian Community selects
 `casa-delgado-valencia` and Casa Delgado de l'Horta; Galicia selects `casa-delgado-gl` and
 A Casa Delgado.
 
-The seed's English/Spanish language writes the single names you see for staff and kitchen
+The seed's English/Spanish language writes the single names you see for staff and station
 products, menus, departments and stations. Regional wording remains in the data;
 customer content keeps Catalan/Valencian/Galician, Spanish and English. Receipt language keeps
 its separate choice. In setup, choose English or Spanish as the working language for these
@@ -971,7 +971,7 @@ this temporary draft marker is never a venue-table field.
 
 `publicGuestMenu` resolves guest names through the requested enabled content language, the venue
 default, then each identity’s own staff name. Product, variant and extra halves resolve separately;
-kitchen names do not enter the projection. The server’s `guest-menu-page.ts` renders that
+prep station names do not enter the projection. The server’s `guest-menu-page.ts` renders that
 allowlisted publication as text-safe HTML; working changes reach the preview only after publication.
 
 The public `/public/menu` page resolves only the opted-in active default publication while the box

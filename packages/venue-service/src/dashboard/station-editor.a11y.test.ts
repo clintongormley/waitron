@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -166,7 +167,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       expect(description.filter((text) => text !== "")).toEqual(
         timing(name).error ? [timing(name).error] : [],
       );
-      const group = el.shadowRoot!.querySelector("fieldset")!;
+      const group = page.getByRole("group", { name: "Late flags" }).element();
       expect(group.contains(timing(name))).toBe(true);
       expect(group.hasAttribute("aria-describedby")).toBe(false);
       expect(el.shadowRoot!.getElementById("timing-inheritance")).toBeNull();

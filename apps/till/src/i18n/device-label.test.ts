@@ -7,10 +7,10 @@ afterEach(() => setLocale("en-GB"));
 it("labels each known device kind with its localised copy, never the raw token", () => {
   expect(deviceKindLabel("till")).toBe("Counter till");
   expect(deviceKindLabel("handheld")).toBe("Handheld");
-  expect(deviceKindLabel("kds_station")).toBe("Kitchen display");
+  expect(deviceKindLabel("kds_station")).toBe("Prep station display");
   setLocale("es-ES");
   expect(deviceKindLabel("kds_station")).toBe(t("device.type.kds", "es-ES"));
-  expect(deviceKindLabel("kds_station")).toBe("Pantalla de cocina");
+  expect(deviceKindLabel("kds_station")).toBe("Pantalla de estación");
 });
 
 it("shows a kind it does not know as the token itself rather than throwing", () => {

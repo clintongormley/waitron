@@ -24,6 +24,12 @@ export class StationTable extends LitElement {
         display: block;
         min-width: 0;
       }
+      wt-data-table::part(table-head) {
+        --wt-space-3: var(--wt-space-1);
+      }
+      wt-data-table::part(station-cell) {
+        padding-inline: var(--wt-space-1);
+      }
       wt-data-table::part(screens) {
         display: grid;
         gap: var(--wt-space-2);
@@ -53,16 +59,13 @@ export class StationTable extends LitElement {
       wt-data-table::part(devices-link) {
         color: var(--wt-color-primary-text);
       }
-      wt-data-table::part(badge) {
-        color: var(--wt-color-text-muted);
-        margin-inline-start: var(--wt-space-2);
-      }
     `,
   ];
   @property({ attribute: false }) statusNotes: Readonly<Record<string, string | TemplateResult>> =
     {};
   @property({ attribute: false }) actions: Readonly<Record<string, TemplateResult>> = {};
   @property({ attribute: false }) stations: readonly PrepStation[] = [];
+  @property({ type: Boolean }) disabled = false;
   @property({ attribute: false }) outputs: Readonly<
     Record<string, { printedOn: string | TemplateResult; shownOn: string | TemplateResult }>
   > = {};
@@ -76,7 +79,6 @@ export class StationTable extends LitElement {
       ></span
       ><span part="station-name-details"
         ><span part="name">${station.name}</span>
-        ${station.isDefault ? html`<span part="badge">${t("prep.default")}</span>` : nothing}
         ${this.statusNotes[station.id] ? html`<span part="station-status">${this.statusNotes[station.id]}</span>` : nothing}
       </span></span
     >`;
@@ -104,6 +106,7 @@ export class StationTable extends LitElement {
       {
         key: "waitsForPass",
         label: t("prep.waits_for_pass"),
+        help: { text: t("prep.waits_for_pass_hint"), label: t("prep.waits_for_pass") },
         cell: (station) =>
           html`<span data-test=${`waits-for-pass-${station.id}`}
             >${station.waitsForPass ? t("venue.yes") : t("venue.no")}</span
@@ -126,6 +129,20 @@ export class StationTable extends LitElement {
       .columns=${this.#columns()}
       .rows=${rows}
       .rowKey=${(station: PrepStation) => station.id}
+      .rowCellParts=${() => "station-cell"}
+      .rowClickLabel=${(station: PrepStation) => `${t("prep.edit_station")}: ${station.name}`}
+      .rowClick=${
+        this.disabled
+          ? undefined
+          : (station: PrepStation) =>
+              this.dispatchEvent(
+                new CustomEvent("station-edit", {
+                  detail: { station },
+                  bubbles: true,
+                  composed: true,
+                }),
+              )
+      }
       emptyMessage=${t("prep.stations_empty")}
     ></wt-data-table>`;
   }

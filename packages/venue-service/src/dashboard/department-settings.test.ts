@@ -1559,19 +1559,19 @@ function lateSend(el: DepartmentSettings) {
   expect(control, "late-send switch").not.toBeNull();
   return control!;
 }
-it("shows the late-send switch under Courses and the kitchen, after the reminder, off for a department the model does not list", async () => {
+it("shows the late-send switch under Courses and stations, after the reminder, off for a department the model does not list", async () => {
   const { el } = await mount();
   await selectDepartmentTab(el, "service");
   const control = lateSend(el);
   const section = control.closest("section")!;
   expect(shownPanel(el).contains(section)).toBe(true);
-  expect(section.getAttribute("aria-label")).toBe("Courses and the kitchen");
+  expect(section.getAttribute("aria-label")).toBe("Courses and stations");
   const reminder = section.querySelector("wt-combobox[name=releaseReminderMinutes]")!;
   expect(reminder.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(control.label).toBe("Manager's PIN to send after a period ends");
   expect(control.checked).toBe(false);
   expect(control.getAttribute("aria-invalid")).toBeNull();
-  const hint = "Off: anyone who can send confirms with the kitchen.";
+  const hint = "Off: anyone who can send confirms with the station.";
   expect(control.description).toBe(hint);
   expect(control.nextElementSibling!.classList.contains("hint")).toBe(true);
   expect(control.nextElementSibling!.textContent!.trim()).toBe(hint);
@@ -1619,7 +1619,7 @@ it("a refusal naming the late-send switch, sent while Details shows, brings back
   expect(shownPanel(el).contains(control)).toBe(true);
   expect(control.getAttribute("aria-invalid")).toBe("true");
   expect(control.description).toBe(
-    `${REFUSED} Off: anyone who can send confirms with the kitchen.`,
+    `${REFUSED} Off: anyone who can send confirms with the station.`,
   );
   expect(
     shownPanel(el).querySelector("[data-field-error=lateSendNeedsManager]")!.textContent!.trim(),
@@ -1669,19 +1669,19 @@ async function clickChosenReminder(el: DepartmentSettings): Promise<number> {
   await el.updateComplete;
   return sent;
 }
-it("shows the reminder under Courses and the kitchen, between Orders and payment and Table states", async () => {
+it("shows the reminder under Courses and stations, between Orders and payment and Table states", async () => {
   const { el } = await mount(reminderView(10));
   await selectDepartmentTab(el, "service");
   const panel = shownPanel(el);
   expect([...panel.querySelectorAll("section > h3")].map((h) => h.textContent!.trim())).toEqual([
     "Orders and payment",
-    "Courses and the kitchen",
+    "Courses and stations",
     "Table states",
   ]);
   const control = reminder(el);
   const section = control.closest("section")!;
   expect(panel.contains(section)).toBe(true);
-  expect(section.getAttribute("aria-label")).toBe("Courses and the kitchen");
+  expect(section.getAttribute("aria-label")).toBe("Courses and stations");
   expect(control.label).toBe("Remind to fire the next course after");
   expect(control.value).toBe("10");
 });
@@ -1867,7 +1867,7 @@ it("reads the reminder in Spanish", async () => {
   const { el } = await mount();
   const control = reminder(el);
   expect(control.closest("section")!.querySelector("h3")!.textContent!.trim()).toBe(
-    "Cursos y cocina",
+    "Cursos y estaciones",
   );
   expect(control.label).toBe("Avisar para marchar el siguiente curso tras");
   expect(control.options.map((option) => option.label)).toEqual([

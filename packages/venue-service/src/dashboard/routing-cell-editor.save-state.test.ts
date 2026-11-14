@@ -24,7 +24,7 @@ const PERIODS: RoutingPeriod[] = [
 const up = { kind: "station", stationId: "up" } as const;
 const down = { kind: "station", stationId: "down" } as const;
 
-async function mount(cell: Partial<RoutingCellEditorCell> = {}, isDefaultCell = false) {
+async function mount(cell: Partial<RoutingCellEditorCell> = {}) {
   setLocale("en");
   const el = (await mountThemed(
     "<routing-cell-editor></routing-cell-editor>",
@@ -41,7 +41,6 @@ async function mount(cell: Partial<RoutingCellEditorCell> = {}, isDefaultCell = 
     { id: "down", name: "Downstairs", active: true },
   ];
   el.rowProductIds = ["mojito"];
-  el.isDefaultCell = isDefaultCell;
   el.open = true;
   await el.updateComplete;
   return el;
@@ -104,16 +103,6 @@ it("opens an inherited cell's Save ready, so its choice can be pinned as it stan
   saveButton(el).click();
   await el.updateComplete;
   expect(seen).toEqual([{ target: up, periods: [{ periodId: "lunch", target: down }] }]);
-});
-
-it("opens the default cell's Save quiet", async () => {
-  const el = await mount(
-    { address: { row: { kind: "all" }, zoneId: null }, label: "All categories, Every zone" },
-    true,
-  );
-  expect(await saveState(el)).toEqual(quiet);
-  await pickTarget(el, "station:down");
-  expect(await saveState(el)).toEqual(ready);
 });
 
 it("keeps Save working after a refusal and quiet while saving", async () => {

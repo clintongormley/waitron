@@ -222,12 +222,12 @@ Cancel its sent dishes before discarding it. If you keep a cancelled dish's char
 
 ## Cancel a dish on a paid bill {#cancel-paid-dish}
 
-When a table has paid for a dish that is not coming, cancel it so the kitchen stops making it and
+When a table has paid for a dish that is not coming, cancel it so the station stops making it and
 the guest can have the money back. Among the table's sent dishes, choose **Void…** from the dish's **More** menu.
 On a paid bill, it is offered only for what has not been served yet.
 
 The **Cancel item** window says **This bill is closed**. Choose **How many**, up to the number not
-yet served. If the dish has gone to the kitchen but nobody has marked it started, answer **Has
+yet served. If the dish has gone to the station but nobody has marked it started, answer **Has
 preparation started?**. Then choose a **Reason**.
 
 Tick **Refund** to give the dish's money back. It starts ticked when preparation has not started,
@@ -243,10 +243,10 @@ under **Refund a payment on a receipt**.
 ## Finish a paid table with food still to come {#finish-paid-table}
 
 When you choose **Finish table** and a paid bill still has dishes nobody has served, a window
-headed, for example, **2 dishes not served** lists them, and you either cancel them all or, when one has a kitchen ticket, send the food to the
+headed, for example, **2 dishes not served** lists them, and you either cancel them all or, when one has a station ticket, send the food to the
 counter.
 
-For a dish that has gone to the kitchen but is not marked started, answer **Has preparation
+For a dish that has gone to the station but is not marked started, answer **Has preparation
 started?**. For the others, the window shows the answer. Tick **Refund** beside each dish whose
 money goes back; a dish starts ticked when preparation has not started. One **Reason** covers every
 dish, and it starts on **Not served** when your venue keeps that reason.
@@ -260,9 +260,9 @@ Once the table is finished, a **Refund** window lists each receipt with ticked d
 open its refund, filled in. When there is only one receipt, its refund opens straight away.
 
 When the guests will wait and take their food from the counter, choose **They'll collect it at the
-counter** instead. It is offered when at least one of the dishes has a kitchen ticket. Nothing is
-cancelled or refunded. Dishes held back go to the kitchen now, each bill whose food still to come
-has a kitchen ticket becomes a paid order waiting at the counter, and the table finishes. The order
+counter** instead. It is offered when at least one of the dishes has a station ticket. Nothing is
+cancelled or refunded. Dishes held back go to the station now, each bill whose food still to come
+has a station ticket becomes a paid order waiting at the counter, and the table finishes. The order
 waits under **Waiting orders** on the **Counter** screen, marked **Paid, not handed over**, and
 **Find a bill** lists it; choose **Hand over** when the guests collect it.
 
@@ -371,7 +371,7 @@ repeat: **Done** clears the one on show, and another order starts the count agai
 
 When you take an order of 2 × Burger with cheese, at a table or at the counter, the bill holds two
 burgers, each with its own cheese, rather than one line of two. That way you can void one burger, or at a table serve or move it, and its cheese goes
-with it, and the bill and the kitchen agree on which burger is which.
+with it, and the bill and the station agree on which burger is which.
 
 While the dishes are the same you still see one row, **2 × Burger**, on the bill and in **Sent**. A
 row parts as soon as one dish differs, for example once one burger is served or comped. Tapping a
@@ -431,7 +431,7 @@ menu and the order sit side by side.
 ## Give a table a short name {#short-names}
 
 A phone or tablet shows a table's short name in the bar's table buttons and the Ready bar, where
-space is tight, and the cards on the [kitchen screen](kitchen-service.md#kitchen-screen) and the
+space is tight, and the cards on the [station screen](kitchen-service.md#kitchen-screen) and the
 [pass](kitchen-service.md#pass-screen) name their table by it. In the dashboard's **Floor plan**,
 each table has a **Short name** under its **Name**, filled in from the name: "T1" for "Terrace 1",
 "Win" for "Window", and a name of four characters or fewer as it is. It follows the name until you
@@ -525,7 +525,7 @@ If a guest leaves without paying, select their bill, open **⋮**, then choose *
 departure** under that bill. Check its amount and give a reason. If approval is needed, choose a
 supervisor or manager and ask them to enter their PIN.
 
-Only that bill’s unserved food is stopped, with cancellation slips for the kitchen. The other
+Only that bill’s unserved food is stopped, with cancellation slips for the station. The other
 bills keep their food, so you can still serve a paid guest’s dessert. The bill remains owed in full.
 The table stays open while another bill needs closing or paid food still needs serving. Serve the
 remaining food, then choose **Finish table** when everyone has finished.
@@ -602,7 +602,7 @@ responsible until the receiving desk accepts. While the request is pending, you 
 **Withdraw request**.
 
 To receive a bill, open **Transfers** and choose **View current tab** beside the incoming request.
-Check **Ordered items** and **Outstanding kitchen work** before choosing **Accept transfer**.
+Check **Ordered items** and **Outstanding station work** before choosing **Accept transfer**.
 Choose the **Destination zone** and, if needed, a **Destination table**, then **Save**. To refuse
 it, choose **Decline transfer**, enter the **Reason for declining** and choose **Save**.
 
@@ -615,7 +615,7 @@ choose **Name this bill**, type up to 40 characters and choose **Save**. Empty t
 the name. **Name the party**, under **Whole table** in the same menu, names the whole party instead.
 If someone else has dishes on the bill that are not sent yet, take over their order first.
 
-To change the name the kitchen sees, use **Name the party**. If kitchen work is still outstanding,
+To change the name the station sees, use **Name the party**. If station work is still outstanding,
 its printers receive a [name-change slip](kitchen-service.md#party-names).
 
 A bill keeps its number for as long as it stays with the party. Merging one bill into another leaves
@@ -623,11 +623,11 @@ a gap: merge Bill 2 into Bill 1 and Bills 1 and 3 remain. A bill that arrives fr
 from the counter takes the party's next number, and so do the bills of a table you join. A table
 split off with bills starts again at Bill 1, and so does a table seated again after its party
 finishes. A bill keeps its name when it moves, including to the counter, where it has no number. You
-can name a bill only at a table. The name is not printed on kitchen tickets or receipts.
+can name a bill only at a table. The name is not printed on station tickets or receipts.
 
 ## See which tables have food ready {#ready-bar}
 
-When the kitchen has dishes ready, you want to know which tables to take them to without going to
+When the station has dishes ready, you want to know which tables to take them to without going to
 look. On a phone or tablet, a bar at the foot of the **Floor** lists each table with food ready and
 how many dishes are waiting, such as **Ready · T2 · 3**. Each table is shown by its short name, such
 as T2 for Table 2, or by its full name while it has none; a table joined to another for today shows

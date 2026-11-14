@@ -175,8 +175,8 @@ describe("till-station-choice-dialog", () => {
   it.each([
     [
       "ticket.already_started",
-      "The kitchen has started, finished or sent out this dish, so it stays where it is",
-      "La cocina ya ha empezado, terminado o sacado este plato, así que se queda donde está",
+      "The station has started, finished or sent out this dish, so it stays where it is",
+      "La estación ya ha empezado, terminado o sacado este plato, así que se queda donde está",
     ],
     ["working_order.not_open", "This order has been discarded", "Este pedido se ha descartado"],
     [
@@ -191,8 +191,8 @@ describe("till-station-choice-dialog", () => {
     ],
     [
       "ticket.not_sent",
-      "This dish has not gone to the kitchen yet",
-      "Este plato aún no ha ido a cocina",
+      "This dish has not gone to the station yet",
+      "Este plato aún no ha ido a la estación",
     ],
     [
       "ticket.made_here",
@@ -212,8 +212,8 @@ describe("till-station-choice-dialog", () => {
   it.each([
     [
       "ticket.already_started",
-      "The kitchen has started, finished or sent out a dish of this order, so nothing was moved",
-      "La cocina ya ha empezado, terminado o sacado un plato de este pedido, así que no se ha pasado nada",
+      "The station has started, finished or sent out a dish of this order, so nothing was moved",
+      "La estación ya ha empezado, terminado o sacado un plato de este pedido, así que no se ha pasado nada",
     ],
     [
       "tab.line_not_found",
@@ -222,8 +222,8 @@ describe("till-station-choice-dialog", () => {
     ],
     [
       "ticket.not_sent",
-      "A dish of this order has not gone to the kitchen yet, so nothing was moved",
-      "Un plato de este pedido aún no ha ido a cocina, así que no se ha pasado nada",
+      "A dish of this order has not gone to the station yet, so nothing was moved",
+      "Un plato de este pedido aún no ha ido a la estación, así que no se ha pasado nada",
     ],
     [
       "ticket.made_here",

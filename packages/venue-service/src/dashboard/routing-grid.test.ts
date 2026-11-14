@@ -81,7 +81,6 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
 
 interface Emitted {
   changes: { address: CellAddress; target: RouteTarget | null }[];
-  defaults: { stationId: string }[];
 }
 
 async function mount(
@@ -94,13 +93,11 @@ async function mount(
   hosts.push(host);
   const el = document.createElement("venue-routing-grid");
   Object.assign(el, { model, ...props });
-  const emitted: Emitted = { changes: [], defaults: [] };
+  const emitted: Emitted = { changes: [] };
   el.addEventListener("routing-cell-change", (event) =>
     emitted.changes.push((event as CustomEvent<Emitted["changes"][number]>).detail),
   );
-  el.addEventListener("routing-make-default", (event) =>
-    emitted.defaults.push((event as CustomEvent<{ stationId: string }>).detail),
-  );
+
   host.append(el);
   await el.updateComplete;
   return { el, emitted };
@@ -712,7 +709,6 @@ describe("venue-routing-grid", () => {
     const heard: string[] = [];
     for (const name of [
       "routing-cell-change",
-      "routing-make-default",
       "wt-change",
       "routing-cell-save",
       "routing-cell-clear",
@@ -721,8 +717,7 @@ describe("venue-routing-grid", () => {
       outside.addEventListener(name, () => heard.push(name));
     }
     await choose(el, combo(el, "c:drinks", "every")!, "Kitchen");
-    await choose(el, combo(el, "all", "every")!, "Bar");
-    expect(heard).toEqual(["routing-cell-change", "routing-make-default"]);
+    expect(heard).toEqual(["routing-cell-change"]);
   });
 
   it("choosing the value already saved emits nothing", async () => {
@@ -755,44 +750,14 @@ describe("venue-routing-grid", () => {
     expect(shown(button)).toEqual({ text: "Bar", muted: false });
   });
 
-  it("All × Every zone: Make default choices with canMakeDefault; read-only explanation without; repair message when no active default", async () => {
-    const { el, emitted } = await mount();
-    const box = combo(el, "all", "every")!;
-    expect(shown(box)).toEqual({ text: "Kitchen", muted: false });
-    expect(optionLabels(field(await openEditor(el, box), "target"))).toEqual([
-      "Kitchen",
-      "Bar",
-      "Terrace bar",
-    ]);
-    await choose(el, box, "Bar");
-    expect(emitted.defaults).toEqual([{ stationId: "bar" }]);
-    expect(emitted.changes).toEqual([]);
-
-    const readOnly = await mount(routing({ canMakeDefault: false }));
-    const fixed = cell(readOnly.el, "all", "every");
+  it("All × Every zone shows the default without an editing action, or No station", async () => {
+    const { el } = await mount();
+    const fixed = cell(el, "all", "every");
+    expect(fixed.textContent!.trim()).toBe("Kitchen");
     expect(fixed.querySelector("button")).toBeNull();
-
     const repair = await mount(routing({ defaultStationId: null }));
-    const missing = cell(repair.el, "all", "every");
-    expect(missing.querySelector('[data-test="default-repair"]')!.textContent!.trim()).toBe(
-      "No default prep station is active. Choose one so items with no other setting have a station to go to.",
-    );
-    const choices = combo(repair.el, "all", "every")!;
-    expect(optionLabels(field(await openEditor(repair.el, choices), "target"))).toEqual([
-      "Kitchen",
-      "Bar",
-      "Terrace bar",
-    ]);
-    await choose(repair.el, choices, "Terrace bar");
-    expect(repair.emitted.defaults).toEqual([{ stationId: "tbar" }]);
-
-    const stuck = await mount(routing({ defaultStationId: null, canMakeDefault: false }));
-    const none = cell(stuck.el, "all", "every");
-    expect(none.querySelector("button")).toBeNull();
-    expect(none.querySelector('[data-test="default-repair"]')).not.toBeNull();
-    expect(none.textContent).toContain(
-      "Only someone who can configure the venue can change the default station.",
-    );
+    expect(cell(repair.el, "all", "every").textContent!.trim()).toBe("No station");
+    expect(cell(repair.el, "all", "every").querySelector("button")).toBeNull();
   });
 
   it("a server refusal shows beside the field and once in the bottom action message, and retry stays enabled", async () => {
@@ -886,7 +851,6 @@ describe("venue-routing-grid", () => {
         target: { kind: "no_preparation" },
       },
     ]);
-    expect(emitted.defaults).toEqual([]);
     expect(heading.querySelector("th button")).toBeNull();
     expect(heading.querySelector("th")!.textContent!.trim()).toBe("No category");
     // Every editor in the grid addresses a real row: All, No category, a category or a product.
@@ -1001,17 +965,12 @@ describe("venue-routing-grid", () => {
       );
     });
 
-    it("the All categories × Every zone cell shows only the default station, editable or not", async () => {
-      const { el } = await mount();
-      expect(text(el, "all", "every")).toBe("Kitchen");
-      await name(el, "all", "every").toHaveAccessibleName(
-        spoken("All categories, Every zone: Kitchen, the default station."),
-      );
-
-      const readOnly = await mount(routing({ canMakeDefault: false }));
-      expect(text(readOnly.el, "all", "every")).toBe(
-        "Kitchen Only someone who can configure the venue can change the default station.",
-      );
+    it("the All categories × Every zone cell shows only the default station for both permissions", async () => {
+      for (const canMakeDefault of [true, false]) {
+        const { el } = await mount(routing({ canMakeDefault }));
+        expect(cell(el, "all", "every").textContent!.trim()).toBe("Kitchen");
+        expect(cell(el, "all", "every").querySelector("button")).toBeNull();
+      }
     });
 
     it("says none of it in Spanish either", async () => {
@@ -1133,7 +1092,7 @@ describe("venue-routing-grid", () => {
         ["all", "every"],
         ["all", "terrace"],
       ] as const) {
-        const value = getComputedStyle(combo(el, row, zone)!.querySelector(".station")!);
+        const value = getComputedStyle(cell(el, row, zone).querySelector(".station")!);
         expect(value.fontWeight).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-bold)"));
         expect(value.color).toBe(tokenValue(el, "color", "var(--wt-color-text)"));
       }
@@ -1182,13 +1141,11 @@ describe("venue-routing-grid", () => {
 
     it("makes the whole cell the button, with a warning, a refusal or a repair note under the station", async () => {
       const { el } = await warned();
-      const repair = await mount(routing({ defaultStationId: null }));
       for (const [grid, row, zone] of [
         [el, "c:drinks", "every"],
         [el, "c:drinks", "terrace"],
         [el, "p:bread", "terrace"],
         [el, "c:food", "inside"],
-        [repair.el, "all", "every"],
       ] as const) {
         const td = cell(grid, row, zone).getBoundingClientRect();
         const button = combo(grid, row, zone)!.getBoundingClientRect();
@@ -1451,7 +1408,6 @@ describe("venue-routing-grid", () => {
       expect([...own.rowProductIds].sort()).toEqual(["cola", "mojito"]);
       expect(own.zoneDepartmentId).toBeNull();
       expect(own.zoneWithoutDepartment).toBe(false);
-      expect(own.isDefaultCell).toBe(false);
       expect(own.periods).toEqual([lunch, staff]);
       expect(own.stations).toEqual(el.model!.stations);
 
@@ -1478,14 +1434,6 @@ describe("venue-routing-grid", () => {
       expect([...all.rowProductIds].sort()).toEqual(["bread", "burger", "cola", "mojito"]);
       expect(all.zoneDepartmentId).toBeNull();
       expect(all.zoneWithoutDepartment).toBe(true);
-
-      const fallback = await openEditor(el, combo(el, "all", "every")!);
-      expect(fallback.isDefaultCell).toBe(true);
-      expect(fallback.cell).toEqual({
-        address: { row: { kind: "all" }, zoneId: null },
-        label: "All categories, Every zone",
-        target: station("kitchen"),
-      });
     });
 
     it("saves a period line with the cell's change, and sends no lines where it had and has none", async () => {

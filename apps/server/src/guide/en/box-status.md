@@ -287,7 +287,7 @@ again.
 
 ## When payments wait for the box's time {#clock-waiting}
 
-After a start, the box takes no payment until its time is confirmed. Orders still reach the kitchen.
+After a start, the box takes no payment until its time is confirmed. Orders still reach the station.
 The **Clock** row then says **Waiting for devices to connect and agree with the box's time**, with
 the box's date and time, and the bell has an alert saying so. The box also waits when its clock
 jumps by more than a minute, forwards or back, while it is not kept in time over the internet: the
@@ -333,7 +333,7 @@ its clock is not answering, the box cannot set its clock: it can then only confi
 
 A box can't tell by itself that its own clock is wrong, so it compares it with other clocks. Tills
 and handhelds send their own clock to the box about every 15 seconds while someone is signed in on
-them or while they show the sign-in screen. Kitchen screens do not send theirs. A till or handheld
+them or while they show the sign-in screen. Station screens do not send theirs. A till or handheld
 running on the box itself does not count, and devices at one network address count as one.
 
 When two or more devices agree with each other that the box's clock is more than a minute off, the

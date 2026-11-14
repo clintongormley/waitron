@@ -1450,45 +1450,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
     it. The owner's screenshot showed two rows highlighted after one edit: reproduce that first,
     since the second may be a separate fault.
 
-- **A1535. The Prep stations screen made plain, and "station", not "kitchen", in the words staff
-  read (owner, 2026-11-14).** No migration: the default station's flag stays where it is. Not
-  started.
-  - **Shown on** lists the device names only (no "— pass monitor" after each), each a link that
-    opens that device's editor on Devices. The row's separate Devices link goes; today it opens
-    the plain Devices page (`packages/venue-service/src/dashboard/prep-stations-screen.ts`). If
-    Devices cannot open one device's editor from a link, add that.
-  - **"Waits for the pass" becomes "Held at the pass"** (Yes or No), with a help bubble: "Its
-    dishes wait at the pass until the pass sends them out."
-  - **"Printed on" becomes "Tickets printed on".**
-  - **Clicking a row opens the station's editor**, as on the other tables, and the row-menu
-    buttons are centred in their cells as elsewhere.
-  - **The default station moves to the Routes tab** as one line: "Dishes with no route go to:
-    [Kitchen]". The "Default" badge and the row menu's Make default go. It is still needed: a dish
-    no route places goes there, and without one sending it fails
-    (`apps/server/src/working-order.ts`, `noDefaultStation`). It is not "When closed, send to",
-    which only picks the station offered first when someone closes this one for the day.
-  - **"When closed, send to"** becomes "When closed for the day, send its dishes to", empty value
-    "Ask each time" in normal text, with the help bubble: "When someone closes this station for
-    the day, Waitron asks which station makes its dishes instead. The station chosen here is
-    offered first." Today's hint ("Close for today starts with this station chosen.") is shown in
-    grey italics, which now means an inherited value (A1534).
-  - **The station editor gets headed sections**: Station (name, colour, ticket printers), When it
-    is closed, The pass, and Station screen (late flags, Done on the screen, and Also list the
-    order's dishes from other stations).
-  - **Add becomes the primary button "Add a station"**, like Devices' "Add a device".
-  - **"Pass screen" and "Pass monitor" become "Pass" and "Pass display (view only)"** everywhere
-    staff read them, profiles included.
-  - **Staff read "station" or "prep station", not "kitchen", where the words mean stations in
-    general**: a bar is not a kitchen. "Kitchen" stays where it really means the kitchen (the owner,
-    2026-11-14: "there may be particular places where kitchen makes more sense"); the PR lists each
-    place kept, with why, for the owner to check. Covers the dashboard, till and venue-service screen text in English and
-    Spanish, the guides and help bubbles: for example "Kitchen display" (a device kind), "Kitchen
-    screen shows", "kitchen routing rules", "kitchen tickets" and "kitchen screens". A station
-    a venue names Kitchen keeps its name. A product's "Kitchen name", one of its three names
-    (`docs/developers/products.md`), becomes "Prep station name" (owner, 2026-11-14), on products
-    and extras alike, with `products.md`'s prose to match. Code identifiers may keep `kitchen`;
-    only the words people read change.
-
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
   The passkey refusal offers retry, password entry and an emailed password reset. These do not
   reactivate a disabled account or replace unavailable email delivery. Design a recovery choice

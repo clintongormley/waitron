@@ -168,9 +168,6 @@ async function routingGrid(el: PrepStationsScreen) {
   return grid;
 }
 const containing = (words: string) => new RegExp(words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-/** A whole name, word for word; a comma after a drawn block may read with a space before it. */
-const spoken = (words: string) =>
-  new RegExp(`^${containing(words).source.replaceAll(", ", " ?, ")}$`);
 /** What a routing cell draws: its button's target and accessible name, and its refusal. */
 function gridCombo(grid: HTMLElement, row: string, zone: string) {
   const td = () =>
@@ -226,20 +223,20 @@ it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
   },
 );
 
-it.each([
-  ["default-upstairs", "open"],
-  ["delete-upstairs", "open"],
-] as const)("keeps station action %s in Stations rather than Routing", async (action, why) => {
-  const next = withUpstairs({ open: true, why });
-  next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
-  next.routing.stations.push({ id: "retired", name: "Retired", active: false, colour: "red" });
-  const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
-  const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
-  expect(await routingGrid(el)).not.toBeNull();
-  expect(routing.querySelector(`[data-test="${action}"]`)).toBeNull();
-  const moved = action.replace("default-", "make-default-");
-  expect(stationTable(el)!.querySelector(`[data-test="${moved}"]`)).not.toBeNull();
-});
+it.each([["delete-upstairs", "open"]] as const)(
+  "keeps station action %s in Stations rather than Routing",
+  async (action, why) => {
+    const next = withUpstairs({ open: true, why });
+    next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
+    next.routing.stations.push({ id: "retired", name: "Retired", active: false, colour: "red" });
+    const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
+    const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
+    expect(await routingGrid(el)).not.toBeNull();
+    expect(routing.querySelector(`[data-test="${action}"]`)).toBeNull();
+    const moved = action.replace("default-", "make-default-");
+    expect(stationTable(el)!.querySelector(`[data-test="${moved}"]`)).not.toBeNull();
+  },
+);
 
 async function openStationRest(el: PrepStationsScreen, stationId = "upstairs") {
   el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
@@ -336,6 +333,21 @@ it.each(
     tabs.scrollIntoView();
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "stations" } }));
     await settle(el);
+    const family = host.style.getPropertyValue("--wt-font-family");
+    const small = host.style.getPropertyValue("--wt-font-size-sm");
+    for (const font of [family, "Arial"]) {
+      host.style.setProperty("--wt-font-family", font);
+      if (font === "Arial") host.style.setProperty("--wt-font-size-sm", "16px");
+      const headings = stationTable(el)!.querySelectorAll("thead th");
+      const label = headings[3]!.querySelector(".head-label")!;
+      const text = [...label.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
+      const range = document.createRange();
+      range.selectNode(text);
+      for (const box of range.getClientRects())
+        expect(box.right).toBeLessThanOrEqual(headings[4]!.getBoundingClientRect().left);
+    }
+    host.style.setProperty("--wt-font-family", family);
+    host.style.setProperty("--wt-font-size-sm", small);
     await expectNoA11yViolations(el);
     await page.screenshot({
       path: `__screenshots__/look/routing-complete-${locale}-${theme}-${width}-stations.png`,
@@ -432,7 +444,7 @@ it.each([
     stationRow(el, "upstairs").querySelector('[part="station-status"]')?.textContent?.trim() ?? "",
   ).toBe(expected);
   expect(stationRow(el, "bar").querySelector('[part="station-status"]')).toBeNull();
-  expect(stationRow(el, "bar").querySelector('[part="badge"]')?.textContent).toBe("Default");
+  expect(stationRow(el, "bar").querySelector('[part="badge"]')).toBeNull();
   expect(q(el, '[data-test="edit-hours-bar"]')).toBeNull();
   expect(q(el, '[data-test="close-today-bar"]')).toBeNull();
 });
@@ -495,7 +507,7 @@ it("keeps station status in Stations instead of repeating it in Routing", async 
 });
 function stationHeadings(el: PrepStationsScreen) {
   return [...(stationTable(el)?.querySelectorAll("thead th") ?? [])].map((th) =>
-    th.textContent?.trim(),
+    (th.getAttribute("aria-label") ?? th.textContent)?.trim(),
   );
 }
 it("draws the Stations rows from the stations list with no health read and no health subscription", async () => {
@@ -511,9 +523,9 @@ it("draws the Stations rows from the stations list with no health read and no he
   expect(stationRow(el, "upstairs").textContent).toContain("Upstairs bar");
   expect(stationHeadings(el)).toEqual([
     "Name",
-    "Printed on",
+    "Tickets printed on",
     "Shown on",
-    "Waits for the pass",
+    "Held at the pass",
     "Actions",
   ]);
   for (const word of ["Waiting", "Being made", "Ready", "Late", "Oldest"])
@@ -600,7 +612,7 @@ it("shows linked printers and kitchen screens in Stations", async () => {
       stationPrinters: [{ stationId: "bar", printerId: "p1" }],
       devices: [
         {
-          id: "d1",
+          id: "d/one",
           label: "Bar display",
           kitchenScreens: [stationScreen([slot("bar", "Bar")])],
           kind: "kds_station",
@@ -614,7 +626,7 @@ it("shows linked printers and kitchen screens in Stations", async () => {
   const screens = q(el, '[data-test="screens-bar"]')!;
   expect(printers.textContent).toContain("Bar printer");
   expect(screens.textContent).toContain("Bar display");
-  expect(screens.querySelector("a")?.getAttribute("href")).toBe("/manage/devices");
+  expect(screens.querySelector("a")?.getAttribute("href")).toBe("/manage/devices/device/d%2Fone");
   expect(
     el
       .shadowRoot!.querySelector('[slot="routing"]')!
@@ -1102,9 +1114,13 @@ it("makes a nondefault station the default", async () => {
   };
   const a = api({ load: vi.fn().mockResolvedValue(changed) });
   const el = await mount(a);
-  q(el, '[data-test="make-default-terrace"]')!.click();
-  await settle(el);
-  expect(a.setDefaultStation).toHaveBeenCalledWith("terrace");
+  const field = q(el, 'wt-combobox[name="defaultStation"]') as WtCombobox;
+  expect(field.label).toBe("Dishes with no route go to");
+  expect(field.value).toBe("bar");
+  expect(field.options.map(({ value }) => value)).toEqual(["bar", "terrace"]);
+  await editSaveField(el, field, "terrace");
+  expect(a.setDefaultStation).toHaveBeenCalledExactlyOnceWith("terrace");
+  expect(q(el, '[data-test="make-default-terrace"]')).toBeNull();
 });
 it("saves station name and thresholds together through the editor", async () => {
   const next = withUpstairs({ open: true, why: "open" });
@@ -1680,7 +1696,7 @@ it("keeps a failed save's message through a later failed refresh and the recover
   await vi.waitFor(() =>
     expect(q(el, '[role="alert"]')?.textContent).toContain("could not be loaded"),
   );
-  q(el, '[data-test="make-default-terrace"]')!.click();
+  await editSaveField(el, q(el, 'wt-combobox[name="defaultStation"]')!, "terrace");
   await vi.waitFor(() =>
     expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved"),
   );
@@ -1910,8 +1926,8 @@ it("opens the default Stations tab and places Add station, the only create actio
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
   expect(q(el, '[data-test="new-station"]')!.closest('[slot="actions"]')).not.toBeNull();
-  expect(q(el, '[data-test="new-station"]')!.textContent!.trim()).toBe("Add");
-  expect(q(el, '[data-test="new-station"]')!.getAttribute("aria-label")).toBe("Add station");
+  expect(q(el, '[data-test="new-station"]')!.textContent!.trim()).toBe("Add a station");
+  expect(q(el, '[data-test="new-station"]')!.getAttribute("aria-label")).toBeNull();
   expect(
     [...q(el, '[slot="actions"]')!.children].map((child) => child.getAttribute("data-test")),
   ).toEqual(["new-station"]);
@@ -2102,7 +2118,7 @@ it.each([
   },
 ])(
   "uses category and Delete wording without deleted stations ($locale)",
-  async ({ locale, heading, field, disable }) => {
+  async ({ locale, heading, disable }) => {
     setLocale(locale);
     // A cell's name is read from what it draws, so the grid's tab is the one shown.
     history.replaceState(null, "", "/manage/prep-stations/view/routing");
@@ -2116,7 +2132,9 @@ it.each([
     expect(grid.shadowRoot!.querySelector("thead th")!.textContent!.trim()).toBe(heading);
     expect(q(el, '[data-test="delete-bar"]')!.textContent!.trim()).toBe(disable);
     expect(q(el, '[data-test="enable-upstairs"]')).toBeNull();
-    await gridCombo(grid, "all", "every")!.named().toHaveAccessibleName(spoken(field));
+    expect(
+      grid.shadowRoot!.querySelector('td[data-row="all"][data-zone="every"]')!.textContent!.trim(),
+    ).toBe("Bar");
   },
 );
 
@@ -2201,12 +2219,9 @@ it("at 320 px in Spanish, every tab shows whole and the tab row does not overflo
   );
 });
 
-it.each([
-  { locale: "en", name: "Add station" },
-  { locale: "es", name: "Añadir estación" },
-] as const)(
-  "at 390 px, the Stations tab shows every tab and its add button whole ($locale)",
-  async ({ locale, name }) => {
+it.each(["en", "es"] as const)(
+  "at 390 px, the Stations tab shows every tab and its add button whole (%s)",
+  async (locale) => {
     setLocale(locale);
     history.replaceState(null, "", "/manage/prep-stations");
     const el = await mount(api());
@@ -2232,7 +2247,9 @@ it.each([
     expect(addBox.right).toBeLessThanOrEqual(row.right + 1);
     const inner = add.shadowRoot!.querySelector("button")!;
     expect(inner.scrollWidth).toBeLessThanOrEqual(inner.clientWidth);
-    expect(inner.getAttribute("aria-label")).toBe(name);
+    await expect
+      .element(page.elementLocator(inner))
+      .toHaveAccessibleName(VENUE_SERVICE_STRINGS[locale as "en" | "es"]["prep.add_station"]);
   },
 );
 
@@ -2518,7 +2535,7 @@ it.each([
     expect(menu!.getAttribute("label")).toContain("Upstairs bar");
     expect(menu!.querySelector('[data-test="edit-upstairs"]')!.textContent).toContain(edit);
     expect(menu!.querySelector('[data-test="delete-upstairs"]')!.textContent).toContain(disable);
-    expect(menu!.querySelector('[data-test="make-default-upstairs"]')).not.toBeNull();
+    expect(menu!.querySelector('[data-test="make-default-upstairs"]')).toBeNull();
     expect(summary.querySelector('[data-test="make-default-bar"]')).toBeNull();
     expect(summary.querySelector('[data-test="enable-retired"]')).toBeNull();
     expect(summary.querySelector('[data-test="disable-retired"]')).toBeNull();
@@ -2576,16 +2593,9 @@ it("keeps a refused station name editable, marks duplicates and validates a corr
   expect(a.updateStation).toHaveBeenLastCalledWith("upstairs", { name: "New name" });
   expect(q(el, '[data-test="station-editor"]')).toBeNull();
 });
-it("Stations row actions reuse default and permanent Delete writes", async () => {
+it("Stations row actions reuse permanent Delete writes", async () => {
   const next = withUpstairs({ open: true, why: "open" });
   const { el, a } = await mountToday(next);
-  const makeDefault = stationTable(el)!.querySelector<HTMLElement>(
-    '[data-test="make-default-upstairs"]',
-  );
-  expect(makeDefault).not.toBeNull();
-  makeDefault!.click();
-  await settle(el);
-  expect(a.setDefaultStation).toHaveBeenCalledWith("upstairs");
   stationTable(el)!.querySelector<HTMLElement>('[data-test="delete-upstairs"]')!.click();
   await settle(el);
   expect(a.deleteStation).not.toHaveBeenCalled();
@@ -2787,7 +2797,7 @@ async function cancelEditor(el: PrepStationsScreen) {
   await settle(el);
 }
 
-it("Stations names each station's printers and the screens that show it, with a link to Devices", async () => {
+it("Stations names each station's printers and links the devices that show it", async () => {
   const { el } = await mountStations();
   const printed = q(el, '[data-test="printed-on-bar"]')!;
   expect(printed.textContent).toContain("Old printer");
@@ -2795,7 +2805,7 @@ it("Stations names each station's printers and the screens that show it, with a 
   expect(bar.textContent).toContain("Bar screen");
   expect(bar.textContent).not.toContain("Other screen");
   expect(bar.textContent).not.toContain("Disabled screen");
-  expect(bar.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
+  expect(bar.querySelector("a")!.getAttribute("href")).toBe("/manage/devices/device/current");
   expect(printed.querySelector("wt-combobox, button")).toBeNull();
   expect(bar.querySelector("wt-combobox")).toBeNull();
 });
@@ -2810,33 +2820,14 @@ it.each(["light", "dark"] as const)(
     probe.style.color = "var(--wt-color-primary-text)";
     el.parentElement!.append(probe);
     const token = getComputedStyle(probe).color;
-    const devices = q(el, '[data-test="screens-bar"] a[href="/manage/devices"]')!;
+    const devices = q(el, '[data-test="screens-bar"] a[href="/manage/devices/device/current"]')!;
     expect(getComputedStyle(devices).color).toBe(token);
   },
 );
 
-it.each([
-  {
-    locale: "en",
-    bar: ["Bar screen — station screen", "Pass — pass screen", "Till 2 — station screen"],
-    upstairs: ["Other screen — station screen", "Pass — pass screen", "Expo — pass monitor"],
-  },
-  {
-    locale: "es",
-    bar: [
-      "Bar screen — pantalla de estación",
-      "Pass — pantalla de pase",
-      "Till 2 — pantalla de estación",
-    ],
-    upstairs: [
-      "Other screen — pantalla de estación",
-      "Pass — pantalla de pase",
-      "Expo — monitor de pase",
-    ],
-  },
-])(
-  "Stations names every device whose kitchen screen shows the station, with the screen's kind ($locale)",
-  async ({ locale, bar, upstairs }) => {
+it.each(["en", "es"])(
+  "Stations links each active device once, using its name only (%s)",
+  async (locale) => {
     const server = structuredClone(ticketView);
     server.devices.push(
       {
@@ -2846,6 +2837,7 @@ it.each([
         active: true,
         kitchenScreens: [
           stationScreen([slot("bar", "Bar"), slot("upstairs", "Upstairs bar")], "pass"),
+          stationScreen([slot("bar", "Bar")]),
         ],
       },
       {
@@ -2875,8 +2867,17 @@ it.each([
       [...q(el, `[data-test="screens-${id}"]`)!.querySelectorAll("[data-test=screen-device]")].map(
         (device) => device.textContent!.trim(),
       );
-    expect(names("bar")).toEqual(bar);
-    expect(names("upstairs")).toEqual(upstairs);
+    expect(names("bar")).toEqual(["Bar screen", "Pass", "Till 2"]);
+    expect(names("upstairs")).toEqual(["Other screen", "Pass", "Expo"]);
+    expect(
+      [...q(el, '[data-test="screens-bar"]')!.querySelectorAll("a")].map((link) =>
+        link.getAttribute("href"),
+      ),
+    ).toEqual([
+      "/manage/devices/device/current",
+      "/manage/devices/device/pass",
+      "/manage/devices/device/till-grill",
+    ]);
   },
 );
 
@@ -3085,7 +3086,7 @@ it("the station editor retains printer memberships independently for each statio
     expect(editorQ<WtInput>(el, 'wt-input[name="stationName"]')!.value).toBe(name);
     expect(combo.values).toEqual(ids);
     expect(combo.getAttribute("name")).toBe("printerIds");
-    expect(combo.label).toBe("Printers");
+    expect(combo.label).toBe("Ticket printers");
     combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
     await combo.updateComplete;
     expect(combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.name).toBe("printerIds");
@@ -3171,8 +3172,14 @@ it.each(["en", "es"] as const)(
     const manager = await mountStations();
     expect(stationHeadings(manager.el)).toEqual(
       locale === "en"
-        ? ["Name", "Printed on", "Shown on", "Waits for the pass", "Actions"]
-        : ["Nombre", "Se imprime en", "Se muestra en", "Espera al pase", "Acciones"],
+        ? ["Name", "Tickets printed on", "Shown on", "Held at the pass", "Actions"]
+        : [
+            "Nombre",
+            VENUE_SERVICE_STRINGS.es["prep.printed_on"],
+            "Se muestra en",
+            VENUE_SERVICE_STRINGS.es["prep.waits_for_pass"],
+            "Acciones",
+          ],
     );
     expect(q(manager.el, '[data-test="printed-on-bar"]')!.textContent?.trim()).toBe("Old printer");
     expect(q(manager.el, '[data-test="printed-on-upstairs"]')!.textContent?.trim()).toBe(
@@ -3255,6 +3262,16 @@ describe("Routing grid", () => {
   function gridView(): PrepStationsView {
     return {
       ...view,
+      stations: [
+        ...view.stations,
+        {
+          ...view.stations[0]!,
+          id: "kitchen",
+          name: "Kitchen",
+          colour: "orange",
+          isDefault: false,
+        },
+      ],
       routing: {
         ...view.routing,
         zones: [{ id: "terrace", name: "Terrace", departmentId: null }],
@@ -3308,6 +3325,13 @@ describe("Routing grid", () => {
     );
   /** Opens the cell's editor and saves `label` as its station, or presses Clear setting. */
   async function chooseCell(el: PrepStationsScreen, row: string, zone: string, label: string) {
+    if (row === "all" && zone === "every") {
+      const box = q(el, 'wt-combobox[name="defaultStation"]') as WtCombobox;
+      const option = box.options.find((option) => option.label === label)!;
+      box.value = option.value;
+      await editSaveField(el, box, option.value);
+      return;
+    }
     cellCombo(el, row, zone).button().click();
     await gridOf(el).updateComplete;
     const editor = cellEditor(el)!;
@@ -3994,7 +4018,7 @@ describe("Routing grid", () => {
       );
     });
 
-    it("closes the default cell's editor once Make default is saved", async () => {
+    it("saves the Routes default choice without opening a cell editor", async () => {
       const { a, el } = await mountGrid({
         setDefaultStation: vi.fn().mockResolvedValue(undefined),
       });
@@ -4003,18 +4027,16 @@ describe("Routing grid", () => {
       await vi.waitFor(() => expect(cellEditor(el)).toBeNull());
     });
 
-    it("hands a refused Make default to the open editor as well as the page", async () => {
+    it("shows a refused Routes default choice at the selector and on the page", async () => {
       const { el } = await mountGrid({
         setDefaultStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
       });
       await chooseCell(el, "all", "every", "Kitchen");
-      const editor = cellEditor(el)!;
-      await vi.waitFor(() =>
-        expect(
-          editor.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
-            .error,
-        ).toBe("The change could not be saved."),
+      expect((q(el, 'wt-combobox[name="defaultStation"]') as WtCombobox).error).toBe(
+        "The change could not be saved.",
       );
+      expect(cellEditor(el)).toBeNull();
+      expect((q(el, 'wt-combobox[name="defaultStation"]') as WtCombobox).value).toBe("bar");
       expect(q(el, '[role="alert"]')!.textContent!.trim()).toBe("The change could not be saved.");
     });
   });
@@ -4154,7 +4176,7 @@ describe("Routing grid", () => {
     expect(formActions(el).error).toBe("");
   });
 
-  it("Make default from All × Every zone calls the default route and maps its refusal", async () => {
+  it("The Routes selector calls the default route and maps its refusal", async () => {
     const { a, el } = await mountGrid({
       setDefaultStation: vi.fn().mockRejectedValue({
         code: "station.not_found",
@@ -5066,7 +5088,7 @@ describe("The station editor", () => {
     q(el, '[data-test="new-station"]')!.click();
     await settle(el);
     const printers = q(el, "wt-combobox[name=printerIds]") as WtCombobox;
-    expect(printers.label).toBe("Printers");
+    expect(printers.label).toBe("Ticket printers");
     expect(printers.options.find((option) => option.value === "watcher")!.disabled).toBe(false);
     expect(printers.options.find((option) => option.value === "disabled")!.disabled).toBe(true);
     await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
@@ -5210,7 +5232,9 @@ it.each([
     const { el } = await mountToday(next);
     const summary = stationTable(el)!;
     expect(
-      [...summary.querySelectorAll("thead th")].map((th) => th.textContent?.trim()),
+      [...summary.querySelectorAll("thead th")].map((th) =>
+        (th.getAttribute("aria-label") ?? th.textContent)?.trim(),
+      ),
     ).not.toContain(todayHeading);
     const rows = [...summary.querySelectorAll("tbody tr")];
     const cell = (name: string) =>
@@ -5254,7 +5278,7 @@ it.each(["en", "es"] as const)(
       "Terrace",
       "Upstairs bar",
     ]);
-    expect(rows[0]!.textContent).toContain(locale === "en" ? "Default" : "Predeterminada");
+    expect(rows[0]!.querySelector('[part="badge"]')).toBeNull();
     expect(rows[2]!.textContent).toContain(
       locale === "en" ? "Closed for today → Bar" : "Cerrada por hoy → Bar",
     );
@@ -5382,7 +5406,9 @@ it("permanent delete names current refusals and never offers a disposition", asy
   const dialog = el.shadowRoot!.querySelector("wt-delete-dialog")!;
   await dialog.updateComplete;
   expect(dialog.copy!.heading).toBe("Delete station");
-  expect(dialog.shadowRoot!.textContent).toContain("Choose another default station first.");
+  expect(dialog.shadowRoot!.textContent).toContain(
+    "Choose another default station on Routes first.",
+  );
   expect(dialog.shadowRoot!.querySelector("wt-combobox")).toBeNull();
   expect(
     dialog.shadowRoot!.querySelector('[data-test="delete-confirm"]')!.hasAttribute("disabled"),
@@ -5556,7 +5582,7 @@ it("A725 holds the colour popup closed while Add station is saving", async () =>
   });
 });
 
-it("A725 lists Stations by name with Default in place and no row grips", async () => {
+it("A725 lists Stations by name without Default badges or row grips", async () => {
   setLocale("en");
   const server = structuredClone(view);
   server.stations = [
@@ -5578,7 +5604,7 @@ it("A725 lists Stations by name with Default in place and no row grips", async (
     "Zulu",
   ]);
   expect(rows.map((row) => row.querySelector('[part="badge"]')?.textContent?.trim() ?? "")).toEqual(
-    ["", "", "Default"],
+    ["", "", ""],
   );
   expect(stationTable(el)!.querySelector('[data-test^="drag-"]')).toBeNull();
   expect(q(el, '[data-test="station-order-status"]')).toBeNull();
@@ -5667,8 +5693,8 @@ describe("A773 station policy: the pass coverage warning", () => {
       const el = await mount(api({ readPassCoverage: vi.fn().mockResolvedValue(gaps) }));
       await settle(el);
       expect(lines(el)).toEqual([
-        "Nothing fires dishes from Grill and Cold in Terrace: no pass screen covers them there. Set one up under Devices.",
-        "Nothing fires dishes from Grill that have no service zone: only a pass screen on every service zone covers them. Set one up under Devices.",
+        "Nothing fires dishes from Grill and Cold in Terrace: no pass covers them there. Set one up under Devices.",
+        "Nothing fires dishes from Grill that have no service zone: only a pass on every service zone covers them. Set one up under Devices.",
       ]);
       const section = warning(el)!;
       expect(section.getAttribute("role")).toBe("status");
@@ -5721,7 +5747,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "Nothing fires dishes from {devices} {zone} in {devices}: no pass screen covers them there. Set one up under Devices.",
+      "Nothing fires dishes from {devices} {zone} in {devices}: no pass covers them there. Set one up under Devices.",
     ]);
     expect(warning(el)!.querySelectorAll("a")).toHaveLength(1);
   });
@@ -5756,9 +5782,9 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "No pass screen covers Grill in any zone. Set one up under Devices.",
-      "Nothing fires dishes from Cold in Terrace: no pass screen covers them there. Set one up under Devices.",
-      "Nothing fires dishes from Grill that have no service zone: only a pass screen on every service zone covers them. Set one up under Devices.",
+      "No pass covers Grill in any zone. Set one up under Devices.",
+      "Nothing fires dishes from Cold in Terrace: no pass covers them there. Set one up under Devices.",
+      "Nothing fires dishes from Grill that have no service zone: only a pass on every service zone covers them. Set one up under Devices.",
     ]);
     for (const line of warning(el)!.querySelectorAll("p")) {
       expect(line.querySelectorAll("a")).toHaveLength(1);
@@ -5787,7 +5813,7 @@ describe("A773 station policy: the pass coverage warning", () => {
       await settle(el);
       expect(lines(el)).toEqual([
         locale === "en"
-          ? "No pass screen covers Grill and Cold in any zone. Set one up under Devices."
+          ? "No pass covers Grill and Cold in any zone. Set one up under Devices."
           : filled("es", "prep.pass_gap_every_zone", { stations: "Grill y Cold" }),
       ]);
     },
@@ -5803,7 +5829,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "Nothing fires dishes from Grill in Terrace: no pass screen covers them there. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Terrace: no pass covers them there. Set one up under Devices.",
     ]);
   });
 
@@ -5826,9 +5852,7 @@ describe("A773 station policy: the pass coverage warning", () => {
       }),
     );
     await settle(el);
-    expect(lines(el)).toEqual([
-      "No pass screen covers Grill in any zone. Set one up under Devices.",
-    ]);
+    expect(lines(el)).toEqual(["No pass covers Grill in any zone. Set one up under Devices."]);
   });
 
   it("A1320 a station covered in one active zone keeps its per-zone lines", async () => {
@@ -5843,8 +5867,8 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "Nothing fires dishes from Grill in Terrace: no pass screen covers them there. Set one up under Devices.",
-      "Nothing fires dishes from Grill in Hall: no pass screen covers them there. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Terrace: no pass covers them there. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Hall: no pass covers them there. Set one up under Devices.",
     ]);
   });
 
@@ -5864,8 +5888,8 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "No pass screen covers Grill in any zone. Set one up under Devices.",
-      "Nothing fires dishes from Grill in Terrace: no pass screen covers them there. Set one up under Devices.",
+      "No pass covers Grill in any zone. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Terrace: no pass covers them there. Set one up under Devices.",
     ]);
   });
 
@@ -5884,7 +5908,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "No pass screen covers {devices} {zone} in any zone. Set one up under Devices.",
+      "No pass covers {devices} {zone} in any zone. Set one up under Devices.",
     ]);
     expect(warning(el)!.querySelectorAll("a")).toHaveLength(1);
   });
@@ -5917,7 +5941,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     const a = api({ liveData, load, readPassCoverage });
     const el = await mount(a);
     await settle(el);
-    const failed = "Which pass screens cover these stations could not be checked.";
+    const failed = "Which passes cover these stations could not be checked.";
     expect(lines(el)).toEqual([failed]);
     expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
     expect(stationRow(el, "bar")).not.toBeNull();
@@ -5938,7 +5962,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     liveData.invalidate([{ type: "devices" }]);
     await vi.waitFor(() =>
       expect(lines(el)).toEqual([
-        "Nothing fires dishes from Grill that have no service zone: only a pass screen on every service zone covers them. Set one up under Devices.",
+        "Nothing fires dishes from Grill that have no service zone: only a pass on every service zone covers them. Set one up under Devices.",
       ]),
     );
   });
@@ -5950,13 +5974,13 @@ describe("A773 station policy: the pass coverage warning", () => {
     const el = await mount(api({ liveData, readPassCoverage }));
     await vi.waitFor(() =>
       expect(lines(el)).toEqual([
-        "Nothing fires dishes from Grill that have no service zone: only a pass screen on every service zone covers them. Set one up under Devices.",
+        "Nothing fires dishes from Grill that have no service zone: only a pass on every service zone covers them. Set one up under Devices.",
       ]),
     );
     readPassCoverage.mockRejectedValue({ code: "connection.failed" });
     liveData.invalidate([{ type: "devices" }]);
     await vi.waitFor(() =>
-      expect(lines(el)).toEqual(["Which pass screens cover these stations could not be checked."]),
+      expect(lines(el)).toEqual(["Which passes cover these stations could not be checked."]),
     );
     expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
   });
@@ -5990,7 +6014,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     await vi.waitFor(() => expect(passCoverageCalls(a)).toBe(before + 1));
   });
 
-  it("A773 station policy: Make default from the stations menu does not read the coverage again", async () => {
+  it("A773 station policy: changing the Routes default does not read the coverage again", async () => {
     const a = api({
       load: vi.fn().mockResolvedValue({
         ...view,
@@ -6005,7 +6029,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     await settle(el);
     const coverage = passCoverageCalls(a);
     const loads = vi.mocked(a.load).mock.calls.length;
-    q(el, '[data-test="make-default-terrace"]')!.click();
+    await editSaveField(el, q(el, 'wt-combobox[name="defaultStation"]')!, "terrace");
     await vi.waitFor(() => expect(vi.mocked(a.load).mock.calls.length).toBe(loads + 1));
     await settle(el);
     expect(a.setDefaultStation).toHaveBeenCalledExactlyOnceWith("terrace");
@@ -6111,4 +6135,27 @@ describe("A773 station policy: the pass coverage warning", () => {
       vi.useRealTimers();
     }
   });
+});
+
+it("Routes repairs a missing default using active stations only, and respects read-only access", async () => {
+  const next = structuredClone(view);
+  next.routing.defaultStationId = null;
+  next.stations.push({ ...next.stations[0]!, id: "gone", name: "Gone", active: false });
+  const a = api({ load: vi.fn().mockResolvedValue(next) });
+  const el = await mount(a);
+  const field = q(el, 'wt-combobox[name="defaultStation"]') as WtCombobox;
+  expect(field.value).toBe("");
+  expect(field.options.map(({ value }) => value)).toEqual(["bar"]);
+  expect(q(el, '[data-test="default-repair"]')!.textContent).toContain(
+    "No default prep station is active",
+  );
+  await editSaveField(el, field, "bar");
+  expect(a.setDefaultStation).toHaveBeenCalledExactlyOnceWith("bar");
+  next.routing.canMakeDefault = false;
+  const readOnly = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
+  expect(q(readOnly, 'wt-combobox[name="defaultStation"]')).toBeNull();
+  expect(q(readOnly, '[data-test="default-setting"]')!.textContent).toContain(
+    "Only someone who can configure the venue",
+  );
+  expect(q(readOnly, '[data-test="default-repair"]')).not.toBeNull();
 });

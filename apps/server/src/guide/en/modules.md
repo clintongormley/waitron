@@ -26,7 +26,7 @@ credentials are saved; it is separate from **Enabled**.
 
 As an administrator, choose **Turn off** or **Turn on** in the Bookings row menu and confirm.
 **Waiting for restart** means the change is saved. Open **Box status** in System and choose **Restart the box**
-when you can pause service. Tills reconnect; check and resend any kitchen send interrupted by the restart.
+when you can pause service. Tills reconnect; check and resend any station send interrupted by the restart.
 Your saved bookings stay on this box when Bookings is off.
 
 If the main box repeatedly fails to start, its recovery page offers **Switch Bookings off and start again**.
@@ -37,7 +37,7 @@ An administrator without a password cannot use that recovery action.
 
 As an administrator, choose **Turn off** or **Turn on** in the module's row menu and confirm.
 **Waiting for restart** means your choice is saved. Open **Box status** in System and choose
-**Restart the box** when you can pause service. Check and resend any kitchen send interrupted by the restart.
+**Restart the box** when you can pause service. Check and resend any station send interrupted by the restart.
 
 Before turning Payments off, turn every card provider off, removing or unpairing its readers first.
 After restarting, you can still take cash and enter cards taken on a separate terminal. Earlier

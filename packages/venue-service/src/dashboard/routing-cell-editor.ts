@@ -121,7 +121,6 @@ export class RoutingCellEditor extends LitElement {
   @property({ attribute: false }) zoneDepartmentId: string | null = null;
   /** A zone column whose zone serves no department: routing there reads no period line. */
   @property({ type: Boolean }) zoneWithoutDepartment = false;
-  @property({ type: Boolean }) isDefaultCell = false;
   /** `message`, when given, is shown at the bottom for a refusal no line takes. */
   @property({ attribute: false }) refusal?: {
     code: string;
@@ -284,7 +283,7 @@ export class RoutingCellEditor extends LitElement {
     this.leftOut = [];
     const kept: PeriodLine[] = [];
     // A period the model no longer lists has been deleted, and its lines with it.
-    for (const line of (this.isDefaultCell ? [] : (cell?.periods ?? []))
+    for (const line of (cell?.periods ?? [])
       .filter(({ periodId }) => order.has(periodId))
       .sort((a, b) => order.get(a.periodId)! - order.get(b.periodId)!)) {
       const period = byId.get(line.periodId)!;
@@ -377,8 +376,7 @@ export class RoutingCellEditor extends LitElement {
       this.stations
         .filter((station) => station.active)
         .map((station) => ({ value: stationKey(station.id), label: station.name }));
-    if (!this.isDefaultCell)
-      options.push({ value: NO_PREPARATION, fixed: true, label: t("prep.no_preparation") });
+    options.push({ value: NO_PREPARATION, fixed: true, label: t("prep.no_preparation") });
     return options;
   }
 
@@ -453,7 +451,7 @@ export class RoutingCellEditor extends LitElement {
 
   /** "Not on Breakfast menus" for a stored line nobody edited whose periods' menus reach none of the row's products. */
   private flagText(line: Line, repeated: Set<string>): string | undefined {
-    if (this.inherited || this.isDefaultCell || this.edited.has(line.id)) return undefined;
+    if (this.inherited || this.edited.has(line.id)) return undefined;
     const flagged = new Set(
       (this.cell?.periods ?? [])
         .filter(
@@ -537,7 +535,7 @@ export class RoutingCellEditor extends LitElement {
     const generation = this.generation;
     const current = () =>
       generation === this.generation && this.isConnected && this.open && !this.busy;
-    const stored = !this.inherited && !this.isDefaultCell;
+    const stored = !this.inherited;
     const repeated = this.repeatedNames();
     return keyed(
       generation,
@@ -645,7 +643,7 @@ export class RoutingCellEditor extends LitElement {
             }}
           ></wt-combobox>
           ${
-            this.isDefaultCell || this.zoneWithoutDepartment
+            this.zoneWithoutDepartment
               ? nothing
               : html`<wt-button
                   class="add"

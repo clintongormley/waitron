@@ -1,6 +1,7 @@
 import { QueryController, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import {
   baseStyles,
   pageTitleStyles,
@@ -51,12 +52,7 @@ import {
   rowInModel,
   type CellPeriodLines,
 } from "./routing-grid-model.js";
-import type {
-  RoutingCellChange,
-  RoutingDefaultRefusal,
-  RoutingPending,
-  RoutingRefusal,
-} from "./routing-grid.js";
+import type { RoutingCellChange, RoutingPending, RoutingRefusal } from "./routing-grid.js";
 import { t } from "./strings.js";
 import "./station-table.js";
 import "./station-editor.js";
@@ -97,24 +93,27 @@ const PREP_TABS = ["stations", "routing"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
-/** One line per active device whose kitchen screens show the station, naming those screens' kinds. */
 function screenDevices(devices: PrepStationsView["devices"], stationId: string) {
-  const lines = devices.flatMap((device) => {
-    if (!device.active) return [];
-    const kinds = device.kitchenScreens
-      .filter(
+  const shown = devices.filter(
+    (device) =>
+      device.active &&
+      device.kitchenScreens.some(
         (screen) =>
           screen.available &&
           screen.stations.some((slot) => slot.id === stationId && slot.available),
-      )
-      .map((screen) => t(`prep.screen_kind.${screen.kind}`));
-    return kinds.length === 0
-      ? []
-      : [format("prep.tickets.screen_device", { device: device.label, kinds: kinds.join(", ") })];
-  });
-  return lines.length === 0
+      ),
+  );
+  return shown.length === 0
     ? t("prep.none")
-    : lines.map((line) => html`<span data-test="screen-device">${line}</span>`);
+    : shown.map(
+        (device) =>
+          html`<a
+            part="devices-link"
+            data-test="screen-device"
+            href=${`/manage/devices/device/${encodeURIComponent(device.id)}`}
+            >${device.label}</a
+          >`,
+      );
 }
 
 @customElement("dashboard-prep-stations-screen")
@@ -216,8 +215,7 @@ export class PrepStationsScreen extends LitElement {
   /** The grid shows this choice at its address until the preview or save settles. */
   @state() private cellChoice: RoutingPending | null = null;
   @state() private cellRefusal: RoutingRefusal | null = null;
-  /** A refused Make default: shown on the page, as every station action's is, and in the editor. */
-  @state() private defaultRefusal: RoutingDefaultRefusal | null = null;
+  @state() private defaultError = "";
   /**
    * The refusal `#dropChoice` set, which a refresh that puts its row and zone back in the grid
    * clears.
@@ -385,7 +383,7 @@ export class PrepStationsScreen extends LitElement {
     }
     if (changedState.has("tab")) {
       this.cellRefusal = null;
-      this.defaultRefusal = null;
+      this.defaultError = "";
       this.#closeCellEditor();
     }
   }
@@ -412,7 +410,7 @@ export class PrepStationsScreen extends LitElement {
     this.pending = undefined;
     this.cellChoice = null;
     this.cellRefusal = null;
-    this.defaultRefusal = null;
+    this.defaultError = "";
     this.#writtenChoice = undefined;
     this.#cellRefreshing = undefined;
     this.#releaseCellScope();
@@ -569,49 +567,30 @@ export class PrepStationsScreen extends LitElement {
       ? t("prep.no_preparation")
       : this.#stationName(target.stationId);
   }
-  /** Whether `run` succeeded. */
-  async #act(run: () => Promise<unknown>): Promise<boolean> {
-    if (this.busy) return false;
-    this.busy = true;
-    this.#showError("");
-    try {
-      await run();
-      await this.#load();
-      return true;
-    } catch {
-      this.#showError(t("prep.save_error"));
-      return false;
-    } finally {
-      this.busy = false;
-    }
-  }
   /** The grid's open editor closes once its choice is written. */
   #closeCellEditor(): void {
     this.renderRoot.querySelector("venue-routing-grid")?.closeEditor();
   }
   async #makeDefault(stationId: string) {
     if (this.busy || this.pending) return;
-    const address: CellAddress = { row: { kind: "all" }, zoneId: null };
     const run = ++this.#cellRun;
     this.busy = true;
     this.#showError("");
-    this.defaultRefusal = null;
-    this.cellChoice = { address, target: { kind: "station", stationId } };
+    this.defaultError = "";
     try {
       await this.api.setDefaultStation(stationId);
-    } catch (error) {
+    } catch {
       if (this.#cellRun !== run || !this.isConnected) return;
       const message = t("prep.save_error");
       this.cellChoice = null;
       this.#showError(message);
-      this.defaultRefusal = { ...refusalOf(error), message };
+      this.defaultError = message;
       this.busy = false;
       return;
     }
     if (this.#cellRun !== run || !this.isConnected) return;
     this.cellChoice = null;
     this.cellRefusal = null;
-    this.#closeCellEditor();
     try {
       await this.#load();
     } finally {
@@ -739,6 +718,11 @@ export class PrepStationsScreen extends LitElement {
     this.pending = undefined;
     this.cellChoice = null;
   }
+  #editStation(station: PrepStation) {
+    this.stationEditBusy = false;
+    this.stationEditRefusal = undefined;
+    this.stationEdit = { token: {}, station };
+  }
   #stationMenu(station: PrepStation) {
     return html`<wt-row-actions
       data-station-id=${station.id}
@@ -748,23 +732,9 @@ export class PrepStationsScreen extends LitElement {
       <wt-button
         data-test=${`edit-${station.id}`}
         ?disabled=${this.busy}
-        @click=${() => {
-          this.stationEditBusy = false;
-          this.stationEditRefusal = undefined;
-          this.stationEdit = { token: {}, station };
-        }}
+        @click=${() => this.#editStation(station)}
         >${t("venue.edit")}</wt-button
       >
-      ${
-        station.active && !station.isDefault
-          ? html`<wt-button
-              data-test=${`make-default-${station.id}`}
-              ?disabled=${this.busy}
-              @click=${() => void this.#act(() => this.api.setDefaultStation(station.id))}
-              >${t("prep.make_default")}</wt-button
-            >`
-          : nothing
-      }
       <wt-button
         data-test=${`delete-${station.id}`}
         ?disabled=${this.busy}
@@ -783,8 +753,7 @@ export class PrepStationsScreen extends LitElement {
           station.id,
           {
             printedOn: printers.join(", ") || t("prep.no_printer"),
-            shownOn: html`${screenDevices(view.devices, station.id)}
-              <a part="devices-link" href="/manage/devices">${t("prep.devices")}</a>`,
+            shownOn: html`${screenDevices(view.devices, station.id)}`,
           },
         ];
       }),
@@ -1533,14 +1502,16 @@ export class PrepStationsScreen extends LitElement {
                       <wt-button
                         @click=${() => this.#openStation()}
                         data-test="new-station"
-                        aria-label=${t("prep.add_station")}
-                        >${t("prep.add")}</wt-button
+                        variant="primary"
+                        >${t("prep.add_station")}</wt-button
                       >
                     </div>`
               }
               <div slot="stations">
                 <prep-station-table
                   .stations=${view.stations}
+                  .disabled=${this.busy}
+                  @station-edit=${(event: CustomEvent<{ station: PrepStation }>) => this.#editStation(event.detail.station)}
                   .actions=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
                   .outputs=${this.#stationOutputs(view)}
                   .statusNotes=${Object.fromEntries(
@@ -1552,15 +1523,36 @@ export class PrepStationsScreen extends LitElement {
                 ></prep-station-table>
               </div>
               <div slot="routing">
+                <div class="form" data-test="default-setting">
+                  ${
+                    view.routing.canMakeDefault
+                      ? html`<wt-combobox
+                          name="defaultStation"
+                          label=${t("prep.default_destination")}
+                          search="auto"
+                          .value=${live(view.stations.some((station) => station.id === view.routing.defaultStationId) ? view.routing.defaultStationId! : "")}
+                          .options=${view.stations.map((station) => ({ value: station.id, label: station.name }))}
+                          .error=${this.defaultError}
+                          ?disabled=${this.busy || this.pending !== undefined}
+                          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                            event.stopPropagation();
+                            void this.#makeDefault(event.detail.value);
+                          }}
+                        ></wt-combobox>`
+                      : html`<p>
+                          ${t("prep.default_destination")}:
+                          ${view.stations.find((station) => station.id === view.routing.defaultStationId)?.name ?? t("routing.no_station")}.
+                          ${t("routing.default_read_only")}
+                        </p>`
+                  }
+                  ${view.stations.some((station) => station.id === view.routing.defaultStationId) ? nothing : html`<p data-test="default-repair">${t("routing.default_repair")}</p>`}
+                </div>
                 <venue-routing-grid
                   .model=${view.routing}
                   .pending=${this.cellChoice}
                   .refusal=${this.cellRefusal}
-                  .defaultRefusal=${this.defaultRefusal}
                   @routing-cell-change=${(event: CustomEvent<RoutingCellChange>) =>
                     void this.#chooseCell(event.detail)}
-                  @routing-make-default=${(event: CustomEvent<{ stationId: string }>) =>
-                    void this.#makeDefault(event.detail.stationId)}
                   @routing-draft-lost=${(event: CustomEvent<{ address: CellAddress }>) =>
                     this.#dropDraft(event.detail.address)}
                 ></venue-routing-grid>

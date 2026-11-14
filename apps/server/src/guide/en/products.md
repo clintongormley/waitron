@@ -2,7 +2,7 @@
 
 A product describes what you sell. A menu decides whether that product is sold in a particular
 service, and at what price. Keeping those jobs separate lets you reuse one coffee on several menus
-without copying its kitchen name, dietary declarations or choices.
+without copying its prep station name, dietary declarations or choices.
 
 Open **Products** in the management dashboard and choose **Add product**. Give the product a name
 and enter its price.
@@ -35,7 +35,7 @@ a colour change before you save. Close the panel with Escape to return to the th
 
 For a fixed-price lunch served at a table, turn on **Set lunch**. Attach extra lists for its
 courses, enter zero for included choices and a supplement price for premium dishes, and give
-each dish its kitchen course. Use the menu's service periods to choose when you sell it.
+each dish its course. Use the menu's service periods to choose when you sell it.
 
 ## Choose a selling unit {#selling-unit}
 
@@ -65,7 +65,7 @@ The name you just typed is the **staff** name. It is plain text, in no particula
 is what you and your staff see: the Products list, the till's buttons, the basket, an open table's
 line list, a retrieved order and your sales reports. Use whatever the venue actually calls the dish.
 
-Two optional names sit in sections of their own. **Descriptors** starts folded and **Kitchen**
+Two optional names sit in sections of their own. **Descriptors** starts folded and **Prep station**
 starts open:
 
 - A **customer-facing name**, under **Descriptors**, with one field per content language. This is
@@ -73,12 +73,12 @@ starts open:
   language's customer-facing name whatever language they print in, or the staff name when you leave
   every language blank. Once you fill in one language, fill in the default language too, or the
   product will not save.
-- A **kitchen name**, under **Kitchen**. This is what the kitchen ticket prints and what the kitchen
+- A **prep station name**, under **Prep station**. This is what the station ticket prints and what the station
   screens show. It is useful when the short label a cook needs differs from the name you sell under.
-  Leave it blank and the kitchen sees the staff name instead.
+  Leave it blank and the station sees the staff name instead.
 
-The two fall back separately. Filling in a customer-facing name does not change what the kitchen
-sees, and filling in a kitchen name does not change what the diner reads. While either name is
+The two fall back separately. Filling in a customer-facing name does not change what the station
+sees, and filling in a prep station name does not change what the diner reads. While either name is
 blank, its field shows the name that will be used instead.
 
 You can also add a customer-facing description, under **Descriptors**, and a photo, which sits
@@ -92,7 +92,7 @@ category's full path on the first line under the window's title, such as
 **Change** after the path to pick another: the list starts with **No category** and then shows
 every category as an indented tree, each subcategory under its parent. You can also move the product
 to another category on the Products screen, by turning on **Select** and dragging it, or
-with **Move to…**. The main category also plays a part in choosing the kitchen station a dish goes
+with **Move to…**. The main category also plays a part in choosing the prep station a dish goes
 to, as described below.
 
 While you add or rename a category, the square beside its name shows its own colour, or the colour
@@ -121,7 +121,7 @@ New venues in Spain start with **Sharing plates**, **Starters**, **Mains** and *
 Their names follow the starter
 language. Assign these courses to your products, or edit the list to suit your service.
 
-Use the **Course** field under **Kitchen** to choose the course for new dishes. It saves
+Use the **Course** field under **Prep station** to choose the course for new dishes. It saves
 with the product. At a table, arrange dishes in **New order**: they can go in **Fire now**, a new
 held group or an existing held group. You can change an unsent dish's course before sending it.
 Use groups to choose which dishes you fire together, rather than treating each course as one
@@ -149,9 +149,9 @@ their stable identities, so a menu's settings for a variant keep pointing at it.
 
 Variants have a section of their own, **Variants**, under **Pricing**. Choose **Add variant** to add
 one. A small window opens where you give the variant its three names (staff, customer-facing and
-kitchen), its price, image and availability; the customer-facing and kitchen names fall back to the
+station), its price, image and availability; the customer-facing and prep station names fall back to the
 variant's staff name exactly as the product's do. Save the window to add that one variant, or cancel
-it to add nothing. On the till's order lines, a receipt and a kitchen ticket, a variant is shown
+it to add nothing. On the till's order lines, a receipt and a station ticket, a variant is shown
 after its product's name, in brackets, such as Coffee (Large), and the sales report lists each
 variant under its product. So name a variant by what sets it apart: Large, not Large coffee.
 
@@ -243,7 +243,7 @@ allergens, and removing the variant's last diet label goes back to the product's
 you can add to a dish is itself a product, so it brings its own declarations with it. A choice on an
 options list does not: an option such as _rare_ or _well done_ carries no allergens and no dietary
 suitability of its own, because it is a way of asking for the same dish rather than something extra
-to eat. The till and kitchen show each item's own list.
+to eat. The till and station show each item's own list.
 
 In the Products list, **Not reviewed**, **None** and **Declared** distinguish a dish you have not
 checked from one you have checked. A variant shows its effective state; italic means it follows
@@ -316,7 +316,7 @@ can publish the menu can patch it. The window lists the items in the live menu, 
 and its extras and options lists under **Extras and options**. Pick an item to see what you can
 change:
 
-- A dish: its name, customer-facing name, kitchen name, description, image, price and VAT class.
+- A dish: its name, customer-facing name, prep station name, description, image, price and VAT class.
 - A variant or an extra: the same, without a description.
 - An options list's choice, and the name of an extras list or an options list: its three names.
 - A section: its internal name, customer-facing name and image.
@@ -349,8 +349,8 @@ value → the new one. Choose **Keep editing** to go back, or **Put live now**. 
   class.
 - On a parked counter order, renaming an options list or one of its choices does what it does after
   a publish, as [What the till does with a list](modifiers.md#till) describes: a new staff name
-  makes the till ask for that answer to be chosen again, and a new customer-facing or kitchen name
-  is saved onto those lines at the next change to the order, which can send a line the kitchen
+  makes the till ask for that answer to be chosen again, and a new customer-facing or prep station name
+  is saved onto those lines at the next change to the order, which can send a line the station
   already has to it again as a new ticket. Those lines keep their prices.
 - It changes nothing else: not the products, not the menu's own items and sections, not your other
   menus. A product on two menus is patched on each one.
@@ -373,14 +373,14 @@ the product's own **Modifiers** section, in the order you want. See
 [Reuse choices across your products](modifiers.md) for what each kind holds, its defaults and
 limits, and extra prices.
 
-When you park or complete an order, Waitron saves the chosen product and variant names, kitchen name,
+When you park or complete an order, Waitron saves the chosen product and variant names, prep station name,
 prices and modifier answers. Later catalogue edits apply to new selections. The parked order,
-kitchen ticket, receipt and reprint continue to show the facts saved with that order.
+station ticket, receipt and reprint continue to show the facts saved with that order.
 
-When you set up a Madrid demo in English, its staff and kitchen names are in English. The till shows
-**Set lunch**, while its customer name is **Lunch menu**. **Salad** uses the kitchen name
+When you set up a Madrid demo in English, its staff and prep station names are in English. The till shows
+**Set lunch**, while its customer name is **Lunch menu**. **Salad** uses the prep station name
 **SALAD · LUNCH** and a custom **Portion** unit, abbreviated **ptn**. **House coffee** has two
-variants and the kitchen name **COFFEE · DOWNSTAIRS BAR**. Customer names keep the venue's
+variants and the prep station name **COFFEE · DOWNSTAIRS BAR**. Customer names keep the venue's
 content languages, so changing staff wording does not replace the words on a receipt.
 
 A demo in Catalonia or the Balearic Islands starts as **Can Delgado**, with regional
@@ -388,7 +388,7 @@ dishes and cava. In the Valencian Community, it starts as **Casa Delgado de l'Ho
 with all i pebre, paella and Requena wine. In Galicia, it starts as **A Casa Delgado**,
 with empanada, lacón con grelos, filloas and Albariño.
 
-Staff and kitchen names, menus, departments and stations follow the
+Staff and prep station names, menus, departments and stations follow the
 English or Spanish language used to prepare the demo. Changing your screen language
 later does not rename them. Customer wording keeps the region's Catalan, Valencian
 or Galician text alongside Spanish and English. Catalonia uses Catalan receipts;
@@ -424,7 +424,7 @@ the till.
 
 Open a sent dish's details to check **Recorded when sent**. These declarations describe the dish
 when you sent it, even if you edit the product later. Dishes on hold keep their current
-declarations until you release them. Use the kitchen's current information when preparing food.
+declarations until you release them. Use the station's current information when preparing food.
 To review an earlier bill, open its details in **Orders**. The saved declarations appear beneath
 each dish and extra.
 
@@ -443,7 +443,7 @@ selects an available dish; tap or press Enter on a sold-out dish to open its inf
 
 Before you first send a table's dishes, answer **Any allergies at this table?** Choose **No
 allergies**, or choose **Allergies** and enter who needs special care, the allergens they avoid and
-an optional kitchen note. You can add several guests. The answer belongs to the people at the
+an optional station note. You can add several guests. The answer belongs to the people at the
 table and is shared by their bills.
 
 For an allergic guest, tick the dishes they will eat. A tick covers the whole order line: a line
@@ -465,13 +465,13 @@ information and confirm again before the move proceeds.
 If the move highlights a guest detail, correct it and continue to the dish assignments. Your
 correction stays in place through background refreshes; a new refusal can highlight it again.
 
-The kitchen keeps its first allergy copy with each dish. A later change reaches it as a separate
-notice to acknowledge. Read how [kitchen allergy copies and corrections](kitchen-service.md#allergy-copies)
+The station keeps its first allergy copy with each dish. A later change reaches it as a separate
+notice to acknowledge. Read how [station allergy copies and corrections](kitchen-service.md#allergy-copies)
 stay with the work.
 
 ## Mark a dish sold out during service {#sold-out}
 
-When the kitchen runs out, hold the dish on Counter or a table order to open its information.
+When the station runs out, hold the dish on Counter or a table order to open its information.
 You can still send or fire portions already on a bill.
 Choose **Mark sold out** for the dish, one size, an extra or an option choice. You must be signed in on a device that takes
 orders. The change applies to every menu in this venue. A sold-out dish stays visible in grey.

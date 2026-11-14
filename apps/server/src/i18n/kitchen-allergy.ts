@@ -2,7 +2,7 @@ import type { AllergenCode } from "@waitron/menu";
 
 export const KITCHEN_ALLERGY_WORDS = {
   en: {
-    guideTitle: "Kitchen service",
+    guideTitle: "Station service",
     ticketHeading: "!!! ALLERGY ON THIS TICKET !!!",
     guestHeading: "*** ALLERGY: {who} ***",
     clash: "!! CONTAINS {allergens} — SENT ANYWAY",
@@ -12,7 +12,7 @@ export const KITCHEN_ALLERGY_WORDS = {
     extraContains: "{extra} - contains {allergens}",
   },
   es: {
-    guideTitle: "Servicio de cocina",
+    guideTitle: "Servicio de estaciones",
     ticketHeading: "!!! ALERGIA EN ESTE TICKET !!!",
     guestHeading: "*** ALERGIA: {who} ***",
     clash: "!! CONTIENE {allergens} — ENVIADO IGUALMENTE",

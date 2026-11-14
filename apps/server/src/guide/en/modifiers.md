@@ -43,7 +43,7 @@ you are editing, not what is stored: nothing is sent until you save the list its
 
 ## Name a list and decide whether it is active {#names}
 
-Give the list a staff name in plain text — what you and your staff call it. A **Kitchen name**,
+Give the list a staff name in plain text — what you and your staff call it. A **Prep station name**,
 directly under it, and a **Customer-facing name**, with one field per content language, are both
 optional and fall back to the staff name when you leave them blank. On a receipt, an options
 list's and an option's new answers keep the default language's text, falling back independently
@@ -52,7 +52,7 @@ Previously recorded answers keep their saved names; an extras
 list's own customer-facing name is not printed anywhere today. While a name is blank, its field
 shows, in place of the blank, the name it falls back to.
 
-In an options list and each option's own window, you see **Name**, then **Kitchen name**, then a
+In an options list and each option's own window, you see **Name**, then **Prep station name**, then a
 plain **Customer-facing names** heading with every language's field already shown. You can compare
 and edit the names without opening a section. An extras list keeps its customer-facing names in a
 folded section: open **Customer-facing names** to edit them. Its closed line shows each language's
@@ -110,9 +110,9 @@ After that, the next change saved to a parked counter order takes off any extra 
 list, and its charge with it, and drops any answer to a deleted options list.
 
 To change a dish already sent at a table, open its details in **Sent**, change it and press
-**Change dish**. Only that dish is saved, and the kitchen gets the change. A row of identical dishes
+**Change dish**. Only that dish is saved, and the station gets the change. A row of identical dishes
 changes together. To take one or more sent dishes off the bill, use **Void…**, which opens
-**Cancel item**. Once the kitchen has started a dish, or any of it has been served, it can no longer be changed.
+**Cancel item**. Once the station has started a dish, or any of it has been served, it can no longer be changed.
 The dish keeps the price it was sold at.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from
@@ -138,7 +138,7 @@ selected. While the default is switched off, the first available option is selec
 option is available, the window says the dish cannot be added.
 
 The operator reads the staff name throughout. The till is a staff screen: the diner's wording is
-what the receipt prints, and the kitchen's is what the ticket prints.
+what the receipt prints, and the station's is what the ticket prints.
 
 Each extra picked becomes its own indented line under the dish in the basket, with its own price
 and its own allergens and dietary labels — never folded into the dish's. An options answer costs
@@ -154,12 +154,12 @@ On a parked counter order, changing the staff name of a list or an option, or tu
 means an options answer no longer matches. The till will not guess: it asks the operator to open that line and choose again before the
 order can be sent.
 
-Changing only a customer-facing or kitchen name still matches, so nobody is stopped at the till, but
+Changing only a customer-facing or prep station name still matches, so nobody is stopped at the till, but
 it is not free. The order remembers all three names, and Waitron cannot tell a renamed answer from a
 different one. So once the menu is published again or patched, the next change made to that parked order, even
 to another line, saves the new wording onto every line carrying the renamed answer. Those lines keep
-the prices they were sold at. A line the kitchen already has is recalled and sent to it again as a
-new ticket. The till refuses the change instead if the kitchen has started such a line, if any of it has been served, or if **Changes after sending**
+the prices they were sold at. A line the station already has is recalled and sent to it again as a
+new ticket. The till refuses the change instead if the station has started such a line, if any of it has been served, or if **Changes after sending**
 at the station of that line, or of one of its extras routed elsewhere, does not allow it. Do your renaming between
 services rather than while orders are parked.
 An extras list is the exception, because an extra is matched by its product: renaming an extras

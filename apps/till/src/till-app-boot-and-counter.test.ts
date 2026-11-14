@@ -708,7 +708,7 @@ describe("till-app session activity", () => {
       expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
       expect(grid().querySelector("till-pass-screen")).toBeNull();
       expect(grid().querySelector(".kitchen-screen-message")?.textContent?.trim()).toBe(
-        `This screen is no longer available: ${kind === "pass" ? "Pass screen" : "Pass monitor"}`,
+        `This screen is no longer available: ${kind === "pass" ? "Pass" : "Pass display (view only)"}`,
       );
     },
   );
@@ -877,7 +877,7 @@ describe("till-app session activity", () => {
       expect(getDevicePassBoard).toHaveBeenCalledTimes(1);
       expect(el.shadowRoot!.querySelector("till-enrol-screen")).toBeNull();
       expect(grid(el)!.querySelector(".kitchen-screen-message")?.textContent?.trim()).toBe(
-        "This screen is no longer available: Pass screen",
+        "This screen is no longer available: Pass",
       );
     });
 
@@ -1062,8 +1062,8 @@ describe("till-app session activity", () => {
     {
       name: "a kitchen display whose kind a narrowing removed names it",
       kitchenScreens: [kitchenScreen("pass", false)],
-      en: "This screen is no longer available: Pass screen",
-      es: "Esta pantalla ya no está disponible: Pantalla de pase",
+      en: "This screen is no longer available: Pass",
+      es: "Esta pantalla ya no está disponible: Pase",
       guidance: {
         en: "Choose this device's screens again in the dashboard, under Devices.",
         es: "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",

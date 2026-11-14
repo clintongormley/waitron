@@ -108,7 +108,7 @@ describe("kitchen instructions on station work", () => {
       groups: [group],
     });
     const heading = el.shadowRoot!.querySelector("[data-kitchen-note]");
-    expect(heading?.textContent).toContain("For the kitchen: Train at 14:30 <keep together>");
+    expect(heading?.textContent).toContain("For the station: Train at 14:30 <keep together>");
     expect(
       heading!.compareDocumentPosition(el.shadowRoot!.querySelector(".line-name")!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -162,12 +162,12 @@ describe("kitchen instructions on station work", () => {
       });
       const rows = el.shadowRoot!.querySelectorAll("[data-notice]");
       expect(rows[0]!.textContent).toContain(
-        locale === "en-GB" ? "Kitchen note changed" : es["kitchen_note.changed"],
+        locale === "en-GB" ? "Station note changed" : es["kitchen_note.changed"],
       );
       expect(rows[0]!.textContent).toContain("Old train");
       expect(rows[0]!.textContent).toContain("New train");
       expect(rows[1]!.textContent).toContain(
-        locale === "en-GB" ? "Kitchen note removed" : es["kitchen_note.removed"],
+        locale === "en-GB" ? "Station note removed" : es["kitchen_note.removed"],
       );
       expect(rows[1]!.textContent).toContain("New train");
       expect(rows[1]!.textContent).toContain("No onions");

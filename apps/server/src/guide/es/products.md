@@ -2,7 +2,7 @@
 
 Un producto describe lo que vendes. Una carta decide si ese producto se vende en un servicio concreto
 y a qué precio. Al mantener separadas las dos tareas, puedes usar el mismo café en varias cartas sin
-copiar su nombre de cocina, sus declaraciones dietéticas ni sus opciones.
+copiar su nombre de estación de preparación, sus declaraciones dietéticas ni sus opciones.
 
 Abre **Productos** en el panel de gestión y elige **Añadir producto**. Ponle un nombre al producto e
 introduce su precio.
@@ -35,7 +35,7 @@ muestra el cambio de color antes de guardar. Cierra el panel con Escape para vol
 
 Para una comida a precio fijo servida en mesa, activa **Comida a precio fijo**. Añade listas de
 extras para sus platos, indica cero en las opciones incluidas y el suplemento de las opciones
-especiales, y asigna a cada plato su pase de cocina. Usa los periodos de servicio de la carta
+especiales, y asigna a cada plato su pase. Usa los periodos de servicio de la carta
 para decidir cuándo se vende.
 
 ## Elige una unidad de venta {#selling-unit}
@@ -68,7 +68,7 @@ idioma concreto, y es lo que ves tú y lo que ve tu personal: la lista de Produc
 la caja, la cesta, las líneas de una mesa abierta, un pedido recuperado y tus informes de ventas.
 Usa el nombre con el que el local llama de verdad al plato.
 
-Dos nombres opcionales tienen su propia sección. **Descriptores** empieza plegada y **Cocina** empieza
+Dos nombres opcionales tienen su propia sección. **Descriptores** empieza plegada y **Estación de preparación** empieza
 abierta:
 
 - Un **nombre para el cliente**, en **Descriptores**, con un campo por cada idioma de contenido. Es lo
@@ -76,12 +76,12 @@ abierta:
   del idioma predeterminado sea cual sea el idioma en que se imprimen, o el nombre del personal si
   dejas todos los idiomas en blanco. En cuanto rellenas un idioma, rellena también el predeterminado,
   o el producto no se guardará.
-- Un **nombre de cocina**, en **Cocina**. Es lo que imprime la comanda de cocina y lo que muestran las
-  pantallas de cocina. Es útil cuando la etiqueta corta que necesita un cocinero no es el nombre con el
-  que vendes. Déjalo en blanco y la cocina verá el nombre del personal.
+- Un **nombre de estación de preparación**, en **Estación de preparación**. Es lo que imprime la comanda de estación y lo que muestran las
+  pantallas de estación. Es útil cuando la etiqueta corta que necesita un cocinero no es el nombre con el
+  que vendes. Déjalo en blanco y la estación verá el nombre del personal.
 
 Cada uno recurre a su alternativa por separado. Rellenar un nombre para el cliente no cambia lo que ve
-la cocina, y rellenar un nombre de cocina no cambia lo que lee el comensal. Mientras uno de los dos
+la estación, y rellenar un nombre de estación de preparación no cambia lo que lee el comensal. Mientras uno de los dos
 esté en blanco, su campo muestra el nombre que se usará en su lugar.
 
 También puedes añadir una descripción para el cliente, en **Descriptores**, y una foto, que va junto al
@@ -96,7 +96,7 @@ ninguna. Elige **Cambiar**, después de la ruta, para elegir otra: la lista empi
 categoría** y después muestra todas las categorías como un árbol sangrado, cada subcategoría bajo su
 categoría superior. También puedes mover el producto a otra categoría en la pantalla Productos,
 activando **Seleccionar** y arrastrándolo, o con **Mover a…**. La categoría principal también influye
-en qué estación de cocina recibe un plato, como se explica más abajo.
+en qué estación de preparación recibe un plato, como se explica más abajo.
 
 Mientras añades una categoría o le cambias el nombre, el cuadrado junto al nombre muestra su propio
 color, o el que hereda de la categoría superior más cercana que tenga color y, después, el
@@ -114,7 +114,7 @@ predeterminada del local.
 La lista de Productos no muestra dónde se prepara cada plato; eso lo muestra la pestaña **Rutas**.
 Un asterisco rojo tras el nombre de una categoría en la lista indica que su ruta de **Todas las
 zonas** no llega a ninguna estación activa. Otras rutas de la pestaña **Rutas** aún pueden enviar
-algunos de sus platos a una estación. Cuando no se puede leer el envío a cocina y la lista tiene
+algunos de sus platos a una estación. Cuando no se puede leer el envío a la estación y la lista tiene
 categorías, una línea sobre la lista lo dice y no se marca ninguna categoría.
 
 Puedes crear una unidad, una lista de extras o una lista de opciones sin abandonar el producto que estás
@@ -127,7 +127,7 @@ Los locales nuevos en España empiezan con **Pica pica**, **Entradas**, **Platos
 **Postres**. Los nombres siguen el idioma
 del contenido inicial. Asigna estos cursos a tus productos o adapta la lista a tu servicio.
 
-Usa el campo **Curso**, en **Cocina**, para elegir el curso de los platos nuevos. Se
+Usa el campo **Curso**, en **Estación de preparación**, para elegir el curso de los platos nuevos. Se
 guarda con el producto. En una mesa, organiza los platos en **Nuevo pedido**: pueden ir en
 **Marchar ya**, en un grupo nuevo en espera o en un grupo que ya está en espera. Puedes cambiar el
 curso de un plato sin enviar antes de enviarlo. Usa los grupos para elegir qué platos marchas juntos,
@@ -155,10 +155,10 @@ conserva su identidad, así que los ajustes de una carta para una variante sigue
 
 Las variantes tienen su propia sección, **Variantes**, bajo **Precios**. Elige **Añadir variante** para
 añadir una. Se abre una ventana pequeña donde das a la variante sus tres nombres (del personal, para el
-cliente y de cocina), su precio, su imagen y su disponibilidad; el nombre para el cliente y el de
-cocina recurren al nombre del personal de la variante igual que los del producto. Guarda la ventana
+cliente y de estación), su precio, su imagen y su disponibilidad; el nombre para el cliente y el de
+la estación recurren al nombre del personal de la variante igual que los del producto. Guarda la ventana
 para añadir esa variante, o cancélala para no añadir nada. En las líneas del pedido de la caja, en un
-ticket y en una comanda de cocina, una variante aparece tras el nombre de su producto, entre
+ticket y en una comanda de estación, una variante aparece tras el nombre de su producto, entre
 paréntesis, por ejemplo Café (Grande), y el informe de ventas muestra cada variante bajo su producto.
 Así que nombra una variante por lo que la distingue: Grande, no Café grande.
 
@@ -254,7 +254,7 @@ vuelve a los alérgenos del producto, y quitar la última etiqueta dietética de
 etiquetas del producto. Un extra que puedes añadir a un plato es en sí un producto, así que trae
 consigo sus propias declaraciones. Una opción de una lista de opciones no: una opción como _poco hecho_
 o _muy hecho_ no lleva alérgenos ni aptitud dietética propios, porque es una forma de pedir el mismo
-plato, no algo más que comer. La caja y la cocina muestran la lista propia de cada elemento.
+plato, no algo más que comer. La caja y la estación muestran la lista propia de cada elemento.
 
 En la lista de Productos, **Sin revisar**, **Ninguno** y **Declarado** distinguen un plato que no has
 comprobado de uno que sí. Una variante muestra su estado efectivo; la cursiva indica que sigue a su
@@ -330,7 +330,7 @@ publicada, y puede usarlo cualquiera que pueda publicar la carta. La ventana mue
 de la carta publicada, con un buscador, y sus listas de extras y de opciones bajo **Extras y
 opciones**. Elige un elemento para ver lo que puedes cambiar:
 
-- Un plato: su nombre, nombre para el cliente, nombre de cocina, descripción, imagen, precio y
+- Un plato: su nombre, nombre para el cliente, nombre de estación de preparación, descripción, imagen, precio y
   clase de IVA.
 - Una variante o un extra: lo mismo, sin descripción.
 - Una opción de una lista de opciones, y el nombre de una lista de extras o de opciones: sus tres
@@ -368,8 +368,8 @@ como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **
 - En un pedido aparcado de caja, cambiar el nombre de una lista de opciones o de una de sus opciones
   hace lo mismo que después de publicar, como explica
   [Qué hace la caja con una lista](modifiers.md#till): un nombre del personal nuevo hace que la caja
-  pida volver a elegir esa respuesta, y un nombre para el cliente o de cocina nuevo se guarda en
-  esas líneas con el siguiente cambio del pedido, lo que puede volver a enviar a la cocina, como
+  pida volver a elegir esa respuesta, y un nombre para el cliente o de estación nuevo se guarda en
+  esas líneas con el siguiente cambio del pedido, lo que puede volver a enviar a la estación, como
   una comanda nueva, una línea que ya tiene. Esas líneas conservan sus precios.
 - No cambia nada más: ni los productos, ni los elementos y secciones de la propia carta, ni tus
   otras cartas. Un producto que está en dos cartas se corrige en cada una.
@@ -393,14 +393,14 @@ Consulta [Reutiliza las mismas elecciones en todos tus productos](modifiers.md) 
 contiene cada tipo, sus valores predeterminados y límites, y los precios de los extras.
 
 Cuando aparcas o completas un pedido, Waitron guarda los nombres del producto y la variante elegidos,
-el nombre de cocina, los precios y las respuestas de los modificadores. Los cambios posteriores en el
-catálogo se aplican a las selecciones nuevas. El pedido aparcado, la comanda de cocina, el ticket y la
+el nombre de estación de preparación, los precios y las respuestas de los modificadores. Los cambios posteriores en el
+catálogo se aplican a las selecciones nuevas. El pedido aparcado, la comanda de estación, el ticket y la
 reimpresión siguen mostrando los datos guardados con ese pedido.
 
-Cuando preparas una demostración de Madrid en español, los nombres del personal y de cocina están en
+Cuando preparas una demostración de Madrid en español, los nombres del personal y de estación están en
 español. La caja muestra **Menú del Día**, mientras que su nombre para el cliente es **Menú del
-mediodía**. **Ensalada** usa el nombre de cocina **ENSALADA · MENÚ** y una unidad propia,
-**Ración**, abreviada **rac**. **Café de la casa** tiene dos variantes y el nombre de cocina
+mediodía**. **Ensalada** usa el nombre de estación de preparación **ENSALADA · MENÚ** y una unidad propia,
+**Ración**, abreviada **rac**. **Café de la casa** tiene dos variantes y el nombre de estación de preparación
 **CAFÉ · BAR DE ABAJO**. Los nombres para el cliente conservan los idiomas de contenido del
 local, por lo que cambiar los nombres internos no sustituye las palabras del ticket.
 
@@ -409,7 +409,7 @@ platos regionales y cava. En la Comunitat Valenciana empieza como **Casa Delgado
 l'Horta**, con all i pebre, paella y vino de Requena. En Galicia empieza como
 **A Casa Delgado**, con empanada, lacón con grelos, filloas y Albariño.
 
-Los nombres internos y de cocina, las cartas, los departamentos y las estaciones siguen
+Los nombres internos y de estación, las cartas, los departamentos y las estaciones siguen
 el inglés o español usado para preparar la demostración.
 Cambiar después el idioma de las pantallas no cambia esos nombres. Los textos para
 el cliente conservan el catalán, valenciano o gallego de la región, además del español
@@ -449,7 +449,7 @@ tiene una pantalla de Alérgenos aparte ni una hoja de alérgenos impresa.
 Abre los detalles de un plato enviado para consultar **Registrado al enviar**. Esas declaraciones
 describen el plato cuando lo enviaste, aunque después edites el producto. Los platos en espera
 mantienen sus declaraciones actuales hasta que los liberas. Usa la información actual de
-la cocina para preparar la comida.
+la estación para preparar la comida.
 Para revisar una cuenta anterior, abre sus detalles en **Pedidos**. Las declaraciones guardadas
 aparecen debajo de cada plato y extra.
 
@@ -468,7 +468,7 @@ enfocado. Intro selecciona un plato disponible; toca o pulsa Intro sobre uno ago
 
 Antes de enviar por primera vez los platos de una mesa, responde **¿Hay alergias en esta mesa?**
 Elige **Sin alergias**, o elige **Alergias** e indica quién necesita atención especial, los alérgenos
-que debe evitar y, si hace falta, una nota para cocina. Puedes añadir varias personas. La respuesta
+que debe evitar y, si hace falta, una nota para la estación. Puedes añadir varias personas. La respuesta
 pertenece a los comensales de la mesa y se comparte entre sus cuentas.
 
 Marca los platos que comerá cada persona con alergias. La marca abarca toda la línea del pedido:
@@ -491,7 +491,7 @@ Si el traslado marca un dato de una persona, corrígelo y continúa con la asign
 corrección se mantiene durante las actualizaciones en segundo plano; un nuevo rechazo puede
 volver a marcarla.
 
-Cocina conserva su primera copia de alergias con cada plato. Un cambio posterior llega en un
+Estaciones conserva su primera copia de alergias con cada plato. Un cambio posterior llega en un
 aviso aparte que debe confirmarse. Consulta cómo las
 [copias de alergias y sus correcciones](kitchen-service.md#allergy-copies) acompañan al trabajo.
 
