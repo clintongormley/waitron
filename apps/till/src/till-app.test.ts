@@ -13509,7 +13509,7 @@ describe("till-app", () => {
     });
 
     // The app's `#onMarkCollected` is mode-independent (it stamps a settled order's handover and reloads);
-    // the reload is only OBSERVABLE where the counter's queue is live — Modes I/T — since `#refreshStationQueue`
+    // the reload is only OBSERVABLE where the counter's queue is live — Modes I/T — since `#loadStationQueue`
     // skips Mode P. So these exercise the handler wiring under `ticket_then_pay`, exactly as the
     // advance-ticket-item tests above do.
     it("mark-collected: hands over the order via markCollected, then refreshes the default station's queue", async () => {
