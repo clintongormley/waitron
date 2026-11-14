@@ -195,7 +195,10 @@ it("cleanup without a setup record leaves other state alone", async () => {
 
 it("a finished setup removes its named files and ordinary attachments, keeping other state", async () => {
   const f = await fixture();
-  await updateSetupFlowSection(f.stateDir, "attempt", () => ({ ...f.attempt, status: "complete" }));
+  await updateSetupFlowSection(f.stateDir, "attempt", () => ({
+    ...f.attempt,
+    status: "complete" as const,
+  }));
   const setup = dirname(f.path);
   const kept = join(f.stateDir, "keep.txt");
   await writeFile(kept, "other state");
@@ -216,7 +219,10 @@ it("a finished setup removes its named files and ordinary attachments, keeping o
 
 it("a finished setup tolerates absent optional files and attachment folders", async () => {
   const f = await fixture();
-  await updateSetupFlowSection(f.stateDir, "attempt", () => ({ ...f.attempt, status: "complete" }));
+  await updateSetupFlowSection(f.stateDir, "attempt", () => ({
+    ...f.attempt,
+    status: "complete" as const,
+  }));
   await endFinishedSetup(f.stateDir);
   await expect(lstat(dirname(f.path))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readSetupFlowRecord(f.stateDir)).toBeNull();
@@ -224,7 +230,10 @@ it("a finished setup tolerates absent optional files and attachment folders", as
 
 it("cleanup keeps unknown root files, linked folders and nested attachments", async () => {
   const f = await fixture();
-  await updateSetupFlowSection(f.stateDir, "attempt", () => ({ ...f.attempt, status: "complete" }));
+  await updateSetupFlowSection(f.stateDir, "attempt", () => ({
+    ...f.attempt,
+    status: "complete" as const,
+  }));
   const setup = dirname(f.path);
   const target = join(f.stateDir, "kept-documents");
   await mkdir(target);
@@ -253,7 +262,10 @@ it("cleanup keeps unknown root files, linked folders and nested attachments", as
 
 it("cleanup still removes later attachments when an earlier folder retains nested content", async () => {
   const f = await fixture();
-  await updateSetupFlowSection(f.stateDir, "attempt", () => ({ ...f.attempt, status: "complete" }));
+  await updateSetupFlowSection(f.stateDir, "attempt", () => ({
+    ...f.attempt,
+    status: "complete" as const,
+  }));
   const setup = dirname(f.path);
   const nested = join(setup, "documents", "nested");
   await mkdir(nested, { recursive: true });
@@ -270,7 +282,10 @@ it("cleanup still removes later attachments when an earlier folder retains neste
 
 it("a refused record removal reports its error and keeps the setup files", async () => {
   const f = await fixture();
-  await updateSetupFlowSection(f.stateDir, "attempt", () => ({ ...f.attempt, status: "complete" }));
+  await updateSetupFlowSection(f.stateDir, "attempt", () => ({
+    ...f.attempt,
+    status: "complete" as const,
+  }));
   const before = await readFile(f.path);
   const readiness = join(dirname(f.path), "readiness.json");
   await writeFile(readiness, "readiness evidence");
@@ -286,7 +301,10 @@ it("a refused record removal reports its error and keeps the setup files", async
 
 it("a refused attachment-folder removal reports its error before removing later attachments", async () => {
   const f = await fixture();
-  await updateSetupFlowSection(f.stateDir, "attempt", () => ({ ...f.attempt, status: "complete" }));
+  await updateSetupFlowSection(f.stateDir, "attempt", () => ({
+    ...f.attempt,
+    status: "complete" as const,
+  }));
   const setup = dirname(f.path);
   await mkdir(join(setup, "documents"));
   await mkdir(join(setup, "import"));
