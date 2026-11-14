@@ -167,7 +167,26 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
       .orderBy(asc(attendanceOperationFacts.at), asc(attendanceOperationFacts.sequence));
 
     const clockRows = await tx
-      .select()
+      .select({
+        id: timeEntries.id,
+        personId: timeEntries.personId,
+        entryKind: timeEntries.entryKind,
+        eventAt: timeEntries.eventAt,
+        eventOffsetMinutes: timeEntries.eventOffsetMinutes,
+        capturedBySource: timeEntries.capturedBySource,
+        recordedByPersonId: timeEntries.recordedByPersonId,
+        recordedAt: timeEntries.recordedAt,
+        correctsEntryId: timeEntries.correctsEntryId,
+        correctionReason: timeEntries.correctionReason,
+        correctionStatus: timeEntries.correctionStatus,
+        correctionActorId: timeEntries.correctionActorId,
+        selfApproved: timeEntries.selfApproved,
+        authorKind: timeEntries.authorKind,
+        correctionDirection: timeEntries.correctionDirection,
+        missingEntryKind: timeEntries.missingEntryKind,
+        respondsToEntryId: timeEntries.respondsToEntryId,
+        payPeriodClosureId: timeEntries.payPeriodClosureId,
+      })
       .from(timeEntries)
       .where(eq(timeEntries.personId, personId))
       .orderBy(asc(timeEntries.eventAt), asc(timeEntries.recordedAt), asc(timeEntries.id));

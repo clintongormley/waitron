@@ -1,3 +1,6 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { cp, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -57,6 +60,14 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
   });
   it("keeps an absent set absent, or upgrades retained tables and recovers earlier payments", async () => {
     const venue = await setupVenue(suite.db);
+    const [admin] = await seedPersons(suite.db, {
+      displayName: "Module Switch Administrator",
+      role: "admin",
+    });
+    const session = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId: admin!.id }),
+    );
+    const adminCookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     const [port] = await freePorts(1);
     let scratch: string | undefined;
     let server: StartedServer | undefined;
@@ -190,6 +201,29 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
               ).length,
           )
           .toBeGreaterThan(0);
+      }
+      if (installed) {
+        const headers = {
+          cookie: adminCookie,
+          "Content-Type": "application/json",
+          origin: base,
+        };
+        const state = await (await fetch(`${base}/management-api/modules`, { headers })).json();
+        const payments = state.find((row: { id: string }) => row.id === "payments");
+        const saved = await fetch(`${base}/management-api/modules/payments/state`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({ enabled: true, revision: payments.revision }),
+        });
+        expect(saved.status).toBe(200);
+        expect(await saved.json()).toMatchObject({ enabled: true, applied: false });
+        const provider = await fetch(`${base}/management-api/payments/providers/stripe/state`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({ enabled: true, revision: 1 }),
+        });
+        expect(provider.status).toBe(409);
+        expect(await provider.json()).toMatchObject({ error: { code: "module.disabled" } });
       }
       const response = await fetch(`${base}/management-api/alerts`, {
         headers: { cookie: venue.managerCookie },

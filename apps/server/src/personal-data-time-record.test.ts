@@ -1,5 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
+import { unzipSync } from "fflate";
+import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -236,13 +238,47 @@ it.each([false, true])(
       }),
     );
     const modules = ALL_MODULES.filter((module) => enabled || module.name !== "workforce-es");
-    const own = personalDataParts(modules).find((entry) => entry.owner === "workforce")!;
-    const build = await withTransaction(suite.db, (tx) => own.part.prepare(tx, subject()));
-    const output = await build();
-    expect(output.map((file) => file.name)).toContain("clock-entries.json");
-    const payload = text(named(output, "clock-entries.json"));
+    const app = new Hono();
+    mountPersonalDataExportApi(
+      app,
+      {
+        db: suite.db,
+        modules,
+        serverParts: timeRecordPersonalData(modules),
+        venueLocale: "en-GB",
+        now: () => AT,
+      },
+      logger,
+    );
+    const response = await app.request("/management-api/me/personal-data/export", {
+      headers: { cookie },
+    });
+    expect(response.status).toBe(200);
+    const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    expect(!!archive["time-record.csv"]).toBe(enabled);
+    const payload = text(archive["clock-entries.json"]!);
     const { entries } = JSON.parse(payload);
     expect(entries).toHaveLength(7);
+    expect(Object.keys(entries[0]).sort()).toEqual([
+      "authorKind",
+      "capturedBySource",
+      "correctionActorId",
+      "correctionDirection",
+      "correctionReason",
+      "correctionStatus",
+      "correctsEntryId",
+      "entryKind",
+      "eventAt",
+      "eventOffsetMinutes",
+      "id",
+      "missingEntryKind",
+      "payPeriodClosureId",
+      "personId",
+      "recordedAt",
+      "recordedByPersonId",
+      "respondsToEntryId",
+      "selfApproved",
+    ]);
     expect(entries.map((entry: { personId: string }) => entry.personId)).toEqual(
       Array(7).fill(marthaId),
     );
