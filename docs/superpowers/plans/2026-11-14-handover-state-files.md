@@ -5,7 +5,8 @@
 It asks for complete state-file treatments and the summaries/checks' follow-ups
 in `docs/backlog/replication-cloud.md:496` and `:712`. Claude reviews this plan;
 the watcher clears it. Neither is owner approval. Implement inline afterwards.
-The A1308 hold was lifted by watcher 2026-11-07 (RUNNER); no schema changes here.
+RUNNER records: "A1308 HOLD LIFTED by the watcher 2026-11-07 ~09:58: A760
+part 3 landed (#2539)." No schema changes here.
 
 **Usable result:** every declared state entry has an explicit handover decision;
 CI detects missing decisions and stale manifest names; read-only fiscal summaries
@@ -81,4 +82,5 @@ their bundle and both index links. Add a dated historical-plan pointer only.
 Estimate added/removed lines: production 160/70; tests 220/70; support 0/0;
 docs 80/40, including this plan. One PR, 170 build minutes; outside opinion
 above 960 changed lines. Normal pre-push lint/types, two run-it reviews and
-current-head CI complete the gate. No whole-package local run solely to finish.
+current-head CI complete the gate. RUNNER §4 quotes owner 2026-11-08 16:28:
+"never run a whole package suite locally" unless "chasing a specific failure".
