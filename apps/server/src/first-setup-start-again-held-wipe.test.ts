@@ -5,6 +5,7 @@ import {
   startAgainMissing,
   stageFreshRestore,
   hourAfterWipe,
+  seedResolutionRecord,
   exists,
   type Held,
 } from "../test/start-again-held-fixture.js";
@@ -90,6 +91,7 @@ it("with the setup database missing and no journal, Start again's wipe deletes t
 
 it("a held setup database, wiped, then the fresh-box restore writes into the usual folders", async () => {
   const f = await heldSetup();
+  expect(await exists(await seedResolutionRecord(f))).toBe(true);
   const { ids, actions } = await withoutSignIn(f);
   await actions.startAgainFirstSetup(ids);
   await stageFreshRestore(f, { ...f.archive, outcome: await hourAfterWipe(f) });
@@ -113,6 +115,7 @@ it("control: the same fresh-box restore beside a held setup database that was no
 
 it("a missing setup database, wiped, then the fresh-box restore writes into the usual folders", async () => {
   const f = await missingHeldDatabase();
+  expect(await exists(await seedResolutionRecord(f))).toBe(true);
   await startAgainMissing(f);
   await stageFreshRestore(f, { ...f.archive, outcome: await hourAfterWipe(f) });
   await expect(runStagedRestore(f.archive.restore)).resolves.toBe(true);
