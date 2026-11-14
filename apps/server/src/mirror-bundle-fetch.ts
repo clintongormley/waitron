@@ -1,5 +1,3 @@
-// `credential` is the primary's by-id login object (`AdoptCredential`), not the dashboard's
-// by-email body: the primary's mirror-bundle route authenticates it with `loginManagerById`.
 import { createHash, X509Certificate } from "node:crypto";
 import { open, readFile, rename, rm } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";

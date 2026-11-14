@@ -1665,7 +1665,7 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
 
 const PRIMARY_URL = "https://primary.example";
 const ADOPT_CREDENTIAL: AdoptCredential = {
-  personId: "88888888-8888-8888-8888-888888888888",
+  email: "owner@example.test",
   password: "correct-horse-battery",
 };
 const BREAK_GLASS_SECRET = "break-glass-secret-abc123DEF456";
@@ -2609,7 +2609,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
   // A wrong-shape login is refused at the mirror's own boundary rather than failing at the primary
   // as a 502, and the error names the field, never its value.
   it.each([
-    ["credential.personId", (c: Record<string, unknown>) => delete c.personId],
+    ["credential.email", (c: Record<string, unknown>) => delete c.email],
     ["credential.password", (c: Record<string, unknown>) => delete c.password],
   ] as const)(
     "rejects a credential missing %s with 400 setup.request_invalid, without adopting",
@@ -3934,7 +3934,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
   }
 
   const resetBody = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
-    personId: ADOPT_CREDENTIAL.personId,
+    email: ADOPT_CREDENTIAL.email,
     password: ADOPT_CREDENTIAL.password,
     ...over,
   });
@@ -4001,6 +4001,20 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
     }
   });
 
+  it("accepts the adopt's email in another letter case and with surrounding spaces", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-case-"));
+    try {
+      const { app, stageReset } = await halfAdopted(dir);
+
+      const response = await postReset(app, resetBody({ email: " OWNER@Example.test  " }));
+      expect(response.status).toBe(202);
+      expect(stageReset).toHaveBeenCalledOnce();
+      await tick();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("lets the event loop turn while it checks the password", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-turn-"));
     try {
@@ -4028,17 +4042,17 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
     }
   });
 
-  it("saves the proof as the person id and a password hash, never the password", async () => {
+  it("saves the proof as the email and a password hash, never the password", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-proof-"));
     try {
       await halfAdopted(dir);
       const text = readFileSync(recordPath(dir), "utf8");
       expect(text).not.toContain(ADOPT_CREDENTIAL.password);
       const proof = (await createSetupOperationStore(dir).read())?.data.resetProof as {
-        personId: string;
+        email: string;
         passwordHash: string;
       };
-      expect(proof.personId).toBe(ADOPT_CREDENTIAL.personId);
+      expect(proof.email).toBe(ADOPT_CREDENTIAL.email);
       expect(await verifyPassword(ADOPT_CREDENTIAL.password, proof.passwordHash)).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -4047,7 +4061,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
 
   it.each([
     ["a wrong password", resetBody({ password: "not-the-password" })],
-    ["a different person id", resetBody({ personId: "99999999-9999-9999-9999-999999999999" })],
+    ["a different email", resetBody({ email: "someone-else@example.test" })],
   ])(
     "refuses %s with password.invalid, staging nothing and leaving the record",
     async (_label, body) => {
@@ -4190,16 +4204,15 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
     }
   });
 
-  const inventedPersonId = (n: number): string =>
-    `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
+  const inventedEmail = (n: number): string => `invented-${n}@example.test`;
 
-  it("counts wrong passwords sent under different person ids against the one saved login", async () => {
+  it("counts wrong passwords sent under different emails against the one saved login", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-throttle-rotate-"));
     try {
       const { app, stageReset } = await halfAdopted(dir);
       const statuses: number[] = [];
       for (let n = 0; n < 5; n += 1) {
-        const body = resetBody({ personId: inventedPersonId(n), password: "not-the-password" });
+        const body = resetBody({ email: inventedEmail(n), password: "not-the-password" });
         statuses.push((await postReset(app, body)).status);
       }
       expect(statuses).toEqual([401, 401, 401, 401, 429]);
@@ -4209,13 +4222,13 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
     }
   });
 
-  it("accepts the correct login once the advertised wait has passed, after 1000 invented person ids", async () => {
+  it("accepts the correct login once the advertised wait has passed, after 1000 invented emails", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-throttle-flood-"));
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       const { app, stageReset } = await halfAdopted(dir);
       for (let n = 0; n < 1000; n += 1) {
-        const body = resetBody({ personId: inventedPersonId(n), password: "not-the-password" });
+        const body = resetBody({ email: inventedEmail(n), password: "not-the-password" });
         expect([401, 429]).toContain((await postReset(app, body)).status);
       }
 
@@ -4239,8 +4252,8 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
   });
 
   it.each([
-    ["personId", { password: "x" }],
-    ["password", { personId: ADOPT_CREDENTIAL.personId, password: "" }],
+    ["email", { password: "x" }],
+    ["password", { email: ADOPT_CREDENTIAL.email, password: "" }],
   ])(
     "refuses a missing or empty %s with setup.request_invalid, never echoing it",
     async (field, body) => {
@@ -4363,6 +4376,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       expect(text).not.toContain(proof.passwordHash);
       expect(text).not.toContain("passwordHash");
       expect(text).not.toContain(ADOPT_CREDENTIAL.password);
+      expect(text).not.toContain(ADOPT_CREDENTIAL.email);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -122,7 +122,7 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
 }
 
 const CREDENTIAL: AdoptCredential = {
-  personId: "99999999-9999-4999-8999-999999999999",
+  email: "owner@example.test",
   password: "dashPass123",
 };
 const REQ = { primaryUrl: "https://primary.test/", credential: CREDENTIAL } as const;

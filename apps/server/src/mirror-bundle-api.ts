@@ -1,5 +1,5 @@
 // `POST /management-api/mirror-bundle`, on the singleton primary. The mirror calls it server-side, so
-// the admin credential rides in the body and is authenticated by person id, not email.
+// the admin's sign-in email, password and code ride in the body.
 import "./errors.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Hono } from "hono";
@@ -24,6 +24,7 @@ import {
   checkManagerPassword,
   endManagementSession,
   loginManagerById,
+  personIdForLoginEmail,
   type TotpKeyRing,
 } from "@waitron/identity";
 import { credentialRevision, writePairLinkTx, type KeyRing } from "@waitron/credentials";
@@ -126,9 +127,9 @@ export function mountMirrorBundleApi(
     run(c, log, async () => {
       // Every malformed credential field answers `password.invalid`, so the response never says which.
       const body = await readJsonBody<{
-        personId?: string;
-        password?: string;
-        totp?: string;
+        email?: unknown;
+        password?: unknown;
+        totp?: unknown;
         standbyNodeId?: string;
         standbyPublicKey?: string;
         standbyContactUrl?: unknown;
@@ -136,15 +137,14 @@ export function mountMirrorBundleApi(
         standbyAt?: unknown;
         moduleOperation?: unknown;
       }>(c);
+      const { email, password, totp } = body;
       if (
-        typeof body.personId !== "string" ||
-        !isUuid(body.personId) ||
-        typeof body.password !== "string" ||
-        (body.totp !== undefined && typeof body.totp !== "string")
+        typeof email !== "string" ||
+        typeof password !== "string" ||
+        (totp !== undefined && typeof totp !== "string")
       ) {
         throw new AppError("password.invalid", {});
       }
-      const { personId, password, totp } = body;
 
       // The contact URL is signed into the org chart and every till dials it, so the primary screens
       // it itself. Checked after the credential screen and before any database work.
@@ -165,6 +165,10 @@ export function mountMirrorBundleApi(
       const standbyContactUrl = body.standbyContactUrl;
       const standbyStoreUrl = body.standbyStoreUrl as string;
       const standbyAt = body.standbyAt;
+
+      // An address with no active account gets an id no person holds, which the sign-in below
+      // refuses after the same hashing work as a wrong password.
+      const personId = await personIdForLoginEmail(deps.appDb, email);
 
       const assemble = async (moduleOperations?: ModuleOperations) => {
         // Before assembly, so a chart too broken to read, or one no stored key vouches for, spends no
@@ -244,7 +248,7 @@ export function mountMirrorBundleApi(
         return withAuthenticatedOperation(
           { db: deps.appDb, credentialKeyRing: deps.credentialKeyRing },
           { binding: operation.binding, permission: "node.manage" },
-          body,
+          { personId, password, totp },
           (authority) =>
             assemble(new Map([[operation.binding.module, { ...operation, authority }]])),
         );

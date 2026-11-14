@@ -176,9 +176,8 @@ dashboard can fill in later. This is the ONLY place either secret is set for the
 
 Dashboard management login is **email + password**: `loginManager` resolves the person by email. Both
 the setup UI and the bare `venue` CLI require the first admin's email and thread it into `seed-admin`,
-so the provisioned admin can sign in immediately. The C2b mirror-bundle adoption route independently
-authenticates that admin **by id** via `loginManagerById`, because it is a server-to-server flow
-carrying the id rather than the dashboard form.
+so the provisioned admin can sign in immediately. The C2b mirror-bundle adoption route takes the same
+email, resolves it to an id with `personIdForLoginEmail`, and signs in through `loginManagerById`.
 
 It reads what would be created, prints the plan headed by the venue directory and the environment
 stamped on it, asks for confirmation (`--yes` skips it), applies, then prints the new `node` id and one

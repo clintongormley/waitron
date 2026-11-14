@@ -77,10 +77,10 @@ export function nodeTablesAdoptLeaves(tables: readonly string[]): string[] {
 
 export type PersistTradingArgs = TradingConfig;
 
-/** The admin login for the PRIMARY: it authorises the bundle mint there and never touches this
+/** The admin's sign-in for the PRIMARY: it authorises the bundle mint there and never touches this
  * mirror's own database. `totp` is present only when the admin has TOTP enrolled. */
 export interface AdoptCredential {
-  personId: string;
+  email: string;
   password: string;
   totp?: string;
 }

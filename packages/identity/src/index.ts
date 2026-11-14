@@ -65,6 +65,7 @@ export {
   loginManager,
   loginManagerById,
   authorizeManager,
+  foldedLoginEmail,
   personIdForLoginEmail,
 } from "./manager-login.js";
 export {

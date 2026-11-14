@@ -1697,7 +1697,7 @@ it.each<[string, (p: Pending) => Promise<void>]>([
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           primaryUrl: "https://primary.example",
-          credential: { personId: "88888888-8888-4888-8888-888888888888", password: "x" },
+          credential: { email: "owner@example.test", password: "x" },
         }),
       });
       expect(response.status).toBe(409);

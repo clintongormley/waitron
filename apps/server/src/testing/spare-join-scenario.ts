@@ -7,7 +7,6 @@ import { readFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { eq } from "drizzle-orm";
 import { expect } from "vitest";
 import {
   assignCatalogueToVenue,
@@ -19,7 +18,6 @@ import {
   invoiceSeries,
   nodes,
   openVenueDatabase,
-  persons,
   readNodeMembership,
   withTransaction,
   type VenueDatabase,
@@ -337,7 +335,6 @@ export async function closeBoxes(boxes: TestBox[]): Promise<unknown[]> {
 
 /** What a till on M needs to ring a counter sale through M's own routes. */
 interface CounterTill {
-  adminId: string;
   personId: string;
   cookie: string;
   menuItemId: string;
@@ -387,12 +384,7 @@ async function seedCounterTill(
         formFactor: "till",
         capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
       });
-      const [admin] = await tx
-        .select({ id: persons.id })
-        .from(persons)
-        .where(eq(persons.email, ADMIN.email));
       return {
-        adminId: admin!.id,
         personId: person!.id,
         profileId: profile!.id,
         menuItemId: offers.offerFor(product.id),
@@ -407,7 +399,6 @@ async function seedCounterTill(
       loginWithPin(tx, { deviceId: device.deviceId, personId: seeded.personId, pin: STAFF_PIN }),
     );
     return {
-      adminId: seeded.adminId,
       personId: seeded.personId,
       cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
       menuItemId: seeded.menuItemId,
@@ -641,7 +632,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           primaryUrl: addressM,
-          credential: { personId: till.adminId, password: ADMIN.password },
+          credential: { email: ADMIN.email, password: ADMIN.password },
           confirmedCaPem: caM,
         }),
       });

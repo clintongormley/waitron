@@ -1834,7 +1834,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               primaryUrl: `http://127.0.0.1:${unreachable}`,
-              credential: { personId: "33333333-3333-4333-8333-333333333333", password: "x" },
+              credential: { email: "owner@example.test", password: "x" },
             }),
           });
           const body = (await response.json()) as { error?: { code: string } };
@@ -1853,7 +1853,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("stages the reset of an adopt that stopped partway and requests a restart", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const personId = "33333333-3333-4333-8333-333333333333";
+    const email = "owner@example.test";
     const operationId = "44444444-4444-4444-8444-444444444444";
     try {
       await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
@@ -1866,13 +1866,13 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             kind: "adopt",
             requestHash: "a-request",
             phase: "venue_committed",
-            data: { resetProof: { personId, passwordHash: hashPassword("the-password") } },
+            data: { resetProof: { email, passwordHash: hashPassword("the-password") } },
             updatedAt: "2026-09-26T00:00:00.000Z",
           }),
         );
         const response = await post("/setup-api/reset-incomplete-adopt", {
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ personId, password: "the-password" }),
+          body: JSON.stringify({ email, password: "the-password" }),
         });
         expect(response.status).toBe(202);
         expect(await response.json()).toEqual({ resetStaged: true, restarting: true });
@@ -1932,7 +1932,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               primaryUrl,
-              credential: { personId: "33333333-3333-4333-8333-333333333333", password: "x" },
+              credential: { email: "owner@example.test", password: "x" },
             }),
           });
           expect(response.status).toBe(200);
@@ -2027,7 +2027,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     const adoptBody = (password: string) =>
       JSON.stringify({
         primaryUrl,
-        credential: { personId: "33333333-3333-4333-8333-333333333333", password },
+        credential: { email: "owner@example.test", password },
       });
     try {
       await withSetupBoot(venue.directory, {}, async ({ post, kills }) => {

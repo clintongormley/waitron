@@ -486,7 +486,7 @@ it("a refused public adoption retains its independently signed reservation witho
       {
         primaryUrl: "https://primary.test",
         credential: {
-          personId: "e1000000-0000-4000-8000-000000000003",
+          email: "owner@example.test",
           password: "synthetic-unused-credential",
         },
       },

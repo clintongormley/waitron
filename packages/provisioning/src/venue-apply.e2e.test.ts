@@ -161,7 +161,7 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
 
 describe("the provisioned admin authenticates by id with its password", () => {
   it("loginManagerById succeeds with the provisioned password and rejects a wrong one", async () => {
-    // The mirror-bundle path authenticates the admin by id, independently of the email.
+    // The mirror-bundle path signs in through the id the admin's email resolves to.
     await applyVenue(planVenue(request("B33333333"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,

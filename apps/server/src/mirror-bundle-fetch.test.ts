@@ -79,7 +79,7 @@ const SAMPLE_BUNDLE: MirrorBundle = {
 };
 
 const CREDENTIAL: AdoptCredential = {
-  personId: "99999999-9999-9999-9999-999999999999",
+  email: "owner@example.test",
   password: "correct-horse-battery",
 };
 

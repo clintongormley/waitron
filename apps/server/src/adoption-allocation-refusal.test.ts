@@ -38,7 +38,7 @@ const PRIMARY = "a7000000-0000-4000-8000-000000000002";
 const STANDBY = "a7000000-0000-4000-8000-000000000003";
 const PRIMARY_KEYS = generateNodeKeyPair();
 const credential = {
-  personId: "a7000000-0000-4000-8000-000000000004",
+  email: "owner@example.test",
   password: "synthetic-login",
 };
 let stateDir: string;

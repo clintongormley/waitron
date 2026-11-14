@@ -182,6 +182,11 @@ async function joinedPair() {
     }),
   );
   const session = await openManagementSession(mainBox.db, "admin");
+  const [{ email: adminEmail }] = (
+    await mainBox.db.execute<{ email: string }>(
+      sql`select email from persons where id = ${session.personId}`,
+    )
+  ).rows as [{ email: string }];
   await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, session.token));
   const bundleApp = new Hono();
   mountMirrorBundleApi(bundleApp, {
@@ -214,7 +219,7 @@ async function joinedPair() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            personId: credential.personId,
+            email: credential.email,
             password: credential.password,
             standbyNodeId: sent.nodeId,
             standbyPublicKey: sent.publicKey,
@@ -242,7 +247,7 @@ async function joinedPair() {
       listIpv4: () => [],
       now: () => new Date(),
     },
-    { primaryUrl: MAIN_URL, credential: { personId: session.personId, password: PASSWORD } },
+    { primaryUrl: MAIN_URL, credential: { email: adminEmail, password: PASSWORD } },
     { beforeFirstWrite: async () => {} },
   );
   expect((await readNodeMode(spareBox.node, spareId)).mode).toBe("mirror");

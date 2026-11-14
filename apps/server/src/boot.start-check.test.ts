@@ -277,7 +277,7 @@ async function boot(
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          personId: admin!.id,
+          email: "owner@example.test",
           password: "dashPass123",
           standbyNodeId: SPARE.nodeId,
           standbyPublicKey: SPARE.publicKey,
