@@ -10,7 +10,7 @@ import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
-import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
+import { periodsPath, seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
 import type { OpeningHoursApi, PeriodDeleteImpact } from "./opening-hours-client.js";
 import type { PeriodDeleteDialog } from "./period-delete-dialog.js";
 import { PeriodEditing } from "./period-editing.js";
@@ -211,18 +211,16 @@ export class PeriodsList extends LitElement {
         (season) =>
           html`<a
             part=${`chip tint-${tints.get(season.id) ?? "grey"}`}
-            data-own-click
             data-painted-in
-            href=${`${seasonPainterPath({ seasonId: season.id, departmentId: row.departmentId })}?back=/manage/periods`}
+            href=${`${seasonPainterPath({ seasonId: season.id, departmentId: row.departmentId })}?back=${periodsPath}`}
             >${season.name}</a
           >`,
       )}${painted.specialDays.map(
         (day) =>
           html`<a
             part="chip special-day"
-            data-own-click
             data-painted-in
-            href=${`${specialDayPainterPath({ specialDayId: day.id })}?back=/manage/periods`}
+            href=${`${specialDayPainterPath({ specialDayId: day.id })}?back=${periodsPath}`}
             >${day.name}</a
           >`,
       )}</span

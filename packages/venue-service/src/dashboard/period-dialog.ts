@@ -29,7 +29,7 @@ import {
   type ColourUser,
 } from "./calendar-colours.js";
 import { format } from "./hours-view.js";
-import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
+import { periodsPath, seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
@@ -380,9 +380,8 @@ export class PeriodDialog extends LitElement {
       links
         ? html`<a
             class="chip"
-            data-own-click
             data-painted-in
-            href=${`${href}?back=/manage/periods`}
+            href=${`${href}?back=${periodsPath}`}
             data-tint=${tint || nothing}
             ?data-special-day=${special}
             >${text}</a

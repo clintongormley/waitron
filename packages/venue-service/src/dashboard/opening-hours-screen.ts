@@ -953,11 +953,13 @@ export class OpeningHoursScreen extends LitElement {
         this.shadowRoot?.querySelector(this.painter ? "season-painter" : "special-day-painter")
     );
   }
-  /** Closes either painter: back to the entry it was pushed over, else to the view it drew over. */
   private closePainter() {
     const current = new URL(navigationGuardFor(window)?.href ?? location.href);
     if (current.searchParams.get("back") === periodsPath) {
-      this.replaceAddress(new URL(periodsPath, current));
+      this.pushedPainter = undefined;
+      const guard = navigationGuardFor(window);
+      if (guard && guard.position.index > 0) history.back();
+      else this.replaceAddress(new URL(periodsPath, current));
       return;
     }
     const pushed = this.atPushedPainter();

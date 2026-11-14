@@ -367,6 +367,57 @@ it.each(["sidebar", "Back"])("the real shell protects the Seasons draft on %s", 
   ).not.toBeNull();
   expect(leaveCoordinatorFor(el)!.isDirty()).toBe(false);
 });
+it("Painted in opens its painter through the shell and Close returns to Periods", async () => {
+  const { el } = await mount();
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-periods]")!);
+  const chip = () =>
+    el
+      .shadowRoot!.querySelector("periods-list")
+      ?.shadowRoot?.querySelector("wt-data-table")
+      ?.shadowRoot?.querySelector<HTMLAnchorElement>("a[data-painted-in]");
+  await vi.waitFor(() => expect(chip()).toBeTruthy());
+  const navigation = vi.spyOn(history, "pushState");
+  const back = vi.spyOn(history, "back");
+  const preventNativeNavigation = (event: MouseEvent) => {
+    if (event.composedPath().includes(chip()!)) event.preventDefault();
+  };
+  document.addEventListener("click", preventNativeNavigation);
+  try {
+    await userEvent.click(chip()!);
+    await vi.waitFor(() =>
+      expect(location.pathname).toBe(
+        "/manage/opening-hours/view/season/season/spring/department/restaurant",
+      ),
+    );
+    expect(location.search).toBe("?back=/manage/periods");
+    expect(navigation).toHaveBeenCalledTimes(1);
+    const painter = calendar(el).shadowRoot!.querySelector("season-painter")!;
+    await vi.waitFor(() => expect(painter.shadowRoot?.querySelector("painter-frame")).toBeTruthy());
+    const frame = painter.shadowRoot!.querySelector("painter-frame")!;
+    await frame.updateComplete;
+    await userEvent.click(frame.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!);
+    await vi.waitFor(() => expect(location.pathname).toBe("/manage/periods"));
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot!.querySelector("periods-list")).not.toBeNull();
+  } finally {
+    document.removeEventListener("click", preventNativeNavigation);
+  }
+});
+it("a direct Painted in address closes to Periods without stepping outside this document", async () => {
+  const { el } = await mount({
+    path: "/manage/opening-hours/view/season/season/spring/department/restaurant?back=/manage/periods",
+  });
+  const back = vi.spyOn(history, "back").mockImplementation(() => {});
+  const painter = () => calendar(el).shadowRoot!.querySelector("season-painter");
+  await vi.waitFor(() =>
+    expect(painter()?.shadowRoot?.querySelector("painter-frame")).toBeTruthy(),
+  );
+  const frame = painter()!.shadowRoot!.querySelector("painter-frame")!;
+  await frame.updateComplete;
+  await userEvent.click(frame.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!);
+  await vi.waitFor(() => expect(location.pathname).toBe("/manage/periods"));
+  expect(back).not.toHaveBeenCalled();
+});
 describe("inline period editing inside the real shell", () => {
   const seasonBase = "/manage/opening-hours/view/season/season/spring/department/restaurant";
   const specialBase = "/manage/opening-hours/view/special-day/special-day/sd1";

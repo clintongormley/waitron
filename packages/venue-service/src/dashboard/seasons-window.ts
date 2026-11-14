@@ -83,9 +83,6 @@ export class SeasonsWindow extends LitElement {
         overflow-x: auto;
         container-type: inline-size;
       }
-      wt-colour-chooser {
-        min-width: max-content;
-      }
       .table-wrap:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);

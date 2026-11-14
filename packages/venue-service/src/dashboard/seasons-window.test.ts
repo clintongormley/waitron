@@ -568,6 +568,19 @@ it("takes a clock revision that arrives while the draft is clean", async () => {
   expect(saveSeasons.mock.calls[0]![1]).toBe(5);
 });
 
+it("Cancel takes the current clock revision before the next edit is saved", async () => {
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-0-name", "Deep winter");
+  el.clockRevision = 5;
+  await el.updateComplete;
+  await press(el, button(el, "cancel-seasons")!);
+  await change(el, "season-0-name", "Late winter");
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+  expect(saveSeasons.mock.calls[0]![1]).toBe(5);
+});
+
 it("swapping two starts sends one request holding both", async () => {
   const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
   const el = await mount(false, { saveSeasons });
