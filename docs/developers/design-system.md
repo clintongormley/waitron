@@ -27,8 +27,20 @@ in any component or view. Every such value reads a token instead. `transparent`,
 and `inherit` are legitimate escape hatches, not chrome.
 `packages/ui/src/no-hardcoded-chrome.test.ts` discovers primitives via
 `import.meta.glob("./components/*.ts", ...)` (excluding `*.test.ts`), scans each one's `static
-styles`, and fails on violations. It covers a new primitive automatically; it does not scan
-app views. The rule above still applies to those views.
+styles`, and fails on violations. It covers a new primitive automatically.
+`scripts/no-hardcoded-chrome-views.test.ts` reads the declaration values in every Lit `css` tagged
+template in a non-test `.ts` on disk under `apps/dashboard/src`, `apps/till/src` and every
+`packages/<name>/src/dashboard` (skipping the folders `sourceFilesIn` in
+`scripts/no-till-as-issuer.mjs` ignores, such as `node_modules` and `dist`), and refuses hex, the
+colour functions, the same short list of named colours, and `rem`/`em` (a `var()` fallback
+included). It does not see `px` sizes; styles outside a `css` tag (inline `style=` attributes,
+`unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`, `index.html`);
+selectors, quoted strings and the contents of `url(…)`; the condition of an at-rule that opens a
+block (`@media`, `@container`, `@supports`, …; a `@media` or `@container` size condition cannot use
+`var()`, so app breakpoints stay literal); a value interpolated with `${…}`, and part or all of the
+rest of the template after a regular expression inside `${…}` whose text holds `//`, `/*`, a quote,
+a backtick or a `{`; or `apps/setup`, `apps/server` and a package's other folders. The rule above still applies to
+everything the guards do not see.
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
 `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 
@@ -159,7 +171,8 @@ edge and the pulse dim colours, is in `colors.test.ts` alone, and the derivation
 `--wt-color-on-danger`, `--wt-color-danger-hover`, `--wt-color-primary-disabled`,
 `--wt-color-on-primary-disabled`, `--wt-color-danger-disabled`, `--wt-color-on-danger-disabled`,
 `--wt-color-success`, `--wt-color-on-success`, `--wt-color-warning`, `--wt-color-on-warning`,
-`--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-logo-plate`, `--wt-color-field-fill`,
+`--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-logo-plate`, `--wt-color-paper`,
+`--wt-color-ink`, `--wt-color-field-fill`,
 `--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
@@ -181,6 +194,9 @@ text `#1f1f1f` in the light theme, and `#131314`, `#8e918f` and `#e3e3e3` in the
 `--wt-color-logo-plate` is the white plate a venue logo is drawn on on dark screens when the logo
 has no version for dark screens, and behind the Look card editor's logo picture (A841): `#ffffff`
 in both themes, and no venue theme writes it.
+
+`--wt-color-paper` and `--wt-color-ink` are a print preview's paper and ink: `#ffffff` and
+`#000000` in both themes, and no venue theme writes them.
 
 Colours are semantic, not literal. There is no `--wt-color-blue`. The one named set is the
 calendar palette below, because there the colour's name is what the operator picks. `--wt-color-scrim` was added
@@ -588,7 +604,11 @@ the circle drawn inside it; see "Help mode"), `--wt-price-field-width`,
 `--wt-duration-move`, `--wt-duration-disclosure`, `--wt-duration-pulse-slow`,
 `--wt-duration-pulse-fast`,
 `--wt-field-height`, `--wt-field-line-width`, `--wt-field-line-width-active`,
-`--wt-dropdown-row-height`
+`--wt-dropdown-row-height`, `--wt-letter-spacing-caps|wide` (0.04em and 0.1em),
+`--wt-row-field-min-width` (12rem), `--wt-date-field-max-width` (16rem, a date picker's widest),
+and the sizes particular to one view: the dashboard's
+`--wt-approvals-…`, `--wt-overview-…`, `--wt-menu-list-…`, `--wt-authenticator-…` and
+`--wt-image-preview-…` tokens and the till's `--wt-till-…` tokens
 
 The field tokens size the filled form field (see "The field box" under Forms):
 `--wt-field-height` (56px) is a labelled field's height, above `--wt-tap-min`, which

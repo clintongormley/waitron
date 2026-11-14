@@ -612,13 +612,13 @@ export class MenusScreen extends LitElement {
          room for the row menu and for the changes link under the state in Status. */
       @container (30rem < width < 50rem) {
         wt-data-table::part(name) {
-          max-width: calc(100cqi - 3 * var(--wt-tap-min) - 8.5rem);
+          max-width: calc(100cqi - 3 * var(--wt-tap-min) - var(--wt-menu-list-middle-room));
         }
       }
       /* A wide list leaves room for Status, Changes and the row menu. */
       @container (min-width: 50rem) {
         wt-data-table::part(name) {
-          max-width: calc(100cqi - 30rem);
+          max-width: calc(100cqi - var(--wt-menu-list-wide-room));
         }
       }
     `,

@@ -819,7 +819,7 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       .action-panel {
-        flex: 0 0 22rem;
+        flex: 0 0 var(--wt-till-ticket-column-width);
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-4);

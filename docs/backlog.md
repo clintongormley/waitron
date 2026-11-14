@@ -1330,8 +1330,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Should an all-archived product selection show Archive greyed out rather than hidden?**
   Left open by W110c (#1271); A435-1 removes Enable and keeps Archive hidden for that selection.
 
-- **Design system doc truth** (bundle of 1 remaining entry, size S). [Detail](backlog/dashboard.md#bundle-design-system-doc-truth)
-
 - **Override PIN limits (C89, #951), for the owner** — **Next action:** the owner decides whether to
   add the countdown and make the limit required. Left open by service Task 11 (#916).
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)

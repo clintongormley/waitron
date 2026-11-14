@@ -58,7 +58,7 @@ export class OverviewScreen extends LitElement {
       }
       .cards {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(var(--wt-overview-card-min-width), 1fr));
         gap: var(--wt-space-4);
       }
       .cards > wt-card {

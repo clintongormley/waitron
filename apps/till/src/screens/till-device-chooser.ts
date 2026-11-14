@@ -36,7 +36,7 @@ export class TillDeviceChooser extends LitElement {
 
       .screen {
         display: flex;
-        max-width: 32rem;
+        max-width: var(--wt-till-chooser-width);
         margin-inline: auto;
         flex-direction: column;
         gap: var(--wt-space-4);
@@ -88,13 +88,13 @@ export class TillDeviceChooser extends LitElement {
       }
 
       wt-dialog {
-        --wt-dialog-max-width: min(96vw, 40rem);
+        --wt-dialog-max-width: min(96vw, var(--wt-till-chooser-dialog-width));
       }
 
       .dialog-enrol {
-        width: 32rem;
+        width: var(--wt-till-chooser-width);
         max-width: 100%;
-        --till-enrol-max-width: 32rem;
+        --till-enrol-max-width: var(--wt-till-chooser-width);
       }
     `,
   ];

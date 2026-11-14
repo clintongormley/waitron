@@ -101,7 +101,7 @@ export const dietBadgeStyles = css`
     flex-wrap: wrap;
     align-items: center;
     gap: var(--wt-space-1) var(--wt-space-2);
-    font-size: var(--wt-font-size-sm, 0.85em);
+    font-size: var(--wt-font-size-sm);
     color: var(--wt-color-text-muted);
   }
 

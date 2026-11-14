@@ -44,7 +44,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
       .roster {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(var(--wt-till-roster-card-min-width), 1fr));
         gap: var(--wt-space-2);
       }
 

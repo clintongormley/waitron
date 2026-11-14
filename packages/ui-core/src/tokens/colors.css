@@ -29,6 +29,8 @@
   --wt-color-focus: #1f6feb;
   --wt-color-scrim: rgb(0 0 0 / 0.4);
   --wt-color-logo-plate: #ffffff;
+  --wt-color-paper: #ffffff;
+  --wt-color-ink: #000000;
   --wt-color-field-fill: #f0f1f4;
   --wt-color-field-line: #7d8390;
   --wt-color-field-label-focus: #1a5fd0;
@@ -165,6 +167,8 @@
     --wt-color-focus: #4c8dff;
     --wt-color-scrim: rgb(0 0 0 / 0.4);
     --wt-color-logo-plate: #ffffff;
+    --wt-color-paper: #ffffff;
+    --wt-color-ink: #000000;
     --wt-color-field-fill: #262a33;
     --wt-color-field-line: #7a8291;
     --wt-color-field-label-focus: #5c98ff;
@@ -294,6 +298,8 @@
   --wt-color-focus: #1f6feb;
   --wt-color-scrim: rgb(0 0 0 / 0.4);
   --wt-color-logo-plate: #ffffff;
+  --wt-color-paper: #ffffff;
+  --wt-color-ink: #000000;
   --wt-color-field-fill: #f0f1f4;
   --wt-color-field-line: #7d8390;
   --wt-color-field-label-focus: #1a5fd0;
@@ -422,6 +428,8 @@
   --wt-color-focus: #4c8dff;
   --wt-color-scrim: rgb(0 0 0 / 0.4);
   --wt-color-logo-plate: #ffffff;
+  --wt-color-paper: #ffffff;
+  --wt-color-ink: #000000;
   --wt-color-field-fill: #262a33;
   --wt-color-field-line: #7a8291;
   --wt-color-field-label-focus: #5c98ff;

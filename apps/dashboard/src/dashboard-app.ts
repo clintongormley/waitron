@@ -535,7 +535,7 @@ export class DashboardApp extends LitElement {
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: var(--wt-letter-spacing-caps);
       }
 
       button.nav-group:hover {
