@@ -1,6 +1,6 @@
 # A1188 groundwork: local selected-backup placement
 
-**Status:** Claude read twice; corrections below folded by the Codex driver. Watcher clearance still required before build. Drafted by separate Sol/high invocation; no owner approval of this plan claimed. Watcher, `~/waitron-campaign-j/questions.md`, 2026-11-14 02:12: “Now A1188: part 0 (slice 14's selected-backup placement) first, plan first.”
+**Status:** Claude read twice; corrections below folded by the Codex driver. Cleared by the watcher on 2026-11-14 at 03:07, including the `pair-copy/` extension and signed source provenance; the owner lands the fiscal build. Drafted by separate Sol/high invocation; no owner approval of this plan claimed. Watcher, `~/waitron-campaign-j/questions.md`, 2026-11-14 02:12: “Now A1188: part 0 (slice 14's selected-backup placement) first, plan first.”
 
 **Ask and scope:** queue A1188 asks “when the venue's box has died, the venue can be started in Waitron Cloud (emergency start).” The watcher’s 00:48 note assigns [A1018 Slice 14](2026-11-02-a1018-handover-build.md#slice-14--a-last-copy-from-a-selected-backup) here as local groundwork. This differs from [A1188 §11](../specs/2026-10-29-a1188-cloud-emergency-start-design.md)’s original part 0; full new-identity restore remains [A1425 part 3](../specs/2026-11-07-restore-takes-new-identity-design.md), waiting on Cloud’s contract amendment.
 
