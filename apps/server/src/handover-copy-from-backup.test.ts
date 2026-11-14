@@ -152,10 +152,14 @@ it.each(["missing-row", "wrong-key", "untrusted-chart", "missing-chart-node", "d
     if (fault === "missing-row") await suite.db.delete(nodes);
     if (fault === "wrong-key") await suite.db.update(nodes).set({ publicKey: main.publicKey });
     if (fault === "missing-chart-node") chart.nodes.pop();
-    if (fault === "different-main")
-      chart.nodes.reverse().forEach((node, i) => {
-        node.standing = i === 0 ? "serving-primary" : "serving-secondary";
+    if (fault === "different-main") {
+      chart.nodes[0]!.standing = "serving-secondary";
+      chart.nodes.push({
+        nodeId: "d5000000-0000-4000-8000-000000000003",
+        standing: "serving-primary",
+        contactUrl: "https://third.example",
       });
+    }
     await writeNodeMembership(suite.db, {
       body: chart,
       signerNodeId: mainId,

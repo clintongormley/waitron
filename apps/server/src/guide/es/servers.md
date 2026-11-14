@@ -57,7 +57,7 @@ Para usar una copia de seguridad cifrada, elige su archivo y pulsa **Usar esta c
 Si este equipo no tiene una clave guardada, introduce la clave de la copia cuando se te pida.
 Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
 última actividad antes de declarar. Elige una copia hecha después de que este equipo de reserva
-se uniera a su principal actual, para que el equipo antiguo pueda reconocerlo cuando vuelva.
+se uniera a su principal actual.
 
 Lee las advertencias, marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
 el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**

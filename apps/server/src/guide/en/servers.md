@@ -51,7 +51,7 @@ activity. Anything newer may be missing; if no date is available, the page says 
 To use an encrypted backup instead, choose its file and select **Use this backup**. If this box has
 no saved recovery key, enter the backup's key when asked. Keep this page open while the spare
 restarts, then review **Selected backup** and its latest activity before declaring. Choose a backup
-made after this spare joined its current main box, so the old box can recognise it when it returns.
+made after this spare joined its current main box.
 
 Read the warnings, tick all three statements and give your reason. Choose **Declare the old main
 box switched off**. At the clock check, tick **These details are correct.** and choose **Proceed**:
