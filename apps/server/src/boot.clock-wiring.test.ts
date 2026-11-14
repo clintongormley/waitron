@@ -512,10 +512,7 @@ describe("boot's authority clock wiring", () => {
           recursive: true,
         });
       }
-      await writeFile(
-        join(scratch, "modules.json"),
-        JSON.stringify({ modules: { "fiscal-none": false } }),
-      );
+      await seedModuleSettings(suite.db, { "fiscal-none": false });
       const env = {
         WAITRON_STATE_DIR: scratch,
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
