@@ -47,7 +47,7 @@ import {
   type ConfigurationTransferTable,
   type WaitronModule,
 } from "@waitron/module";
-import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
+import { decryptArtifact, encryptArtifact, encryptArtifactAsync } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
 import { assertImportedStationTimings } from "./kitchen-timing.js";
@@ -544,6 +544,17 @@ async function leaveBehindReferences(
 export function encodeConfigurationBundle(bundle: ConfigurationBundle, passphrase: string): Buffer {
   if (passphrase.length < 12) throw new AppError("setup.request_invalid", { field: "passphrase" });
   return encryptArtifact(
+    packArchive([{ name: ENTRY, bytes: Buffer.from(JSON.stringify(bundle), "utf8") }]),
+    passphrase,
+  );
+}
+
+export async function encodeConfigurationBundleAsync(
+  bundle: ConfigurationBundle,
+  passphrase: string,
+): Promise<Buffer> {
+  if (passphrase.length < 12) throw new AppError("setup.request_invalid", { field: "passphrase" });
+  return encryptArtifactAsync(
     packArchive([{ name: ENTRY, bytes: Buffer.from(JSON.stringify(bundle), "utf8") }]),
     passphrase,
   );

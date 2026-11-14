@@ -2,7 +2,7 @@ import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -18,6 +18,41 @@ import { decodeConfigurationBundle } from "./configuration-transfer.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+
+const encoding = vi.hoisted(() => ({
+  observe: false,
+  order: [] as string[],
+  before: undefined as undefined | (() => Promise<void>),
+  after: undefined as undefined | (() => void),
+  built: undefined as undefined | (() => void),
+}));
+vi.mock("./configuration-transfer.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./configuration-transfer.js")>();
+  return {
+    ...actual,
+    buildConfigurationBundle: async (
+      ...args: Parameters<typeof actual.buildConfigurationBundle>
+    ) => {
+      const bundle = await actual.buildConfigurationBundle(...args);
+      encoding.built?.();
+      return bundle;
+    },
+    encodeConfigurationBundleAsync: async (
+      ...args: Parameters<typeof actual.encodeConfigurationBundleAsync>
+    ) => {
+      await encoding.before?.();
+      const turn = encoding.observe ? setImmediate(() => encoding.order.push("turned")) : undefined;
+      try {
+        const bytes = await actual.encodeConfigurationBundleAsync(...args);
+        if (encoding.observe) encoding.order.push("encoded");
+        return bytes;
+      } finally {
+        if (turn !== undefined) clearImmediate(turn);
+        encoding.after?.();
+      }
+    },
+  };
+});
 
 const noopLog: Logger = () => {};
 let venue: VenueResult;
@@ -142,6 +177,89 @@ describe("configuration export API", () => {
       });
     } finally {
       suite.db.execute(sql`delete from settings where module = 'adjustments'`);
+    }
+  });
+
+  it("awaits asynchronous encryption while the event loop keeps turning", async () => {
+    encoding.observe = true;
+    encoding.order = [];
+    try {
+      const response = await app().request("/management-api/configuration-export", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ passphrase: "a strong passphrase" }),
+      });
+      expect(response.status).toBe(200);
+      expect(encoding.order).toEqual(["turned", "encoded"]);
+      expect(
+        decodeConfigurationBundle(
+          new Uint8Array(await response.arrayBuffer()),
+          "a strong passphrase",
+        ).venue.legalName,
+      ).toBe("Prepared Export SL");
+    } finally {
+      encoding.observe = false;
+    }
+  });
+
+  it.each([
+    { failFirst: false, label: "successful" },
+    { failFirst: true, label: "failed" },
+  ])("serializes derivations after a $label export", async ({ failFirst }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let prepared!: () => void;
+    const secondPrepared = new Promise<void>((resolve) => {
+      prepared = resolve;
+    });
+    let preparations = 0;
+    encoding.built = () => {
+      if (++preparations === 2) prepared();
+    };
+    const order: string[] = [];
+    encoding.before = async () => {
+      const first = order.length === 0;
+      order.push("start");
+      if (first) {
+        started();
+        await held;
+        if (failFirst) {
+          order.push("end");
+          throw new Error("derivation failed");
+        }
+      }
+    };
+    encoding.after = () => {
+      order.push("end");
+    };
+    const server = app();
+    const send = () =>
+      server.request("/management-api/configuration-export", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ passphrase: "a strong passphrase" }),
+      });
+    try {
+      const first = send();
+      await firstStarted;
+      const second = send();
+      await secondPrepared;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      release();
+      expect((await first).status).toBe(failFirst ? 500 : 200);
+      expect((await second).status).toBe(200);
+      expect(order).toEqual(["start", "end", "start", "end"]);
+    } finally {
+      release();
+      encoding.before = undefined;
+      encoding.after = undefined;
+      encoding.built = undefined;
     }
   });
 

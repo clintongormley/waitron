@@ -149,8 +149,8 @@ export type {
   AccountMailParams,
   IssuedAccountAction,
 } from "./account-action.js";
-export { hashSecret, verifySecretAsync } from "./secret-hash.js";
-export { hashPin, verifyPin } from "./verify-pin.js";
+export { hashSecret, hashSecretAsync, verifySecretAsync } from "./secret-hash.js";
+export { hashPin, hashPinAsync, verifyPin } from "./verify-pin.js";
 export {
   PIN_THROTTLE_FREE_ATTEMPTS,
   PIN_THROTTLE_FULL_RETRY_SECONDS,
@@ -167,6 +167,7 @@ export {
   MIN_PASSWORD_LENGTH,
   assertPasswordLength,
   hashPassword,
+  hashPasswordAsync,
   verifyPassword,
 } from "./verify-password.js";
 export { generateTotpSecret, totpAuthUri, verifyTotp } from "./totp.js";

@@ -152,7 +152,7 @@ it("shares the failure budget across preparation and promotion", async () => {
 it.each(["legacy", "module", "preparation"])(
   "keeps the real recovery key usable after wrong guesses on %s",
   async (kind) => {
-    const made = makeBreakGlassSecret();
+    const made = await makeBreakGlassSecret();
     await withNodeTransaction(suite.node, (tx) =>
       setRecoveryKeyTx(tx, NODE, made.verifier, "test-key"),
     );

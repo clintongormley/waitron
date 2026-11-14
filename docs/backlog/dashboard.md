@@ -200,16 +200,6 @@ After A760, decide whether to remove the redundant column and read the provider 
   Confirm with owner: an existing malformed number now blocks an otherwise-unrelated edit, because
   both forms re-validate the telephone field on every submit.
 
-## Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, #1117); two blocking derivations remain OPEN
-
-Nothing makes a NEW route
-derive its key before the transaction opens or take turns (`docs/developers/conventions-data.md`).
-**Still open:** `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so setting a PIN or password, or
-minting the break-glass secret or first-setup key, stops the event loop; device and print-agent tokens are hashed with
-`hashDeviceToken` instead. The `deriveKey` callers are tracked under
-[The box](box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives). Left by #912's review: `verifySecretAsync` could be
-renamed `verifySecret` (optional).
-
 ## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
 
 Safari was not tried, so what it draws with no colour chosen, and whether the ring and the
@@ -313,13 +303,11 @@ the usual remedy is to keep field text at 16px on small screens only.
 
 ## Bundle: Slow key derivation off the main thread
 
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size M. Remaining work after asynchronous export and credential creation (2026-11-14).
 
 - **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
   own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.
   Scope a shared limit or an isolated opener with a deadline. Raised by A852's review.
-- **Loose ends left by secret checks and the write lock (W1, #1117; #912's review).**
-  [Detail](dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-remain-open)
 - **A refused early dashboard payment authorization may become allowed before the PIN transaction —
   UNVERIFIED (A530 review).** `managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no
   credential when its read refuses; `pinGated` then opens the transaction without a turn.
@@ -398,6 +386,12 @@ Shared form plumbing, an untraced dialog focus line and retiring the summary onc
   untried. Left open by A331 batch 3a (#1401).
 
 ## Decisions and deliberate limits
+
+- **New credential hashes stay inside their existing write transactions** (watcher, 2026-11-14
+  17:30, Lane K questions.md). Their derivation now yields the event loop; other writes still wait
+  for that transaction. Existing secret checks retain their treatment before the write lock.
+  Setup-only parsing/reset proof, startup dummy hashes and offline commands retain synchronous
+  hashing. See [the cleared plan](../superpowers/plans/2026-11-14-kdf-off-main-thread.md).
 
 - **An unreadable authenticator secret is a sign-in refusal (C95, #930).**
   `manager-login.ts` reports an authenticator secret it cannot decrypt as a failed login

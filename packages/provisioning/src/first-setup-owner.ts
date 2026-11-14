@@ -8,8 +8,8 @@ import { AppError } from "@waitron/shared";
 import {
   assertPasswordLength,
   assertPinLength,
-  hashPassword,
-  hashPin,
+  hashPasswordAsync,
+  hashPinAsync,
   normalizeAndValidateEmail,
   verifyPassword,
 } from "@waitron/identity";
@@ -208,8 +208,8 @@ export function createFirstSetupOwner(options: OwnerOptions) {
           ...admin,
           displayName: admin.displayName.trim(),
           email: normalizeAndValidateEmail(admin.email),
-          pinHash: hashPin(pin),
-          passwordHash: hashPassword(password),
+          pinHash: await hashPinAsync(pin),
+          passwordHash: await hashPasswordAsync(password),
         },
       };
       const ids = { attemptId: randomUUID(), nodeId: randomUUID(), administratorId: randomUUID() };

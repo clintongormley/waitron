@@ -1,5 +1,5 @@
 import { generatePassword, newBreakGlassKeyName } from "@waitron/provisioning";
-import { hashSecret, verifySecretAsync } from "@waitron/identity";
+import { hashSecretAsync, verifySecretAsync } from "@waitron/identity";
 import {
   readRecoveryPacks,
   requireStamp,
@@ -63,9 +63,9 @@ export interface BreakGlassSecret {
   verifier: string;
 }
 
-export function makeBreakGlassSecret(): BreakGlassSecret {
+export async function makeBreakGlassSecret(): Promise<BreakGlassSecret> {
   const secret = generatePassword();
-  return { secret, verifier: hashSecret(secret) };
+  return { secret, verifier: await hashSecretAsync(secret) };
 }
 
 /** Saves `made`'s verifier under a fresh key name inside the caller's node transaction. */
@@ -86,7 +86,7 @@ export async function mintBreakGlassKey(
   nodeId: string,
 ): Promise<{ secret: string; name: string }> {
   await requireStamp(handles.venue);
-  const made = makeBreakGlassSecret();
+  const made = await makeBreakGlassSecret();
   return withNodeTransaction(handles.node, (tx) =>
     mintBreakGlassKeyTx(handles.venue, tx, nodeId, made),
   );

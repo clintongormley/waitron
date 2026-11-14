@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, scrypt } from "node:crypto";
 import {
   CORE_MIGRATIONS,
   outgoingMail,
@@ -12,7 +12,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { isAppError, quoteLiteral } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ACCOUNT_ACTION_TTL_MS,
   completeAccountAction,
@@ -29,6 +29,11 @@ import { loginManager } from "./manager-login.js";
 import { updatePersonDetails } from "./staff.js";
 import { hashSessionToken } from "./session-token.js";
 import { codeOf, seedManager, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
+
+vi.mock("node:crypto", async (original) => {
+  const actual = await original<typeof import("node:crypto")>();
+  return { ...actual, scrypt: vi.fn(actual.scrypt) };
+});
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -168,6 +173,7 @@ describe("management account actions", () => {
       ),
     ).rejects.toMatchObject({ code: "pin.too_short" });
 
+    vi.mocked(scrypt).mockClear();
     const completion = await run((tx) =>
       completeAccountAction(tx, {
         token: issued.token,
@@ -175,6 +181,9 @@ describe("management account actions", () => {
         password: "a new secure password",
         pin: "4321",
       }),
+    );
+    expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toEqual(
+      expect.arrayContaining(["a new secure password", "4321"]),
     );
     expect(completion.personId).toBe(personId);
     expect(completion.session).not.toBeNull();
