@@ -279,6 +279,35 @@ describe("recordCorrection", () => {
     expect(ref.state).toBe("pending");
   });
 
+  it("lists only the corrections recorded as replacements, on their own node", async () => {
+    const original = saleOn(NODE_A, 1);
+    await suite.db.transaction((tx) => backend.recordSale(tx, original));
+    const byDifference = {
+      ...saleOn(NODE_A, 2),
+      saleId: saleId("22222222-3333-4444-5555-000000000002"),
+      total: decimal("-12.10"),
+    };
+    const replacement = {
+      ...saleOn(NODE_A, 3),
+      saleId: saleId("22222222-3333-4444-5555-000000000003"),
+    };
+    await suite.db.transaction(async (tx) => {
+      await backend.recordCorrection(tx, byDifference, { correctsSaleId: original.saleId });
+      await backend.recordCorrection(tx, replacement, {
+        correctsSaleId: original.saleId,
+        replaces: true,
+      });
+    });
+
+    expect((await backend.recordsFor(NODE_A)).map((r) => [r.saleId, r.kind, r.sequence])).toEqual([
+      [original.saleId, "sale", 1],
+      [byDifference.saleId, "correction", 2],
+      [replacement.saleId, "correction", 3],
+    ]);
+    expect(await backend.replacementsFor(NODE_A)).toEqual([replacement.saleId]);
+    expect(await backend.replacementsFor(NODE_B)).toEqual([]);
+  });
+
   it("leaves no record behind when the transaction rolls back", async () => {
     const original = saleOn(NODE_A, 1);
     await suite.db.transaction((tx) => backend.recordSale(tx, original));
