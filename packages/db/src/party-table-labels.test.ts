@@ -9,6 +9,7 @@ import {
   billParties,
   billPartyTableLabels,
   orderTableLabels,
+  partyFamilies,
   partySurvivorNames,
   partySurvivors,
   partyTableLabels,
@@ -146,6 +147,20 @@ describe("party table labels", () => {
         [survivor, survivor],
       ]),
     );
+  });
+
+  it("gathers each party with every party merged into it, through a chain, for several at once", async () => {
+    const survivor = await party();
+    const middle = await party();
+    const first = await party();
+    const lone = await party();
+    await merge(middle, survivor);
+    await merge(first, middle);
+    const families = await inTx((tx) => partyFamilies(tx, [survivor, middle, lone]));
+    expect([...families.keys()]).toEqual([survivor, middle, lone]);
+    expect([...families.get(survivor)!].sort()).toEqual([first, middle, survivor].sort());
+    expect([...families.get(middle)!].sort()).toEqual([first, middle].sort());
+    expect(families.get(lone)).toEqual([lone]);
   });
 
   it("names a seated party after its own tables, even when it was merged into another", async () => {

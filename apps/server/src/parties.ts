@@ -11,6 +11,7 @@ import {
   nowIso,
   sales,
   serviceCommands,
+  partyFamilies,
   partyTables,
   parties,
   ticketItems,
@@ -492,29 +493,10 @@ export async function bumpPartyRevision(tx: Transaction, partyId: string): Promi
 }
 
 /**
- * The party and every party merged into it, directly or through a chain of merges. Only an open
- * party can absorb another and the absorbed one closes, so a chain cannot loop.
+ * The party and every party merged into it, directly or through a chain of merges.
  */
 export async function partyFamily(tx: Transaction, partyId: string): Promise<string[]> {
   return (await partyFamilies(tx, [partyId])).get(partyId)!;
-}
-
-/** {@link partyFamily} for several parties in one query, keyed by each party asked about. */
-export async function partyFamilies(
-  tx: Transaction,
-  partyIds: readonly string[],
-): Promise<Map<string, string[]>> {
-  const families = new Map(partyIds.map((id) => [id, [] as string[]]));
-  const { rows } = await tx.execute<{ root: string; id: string }>(sql`
-    with recursive family(root, id) as (
-      select value, value from json_each(${JSON.stringify(partyIds)})
-      union
-      select f.root, v.id from parties v join family f on v.merged_into_party_id = f.id
-    )
-    select root, id from family
-  `);
-  for (const row of rows) families.get(row.root)!.push(row.id);
-  return families;
 }
 
 async function readParty(

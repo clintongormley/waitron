@@ -18,6 +18,7 @@ import {
   ticketItems,
   ticketState,
   parties,
+  partyFamilies,
   partyTables,
   partySurvivors,
   workingOrderLines,
@@ -67,7 +68,7 @@ import {
 } from "./order-places.js";
 import { readWholePortionLines } from "./order-portions.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
-import { holdersOf, partyFamilies, partyFamily } from "./parties.js";
+import { holdersOf, partyFamily } from "./parties.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { heldPaperStations, readGroupNumberLabels } from "./order-groups.js";
 import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
