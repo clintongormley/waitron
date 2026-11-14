@@ -102,7 +102,7 @@ describe("the clock stop emails' till offer", () => {
       expect(en.text).not.toMatch(/just started|just after a start/);
       expect(es.text).not.toMatch(/acaba de arrancar|justo después de arrancar/);
       expect(en.text).toMatch(/if the box started with (its clock wrong|payments stopped)/);
-      expect(es.text).toMatch(/si el equipo arrancó con (la hora mal|los cobros parados)/);
+      expect(es.text).toMatch(/si el servidor arrancó con (la hora mal|los cobros parados)/);
     },
   );
 
@@ -113,7 +113,7 @@ describe("the clock stop emails' till offer", () => {
     );
     expect(en.text).toContain("and, in the same case, a staff member confirms it");
     expect(es.text).toContain(
-      "Hacienda no responde (o el equipo no le envía registros), cualquier empleado",
+      "Hacienda no responde (o el servidor no le envía registros), cualquier empleado",
     );
     expect(es.text).toContain("y, en ese mismo caso, un empleado la confirma");
   });
@@ -201,7 +201,7 @@ describe("boxEmailMessage for payments restarted", () => {
     expect(
       boxEmailMessage("clock.behind_chain_restarted", "es", "Corner Bistro", params).text,
     ).toBe(
-      "La hora del equipo la confirmó Anna, miembro del personal, en la caja Bar, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor).",
+      "La hora del servidor la confirmó Anna, miembro del personal, en la caja Bar, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor).",
     );
   });
 
@@ -378,14 +378,14 @@ describe("boxEmailMessage for the box setting its clock", () => {
       "The box's clock was set from the device showing the setup or restore page, by Ben: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
     );
     expect(message("es", named).text).toBe(
-      `El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración, por Ben: adelantado ${formatDuration(STEP.stepMs, "es-ES")}, de 14/03/2025 09:12 a 18/10/2026 23:40.`,
+      `El reloj del servidor se puso en hora con el dispositivo que mostraba la página de configuración o restauración, por Ben: adelantado ${formatDuration(STEP.stepMs, "es-ES")}, de 14/03/2025 09:12 a 18/10/2026 23:40.`,
     );
     const nobody = { ...STEP, source: "setup", bySetup: true };
     expect(message("en", nobody).text).toBe(
       "The box's clock was set from the device showing the setup or restore page: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
     );
     expect(message("es", nobody).text).toBe(
-      `El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración: adelantado ${formatDuration(STEP.stepMs, "es-ES")}, de 14/03/2025 09:12 a 18/10/2026 23:40.`,
+      `El reloj del servidor se puso en hora con el dispositivo que mostraba la página de configuración o restauración: adelantado ${formatDuration(STEP.stepMs, "es-ES")}, de 14/03/2025 09:12 a 18/10/2026 23:40.`,
     );
     expect(message("en", { ...nobody, verified: false, unverified: true }).subject).toBe(
       "Corner Bistro: the box could not confirm it set its clock",
@@ -666,7 +666,7 @@ describe("boxEmailMessage for old backups deleted", () => {
       }),
     ).toEqual({
       subject: "Corner Bistro: Copias antiguas borradas: poco espacio en disco",
-      text: "Poco espacio en disco: el equipo borró su copia de seguridad más antigua (28 oct 2026).",
+      text: "Poco espacio en disco: el servidor borró su copia de seguridad más antigua (28 oct 2026).",
     });
   });
 
@@ -686,7 +686,7 @@ describe("boxEmailMessage for old backups deleted", () => {
         lastDate: "2026-10-28",
         severalDays: false,
       }).text,
-    ).toBe("Poco espacio en disco: el equipo borró sus 3 copias más antiguas (28 oct 2026).");
+    ).toBe("Poco espacio en disco: el servidor borró sus 3 copias más antiguas (28 oct 2026).");
   });
 
   it("words several deleted backups taken on different days by their first and last day, in both languages", () => {
@@ -695,7 +695,7 @@ describe("boxEmailMessage for old backups deleted", () => {
       "Low disk space: the box deleted its 3 oldest backups (21 Oct 2026 to 24 Oct 2026).",
     );
     expect(boxEmailMessage("backup.archives_deleted", "es", "Corner Bistro", params).text).toBe(
-      "Poco espacio en disco: el equipo borró sus 3 copias más antiguas (del 21 oct 2026 al 24 oct 2026).",
+      "Poco espacio en disco: el servidor borró sus 3 copias más antiguas (del 21 oct 2026 al 24 oct 2026).",
     );
   });
 
