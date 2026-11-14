@@ -691,6 +691,29 @@ describe("A768 the till follows the venue's setup revision", () => {
       "Fire now · Mains",
     );
   });
+
+  it("a new fallback receipt language reaches an open table's bill without a reload", async () => {
+    const before = {
+      ...till(drillFormFactor),
+      invoiceLocale: "es-ES",
+      receiptLanguages: ["es-ES", "en-GB"],
+    };
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(before) });
+    await openTable(el);
+    const language = () =>
+      tableOrder(el)!.shadowRoot!.querySelector("[data-choose-bill-language]")?.textContent?.trim();
+    expect(language()).toBe("Receipt: Spanish");
+    api.getTill.mockResolvedValue({
+      ...before,
+      invoiceLocale: "ca-ES",
+      receiptLanguages: ["ca-ES", "es-ES"],
+      setupRevision: "s2",
+    });
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    expect(tableOrder(el)!.receiptLanguages).toEqual(["ca-ES", "es-ES"]);
+    expect(language()).toBe("Receipt: Catalan");
+  });
 });
 
 describe("A768 a settings read that gets no answer", () => {

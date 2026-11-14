@@ -1192,10 +1192,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   open:**
   [Detail](backlog/printers.md#one-receipts-settings-page-with-a-live-preview-c116-989-c120-1000-c121-996--still-open)
 
-**Left open, for the owner, by C113 (#1014, one receipt language per location):**
-
-- **Receipt language loose ends** (bundle of 5, size S). [Detail](backlog/printers.md#bundle-receipt-language-loose-ends)
-
 ### Payments and card readers
 
 - **A1089: charged-but-unsettled and repeated payment-check failures need a recovery route.** Trace the existing pending-payment recovery and reason-specific messages, then offer only confirmed-outcome actions. Never retry a charge or unlock an unknown outcome.
