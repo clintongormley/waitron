@@ -1259,12 +1259,12 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     const WAITING_CLOCK: BoxHealth["clock"] = {
       ...health().clock,
       sync: { synced: false, source: "timedatectl", warn: true },
-      waiting: { boxAt: BOX_AT, agreed: 1, hostAnswers: true },
+      waiting: { boxAt: BOX_AT, agreed: 1, hostAnswers: true, cause: "start" },
     };
     const SILENT_CLOCK: BoxHealth["clock"] = {
       ...health().clock,
       sync: { synced: false, source: "unavailable", warn: false },
-      waiting: { boxAt: BOX_AT, agreed: 0, hostAnswers: false },
+      waiting: { boxAt: BOX_AT, agreed: 0, hostAnswers: false, cause: "start" },
     };
     const CONFIRMED = { confirmationId: null, stepMs: 0, confirmedAt: BOX_AT };
     const confirmButton = (el: BoxStatusScreen) =>

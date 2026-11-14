@@ -4225,9 +4225,10 @@ failure. Pointer: `packages/migrations/src/apply-complete.test.ts`.
 
 **Nothing EXTERNAL may block a sale, though a start must have its time confirmed first — and a till
 needs the venue's PRIMARY.** AEAT, the card network and the internet are never on the sale path of
-whichever node is primary, except that, on a box that files records, a start the internet cannot
-confirm waits for two devices or a person to confirm its time before its first payment (owner,
-2026-11-10; [below](#every-start-confirms-the-boxs-time-before-it-trades)): records chain locally
+whichever node is primary, except that, on a box that files records and whose time service is not
+synchronised, a start, or a clock jump of over a minute once the clock watch's next look (15 seconds
+after the last ends) finds it, waits for two devices or a person to confirm its time before any
+later payment (owner, 2026-11-10; the jump, 2026-11-11; [below](#every-start-confirms-the-boxs-time-before-it-trades)): records chain locally
 and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
 is an outbox, never inline.
 
@@ -4375,9 +4376,9 @@ synchronised answer confirms `by_internet` and logs `clock_start.confirmed` with
 host that throws, or a host that answers `available: false`, which the state keeps as
 `hostAnswers: false` (plan D12). AEAT is not asked. The look runs whatever the box's role.
 
-How it moves (plan D3):
+How it moves (A1420 plan D3; A1506 plan row 3):
 
-- **`by_internet` is final** for the process: nothing moves it.
+- **`by_internet` is left only after a clock jump** (below); nothing else moves it.
 - **The time service.** Until the start is `by_internet`, each clock-watch look (every 15 seconds,
   `CLOCK_WATCH_MS`, on every node) reads the time service through the same shared reading, so the
   host program, which systemd starts once per request, runs at most once a minute. A synchronised
@@ -4395,6 +4396,30 @@ How it moves (plan D3):
   `by_devices` or `by_person` back to `waiting` and logs `clock_start.step_unverified`, whatever the
   set's reason. The watch's device check runs in the correction's turn, so it never confirms while a
   set is in flight.
+- **A clock jump** (`lookForJump` in `apps/server/src/clock-watch.ts`, A1506 PR 1). Each 15-second
+  look compares how far the wall clock (`Date.now()`) moved since the last look with how far the
+  boot clock moved. The boot clock is `/proc/uptime`, read through `bootReader().elapsed`
+  (`apps/server/src/boot-reader.ts`). It keeps counting while the machine is suspended, so a box
+  waking from sleep is not taken for a jump. A failed read answers NaN, which is never a jump. A
+  difference of more than a minute (`JUMP_MS`), forwards or back, is a jump. A clock set by
+  Waitron is never one: the watch is an anchor of the clock correction, so every set the host is
+  asked to make, refused or not, re-takes the watch's starting point, and a move after the set is still seen at the next
+  look. A move between the last look and a set the host refused is not seen. A set whose anchors were not told is covered by the correction's set counter (`steps()`):
+  a look whose counter changed compares nothing. The check runs in the correction's turn, after
+  the start's look. On a jump the watch first clears the shared time-service reading
+  (`clearClockStatus`), so the answer is not one cached before the jump, then reads it again and
+  notes whether the host answered (`hostAnswers`). Synchronised, nothing changes. Not
+  synchronised, or a host that does not answer or throws, sends the box back to `waiting` with
+  cause `clock_jumped` from any status, `by_internet` included (`backToWaitingUnlessSynchronised`,
+  `apps/server/src/start-clock-check.ts`). Either way it logs `clock_watch.jumped`, as a warning
+  when it moved the box. The wait ends as a start's does. The next look, 15 seconds later, reads
+  the time service afresh once more, so a service that reports synchronised just after the jump
+  confirms the box then. After that the shared one-minute reading applies, as at a start, so a
+  later change is seen within about 75 seconds. Device readings taken before the jump do not count towards it: the store
+  (`apps/server/src/clock-witnesses.ts`) drops a reading once the wall clock has moved more than a
+  second against its own steady clock (`performance.now()`) since it arrived. The cause reaches Box status as
+  `clock.waiting.cause`, and the till's `clock.unconfirmed` notice and the dashboard bell's
+  `clock.unconfirmed` alert as `params.cause`, which word a jump's wait apart from a start's.
 
 A confirmation that sets nothing writes a log line and no row. Each confirmation keeps the chain
 heads it was made at, read through the seat's optional `recordHeads?(tx)` (`packages/fiscal/src/backend.ts`).
@@ -4427,7 +4452,8 @@ any remedy runs (`packages/fiscal-verifactu/src/record-remedy-routes.ts`, `requi
 **"Check the time" on a till while the start waits** (`apps/server/src/till-box-clock-api.ts`,
 `apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,
 staff signed in on a till see `clock.unconfirmed`, "Payments wait: the server is waiting for
-devices to connect and agree with its time (… of 2 so far)", with “Check the time”, whatever the
+devices to connect and agree with its time (… of 2 so far)" (after a jump, "Payments wait: the
+server's clock jumped …"), with “Check the time”, whatever the
 start-up window says. The PIN screen shows the same line, without the action. The count shows at most 1, since two confirm at the next look. While
 the start waits, the challenge needs no stop and does not ask the start-up window; it
 answers `keepOffered: true` unless the clock reads before 28-10-2024. The
@@ -4478,7 +4504,11 @@ Guards: `apps/server/src/start-clock-check.test.ts`, `apps/server/src/start-cloc
 weaker than the rule: `clock-unconfirmed-gate.test.ts` calls the seat's four writers and sends the
 money routes it lists through a seat wrapped as boot wraps it, and `boot.start-clock-gate.test.ts`
 sends one cash sale and one correction-record request through boot itself; a new money route is
-covered only once that file lists it.
+covered only once that file lists it. The jump cases in `clock-watch.start-up.test.ts` and
+`clock-correction.test.ts` move stand-in clocks: no case makes a real clock step or a real
+suspend. `boot.clock-correction.test.ts` checks that boot hands the watch the boot reader's
+`elapsed` and adds the watch as an anchor, by identity; no boot test makes a jump, so boot's own
+`clearClockStatus` is run by no test.
 
 ### The box sets its own clock
 

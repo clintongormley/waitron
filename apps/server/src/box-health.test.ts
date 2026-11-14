@@ -131,12 +131,15 @@ describe("collectBoxHealth", () => {
   it("answers a waiting start with the box's time, the devices agreeing and whether its host answers", async () => {
     const health = await collectBoxHealth(
       suite.db,
-      stubReaders({ startClock: () => ({ agreed: 1, hostAnswers: false }) }),
+      stubReaders({
+        startClock: () => ({ agreed: 1, hostAnswers: false, cause: "clock_jumped" }),
+      }),
     );
     expect(health.clock.waiting).toEqual({
       boxAt: NOW.toISOString(),
       agreed: 1,
       hostAnswers: false,
+      cause: "clock_jumped",
     });
   });
 

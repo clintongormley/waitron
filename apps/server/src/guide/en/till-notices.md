@@ -44,8 +44,13 @@ the sign-in screen, and agree with the server's time. Otherwise, use **Check the
 server's time if it is right, or use this device's time if that is. The sign-in page shows the same
 words, without **Check the time**: sign in to use it.
 
-**Check the time** at the end of a red clock line, instead of **Tell a manager**, means the server
-started with its clock in doubt and could not confirm it by itself. It ends either of the two red
+**Payments wait: the server's clock jumped and it cannot check the time over the internet. Waiting
+for devices to agree with its time (0 of 2 so far) · Check the time** is red. The server's clock
+moved by more than a minute while it was not kept in time over the internet, so payments wait. They
+start again in the same ways.
+
+**Check the time** at the end of a red clock line, instead of **Tell a manager**, means the server's
+clock is in doubt and the server could not confirm it by itself. It ends any of the three red
 clock lines above. A refused payment then says to use **Check the time** at the top
 of the screen. Tap **Check the time** to open its dialog; when another notice shows first, open the
 list and tap it there. Anyone signed in on the till can use it.

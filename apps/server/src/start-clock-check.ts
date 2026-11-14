@@ -12,11 +12,11 @@ export function startClockAgreed(witnesses: readonly ClockWitness[]): number {
 
 export type StartClockConfirmation = "by_devices" | "by_person" | "by_internet";
 export type StartClockStatus = "waiting" | StartClockConfirmation;
-export type StartClockCause = "start" | "future_date_refused";
+export type StartClockCause = "start" | "future_date_refused" | "clock_jumped";
 /** Each chain's node and its highest record position, as `recordHeads` reads them. */
 export type ChainHeads = Readonly<Record<string, number>>;
 
-/** Held in memory for one process. `by_internet` is final: nothing moves it. */
+/** Held in memory for one process. Only `backToWaiting` moves a box off `by_internet`. */
 export interface StartClockState {
   readonly status: StartClockStatus;
   /** Why the box waits; null while it does not. */
@@ -27,6 +27,7 @@ export interface StartClockState {
   readonly hostAnswers: boolean;
   unconfirmed(): boolean;
   confirm(by: StartClockConfirmation, heads: ChainHeads): void;
+  /** Moves any status to waiting, `by_internet` included: the caller decides by the reading. */
   backToWaiting(cause: StartClockCause): void;
   /** While waiting, confirms by devices when two or more agree within `START_CLOCK_MARGIN_MS`,
    * and answers their readings; otherwise answers none, changes nothing and reads no heads. */
@@ -67,7 +68,6 @@ export function startClockState(): StartClockState {
     unconfirmed: () => status === "waiting",
     confirm,
     backToWaiting(next) {
-      if (status === "by_internet") return;
       status = "waiting";
       cause = next;
     },
@@ -93,16 +93,34 @@ export interface StartClockCheckDeps {
   heads(): Promise<ChainHeads>;
 }
 
+async function clockServiceAnswerOf(
+  clockStatus: () => Promise<ClockServiceStatus>,
+): Promise<ClockServiceStatus> {
+  try {
+    return await clockStatus();
+  } catch {
+    return { available: false, reason: "lost" };
+  }
+}
+
+/** Sends the box back to waiting unless the time service answers synchronised; a host that
+ * throws or does not answer counts as not synchronised. Answers whether it moved. */
+export async function backToWaitingUnlessSynchronised(
+  deps: Pick<StartClockCheckDeps, "state" | "clockStatus">,
+  cause: StartClockCause,
+): Promise<boolean> {
+  const answer = await clockServiceAnswerOf(deps.clockStatus);
+  deps.state.noteHost(answer.available);
+  if (answer.available && answer.synchronised) return false;
+  deps.state.backToWaiting(cause);
+  return true;
+}
+
 /** One look at the time service: a synchronised answer confirms by the internet. A host that
  * throws or does not answer counts as not synchronised. Once by the internet it asks nothing. */
 export async function lookAtClockService(deps: StartClockCheckDeps): Promise<void> {
   if (deps.state.status === "by_internet") return;
-  let answer: ClockServiceStatus;
-  try {
-    answer = await deps.clockStatus();
-  } catch {
-    answer = { available: false, reason: "lost" };
-  }
+  const answer = await clockServiceAnswerOf(deps.clockStatus);
   deps.state.noteHost(answer.available);
   if (answer.available && answer.synchronised)
     deps.state.confirm("by_internet", await deps.heads());

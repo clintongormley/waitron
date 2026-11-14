@@ -96,14 +96,14 @@ describe("the till's clock check", () => {
   it("answers the waiting notice with its count in place of the marker while the start check waits", async () => {
     const source = clockCheckNoticeSource(
       async () => true,
-      () => 1,
+      () => ({ agreed: 1, cause: "start" }),
     );
     expect(await source.read(CTX)).toEqual([
       {
         key: "clock.unconfirmed",
         code: "clock.unconfirmed",
         severity: "error",
-        params: { agreed: 1 },
+        params: { agreed: 1, cause: "start" },
       },
     ]);
   });
@@ -118,18 +118,18 @@ describe("the till's clock check", () => {
     expect(
       await clockCheckNoticeSource(
         async () => false,
-        () => 0,
+        () => ({ agreed: 0, cause: "start" }),
       ).read(CTX),
     ).toEqual([]);
   });
 
-  it("is given the waiting count by the device sources", async () => {
+  it("is given the waiting count and why the box waits by the device sources", async () => {
     const sources = deviceNoticeSources(
       {
         disk: { since: () => null },
         space: { current: () => OFF },
         clockCheck: async () => true,
-        startClockAgreed: () => 0,
+        startClockWaits: () => ({ agreed: 0, cause: "clock_jumped" }),
       },
       [],
     );
@@ -142,7 +142,7 @@ describe("the till's clock check", () => {
         key: "clock.unconfirmed",
         code: "clock.unconfirmed",
         severity: "error",
-        params: { agreed: 0 },
+        params: { agreed: 0, cause: "clock_jumped" },
         owner: BOX_CLOCK_NOTICE_OWNER,
       },
     ]);

@@ -297,7 +297,7 @@ de la caja y qué hace cada botón.
 
 La caja envía su propia hora. Cuando está a más de un minuto de la del servidor, **Este dispositivo**
 pone el reloj del servidor a esa hora, y **El servidor** mantiene el reloj del servidor sea cual sea la
-hora de la caja mientras el servidor espera a que se confirme su hora tras un arranque y los cobros no
+hora de la caja mientras el servidor espera a que se confirme su hora y los cobros no
 están parados además porque el reloj marca una fecha
 anterior al 28 de octubre de 2024; si no, **El servidor** pide a la persona que corrija la hora de
 la caja. Cuando está a menos de un minuto, **Sí** mantiene el reloj del servidor. Cada uno de ellos
@@ -305,17 +305,18 @@ que el servidor acepta reanuda los cobros. Cuando el servidor pone su reloj en h
 correo nombran al empleado y a la caja. Cuando se usa la hora de la caja, las lecturas de otros
 dispositivos no lo impiden.
 
-Dos cajas o terminales que coinciden con el servidor confirman su hora tras un arranque por sí solos.
-
 El arranque termina en cuanto el servidor ve que el reloj ya no para los cobros. Desde entonces, en cuanto
-internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja.
+internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja, hasta que su reloj salte y vuelva a esperar su
+hora.
 
 ## Cuando los cobros esperan la hora del servidor {#clock-waiting}
 
 Tras un arranque, el servidor no acepta cobros hasta que se confirma su hora. Los pedidos siguen
 llegando a cocina. La fila **Reloj** dice entonces **Esperando a que se conecten dispositivos y
 coincidan con la hora del servidor**, con la fecha y la hora del servidor, y la campana muestra un aviso
-que lo dice.
+que lo dice. El servidor también espera cuando su reloj salta más de un minuto, hacia delante o hacia
+atrás, mientras no se pone en hora por internet: la fila **Reloj** empieza entonces con **El reloj
+del servidor ha saltado**, y su hora se confirma de las mismas maneras.
 
 El servidor confirma su hora solo en cuanto llega a internet, o en cuanto dos cajas o terminales
 encendidos y conectados coinciden con su reloj, aunque estén en la pantalla de inicio de sesión.
@@ -329,9 +330,9 @@ Un administrador puede confirmarla antes en esta página:
   reloj en hora, el diálogo ofrece **Usar esta hora**, que pone el reloj del servidor a la hora de tu
   dispositivo y la confirma.
 
-Mientras no responda la parte del servidor que lee su hora de internet, la fila **Reloj** lo dice y el
-servidor espera así en cada arranque. Su hora se puede confirmar entonces, pero no corregir, hasta que
-esa parte responda.
+Mientras no responda la parte del servidor que lee su hora de internet, la fila **Reloj** lo dice.
+El servidor espera entonces así en cada arranque, y su hora se puede confirmar, pero no corregir,
+hasta que esa parte responda.
 
 ## El servicio de hora del servidor {#clock-service}
 

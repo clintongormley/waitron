@@ -26,7 +26,7 @@ describe("clock.unconfirmed", () => {
       filesRecords: () => true,
       witnesses: oneDeviceAgreeing(),
     });
-    expect(waiting).toEqual({ agreed: 1, hostAnswers: true });
+    expect(waiting).toEqual({ agreed: 1, hostAnswers: true, cause: "start" });
     expect(await read(waiting)).toEqual([
       {
         key: "clock.unconfirmed",
@@ -34,7 +34,7 @@ describe("clock.unconfirmed", () => {
         severity: "error",
         since: null,
         screen: "box-status",
-        params: { agreed: 1, hostSilent: false },
+        params: { agreed: 1, hostSilent: false, cause: "start" },
       },
     ]);
   });
@@ -47,8 +47,29 @@ describe("clock.unconfirmed", () => {
       filesRecords: () => true,
       witnesses: createClockWitnessStore({ wall: () => BOX_MS, monotonic: () => 0 }),
     });
-    expect(waiting).toEqual({ agreed: 0, hostAnswers: false });
-    expect((await read(waiting))[0]?.params).toEqual({ agreed: 0, hostSilent: true });
+    expect(waiting).toEqual({ agreed: 0, hostAnswers: false, cause: "start" });
+    expect((await read(waiting))[0]?.params).toEqual({
+      agreed: 0,
+      hostSilent: true,
+      cause: "start",
+    });
+  });
+
+  it("carries why the box waits again after its clock jumped", async () => {
+    const state = startClockState();
+    state.confirm("by_internet", {});
+    state.backToWaiting("clock_jumped");
+    const waiting = startClockWaiting({
+      state,
+      filesRecords: () => true,
+      witnesses: createClockWitnessStore({ wall: () => BOX_MS, monotonic: () => 0 }),
+    });
+    expect(waiting).toEqual({ agreed: 0, hostAnswers: true, cause: "clock_jumped" });
+    expect((await read(waiting))[0]?.params).toEqual({
+      agreed: 0,
+      hostSilent: false,
+      cause: "clock_jumped",
+    });
   });
 
   it.each([

@@ -14,6 +14,12 @@ const FIXED = {
   "clock.check_time": "staff_notice.clock.check_time",
 } as const;
 
+/** The causes of a wait the till words; any other, `future_date_refused` included, is unknown. */
+const WAIT_CAUSES = {
+  start: "staff_notice.clock.unconfirmed",
+  clock_jumped: "staff_notice.clock.unconfirmed_jumped",
+} as const;
+
 function unknownText(): { main: string; hint: string } {
   return { main: t(UNKNOWN.main), hint: t(UNKNOWN.hint) };
 }
@@ -45,10 +51,11 @@ export function staffNoticeText(
     };
   }
   if (notice.code === "clock.unconfirmed") {
-    const { agreed } = notice.params;
+    const { agreed, cause } = notice.params;
     if (agreed !== 0 && agreed !== 1) return unknownText();
+    if (typeof cause !== "string" || !Object.hasOwn(WAIT_CAUSES, cause)) return unknownText();
     return {
-      main: t("staff_notice.clock.unconfirmed").replace("{agreed}", String(agreed)),
+      main: t(WAIT_CAUSES[cause as keyof typeof WAIT_CAUSES]).replace("{agreed}", String(agreed)),
       hint: t(checksTime(notice, checkTime) ? "staff_notice.check_time" : TELL_MANAGER),
     };
   }

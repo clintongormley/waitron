@@ -109,7 +109,7 @@ describe.each(["light", "dark"] as const)("till-lock-screen a11y (%s theme)", (t
           key: "clock.unconfirmed",
           code: "clock.unconfirmed",
           severity: "error",
-          params: { agreed: 1 },
+          params: { agreed: 1, cause: "start" },
         },
       },
       theme,

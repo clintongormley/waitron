@@ -275,22 +275,24 @@ what the till's dialog shows and what each button does.
 
 The till sends its own time. When it is more than a minute from the box's, **This device** sets the
 box's clock to it, and **The server** keeps the box's clock whatever the till's time while the box
-waits for its time to be confirmed after a start and payments are not also stopped because the clock
+waits for its time to be confirmed and payments are not also stopped because the clock
 reads before 28 October 2024; otherwise **The
 server** asks the person to correct the till's time. When it is within a minute, **Yes** keeps the
 box's clock. Each of these the box accepts restarts payments. When the box sets its clock, the bell and the email name the
 staff member and the till. When the till's time is used, other devices' readings do not stop it.
 
-Two tills or handhelds that agree with the box confirm its time after a start by themselves.
-
 Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, once
-the internet has confirmed the box's time, a staff member can no longer set the clock from a till.
+the internet has confirmed the box's time, a staff member can no longer set the clock from a till, until its clock jumps and it waits for its time
+again.
 
 ## When payments wait for the box's time {#clock-waiting}
 
 After a start, the box takes no payment until its time is confirmed. Orders still reach the kitchen.
 The **Clock** row then says **Waiting for devices to connect and agree with the box's time**, with
-the box's date and time, and the bell has an alert saying so.
+the box's date and time, and the bell has an alert saying so. The box also waits when its clock
+jumps by more than a minute, forwards or back, while it is not kept in time over the internet: the
+**Clock** row then starts with **The box's clock jumped**, and its time is confirmed in the same
+ways.
 
 The box confirms its time by itself as soon as it reaches the internet, or once two tills or
 handhelds that are switched on and connected agree with its clock, even at the sign-in screen.
@@ -302,8 +304,8 @@ An administrator can confirm it sooner on this page:
   confirms the box's time. When they are further apart and the box can set its clock, the dialog
   offers **Use this time**, which sets the box's clock from your device and confirms it.
 
-While the part of the box that reads its internet time is not answering, the **Clock** row says so,
-and the box waits like this at every start. Its time can then be confirmed, but not corrected, until
+While the part of the box that reads its internet time is not answering, the **Clock** row says so.
+The box then waits like this at every start, and its time can be confirmed, but not corrected, until
 that part answers.
 
 ## The box's time service {#clock-service}

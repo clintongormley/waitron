@@ -779,7 +779,7 @@ describe("till-lock-screen", () => {
       key: "clock.unconfirmed",
       code: "clock.unconfirmed",
       severity: "error",
-      params: { agreed: 1 },
+      params: { agreed: 1, cause: "start" },
     };
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);

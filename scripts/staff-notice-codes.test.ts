@@ -55,6 +55,7 @@ function wordedAsUnknown(codes: readonly string[]): string[] {
               printer: "Kitchen",
               since: "2026-10-23T19:16:00.000Z",
               agreed: 1,
+              cause: "start",
             },
           }).main === unknown
         );

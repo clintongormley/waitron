@@ -23,7 +23,21 @@ const seen = vi.hoisted(() => ({
   anchors: [] as unknown[][],
   watchCorrections: [] as unknown[],
   watches: [] as unknown[],
+  watchSteady: [] as unknown[],
+  bootElapsed: [] as unknown[],
 }));
+
+vi.mock("./boot-reader.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./boot-reader.js")>();
+  return {
+    ...actual,
+    bootReader: (...args: Parameters<typeof actual.bootReader>) => {
+      const reader = actual.bootReader(...args);
+      seen.bootElapsed.push(reader.elapsed);
+      return reader;
+    },
+  };
+});
 
 vi.mock("./clock-correction.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./clock-correction.js")>();
@@ -51,6 +65,7 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
     ...actual,
     createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) => {
       seen.watchCorrections.push(args[0].correction);
+      seen.watchSteady.push(args[0].monotonic);
       const watch = actual.createClockWatch(...args);
       seen.watches.push(watch);
       return watch;
@@ -112,6 +127,10 @@ describe("the running server's clock correction", () => {
           (seen.corrections[0] as Record<string, unknown>)[method],
         );
       }
+
+      // The boot-time clock, which counts a suspend, and a set re-takes the jump check's baseline.
+      expect(seen.bootElapsed).toContain(seen.watchSteady[0]);
+      expect(seen.anchors[0]).toContain(seen.watches[0]);
 
       await vi.waitFor(async () => {
         expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
