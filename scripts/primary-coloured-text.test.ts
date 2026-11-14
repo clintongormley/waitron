@@ -134,6 +134,8 @@ export function primaryColourDeclarations(
   source: string,
   kind: "ts" | "css" | "html",
 ): PrimaryColourDeclaration[] {
+  // Cleaning only blanks characters, so a declaration's token must occur in the raw source.
+  if (!/--wt-color-primary/i.test(source)) return [];
   if (kind === "css") return declarationsIn(source, lineCounter(source));
   if (kind === "html") {
     let kept = blank(source);
@@ -225,6 +227,7 @@ describe("primaryColourDeclarations refuses", () => {
     [".a { color : var( --wt-color-primary ) }", "css", 1, ".a"],
     [".a { color: var(--wt-color-primary, #000); }", "css", 1, ".a"],
     [".a { COLOR: var(--wt-color-primary); }", "css", 1, ".a"],
+    ["css`.a { color: var(--WT-COLOR-PRIMARY); }`", "ts", 1, ".a"],
     [".a { color: var(--wt-color-primary) !important; }", "css", 1, ".a"],
     ["/* note */\n.b,\n.c { color: var(--wt-color-primary); }", "css", 3, ".b, .c"],
     ["@media (x) { .m { color: var(--wt-color-primary); } }", "css", 1, ".m"],

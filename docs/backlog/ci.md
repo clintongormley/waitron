@@ -360,6 +360,9 @@ The [parties task-wait cut](../superpowers/plans/2026-11-14-a1398-till-task-wait
 The watcher accepted the dashboard and till measurements on 14 November at 06:51 and 09:44.
 The [stream readiness polling cut](../superpowers/plans/2026-11-14-a1398-stream-clock-poll.md), cleared at 11:18, polls the existing sleeping condition every millisecond with the existing explicit timeout values and assertions. The forced-stop test waits for the real child exit rather than spending the manual clock’s finite wakes on it. Judge it by its PR whole-job timing, not the local file-time gain. Server shard 2 remains separate: retained whole-job samples of 226/238/254 seconds do not establish a recurring gap or a cause.
 
+The [root colour scan](../superpowers/plans/2026-11-14-a1398-root-colour-scan.md) skips parsing when the raw source lacks the colour token, case-insensitively.
+Qualify its root whole-job time from the PR's own CI, recording the runner and coverage; the local file-time cut does not establish the four-minute goal.
+
 ## Bundle A1398: Pack the other packages' test shards by measured time
 
 1 conditional entry. Add an inventory of run test files only if a same-count wrong-files case is
