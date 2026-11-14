@@ -96,7 +96,8 @@ dashPass123** (`pnpm dev:setup` prints all three).
 
 To start over from a clean database (throwaway preproduction data), `pnpm dev:reset` removes the
 venue directory and re-provisions. From a worktree, use `wa-wt demo <name>` for this seeded target or
-`wa-wt onboarding <name>` for a fresh run through the shipping setup wizard. You can run up to
-eight worktrees at once, each on its own ports. Run `wa-wt ls` for each instance's URLs, then use
-`wa-wt down <name>` to stop only that instance. The stacks share the practice email inbox, but
-each has its own venue directory.
+`wa-wt onboarding <name>` for a fresh run through the shipping setup wizard. The owner runs one
+stack at a time on these ports; starting another stops the previous one. Claude's stacks run beside
+it on seven other sets of ports, each with its own venue directory. Run `wa-wt ls` for each
+instance's URLs, then use `wa-wt down <name>` to stop only that instance. The stacks share the
+practice email inbox.

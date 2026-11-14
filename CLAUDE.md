@@ -1064,9 +1064,13 @@ before treating an implementation as a rule violation.
   1–7, never stop the owner's, and keep their data and settings in
   `~/workspace/.waitron-dev/claude/<name>`** (owner, 2026-11-14). The owner's demo venue, shared
   by the owner's checkouts, survives moving between them, so a branch's migrations can fail on its
-  rows. Claude rebuilds it only from main (`wa-wt reset demo waitron`, which restarts the owner's
-  stack); `wa-wt reset own demo <name>` rebuilds Claude's own copy. Guard: `wa-wt.test.sh` in
-  `~/workspace/tools`. [Detail](docs/developers/workflow-guide.md#the-owners-dev-stack-and-claudes).
+  rows. Claude rebuilds it only from the main checkout (`wa-wt reset demo waitron`, which stops and
+  restarts the owner's stack when one is running); `wa-wt reset own demo <name>` rebuilds Claude's own copy. Cost: a Claude
+  reset on slot 2 rewrote the main checkout's `.env`, and the owner's next start got a dashboard that
+  could not reach its server. Guards: `wa-wt.test.sh` in `~/workspace/tools`, weaker than its name (stand-in `pnpm`
+  and `docker`, run by hand), and `apps/server/scripts/dev-setup.test.ts`,
+  `apps/server/scripts/dev-onboard.test.ts` and `apps/server/scripts/dev-server.test.ts` for
+  `WAITRON_DEV_ENV_FILE`. [Detail](docs/developers/workflow-guide.md#the-owners-dev-stack-and-claudes).
 - **Mock-ups and screenshots are never committed, and not copied to Drive** (owner, 2026-11-02):
   they stay in the working folder of whoever made them and are shown to the owner directly. Cost:
   184 MiB of them in the tree when removed. Guard:

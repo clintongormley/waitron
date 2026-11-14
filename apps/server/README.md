@@ -507,7 +507,8 @@ from scratch. Nothing in Compose holds venue data, so no `docker compose` comman
 
 Fresh developer venues use English administrator and device names. Reusing a saved demo keeps its
 recorded names, while the terminal lists the names from the current seed. To rebuild that demo's
-practice data with the current names, run `wa-wt reset demo <worktree-name>`.
+practice data with the current names, run `wa-wt reset demo <worktree-name>` (Claude, for its own
+copy: `wa-wt reset own demo <worktree-name>`).
 
 For a new Prepare or Live venue outside development, the setup wizard asks for the mail server settings and sends a
 test message to your administrator address. Continue becomes available when the server accepts a
@@ -952,4 +953,5 @@ Screens remain English or Spanish.
 
 Changing `WAITRON_DEMO_REGION` keeps an existing venue's stored geography and data.
 To replace a throwaway venue you own, run
-`WAITRON_DEMO_REGION=catalonia wa-wt reset demo <worktree-name>`.
+`WAITRON_DEMO_REGION=catalonia wa-wt reset demo <worktree-name>` (the owner's shared demo venue), or,
+from Claude, `WAITRON_DEMO_REGION=catalonia wa-wt reset own demo <worktree-name>` (Claude's own copy).
