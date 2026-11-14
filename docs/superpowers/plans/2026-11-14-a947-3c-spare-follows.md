@@ -37,4 +37,4 @@ No unused-library PR. Reuse `bench/sqlite-failover/src/probes/restore-time.ts`; 
 - [ ] Test the cleared 15-second clock policy and existing-warning precedence. Report spare comparisons through signed status, without a spare bell/public API.
 - [ ] Preserve passive refresh, handover/retire menus and permissions. Inspect EN/ES, both themes, phone/desktop. Mock-up reference: `git show '3ef533f4fe^:docs/backlog/mockups/a947-two-box-failover/3-servers-screen.png'`; roles, seconds of delay, amber warning, last-applied time and Servers link apply; its offsite-copy caption waits for 5e.
 
-Each PR: TDD, changed-file tests, real-binary tests with `WAITRON_REQUIRE_TEST_TOOLS=1`, unedited fiscal gates, normal hook, sign-offs, current-head CI and Claude finish-branch reviews. No implementation or measurement is claimed here.
+Each PR: TDD, changed-file tests, real-binary tests with `WAITRON_REQUIRE_TEST_TOOLS=1`, unedited fiscal gates, normal hook, sign-offs, current-head CI and Claude finish-branch reviews. No runtime implementation is claimed; measured results are in the linked research note.
