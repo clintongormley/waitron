@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { navigationGuardFor, type WtInput } from "@waitron/ui";
 import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import {
   mountPrinterApp,
@@ -31,9 +32,17 @@ it.each(["en-GB", "es-ES"])(
         locale,
         path: path(id),
         printers: [
-          { ...receiptPrinter, transport: transport === "a4" ? "network_tcp" : transport },
+          {
+            ...receiptPrinter,
+            hasCashDrawer: true,
+            transport: transport === "a4" ? "network_tcp" : transport,
+          },
         ],
         pagePrinters: [officePrinter],
+        respond: (url) =>
+          url.endsWith("/test-drawer")
+            ? Promise.resolve(new Response(JSON.stringify({ jobId: "drawer-test" })))
+            : undefined,
       });
       const screen = printerScreen(app);
       await expect
@@ -42,10 +51,10 @@ it.each(["en-GB", "es-ES"])(
       const actual = new Set<string>();
       const collect = (editor: string) => {
         for (const field of screen.shadowRoot!.querySelectorAll<HTMLElement & { label: string }>(
-          "wt-input[name], wt-combobox[name], wt-switch[name]",
+          "[name]",
         )) {
           const name = field.getAttribute("name")!;
-          if (!name.startsWith("printer-")) continue;
+          if (!name.startsWith("printer-") || name === "printer-drawer-result") continue;
           const step = field
             .closest("[data-test^=calibration-step-]")
             ?.getAttribute("data-test")
@@ -58,6 +67,13 @@ it.each(["en-GB", "es-ES"])(
         await navigationGuardFor(window)!.write(path(id, "calibrate", "1"));
         await expect
           .poll(() => screen.shadowRoot!.querySelector("[name=printer-ruler-number]"))
+          .toBeTruthy();
+        await navigationGuardFor(window)!.write(path(id, "calibrate", "3"));
+        await userEvent.click(
+          screen.shadowRoot!.querySelector<HTMLElement>("[data-test=test-printer-drawer]")!,
+        );
+        await expect
+          .poll(() => screen.shadowRoot!.querySelector("[name=printer-drawer-result]"))
           .toBeTruthy();
         collect("calibrate");
         for (const [answer, name] of [
@@ -116,6 +132,7 @@ it("restores targets after delayed lists, Back/Forward and remount; closes and s
   await expect
     .poll(() => screen.shadowRoot!.querySelector("[name=printer-detail-name]"))
     .toBeTruthy();
+  expect(screen.shadowRoot!.querySelector("[data-test=edit-printer-modal]")).toBeNull();
   history.forward();
   await expect
     .poll(() =>
@@ -181,6 +198,14 @@ it("step changes and live reads retain calibration edits; a guarded target chang
   );
   await expect.poll(() => location.pathname).toBe(path("p1", "calibrate", "2"));
   expect(replaced).toHaveBeenCalled();
+  await userEvent.click(
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=calibration-back]")!,
+  );
+  expect(location.pathname).toBe(path("p1", "calibrate", "1"));
+  expect(qr()!.value).toBe("203dpi");
+  await userEvent.click(
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=calibration-next]")!,
+  );
   api.liveData.invalidate([{ type: "printers", id: "p1" }]);
   await api.liveData.refresh();
   expect(qr()!.value).toBe("203dpi");
@@ -238,3 +263,12 @@ it.each(["edit-cancel", "calibration-save", "calibration-escape"] as const)(
     ).toBeNull();
   },
 );
+
+it("a missing saved printer keeps the not-found refusal", async () => {
+  const { app } = await mountPrinterApp({ path: path("missing") });
+  const root = printerScreen(app).shadowRoot!;
+  await expect
+    .poll(() => root.querySelector("[data-test=printer-details-body]")?.textContent)
+    .toContain(codeMessage("printer.not_found"));
+  expect(root.querySelector("[data-test=printer-setting-unavailable]")).toBeNull();
+});
