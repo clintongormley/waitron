@@ -58,6 +58,7 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/restore-flow.ts": "removes only restore attachments under flows/restore",
   "apps/server/src/restore-stream.ts": "restores into a scratch folder it removes",
   "apps/server/src/spare-copy.ts": "removes only its own pair-copy folder",
+  "apps/server/src/spare-follow.ts": "removes only its own scratch follower folder",
   "apps/server/src/start-backup-room-record.ts":
     "names venue.db in prose; unlinks only the start's deletion record",
   "apps/server/src/testing/handover-placed-copy.ts": "test harness: a spare's own stopped files",
