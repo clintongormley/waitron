@@ -164,7 +164,7 @@ it.each(["rename", "permissions", "delete"])(
     const { id } = await create(admin.token, "Remedy", ["report.view", "fiscal.remedy"]);
     const input = { managementSessionId: actor.token, roleId: id };
     const change = () =>
-      withTransaction(suite.db, (tx) =>
+      withTransaction<unknown>(suite.db, (tx) =>
         operation === "rename"
           ? identity.renameAccessRole(tx, { ...input, name: "New", expectedName: "Remedy" })
           : operation === "delete"
@@ -348,7 +348,7 @@ it.each(["rename", "permissions", "delete", "copy"])(
     const { actor } = await fixture(true);
     const input = { managementSessionId: actor.token, roleId: crypto.randomUUID() };
     const change = () =>
-      withTransaction(suite.db, (tx) =>
+      withTransaction<unknown>(suite.db, (tx) =>
         operation === "rename"
           ? identity.renameAccessRole(tx, { ...input, name: "New", expectedName: "Old" })
           : operation === "permissions"
