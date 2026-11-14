@@ -581,14 +581,12 @@ describe("partly refunded charges", () => {
   it("keeps failed retention held without claiming it checked a full refund", async () => {
     const el = await mount(
       stubApi({
-        listStuckPayments: vi
-          .fn()
-          .mockResolvedValue([
-            {
-              ...row,
-              retention: { remaining: "1.10", applied: "1.10", tip: "0.00", outstanding: "0.40" },
-            },
-          ]),
+        listStuckPayments: vi.fn().mockResolvedValue([
+          {
+            ...row,
+            retention: { remaining: "1.10", applied: "1.10", tip: "0.00", outstanding: "0.40" },
+          },
+        ]),
         retainPartialRefund: vi
           .fn()
           .mockRejectedValue({ code: "payment.outcome_unknown", params: { reason: "ambiguous" } }),

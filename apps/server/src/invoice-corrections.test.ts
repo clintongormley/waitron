@@ -327,16 +327,12 @@ async function behindLatestRecord(): Promise<TrustedClock> {
 describe("openInvoiceCorrection", () => {
   it("previews correcting a retained receipt using its net refundable money", async () => {
     const id = randomUUID();
-    await parkOrder(
-      { db: venue.db },
-      venue.cfg,
-      {
-        id,
-        lines: [{ menuItemId: offerOf("Rib steak"), quantity: "1" }],
-        zoneId: venue.zoneId,
-        operatorId: venue.operatorId,
-      },
-    );
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id,
+      lines: [{ menuItemId: offerOf("Rib steak"), quantity: "1" }],
+      zoneId: venue.zoneId,
+      operatorId: venue.operatorId,
+    });
     const saleId = await inTx(venue, async (tx) => {
       const [bill] = await tx
         .insert(billPayments)

@@ -202,16 +202,14 @@ async function prior(
 describe("settled-tender reservation inside the caller's transaction", () => {
   it("can reserve all the retained receipt after its earlier provider refund", async () => {
     const target = await paid("card", { bill: true, captured: 1500, state: "partially_refunded" });
-    await store.db
-      .insert(paymentRefunds)
-      .values({
-        paymentId: target.capture!.id,
-        provider: "fake",
-        paymentRef: target.capture!.paymentRef,
-        providerRefundRef: "before-retention",
-        amount: 400,
-        state: "succeeded",
-      });
+    await store.db.insert(paymentRefunds).values({
+      paymentId: target.capture!.id,
+      provider: "fake",
+      paymentRef: target.capture!.paymentRef,
+      providerRefundRef: "before-retention",
+      amount: 400,
+      state: "succeeded",
+    });
     const result = await reserve(
       target.saleId,
       request(target.tenderId, { appliedAmount: "10.00", tipAmount: "1.00" }),

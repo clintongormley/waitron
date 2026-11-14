@@ -267,16 +267,14 @@ describe("settled-tender refundable balances", () => {
       state: "partially_refunded",
     });
     const returned = (amount: number) =>
-      store.db
-        .insert(paymentRefunds)
-        .values({
-          paymentId: payment.id,
-          provider: payment.provider,
-          paymentRef: payment.paymentRef,
-          providerRefundRef: randomUUID(),
-          amount,
-          state: "succeeded",
-        });
+      store.db.insert(paymentRefunds).values({
+        paymentId: payment.id,
+        provider: payment.provider,
+        paymentRef: payment.paymentRef,
+        providerRefundRef: randomUUID(),
+        amount,
+        state: "succeeded",
+      });
     await returned(4000);
     expect(await read(target.saleId)).toMatchObject([
       { appliedRemaining: "60.00", tipRemaining: "0.00" },
