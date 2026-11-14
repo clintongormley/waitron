@@ -530,10 +530,10 @@ stored in it, including the key that protects two-factor secrets, so also choose
 each person who uses two-factor sign-in. Waitron refuses **Reset login** for the venue's only active admin who can sign in to the dashboard, who instead opens **Account settings**, chooses **Disable** beside **Authenticator
 app**, and sets it up again. The recovery key also opens your scheduled backups,
 wherever that person can reach them. Revoke the old access keys at your bucket provider, which
-Waitron cannot do for you. Then, on **Backups**, choose **Change bucket** and enter the new keys. If
-your scheduled backups go to **The bucket copy's bucket**, also choose **Change destination or
-schedule**, choose **The bucket copy's bucket** again, and save, because they keep the keys they
-were saved with. A new recovery key does not change the passwords and keys for your other providers,
+Waitron cannot do for you. Then, on **Backups**, choose **Change bucket** and enter the new keys. Scheduled
+backups to a bucket keep their own keys, which **Change bucket** does not change: if they used the
+old keys, also choose **Change destination or schedule**, enter the new keys in **Access key ID**
+and **Secret access key**, and choose **Save changes**. A new recovery key does not change the passwords and keys for your other providers,
 so change those at each provider too. While scheduled backups are on, **Backups** also offers
 **Change the recovery key**; afterwards choose **Make recovery pack** on **Backups** and keep the new
 pack. Scheduled backups made before the change and the whole older bucket copy still need the

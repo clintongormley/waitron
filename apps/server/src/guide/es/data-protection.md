@@ -585,9 +585,10 @@ autenticación** y lo vuelve a configurar. La clave de recuperación también ab
 programadas, allí donde esa
 persona pueda llegar a ellas. Revoca las claves de acceso antiguas en tu proveedor del bucket, algo
 que Waitron no puede hacer por ti. Después, en **Copias de seguridad**, elige **Cambiar de bucket**
-e introduce las claves nuevas. Si tus copias programadas van a **El bucket de la copia continua**,
-elige también **Cambiar el destino o la programación**, vuelve a elegir **El bucket de la copia
-continua** y guarda, porque conservan las claves con las que se guardaron. Una clave de recuperación
+e introduce las claves nuevas. Las copias programadas en un bucket
+conservan sus propias claves, que **Cambiar de bucket** no cambia: si usaban las claves antiguas,
+elige también **Cambiar el destino o la programación**, escribe las claves nuevas en **ID de la
+clave de acceso** y **Clave de acceso secreta**, y elige **Guardar cambios**. Una clave de recuperación
 nueva no cambia las contraseñas y claves de tus otros proveedores, así que cámbialas también en cada
 proveedor. Mientras las copias programadas están activadas, **Copias de seguridad** también ofrece
 **Cambiar la clave de recuperación**; después elige **Hacer paquete de recuperación** en **Copias de
