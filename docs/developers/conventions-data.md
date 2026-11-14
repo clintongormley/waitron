@@ -4407,7 +4407,12 @@ till's profile and the person are still checked. The confirm then takes one of t
 - `keep: true` ("The server") confirms the box's time as it stands, whatever the
   till reads: no host call, no row, state `by_person`, one `clock_start.confirmed` line with
   source `staff` or `admin`. While the clock reads before 28-10-2024 it is refused
-  `clock.set_refused` with reason `stopped`, writing nothing;
+  `clock.set_refused` with reason `stopped`, writing nothing; it is refused `stale` when a set
+  landed after the confirm arrived, or the box's clock moved more than a second against its
+  steady clock since the challenge was issued. The till's dialog sends no keep when the fresh
+  challenge's time is more than a minute (the dialog shows minutes) from the time it showed,
+  carried forward on the till's steady clock: it shows its own stale refusal instead
+  (`apps/till/src/widgets/box-time-dialog.ts`);
 - a till within a minute confirms the same way ("Yes"). On a clock reading before 28-10-2024 a
   "Yes" is refused, leaving the start waiting: the till then reads before that date too, so the
   confirm refuses it `target_invalid` (run, in `till-box-clock-api.test.ts`);
@@ -4420,6 +4425,20 @@ Once the start is `by_devices` or `by_person`, the challenge is refused `not_sto
 clock reads before 28-10-2024, and staff are admitted whatever the start-up window says until the
 start is `by_internet`. `keep: true` is refused `stopped` while the clock reads before 28-10-2024,
 and `not_stopped` once the start is `by_internet`.
+
+**"The date and time are right" on Box status while the start waits**
+(`apps/server/src/box-health-api.ts`). An administrator (`system.box_admin`) asks
+`POST /api/box/clock-challenge`, then sends `POST /api/box/clock-confirm` with
+`{ challengeId, asShown: true }`; both are refused `same_machine` from the box's own screen. It
+confirms the box's time as it stands: no host call, no row, state `by_person`, one
+`clock_start.confirmed` line with source `admin`. It is refused `clock.set_refused` with reason
+`stale` when a set landed after the confirm arrived, or the box's clock moved more than a second
+against its steady clock while it was handled or since the challenge was issued; `stopped` while
+the clock reads before 28-10-2024; and `not_stopped` when the start is not waiting. The page
+(`apps/dashboard/src/screens/box-status-screen.ts`) sends no confirm when the fresh challenge's
+time is more than a minute (the Clock row shows minutes) from the row's, carried forward on the
+device's steady clock since the read that drew it; it says the time changed and reads the box
+again.
 A box whose host service does not answer waits at every start and cannot be set through it, so
 devices or a person confirm its time as it stands (plan D12).
 

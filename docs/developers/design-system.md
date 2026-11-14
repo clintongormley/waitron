@@ -6406,13 +6406,14 @@ alert list.
   rows, as picture 4 draws them; where the screen's own area is 600px wide or less the name sits
   above the words and the actions go under them.
 - **Dots.** A `--wt-space-3` circle: `--wt-color-success` for fine, `--wt-color-warning` for needs
-  attention, `--wt-color-danger` for something can't be saved, with the state's words in visually
-  hidden text beside it. Red is a staff notice of severity `error` (`storage.disk_full`,
-  `clock.unusable`); amber is any other notice and any bell alert on that row,
+  attention, `--wt-color-danger` for something can't be saved or paid, with the state's words in
+  visually hidden text beside it. Red is a staff notice of severity `error` (`storage.disk_full`,
+  `clock.unusable`), and the Clock and Sales rows while the start waits for its time (the health
+  read's `clock.waiting`); amber is any other notice and any bell alert on that row,
   whatever the alert's own severity, and the Clock row when the box's own read
   of AEAT's time is at `warning`, because amber means everything still
-  works. The legend says "red: something can't be saved", not "nothing", because an unusable clock
-  refuses sales while orders still save.
+  works. The legend says "red: something can't be saved or paid", not "nothing", because an
+  unusable clock refuses sales while orders still save, and a waiting start takes no payment.
 - **Under the rows.** A note when a staff-notice check, or the read of the records waiting to be
   sent, could not be made; a note when the bell's
   alerts could not be read (the rows still show, from the box's read); "{n} other alerts" with
