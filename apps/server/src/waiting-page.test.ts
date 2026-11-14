@@ -1,3 +1,4 @@
+import vm from "node:vm";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -17,6 +18,49 @@ async function page(names: readonly (string | null)[], language: string): Promis
   const res = await app.request("/", { headers: { "accept-language": language } });
   expect(res.headers.get("cache-control")).toBe("no-store");
   return res.text();
+}
+
+/** Runs the page's script against a stand-in clock, `fetch` and `location`. */
+function openPage(answer: (url: string, init: RequestInit) => Promise<Response>) {
+  const script = /<script>([\s\S]*)<\/script>/.exec(renderWaitingPage("Spare", "en-GB"))?.[1];
+  if (script === undefined) throw new Error("the waiting page has no script");
+  let now = 0;
+  let nextId = 1;
+  let timers: { id: number; at: number; run: () => void; every: number | null }[] = [];
+  const add = (run: () => void, ms: number, every: number | null): number => {
+    timers.push({ id: nextId, at: now + ms, run, every });
+    return nextId++;
+  };
+  const clear = (id: number): void => {
+    timers = timers.filter((timer) => timer.id !== id);
+  };
+  const fetch = vi.fn(answer);
+  const replace = vi.fn();
+  vm.runInNewContext(script, {
+    fetch,
+    location: { replace },
+    setTimeout: (run: () => void, ms: number) => add(run, ms, null),
+    setInterval: (run: () => void, ms: number) => add(run, ms, ms),
+    clearTimeout: clear,
+    clearInterval: clear,
+  });
+  /** Runs every timer due in the next `ms`, in order, letting each one's promises settle. */
+  const advance = async (ms: number): Promise<void> => {
+    const until = now + ms;
+    for (;;) {
+      const due = timers
+        .filter((timer) => timer.at <= until)
+        .sort((a, b) => a.at - b.at || a.id - b.id)[0];
+      if (due === undefined) break;
+      now = due.at;
+      if (due.every === null) clear(due.id);
+      else due.at += due.every;
+      due.run();
+      await new Promise((settled) => setImmediate(settled));
+    }
+    now = until;
+  };
+  return { fetch, replace, advance };
 }
 
 describe("the waiting page", () => {
@@ -106,14 +150,32 @@ describe("the waiting page", () => {
     expect(res.headers.get("x-waitron-waiting")).toBe("1");
   });
 
-  it("asks every 5 seconds whether it is still the waiting page, and leaves for the box's page once not", () => {
-    const html = renderWaitingPage("Spare", "en-GB");
-    expect(html).toContain("<script>");
-    expect(html).toContain('fetch("/", { cache: "no-store" })');
-    // A refusal (the closed gate's 503 while the box steps down) is not the next start's page.
-    expect(html).toContain('response.ok && response.headers.get("x-waitron-waiting") === null');
-    expect(html).toContain('location.replace("/")');
-    expect(html).toContain("5000");
+  it("asks every 5 seconds whether it is still the waiting page, and leaves for the box's page once a successful answer is not", async () => {
+    const page = openPage(() => Promise.resolve(new Response(null, { status: 200 })));
+    await page.advance(4_999);
+    expect(page.fetch).not.toHaveBeenCalled();
+    await page.advance(1);
+    expect(page.fetch).toHaveBeenCalledTimes(1);
+    expect(page.fetch).toHaveBeenCalledWith("/", expect.objectContaining({ cache: "no-store" }));
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith("/");
+  });
+
+  it("stays on the waiting page's own answer, a refusal or a failed fetch, and leaves at the next turn that answers otherwise", async () => {
+    const answers: (() => Promise<Response>)[] = [
+      () =>
+        Promise.resolve(new Response(null, { status: 200, headers: { "X-Waitron-Waiting": "1" } })),
+      () => Promise.resolve(new Response(null, { status: 503 })),
+      () => Promise.reject(new TypeError("Failed to fetch")),
+      () => Promise.resolve(new Response(null, { status: 200 })),
+    ];
+    const page = openPage(() => answers[page.fetch.mock.calls.length - 1]!());
+    for (let turn = 1; turn <= 3; turn++) {
+      await page.advance(5_000);
+      expect(page.fetch).toHaveBeenCalledTimes(turn);
+      expect(page.replace).not.toHaveBeenCalled();
+    }
+    await page.advance(5_000);
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith("/");
   });
 
   it("with no box to name, waits for the other box", async () => {
