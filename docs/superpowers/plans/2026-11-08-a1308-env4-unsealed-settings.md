@@ -21,6 +21,11 @@
 > real reader needs them. No screen used that query through the live controller. One gathered fixes
 > pass and one fresh read are cleared, with up to 725 gross lines and no wider missing-sender catch.
 
+> **2026-11-14, CI receipt, watcher 23:01:** `ACTIVATION_ROWS` is 126 rather than 124: the held
+> setup now has one `settings.mail` row and its `settings.saved` activity entry. A read-only fixture
+> probe checked both rows and the total. The holdings, holdings-ledger and holdings-damage suites
+> keep all their exact count, kept-record, no-copy and fiscal assertions.
+
 **Goal:** The email sender address stops being sealed with the SMTP secret it sits beside. It moves
 to a new `mail` settings document; the sealed SMTP credential keeps only the connection URL.
 Stripe's two return addresses are not moved (owner, 2026-11-09; "What it leaves out").
