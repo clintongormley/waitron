@@ -1,5 +1,7 @@
 # A841 slice 9 — the venue's logo on receipts and A4 invoices: implementation plan
 
+> 2026-11-14: the Receipts tab now says when its preview shows the venue's logo, and redraws when the theme in use changes (branch `fix/dept-receipt-preview`). D7's "The dashboard learns nothing new … and the Receipts tab gains no words", the first two backlog entries quoted under Driver steps, and the wording and theme-redraw parts of the second item under Left for later describe the earlier state; its 58 mm "How it prints" is still open.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The logo of the theme in use prints, in black dots, at the top of every receipt and A4

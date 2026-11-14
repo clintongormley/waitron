@@ -120,6 +120,7 @@ it.each(cases)(
         "address-on",
         "address-off",
         "no-address",
+        "venue-logo",
         "phone",
         "email",
         "logo",
@@ -134,7 +135,7 @@ it.each(cases)(
             ...receiptModel.receipt,
             phone: "+34 912 345 678",
             email: "hola@deli.es",
-            logo,
+            ...(state === "venue-logo" ? {} : { logo }),
             printAddress: state !== "address-off",
             footerMessage: { "es-ES": "Thanks" },
           },
@@ -143,8 +144,9 @@ it.each(cases)(
         api.previewReceiptDraft.mockResolvedValue({
           ...preview("Bar"),
           marks: { ...preview().marks, headerSubtitle: { start: 0, end: 1 } },
+          venueLogo: state === "venue-logo",
         });
-        const refused = !["address-on", "address-off", "no-address"].includes(state);
+        const refused = !["address-on", "address-off", "no-address", "venue-logo"].includes(state);
         if (refused)
           api.putDepartmentReceipt.mockRejectedValue({
             code: "receipt.invalid",
@@ -165,7 +167,7 @@ it.each(cases)(
           });
         const { el, host } = await mountReceiptEditor(api, theme);
         const upload = receiptRoot(el).querySelector("dashboard-image-upload")!;
-        expect(upload.image).toBe(logo);
+        expect(upload.image).toBe(state === "venue-logo" ? null : logo);
         expect(
           receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>(
             "wt-switch[name=printAddress]",
@@ -175,6 +177,10 @@ it.each(cases)(
           expect(receiptRoot(el).querySelector("[data-test=venue-address]")!.textContent).toContain(
             t("receipts.no_address"),
           );
+        if (state === "venue-logo")
+          await expect
+            .poll(() => receiptRoot(el).querySelector("[data-test=venue-logo]")?.textContent)
+            .toContain(t("receipts.venue_logo"));
         if (refused) {
           await editReceipt(el, "email", "changed@deli.es");
           await clickReceiptSave(el);

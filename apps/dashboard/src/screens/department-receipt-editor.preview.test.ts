@@ -282,6 +282,23 @@ it("says in words when the preview draws the venue's logo, and only then", async
   await editReceipt(el, "email", "draft@example.com");
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(2);
   await expect.poll(() => note()).toBeNull();
+  api.previewReceiptDraft.mockResolvedValueOnce({ ...preview(), venueLogo: true });
+  await editReceipt(el, "email", "again@example.com");
+  await expect.poll(() => note()).toBeTruthy();
+  api.previewReceiptDraft.mockRejectedValueOnce({ code: "server.internal" });
+  const logo = `${"a".repeat(64)}.png`;
+  receiptRoot(el)
+    .querySelector("dashboard-image-upload")!
+    .dispatchEvent(
+      new CustomEvent("image-changed", {
+        detail: { image: logo },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  await expect.poll(() => receiptRoot(el).querySelector(".preview [role=alert]")).toBeTruthy();
+  expect(api.previewReceiptDraft.mock.lastCall![0].receipt.logo).toBe(logo);
+  expect(note()).toBeNull();
   const english = t("receipts.venue_logo");
   setLocale("es-ES");
   expect(t("receipts.venue_logo")).not.toBe(english);
@@ -300,4 +317,23 @@ it("redraws the preview when the theme in use changes, with the draft unchanged"
   await expect.poll(() => receiptRoot(el).querySelector(".paper")?.textContent).toContain("THEMED");
   await expect.poll(() => receiptRoot(el).querySelector("[data-test=venue-logo]")).toBeTruthy();
   expect(el.hasUnsavedChanges).toBe(false);
+});
+it("a closed editor keeps no theme watch, even when it closes before the receipt read answers", async () => {
+  const api = receiptApi();
+  const { el } = await mountReceiptEditor(api);
+  const themes = () =>
+    api.liveData.interests.filter((interest) => interest.type === "custom_themes");
+  await expect.poll(themes).toEqual([{ type: "custom_themes" }]);
+  const held = deferred<typeof receiptModel>();
+  api.getDepartmentReceipt.mockImplementationOnce(() => held.promise);
+  el.subject = undefined;
+  await el.updateComplete;
+  el.subject = { id: "bar", name: "Bar" };
+  await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+  el.subject = undefined;
+  await el.updateComplete;
+  held.resolve(structuredClone(receiptModel));
+  await held.promise;
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(themes()).toEqual([]);
 });
