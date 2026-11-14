@@ -13,6 +13,7 @@ import { TillApp } from "./till-app.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
+import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   MenuStateAnswer,
