@@ -135,14 +135,92 @@ describe("SumUp gross charge report", () => {
     expect(report.unreadableUnlinked).toBe(1);
   });
 
+  it("counts non-object entries and resets the count on the next report", async () => {
+    const client = new FakeSumUp();
+    vi.spyOn(client, "historyPage")
+      .mockResolvedValueOnce({ items: [null, "bad"] as never })
+      .mockResolvedValueOnce({ items: [] });
+    const report = source(client);
+    expect(await report.fetch(period)).toEqual([]);
+    expect(report.unreadableUnlinked).toBe(2);
+    expect(await report.fetch(period)).toEqual([]);
+    expect(report.unreadableUnlinked).toBe(0);
+  });
+
+  it("keeps only the half-open report period even when history includes adjacent charges", async () => {
+    const client = new FakeSumUp();
+    vi.spyOn(client, "historyPage").mockResolvedValue({
+      items: [
+        item({ transaction_id: "before", timestamp: "2026-06-30T23:59:59.999Z" }),
+        item({ transaction_id: "start", timestamp: "2026-07-01T00:00:00Z" }),
+        item({ transaction_id: "end", timestamp: "2026-07-02T00:00:00Z" }),
+      ],
+    });
+    expect(await source(client).fetch(period)).toEqual([
+      { references: ["start"], amount: decimal("10.00"), settledAt: period.from },
+    ]);
+  });
+
+  it("refuses a supplemental detail that names another charge", async () => {
+    const client = new FakeSumUp();
+    vi.spyOn(client, "findTransaction").mockResolvedValue({
+      id: "other",
+      status: "SUCCESSFUL",
+      amount: decimal("10.00"),
+      currency: "EUR",
+      timestamp: "2026-07-01T12:00:00Z",
+    });
+    await expect(source(client).fetch(period, ["expected"])).rejects.toMatchObject({
+      code: "payment.audit_incomplete",
+    });
+  });
+
+  it("removes the order hint when two failed payments resolve to the same charge", async () => {
+    const client = new FakeSumUp();
+    vi.spyOn(client, "findTransaction").mockResolvedValue({
+      id: "shared",
+      status: "SUCCESSFUL",
+      amount: decimal("10.00"),
+      currency: "EUR",
+      timestamp: "2026-07-01T12:00:00Z",
+    });
+    expect(
+      await source(client, [
+        { state: "failed", paymentRef: "first", externalRef: null, workingOrderId: "order-a" },
+        { state: "failed", paymentRef: "second", externalRef: null, workingOrderId: "order-b" },
+      ]).fetch(period),
+    ).toEqual([
+      {
+        references: ["shared"],
+        amount: decimal("10.00"),
+        settledAt: new Date("2026-07-01T12:00:00Z"),
+      },
+    ]);
+  });
+
   it("accepts the recorded empty last page without links", async () => {
     const client = new FakeSumUp();
     vi.spyOn(client, "historyPage").mockResolvedValue({ items: [] });
     expect(await source(client).fetch(period)).toEqual([]);
   });
 
+  it("refuses pagination outside a query before requesting another page", async () => {
+    const client = new FakeSumUp();
+    const pages = vi.spyOn(client, "historyPage").mockResolvedValue({
+      items: [],
+      links: [{ rel: "next", href: "/another/path" }],
+    });
+    await expect(source(client).fetch(period)).rejects.toMatchObject({
+      code: "payment.audit_incomplete",
+    });
+    expect(pages).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
+    null,
+    { items: null },
     { items: [], links: "bad" },
+    { items: [], links: [null] },
     { items: [], links: [{ rel: "next", href: "same=page" }] },
   ])("refuses incomplete or repeated pages", async (page) => {
     const client = new FakeSumUp();

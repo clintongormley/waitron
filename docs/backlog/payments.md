@@ -172,6 +172,7 @@ refunded unfiled charge keeps the order held. Retaining and allocating the remai
 a partial refund is still unavailable. Bank-payout audit, refund reconciliation, orphan self-heal, durable reversal attempts
 and all three backup-machine cases remain open, along with signature handling.
 
+The daily gross-charge audit is implemented; it does not establish bank arrival or reconcile refunds.
 Bank-payout audit, refund reconciliation and orphan self-heal remain to build. The original transaction can stay
 `SUCCESSFUL` while identified `REFUND` events in `events` and `transaction_events` show money
 returned; its status alone cannot establish what remains collected.

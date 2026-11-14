@@ -3,7 +3,7 @@ import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { eq } from "drizzle-orm";
 import { sumupClient } from "./sumup-client.js";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, incidents as incidentsTable, withTransaction } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
@@ -79,6 +79,28 @@ async function setup(incidentRecorded = true) {
 }
 
 describe("SumUpCloudProvider.resolvePending", () => {
+  it("fails a zero-value provider capture without forwarding money", async () => {
+    const { fake, provider, attempting, state } = await setup();
+    await attempting("empty-charge", { status: "SUCCESSFUL" });
+    vi.spyOn(fake, "findTransaction").mockResolvedValue({
+      id: "zero",
+      status: "SUCCESSFUL",
+      amount: decimal("0.00"),
+      refundEvents: [],
+    });
+    await expect(provider.resolvePending(T0, await ownsEveryPayment(suite.db))).resolves.toEqual({
+      nextDueAt: null,
+      forwarded: 0,
+      declined: 1,
+      incidentsRaised: 1,
+    });
+    expect((await state("empty-charge")).state).toBe("failed");
+    expect(await suite.db.select().from(paymentRefunds)).toEqual([]);
+    expect(await suite.db.select({ code: incidentsTable.code }).from(incidentsTable)).toEqual([
+      { code: "payment.capture_mismatch" },
+    ]);
+  });
+
   it.each([
     { refund: 7, want: "refunded", net: 0 },
     { refund: 2, want: "partially_refunded", net: 500 },
