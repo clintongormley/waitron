@@ -41,8 +41,10 @@ kinds are integrity warnings, mismatched reply lines and wrong-environment refus
 
 ## Decision for the owner: wrong-environment refusals
 
-**By the trace below, neither environment refusal can be raised on a box set up by today's code, so
-this plan builds nothing for them.** Traced, not run:
+**By the trace below, both environment refusals are unreachable only while every setup path stamps
+the database's environment before its first record (the stamp sites listed below); the start check
+does not cover the rest, and this plan builds nothing for them.** Traced, except where a test is
+named:
 
 - A record's environment is the process's `config.environment` (`apps/server/src/boot.ts:3194`,
   `recordGeneration.environment`), and the drain compares it with the same value
@@ -53,8 +55,11 @@ this plan builds nothing for them.** Traced, not run:
   (`packages/provisioning/src/first-setup-command-deployment.ts:275`), provisioning
   (`apps/server/src/provision.ts:141`), adoption (`apps/server/src/adopt.ts:235`); a restore of a
   backup from the other environment is refused (`apps/server/src/restore-gate.ts:20`).
-- The only unstamped case allowed to start is a preproduction box over an unstamped database
-  (`deployment-guard.ts:13-25`), which no venue path produces.
+- The start check over an unstamped database (`apps/server/src/deployment-guard.ts:13-25`) looks
+  at the records only on a production box, and refuses only preproduction records or records with
+  no environment. A reviewer's throwaway test showed a test box over an unstamped database holding
+  production records, or records with no environment, starts normally; production over unstamped
+  production records also starts (`apps/server/src/deployment-guard.test.ts:111`).
 - `fiscal.environment_unknown` needs a record with no environment. The only writers of
   `registros_facturacion` are `chain.ts:264`, whose `entorno` is typed non-null
   (`chain.ts:71,78`, `registro-row.ts:54`), and the handover return
@@ -88,12 +93,17 @@ the fiscal module has a precedent: `packages/fiscal-verifactu/src/clock-stop-inc
    the records sent. Params (`errors.ts:215`): `registroIds` (the records sent, in order), `csv`
    (the submission's code), `lineasRespuesta` (each line: invoice number and date, operation,
    status, code, AEAT's message). `sale_id` is the first record's sale. **What happens to the
-   records:** each unmatched record goes back to waiting with a later retry time, or stays held if
-   it was a held chain's hourly probe (`awaitReadableAnswer`, `drain.ts:1658-1681`); a record waits
-   while an earlier record on its chain is still waiting for its retry or being sent
-   (`claimBatch`, `drain.ts:658-666`). **Limit:** while the alert is open, a later mismatched reply
-   whose first record belongs to the same sale keeps none of its lines (`errors.ts:210-213`), so
-   the lines shown are the first kept, not necessarily the latest reply.
+   records:** each unmatched record goes back to waiting with a later retry time
+   (`awaitReadableAnswer`, `drain.ts:1666-1673`), except a held chain's hourly probe, which skips
+   that update and stays held until its next probe an hour later (`drain.ts:1654-1656`, `1666`;
+   interval `drain.ts:74`, `1088`). Each one also raises a "status unknown" alert
+   (`fiscal.estado_desconocido`, `drain.ts:1674-1681`; records of one sale share one while it is
+   open, `incidents_open_dedup`). A record waits while an earlier record on its chain is still
+   waiting for its retry or being sent (`claimBatch`, `drain.ts:658-666`), and when it is claimed
+   it is held instead of sent if an earlier record on its chain is held (`haltOpenChainClaims`,
+   `drain.ts:788-877`, the check at `848-853`). **Limit:** while the alert is open, a later
+   mismatched reply whose first record belongs to the same sale keeps none of its lines
+   (`errors.ts:210-213`), so the lines shown are the first kept, not necessarily the latest reply.
 2. **Local validation warnings — `fiscal.record_flagged` and `fiscal.record_totals_disagree`**
    (warnings). Raised by `attemptAppend` after the record is written (`chain.ts:283-296`), so the
    record exists and is sent like any other; the drain never reads incidents. Params: `fields` and
@@ -227,6 +237,9 @@ Math.floor(generated / 1000)`, exactly one match or null.
     `record` names that invoice.
   - a second record of the same sale generated in the same second: `record` is null for that
     warning (the exactly-one rule).
+  - a record of a different sale generated in the same second as the flagged record: `record`
+    still names the flagged invoice, never the other sale's record (matching stays within the
+    warning's `sale_id`).
   - a chain check: a record appended, then `recordIncident` with
     `new AppError("chain.verification_failed", …)` built exactly as `record-sale.ts:208-217`
     builds it from a `predecessor-link-mismatch` issue naming that record (the params type is
@@ -251,6 +264,9 @@ Math.floor(generated / 1000)`, exactly one match or null.
   - `filing-overview-routes.test.ts`, new case: a manager's answer carries `warnings` with the
     shape of Task 1 (one seeded flagged record), and `cases=all` reads it with no limit (spy on
     `readFilingWarnings` as the file already spies on `readFilingOverview`).
+  - the existing case "refuses a supervisor, who may view reports but not export them"
+    (`filing-overview-routes.test.ts:78-85`), which already asserts `readFilingOverview` was not
+    called (`:84`), also asserts `readFilingWarnings` was not called.
   - `alerts.test.ts`: **the one existing assertion this plan changes.** The whole-shape pin of
     `FISCAL_ALERTS` gains four entries (no entry is removed or altered), each
     `{ prefix, area: "fiscal", permission: "fiscal.view", screen: "fiscal-filing" }` for
@@ -299,9 +315,12 @@ line says "Showing the newest {shown} of {total}. Export them to see every one."
 
 1. **AEAT answers that did not match what was sent** / **Respuestas de la AEAT que no cuadran con
    lo enviado**. Line: "AEAT answered {sent} records with {lines} lines, so Waitron applied none of
-   them." Muted: "Seen {time}". **What happens now:** "Waitron sends each record again unless an
-   earlier record on its chain is on hold. The state of each one now is below." (the same claim as
-   the reviewed alert, receipts `drain.ts:1658-1681`, `drain.ts:658-666`). Technical details: the
+   them." Muted: "Seen {time}". **What happens now:** "Waitron sends each record again later, unless
+   an earlier record on its chain is on hold, which puts it on hold too. A record that was already
+   on hold stays on hold and is tried again an hour later. The state of each one now is below."
+   (receipts: sent again, `drain.ts:1666-1673`; held behind an earlier held record,
+   `drain.ts:848-853`; an on-hold record stays on hold, `drain.ts:1666`, retried after
+   `BRAKE_PROBE_INTERVAL_MS`, `drain.ts:74`, `1088`). Technical details: the
    submission code (`csv`); "Records sent": each "{number} · {date} · {state now}", state through
    the existing `fiscal_filing.record_state.*` strings; "AEAT's lines": each "{number} · {date} ·
    {operation} {status} {code}" with the message in `aeatWords`; and the note "These are the lines
@@ -373,6 +392,16 @@ No buttons, no colour beyond existing tokens, no new primitive.
 ## Limits this step leaves (none needs new storage to state)
 
 - A reply's later mismatched lines are not kept while its alert is open (`errors.ts:210-213`).
+- A mismatched reply also raises a "status unknown" alert (`fiscal.estado_desconocido`) for each
+  record it leaves unanswered (`drain.ts:1674-1681`; records of one sale share one while it is
+  open). Those alerts have no link to the page (`alerts.ts` claims no screen for that code) and this
+  step adds none.
+- A sale's later validation warning is lost while an earlier one of the same code for that sale is
+  still open: `raiseWarning` (`chain.ts:306-320`) calls `recordIncident`, whose insert does nothing
+  on a conflict (`packages/core/src/incidents.ts:103-116`) with the one-open-row-per-source,
+  device, code and sale index (`packages/db/src/schema/incidents.ts:69-76`). A reviewer's throwaway
+  test flagged an invoice and then its cancellation in the same sale; only one incident was kept,
+  so the page shows the first record's warning only.
 - A validation warning keeps field names and codes, never values (`errors.ts:135`).
 - A predecessor check covers two records, not the chain (`verify.ts:41-106`); the page says what it
   found, not that the rest of the chain is sound.
