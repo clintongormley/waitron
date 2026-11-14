@@ -473,6 +473,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).**
   [Detail](backlog/ci.md#menu-prices-narrow-layout-ci-failure-still-needs-a-cause-a613)
 
+- **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/catalogue.md#bundle-tabs-selected-visible)
+
 - **A884. Deleting an options or extras list leaves it on the published menus until they are
   republished.**
   [Detail](backlog/catalogue.md#a884-deleting-an-options-or-extras-list-leaves-it-on-the-published-menus-until-they-are-republished)
