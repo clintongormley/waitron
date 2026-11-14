@@ -130,6 +130,9 @@ it("copies the source ticks with a new name in one confirmation", async () => {
   await expect
     .poll(() => create.mock.calls)
     .toEqual([[{ name: "Bookkeeper", permissions: ["report.view"], copiedFrom: "accounts" }]]);
+  await expect.poll(() => el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
+  expect(q(el, "editor")).not.toBeNull();
+  expect(q(el, "editor").querySelector("h1")!.textContent).toBe("Accountant");
 });
 it("names the affected people in the only delete confirmation", async () => {
   const remove = vi.fn().mockResolvedValue({ removedFrom: 2 });

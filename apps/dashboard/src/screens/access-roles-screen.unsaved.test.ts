@@ -150,16 +150,28 @@ it("keeps a draft when Reload is declined and reloads after explicit Discard", a
   };
   const { el: app } = await mountWidget<RoleLeaveApp>("role-leave-test-app", {
     api: {
-      listAccessRoles: async () => [
-        account,
-        {
-          id: "admin",
-          builtInKey: "admin",
-          name: null,
-          permissions: ["report.view"],
-          holderCount: 1,
-        },
-      ],
+      listAccessRoles: vi
+        .fn()
+        .mockResolvedValueOnce([
+          account,
+          {
+            id: "admin",
+            builtInKey: "admin",
+            name: null,
+            permissions: ["report.view"],
+            holderCount: 1,
+          },
+        ])
+        .mockResolvedValue([
+          { ...account, name: "Ledger" },
+          {
+            id: "admin",
+            builtInKey: "admin",
+            name: null,
+            permissions: ["report.view"],
+            holderCount: 1,
+          },
+        ]),
     } as unknown as DashboardApi,
   });
   const screen = app.shadowRoot!.querySelector("dashboard-access-roles-screen")!;
@@ -174,5 +186,5 @@ it("keeps a draft when Reload is declined and reloads after explicit Discard", a
   expect(field.value).toBe("Draft");
   screen.shadowRoot!.querySelector<HTMLElement>("[data-test=reload]")!.click();
   await choose(app, "discard");
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-input")?.value).toBe("Books");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-input")?.value).toBe("Ledger");
 });

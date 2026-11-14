@@ -331,6 +331,7 @@ export class AccessRolesScreen extends LitElement {
       },
       {
         key: "people",
+        choosable: "shown",
         label: t("access_roles.people"),
         cell: (role) => String(role.holderCount),
         sortValue: (role) => role.holderCount,
@@ -494,7 +495,7 @@ export class AccessRolesScreen extends LitElement {
               }}
             ></wt-input>`
           : html`<p data-test="delete-message">
-              ${fill(role.holderCount === 1 ? "access_roles.delete_one" : "access_roles.delete_message", { count: String(role.holderCount), role: accessRoleName(role) })}
+              ${fill(role.holderCount === 1 ? "access_roles.delete_message_one" : "access_roles.delete_message", { count: String(role.holderCount), role: accessRoleName(role) })}
             </p>`
       }
       <wt-form-actions
@@ -539,6 +540,17 @@ export class AccessRolesScreen extends LitElement {
               </div>
             </div>
             <wt-data-table
+              viewKey="waitron.access-roles.table"
+              customiseColumnsLabel=${t("table.customise_columns")}
+              customiseLabel=${t("table.customise")}
+              restoreColumnsLabel=${t("table.restore_columns")}
+              doneLabel=${t("table.done")}
+              moveColumnLabel=${t("table.move_column")}
+              showColumnLabel=${t("table.show_column")}
+              hideColumnLabel=${t("table.hide_column")}
+              alwaysShownColumnLabel=${t("table.column_always_shown")}
+              lastShownColumnLabel=${t("table.column_last_shown")}
+              columnPositionLabel=${t("table.column_position")}
               aria-label=${t("access_roles.title")}
               .rows=${this.roles}
               .columns=${this.#columns()}
