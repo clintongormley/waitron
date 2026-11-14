@@ -4191,9 +4191,9 @@ export const es: Record<StringKey, string> = {
   "permission.booking.manage.help":
     "Crea y cambia reservas en Reservas. Sienta a los clientes, cancela una reserva o márcala como finalizada o no presentada.",
   "permission.system.manage.help":
-    "Gestiona copias de seguridad y la conexión a Cloud, descarga archivos de recuperación, consulta diagnósticos y reinicia el equipo. Instala certificados fiscales y reintenta envíos fiscales; cambiar el reloj o el servidor de correo requiere Administrar esta caja.",
+    "Gestiona copias de seguridad y la conexión a Cloud, descarga archivos de recuperación, consulta diagnósticos y reinicia el servidor. Instala certificados fiscales y reintenta envíos fiscales; cambiar el reloj o el servidor de correo requiere Administrar esta caja.",
   "permission.system.box_admin.help":
-    "Confirma o corrige el reloj del equipo y cambia el servidor de correo. Para abrir Estado del equipo y consultar los ajustes del correo también necesitas Gestionar el sistema.",
+    "Confirma o corrige el reloj del servidor y cambia el servidor de correo. Para abrir Estado del servidor y consultar los ajustes del correo también necesitas Gestionar el sistema.",
   "permission.node.manage.help":
     "Gestiona los servidores del local: prepara uno de reserva o un espejo, traspasa el servicio, activa una reserva y retira un servidor. Sigue la página Servidores para los pasos de cada operación.",
 
