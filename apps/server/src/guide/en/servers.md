@@ -7,8 +7,6 @@ and data. The spare’s page shows its status; it takes no sales and offers no d
 
 ## Add a spare box {#adding-a-spare}
 
-A venue set up in Spain cannot add a spare yet.
-
 A spare that has finished joining cannot be removed in this version. Do not add one to a venue
 that is open for business until an update lets you remove it.
 

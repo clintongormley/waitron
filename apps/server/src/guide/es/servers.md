@@ -8,8 +8,6 @@ ofrece acceso al panel de gestión.
 
 ## Añadir un servidor de reserva {#adding-a-spare}
 
-Un local configurado en España aún no puede añadir un servidor de reserva.
-
 En esta versión no se puede retirar un servidor de reserva que ha terminado de unirse. No lo añadas
 a un local que esté abierto al público hasta que una actualización permita retirarlo.
 

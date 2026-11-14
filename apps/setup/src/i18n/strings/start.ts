@@ -15,7 +15,7 @@ export const startEn = {
     "Restore a backup onto this server when no other server is still running with newer restaurant data, or rebuild from the continuous copy in your own storage bucket when the old server is gone. A mirror cannot take over yet.",
   "role.mirror.heading": "Add a mirror node",
   "role.mirror.copy":
-    "This server joins the primary and keeps a copy of the restaurant's data. It cannot take over yet, and a restaurant that files with Veri*Factu cannot add one yet. To recover a restaurant, choose Restore from backup or Restore from my bucket.",
+    "This server joins the primary and keeps a copy of the restaurant's data. It cannot take over yet. To recover a restaurant, choose Restore from backup or Restore from my bucket.",
   "role.restore.heading": "Restore from backup",
   "role.restore.copy":
     "Recover onto this fresh server from an encrypted Waitron backup when no other server is still running with newer restaurant data.",
@@ -141,7 +141,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
     "Restaura una copia de seguridad en este servidor cuando no haya otro servidor funcionando con datos más recientes del restaurante, o reconstrúyelo desde la copia continua de tu propio bucket cuando el servidor anterior ya no esté. Una réplica aún no puede sustituir al principal.",
   "role.mirror.heading": "Añadir un nodo réplica",
   "role.mirror.copy":
-    "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo, y un restaurante que presenta sus facturas con Veri*Factu aún no puede añadir una réplica. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
+    "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
   "role.restore.heading": "Restaurar desde una copia de seguridad",
   "role.restore.copy":
     "Recupera el restaurante en este servidor nuevo desde una copia de seguridad cifrada de Waitron cuando no haya ningún otro servidor funcionando con datos más recientes del restaurante.",

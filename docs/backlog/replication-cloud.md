@@ -279,17 +279,17 @@ initial copy ([design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-
 question**: `tenant_credentials` is `local` and a blob sealed under one node's ring cannot be opened
 under another's. Since A947 slice 3a a spare receives the main box's ring when it joins
 (`credentialsRing` in `apps/server/src/mirror-bundle.ts`, written by `apps/server/src/adopt.ts`), so
-rows a copy of `venue.db` brings open there. Since 3b-6a a spare of a venue that does not file with
-Veri*Factu receives that copy; nothing yet delivers a ring the main box changes after the join
-(A1273).
+rows a copy of `venue.db` brings open there. Since 3b-6a a spare receives that copy, and since 3b-F
+a spare of a venue that files with Veri*Factu does too; nothing yet delivers a ring the main box
+changes after the join (A1273).
 
 ## Adding a mirror while the internet is down
 
 Owner, 2026-10-02. A second machine can rebuild from the owner's bucket
 (`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
-For a venue that does not file with Veri*Factu, a joining spare now receives a copy from the
-primary over the venue's network, puts it in place at its next start and finishes joining as a
-standby (it cannot take over yet); a Veri*Factu venue is still refused until 3b-F. Wanted: adding
+A joining spare now receives a copy from the primary over the venue's network, puts it in place at
+its next start and finishes joining as a standby (it cannot take over yet); since 3b-F that
+includes a venue that files with Veri*Factu. Wanted: adding
 a mirror works with the internet down, which is the very case an on-prem mirror exists for. Left: the owner measures it on two boxes with the internet unplugged (3b plan Task 6.11). A cloud mirror needs the internet anyway and is outside this item.
 
 ## A stop made while `cloud/replacement.json` is unreadable is not recorded in it
@@ -1098,8 +1098,8 @@ the box's role is saved a moment after the switch's fiscal save, and a spare che
 certificate fingerprint before it receives the venue's keys. Slice 3b's build
 [plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) was written on 2026-11-04:
 eight pull requests, split on 2026-11-10 into eleven, two of them fiscal and landed by the owner (3b-G, the start steps that decide
-whether a box files; 3b-F, letting a Veri*Factu venue add a spare, which waits on the owner's
-question Q1). 3b-1 landed as [#2721](https://github.com/clintongormley/waitron/pull/2721); 3b-2 (each
+whether a box files; 3b-F, letting a Veri*Factu venue add a spare, under the owner's answer (c) to
+question Q1 on 2026-11-04: its dormant tax-filing setup is written when the spare is switched on). 3b-1 landed as [#2721](https://github.com/clintongormley/waitron/pull/2721); 3b-2 (each
 box's own name) as [#2742](https://github.com/clintongormley/waitron/pull/2742); 3b-3 (a joining spare
 takes the venue's certificate authority as its own) as
 [#2761](https://github.com/clintongormley/waitron/pull/2761); 3b-4 (box-to-box calls find a `.local` box by

@@ -1,5 +1,4 @@
-import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -7,13 +6,12 @@ import { TLSSocket } from "node:tls";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
+import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   insertReservedNodeTx,
   nodes,
   readNodeMembership,
   readTenant,
-  stampDeployment,
   withNodeTransaction,
   withTransaction,
   writeNodeMembership,
@@ -21,16 +19,11 @@ import {
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { HandoverBinding } from "@waitron/handover";
-import { hashPassword, hashPin } from "@waitron/identity";
-import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { endorseKey, signDocumentBody } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules } from "@waitron/module";
 import { readHandoverOperation, readNodeMode, recordHandoverRestrictionTx } from "@waitron/node-db";
-import { planVenue } from "@waitron/provisioning";
-import { applyAllocatedTestVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { adoptFromPrimary, type AdoptCredential } from "./adopt.js";
 import { captureFinalCopy, finalCopyPath } from "./handover-capture.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
@@ -38,26 +31,16 @@ import { receivedCopyPath } from "./handover-destination-duty.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { advanceHandover } from "./handover-store.js";
-import type { MirrorBundle } from "./mirror-bundle.js";
-import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
-import { holdRecoveryKey } from "./testing/recovery-key.js";
-import { replaceBackupSettings } from "./backup-env-writer.js";
-import { readModuleConfig, writeModuleConfig } from "./module-config.js";
+import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
-import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
-import { mintSelfSignedServerCert } from "./self-signed-cert.js";
-import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { MAIN_URL, joinSpare, veriFactuMainBox } from "./testing/veri-factu-join.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const MAIN_URL = "https://main.test";
-const SPARE_URL = "https://spare.test";
-const PASSWORD = "correct horse";
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const mainBox = useVenueDb({ migrations, timeoutMs: 60_000 });
@@ -84,130 +67,10 @@ afterEach(async () => {
  * by hand the taxpayer and the chart its first copy will bring (A947 3b's Task 6.3).
  */
 async function joined() {
-  const moduleConfig = await readModuleConfig(mainBox.db);
-  const modules = enabledModules(ALL_MODULES, moduleConfig);
-  const venue = await applyAllocatedTestVenue(
-    planVenue(
-      {
-        country: "ES",
-        taxId: "81000001K",
-        legalName: "Two Boxes SL",
-        name: "Main box",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Sale",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
-        seriesCode: "FA",
-        rectificativeSeriesCode: "RF",
-        admin: {
-          displayName: "Owner",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword(PASSWORD),
-          email: "owner@example.test",
-        },
-      },
-      modules,
-    ),
-    { db: mainBox.db, modules },
-  );
-  await stampDeployment(mainBox.db, "preproduction");
-  await mkdir(join(mainState, "tls"), { recursive: true });
-  const authority = mintSelfSignedServerCert({
-    hostnames: ["waitron.local"],
-    ipAddresses: [],
-    now: new Date(),
-  });
-  await writeFile(join(mainState, "tls", "ca.crt"), authority.caCertPem);
-  await writeFile(join(mainState, "tls", "ca.key"), authority.caKeyPem);
-  await holdRecoveryKey(mainState);
-  const designated = { nodeId: venue.nodeId };
-  const mainId: string = venue.nodeId;
-  await establishNodeIdentity({ ownerDb: mainBox.db, node: mainBox.node, ring: RING }, mainId);
-  const mainKey = await readNodeIdentityKey(mainBox.node, RING, mainId);
-  await writeNodeMembership(
-    mainBox.db,
-    signedMembershipDoc(1, {
-      signerNodeId: mainId,
-      keyPair: { publicKey: nodeSigningPublicKey(mainKey), privateKey: mainKey },
-      nodes: [{ nodeId: mainId, contactUrl: MAIN_URL, standing: "serving-primary" }],
-    }),
-  );
-  const session = await openManagementSession(mainBox.db, "admin");
-  const [{ email: adminEmail }] = (
-    await mainBox.db.execute<{ email: string }>(
-      sql`select email from persons where id = ${session.personId}`,
-    )
-  ).rows as [{ email: string }];
-  await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, session.token));
-
-  const bundleApp = new Hono();
-  mountMirrorBundleApi(bundleApp, {
-    appDb: mainBox.db,
-    node: mainBox.node,
-    ring: RING,
-    stateDir: mainState,
-    boxHostname: "waitron.local",
-    advertisedOrigin: MAIN_URL,
-    designated,
-    accountKey: Buffer.alloc(32, 9).toString("base64"),
-    credentialKeyRing: TOTP_KEY_RING,
-    wakeSpareJoin: () => {},
-  });
-
-  let standby!: { nodeId: string; publicKey: string };
-  let spareId!: string;
-  await adoptFromPrimary(
-    {
-      ownerDb: spareBox.db,
-      ownerNode: spareBox.node,
-      ring: RING,
-      persistCredentialsRing: async () => {},
-      fetchBundle: async (_url, credential: AdoptCredential, sent) => {
-        standby = { nodeId: sent.nodeId, publicKey: sent.publicKey };
-        const response = await bundleApp.request("/management-api/mirror-bundle", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            email: credential.email,
-            password: credential.password,
-            standbyNodeId: sent.nodeId,
-            standbyPublicKey: sent.publicKey,
-            standbyContactUrl: sent.contactUrl,
-            standbyStoreUrl: sent.storeUrl,
-            standbyAt: sent.at,
-          }),
-        });
-        const bundle = await response.json();
-        expect(response.status, JSON.stringify(bundle)).toBe(200);
-        return bundle as MirrorBundle;
-      },
-      advertisedOrigin: SPARE_URL,
-      spareStorePort: 7443,
-      environment: "preproduction",
-      persistTrading: async (args) => {
-        spareId = args.nodeId;
-      },
-      persistBackupSettings: (settings) => replaceBackupSettings(spareState, settings),
-      persistModuleConfig: async (config) => {
-        await writeModuleConfig(spareBox.db, config, null);
-      },
-      stateDir: spareState,
-      database: "spare",
-      listIpv4: () => [],
-      now: () => new Date(),
-    },
-    {
-      primaryUrl: MAIN_URL,
-      credential: { email: adminEmail, password: PASSWORD },
-    },
-    { beforeFirstWrite: async () => {} },
-  );
+  const boxes = { mainBox, spareBox, mainState, spareState, ring: RING };
+  const main = await veriFactuMainBox(boxes);
+  const { modules, mainId, mainKey, session } = main;
+  const { standby, spareId } = await joinSpare(boxes, main);
   expect((await readNodeMode(spareBox.node, spareId)).mode).toBe("mirror");
 
   await seedVenue(spareBox.db);

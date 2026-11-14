@@ -33,12 +33,12 @@ describe("setup-role-screen", () => {
     [
       "en-GB",
       "A mirror cannot take over yet.",
-      "This server joins the primary and keeps a copy of the restaurant's data. It cannot take over yet, and a restaurant that files with Veri*Factu cannot add one yet. To recover a restaurant, choose Restore from backup or Restore from my bucket.",
+      "This server joins the primary and keeps a copy of the restaurant's data. It cannot take over yet. To recover a restaurant, choose Restore from backup or Restore from my bucket.",
     ],
     [
       "es-ES",
       "Una réplica aún no puede sustituir al principal.",
-      "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo, y un restaurante que presenta sus facturas con Veri*Factu aún no puede añadir una réplica. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
+      "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
     ],
   ] as const)(
     "says a mirror keeps a copy but cannot take over yet (%s)",
@@ -98,7 +98,7 @@ describe("setup-role-screen in Spanish", () => {
     expect(text(q(el, "h1")!)).toBe("Unirse a un restaurante existente o recuperarlo");
     expect(row(el, "choose-mirror")).toEqual({
       heading: "Añadir un nodo réplica",
-      copy: "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo, y un restaurante que presenta sus facturas con Veri*Factu aún no puede añadir una réplica. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
+      copy: "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
     });
     expect(row(el, "choose-restore")).toEqual({
       heading: "Restaurar desde una copia de seguridad",
