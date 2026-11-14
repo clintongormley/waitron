@@ -1963,7 +1963,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **A1398-2. Finish the four-minute target for dashboard and till jobs.** Measure dashboard and till’s coverage-on whole jobs, including the archiver wait, on a green full run with healthy checkout timings before another cut. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
+- **A1398-2. Finish the four-minute target for dashboard and till jobs.** Qualify the cleared six-shard dashboard cut after matching runner support is published; profile till's remaining slow files and keep the archiver wait open. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 

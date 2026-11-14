@@ -348,6 +348,12 @@ Judge the first cut by drafts' own file time in its PR run; do not compare cover
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
 cause and its measurement to the watcher before splitting files or changing capacity.
 
+The [14 November plan](../superpowers/plans/2026-11-14-a1398-next-browser-cut.md)
+records the measured dashboard/till baseline and the watcher's clearance for six dashboard
+shards. Build after matching Cloud runner support is published; qualify hosted coverage-on
+jobs at 240 seconds or under and prove server admission of shards 5–6 before merging.
+Till's internal cause and the archiver wait remain open.
+
 ## Bundle A1398: Pack the other packages' test shards by measured time
 
 1 conditional entry. Add an inventory of run test files only if a same-count wrong-files case is

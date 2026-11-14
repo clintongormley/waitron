@@ -1,6 +1,8 @@
 # A1398-2: next browser CI cut
 
-Codex draft, reviewed by Claude on 14 November; watcher clearance is pending. Build inline only after clearance.
+Codex plan, reviewed by Claude on 14 November; the watcher cleared corrected head `da2137be72`
+in `~/waitron-campaign-i/questions.md` at 04:20. Build Waitron's side only after lane G confirms
+the matching Cloud runner support is published. No owner design approval is claimed.
 The ask in `~/waitron-campaign-i/queue.md` is:
 > every CI test job finishes in about four minutes (owner, 2026-10-09 and 2026-10-11; CLAUDE.md §2: "Fix the cause, never cut a check"). Measure dashboard and till on current main first; a performance plan needs measured causes and expected saving, at most one page, Claude review and watcher clearance.
 
