@@ -257,6 +257,33 @@ describe("recordReplacement — the replacement sale", () => {
     });
   });
 
+  it("stores the operation date it was given on the replacement's own row", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    const { saleId } = await replace(backend, originalId, { operationDate: "2026-02-27" });
+
+    const { rows } = await suite.db.execute<{ id: string; operation_date: string | null }>(
+      sql`select id, operation_date from sales order by invoice_number, series_id`,
+    );
+    expect(Object.fromEntries(rows.map((r) => [r.id, r.operation_date]))).toEqual({
+      [originalId]: null,
+      [saleId]: "2026-02-27",
+    });
+  });
+
+  it("stores no operation date when it was given none", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    const { saleId } = await replace(backend, originalId);
+
+    const { rows } = await suite.db.execute<{ operation_date: string | null }>(
+      sql`select operation_date from sales where id = ${saleId}`,
+    );
+    expect(rows).toEqual([{ operation_date: null }]);
+  });
+
   it("names no operation date to the backend when it was given none", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);

@@ -210,8 +210,9 @@ function notSubstituteClause(): SQL {
 
 /**
  * A corrective by replacement is never counted: it repeats its original's full amounts, and the
- * original carries the sale, on its own day and in its own VAT period. A later refund of the
- * replacement is an ordinary corrective and is counted.
+ * original carries the sale — on its own day, and in the VAT period of the replacement's
+ * `operation_date` when it has one (`computeVatReturn`). A later refund of the replacement is an
+ * ordinary corrective and is counted.
  */
 function notReplacementClause(): SQL {
   return sql`s.replaces_original = 0`;

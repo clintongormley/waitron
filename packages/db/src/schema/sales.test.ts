@@ -833,4 +833,36 @@ describe("sales — a replacement corrective", () => {
       .where(eq(sales.id, originalSaleId));
     expect(row!.replacesOriginal).toBe(false);
   });
+
+  it("refuses an operation date on a sale that is not a replacement", async () => {
+    const ordinary = await captureError(() =>
+      insert({ invoiceNumber: 2, operationDate: "2026-02-28" }),
+    );
+    expect(isRefusal(ordinary, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(ordinary)).toMatch(/sales_operation_date_ck/);
+
+    const byDifferences = await captureError(() =>
+      insert({
+        invoiceNumber: 3,
+        total: -50,
+        correctsSaleId: originalSaleId,
+        operationDate: "2026-02-28",
+      }),
+    );
+    expect(isRefusal(byDifferences, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(byDifferences)).toMatch(/sales_operation_date_ck/);
+  });
+
+  it("stores an operation date on a replacement", async () => {
+    const [row] = await insert({
+      invoiceNumber: 2,
+      replacesOriginal: true,
+      correctsSaleId: originalSaleId,
+      operationDate: "2026-02-28",
+    });
+    const [stored] = suite.db.all<{ operation_date: string | null }>(
+      sql`select operation_date from sales where id = ${row!.id}`,
+    );
+    expect(stored!.operation_date).toBe("2026-02-28");
+  });
 });
