@@ -415,7 +415,9 @@ describe("the waiting start", () => {
         ],
       });
       await new Promise((done) => setTimeout(done, 10));
-      const stepping = app!.request("/step", { method: "POST" }).finally(() => stepAnswered());
+      const stepping = Promise.resolve(app!.request("/step", { method: "POST" })).finally(() =>
+        stepAnswered(),
+      );
       answer(PROCEED);
       await new Promise((done) => setTimeout(done, 10));
       release();
