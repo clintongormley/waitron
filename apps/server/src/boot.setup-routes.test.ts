@@ -95,6 +95,32 @@ vi.mock("@hono/node-server", async () => {
   return ephemeralHttpMock();
 });
 
+const MAIN_NODE_ID = "44444444-4444-4444-8444-444444444444";
+
+/** A main box's answer to an adopt, with the parts a test varies given. */
+function bundleFor(overrides: {
+  boxCaPem: string;
+  boxCaKeyPem: string;
+  endorsement: unknown;
+  moduleOverrides: Record<string, boolean>;
+  primaryPublicKey: string;
+}) {
+  const { endorsement, ...rest } = overrides;
+  return {
+    designated: { nodeId: MAIN_NODE_ID },
+    tenant: { country: "ES", taxId: "80000001K" },
+    primaryNode: { name: "Till 1", filingModule: "fiscal-verifactu", taxModule: null },
+    environment: "preproduction",
+    boxHostname: "waitron.local",
+    ...PAIR_BUNDLE_FIELDS,
+    accountKey: Buffer.alloc(32, 9).toString("base64"),
+    reservedIdentity: { modules: {}, series: [], endorsement },
+    credentialsRing: { key: Buffer.alloc(32, 8).toString("base64"), version: 1 },
+    backupSettings: null,
+    ...rest,
+  };
+}
+
 const { beforeServerStarts, startServer, httpPort, startConfiguredServer } =
   ephemeralServerFixture();
 
@@ -1866,7 +1892,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("an adopt in the setup start restarts through the seam, not by signalling the process", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const primaryId = "44444444-4444-4444-8444-444444444444";
     const primaryKeys = generateNodeKeyPair();
     const primary = createHttpServer((req, res) => {
       const chunks: Buffer[] = [];
@@ -1878,31 +1903,20 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         };
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
-          JSON.stringify({
-            designated: { nodeId: primaryId },
-            tenant: { country: "ES", taxId: "80000001K" },
-            primaryNode: { name: "Till 1", filingModule: "fiscal-verifactu", taxModule: null },
-            environment: "preproduction",
-            boxHostname: "waitron.local",
-            boxCaPem: MAIN_AUTHORITY.caCertPem,
-            ...PAIR_BUNDLE_FIELDS,
-            accountKey: Buffer.alloc(32, 9).toString("base64"),
-            reservedIdentity: {
-              modules: {},
-              series: [],
+          JSON.stringify(
+            bundleFor({
+              boxCaPem: MAIN_AUTHORITY.caCertPem,
+              boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
               endorsement: endorseKey(
                 sent.standbyNodeId,
                 sent.standbyPublicKey,
-                primaryId,
+                MAIN_NODE_ID,
                 primaryKeys.privateKey,
               ),
-            },
-            moduleOverrides: { "fiscal-verifactu": false },
-            primaryPublicKey: primaryKeys.publicKey,
-            credentialsRing: { key: Buffer.alloc(32, 8).toString("base64"), version: 1 },
-            backupSettings: null,
-            boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
-          }),
+              moduleOverrides: { "fiscal-verifactu": false },
+              primaryPublicKey: primaryKeys.publicKey,
+            }),
+          ),
         );
       });
     });
@@ -1992,33 +2006,18 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("refuses an adopt into a database stamped for another environment without locking setup", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const bundle = {
-      designated: {
-        nodeId: "44444444-4444-4444-8444-444444444444",
-      },
-      tenant: { country: "ES", taxId: "80000001K" },
-      primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
-      environment: "preproduction",
-      boxHostname: "waitron.local",
+    const bundle = bundleFor({
       boxCaPem: "fixture-ca",
-      ...PAIR_BUNDLE_FIELDS,
-      accountKey: Buffer.alloc(32, 9).toString("base64"),
-      reservedIdentity: {
-        modules: {},
-        series: [],
-        endorsement: {
-          nodeId: "66666666-6666-4666-8666-666666666666",
-          publicKey: "fixture-key",
-          endorsedBy: "44444444-4444-4444-8444-444444444444",
-          signature: "fixture-signature",
-        },
+      boxCaKeyPem: "fixture-ca-key",
+      endorsement: {
+        nodeId: "66666666-6666-4666-8666-666666666666",
+        publicKey: "fixture-key",
+        endorsedBy: MAIN_NODE_ID,
+        signature: "fixture-signature",
       },
       moduleOverrides: {},
       primaryPublicKey: "fixture-primary-key",
-      credentialsRing: { key: Buffer.alloc(32, 8).toString("base64"), version: 1 },
-      backupSettings: null,
-      boxCaKeyPem: "fixture-ca-key",
-    };
+    });
     const primary = createHttpServer((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(bundle));
