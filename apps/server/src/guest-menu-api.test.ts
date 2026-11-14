@@ -17,6 +17,7 @@ import {
 } from "@waitron/catalogue";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountGuestMenuApi, mountPublicGuestMenu } from "./guest-menu-api.js";
+import * as guestMenuApi from "./guest-menu-api.js";
 import "./errors.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 async function fixture() {
@@ -50,6 +51,32 @@ async function fixture() {
     },
   };
 }
+it("builds every Cloud page from the opted-in publication without dropping content-language tags", async () => {
+  const f = await fixture();
+  await expect((async () => guestMenuApi.readGuestMenuPages(suite.db, "en"))()).resolves.toBeNull();
+  await withTransaction(suite.db, async (tx) => {
+    await writeContentLanguages(tx, {
+      defaultLanguage: "ca-ES-valencia",
+      languages: ["ca-ES-valencia", "en", "fr"],
+    });
+    await setVenueDefaultCatalogue(tx, f.lunch);
+    await saveSettings(tx, GUEST_MENU_SETTINGS, {
+      doc: { enabled: true },
+      expectedRevision: 0,
+      personId: null,
+    });
+    await updateProduct(tx, f.soup, { customerName: { en: "Unpublished soup" } });
+  });
+  const body = await guestMenuApi.readGuestMenuPages(suite.db, "en");
+  expect(body!.defaultLanguage).toBe("ca-ES-valencia");
+  expect(Object.keys(body!.pages).sort()).toEqual(["ca-ES-valencia", "en", "fr"]);
+  expect(body!.pages.en).toContain("Soup for guests");
+  for (const html of Object.values(body!.pages)) {
+    expect(html).not.toContain("Unpublished soup");
+    expect(html).toContain("?lang=ca-ES-valencia");
+    expect(html).toContain("?lang=fr");
+  }
+});
 it("renders the publication, keeping later draft names and prices out", async () => {
   const f = await fixture();
   await withTransaction(suite.db, (tx) =>

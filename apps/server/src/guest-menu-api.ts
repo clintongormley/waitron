@@ -44,6 +44,28 @@ async function sharingStatus(tx: Transaction, serving: () => boolean) {
   const { doc, revision } = await readSettings(tx, GUEST_MENU_SETTINGS);
   return { ...doc, revision, available: serving() && (await readGuestMenu(tx)) !== null };
 }
+export async function readGuestMenuPages(db: Database, venueLocale: string) {
+  const live = await readGuestMenu(db);
+  if (live === null) return null;
+  const languages = await readContentLanguages(db, venueLocale);
+  const venue = await readVenue(db);
+  return {
+    defaultLanguage: languages.defaultLanguage,
+    pages: Object.fromEntries(
+      languages.languages.map((language) => [
+        language,
+        renderGuestMenuPage(
+          publicGuestMenu(live.document, languages, language),
+          venue.name,
+          languages.defaultLanguage,
+          true,
+          undefined,
+          "lang",
+        ),
+      ]),
+    ),
+  };
+}
 export function mountGuestMenuApi(
   app: Hono,
   deps: { db: Database; venueLocale?: string; serving: () => boolean },
