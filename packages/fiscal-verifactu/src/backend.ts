@@ -126,6 +126,13 @@ type OriginalAltaForCorrection = Pick<
   | "tipo_rectificativa"
 >;
 
+/** A `YYYY-MM-DD` day that exists in the calendar (`Date.parse` rolls 2026-02-30 into March). */
+function isCalendarDay(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 /**
  * One filed VAT line. "S1" is sujeta y no exenta, sin inversión del sujeto pasivo, the ordinary
  * domestic sale; a rectificativa por diferencias files the same shape with negative figures. No
@@ -494,6 +501,13 @@ export class VerifactuBackend implements FiscalBackend {
     sale: SaleForFiscalRecord,
     correction: { correctsSaleId: SaleId; replaces?: true; operationDate?: string },
   ): Promise<FiscalRecordRef> {
+    const { operationDate } = correction;
+    if (operationDate !== undefined && !isCalendarDay(operationDate)) {
+      throw new AppError("fiscal.record_invalid", {
+        fields: ["FechaOperacion"],
+        codes: ["FECHA_FORMAT"],
+      });
+    }
     const chart = await this.admitIssuance(tx, sale.nodeId);
     const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
       select id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura,
@@ -538,7 +552,6 @@ export class VerifactuBackend implements FiscalBackend {
 
     const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
-    const { operationDate } = correction;
     const fechaOperacion =
       replacesRefusedF2 &&
       operationDate !== undefined &&

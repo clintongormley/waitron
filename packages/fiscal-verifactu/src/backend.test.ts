@@ -830,6 +830,19 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
     expect(await storedReplacement()).toEqual([]);
   });
 
+  it.each(["2026-3-1", "2026-02-30", "2026-13-01", "01-03-2026"])(
+    "refuses an operation date of %s as a malformed record field, and records nothing",
+    async (operationDate) => {
+      const original = await originalWithDelivery("rechazado");
+
+      await expect(replace(original, laterDay, operationDate)).rejects.toMatchObject({
+        code: "fiscal.record_invalid",
+        params: { fields: ["FechaOperacion"], codes: ["FECHA_FORMAT"] },
+      });
+      expect(await storedReplacement()).toEqual([]);
+    },
+  );
+
   it("refuses a replacement of a refused original that is not a simplified invoice, and records nothing", async () => {
     const original = brandSaleId("88888888-8888-4888-8888-888888888888");
     await withTransaction(suite.db, async (tx) => {
