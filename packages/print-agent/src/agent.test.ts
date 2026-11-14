@@ -2719,6 +2719,26 @@ describe("createAgent — Bluetooth commands", () => {
     ]);
   });
 
+  it("an outcome carries a reason only when the host's is a known code", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const results: (() => Promise<unknown>)[] = [
+      async () => ({ ok: false, error: "melted", reason: "printer_melted" }),
+      async () => ({ ok: false, error: "melted", reason: 7 }),
+    ];
+    host.forgetBluetooth = vi.fn(() => results.shift()!()) as Host["forgetBluetooth"];
+    const c = client({
+      pullJobs: scripted(reply({ bluetoothCommands: ["c1", "c2"].map(forget) })),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    await agent.runOnce();
+    expect(outcomesOn(c, 1)).toStrictEqual([
+      { id: "c1", ok: false, error: "melted" },
+      { id: "c2", ok: false, error: "melted" },
+    ]);
+  });
+
   it.each([
     // A PIN that is also a byte of the address, the printer's name ending in it, and a colon.
     ["45", `Failed to pair: org.bluez.Error.AuthenticationFailed Device ${MAC}`],

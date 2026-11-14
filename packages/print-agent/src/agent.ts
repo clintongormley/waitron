@@ -1,5 +1,6 @@
 import {
   BLUETOOTH_COMMAND_LIMIT,
+  BLUETOOTH_FAILURE_REASONS,
   createClient,
   describeRejection,
   withholdPin,
@@ -292,7 +293,7 @@ export function createAgent(opts: AgentOptions): Agent {
           : await host.forgetBluetooth(command.address);
       ok = result.ok === true;
       if (!ok && result.error !== undefined) error = describeRejection(result.error);
-      if (!ok) reason = result.reason;
+      if (!ok) reason = BLUETOOTH_FAILURE_REASONS.find((code) => code === result.reason);
     } catch (thrown) {
       error = describeRejection(thrown);
     }
