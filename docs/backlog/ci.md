@@ -1349,7 +1349,9 @@ A1271 PR. The server suites' larger build limits do not remove repeated metadata
 Audit these remaining CLI callers and their containing test or hook deadlines. Both pass the
 16-second-per-Git-read control, which does not exhaust the metadata subprocess budgets:
 
-- `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`: a 60-second build limit.
+- `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`: a 60-second build limit. It ran out
+  once (status null, 60,028 ms) in a local whole-package `test:coverage` run on 2026-11-14, on a
+  Mac with 73% memory free and other worktrees' typechecks running.
 - `packages/provisioning/src/cli-entry.test.ts`: a 120-second build limit leaves no allowance
   beyond the metadata subprocess budgets for compilation. No timeout failure was reproduced.
 
