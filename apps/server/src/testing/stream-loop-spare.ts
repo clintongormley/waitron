@@ -24,6 +24,7 @@ import { freePorts } from "./free-ports.js";
 import { waitUntil } from "./scenario-stages.js";
 import {
   BOOT_MS,
+  COPY_WAIT_MS,
   LINK_WAIT_MS,
   MIRROR_WAIT_MS,
   TestBox,
@@ -52,14 +53,20 @@ export const STREAM_LOOP_SPARE_PHASES = [
 export type StreamLoopSparePhase = (typeof STREAM_LOOP_SPARE_PHASES)[number];
 
 const STREAM_WAIT_MS = 30_000;
-// Half the two-box test's, so the loop's sum stays inside the AWS rehearsal's deadline, which
-// `stream-loop-scenario.test.ts` holds it to; the first copy took about 11 seconds locally.
-const COPY_WAIT_MS = 60_000;
 const HEALTH_MS = POLL_TRIES * POLL_INTERVAL_MS;
+// The two adopt requests, two sign-ins and closing three servers and C's store have no limits of
+// their own.
+const SPARE_UNTIMED_MS = 30_000;
 // B and C start side by side under one BOOT_MS; B restarts once more for the start check. C's
 // restarts during the join happen inside the link, copy and mirror waits, which bound them.
 export const STREAM_LOOP_SPARE_MS =
-  2 * BOOT_MS + 2 * HEALTH_MS + STREAM_WAIT_MS + LINK_WAIT_MS + COPY_WAIT_MS + MIRROR_WAIT_MS;
+  2 * BOOT_MS +
+  2 * HEALTH_MS +
+  STREAM_WAIT_MS +
+  LINK_WAIT_MS +
+  COPY_WAIT_MS +
+  MIRROR_WAIT_MS +
+  SPARE_UNTIMED_MS;
 
 const FISCAL_TABLES = [...FISCAL_CLASSIFICATION.map(({ table }) => table), "invoice_series"];
 
@@ -196,6 +203,7 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
 
     begin("spare-join");
     const fiscalAtJoin = fiscalRowsIn(dirsB.venue);
+    expect(Object.values(fiscalAtJoin).flat()).not.toEqual([]);
     const preparationB = await preparationIn(dirsB.state);
     const joined = await adoptFrom(urlC, clientC.via, primary);
     expect(joined.status, JSON.stringify(joined.body)).toBe(200);
@@ -229,9 +237,7 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
       });
     expect(nodeKeyIn(dirsC.venue, nodeIdC)).toBe(link.peerPublicKey);
     expect(nodeKeyIn(dirsB.venue, nodeIdC)).toBe(link.peerPublicKey);
-    const fiscalC = fiscalRowsIn(dirsC.venue);
-    expect(fiscalC.registros_facturacion).not.toEqual([]);
-    expect(JSON.stringify(fiscalC)).not.toContain(nodeIdC);
+    expect(fiscalRowsIn(dirsC.venue)).toEqual(fiscalAtJoin);
     expect(fiscalRowsIn(dirsB.venue)).toEqual(fiscalAtJoin);
     expect(await preparationIn(dirsB.state)).toBe(preparationB);
     expect(await preparationIn(dirsC.state)).toBeNull();

@@ -57,19 +57,16 @@ import { loadBoxEnv } from "../box-env.js";
 import { parseEnvFile } from "../env-file.js";
 import { ALL_MODULES } from "../modules.js";
 import { runRestore } from "../restore-command.js";
+import { SPARE_STORE_BUCKET } from "../spare-store.js";
 import { unsealNodeState } from "../sealed-state.js";
 import type { StreamHostDeps } from "../stream-host.js";
-import { outsideRequestScope } from "./aws-send-gate.js";
+import { exemptBucket } from "./aws-send-gate.js";
 import { httpsVia } from "./boot-harness.js";
 import { freePort } from "./free-ports.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 import { bootEnv, boxDirs, copyMigrations, provisionStreamBox } from "./stream-box.js";
-import {
-  STREAM_LOOP_SPARE_MS,
-  STREAM_LOOP_SPARE_PHASES,
-  runLoopSpare,
-} from "./stream-loop-spare.js";
+import { STREAM_LOOP_SPARE_PHASES, runLoopSpare } from "./stream-loop-spare.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";
@@ -106,6 +103,8 @@ const VENUE: VenueRequest = {
 // includes UNTIMED_MS for migrations, provisioning and closes, because Vitest's timer fails a healthy
 // run that outlasts it (CLAUDE.md §4). An upload wait restores the generation once per poll, so it
 // also gets one restore's worth on top.
+// The sum leaves out the spare phases, which run only with `versitygwBin`; a caller that passes it
+// adds STREAM_LOOP_SPARE_MS.
 const POINTER_WAIT_MS = 30_000;
 const UPLOAD_WAIT_MS = 30_000;
 /** Sales timed with the transport up, and again with it frozen (stage 8b). */
@@ -124,8 +123,7 @@ export const STREAM_LOOP_SCENARIO_MS =
   2 * TIMED_SALES * 1_000 +
   REBUILD_MS +
   RESTORE_MS +
-  UNTIMED_MS +
-  STREAM_LOOP_SPARE_MS;
+  UNTIMED_MS;
 
 export const STREAM_LOOP_PHASES = [
   "probe",
@@ -843,9 +841,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         clock.end("skipped");
       }
     } else {
-      // These phases never run against Amazon S3, and B's pair stream writes to C's own store, a
-      // bucket no rehearsal plan names.
-      await outsideRequestScope(() =>
+      // B's pair stream writes to C's own store, a bucket no rehearsal plan names.
+      await exemptBucket(SPARE_STORE_BUCKET, () =>
         runLoopSpare({
           scratch,
           migrationsRoot,

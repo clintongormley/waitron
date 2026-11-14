@@ -49,9 +49,25 @@ export function currentRequestScope(): RequestScope | undefined {
   return storage.getStore();
 }
 
-/** Runs `body` outside any scope, so the servers it starts send without a plan's checks. */
-export function outsideRequestScope<T>(body: () => T): T {
-  return storage.exit(body);
+/**
+ * Runs `body` in a scope that lets requests naming `bucket` through unchecked and checks every
+ * other request as the caller's scope does.
+ */
+export function exemptBucket<T>(bucket: string, body: () => T): T {
+  const outer = storage.getStore();
+  if (outer === undefined) return body();
+  const exempt = (input: Record<string, unknown>): boolean => input.Bucket === bucket;
+  const scope: RequestScope = {
+    ...outer,
+    run: (inner) => storage.run(scope, inner),
+    check(sender, api, input) {
+      if (!exempt(input)) outer.check(sender, api, input);
+    },
+    checkSerialised(sender, api, input) {
+      if (!exempt(input)) outer.checkSerialised(sender, api, input);
+    },
+  };
+  return storage.run(scope, body);
 }
 
 export function setSendGateStrict(on: boolean): void {

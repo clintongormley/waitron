@@ -28,12 +28,14 @@ import {
   runStreamLoopScenario,
   type StreamLoopEvent,
 } from "./testing/stream-loop-scenario.js";
+import { STREAM_LOOP_SPARE_MS } from "./testing/stream-loop-spare.js";
 
 const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
 const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_TEST_TOOLS === "1";
 
-// The helper enforces the S3 server's start; the scenario's own waits are in its sum.
-const LOOP_TIMEOUT_MS = S3_READY_MS + STREAM_LOOP_SCENARIO_MS;
+// The helper enforces the S3 server's start; the scenario's own waits are in its sum, and this
+// case passes versitygw, so the spare phases run too.
+const LOOP_TIMEOUT_MS = S3_READY_MS + STREAM_LOOP_SCENARIO_MS + STREAM_LOOP_SPARE_MS;
 // After an abort the scenario may still be inside one restore, which its abort cannot cut short.
 const ABORT_SETTLE_MS = 60_000;
 
