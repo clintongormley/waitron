@@ -2372,7 +2372,11 @@ suite ran beside other test files in one browser: a "new history entry" check fa
 (`docs/superpowers/plans/2026-10-05-unsaved-changes-audit.md`). A test spies on
 `history.pushState` and `history.replaceState` and reads their calls instead, as `writtenPaths` and
 the retired-address cases in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts` do.
-Nothing guards it.
+Guard: `scripts/no-history-length.test.ts`, weaker than its name. It reads the syntax of each
+`.test.ts` file under `apps/` and `packages/` as text, without types, and flags `history.length`,
+`window.history.length` and `globalThis.history.length`. A read through another name for the
+browser's history (`const h = history; h.length`), `history["length"]`, or one in a helper file that
+is not a `.test.ts` is unseen.
 
 ## The mouse cursor belongs to the shared page, so a hover outlives the test — and the file — that moved it.
 
@@ -3866,6 +3870,8 @@ Cost: a devices-screen test failed A441's CI (#1477), and a finish-table test fa
 ### A browser test sees whether a push happened by spying on `history.pushState` and `replaceState`, never by counting `history.length`
 
 Cost: A506-12's Times tab check failed beside other files, and the unsaved-changes audit met it first.
+Guard: `scripts/no-history-length.test.ts`, weaker than its name: a text match, so a read through
+another name for `history` is unseen.
 
 ### A test waits for a browser grant, such as a Web Lock, by tracking the request until it is answered — never by a fixed sleep
 
@@ -4048,7 +4054,9 @@ nor for the dialog's `open` to turn false.** Nothing guards it. Receipt:
 ### A browser test sees whether a push happened by spying on `history.pushState` and `replaceState`, never by counting `history.length`
 
 **A browser test sees whether a push happened by spying on `history.pushState` and `replaceState`,
-never by counting `history.length`**, which Chromium stops at 50. Nothing guards it. Receipt:
+never by counting `history.length`**, which Chromium stops at 50. Guard:
+`scripts/no-history-length.test.ts`, weaker than its name: a text match, so a read through another
+name for `history` is unseen. Receipt:
 [testing-guide.md](testing-guide.md#a-browser-test-sees-a-push-through-pushstate-not-historylength).
 
 ### A proof-by-deletion belongs to the SHAPE of the code it was taken against.
