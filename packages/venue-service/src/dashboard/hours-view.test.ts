@@ -8,6 +8,7 @@ import {
   formatDayHeading,
   formatDayTitleParts,
   formatLongDate,
+  formatMonthName,
   formatWeekTitleParts,
   formatWeekday,
 } from "./hours-view.js";
@@ -55,11 +56,15 @@ it.each([
 );
 
 it("names a weekday narrow or in full, and follows a change of language", () => {
+  expect(formatMonthName(9)).toBe("September");
+  expect(formatMonthName(9, undefined, "short")).toBe("Sept");
   expect(formatWeekday("2024-01-01", "narrow")).toBe("M");
   expect(formatWeekday("2024-01-01", "long")).toBe("Monday");
   expect(formatDate("2026-10-12")).toBe("Mon, 12 Oct 2026");
   expect(formatLongDate("2026-10-12")).toBe("Monday, 12 October 2026");
   setLocale("es");
+  expect(formatMonthName(9)).toBe("septiembre");
+  expect(formatMonthName(9, undefined, "short")).toBe("sept");
   expect(formatWeekday("2024-01-01", "narrow")).toBe("L");
   expect(formatWeekday("2024-01-01", "long")).toBe("lunes");
   expect(formatDate("2026-10-12")).toBe("lun, 12 oct 2026");

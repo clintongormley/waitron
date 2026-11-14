@@ -131,6 +131,25 @@ export class SeasonsWindow extends LitElement {
       .start wt-combobox[name$="-month"] {
         min-width: calc(var(--wt-space-6) * 4.5);
       }
+      @container (width < 480px) {
+        th:nth-child(3) {
+          white-space: normal;
+        }
+        th:nth-child(2),
+        .name {
+          padding-inline-start: 0;
+        }
+        .starts {
+          padding-inline: 0;
+        }
+        .start {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .start wt-combobox[name$="-month"] {
+          min-width: max-content;
+        }
+      }
       .until,
       .text {
         white-space: nowrap;
@@ -486,7 +505,11 @@ export class SeasonsWindow extends LitElement {
     }));
   }
   private readonly monthOptions = () =>
-    MONTHS.map((month) => ({ value: month, label: formatMonthName(Number(month)) }));
+    MONTHS.map((month) => ({
+      value: month,
+      label: formatMonthName(Number(month)),
+      valueLabel: formatMonthName(Number(month), undefined, "short"),
+    }));
 
   private editableRow(row: SeasonRow, index: number, marks: Marks) {
     const busy = this.busy;
@@ -526,7 +549,7 @@ export class SeasonsWindow extends LitElement {
           @wt-change=${on("name")}
         ></wt-input>
       </td>
-      <td>
+      <td class="starts">
         <div
           class="start"
           role="group"
@@ -549,6 +572,7 @@ export class SeasonsWindow extends LitElement {
           ></wt-combobox>
           <wt-combobox
             ?preserve-order=${true /* Preserve month chronology. */}
+            stable-width
             name=${`season-${index}-month`}
             label=${t("season.month")}
             required

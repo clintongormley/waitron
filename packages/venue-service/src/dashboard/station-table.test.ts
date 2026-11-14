@@ -177,13 +177,53 @@ it.each([
   await page.viewport(width, 844);
   try {
     setLocale(locale);
-    const el = await mount([bar]);
-    el.outputs = outputs;
+    const el = await mount([
+      bar,
+      station({ id: "grill", name: "Upstairs bar", waitsForPass: true }),
+    ]);
+    el.outputs = { ...outputs, grill: outputs.bar };
+    el.actions = {
+      bar: html`<button type="button">Menu</button>`,
+      grill: html`<button type="button">Menu</button>`,
+    };
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => requestAnimationFrame(resolve));
     const summary = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = table(el)!;
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
     expect(headings(el)).toHaveLength(5);
     expect(summary.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    const heading = root.querySelectorAll("th")[3]!;
+    const range = document.createRange();
+    range.selectNodeContents(heading);
+    expect(
+      new Set([...range.getClientRects()].map((box) => Math.round(box.top))).size,
+    ).toBeGreaterThan(1);
+    for (const cell of root.querySelectorAll("td")) {
+      const bounds = cell.getBoundingClientRect();
+      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        if (!walker.currentNode.textContent!.trim()) continue;
+        range.selectNodeContents(walker.currentNode);
+        for (const box of range.getClientRects()) {
+          expect(box.left, walker.currentNode.textContent!).toBeGreaterThanOrEqual(bounds.left - 1);
+          expect(box.right, walker.currentNode.textContent!).toBeLessThanOrEqual(bounds.right + 1);
+        }
+      }
+    }
+    expect(root.textContent).toContain("Epson, Star");
+    expect(root.textContent).toContain("Pantalla Cocina — station screen");
+    const wrapped = scroll.scrollWidth;
+    summary.wrapToFit = false;
+    await summary.updateComplete;
+    await new Promise(requestAnimationFrame);
+    expect(wrapped).toBeLessThan(scroll.scrollWidth);
+    scroll.scrollLeft = scroll.scrollWidth;
+    await new Promise(requestAnimationFrame);
+    for (const button of root.querySelectorAll<HTMLButtonElement>("td[data-pinned=end] button"))
+      expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(
+        scroll.getBoundingClientRect().right,
+      );
   } finally {
     await page.viewport(frame.width, frame.height);
   }

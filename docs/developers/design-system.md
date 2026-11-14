@@ -1445,7 +1445,7 @@ four start on one line, whether or not the state has a second line. Guards: the 
 Otherwise a table is never narrower than its headings and cell text laid out on one line, except
 where a cell caps its own width, and its box scrolls sideways when that is wider than the box. A table given `wrapToFit` (the `wrap-to-fit` attribute) lets its
 headings and cell text wrap at spaces first, so it scrolls only when even its longest words and its
-`white-space: nowrap` items do not fit. Only the Periods window sets it. Guard: the `wrapToFit` case in
+`white-space: nowrap` items do not fit. Guard: the `wrapToFit` case in
 `packages/ui/src/components/wt-data-table.head-and-cells.test.ts`.
 
 A reorderable table (`ReorderController.tableStyles`, `packages/ui/src/reorder-table.ts`) lines its
@@ -5045,6 +5045,7 @@ when the labels do not fit.
 Stations shows no live kitchen numbers: each station's name with its
 Default mark, Printed on (its printers, or "No printer"), Shown on (the devices whose kitchen screens
 show it, and a link to Devices), Waits for the pass (Yes or No) and Actions, the row's menu.
+The table uses `wrapToFit`; the name grid keeps its min-content width so names and the Default mark stay inside Name.
 A closure note beside its name reads Closed for today and its destination;
 open and default stations need no closure note (`packages/venue-service/src/dashboard/station-table.ts`).
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
@@ -6828,7 +6829,7 @@ cut with an ellipsis rather than pushing the Day box under the bin. Rows run fro
 `season-draft.ts`); they do not re-sort while editing, and the list comes back sorted after a Save.
 Each row edits its colour (a `wt-colour-chooser` with `hide-label`, whose tiles name the other named rows
 that use each colour; two seasons may share one), its name, and its start as a Day and a Month
-combobox side by side: the Day offers the chosen month's days, February always 28, and choosing a
+combobox side by side, stacked within the same cell when the scrolling region is narrower than 480 px. The closed Month shows its short name; its list offers full month names. The Day offers the chosen month's days, February always 28, and choosing a
 shorter month brings a later day down to its last. The Season and Starts on headings each carry a
 required asterisk, and the fields under them draw none. Runs until is worked out from the rows that
 have a whole start and is not typed. Under the table, at the start, "Add season" adds an empty row at

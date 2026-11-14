@@ -391,7 +391,7 @@ it.each(["en", "es"] as const)(
 );
 
 it.each(["en", "es"] as const)(
-  "at 390 every row's bin and Day box are on screen on opening, and the bin stays put while the table scrolls (%s)",
+  "at 390 every row's bin and date controls are on screen even with a wide font, and the bin stays put while the table scrolls (%s)",
   async (locale) => {
     const old = [window.innerWidth, window.innerHeight] as const;
     try {
@@ -399,6 +399,7 @@ it.each(["en", "es"] as const)(
       await page.viewport(390, 800);
       expect(window.innerWidth).toBe(390);
       const el = await mount();
+      el.style.setProperty("--wt-font-family", 'Verdana, "DejaVu Sans"');
       await change(el, "season-1-day", "31");
       // The longest colour name in each language: Turquesa in Spanish, Magenta in English.
       await change(el, "season-0-colour", locale === "es" ? "teal" : "magenta");
@@ -426,11 +427,34 @@ it.each(["en", "es"] as const)(
           ),
         );
       check();
+      expect(
+        field(el, "season-3-month").shadowRoot!.querySelector(".value")!.textContent!.trim(),
+      ).toBe(locale === "en" ? "Sept" : "sept");
       const binCell = rows[0]!.querySelector<HTMLElement>("td.bin")!;
+      const heading = root(el).querySelector("thead th:nth-child(3)")!;
+      const label = document.createRange();
+      label.selectNodeContents(heading);
+      expect(
+        label.getBoundingClientRect().right,
+        "Starts on and its required mark clear the bin",
+      ).toBeLessThanOrEqual(binCell.getBoundingClientRect().left);
       rows.forEach((row, index) => {
         const day = row.querySelector("wt-combobox[name$=-day]")!.getBoundingClientRect();
+        const name = row.querySelector("wt-input")!.getBoundingClientRect();
+        expect(name.right, `row ${index}'s Name stays separate from Day`).toBeLessThan(day.left);
         within(day, `row ${index}'s Day box`);
         expect(day.right, `row ${index}'s Day box clears the bin column`).toBeLessThanOrEqual(
+          binCell.getBoundingClientRect().left,
+        );
+        const monthField = row.querySelector("wt-combobox[name$=-month]")!;
+        const month = monthField.getBoundingClientRect();
+        const value = monthField.shadowRoot!.querySelector<HTMLElement>(".value")!;
+        expect(
+          value.scrollWidth,
+          `row ${index} shows its selected month whole`,
+        ).toBeLessThanOrEqual(value.clientWidth);
+        within(month, `row ${index}'s Month box`);
+        expect(month.right, `row ${index}'s Month box clears the bin column`).toBeLessThanOrEqual(
           binCell.getBoundingClientRect().left,
         );
       });
