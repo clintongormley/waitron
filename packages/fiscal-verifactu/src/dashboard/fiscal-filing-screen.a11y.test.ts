@@ -29,6 +29,7 @@ const EMPTY = overview({
   activeConflicts: [],
   heldWithoutCase: 0,
   missingHistory: { notIssuedHere: [], identityChanges: [] },
+  warnings: { replyMismatches: [], recordWarnings: [], total: 0 },
 });
 
 const MESSAGE = "Valor o tipo incorrecto del campo: DescripcionOperacion";
@@ -115,6 +116,18 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
     await expectNoA11yViolations(host);
   });
 
+  it("draws the warnings with each one's technical details open", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(overview(), theme);
+    const folds = screen.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-disclosure"]>(
+      "[data-test=warnings] wt-disclosure",
+    );
+    expect(folds).toHaveLength(3);
+    for (const fold of folds) fold.open = true;
+    await Promise.all([...folds].map((fold) => fold.whenSettled()));
+    await expectNoA11yViolations(host);
+  });
+
   it("draws a case's details with the technical details closed and open", async () => {
     await page.viewport(1280, 1000);
     const screen = await show(overview(), theme);
@@ -163,6 +176,14 @@ async function refuseOnce(screen: FiscalFilingScreen): Promise<HTMLElement> {
 it("draws the full page and a case's details at phone width", async () => {
   await page.viewport(390, 1000);
   const screen = await show(overview(), "light");
+  await expectNoA11yViolations(host);
+  expect(screen.scrollWidth).toBeLessThanOrEqual(screen.clientWidth);
+
+  const fold = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+    "[data-test=reply-mismatches] wt-disclosure",
+  )!;
+  fold.open = true;
+  await fold.whenSettled();
   await expectNoA11yViolations(host);
   expect(screen.scrollWidth).toBeLessThanOrEqual(screen.clientWidth);
 

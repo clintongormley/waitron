@@ -15,11 +15,14 @@ import { REMEDY_REFUSALS, type RemedyRefusal } from "../remedy-refusals.js";
 import { REFUSAL_WORDS } from "./put-right-words.js";
 import { t } from "./strings.js";
 import {
+  FLAGGED_WARNING,
   IDENTITY_CHANGE,
   NOT_ISSUED_HERE,
   OURS,
   PREVIOUS,
+  REPLY_MISMATCH,
   THEIRS,
+  TOTALS_WARNING,
   conflictCase,
   overview,
 } from "../../test/fiscal-filing-browser-fixture.js";
@@ -346,6 +349,160 @@ describe("vf-fiscal-filing-screen", () => {
     expect(text(spanish.screen, "[data-test=identity-changes]")).toBe(
       "Cambios de identidad sin traspaso La identidad fiscal no ha cambiado sin un traspaso.",
     );
+  });
+
+  it("lists a reply that did not match what was sent, with what happens now and AEAT's lines folded away", async () => {
+    const { screen } = await mount(vi.fn(async () => overview()));
+    const section = screen.shadowRoot!.querySelector("section[data-test=warnings]")!;
+    const heading = section.querySelector("h2")!;
+    expect(section.getAttribute("aria-labelledby")).toBe(heading.id);
+    expect(flat(heading)).toBe("Warnings");
+    const item = section.querySelector("[data-test=reply-mismatches] > ul > li")!;
+    expect(flat(section.querySelector("[data-test=reply-mismatches] h3"))).toBe(
+      "AEAT answers that did not match what was sent",
+    );
+    expect(unfolded(item)).toBe(
+      "AEAT's answer to 2 records sent together had a different number of lines (1), so Waitron applied none of them. " +
+        `Seen ${formatIsoMinute(REPLY_MISMATCH.detectedAt)} ` +
+        "What happens now Waitron sends each record again later, unless an earlier record on its chain is on hold, which puts it on hold too. A record that was already on hold stays on hold and is tried again an hour later. The state of each one now is below.",
+    );
+    const fold = item.querySelector("wt-disclosure[data-test=technical]")!;
+    expect(fold.getAttribute("heading")).toBe("Technical details");
+    const evidence = flat(fold);
+    for (const shown of [
+      "A-YZ3K7QW2",
+      "T1/50 · 2026-11-09 · Waiting to be sent to AEAT.",
+      "T1/51 · 2026-11-09 · Held back: not sent for now.",
+      "T1/50 · 2026-11-09 · Alta Incorrecto 1100",
+      "These are the lines AEAT gave the first time while this warning is open; a later answer may differ.",
+    ])
+      expect(evidence).toContain(shown);
+    expect([...fold.querySelectorAll("q[lang=es]")].map(flat)).toEqual([
+      "Alta Incorrecto 1100",
+      "Valor o tipo incorrecto del campo.",
+    ]);
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(async () => overview()));
+    expect(flat(spanish.screen.shadowRoot!.querySelector("[data-test=warnings] h2"))).toBe(
+      "Avisos",
+    );
+    expect(text(spanish.screen, "[data-test=reply-mismatches] h3")).toBe(
+      "Respuestas de la AEAT que no cuadran con lo enviado",
+    );
+    expect(
+      unfolded(spanish.screen.shadowRoot!.querySelector("[data-test=reply-mismatches] > ul > li")!),
+    ).toContain(
+      "La respuesta de la AEAT a 2 registros enviados juntos tenía otro número de líneas (1), así que Waitron no aplicó ninguna.",
+    );
+  });
+
+  it("names each invoice with a warning from Waitron's own check, with its fields and codes folded away", async () => {
+    const { screen } = await mount(vi.fn(async () => overview()));
+    expect(text(screen, "[data-test=record-warnings] h3")).toBe(
+      "Invoices with a warning from Waitron's own check",
+    );
+    const items = [...screen.shadowRoot!.querySelectorAll("[data-test=record-warnings] > ul > li")];
+    expect(items.map(unfolded)).toEqual([
+      "The totals of invoice T1/47 (2026-11-08) do not match its tax lines. AEAT accepts it; check that sale's prices. AEAT accepted it.",
+      "Invoice T1/44 (2026-11-07) has something AEAT accepts but may point out. AEAT accepted it.",
+    ]);
+    const totals = flat(items[0]!.querySelector("wt-disclosure[data-test=technical]"));
+    expect(totals).toContain("CuotaTotal · CUOTA_TOTAL_MISMATCH");
+    expect(totals).toContain("ImporteTotal · IMPORTE_TOTAL_MISMATCH");
+    expect(flat(items[1]!.querySelector("wt-disclosure[data-test=technical]"))).toContain(
+      "Desglose[0].ClaveRegimen · CLAVE_REGIMEN_REQUIRED",
+    );
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(async () => overview()));
+    const spanishItems = [
+      ...spanish.screen.shadowRoot!.querySelectorAll("[data-test=record-warnings] > ul > li"),
+    ];
+    expect(text(spanish.screen, "[data-test=record-warnings] h3")).toBe(
+      "Facturas con un aviso de la comprobación de Waitron",
+    );
+    expect(unfolded(spanishItems[0]!)).toContain(
+      "Los totales de la factura T1/47 (2026-11-08) no cuadran con sus líneas de impuestos.",
+    );
+    expect(unfolded(spanishItems[1]!)).toContain(
+      "La factura T1/44 (2026-11-07) tiene algo que la AEAT acepta pero puede señalar.",
+    );
+  });
+
+  it("says when an invoice was recorded when the warning names no record", async () => {
+    const answer = () =>
+      Promise.resolve(
+        overview({
+          warnings: {
+            replyMismatches: [],
+            recordWarnings: [
+              { ...TOTALS_WARNING, record: null },
+              { ...FLAGGED_WARNING, record: null },
+            ],
+            total: 2,
+          },
+        }),
+      );
+    const { screen } = await mount(vi.fn(answer));
+    expect(screen.shadowRoot!.querySelector("[data-test=reply-mismatches]")).toBeNull();
+    const items = [...screen.shadowRoot!.querySelectorAll("[data-test=record-warnings] > ul > li")];
+    expect(items.map(unfolded)).toEqual([
+      `An invoice recorded at ${formatIsoMinute(TOTALS_WARNING.detectedAt)} has totals that do not match its tax lines. AEAT accepts it; check that sale's prices.`,
+      `An invoice recorded at ${formatIsoMinute(FLAGGED_WARNING.detectedAt)} has something AEAT accepts but may point out.`,
+    ]);
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(answer));
+    expect(text(spanish.screen, "[data-test=record-warnings] li")).toContain(
+      `Una factura registrada el ${formatIsoMinute(TOTALS_WARNING.detectedAt)}`,
+    );
+  });
+
+  it("says there are no open warnings, and draws no list, when there are none", async () => {
+    const answer = () =>
+      Promise.resolve(
+        overview({ warnings: { replyMismatches: [], recordWarnings: [], total: 0 } }),
+      );
+    const { screen } = await mount(vi.fn(answer));
+    expect(text(screen, "[data-test=warnings]")).toBe("Warnings No open warnings.");
+    expect(screen.shadowRoot!.querySelectorAll("[data-test=warnings] li")).toHaveLength(0);
+    expect(screen.shadowRoot!.querySelector("[data-test=warnings] [data-test=bounded]")).toBeNull();
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(answer));
+    expect(text(spanish.screen, "[data-test=warnings]")).toBe("Avisos No hay avisos abiertos.");
+  });
+
+  it("says the warnings shown are the newest few when there are more", async () => {
+    const answer = () =>
+      Promise.resolve(
+        overview({
+          warnings: { replyMismatches: [REPLY_MISMATCH], recordWarnings: [], total: 201 },
+        }),
+      );
+    const { screen } = await mount(vi.fn(answer));
+    expect(text(screen, "[data-test=warnings] [data-test=bounded]")).toBe(
+      "Showing the newest 1 of 201. Export them to see every one.",
+    );
+    const all = await mount(vi.fn(async () => overview()));
+    expect(
+      all.screen.shadowRoot!.querySelector("[data-test=warnings] [data-test=bounded]"),
+    ).toBeNull();
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(answer));
+    expect(text(spanish.screen, "[data-test=warnings] [data-test=bounded]")).toBe(
+      "Se muestran los 1 más recientes de 201. Expórtalos para verlos todos.",
+    );
+  });
+
+  it("puts the warnings between the filing cases and the possibly missing history", async () => {
+    const { screen } = await mount(vi.fn(async () => overview()));
+    const order = [...screen.shadowRoot!.querySelectorAll("section[data-test]")].map((section) =>
+      section.getAttribute("data-test"),
+    );
+    expect(order).toEqual(["progress", "cases", "warnings", "missing-history"]);
   });
 
   it("shows a refused read's message under the actions until a later read succeeds", async () => {

@@ -190,6 +190,31 @@ const en = {
   "fiscal_filing.none": "None",
   "fiscal_filing.cases": "Filing cases",
   "fiscal_filing.held_without_case": "Held with no case: {count}",
+  "fiscal_filing.warnings": "Warnings",
+  "fiscal_filing.warnings.none": "No open warnings.",
+  "fiscal_filing.warnings.bounded":
+    "Showing the newest {shown} of {total}. Export them to see every one.",
+  "fiscal_filing.warnings.reply": "AEAT answers that did not match what was sent",
+  "fiscal_filing.warnings.reply.line":
+    "AEAT's answer to {sent} records sent together had a different number of lines ({lines}), so Waitron applied none of them.",
+  "fiscal_filing.warnings.reply.seen": "Seen {time}",
+  "fiscal_filing.warnings.reply.now":
+    "Waitron sends each record again later, unless an earlier record on its chain is on hold, which puts it on hold too. A record that was already on hold stays on hold and is tried again an hour later. The state of each one now is below.",
+  "fiscal_filing.warnings.reply.csv": "Submission code (CSV)",
+  "fiscal_filing.warnings.reply.sent": "Records sent",
+  "fiscal_filing.warnings.reply.lines": "AEAT's lines",
+  "fiscal_filing.warnings.reply.first":
+    "These are the lines AEAT gave the first time while this warning is open; a later answer may differ.",
+  "fiscal_filing.warnings.record": "Invoices with a warning from Waitron's own check",
+  "fiscal_filing.warnings.record.totals":
+    "The totals of invoice {number} ({date}) do not match its tax lines. AEAT accepts it; check that sale's prices.",
+  "fiscal_filing.warnings.record.flagged":
+    "Invoice {number} ({date}) has something AEAT accepts but may point out.",
+  "fiscal_filing.warnings.record.totals_unknown":
+    "An invoice recorded at {time} has totals that do not match its tax lines. AEAT accepts it; check that sale's prices.",
+  "fiscal_filing.warnings.record.flagged_unknown":
+    "An invoice recorded at {time} has something AEAT accepts but may point out.",
+  "fiscal_filing.warnings.record.fields": "Fields and check codes",
   "fiscal_filing.history": "Possibly missing history",
   "fiscal_filing.history.not_issued": "Invoices AEAT holds that this box did not issue",
   "fiscal_filing.history.not_issued.line":
@@ -519,6 +544,31 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.none": "Ninguno",
   "fiscal_filing.cases": "Casos de remisión",
   "fiscal_filing.held_without_case": "Detenidos sin caso: {count}",
+  "fiscal_filing.warnings": "Avisos",
+  "fiscal_filing.warnings.none": "No hay avisos abiertos.",
+  "fiscal_filing.warnings.bounded":
+    "Se muestran los {shown} más recientes de {total}. Expórtalos para verlos todos.",
+  "fiscal_filing.warnings.reply": "Respuestas de la AEAT que no cuadran con lo enviado",
+  "fiscal_filing.warnings.reply.line":
+    "La respuesta de la AEAT a {sent} registros enviados juntos tenía otro número de líneas ({lines}), así que Waitron no aplicó ninguna.",
+  "fiscal_filing.warnings.reply.seen": "Visto: {time}",
+  "fiscal_filing.warnings.reply.now":
+    "Waitron vuelve a enviar cada registro más tarde, salvo que un registro anterior de su cadena esté detenido, lo que también lo detiene. Un registro que ya estaba detenido sigue detenido y se vuelve a intentar una hora después. Abajo está el estado actual de cada uno.",
+  "fiscal_filing.warnings.reply.csv": "Código de la remisión (CSV)",
+  "fiscal_filing.warnings.reply.sent": "Registros enviados",
+  "fiscal_filing.warnings.reply.lines": "Líneas de la AEAT",
+  "fiscal_filing.warnings.reply.first":
+    "Son las líneas que dio la AEAT la primera vez mientras este aviso está abierto; una respuesta posterior puede ser distinta.",
+  "fiscal_filing.warnings.record": "Facturas con un aviso de la comprobación de Waitron",
+  "fiscal_filing.warnings.record.totals":
+    "Los totales de la factura {number} ({date}) no cuadran con sus líneas de impuestos. La AEAT la acepta; revisa los precios de esa venta.",
+  "fiscal_filing.warnings.record.flagged":
+    "La factura {number} ({date}) tiene algo que la AEAT acepta pero puede señalar.",
+  "fiscal_filing.warnings.record.totals_unknown":
+    "Una factura registrada el {time} tiene totales que no cuadran con sus líneas de impuestos. La AEAT la acepta; revisa los precios de esa venta.",
+  "fiscal_filing.warnings.record.flagged_unknown":
+    "Una factura registrada el {time} tiene algo que la AEAT acepta pero puede señalar.",
+  "fiscal_filing.warnings.record.fields": "Campos y códigos de la comprobación",
   "fiscal_filing.history": "Historial que puede faltar",
   "fiscal_filing.history.not_issued": "Facturas que la AEAT tiene y este servidor no emitió",
   "fiscal_filing.history.not_issued.line":
