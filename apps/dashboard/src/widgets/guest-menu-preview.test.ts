@@ -255,6 +255,9 @@ it("shares one settings revision between appearance and sharing actions in eithe
     font.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "sans" } }));
     await page.elementLocator(root.querySelector("#save-paper")!).click();
     await expect.poll(() => settings.revision).toBe(1);
+    await expect
+      .poll(() => root.querySelector<HTMLElementTagNameMap["wt-button"]>("#save-paper")!.disabled)
+      .toBe(true);
     await page.elementLocator(el.shadowRoot!.querySelector("#sharing-action")!).click();
     await expect.poll(() => settings.enabled).toBe(true);
     await page.elementLocator(el.shadowRoot!.querySelector("#sharing-action")!).click();
@@ -262,8 +265,24 @@ it("shares one settings revision between appearance and sharing actions in eithe
     font.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "serif" } }));
     await page.elementLocator(root.querySelector("#save-paper")!).click();
     await expect.poll(() => settings.revision).toBe(4);
+    await expect
+      .poll(() => root.querySelector<HTMLElementTagNameMap["wt-button"]>("#save-paper")!.disabled)
+      .toBe(true);
     expect(settings.paper?.font).toBe("serif");
     expect(el.shadowRoot!.querySelector("#sharing-error")).toBeNull();
+    await el.shadowRoot!.querySelector("wt-modal")!.requestClose("navigation");
+    await expect.poll(() => el.shadowRoot!.querySelector("dashboard-guest-menu-paper")).toBeNull();
+    settings = { ...settings, revision: 5, paper: { ...settings.paper!, font: "sans" } };
+    await page.elementLocator(el.shadowRoot!.querySelector("wt-button")!).click();
+    await expect
+      .poll(
+        () =>
+          el
+            .shadowRoot!.querySelector("dashboard-guest-menu-paper")
+            ?.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="paper-font"]')
+            ?.value,
+      )
+      .toBe("sans");
   } finally {
     cleanupWidgets();
   }

@@ -96,6 +96,7 @@ export class GuestMenuPreview extends LitElement {
   #close() {
     this.#generation++;
     this.#sharingGeneration++;
+    this.sharing = null;
     this.#clear();
     this.opened = false;
     this.loading = false;
