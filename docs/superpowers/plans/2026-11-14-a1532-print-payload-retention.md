@@ -40,7 +40,10 @@ Use `saleId` to distinguish them. Keep existing reprint availability and request
 Watcher 17:49 withdraws the 17:47 exception: all expired queue reprints refuse and point
 sale receipts/invoices to Orders; there is no alternate-printer exception. Consumer trace includes
 resend, invoice retry/switch, alternate-printer layout, queue width,
-preview and practice preview; the latter already accepts empty bytes, so add no special filter.
+preview and practice preview. Watcher 19:12 clears omitting empty-payload jobs from the practice-only
+demo preview, while real queue rows and its explicit expiry refusal remain. Clickable expired queue
+Reprint is the deliberate row-state exception: it explains the Orders fallback (watcher 19:12, citing
+the owner's 14 October note).
 
 **Tests, failing first.** Server `housekeeping.test.ts` owns age boundaries, each terminal
 case, preserved retryable/undecided failures (including moved/unpaired), repeat sweeps, cursor

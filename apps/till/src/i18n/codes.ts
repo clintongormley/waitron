@@ -406,8 +406,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este TPV no tiene impresora de tickets para imprimir la factura. Avisa a un responsable",
   },
   "print_job.sale_payload_expired": {
-    en: "Saved print data is removed after a week. Reprint this receipt or invoice from Orders.",
-    es: "Los datos de impresión guardados se eliminan al cabo de una semana. Vuelve a imprimir este recibo o factura desde Pedidos.",
+    en: "Saved print data is removed after a week. Reprint this receipt or invoice from Orders in the dashboard.",
+    es: "Los datos de impresión guardados se eliminan al cabo de una semana. Vuelve a imprimir este recibo o factura desde Pedidos en el panel.",
   },
   "print_job.not_resendable": {
     en: "The original receipt cannot be printed again now. Check its status",

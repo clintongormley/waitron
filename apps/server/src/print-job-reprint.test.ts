@@ -502,6 +502,23 @@ describe("the print queue's resend to another printer", () => {
     });
   });
 
+  it("lists the queue with an expired kitchen payload without decoding a null head", async () => {
+    const id = await kitchenTicket(at58);
+    await setJob(id, { createdAt: "2026-11-01T00:00:00.000Z" });
+    await clearOldPrintPayloads(
+      venue.db,
+      new Date("2026-11-14T04:00:00.000Z"),
+      new AbortController().signal,
+    );
+    expect((await jobRow(id)).payload.byteLength).toBe(0);
+    const response = await printApi().request("/management-api/print-jobs", {
+      headers: { cookie: venue.adminDashboard },
+    });
+    expect(response.status).toBe(200);
+    const rows = (await response.json()) as { id: string; reprintRule: string }[];
+    expect(rows.find((row) => row.id === id)?.reprintRule).toBe("own");
+  });
+
   it("lists which printers each printout may go to", async () => {
     const { original: receipt } = await paidSale(at80);
     const ticket = await kitchenTicket(at80);

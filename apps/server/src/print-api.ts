@@ -1629,7 +1629,13 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               })
               .from(printJobs)
               .innerJoin(printers, eq(printJobs.printerId, printers.id))
-              .where(and(eq(printers.localKey, DEMO_PRINTER_KEY), eq(printJobs.status, "done")))
+              .where(
+                and(
+                  eq(printers.localKey, DEMO_PRINTER_KEY),
+                  eq(printJobs.status, "done"),
+                  sql`length(${printJobs.payload}) > 0`,
+                ),
+              )
               .orderBy(desc(printJobs.createdAt), sql`print_jobs.rowid desc`)
               .limit(RECENT_JOBS_LIMIT),
           ),
@@ -1691,7 +1697,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             createdAt: printJobs.createdAt,
             deliveredAt: printJobs.deliveredAt,
             // `jobWidthDots` reads a printout's width from its first ten bytes alone.
-            head: sql<Uint8Array>`substr(${printJobs.payload}, 1, 10)`,
+            head: sql<Uint8Array | null>`substr(${printJobs.payload}, 1, 10)`,
             // Correlated to the outer `print_jobs`; the join below keeps both sides qualified.
             linked: sql<number>`case when ${printJobs.saleId} is null then ${linkedPrintoutSql(sql`coalesce(${printJobs.resendOf}, ${printJobs.id})`)} else 0 end`,
           })

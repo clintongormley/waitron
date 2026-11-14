@@ -964,8 +964,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esa impresora no tiene agente de impresión. Búscala de nuevo en Añadir impresora",
   },
   "print_job.sale_payload_expired": {
-    en: "Saved print data is removed after a week. Reprint this receipt or invoice from Orders.",
-    es: "Los datos de impresión guardados se eliminan al cabo de una semana. Vuelve a imprimir este recibo o factura desde Pedidos.",
+    en: "Saved print data is removed after a week. Reprint this receipt or invoice from Orders in the dashboard.",
+    es: "Los datos de impresión guardados se eliminan al cabo de una semana. Vuelve a imprimir este recibo o factura desde Pedidos en el panel.",
   },
   "print_job.payload_expired": {
     en: "Saved print data is removed after a week. This printout can no longer be reprinted, including kitchen tickets, refund receipts, payment slips and reports.",
