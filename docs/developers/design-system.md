@@ -4094,7 +4094,9 @@ The chosen department is checked again before opening. Offered tabs in the same 
 your draft; another department uses the usual Keep editing/Discard question. Search finishes on
 the window and tab, without moving focus to a field. Declarations beside the department fields
 reuse their label keys and tab mapping; a mounted EN/ES check compares them with the controls
-in both directions.
+in both directions. Zone settings use **Edit zone** as their location. Their chooser labels pair the
+department and zone names; the selected zone opens its existing editor, keeping an edited draft
+when it is already open. Zone declarations have the same mounted EN/ES label/control check.
 
 When nothing matches, the nav says **No pages
 match.** in a `role="status"` message. Enter opens the first result shown, in the order shown, and does

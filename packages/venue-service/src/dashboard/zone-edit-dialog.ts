@@ -30,6 +30,23 @@ const equal = (a: ZoneEditInput, b: ZoneEditInput) =>
   a.collectionNumber === b.collectionNumber;
 type Field = keyof ZoneEditInput;
 const policyFields = ["orderStart", "paidWhen", "collectionNumber"] as const;
+export const zoneSettingFields = [
+  { name: "name", labelKey: "venue.zone_name" },
+  { name: "orderStart", labelKey: "venue.order_start" },
+  { name: "paidWhen", labelKey: "venue.counter_paid_when" },
+  { name: "collectionNumber", labelKey: "venue.print_collection_ticket" },
+] as const;
+
+export function zoneIsEditable(
+  model: VenueServiceView,
+  zone: VenueServiceView["zones"][number],
+): boolean {
+  return (
+    zone.active !== false &&
+    model.floorZones.find((floor) => floor.id === zone.id)?.active !== false &&
+    model.departments.some((department) => department.id === zone.departmentId && department.active)
+  );
+}
 
 @customElement("zone-edit-dialog")
 export class ZoneEditDialog extends LitElement {
@@ -85,15 +102,10 @@ export class ZoneEditDialog extends LitElement {
   }
   private get zone() {
     return this.model?.zones.find(
-      (row) =>
-        row.id === this.zoneId &&
-        row.active !== false &&
-        this.model?.floorZones.find((floor) => floor.id === row.id)?.active !== false &&
-        this.model?.departments.some(
-          (department) => department.id === row.departmentId && department.active,
-        ),
+      (row) => row.id === this.zoneId && zoneIsEditable(this.model, row),
     );
   }
+
   protected override willUpdate() {
     const row = this.zone;
     if (!row) {

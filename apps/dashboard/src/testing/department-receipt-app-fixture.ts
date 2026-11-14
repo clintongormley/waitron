@@ -18,8 +18,17 @@ export function deep(root: ShadowRoot | Element, selector: string): Element | nu
   }
   return null;
 }
+interface Zone {
+  id: string;
+  name: string;
+  departmentId: string;
+  departmentName: string;
+  serviceMode: "table_tab" | "prepay" | "ticket_then_pay";
+  active?: boolean;
+}
 export function venueServiceModel(
   departments: { id: string; name?: string; active?: boolean }[] = [{ id: "bar", name: "Bar" }],
+  suppliedZones?: Zone[],
 ) {
   return {
     departments: departments.map((department) => ({
@@ -28,7 +37,7 @@ export function venueServiceModel(
       active: department.active ?? true,
       isDefault: department.id === "bar",
     })),
-    zones: [],
+    zones: suppliedZones ?? [],
     floorZones: [],
     readiness: [],
     salePolicies: {
@@ -55,6 +64,7 @@ export async function mountReceiptApp(
     required?: boolean;
     path?: string;
     departments?: { id: string; name: string; active?: boolean }[];
+    zones?: Zone[];
     locale?: string;
     theme?: Theme;
     respond?: (path: string, init: RequestInit) => Promise<Response> | undefined;
@@ -66,7 +76,7 @@ export async function mountReceiptApp(
     "",
     options.path ?? "/manage/venue-operations/department/bar/view/receipt",
   );
-  const model = venueServiceModel(options.departments);
+  const model = venueServiceModel(options.departments, options.zones);
   const fetchImpl = vi.fn(async (path: string, init: RequestInit) => {
     const answer = options.respond?.(path, init);
     if (answer) return answer;
