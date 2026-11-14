@@ -21,16 +21,10 @@ This draft needs driver verification, Claude review and watcher clearance before
      `afterDialogCloses` call at 1115 onward; some follow layout or direct resets, not closes.
    - `apps/dashboard/src/widgets/menu-publications.save-state.test.ts`: schedule draft reset
      and quiet action after close/reopen (263).
-   - `apps/dashboard/src/widgets/menu-patch-dialog.test.ts`: Close-button completion (1593);
-     `open=false` follows its close handler, so distinguish polling delay from an assertion race.
    - `packages/venue-service/src/dashboard/zone-edit-dialog-lifecycle.test.ts`: `closed`, dirty-scope
      disposal and retained-editor reset (77, 93); separate discard work from later close effects.
-   - `packages/ui/src/components/wt-modal.test.ts`: child Escape finishes before checking
-     the parent's retained draft and untouched `beforeClose` (1038).
-   - `packages/ui/src/components/wt-combobox.test.ts`: second Escape closes the surrounding
-     dialog and reports once (3006); first Escape's popover and stays-open checks remain.
-   - `apps/dashboard/src/widgets/print-job-preview.test.ts`: Escape's `open=false` is assigned
-     in the callback that also emits `preview-close` (121); retain if it already establishes the effect.
+   - `packages/staffing/src/dashboard/staffing-month.test.ts`: classify the day-box removal and
+     focus checks after Escape (1107–1176): `calendar-day-box-close` follows native `toggle`.
    Also classify `apps/dashboard/src/screens/business-day-start-editor.unsaved.test.ts`,
    `apps/dashboard/src/screens/modules-screen.unsaved.test.ts`,
    `packages/staffing/src/dashboard/staff-role-dialog.unsaved.test.ts` and
@@ -39,21 +33,29 @@ This draft needs driver verification, Claude review and watcher clearance before
    Reuse dashboard `widgets/test-helpers.ts`'s `dialogClosed(Element): Promise<unknown>` and local
    one-shot promises elsewhere. Capture the target before acting, await its event, then retain
    needed updates/frames and all focus, reset and refusal assertions.
-   Guard against a nested child's bubbled event satisfying a parent's wait. No new helper framework.
+   At nested sites use a local listener checking `event.target === dialog`; keep the shared helper
+   unchanged. Leave owner-open checks whose handler already establishes the asserted effect alone.
+   Record the popover decision in the PR: repair only effects owned by a delayed close/toggle event;
+   synchronous state/visibility checks and refused closes keep their existing waits. No framework.
 
-3. Before repairs, reproduce the combobox second-Escape race in an installed disposable checkout.
-   Temporarily intercept its target native close event and deliver it once after 1.5 seconds;
-   leave native closing/state changes real. Run the UI command below with `-t 'inside an open wt-dialog'`.
-   The old one-second open-state poll must time out while the native dialog is closed and no
-   close report has arrived; the event-wait repair must pass unchanged assertions under that delay. Record both results; discard the injector before
-   shipping. Repair remaining confirmed sites, then run without interception. No permanent delay support.
+3. Before repairs, use a registered disposable worktree to probe the menus focus-table case
+   “Add products, saved”. A capture listener on the target modal's shadow root stops the first
+   native `close`, then resends it once after 500 ms without intercepting its own resend. Keep
+   native closing and the `open` poll real. Predict the old focus assertion fails before the close
+   report, then verify it; the event-wait repair must pass the same assertions under that delay.
+   If focus is already restored independently, record that result and leave that site alone rather
+   than manufacture a failure. Keep the probe out of the shipped tree; run repaired files normally.
 
-4. Run focused files with real Chromium, sequentially: `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.test.ts src/widgets/menu-publications.save-state.test.ts src/widgets/menu-patch-dialog.test.ts`; `pnpm --filter @waitron/ui exec vitest run src/components/wt-modal.test.ts src/components/wt-combobox.test.ts src/components/wt-dialog.test.ts`; `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/zone-edit-dialog-lifecycle.test.ts`. Add every audit-confirmed changed suite using its package's same focused command; include preview/unsaved files only if changed. Read actual Tests counts, not exit status alone.
+4. Run every changed file with real Chromium, sequentially, using
+   `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.test.ts src/widgets/menu-publications.save-state.test.ts`,
+   `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/zone-edit-dialog-lifecycle.test.ts`
+   and `pnpm --filter @waitron/staffing exec vitest run src/dashboard/staffing-month.test.ts` where changed.
+   Add any audit-confirmed changed suite to its package's focused run; read actual Tests counts.
 
 5. Keep `wt-dialog.test.ts`'s already-awaited real Escape case (1c8bd5b22d) and stays-open timer.
-   Exclude product behavior, config, thresholds, ignores, test moves, general guards and popover fixes.
-   After audit/repair, remove completed entries from `docs/backlog.md` and `docs/backlog/ci.md`;
-   retain unresolved popover work in the existing bundle. One PR lists every changed file, with
+   Exclude product behavior, config, thresholds, ignores, test moves and general guards.
+   After audit/repair and the recorded popover decision, remove completed entries from
+   `docs/backlog.md` and `docs/backlog/ci.md`; retain only work the audit establishes is still open. One PR lists every changed file, with
    finish-branch reviews, the normal push hook and current-head scoped CI; no whole-workspace run.
 
 Expected diff, provisional until classification: tests +200/-80 lines; test support +10/-10 (local settling helpers; shared helpers unchanged); production +0/-0.
