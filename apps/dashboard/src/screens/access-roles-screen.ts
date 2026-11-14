@@ -6,6 +6,7 @@ import {
   submitOnEnter,
   focusFirstInvalid,
 } from "@waitron/ui";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
 import { LitElement, css, html, nothing } from "lit";
@@ -341,6 +342,7 @@ export class AccessRolesScreen extends LitElement {
         key: "name",
         label: t("access_roles.name"),
         cell: (role) => accessRoleName(role),
+        searchValue: (role) => accessRoleName(role),
         sortValue: (role) => accessRoleName(role),
       },
       {
@@ -565,6 +567,9 @@ export class AccessRolesScreen extends LitElement {
             </div>
             ${this.viewerPermissions.some((p) => p === "venue.view" || p === "schedule.manage") ? html`<p><a href="/manage/staff-roles">${t("access_roles.job_roles")}</a></p>` : nothing}
             <wt-data-table
+              noMatchesMessage=${tableNoMatches()}
+              searchable
+              searchLabel=${t("access_roles.search")}
               viewKey="waitron.access-roles.table"
               customiseColumnsLabel=${t("table.customise_columns")}
               customiseLabel=${t("table.customise")}

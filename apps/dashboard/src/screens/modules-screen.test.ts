@@ -331,3 +331,27 @@ it("keeps the Payments provider prerequisite refusal beside the confirmation", a
   );
   expect(el.shadowRoot!.querySelector("wt-dialog")).not.toBeNull();
 });
+it("narrows the modules to those whose shown name or configuration matches the search, beside the Category and State choices", async () => {
+  history.replaceState(null, "", "/manage/modules/view/all/state/all");
+  const el = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  const rowKeys = () =>
+    [...table.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+      row.getAttribute("data-row-key"),
+    );
+  const search = async (value: string) => {
+    const box = table.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    box.value = value;
+    box.dispatchEvent(new Event("input"));
+    await table.updateComplete;
+  };
+  expect(table.shadowRoot!.querySelector(".table-search")!.getAttribute("aria-label")).toBe(
+    "Search modules",
+  );
+  await search("spanish workforce");
+  expect(rowKeys()).toEqual(["module:workforce-es"]);
+  await search("needs setup");
+  expect(rowKeys()).toEqual(["card-provider:stripe"]);
+  expect(el.shadowRoot!.querySelector("[name=category]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[name=state]")).not.toBeNull();
+});

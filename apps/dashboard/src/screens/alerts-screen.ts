@@ -157,15 +157,50 @@ export class AlertsScreen extends LitElement {
     >`;
   }
 
+  #alertText(alert: AlertView): string {
+    return [
+      alertMessage(alert.code, alert.params),
+      hasAlertMessage(alert.code) ? "" : alert.code,
+      severityLabel(alert.severity),
+      sourceLabel(alert),
+    ].join(" ");
+  }
+
+  #alertColumn(): DataTableColumn<AlertView> {
+    return {
+      key: "alert",
+      label: t("alerts.col_alert"),
+      cell: (a) => this.#alertCell(a),
+      searchValue: (a) => this.#alertText(a),
+    };
+  }
+
+  #areaColumn(alerts: AlertView[]): DataTableColumn<AlertView> {
+    return {
+      key: "area",
+      label: t("alerts.col_area"),
+      choosable: "shown",
+      cell: (a) => areaLabel(a.area),
+      searchValue: (a) => areaLabel(a.area),
+      filter: {
+        label: t("alerts.col_area"),
+        allLabel: t("alerts.filter_area_all"),
+        multiple: {
+          countLabel: (count) => fill("alerts.filter_area_count", { count: String(count) }),
+        },
+        value: (a) => a.area,
+        options: [...new Set(alerts.map((a) => a.area))].map((area) => ({
+          value: area,
+          label: areaLabel(area),
+        })),
+      },
+    };
+  }
+
   #openColumns(): DataTableColumn<AlertView>[] {
     return [
-      { key: "alert", label: t("alerts.col_alert"), cell: (a) => this.#alertCell(a) },
-      {
-        key: "area",
-        label: t("alerts.col_area"),
-        choosable: "shown",
-        cell: (a) => areaLabel(a.area),
-      },
+      this.#alertColumn(),
+      this.#areaColumn(this.open),
       {
         key: "since",
         label: t("alerts.col_since"),
@@ -209,23 +244,20 @@ export class AlertsScreen extends LitElement {
   }
 
   #handledColumns(): DataTableColumn<AlertView>[] {
+    const handledText = (a: AlertView) =>
+      fill("alerts.handled_by", {
+        time: formatAlertTime(a.handledAt ?? null),
+        person: a.handledBy ?? t("alerts.someone"),
+      });
     return [
-      { key: "alert", label: t("alerts.col_alert"), cell: (a) => this.#alertCell(a) },
-      {
-        key: "area",
-        label: t("alerts.col_area"),
-        choosable: "shown",
-        cell: (a) => areaLabel(a.area),
-      },
+      this.#alertColumn(),
+      this.#areaColumn(this.handled),
       {
         key: "handled",
         label: t("alerts.col_handled"),
         choosable: "shown",
-        cell: (a) =>
-          fill("alerts.handled_by", {
-            time: formatAlertTime(a.handledAt ?? null),
-            person: a.handledBy ?? t("alerts.someone"),
-          }),
+        cell: handledText,
+        searchValue: handledText,
       },
     ];
   }
@@ -260,6 +292,14 @@ export class AlertsScreen extends LitElement {
         <div slot="open">
           <wt-data-table
             noMatchesMessage=${tableNoMatches()}
+            filterSearchPlaceholder=${t("categories.combobox_search")}
+            filterNoResultsLabel=${t("categories.combobox_no_results")}
+            filtersLabel=${t("table.filters")}
+            filteredColumnLabel=${t("table.filtered_column")}
+            filtersClearAllLabel=${t("table.filters_clear_all")}
+            filtersCloseLabel=${t("table.filters_close")}
+            searchable
+            searchLabel=${t("alerts.search_open")}
             data-test="open-alerts-table"
             viewKey="waitron.alerts.open.table"
             customiseColumnsLabel=${t("table.customise_columns")}
@@ -284,6 +324,14 @@ export class AlertsScreen extends LitElement {
         <div slot="handled">
           <wt-data-table
             noMatchesMessage=${tableNoMatches()}
+            filterSearchPlaceholder=${t("categories.combobox_search")}
+            filterNoResultsLabel=${t("categories.combobox_no_results")}
+            filtersLabel=${t("table.filters")}
+            filteredColumnLabel=${t("table.filtered_column")}
+            filtersClearAllLabel=${t("table.filters_clear_all")}
+            filtersCloseLabel=${t("table.filters_close")}
+            searchable
+            searchLabel=${t("alerts.search_handled")}
             data-test="handled-alerts-table"
             viewKey="waitron.alerts.handled.table"
             customiseColumnsLabel=${t("table.customise_columns")}

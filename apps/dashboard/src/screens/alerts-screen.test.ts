@@ -2,6 +2,7 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, timesAcrossLines } from "../widgets/test-helpers.js";
+import { chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { AlertView, AlertsResponse, DashboardApi } from "../api/client.js";
 import "./alerts-screen.js";
@@ -733,3 +734,90 @@ it.each(captureCases)(
     }
   },
 );
+
+describe("searching and filtering the alerts", () => {
+  const handledBackup: AlertView = {
+    ...ongoing,
+    key: "incident:i3",
+    kind: "event",
+    handledAt: "2026-09-14T14:00:00.000Z",
+    handledBy: "Jordi",
+  };
+  async function mountAlerts(): Promise<AlertsScreen> {
+    const api = stubApi({
+      listHandledAlerts: vi
+        .fn()
+        .mockResolvedValue({ visible: true, alerts: [handled, handledBackup] }),
+    });
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
+    await flush(el);
+    return el;
+  }
+  const table = (el: AlertsScreen, test: string) =>
+    el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      `[data-test=${test}]`,
+    )!;
+  function rowKeys(el: AlertsScreen, test: string): string[] {
+    return [...table(el, test).shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+      row.getAttribute("data-row-key")!,
+    );
+  }
+  async function search(el: AlertsScreen, test: string, value: string): Promise<void> {
+    const box = table(el, test).shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+    box.value = value;
+    box.dispatchEvent(new Event("input"));
+    await flush(el);
+    await table(el, test).updateComplete;
+  }
+  const areaFilter = (el: AlertsScreen, test: string) =>
+    table(el, test).shadowRoot!.querySelector<HTMLElement>('wt-combobox[data-filter="area"]')!;
+
+  it("narrows the open alerts to those whose wording matches the search", async () => {
+    const el = await mountAlerts();
+    await search(el, "open-alerts-table", "no copy of your data");
+    expect(rowKeys(el, "open-alerts-table")).toEqual(["backup.disabled:local"]);
+    await search(el, "open-alerts-table", "problem");
+    expect(rowKeys(el, "open-alerts-table")).toEqual(["incident:i1"]);
+  });
+
+  it("narrows the handled alerts to those whose wording or handler matches the search", async () => {
+    const el = await mountAlerts();
+    await search(el, "handled-alerts-table", "jordi");
+    expect(rowKeys(el, "handled-alerts-table")).toEqual(["incident:i3"]);
+    await search(el, "handled-alerts-table", "card refund");
+    expect(rowKeys(el, "handled-alerts-table")).toEqual(["incident:i2"]);
+  });
+
+  it("narrows each list to the area chosen", async () => {
+    const el = await mountAlerts();
+    const filter = areaFilter(el, "open-alerts-table") as HTMLElement & {
+      options: { label: string }[];
+    };
+    expect(new Set(filter.options.map((o) => o.label))).toEqual(
+      new Set([t("alerts.filter_area_all"), "Backups", "Card payments"]),
+    );
+    await chooseOptions(filter, ["backup"]);
+    await flush(el);
+    expect(rowKeys(el, "open-alerts-table")).toEqual(["backup.disabled:local"]);
+    await chooseOptions(areaFilter(el, "handled-alerts-table"), ["payments"]);
+    await flush(el);
+    expect(rowKeys(el, "handled-alerts-table")).toEqual(["incident:i2"]);
+  });
+
+  it("translates the alerts' filter panel", async () => {
+    const el = await mountAlerts();
+    const filter = areaFilter(el, "handled-alerts-table") as HTMLElement & {
+      searchPlaceholder: string;
+      noResultsLabel: string;
+    };
+    expect([filter.searchPlaceholder, filter.noResultsLabel]).toEqual([
+      t("categories.combobox_search"),
+      t("categories.combobox_no_results"),
+    ]);
+    expect(
+      table(el, "handled-alerts-table")
+        .shadowRoot!.querySelector(".filters-trigger")!
+        .getAttribute("aria-label"),
+    ).toBe(t("table.filters"));
+  });
+});
