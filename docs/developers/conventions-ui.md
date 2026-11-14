@@ -2145,8 +2145,10 @@ and drops every other owner's old notices (`nextNotices`, `apps/till/src/state/s
 then orders them errors, warnings, then the rest, in the box's order within each. The box's order is
 its own source (`box`), the enabled modules', then the per-device printer source (`printers`,
 `deviceSources` in `apps/server/src/device-api.ts`), which reads the box's printers in trouble
-at most once per ten seconds for every device together, and names a printer only while it is stuck
-(no later document on it has printed): a kitchen printer for every device, another only for the
+at most once per ten seconds for every device together, and names a printer as `printer.jobs_waiting`
+while it is stuck (no later document on it has printed), and as `printer.ticket_failed` once a later
+document has printed but a ticket it gave up on has no printed reprint or resend: a kitchen printer for
+every device, another only for the
 devices whose receipts, payment slips or full invoices resolve to it (`printerStaffNoticeSource`,
 `apps/server/src/box-staff-notices.ts`). Logging out clears the till's notices (`#endOperatorSession`), so nothing
 carries from one session to the next. A kitchen display in device mode signs no one in, runs no

@@ -125,8 +125,9 @@ has waited two minutes or more without printing, or the server has stopped tryin
 kitchen printer's notice shows on every till and handheld; any other printer's only on the tills
 and handhelds that print their receipts, payment slips or full invoices to it. Check the printer's
 paper, power and cable. The notice goes once the printer prints anything sent to it after that
-ticket. If that ticket itself never printed, the tills then show **Printer “Kitchen” could not print
-a ticket · Reprint it** in amber until it is reprinted from the table or resent from **Printers**.
+ticket. If the server stopped trying to send a ticket, the tills then show **Printer “Kitchen”
+could not print a ticket · Reprint it** in amber until a reprint of it (a kitchen ticket from the
+table, a receipt from its sale) or a resend from **Printers** has printed.
 
 **The server needs attention · Tell a manager** is a notice this till has no words for, perhaps from
 a newer version of the server. Tell a manager so they can check the server.

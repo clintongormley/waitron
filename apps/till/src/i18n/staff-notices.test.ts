@@ -14,7 +14,7 @@ const LANGUAGES = [
 
 const TICKET_FAILED = {
   "en-GB": { main: "Printer “Kitchen” could not print a ticket", hint: "Reprint it" },
-  "es-ES": { main: "Impresora «Cocina»: no pudo imprimir un ticket", hint: "Vuelve a imprimirlo" },
+  "es-ES": { main: "Impresora «Cocina» no pudo imprimir un ticket", hint: "Vuelve a imprimirlo" },
 } as const;
 
 describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {

@@ -72,7 +72,7 @@ export function staffNoticeText(
     if (typeof printer !== "string" || printer === "") return unknownText();
     return {
       main: t("staff_notice.printer.ticket_failed").replace("{printer}", () => printer),
-      hint: t("staff_notice.printer.reprint"),
+      hint: t("staff_notice.reprint"),
     };
   }
   if (notice.code === "fiscal.records_unsent") {

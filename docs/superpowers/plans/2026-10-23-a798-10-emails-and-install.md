@@ -478,6 +478,9 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
     the design keeps ("means what it means today", `:1279`), so the job a printer gave up on still
     shows there until it is reprinted or resent. Cost: a printer that prints some documents but
     keeps failing others (a jam on long tickets) loses its notice at the first one that prints.
+    **2026-11-14:** the owner chose a second till notice for that case (campaign C questions,
+    PRINTER-STUCK-COUNT part 3, option (b)): once a later document prints, a printer that gave up on
+    a ticket shows `printer.ticket_failed` until a reprint or resend of it has printed.
 
 ## Questions for the owner
 
