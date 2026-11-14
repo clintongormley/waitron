@@ -9,6 +9,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Hono } from "hono";
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { X509Certificate } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -51,7 +53,9 @@ import { venueModuleConfig } from "./provision.js";
 import { readModuleConfig } from "./module-config.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
-import { generateNodeKeyPair } from "@waitron/membership";
+import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { encodeRecoveryKit, signPointer } from "@waitron/stream";
 import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
@@ -90,6 +94,32 @@ vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
   return ephemeralHttpMock();
 });
+
+const MAIN_NODE_ID = "44444444-4444-4444-8444-444444444444";
+
+/** A main box's answer to an adopt, with the parts a test varies given. */
+function bundleFor(overrides: {
+  boxCaPem: string;
+  boxCaKeyPem: string;
+  endorsement: unknown;
+  moduleOverrides: Record<string, boolean>;
+  primaryPublicKey: string;
+}) {
+  const { endorsement, ...rest } = overrides;
+  return {
+    designated: { nodeId: MAIN_NODE_ID },
+    tenant: { country: "ES", taxId: "80000001K" },
+    primaryNode: { name: "Till 1", filingModule: "fiscal-verifactu", taxModule: null },
+    environment: "preproduction",
+    boxHostname: "waitron.local",
+    ...PAIR_BUNDLE_FIELDS,
+    accountKey: Buffer.alloc(32, 9).toString("base64"),
+    reservedIdentity: { modules: {}, series: [], endorsement },
+    credentialsRing: { key: Buffer.alloc(32, 8).toString("base64"), version: 1 },
+    backupSettings: null,
+    ...rest,
+  };
+}
 
 const { beforeServerStarts, startServer, httpPort, startConfiguredServer } =
   ephemeralServerFixture();
@@ -1859,36 +1889,135 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
+  it("an adopt in the setup start restarts through the seam, not by signalling the process", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const primaryKeys = generateNodeKeyPair();
+    const primary = createHttpServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        const sent = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+          standbyNodeId: string;
+          standbyPublicKey: string;
+        };
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify(
+            bundleFor({
+              boxCaPem: MAIN_AUTHORITY.caCertPem,
+              boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
+              endorsement: endorseKey(
+                sent.standbyNodeId,
+                sent.standbyPublicKey,
+                MAIN_NODE_ID,
+                primaryKeys.privateKey,
+              ),
+              moduleOverrides: { "fiscal-verifactu": false },
+              primaryPublicKey: primaryKeys.publicKey,
+            }),
+          ),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
+    const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
+    let restarts = 0;
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, kills }) => {
+          const response = await post("/setup-api/adopt", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              primaryUrl,
+              credential: { personId: "33333333-3333-4333-8333-333333333333", password: "x" },
+            }),
+          });
+          expect(response.status).toBe(200);
+          await poll(() => (restarts > 0 ? restarts : undefined));
+          expect(restarts).toBe(1);
+          expect(kills).toEqual([]);
+        },
+        { seams: { restart: () => (restarts += 1) } },
+      );
+    } finally {
+      await new Promise((resolve) => primary.close(resolve));
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("a setup start's box-to-box call resolves a `.local` name through the injected lookup", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const name = "nothing-else-resolves-this.local";
+    const served = mintSelfSignedServerCert({
+      hostnames: [name],
+      ipAddresses: [],
+      now: new Date(),
+    });
+    const main = createHttpsServer(
+      { cert: served.serverCertPem, key: served.serverKeyPem },
+      (req, res) => {
+        if (req.url !== "/ca.crt") {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/x-pem-file" });
+        res.end(MAIN_AUTHORITY.caCertPem);
+      },
+    );
+    await new Promise<void>((resolve) => main.listen(0, "127.0.0.1", resolve));
+    const port = (main.address() as AddressInfo).port;
+    const asked: string[] = [];
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post }) => {
+          const response = await post("/setup-api/primary-certificate", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ primaryUrl: `https://${name}:${port}` }),
+          });
+          expect(response.status).toBe(200);
+          expect(((await response.json()) as { fingerprint256: string }).fingerprint256).toBe(
+            new X509Certificate(MAIN_AUTHORITY.caCertPem).fingerprint256,
+          );
+          expect(asked).toEqual([name]);
+        },
+        {
+          seams: {
+            boxLookup: async (hostname) => {
+              asked.push(hostname);
+              return { addresses: ["127.0.0.1"], remembered: false };
+            },
+          },
+        },
+      );
+    } finally {
+      await new Promise((resolve) => main.close(resolve));
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("refuses an adopt into a database stamped for another environment without locking setup", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const bundle = {
-      designated: {
-        nodeId: "44444444-4444-4444-8444-444444444444",
-      },
-      tenant: { country: "ES", taxId: "80000001K" },
-      primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
-      environment: "preproduction",
-      boxHostname: "waitron.local",
+    const bundle = bundleFor({
       boxCaPem: "fixture-ca",
-      ...PAIR_BUNDLE_FIELDS,
-      accountKey: Buffer.alloc(32, 9).toString("base64"),
-      reservedIdentity: {
-        modules: {},
-        series: [],
-        endorsement: {
-          nodeId: "66666666-6666-4666-8666-666666666666",
-          publicKey: "fixture-key",
-          endorsedBy: "44444444-4444-4444-8444-444444444444",
-          signature: "fixture-signature",
-        },
+      boxCaKeyPem: "fixture-ca-key",
+      endorsement: {
+        nodeId: "66666666-6666-4666-8666-666666666666",
+        publicKey: "fixture-key",
+        endorsedBy: MAIN_NODE_ID,
+        signature: "fixture-signature",
       },
       moduleOverrides: {},
       primaryPublicKey: "fixture-primary-key",
-      credentialsRing: { key: Buffer.alloc(32, 8).toString("base64"), version: 1 },
-      backupSettings: null,
-      boxCaKeyPem: "fixture-ca-key",
-    };
+    });
     const primary = createHttpServer((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(bundle));

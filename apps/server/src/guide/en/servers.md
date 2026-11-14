@@ -5,6 +5,38 @@
 If you see **This box is the spare**, open the main box’s address to use the restaurant screens
 and data. The spare’s page shows its status; it takes no sales and offers no dashboard sign-in.
 
+## Add a spare box {#adding-a-spare}
+
+A venue set up in Spain cannot add a spare yet.
+
+A spare that has finished joining cannot be removed in this version. Do not add one to a venue
+that is open for business until an update lets you remove it.
+
+While a joined spare is switched off, the main box waits at each start until an administrator
+[lets it carry on without the spare](servers.md#carry-on).
+
+Before you start, check two things on the main box:
+
+- It has a backup recovery key, which the spare needs. If backups have never been turned on, open
+  **Backups** and choose **Turn on backups**.
+- **Continuous copy to your bucket** is off. The venue copies its changes to one place at a time,
+  and a spare takes that place. To add a spare anyway, choose **Turn off** under that heading; your
+  bucket then stops receiving the venue's changes, and in this version it cannot receive them again
+  while the spare is there.
+
+You also need an account that can open **Settings → Servers** on the main box, with its person ID,
+its password and its current authenticator code, if set up.
+
+Connect the new box to the venue's network and switch it on; it needs no internet connection.
+Because `waitron.local` reaches the main box, open the address that the new box's screen lists
+after **Use this box's own address**. Choose **Join or recover**, then **Add a mirror node**.
+
+Enter the main box's HTTPS address and choose **Continue**. On a device already signed in to the
+main box's dashboard, open **Settings → Servers** and compare **This server's public certificate
+fingerprint** with the one the new box shows. Choose **It matches** only if they are the same.
+Then enter the account's details and choose **Connect**. The new box takes its first copy over the
+venue's network and restarts by itself as the spare.
+
 ## Start here when the main box has failed {#emergency}
 
 Use a spare that has finished joining this venue. Switch off the old main box and keep it off,

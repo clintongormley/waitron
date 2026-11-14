@@ -12,7 +12,7 @@
 //     and a sale made while the bucket was frozen is in it.
 // `stream-pause.e2e.test.ts` runs it against versitygw; `aws-stream-pause.aws-rehearsal.test.ts`
 // against Amazon S3, by opt-in only.
-import { cp, mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -64,6 +64,7 @@ import { establishNodeIdentity } from "../node-identity.js";
 import { streamSettingsPayload, type StreamHostDeps } from "../stream-host.js";
 import { freePort } from "./free-ports.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
+import { bootEnv, copyMigrations } from "./stream-box.js";
 import {
   framesUnderHeader,
   holdProven,
@@ -259,13 +260,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
   const failures: unknown[] = [];
   try {
     clock.begin("probe");
-    const migrationsRoot = join(scratch, "migrations");
-    const fromSource = migrationOptionsFor(manifestSets(), null);
-    for (const [index, set] of manifestSets().entries()) {
-      await cp(fromSource[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-        recursive: true,
-      });
-    }
+    const migrationsRoot = await copyMigrations(scratch);
 
     // 1. The bucket.
     const store = fixture.store ?? createS3ObjectStore(bucket);
@@ -288,7 +283,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
       listIpv4: () => [],
     });
     const ring = loadKeyRing(parseEnvFile(await readFile(join(stateDir, "secrets.env"), "utf8")));
-    await applyMigrations(venueDir, fromSource);
+    await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
     const seeding = await openVenueDatabase(venueDir);
     let box: {
       nodeId: string;
@@ -413,14 +408,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     // 3. The server boots with a small side-file limit and opens its generation.
     server = await startServer(
       await loadBoxEnv(
-        {
-          WAITRON_STATE_DIR: stateDir,
-          WAITRON_VENUE_DIR: venueDir,
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_HTTP_LANDING_PORT: "0",
-          WAITRON_LITESTREAM_BIN: litestreamBin,
-        },
+        bootEnv({ state: stateDir, venue: venueDir }, port, migrationsRoot, litestreamBin),
         stateDir,
       ),
       {},

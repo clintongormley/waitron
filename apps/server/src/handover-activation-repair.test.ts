@@ -147,7 +147,7 @@ async function startAfterTheKill(env?: Record<string, string>) {
   vi.setSystemTime(new Date("2026-10-16T12:41:00Z"));
   started = await startServer(env ?? (await spareEnv()), undefined, {
     timings: { minTickMs: 200, maxTickMs: 600_000 },
-    stepdown: { mount: () => {}, restart: () => restarts.push("restart") },
+    restart: () => restarts.push("restart"),
   });
   return restarts;
 }

@@ -1118,7 +1118,7 @@ asking the network, a spare listens on the venue's network, and what it serves t
 test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (the pair link: a spare joins with no Cloud relay,
 the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898); 3b-5b (a spare runs its store behind a listener
 that admits only its main box's client certificate, a venue with a standby refuses bucket-copy settings, and key ring
-rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining). 3b-6b to 3b-F and slices 3c onwards are still open;
+rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining) and 3b-6b (a test runs a main box and a spare together over the venue's network, and the Servers guide explains adding a spare). 3b-6c to 3b-F and slices 3c onwards are still open;
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
@@ -1280,13 +1280,6 @@ not a notification to refresh the fingerprint.
 Evidence: `~/waitron-campaign-d/receipts/a1282/refresh.log`, `browser-events.json` and screenshots.
 The Chromium check accepted only the original served leaf key through a temporary SPKI exemption,
 with `ignoreHTTPSErrors: false`; it did not install an authority in the operating system.
-
-## A1283: spare-joining guide owned by A947 Task 6.10
-
-[A947 Task 6.10](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md#task-610-the-guide-the-docs-and-final-checks)
-owns the English and Spanish “Adding a spare box” section and its fingerprint comparison, alongside
-the joining feature. The existing Servers guide covers handover and returning a former main box;
-no separate guide or help bubble is needed before spare joining is available.
 
 ## Loose ends left by the Cloud connection integration
 

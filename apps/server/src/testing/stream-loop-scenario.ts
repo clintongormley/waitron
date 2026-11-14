@@ -4,28 +4,15 @@
 // restore of B's generation holds exactly what B's database holds. `stream-loop.e2e.test.ts` runs it
 // against versitygw; `aws-stream-loop.aws-rehearsal.test.ts` against Amazon S3, by opt-in only.
 import { randomBytes, randomUUID, X509Certificate } from "node:crypto";
-import { copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
 import { connect as tlsConnect } from "node:tls";
 import { eq } from "drizzle-orm";
 import { expect } from "vitest";
-import {
-  loadKeyRing,
-  nodeSigningPublicKey,
-  putCredential,
-  readNodeSigningKey,
-} from "@waitron/credentials";
-import {
-  nodeSealedState,
-  nodes,
-  openVenueDatabase,
-  readStandardSeriesId,
-  stampDeployment,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { loadKeyRing, nodeSigningPublicKey, readNodeSigningKey } from "@waitron/credentials";
+import { nodeSealedState, nodes, openVenueDatabase, readStandardSeriesId } from "@waitron/db";
 import {
   createPaperAllocationPreparation,
   registroSif,
@@ -33,22 +20,19 @@ import {
 } from "@waitron/fiscal-verifactu";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack";
 import { verifySecretAsync } from "@waitron/identity";
-import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readRecoveryKeyVerifier } from "@waitron/node-db";
-import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { nodeId } from "@waitron/shared";
 import {
   applyVenue as applyMinuteVenue,
   mergeModulePreparationRevisions,
-  planVenue,
   quoteIdent,
+  type VenueRequest,
 } from "@waitron/provisioning";
 import { withOperationAuthority } from "@waitron/module";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { createHourTestClock, selectPastWaits } from "./hour-test-clock.js";
-import { mintBreakGlassSecret } from "../break-glass.js";
 import {
   createRecoveryRestoreRunner,
   readRecoveryOperationFile,
@@ -70,21 +54,45 @@ import { recordFixtureSale } from "../../scripts/testing/sale.js";
 import { deriveStreamKey } from "../stream-key.js";
 import { startServer, type StartedServer } from "../boot.js";
 import { loadBoxEnv } from "../box-env.js";
-import { ensureBoxSecrets } from "../box-secrets.js";
-import { formatEnvFile, parseEnvFile } from "../env-file.js";
-import { seedTermZeroMembership } from "../membership-seed.js";
+import { parseEnvFile } from "../env-file.js";
 import { ALL_MODULES } from "../modules.js";
-import { establishNodeIdentity } from "../node-identity.js";
 import { runRestore } from "../restore-command.js";
 import { unsealNodeState } from "../sealed-state.js";
-import { streamSettingsPayload, type StreamHostDeps } from "../stream-host.js";
+import type { StreamHostDeps } from "../stream-host.js";
 import { httpsVia } from "./boot-harness.js";
 import { freePort } from "./free-ports.js";
-import { stageClock, waitUntil } from "./scenario-stages.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
+import { stageClock, waitUntil } from "./scenario-stages.js";
+import { bootEnv, boxDirs, copyMigrations, provisionStreamBox } from "./stream-box.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";
+const VENUE: VenueRequest = {
+  country: "ES",
+  taxId: "74000001P",
+  legalName: "Stream Loop SL",
+  name: "Main room",
+  fiscalTerritory: "ES-common",
+  invoiceLocales: [LOCALE],
+  operationDescription: "Venta en establecimiento",
+  addressLine1: "Calle Mayor 1",
+  addressLine2: null,
+  postalCode: "28013",
+  city: "Madrid",
+  province: "Madrid",
+  timeZone: "Europe/Madrid",
+  dayCutover: "05:00",
+  seriesCode: "A",
+  rectificativeSeriesCode: "R",
+  admin: {
+    displayName: "Administrator",
+    firstNames: "Test",
+    lastNames: "Operator",
+    pinHash: fixturePinHash("1234"),
+    passwordHash: fixturePasswordHash("dashPass123"),
+    email: "owner@example.test",
+  },
+};
 
 // `waitFor` checks each POINTER and UPLOAD wait's deadline between probes, and each restore passes
 // RESTORE_MS as `restoreGeneration`'s ceiling, which it checks every five seconds.
@@ -149,19 +157,6 @@ export interface StreamLoopFixture {
   record?(event: StreamLoopEvent): void;
   /** Handed to both servers' stream, so a caller can learn of each Litestream they start. */
   serverSeams?: Pick<StreamHostDeps, "spawn">;
-}
-
-interface BoxDirs {
-  root: string;
-  state: string;
-  venue: string;
-}
-
-async function boxDirs(parent: string, name: string): Promise<BoxDirs> {
-  const root = join(parent, name);
-  const dirs = { root, state: join(root, "state"), venue: join(root, "state", "venue") };
-  await mkdir(dirs.venue, { recursive: true });
-  return dirs;
 }
 
 /** Keys in the bucket containing `fragment`, whether the store returns them with its prefix or without. */
@@ -330,13 +325,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
   const failures: unknown[] = [];
   try {
     clock.begin("probe");
-    const migrationsRoot = join(scratch, "migrations");
-    const fromSource = migrationOptionsFor(manifestSets(), null);
-    for (const [index, set] of manifestSets().entries()) {
-      await cp(fromSource[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-        recursive: true,
-      });
-    }
+    const migrationsRoot = await copyMigrations(scratch);
 
     // 1. The bucket, and the conditional write every pointer move depends on. A server that does not
     //    refuse a stale write fails HERE, with the probe's reason, before anything streams.
@@ -352,119 +341,20 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     //    switched on with a recovery key.
     const dirsA = await boxDirs(scratch, "box-a");
     const portA = await freePort();
-    await ensureBoxSecrets({
-      stateDir: dirsA.state,
-      hostnames: ["waitron.local", "localhost"],
-      now: () => new Date(),
-      listIpv4: () => [],
+    const { nodeSecret: mintedSecret, ...a } = await provisionStreamBox({
+      dirs: dirsA,
+      advertisedOrigin: `https://127.0.0.1:${portA}`,
+      bucket,
+      recoveryKey: RECOVERY_KEY,
+      modulesJson: { modules: { "fiscal-none": false } },
+      venue: { request: VENUE, modules: ALL_MODULES },
+      ...(fixture.useRecoveryPack ? { apply: applyWithFirstSetup(dirsA.state) } : {}),
     });
-    const ring = loadKeyRing(
-      parseEnvFile(await readFile(join(dirsA.state, "secrets.env"), "utf8")),
-    );
-    await applyMigrations(dirsA.venue, fromSource);
-    let nodeSecret: string;
-    const seeding = await openVenueDatabase(dirsA.venue);
-    let a: {
-      nodeId: string;
-      seriesId: string;
-      locationId: string;
-      publicKey: string;
-    };
-    try {
-      await stampDeployment(seeding.venue, "preproduction");
-      const venue = await (fixture.useRecoveryPack ? applyWithFirstSetup(dirsA.state) : applyVenue)(
-        planVenue(
-          {
-            country: "ES",
-            taxId: "74000001P",
-            legalName: "Stream Loop SL",
-            name: "Sala principal",
-            fiscalTerritory: "ES-common",
-            invoiceLocales: [LOCALE],
-            operationDescription: "Venta en establecimiento",
-            addressLine1: "Calle Mayor 1",
-            addressLine2: null,
-            postalCode: "28013",
-            city: "Madrid",
-            province: "Madrid",
-            timeZone: "Europe/Madrid",
-            dayCutover: "05:00",
-            seriesCode: "A",
-            rectificativeSeriesCode: "R",
-            admin: {
-              displayName: "Administradora",
-              firstNames: "Test",
-              lastNames: "Operator",
-              pinHash: fixturePinHash("1234"),
-              passwordHash: fixturePasswordHash("dashPass123"),
-              email: "owner@example.test",
-            },
-          },
-          ALL_MODULES,
-        ),
-        { db: seeding.venue, modules: ALL_MODULES },
-      );
-      const venueId = await venueLocationId(seeding.venue);
-      nodeSecret = await mintBreakGlassSecret(
-        { venue: seeding.venue, node: seeding.node },
-        venue.nodeId,
-      );
-      await establishNodeIdentity(
-        { ownerDb: seeding.venue, node: seeding.node, ring },
-        venue.nodeId,
-      );
-      await seedTermZeroMembership(
-        { db: seeding.venue, node: seeding.node, ring },
-        venue.nodeId,
-        `https://127.0.0.1:${portA}`,
-      );
-      await withTransaction(seeding.venue, (tx) =>
-        putCredential(tx, ring, {
-          purpose: "backup.stream",
-          value: streamSettingsPayload({ venueId, bucket }),
-        }),
-      );
-      const [row] = await seeding.venue
-        .select({ publicKey: nodes.publicKey })
-        .from(nodes)
-        .where(eq(nodes.id, venue.nodeId));
-      a = {
-        nodeId: venue.nodeId,
-        seriesId: venue.seriesIds[0]!,
-        locationId: venueId,
-        publicKey: row!.publicKey!,
-      };
-    } finally {
-      await seeding.close();
-    }
-    await writeFile(
-      join(dirsA.state, "trading.env"),
-      formatEnvFile({
-        WAITRON_NODE_ID: a.nodeId,
-        WAITRON_ENV: "preproduction",
-      }),
-    );
-    await writeFile(
-      join(dirsA.state, "backup.env"),
-      formatEnvFile({ WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY }),
-    );
-    await writeFile(
-      join(dirsA.state, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
-
-    const bootEnv = (dirs: BoxDirs, port: number): NodeJS.ProcessEnv => ({
-      WAITRON_STATE_DIR: dirs.state,
-      WAITRON_VENUE_DIR: dirs.venue,
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_LITESTREAM_BIN: litestreamBin,
-    });
+    let nodeSecret = mintedSecret;
 
     // 3. A boots, opens its generation and moves the pointer only after the first full copy landed.
     const serverA = await startServer(
-      await loadBoxEnv(bootEnv(dirsA, portA), dirsA.state),
+      await loadBoxEnv(bootEnv(dirsA, portA, migrationsRoot, litestreamBin), dirsA.state),
       {},
       { stream: { ...fixture.serverSeams } },
     );
@@ -738,7 +628,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     // 7. B's first start: a membership document one term higher, a generation of its own, and the
     //    pointer moved — still verifiable with the key the owner's kit carries.
     const serverB = await startServer(
-      await loadBoxEnv(bootEnv(dirsB, portB), dirsB.state),
+      await loadBoxEnv(bootEnv(dirsB, portB, migrationsRoot, litestreamBin), dirsB.state),
       {},
       { stream: { ...fixture.serverSeams } },
     );

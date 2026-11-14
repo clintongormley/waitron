@@ -274,7 +274,7 @@ async function boot(
   server = await startServer(env, env, {
     timings: { maxTickMs: 600000, minTickMs: 200 },
     peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
-    stepdown: { mount: () => {}, restart: () => {} },
+    restart: () => {},
   });
   return { nodeId, asked, posts, binding };
 }

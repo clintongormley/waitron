@@ -62,8 +62,6 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/testing/staged-hour-crash.ts": "test harness: a scratch box it removes",
   "apps/server/src/testing/staged-hour-restore.ts": "test harness: a scratch box it removes",
   "apps/server/src/testing/stream-loop-scenario.ts": "test harness: scratch folders it removes",
-  "apps/server/src/testing/stream-pause-scenario.ts":
-    "test harness: copies migration folders into its scratch box and only opens its venue.db",
   "packages/stream/src/restore.ts": "removes its own configuration file",
   "packages/stream/src/supervisor.ts": "removes its pid file and venue.db's Litestream folder",
 };

@@ -89,7 +89,7 @@ async function withServer(
   let seen: Hono | undefined;
   const seams: StartServerSeams = {
     boxHostRequests: host,
-    stepdown: { mount: () => {}, restart },
+    restart,
     requestFromBox: () => false,
     observeApp: (app) => {
       seen = app;

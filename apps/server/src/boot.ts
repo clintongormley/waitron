@@ -380,7 +380,12 @@ import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { adoptFromPrimary } from "./adopt.js";
-import { fetchMirrorBundle, rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
+import {
+  fetchMirrorBundle,
+  fetchPrimaryCertificate,
+  rememberCheckedAddressesIn,
+  type BoxLookup,
+} from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
@@ -1021,13 +1026,9 @@ export interface StartServerSeams {
   observeApp?: (app: Hono) => void;
   /** Every card provider the till and the card sweeps reach, built on the server's own handle. */
   cardPool?: (deps: { db: Database }) => CardProviderPool;
-  /**
-   * The full start's stepdown, handed to a test that mounts its own route behind the handover gate;
-   * `restart` stands in for the SIGTERM.
-   */
+  /** The full start's stepdown, for a test that mounts its own route behind the handover gate. */
   stepdown?: {
     mount(app: Hono, stepDown: (request: StepDownRequest) => Promise<StepDownResult>): void;
-    restart(): void;
   };
   /**
    * Stands in for the start check on a box that is not a mirror. A suite sets it, saying why at the
@@ -1051,6 +1052,19 @@ export interface StartServerSeams {
   mdnsQuerySocket?: () => MdnsQuerySocket;
   /** Draws the setup start's delay between those asks; unset, `Math.random`. */
   setupAskRandom?: () => number;
+  /**
+   * Resolves another box's name for the setup routes, adopt, the start check and the store pipe;
+   * unset, `lookupBoxName`.
+   */
+  boxLookup?: BoxLookup;
+  /**
+   * Takes every restart a start asks for, so a test running servers in its own process is not
+   * stopped: `"restart"` where production calls `restartProcess`, `"signal"` where it sends itself
+   * SIGTERM.
+   */
+  restart?: (kind: "restart" | "signal") => void;
+  /** Awaited by the joining spare's first-copy job before each attempt. */
+  spareCopy?: { hold?: Promise<void> };
 }
 
 /**
@@ -1398,7 +1412,14 @@ async function bootServer(
   let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
     Promise.reject(new Error("stepdown called on a start that has not provided one"));
   seams.stepdown?.mount(app, (request) => stepDownHere(request));
-  const restart = seams.stepdown?.restart ?? restartProcess;
+  const restartSeam = seams.restart;
+  const restart = restartSeam ? () => restartSeam("restart") : restartProcess;
+  const signalRestart = restartSeam
+    ? () => restartSeam("signal")
+    : () => process.kill(process.pid, "SIGTERM");
+  const boxLookup = seams.boxLookup;
+  const storeLookup =
+    boxLookup === undefined ? undefined : (name: string) => boxLookup(name, { fresh: false });
   // Registered before every surface below, so each wraps all of them; `/health`, registered above, is
   // deliberately left out of the request log and names no build.
   app.use("*", requestIdMiddleware(log, now));
@@ -1531,6 +1552,8 @@ async function bootServer(
         writeClockSteps: () => setupClock.writePending(),
         cloudRecovery,
         requestFromBox: seams.requestFromBox,
+        readPrimaryCertificate: (primaryUrl) =>
+          fetchPrimaryCertificate(primaryUrl, { lookup: seams.boxLookup }),
         prepareRecovery: recoveryPreparation,
         stageRecovery: recoveryPreparation.stage,
         discardStagedRecovery: recoveryPreparation.discard,
@@ -1743,7 +1766,10 @@ async function bootServer(
               ring,
               persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
               persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
-              fetchBundle: fetchMirrorBundle,
+              fetchBundle: (primaryUrl, credential, standby, confirmedCaPem) =>
+                fetchMirrorBundle(primaryUrl, credential, standby, confirmedCaPem, {
+                  lookup: seams.boxLookup,
+                }),
               advertisedOrigin: config.managementOrigin,
               spareStorePort: config.spareStorePort,
               environment: config.environment,
@@ -1769,7 +1795,7 @@ async function bootServer(
         node: store.node,
         ring,
         persistTrading,
-        requestRestart: () => process.kill(process.pid, "SIGTERM"),
+        requestRestart: signalRestart,
         setupAppDir: config.setupAppDir,
       },
       log,
@@ -1944,6 +1970,7 @@ async function bootServer(
         migrationsRoot: config.migrationsRoot,
         restart,
         report: (status) => (copyStatus = status),
+        ...(seams.spareCopy?.hold === undefined ? {} : { hold: seams.spareCopy.hold }),
       }).catch((error: unknown) => {
         if (!copyAbort.signal.aborted)
           log("error", "spare.first_copy_failed", { errorCode: codeOf(error) });
@@ -2102,6 +2129,7 @@ async function bootServer(
             stateDir: config.stateDir,
             advertisedOrigin: config.managementOrigin,
             log,
+            lookup: seams.boxLookup,
           })
         : seams.peerCheck();
     let outcome = await checkPeers();
@@ -2476,7 +2504,7 @@ async function bootServer(
         scope,
         admission: tradingAdmission,
         managementOrigin: config.managementOrigin,
-        requestRestart: () => process.kill(process.pid, "SIGTERM"),
+        requestRestart: signalRestart,
         now,
       },
       log,
@@ -3377,6 +3405,7 @@ async function bootServer(
     mayStream: () => firstStart.mayStream,
     readRecoveryKey,
     refreshSealedState: () => sealedState.refresh(),
+    ...(storeLookup === undefined ? {} : { storeLookup }),
     ...seams.stream,
   });
   const stopSealingNodeCommits = store.node.onCommit(() => jobRunner.wake("backups.sealed_state"));
@@ -3416,6 +3445,7 @@ async function bootServer(
         stream: streamHost,
         turns: backupTurns,
         log,
+        ...(storeLookup === undefined ? {} : { storeLookup }),
       })
     : undefined;
   undoOnFailure.push(async () => spareJoin?.stop());
@@ -4078,7 +4108,7 @@ async function bootServer(
         stateDir: config.stateDir,
         now,
         log,
-        kill: () => process.kill(process.pid, "SIGTERM"),
+        kill: signalRestart,
         store: { lock: withRecoveryLock, read: readRecoveryState, write: writeRecoveryState },
       }),
       log,

@@ -123,6 +123,7 @@ describe("the user guides", () => {
     expect(markdown).toBeDefined();
     expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
       "spare",
+      "adding-a-spare",
       "emergency",
       "old-box-returns",
       "hand-over",

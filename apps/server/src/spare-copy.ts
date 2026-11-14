@@ -51,10 +51,25 @@ export interface FirstCopyDeps {
   migrationsRoot: string | null;
   restart: () => void;
   report: (status: FirstCopyStatus) => void;
+  /** Awaited before each attempt. */
+  hold?: Promise<void>;
   openStore?: (bucket: BucketConfig) => ObjectStore;
   restoreGeneration?: typeof restoreGeneration;
   checkIntegrity?: (databasePath: string) => Promise<boolean>;
   intervalMs?: number;
+}
+
+/** Settles when `hold` does, however it settles, or rejects once `signal` aborts. */
+function untilAborted(hold: Promise<void>, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const stop = () => reject(signal.reason);
+    signal.addEventListener("abort", stop, { once: true });
+    const released = () => {
+      signal.removeEventListener("abort", stop);
+      resolve();
+    };
+    void hold.then(released, released);
+  });
 }
 
 /** Why an attempt ended without a copy; the reason is what `spare.first_copy_waiting` logs. */
@@ -93,6 +108,7 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
   deps.report({ copy: "waiting" });
   for (;;) {
     deps.signal.throwIfAborted();
+    if (deps.hold !== undefined) await untilAborted(deps.hold, deps.signal);
     try {
       const ready = await attempt();
       deps.log("info", "spare.first_copy_ready", { ...ready });

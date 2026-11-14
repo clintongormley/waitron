@@ -687,7 +687,7 @@ export async function fetchMirrorBundle(
   credential: AdoptCredential,
   standby: { nodeId: string; publicKey: string; contactUrl: string; storeUrl: string; at: number },
   confirmedCaPem?: string,
-  { timeoutMs = BUNDLE_REQUEST_LIMIT_MS }: RequestLimit = {},
+  { timeoutMs = BUNDLE_REQUEST_LIMIT_MS, lookup }: RequestLimit & { lookup?: BoxLookup } = {},
 ): Promise<MirrorBundle> {
   // Re-checked here so no caller can make this fetch an unvalidated URL; the request is built from
   // the parsed `URL`, not the raw string.
@@ -720,6 +720,7 @@ export async function fetchMirrorBundle(
           trust: { ca: confirmedCaPem, rejectUnauthorized: true },
           signal,
           body,
+          lookup,
         });
       }
       const plain = await fetch(url, {

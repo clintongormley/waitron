@@ -142,7 +142,7 @@ const makeSeams = (restart: () => void = () => {}) => ({
   timings: { minTickMs: 200, maxTickMs: 600_000 },
   // Beside a real chart whose other box is not running.
   peerCheck: async () => ({ result: "proceed" as const, successorNodeId: null }),
-  stepdown: { mount: () => {}, restart },
+  restart,
 });
 
 interface BoxOptions {

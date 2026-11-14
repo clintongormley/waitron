@@ -616,7 +616,7 @@ describe("a full start's stepdown, through its test seam", () => {
       const started = await boot(suite, {
         restricted: false,
         tls: true,
-        seams: { stepdown: { restart, mount: () => {} } },
+        seams: { restart },
         beforeStart: async () => {
           cookie = await adminCookie();
           await stampDeployment(suite.db, "preproduction");
@@ -989,8 +989,8 @@ describe("a full start's stepdown, through its test seam", () => {
     const restart = vi.fn();
     let nodeId = "";
     const seams: StartServerSeams = {
+      restart,
       stepdown: {
-        restart,
         mount: (app, stepDown) =>
           app.post("/test-stepdown", async (c) =>
             c.json(
@@ -1027,7 +1027,7 @@ describe("a full start's stepdown, through its test seam", () => {
     const successor = "00000000-0000-4000-8000-0000000000cc";
     const { port, venue } = await boot(suite, {
       restricted: false,
-      seams: { stepdown: { restart, mount: () => {} } },
+      seams: { restart },
     });
     const nodeId = venue.cfg.nodeId;
     const body: MembershipDocumentBody = {
@@ -1071,8 +1071,8 @@ describe("a full start's stepdown, through its test seam", () => {
     const { port, venue } = await boot(suite, {
       restricted: false,
       seams: {
+        restart,
         stepdown: {
-          restart,
           // This route keeps running until the restart, so a stepdown that counted it would wait
           // the whole admitted-work limit before restarting.
           mount: (app, stepDown) =>

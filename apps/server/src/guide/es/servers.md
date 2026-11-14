@@ -6,6 +6,40 @@ Si ves **Este es el equipo de reserva**, abre la dirección del equipo principal
 pantallas y los datos del local. La página de reserva muestra su estado; no acepta ventas ni
 ofrece acceso al panel de gestión.
 
+## Añadir un equipo de reserva {#adding-a-spare}
+
+Un local configurado en España aún no puede añadir un equipo de reserva.
+
+En esta versión no se puede retirar un equipo de reserva que ha terminado de unirse. No lo añadas
+a un local que esté abierto al público hasta que una actualización permita retirarlo.
+
+Mientras un equipo de reserva que ha terminado de unirse está apagado, el equipo principal espera
+en cada inicio hasta que un administrador [deje que siga sin él](servers.md#carry-on).
+
+Antes de empezar, comprueba dos cosas en el equipo principal:
+
+- Tiene una clave de recuperación de las copias, que el equipo de reserva necesita. Si nunca se han
+  activado las copias de seguridad, abre **Copias de seguridad** y elige **Activar las copias**.
+- **Copia continua en tu bucket** está desactivada. El local copia sus cambios en un solo sitio a
+  la vez, y el equipo de reserva ocupa ese sitio. Para añadirlo de todos modos, elige
+  **Desactivar** en ese apartado; tu bucket deja entonces de recibir los cambios del local y, en
+  esta versión, no puede volver a recibirlos mientras el equipo de reserva siga en el local.
+
+También necesitas una cuenta que pueda abrir **Ajustes → Servidores** en el equipo principal, con
+su ID de persona, su contraseña y el código actual del autenticador, si está configurado.
+
+Conecta el equipo nuevo a la red del local y enciéndelo; no necesita conexión a internet. Como
+`waitron.local` lleva al equipo principal, abre la dirección que la pantalla del equipo nuevo
+muestra después de **Use this box's own address**. Elige **Unirse o recuperar** y después
+**Añadir un nodo réplica**.
+
+Introduce la dirección HTTPS del equipo principal y elige **Continuar**. En un dispositivo que ya
+tenga la sesión iniciada en el panel del equipo principal, abre **Ajustes → Servidores** y compara
+**Huella del certificado público de este servidor** con la que muestra el equipo nuevo. Elige
+**Coincide** solo si son iguales. Después introduce los datos de la cuenta y elige **Conectar**. El
+equipo nuevo recibe su primera copia por la red del local y se reinicia solo como equipo de
+reserva.
+
 ## Iniciar aquí si ha fallado el equipo principal {#emergency}
 
 Usa un equipo de reserva que haya terminado de unirse a este local. Apaga el equipo principal

@@ -3425,7 +3425,10 @@ esté abierto al público hasta que una actualización traiga el cambio de equip
 the promotion request today (`git grep -n "management-api/promote" -- apps ':!*.test.ts'` finds only
 `promote-api.ts` and `read-only-exemptions.ts`), and Task 4.6 keeps it to the spare's own screen;
 the switch is A947 4b–4e; a joined spare cannot be removed (fact 26), so adding one is not undone.
-When switching lands, its slice removes the sentence);
+When switching lands, its slice removes the sentence; **2026-11-14 (3b-6b, watcher 00:18):** the
+guide does not carry this sentence, because Servers already offers **Hand over the venue** on a
+spare's row; it says instead that a spare that has finished joining cannot be removed, and 3b-F
+rewords the remaining "cannot take over yet" words);
 the session running this plan adds the backlog entry D17 names ("a joined standby cannot be retired, so a dead spare makes
 the main box wait at every start"), in the A947 area;
 `docs/developers/conventions-data.md` (one entry: the pair link and the store). Final checks
@@ -3476,6 +3479,12 @@ _2026-11-12, review of 3b-5a:_ the setup wizard words `mirror.standby_series_uns
 code alone (`shell.adopt.standby_series_unsupported`), and those words name Veri*Factu whichever
 module the refusal carries. That is true while Veri*Factu is the only module whose standby series
 starts on activation; 3b-F, or a second such module, rewords it.
+
+_2026-11-14 (watcher, questions.md 00:18), from 3b-6b:_ 3b-F's two-box test runs a handover to the
+joined spare, and then 3b-F rewords the setup wizard's "cannot take over yet" (`role.intro`,
+`role.mirror.copy` and `connect.intro` in `apps/setup/src/i18n/strings/start.ts`) and the guide's
+"A mirror cannot take over yet" (`apps/server/src/guide/en/backup-recovery.md` and its Spanish
+twin) to match what it shows.
 
 ### Task F.0: The trace so far, and what remains
 
