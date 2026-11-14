@@ -263,4 +263,4 @@ export {
   moduleRecordBytes,
 } from "./module-records.js";
 
-export { MAIL_SETTINGS, type MailDocument } from "./mail-settings.js";
+export { MAIL_SETTINGS, saveSmtpSettings, type MailDocument } from "./mail-settings.js";

@@ -50,7 +50,6 @@ import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
-import { SERVER_SETTINGS_KEYS } from "./mail-settings.js";
 import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync } from "node:fs";
@@ -2625,12 +2624,12 @@ async function bootServer(
   undoOnFailure.push(async () => printStop.abort());
   const liveEvents = new LiveEvents();
   const changeSources = migrationModules.flatMap((module) => module.changes ?? []);
-  const resourceTypes = liveResourceTypes(changeSources, [
-    ...availableModules.flatMap((module) =>
+  const resourceTypes = liveResourceTypes(
+    changeSources,
+    availableModules.flatMap((module) =>
       (module.settings ?? []).map((document) => document.module),
     ),
-    ...SERVER_SETTINGS_KEYS,
-  ]);
+  );
   await installChangeFeed(db, changeSources);
   mountLiveApi(
     app,

@@ -8,7 +8,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { deleteCredential, putCredential, type KeyRing } from "@waitron/credentials";
+import { deleteCredential, type KeyRing } from "@waitron/credentials";
 import {
   authorizeManager,
   persons,
@@ -19,7 +19,7 @@ import {
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import { readSavedSmtp, resolveEmailDeliveryIn } from "./email-delivery.js";
-import { MAIL_SETTINGS } from "./mail-settings.js";
+import { MAIL_SETTINGS, saveSmtpSettings } from "./mail-settings.js";
 import { venueSmtpFrom } from "./email-sender-name.js";
 import type { Logger } from "./logger.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
@@ -99,13 +99,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
         if (!editable) throw new AppError("email.settings_not_allowed", {});
         await requireFreshManagementSignIn(tx, requireManagementSession(c));
         const value = parseEmailSettings(body);
-        await putCredential(tx, deps.ring, { purpose: "email.smtp", value: { url: value.url } });
-        const { revision } = await readSettings(tx, MAIL_SETTINGS);
-        await saveSettings(tx, MAIL_SETTINGS, {
-          doc: { from: value.from },
-          expectedRevision: revision,
-          personId: authorizedBy,
-        });
+        await saveSmtpSettings(tx, deps.ring, value, authorizedBy);
       });
       return c.json({ saved: true });
     }),

@@ -382,7 +382,7 @@ it:
   a boot-time `credentials.key_ring_incomplete` failure, not a runtime surprise later.
 
 Use `packages/credentials`'s CLI to provision and rotate credentials (`fiscal.aeat`,
-`payments.stripe`, `payments.sumup`, `email.smtp`), for example
+`payments.stripe`, `payments.sumup`), for example
 `waitron-credentials set --purpose fiscal.aeat` with the JSON payload on stdin. That CLI refuses a
 `--tenant` flag because one database holds one taxpayer. Run
 `waitron-credentials` with no arguments for its own usage text (`set` / `list` / `delete` /
@@ -520,19 +520,9 @@ Ordinary outgoing SMTP mail and the Settings test use the venue name as the send
 keeping the configured mailbox. Settings shows the saved From value so you can repair it when
 it cannot be used for delivery. Setup tests and local capture keep their own sender.
 
-Set your sender address through the setup wizard or the dashboard's mail settings. To replace the
-connection URL for an already configured sender from a terminal, write the URL to a
-permission-restricted file rather than putting its password in a shell argument:
-
-```json
-{
-  "url": "smtps://user:password@smtp.example.com:465"
-}
-```
-
-```bash
-waitron-credentials set --purpose email.smtp --file /secure/path/smtp.json
-```
+Set up SMTP through the wizard; use the dashboard's **Email** settings to change or remove it.
+The credentials tool refuses SMTP changes because the connection URL and sender address must
+be saved or removed together.
 
 The server reads this credential when it sends, so rotating it does not require a restart. Configured
 SMTP takes precedence over local account-email capture in development. Ordinary Prepare and Live

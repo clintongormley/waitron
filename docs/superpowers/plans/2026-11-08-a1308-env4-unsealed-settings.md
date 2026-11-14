@@ -13,6 +13,14 @@
 > is preserved. No wider catch or compatibility conversion is added.
 > The watcher cleared up to about 650 gross lines at 22:15 for the shared fixture replacements.
 
+> **2026-11-14, watcher 22:36, after both Claude run-it reviews:** one shared `saveSmtpSettings`
+> in provisioning owns the split write; all four writers and the test fixture wrapper call it.
+> The generic credentials CLI refuses SMTP set/delete and points to dashboard Email settings.
+> Its list/rotate and other purposes stay. The existing parser/default suite moves to provisioning.
+> The unused mail live-query dependency, test and server-key plumbing below are omitted until a
+> real reader needs them. No screen used that query through the live controller. One gathered fixes
+> pass and one fresh read are cleared, with up to 725 gross lines and no wider missing-sender catch.
+
 **Goal:** The email sender address stops being sealed with the SMTP secret it sits beside. It moves
 to a new `mail` settings document; the sealed SMTP credential keeps only the connection URL.
 Stripe's two return addresses are not moved (owner, 2026-11-09; "What it leaves out").

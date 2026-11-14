@@ -535,7 +535,6 @@ export const QUERY_DEPENDENCIES = {
   // `taxpayer` holds the venue's privacy page, which this answer carries.
   getGoogleConfig: ["google_config", "taxpayer"],
   getEmailInbox: ["email_inbox"],
-  getEmailSettings: ["settings.mail"],
   // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.
   listServers: ["node_membership", "nodes"],
   getBackupStatus: ["backup_status"],
