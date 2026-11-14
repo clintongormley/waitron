@@ -3,7 +3,7 @@ import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { eq } from "drizzle-orm";
 import { sumupClient } from "./sumup-client.js";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, incidents, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, incidents as incidentsTable, withTransaction } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
@@ -96,7 +96,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     });
     expect((await state("empty-charge")).state).toBe("failed");
     expect(await suite.db.select().from(paymentRefunds)).toEqual([]);
-    expect(await suite.db.select({ code: incidents.code }).from(incidents)).toEqual([
+    expect(await suite.db.select({ code: incidentsTable.code }).from(incidentsTable)).toEqual([
       { code: "payment.capture_mismatch" },
     ]);
   });
