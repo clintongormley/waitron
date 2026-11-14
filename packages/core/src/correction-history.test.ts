@@ -491,6 +491,31 @@ it("refuses a substituted invoice as replaced before asking the regime", async (
   });
 });
 
+it("refuses a replaced invoice that was also exchanged for a full invoice, as replaced", async () => {
+  const { saleId } = await sellSteak();
+  await withTransaction(suite.db, (tx) =>
+    recordReplacement(tx, backend, {
+      origin: deviceOrigin(deviceId),
+      nodeId,
+      seriesId: rectSeriesId,
+      correctsSaleId: saleId,
+      authz: { sessionId },
+      clock,
+    }),
+  );
+  // Written directly: `recordSubstitution` refuses a replaced ticket, so this is the history
+  // check's own refusal.
+  const substitute = await sellSteak();
+  await suite.db
+    .insert(saleSubstitutions)
+    .values({ substitutionSaleId: substitute.saleId, substitutedSaleId: saleId });
+
+  expect(await captureError(() => preview(saleId))).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason: "replaced" },
+  });
+});
+
 const filed = (total: string, ...split: (readonly [string, string, string])[]) => ({
   readable: true as const,
   newest: {

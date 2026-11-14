@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { saleLines, sales, saleSubstitutions, type Transaction } from "@waitron/db";
 import type { CorrectionAdmission, FiledFigures, FiscalBackend } from "@waitron/fiscal";
 import {
@@ -97,10 +97,11 @@ async function admittedHistory(
   issuingNodeId: NodeId,
 ) {
   const saleId = await correctionTargetFor(tx, invoiceId);
+  // The requested invoice as well as its replacement: an exchange names the invoice it took.
   const [substituted] = await tx
     .select({ id: saleSubstitutions.id })
     .from(saleSubstitutions)
-    .where(eq(saleSubstitutions.substitutedSaleId, saleId));
+    .where(inArray(saleSubstitutions.substitutedSaleId, [invoiceId, saleId]));
   if (substituted !== undefined) {
     throw new AppError("sale.correction_not_admitted", { reason: "replaced" });
   }

@@ -71,6 +71,7 @@ const NOT_RECORDED = new Set([
   "sale.series_retired",
   "sale.series_wrong_node",
   "sale.series_wrong_purpose",
+  "sale.substitution_not_admitted",
   "sale.total_mismatch",
   "sale.void",
   "sale.voided",

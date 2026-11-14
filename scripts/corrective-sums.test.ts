@@ -66,6 +66,12 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     reason: "a replacement is refused after ANY earlier corrective (sale.replacement_not_first)",
   },
   {
+    file: "packages/core/src/record-substitution.ts",
+    fragment: "inArray(sales.correctsSaleId, input.substitutedSaleIds)",
+    lines: 1,
+    reason: "finds a replacement of a ticket (with replacesOriginal), which refuses its exchange",
+  },
+  {
     file: "packages/core/src/correction-target.ts",
     fragment: "eq(sales.correctsSaleId, saleId), eq(sales.replacesOriginal, true)",
     lines: 1,

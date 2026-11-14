@@ -127,6 +127,10 @@ declare module "@waitron/shared" {
      * exchanged by two F3s. A duplicate id within one call's list is refused earlier, as a plain
      * Error. */
     "sale.already_substituted": { saleId: string };
+    /** Thrown by `recordSubstitution`, before a number is allocated, for a ticket a replacement
+     * corrective already takes the place of (`replaced`) or that is itself a replacement
+     * (`replacement`). */
+    "sale.substitution_not_admitted": { saleId: string; reason: "replaced" | "replacement" };
     /** A sale with no named customer (a simplified invoice) whose total is over the fiscal
      * regime's `simplifiedInvoiceLimit`. Thrown by `refuseOverSimplifiedLimit` before anything
      * commits or money moves: by `recordSale`, on the base plus VAT it files, and by the till's paths
