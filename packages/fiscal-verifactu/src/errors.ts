@@ -310,8 +310,8 @@ declare module "@waitron/shared" {
      * neither an `F2` nor an R5 by replacement (`TipoRectificativa` "S"), which stands in for the
      * `F2` it replaced. Rectifying an `F1` is an `R1`, and filing the wrong rectificativa is
      * unrepairable, so this refuses rather than mis-types it. Also thrown, with `replaces: true`, for
-     * a replacement of anything but an `F2` whose every stored record AEAT refused, none with code
-     * `3000`. `tipoFactura` is the original's type.
+     * a replacement unless the original is an `F2` and AEAT refused every record Waitron stored of
+     * it, none with code `3000`. `tipoFactura` is the original's type.
      */
     "fiscal.correction_unsupported": { saleId: string; tipoFactura: string; replaces?: true };
 

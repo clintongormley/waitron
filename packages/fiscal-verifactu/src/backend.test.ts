@@ -483,7 +483,7 @@ describe("recordCorrection — refusals", () => {
     });
   });
 
-  it("refuses to correct a non-simplified invoice, since only F2 → R5 is supported (R1 deferred)", async () => {
+  it("refuses to correct a full invoice (F1), which would need an R1 (deferred)", async () => {
     const original = brandSaleId("44444444-4444-4444-8444-444444444444");
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({

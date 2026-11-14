@@ -111,13 +111,13 @@ export async function recordSubstitution(
     if (replacedIds.has(substitutedSaleId)) {
       throw new AppError("sale.substitution_not_admitted", {
         saleId: substitutedSaleId,
-        reason: "replaced",
+        reason: "has_replacement",
       });
     }
     if (replacementIds.has(substitutedSaleId)) {
       throw new AppError("sale.substitution_not_admitted", {
         saleId: substitutedSaleId,
-        reason: "replacement",
+        reason: "is_replacement",
       });
     }
   }

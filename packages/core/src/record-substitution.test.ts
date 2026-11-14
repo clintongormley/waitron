@@ -351,7 +351,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
 
       await expectRefusedUsingNoNumber(backend, saleId, {
         code: "sale.substitution_not_admitted",
-        params: { saleId, reason: "replaced" },
+        params: { saleId, reason: "has_replacement" },
       });
     });
 
@@ -362,7 +362,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
 
       await expectRefusedUsingNoNumber(backend, replacement.saleId, {
         code: "sale.substitution_not_admitted",
-        params: { saleId: replacement.saleId, reason: "replacement" },
+        params: { saleId: replacement.saleId, reason: "is_replacement" },
       });
     });
   });

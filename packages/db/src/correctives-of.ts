@@ -10,7 +10,8 @@ import type { SQL } from "drizzle-orm";
  * it allows to read correctives directly: `scripts/corrective-sums.test.ts`.
  *
  * A condition on the caller's row rather than a list of ids: SQLite plans an id list with an extra
- * look-up by id for every corrective.
+ * look-up by id for every corrective. The condition is NULL, not false, for a row that corrects
+ * nothing: never negate it.
  */
 export function correctivesOf(corrective: SQL, saleId: SQL): SQL {
   return sql`((${corrective}.corrects_sale_id = ${saleId} and ${corrective}.replaces_original = 0)
