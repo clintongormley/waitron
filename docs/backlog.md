@@ -686,8 +686,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     and "Open this week" stay at the bottom.
 
 - **A1539. Calendar: prep stations, all at once, and said to be stations (owner, 2026-11-14).**
-  Reads only, no migration. Not started. Easiest after A1537, which changes the same views; the
-  Periods link wants A1536.
+  Reads only, no migration. Build not started. The watcher cleared the
+  [build plan](superpowers/plans/2026-11-14-a1539-calendar-stations.md) on 2026-11-14;
+  build after A1537, which changes the same views. The Periods link wants A1536.
   - **The "Show" dropdown (`calendar-show.ts`) reads "Show all", "All departments" with each
     department indented beneath, then "All prep stations" with each station beneath.** "All
     departments" is today's separate first entry, and the "Departments" and "Prep stations"
