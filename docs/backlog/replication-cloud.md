@@ -722,17 +722,10 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 
 ## Bundle: Series and module-preparation gaps at handover
 
-3 entries, size M.
+2 entries, size M.
 
 - **A second live standard series made a sale answer `server.internal` in a test fixture;
   the production cause is untraced.** Left open by A1018 Slice 5 (Ruling R39).
-- **The first hand-back to the same box is refused after the giving box has stopped filing; settle
-  before Slice 13.** M2 to M1 answers `sif.allocation_invalid` `standby_already_active` at the first
-  request, because M1's registration stays active (run on a promoted database standing in for the
-  copy). An emergency takeover by a reset M1 is not refused: `apps/server/src/handover-two-boxes.test.ts`
-  gives M1 two new databases, joins it to M2 under a new id, and M1 takes over by emergency switch
-  and sells under a new installation, M2's records unchanged. That ran on databases only: no box
-  restarts, no real wipe of M1's files, and no bucket stream. Left open by A1018 Slice 5 (Ruling R40).
 - **The module preparation file grows with every write, and a handover cannot promise room in it.**
   Every revision repeats all earlier entries under a 1 MiB cap. The handover's size check keeps room
   for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5
@@ -929,6 +922,10 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
   as a refactor larger than that PR (its simplify review, 2026-10-15).
 
 ## Decisions and deliberate limits
+
+**A1018 R40, 2026-11-14:** A box goes back to being main only by being reset, rejoining as a spare
+and taking the normal controlled handover; a hand-back to a former main that kept its files is
+not built (owner, closing #3126, 09:44), so every new main starts with a clean fiscal slate.
 
 **A1018 R39, 2026-11-14:** The dormant-series prerequisite is dropped: the bounded source check
 found no production route or duty that changes a filing box's live series outside an allocation.

@@ -1792,7 +1792,7 @@ Not in any track until the standalone primary is done.
   third-box cases from A1342 need their own approved scope; the owner accepted the two-box bucket
   stop as clearing A947 3b-6 on 2026-11-09. [Detail](backlog/replication-cloud.md#a-box-the-chart-no-longer-names-main-keeps-filing-its-earlier-records)
 
-- **Series and module-preparation gaps at handover** (bundle of 3, 2 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
+- **Series and module-preparation gaps at handover** (bundle of 2, at least 1 go-live, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 
 - **Decide what the old promote route still does** (bundle of 3, 2 important, size S). Holds A1279. [Detail](backlog/replication-cloud.md#bundle-decide-what-the-old-promote-route-still-does)
 
