@@ -4,7 +4,7 @@ import type { Transaction } from "@waitron/db";
 import type { ModuleRouteContext } from "@waitron/module";
 import { AppError, decimal, jobOrigin, seriesId } from "@waitron/shared";
 import { applyCorrectiveInvoice } from "./record-remedy-corrective.js";
-import { caseIdForRecord, type RemedyKind } from "./record-remedy.js";
+import { caseIdForRecord, type RemedyPolicy } from "./record-remedy.js";
 import { makeVerifactuBackend } from "./slot.js";
 
 function invalid(): never {
@@ -72,7 +72,7 @@ export async function applyCorrectiveInvoiceRequest(
   ctx: Pick<ModuleRouteContext, "db">,
   generation: NonNullable<ModuleRouteContext["recordGeneration"]>,
   token: string,
-  enabledRemedies: ReadonlySet<RemedyKind>,
+  enabledRemedies: RemedyPolicy,
   raw: Record<string, unknown>,
 ) {
   only(raw, ["kind", "caseId", "registroId", "actionKey", "reason", "correction"]);

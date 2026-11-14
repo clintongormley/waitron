@@ -12,6 +12,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
+import { ACCEPTED_WITH_ERRORS_CORRECTION } from "./record-remedy.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -99,7 +100,7 @@ function send(facts: unknown, enabled = true) {
       },
     },
     () => {},
-    new Set(enabled ? ["record-correction"] : []),
+    new Set(enabled ? ["record-correction", ACCEPTED_WITH_ERRORS_CORRECTION] : []),
   );
   return app.request("/management-api/fiscal-records/remedy", {
     method: "POST",

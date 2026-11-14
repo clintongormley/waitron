@@ -6,7 +6,7 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, compareDecimal, decimal, readSaleOrigin, saleId } from "@waitron/shared";
 import type { AltaInput, RegistroAlta } from "@waitron/verifactu";
-import { applyRecordCorrection, caseIdForRecord, type RemedyKind } from "./record-remedy.js";
+import { applyRecordCorrection, caseIdForRecord, type RemedyPolicy } from "./record-remedy.js";
 import { readCorrectedRecordFacts, type CorrectedRecordFacts } from "./record-remedy-facts.js";
 import { currentSif } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -137,7 +137,7 @@ export async function applyCorrectedRecordFacts(
   tx: Transaction,
   generation: NonNullable<ModuleRouteContext["recordGeneration"]>,
   token: string,
-  enabledRemedies: ReadonlySet<RemedyKind>,
+  enabledRemedies: RemedyPolicy,
   raw: unknown,
 ) {
   const body = object(raw);

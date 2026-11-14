@@ -607,7 +607,12 @@ key is refused. Retries after a later delivery outcome and clock change preserve
 The tests compare earlier records, deliveries and case facts, including two successive synthetic
 accepted-with-errors corrections. These are local engineering checks, not AEAT acceptance or a
 decision that a particular invoice error permits this remedy. Production policies remain empty.
-_2026-11-14: Q37-FIX enables the correction record in production; see the W41s entry._
+_2026-11-14: Q37-FIX enables the correction record in production for rejected records only; a
+correction of an accepted-with-errors case stays refused (`fiscal.remedy_disabled` naming
+`priorOutcome`) unless a policy carries `ACCEPTED_WITH_ERRORS_CORRECTION`. A record of a former main
+this box took back keeps the reach A1342 gave it, both outcomes. Checked by the default-policy and
+returned-record cases in `packages/fiscal-verifactu/src/record-remedy-http.test.ts`; see the W41s
+entry._
 
 | Source, checked 2 November 2026 | Exact words | Scope |
 | --- | --- | --- |

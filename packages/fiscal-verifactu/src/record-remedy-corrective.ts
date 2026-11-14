@@ -8,7 +8,7 @@ import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, saleId } from "@waitron/shared";
 import type { VerifactuBackend } from "./backend.js";
 import { recordCaseEvent } from "./filing-cases.js";
-import { admitRecordRemedy, isInHistory, type RemedyKind } from "./record-remedy.js";
+import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -26,7 +26,7 @@ export async function applyCorrectiveInvoice(
   input: {
     managementSessionId: string;
     generation: NonNullable<ModuleRouteContext["recordGeneration"]>;
-    enabledRemedies: ReadonlySet<RemedyKind>;
+    enabledRemedies: RemedyPolicy;
     backend: VerifactuBackend;
     request: CorrectiveInvoiceRequest;
   },

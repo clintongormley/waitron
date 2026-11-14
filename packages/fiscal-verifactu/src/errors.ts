@@ -109,7 +109,8 @@ declare module "@waitron/shared" {
     "fiscal.record_invalid": { fields: string[]; codes: string[] };
     "fiscal.record_already_corrected": { registroId: string };
     "fiscal.remedy_invalid": { registroId: string };
-    "fiscal.remedy_disabled": { kind: string };
+    /** `priorOutcome` is set when the kind is on but its reach to that outcome is not. */
+    "fiscal.remedy_disabled": { kind: string; priorOutcome?: "accepted-with-errors" };
     "fiscal.remedy_request_invalid": Record<string, never>;
     /** A fix re-files the same invoice, so its rates, bases, VAT, total and a corrective's
      * `ImporteRectificacion` stay as filed; an amount error takes a corrective invoice. */

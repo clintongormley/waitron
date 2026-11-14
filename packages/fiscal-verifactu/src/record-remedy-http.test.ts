@@ -22,6 +22,7 @@ import { recordTakeover } from "../test/takeover-fixture.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
+import { ACCEPTED_WITH_ERRORS_CORRECTION, type RemedyPolicy } from "./record-remedy.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
@@ -104,9 +105,22 @@ beforeEach(async () => {
   });
 });
 
+/** Enables both reaches of a correction record, so the accepted-with-errors cases below can run. */
+const BOTH_OUTCOMES: RemedyPolicy = new Set(["record-correction", ACCEPTED_WITH_ERRORS_CORRECTION]);
+
 function send(
   value: unknown = body,
   enabled = true,
+  runtime = true,
+  returnSource?: () => Promise<SeededNode["nodeId"] | null>,
+) {
+  return sendUnder(enabled ? BOTH_OUTCOMES : new Set(), value, runtime, returnSource);
+}
+
+/** Mounts the route under `policy`; `undefined` leaves the route's own default policy in place. */
+function sendUnder(
+  policy: RemedyPolicy | undefined,
+  value: unknown = body,
   runtime = true,
   returnSource?: () => Promise<SeededNode["nodeId"] | null>,
 ) {
@@ -131,7 +145,7 @@ function send(
         : undefined,
     },
     () => {},
-    new Set(enabled ? ["record-correction"] : []),
+    policy,
   );
   return app.request("/management-api/fiscal-records/remedy", {
     method: "POST",
@@ -195,6 +209,60 @@ async function acceptedDescriptionDecision() {
     };
   });
 }
+
+it("refuses, under the default policy, a correction record for a case AEAT accepted with errors, writing nothing", async () => {
+  const decision = await acceptedDescriptionDecision();
+  const before = await snapshot();
+  const res = await sendUnder(undefined, decision);
+  expect(res.status).toBe(409);
+  expect(await res.json()).toEqual({
+    error: {
+      code: "fiscal.remedy_disabled",
+      params: { kind: "record-correction", priorOutcome: "accepted-with-errors" },
+    },
+  });
+  expect(await snapshot()).toEqual(before);
+  // Control: the same request under a policy that enables accepted-with-errors corrections is written.
+  const enabled = await sendUnder(BOTH_OUTCOMES, decision);
+  expect(enabled.status).toBe(200);
+  expect((await snapshot()).records).toHaveLength(before.records.length + 1);
+});
+
+it("refuses, under the default policy, a replay of an accepted-with-errors correction another policy wrote", async () => {
+  const decision = await acceptedDescriptionDecision();
+  expect((await sendUnder(BOTH_OUTCOMES, decision)).status).toBe(200);
+  const before = await snapshot();
+  const res = await sendUnder(undefined, decision);
+  expect(res.status).toBe(409);
+  expect(await res.json()).toMatchObject({
+    error: { code: "fiscal.remedy_disabled", params: { priorOutcome: "accepted-with-errors" } },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
+it.each([
+  ["no remedy enabled", new Set<never>()],
+  ["the default policy", undefined],
+])(
+  "corrects an accepted-with-errors case on a record of the former main this box took back, under %s",
+  async (_label, policy) => {
+    const decision = await acceptedDescriptionDecision();
+    generationNode = (await seedNode(suite.db, "Current main")).nodeId;
+    const before = await snapshot();
+    const res = await sendUnder(policy, decision, true, async () => node.nodeId);
+    expect(res.status, await res.clone().text()).toBe(200);
+    const result = (await res.json()) as { registroId: string };
+    const after = await snapshot();
+    expect(after.records).toHaveLength(before.records.length + 1);
+    expect(after.records.at(-1)).toMatchObject({
+      id: result.registroId,
+      nodeId: generationNode,
+      correctsRegistroId: decision.registroId,
+      subsanacion: "S",
+      rechazoPrevio: "N",
+    });
+  },
+);
 
 it("requires the shared confirmation before an enabled remedy changes records", async () => {
   await suite.db

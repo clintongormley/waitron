@@ -7,7 +7,11 @@ import { hashPin, registerModulePermissions, startManagementSession } from "@wai
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";
-import { applyRecordCorrection, type RecordCorrectionRequest } from "./record-remedy.js";
+import {
+  ACCEPTED_WITH_ERRORS_CORRECTION,
+  applyRecordCorrection,
+  type RecordCorrectionRequest,
+} from "./record-remedy.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
@@ -68,13 +72,17 @@ beforeEach(async () => {
   });
 });
 
-function apply(enabled = true, value = request) {
+function apply(enabled = true, value = request, acceptance = false) {
   return withTransaction(suite.db, (tx) =>
     applyRecordCorrection(tx, {
       managementSessionId: token,
       nodeId: node.nodeId,
       environment: "preproduction",
-      enabledRemedies: new Set(enabled ? ["record-correction"] : []),
+      enabledRemedies: new Set(
+        enabled
+          ? ["record-correction", ...(acceptance ? [ACCEPTED_WITH_ERRORS_CORRECTION] : [])]
+          : [],
+      ),
       request: value,
       now: NOW,
     }),
@@ -288,7 +296,7 @@ it("reports a malformed synthetic predecessor while preserving it and appending 
   });
 });
 
-it("corrects an accepted-with-errors delivery without changing its original acknowledgement facts", async () => {
+it("corrects an accepted-with-errors delivery only under a policy that enables it, without changing its original acknowledgement facts", async () => {
   await suite.db
     .update(envios)
     .set({
@@ -299,7 +307,12 @@ it("corrects an accepted-with-errors delivery without changing its original ackn
     })
     .where(eq(envios.registroId, request.registroId));
   const before = await snapshot();
-  await apply();
+  await expect(apply()).rejects.toMatchObject({
+    code: "fiscal.remedy_disabled",
+    params: { kind: "record-correction", priorOutcome: "accepted-with-errors" },
+  });
+  expect(await snapshot()).toEqual(before);
+  await apply(true, request, true);
   expect((await snapshot()).deliveries[0]).toEqual(before.deliveries[0]);
 });
 
