@@ -158,6 +158,11 @@ that bundle's heading in the area's file: take a bundle as one pull request.
 
 ### Fiscal records, invoices and the asesor
 
+- **The Verifactu backend accepts a `resolveClient` and a `skipRetryMs` it never reads** (fiscal;
+  the owner lands it). Remove both from `VerifactuBackend`'s deps (`fiscal-verifactu/src/backend.ts`),
+  with `rejectResolveClient` (`slot.ts`), telling apart callers that pass `resolveClient` to the
+  drain and reconcile, which read it. Also open: regime-agnostic provisioning tests.
+
 - **Retire the historical allocation formats from `fiscal-verifactu`.** Historical code still
   reads signed paper, Cloud receipts and emergency names, and three Cloud settings whose only
   guide was deleted. Removing it changes activation, so it is its own fiscal change for the owner
@@ -261,7 +266,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   No till screen or server route calls `recordVoid` yet.
   [Detail](backlog/fiscal.md#owner-decision-2026-09-24-a-void-counts-on-the-day-it-is-made-not-the-day-of-the-sale)
 
-- **One authorised edit of a protected test, plus its neighbours** (bundle of 2, size S, needs the owner). [Detail](backlog/fiscal.md#bundle-one-authorised-edit-of-a-protected-test-plus-its-neighbours)
+- **One authorised edit of a protected test, plus its neighbours** (bundle of 3, size S, needs the owner). [Detail](backlog/fiscal.md#bundle-one-authorised-edit-of-a-protected-test-plus-its-neighbours)
 
 - **Adviser confirmation: supplier invoice numbers by issue year.**
   [Detail](backlog/fiscal.md#adviser-confirmation-supplier-invoice-numbers-by-issue-year).
@@ -2107,7 +2112,15 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   hyphenated segment (`/management-api/venue-details`, `/venue-defaults`). Pick one shape before
   go-live.
 
-- **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 20, size M). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
+- **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 11, size M). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
+
+- **Small refactors** (bundle of 3, size S). [Detail](backlog/architecture.md#bundle-small-refactors)
+
+- **Loose ends left by the tenant-column removal (#378, 2026-09-16).** Index names that still
+  read `tenant`, and `server.credential_unusable`'s prefix (fiscal: one index is on
+  `registros_facturacion`; its own slice, not a tidy-up, because three `persons_*` names are
+  matched by name in error translation).
+  [Detail](backlog/architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16)
 
 - **Go-live day steps.**
   [Detail](backlog/architecture.md#go-live-day-steps).

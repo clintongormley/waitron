@@ -1029,7 +1029,7 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 
 ## Bundle: One authorised edit of a protected test, plus its neighbours
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. The first two keep their text from the index they came from (backlog review, 2026-11-06).
 
 - **`packages/fiscal-verifactu` code** — found by #562 while pruning comments. **Open:** the inner
   try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead; removing
@@ -1039,6 +1039,9 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   no fiscal condition blocks a sale; the approved local conflict stop is an exception. Keep its
   behavioral assertions and protected-file scope intact.
   [Detail](fiscal.md#protected-write-path-test-policy-quotation).
+- **Test files in `packages/fiscal-verifactu` still name their database handle `pg`**
+  (`git grep -l 'const pg = ' packages/fiscal-verifactu`), among them `write-path.e2e.test.ts` and
+  `inmutabilidad.test.ts`. Rename it in the same authorised edit. Left by the T2 sweep (2026-09-23).
 
 ## Decisions and deliberate limits
 

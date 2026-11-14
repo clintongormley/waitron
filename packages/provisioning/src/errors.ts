@@ -43,9 +43,6 @@ declare module "@waitron/shared" {
      * AND the prompt answered nothing. `variable` is our own declared environment-variable NAME,
      * never a path an operator typed. */
     "provisioning.venue_dir_missing": { variable: string };
-    /** `value` IS echoed: it is operator-typed configuration, never a secret, and a refusal that
-     * withheld it could not be acted on. */
-    "provisioning.invalid_identifier": { kind: "database"; value: string };
     /** Not two ASCII letters — the SHAPE of an ISO-3166-1 alpha-2 code such as `ES`, not a
      * membership check against a country list. `value` IS echoed: an operator's typo, never a
      * secret. */

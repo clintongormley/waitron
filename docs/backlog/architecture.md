@@ -65,20 +65,6 @@ handle. A differently named handle can escape it; expanding that detector needs 
 control and the ordinary `Set.delete` control. The allowance list remains JSON, with the reasons
 beside its reader in `scripts/write-path-tables.test.ts`.
 
-## Small renames and dead exports the sweep found and could not make
-
-**OPEN (T2, 2026-09-23; narrowed by A92 and #1039).**
-  `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
-  because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`)
-  ran it by that name. PF8 landed as #1088; rename the file and its references in the next T2
-  sweep. The `pg` handle
-  stays in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad.test.ts`,
-  the fiscal gates no runner edits.
-  `generatePassword` has a caller in `apps/server/src/break-glass.ts` and remains exported.
-  The `provisioning.invalid_identifier` error registry entry remains; the A92 tree search
-  (`rg -n provisioning.invalid_identifier packages apps`) found no product throw site. Retire it
-  with the broader dead-code sweep, checking stored-code consumers first.
-
 ## Prune the comments, one package per pull request
 
 **IN PROGRESS (owner decision 2026-09-23).**
@@ -1388,7 +1374,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Remove code nothing reaches (replaced or dead, never merely unused)
 
-20 entries, size M.
+11 entries, size M.
 
 - **The products' made-at read has no screen since A655**
   [Detail](catalogue.md#the-products-made-at-read-has-no-screen-since-a655)
@@ -1416,39 +1402,29 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
   moved a station's printers into the station save; `parseStationPrinterIds`
   (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.
-- **Four dashboard text keys have no reader.** `venue_settings.help`, `venue_settings.help_label`,
-  `venue_settings.save_error` and `venue_settings.load_error` (`apps/dashboard/src/i18n/strings.ts`,
-  English and Spanish) are used by no screen; A1301 S1 renamed them from `location_settings.*`
-  without removing them, and `apps/dashboard/src/i18n/t.test.ts` pins the load error's wording.
-  Delete them, and that case, unless a screen should show them.
-- **`fiscal-none` left-behinds:** remove the inert `resolveClient`/`skipRetryMs`; regime-agnostic
-  provisioning tests.
-- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23;
-  narrowed by A92 and #1039).** Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps
-  its `.sqlite.` infix because the approved slice 3d plan ran it by that name. The
-  `provisioning.invalid_identifier` error registry entry remains. [Detail](architecture.md#small-renames-and-dead-exports-the-sweep-found-and-could-not-make)
-- **Loose ends left by the tenant-column removal (#378, 2026-09-16).**
-  [Detail](architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16).
-- An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
-  `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
-  constant (the theme colour is literal in three places).
 - **Unread configuration parameters remain in `apps/server/src`.** Test helpers still use
   `void cfg;` (`git grep -n 'void cfg;' apps/server/src`); `setLineCourse` and
   `readTransactionReceipt` retain `_cfg` in their signatures, among others
   (`git grep -n '_cfg:' apps/server/src`). Left open by SQLite slice 1
-  (#490 and the preparation tasks) and A1308 5f-ii's five-function scope.
-- `resolveInstalledDefaultContentLanguage` (`packages/country-packs/src/registry.ts`) **is now
-  called only by its own tests; delete it with its cases**: nothing else calls it, because the built
-  Task 6 works out the default itself, and only the demo-data plan's Task 6 sketch still names it.
-  Left by #1320 (W109-6, content languages per region), OPEN, unqueued.
+  (#490 and the preparation tasks) and A1308 5f-ii's five-function scope. Size on 2026-11-14 for
+  the five most-called of the eight, counted as matches of `<name>(` in `apps/server/src`
+  (declarations and same-named test wrappers included): `offerProducts` 284, `createTable` 187,
+  `defaultLayout` 68, `readDrafts` 49, `setLineCourse` 20, mostly in tests, plus 11 `void cfg;`
+  lines.
+
+## Bundle: Small refactors
+
+3 entries, size S. These are refactors, not dead code: each moves or reshapes code that is still
+used. Moved out of "Remove code nothing reaches" on 2026-11-14.
+
+- An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
+  `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
+  constant (the theme colour is literal in three places).
 - `partyFamilies`, the reverse lookup of `partySurvivors`, stayed in `apps/server/src/parties.ts`,
   while `partySurvivors` is in `packages/db/src/party-table-labels.ts`. Left open by the table
   actions plan's Task 8 (#869, move guests, join and split tables) and C77/C86.
 - The device-management routes build their `devices ⨝ device_profiles` read inline
   (`apps/server/src/device-api.ts`) where a `listDevices` store verb belongs.
-- **No route raises `menu_item.variant_not_allowed`**: `addProductToMenu` is its only thrower and
-  the demo seed its only caller outside tests. The code and its 400 in
-  `apps/server/src/catalogue-api.ts` are left for whoever next prunes unraised codes.
 
 ## Bundle: Tighten the checks the A974 review probed
 
