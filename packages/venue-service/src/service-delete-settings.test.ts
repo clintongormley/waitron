@@ -148,7 +148,6 @@ it("delete starting zone advances only within allowed surviving zones and Every 
           { id: f.explicit, name: "Explicit" },
         ],
       },
-      { key: "zone_policies", count: 1, targets: [] },
       { key: "counter_default", count: 1, targets: [{ id: f.forbidden, name: "Unpermitted" }] },
     ]);
     await clearServiceDeleteSettings(tx, [f.gone], null);
@@ -364,11 +363,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       { key: "routing_rules", count: 1, targets: [] },
       { key: "routing_periods", count: 3, targets: [] },
       { key: "profile_zones", count: 2, targets: [] },
-      { key: "zone_policies", count: 3, targets: [] },
-      { key: "zone_extensions", count: 1, targets: [] },
-      { key: "department_periods", count: 2, targets: [] },
-      { key: "staff_menus", count: 2, targets: [] },
-      { key: "department_policy", count: 1, targets: [] },
       { key: "transfer_desks", count: 1, targets: [{ id: f.explicit, name: "Explicit" }] },
       {
         key: "transfer_routes",
@@ -562,7 +556,7 @@ async function paintSeasons(tx: Transaction) {
 
 const seasonLines = (impact: { key: string }[]) => impact.filter((item) => item.key === "seasons");
 
-it("lists and deletes a deleted department's service steps", async () => {
+it("deletes a deleted department's service steps without listing them", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
     const step = (departmentId: string, position: number) => ({
@@ -581,17 +575,16 @@ it("lists and deletes a deleted department's service steps", async () => {
         step(f.alpha, 0),
       ]);
     const kept = await tx.select().from(serviceSteps).where(eq(serviceSteps.departmentId, f.alpha));
-    expect(await readServiceDeleteSettings(tx, [], f.department)).toContainEqual({
-      key: "service_steps",
-      count: 3,
-      targets: [],
-    });
+    expect(await readServiceDeleteSettings(tx, [], f.department)).toEqual([
+      { key: "profile_zones", count: 2, targets: [] },
+      { key: "default_department", count: 1, targets: [{ id: f.alpha, name: "Alpha" }] },
+    ]);
     await clearServiceDeleteSettings(tx, [], f.department);
     expect(await tx.select().from(serviceSteps)).toEqual(kept);
   });
 });
 
-it("the delete impact counts a week saved with no season once per season", async () => {
+it("the delete impact lists no seasons for a week saved with no season", async () => {
   await run(async (tx) => {
     const { f, week } = await paintSeasons(tx);
     await week();
@@ -601,11 +594,11 @@ it("the delete impact counts a week saved with no season once per season", async
       [f.gone, f.forbidden, f.allowed],
       f.department,
     );
-    expect(seasonLines(impact)).toEqual([{ key: "seasons", count: 4, targets: [] }]);
+    expect(seasonLines(impact)).toEqual([]);
   });
 });
 
-it("the delete impact counts one season for a week painted in Winter only, with a Winter closure in its zone", async () => {
+it("the delete impact lists no season for a week painted in Winter only, with a Winter closure in its zone, and clears both", async () => {
   await run(async (tx) => {
     const { f, season, week, closure } = await paintSeasons(tx);
     await week(season("Winter"));
@@ -615,7 +608,7 @@ it("the delete impact counts one season for a week painted in Winter only, with 
       seasonLines(
         await readServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department),
       ),
-    ).toEqual([{ key: "seasons", count: 1, targets: [] }]);
+    ).toEqual([]);
     await clearServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department);
     expect(await tx.select().from(departmentDays)).toEqual([]);
     expect(await tx.select().from(departmentDayRanges)).toEqual([]);
@@ -624,16 +617,14 @@ it("the delete impact counts one season for a week painted in Winter only, with 
   });
 });
 
-it("a zone delete counts the seasons holding its closures and none of its department's hours", async () => {
+it("a zone delete lists no seasons for its closures", async () => {
   await run(async (tx) => {
     const { f, season, week, closure } = await paintSeasons(tx);
     await week();
     await closure(season("Winter"));
     await closure(season("Summer"));
 
-    expect(seasonLines(await readServiceDeleteSettings(tx, [f.gone], null))).toEqual([
-      { key: "seasons", count: 2, targets: [] },
-    ]);
+    expect(seasonLines(await readServiceDeleteSettings(tx, [f.gone], null))).toEqual([]);
   });
 });
 
@@ -729,9 +720,7 @@ it("delete preserves defaults when the removed zone was not default", async () =
   await run(async (tx) => {
     const f = await fixture(tx);
     const before = { departments: await tx.select().from(departments) };
-    expect(await readServiceDeleteSettings(tx, [f.forbidden], null)).toEqual([
-      { key: "zone_policies", count: 1, targets: [] },
-    ]);
+    expect(await readServiceDeleteSettings(tx, [f.forbidden], null)).toEqual([]);
     await clearServiceDeleteSettings(tx, [f.forbidden], null);
     expect((await resolveNewOrderZone(tx, {})).zoneId).toBe(f.gone);
     expect(await tx.select().from(departments)).toEqual(before.departments);

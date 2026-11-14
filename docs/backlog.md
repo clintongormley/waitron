@@ -683,16 +683,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     (`department-dialogs.ts`); today `department-edit-dialog.ts` draws them inside the scrolling
     content, and the "Edit department: …" title and the Details / Service / Receipts / Transfers
     tabs scroll away too.
-  - **Delete department and Delete zone list only what changes outside the thing deleted.** A
-    department added a moment ago listed "Removes 1 department period", "Removes hours in 4
-    seasons", "Removes 1 department service setting" and "Removes 3 service steps", all made
-    automatically and never seen. Both dialogs keep the refusal reasons and "Work ended". Under
-    "Settings removed" they keep zones, tables, floor plans, device profiles, kitchen screens,
-    routing and the default-department and Counter-default lines, and drop the item's own
-    settings: periods, hours, service settings, service steps and zone extensions. With nothing
-    left, the dialog is the name and "This can't be undone." The owner first asked for no list at
-    all, and took this version once told that a till's profile can lose a zone it serves without
-    any other warning (`service-delete-copy.ts`, `service-delete-settings.ts`).
 
 - **Department dialog** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 

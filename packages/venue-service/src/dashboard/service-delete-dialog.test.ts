@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import { setLocale } from "@waitron/dashboard-kit";
 import type { DeleteImpact } from "@waitron/shared";
 import {
   allowedImpact,
@@ -294,6 +295,26 @@ it.each(["department", "zone"] as const)(
     expect(kind === "zone" ? api.deleteZone : api.deleteDepartment).toHaveBeenCalledExactlyOnceWith(
       impact.target.id,
     );
+  },
+);
+it.each([
+  ["en", "This can't be undone."],
+  ["es", "Esta acción no se puede deshacer."],
+] as const)(
+  "a department with nothing outside it shows only its name and the warning (%s)",
+  async (locale, irreversible) => {
+    const { screen } = await mountDelete();
+    setLocale(locale);
+    try {
+      const dialog = await openDelete(screen);
+      await ready(dialog);
+      const body = [...dialog.shadowRoot!.querySelector("wt-modal")!.children].filter(
+        (child) => child.getAttribute("slot") !== "footer",
+      );
+      expect(body.map((child) => child.textContent!.trim())).toEqual(["Restaurant", irreversible]);
+    } finally {
+      setLocale("en");
+    }
   },
 );
 it("live blocker and recovery change Confirm while preserving action refusal", async () => {
