@@ -42,12 +42,14 @@ export function otherBoxPhrase(names: readonly (string | null)[], locale: Suppor
     : new Intl.ListFormat(locale, { type: "conjunction" }).format(shown);
 }
 
-/** Marks an answer to `GET /` as the waiting page; its absence tells an open page the wait ended. */
+/**
+ * Marks an answer to `GET /` as the waiting page; its absence tells an open page the wait ended.
+ */
 const WAITING_HEADER = "X-Waitron-Waiting";
 
-// A failed fetch or a refusal is the gap between the waiting start's listener closing and the
-// next start's opening (or a stepdown's restart), so it is tried again. `replace` rather than `reload`, because the carry-on form's
-// answers are drawn from a POST that a reload would send again.
+// A failed fetch, a stalled one past its deadline, or an answer that is not OK is tried again at
+// the next turn. `replace`, not `reload`: a page drawn from the carry-on form's POST would send
+// that POST again.
 const LEAVE_WHEN_DONE = `<script>
 (() => {
   const ask = async () => {
