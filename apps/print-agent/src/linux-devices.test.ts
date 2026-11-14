@@ -212,6 +212,7 @@ describe("createLinuxDevices — scan()", () => {
     const devices = createLinuxDevices({
       sysfsRoot: root,
       bluetooth: fakeBluetooth({ scan: btScan }),
+      scanNetwork,
     });
     expect(await devices.scan(["bluetooth"])).toEqual([btHit]);
     expect(scanNetwork).not.toHaveBeenCalled();

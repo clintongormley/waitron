@@ -1924,21 +1924,19 @@ describe("createAgent — inventory, discovery and resolve", () => {
         .mockImplementation(never);
       const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
       const inFlight = deferred<Result<PullReply>>();
-      const pulls = vi
-        .fn()
-        .mockResolvedValueOnce(open())
-        .mockResolvedValueOnce(open())
-        .mockReturnValueOnce(inFlight.promise)
-        .mockResolvedValue(
-          okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
-        );
-      const c = client({ pullJobs: pulls });
       const closed = okR<PullReply>({
         nodeId: "n1",
         servers: [],
         jobs: [],
         discoveryExpiresInMs: null,
       });
+      const pulls = vi
+        .fn()
+        .mockResolvedValueOnce(open())
+        .mockResolvedValueOnce(open())
+        .mockReturnValueOnce(inFlight.promise)
+        .mockResolvedValue(closed);
+      const c = client({ pullJobs: pulls });
       const agent = createAgent({ host, client: c });
       const usb = { transport: "usb" as const, name: "USB-80", localKey: "SN-9" };
       await agent.runOnce(); // opens the window
@@ -2281,7 +2279,13 @@ describe("createAgent — start/stop and logging", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(pulls).toHaveBeenCalledTimes(2);
         held.waits[0]!.resolve(
-          okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
+          okR<PullReply>({
+            nodeId: "n1",
+            servers: [],
+            jobs: [],
+            discoveryExpiresInMs: null,
+            networkProbes: [{ host: "10.0.0.4", port: 9100, expiresInMs: 30_000 }],
+          }),
         );
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(probeNetwork).toHaveBeenCalledTimes(1);
