@@ -18,7 +18,7 @@ Expected saving is tens of seconds from replacing repeated timer waits; this is 
 
 ## Smallest useful change
 
-In `apps/till/src/till-app-parties.test.ts:435`, replace only flush's real-time `setTimeout(0)` yield with local `nextTask(): Promise<void>`. Reuse `apps/dashboard/src/screens/payments-screen.test.ts:155`'s MessageChannel pattern, closing both ports. Preserve actual task boundaries for queued browser work between renders.
+In `apps/till/src/till-app-parties.test.ts:435`, replace only flush's real-time `setTimeout(0)` yield with local `nextTask(): Promise<void>`. Reuse `apps/dashboard/src/screens/payments-screen.test.ts:155`'s MessageChannel pattern, closing both ports inside the message handler before resolving. Keep actual task boundaries; fast turns do not promise a rendering frame between rounds.
 
 Preserve default three rounds, explicit round counts, fake-timer advance and `el.updateComplete`. Inspect dependencies on real due timers: `apps/till/src/state/draft-sync.ts` owns 400 ms autosave, 500 ms retries and abort-driven pauses; retain their waits.
 
@@ -26,8 +26,8 @@ Keep all 680 cases/assertions, explicit autosave/retry waits, native `userEvent`
 
 ## Build and verify after clearance
 
-1. First remove only the real-task yield in a disposable snapshot. Run `pnpm --filter @waitron/till test src/till-app-parties.test.ts -t 'closing its success notice dismisses Undo without changing service'`. Record an original assertion failing: native close must dismiss Undo without sending a service change. If this control does not discriminate, return to the watcher; add no helper suite or elapsed-time assertion.
-2. Substitute the helper, excluding instrumentation. Run `pnpm --filter @waitron/till test src/till-app-parties.test.ts`; require original 680/680 and unchanged assertions. No extra baseline/package suite. Changed behavior, compensating sleeps or assertion changes mean return to watcher, not repairs elsewhere.
+1. First remove only the real-task yield in a disposable snapshot. Run `pnpm --filter @waitron/till test src/till-app-parties.test.ts -t 'closing its success notice dismisses Undo without changing service'`. Record an original assertion failing: native close must dismiss Undo without sending a service change. Also run unchanged 1280-wide rows in "uses readable controls and a native Undo in %s at %s" and "at $width × $height px, after someone else's unsent dishes refuse the name, their order and its Take over button are on view" (the latter polls `wide`). A no-yield failure proves a task boundary, not a frame. Audit frame-dependent negative checks for an existing definite frame/observer endpoint; a green file alone cannot rule out a skipped frame effect. If these controls cannot establish the boundary or need new waits/assertion changes, return to the watcher; add no helper suite or elapsed-time assertion.
+2. Substitute the helper, excluding instrumentation. Run `pnpm --filter @waitron/till test src/till-app-parties.test.ts`; require original 680/680 and unchanged assertions. Record this run's file/test times against retained 377.22 s / 367.25 s local measurements; this costs no extra baseline run. Require a clear local saving before requesting hosted qualification, without treating local coverage-off results as hosted savings. No package suite. Changed behavior, compensating sleeps or assertion changes mean return to watcher, not repairs elsewhere.
 3. Update only A1398's own entries in `docs/backlog.md` and `docs/backlog/ci.md`. Keep the archiver wait and any remaining four-minute gap open. Avoid historical rewrites.
 
 Expected size: production +0/-0; parties test support roughly +12/-1; other docs roughly +10/-3, plus this plan. No other file edits.
