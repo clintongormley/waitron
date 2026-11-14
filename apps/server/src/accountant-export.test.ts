@@ -607,6 +607,45 @@ describe("accountant period selection", () => {
     });
   });
 
+  it("lists a sale with ordinary refunds once, under its own type", async () => {
+    const [series] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .returning({ id: invoiceSeries.id });
+    const refundSeries = { ...venue, seriesId: series!.id as SeededVenue["seriesId"] };
+    const once = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-01T12:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    const twice = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-11-01T13:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    const refunds = [];
+    for (const [number, correctsSaleId] of [once, twice, twice].entries()) {
+      refunds.push(
+        await seedSale(suite.db, refundSeries, {
+          invoiceNumber: number + 1,
+          issuedAt: `2026-11-0${number + 2}T12:00:00.000Z`,
+          total: "-3.30",
+          correctsSaleId,
+          lines: [{ vatRate: "10.00", lineTotal: "-3.00" }],
+        }),
+      );
+    }
+
+    const rows = (await list()).invoices;
+    expect(rows.map((row) => [row.id, row.invoiceType])).toEqual([
+      [once, "F2"],
+      [twice, "F2"],
+      ...refunds.map((refund) => [refund, "corrective"]),
+    ]);
+  });
+
   it("uses inclusive receipt dates for purchases and retains recorded scales and discrepancies", async () => {
     for (const [index, receivedOn] of [
       "2026-10-31",
