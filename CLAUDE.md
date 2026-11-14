@@ -936,7 +936,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   [Detail](docs/superpowers/plans/2026-11-02-a1018-handover-build.md#slice-3-as-built-2026-11-03).
 - **The bucket stream never waits on the bucket to sell or fails `/health`; its local checkpoint
   can hold the write lock and delay sales.** Fifteen minutes behind raises `backup.stream_behind`
-  unless a stopped/refused/unusable-settings alert explains it. Guards: stream loop/pause e2e and
+  (a copy to a paired spare: over 60 seconds, the worse of its upload and the spare's apply delay;
+  "warns only above sixty seconds" in `apps/server/src/alert-sources.test.ts`) unless a
+  stopped/refused/unusable-settings alert explains it. Guards: stream loop/pause e2e and
   health bucket-copy cases, weaker than the rule: named cases only; stream cases skip without binaries.
 - **`registros_facturacion` is immutable: never work around its append-only update/delete triggers.**
   Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
