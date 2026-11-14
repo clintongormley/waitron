@@ -179,8 +179,8 @@ the existing routing step selects GitHub. Checkout still fetches full history.
 The workflow no longer uses `DISPOSABLE_TESTS_*_JOBS` family caps. The controller's
 measured global pool limits simultaneous guests. Removing a workflow cap does not add
 memory or runner slots. Publish matching controller and host job-key support before
-activating this workflow; the controller must recognise stream and merge
-jobs as well as package shards.
+activating this workflow or changing the dashboard shard count; the controller must
+recognise stream and merge jobs as well as package shards.
 
 Set `DISPOSABLE_TESTS_HEAD` to one full source SHA to select that commit, or unset it
 for ordinary traffic. The watchdog uses the same selection. The selection reads the PR
