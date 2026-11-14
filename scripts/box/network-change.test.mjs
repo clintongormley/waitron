@@ -18,6 +18,7 @@ async function fixture({
   failStart = false,
   failLoad = false,
   disconnected = false,
+  failPrevious = false,
 } = {}) {
   const root = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "b3-network-change-")));
   folders.push(root);
@@ -25,6 +26,7 @@ async function fixture({
     profilesRoot = join(root, "profiles"),
     bootRoot = join(root, "boot");
   for (const path of [hostRoot, profilesRoot, bootRoot]) await fs.mkdir(path, { mode: 0o700 });
+  let previousAuto = true;
   let activated = false,
     boot = "boot-one",
     candidateUuid;
@@ -35,11 +37,15 @@ async function fixture({
       return "";
     }
     if (command === "nmcli") {
+      if (args.includes("modify") && args.includes(previous)) previousAuto = args.at(-1) === "yes";
       if (args.includes("load") && failLoad) throw Error("cannot load profile");
       if (args.includes("delete") && !candidateUuid) throw Error("unknown connection");
       if (args.includes("load"))
         candidateUuid = /^uuid=(.+)$/m.exec(await fs.readFile(args.at(-1), "utf8"))[1];
-      if (args.includes("up") && args.includes(previous)) return "";
+      if (args.includes("up") && args.includes(previous)) {
+        if (failPrevious) throw Error("previous router unavailable");
+        return "";
+      }
       if (args.includes("up")) {
         if (failActivation) throw Error("secret activation detail");
         activated = true;
@@ -59,10 +65,11 @@ async function fixture({
               connection: {
                 type: typed("802-11-wireless"),
                 uuid: typed(path === "/candidate" ? candidateUuid : previous),
+                autoconnect: typed(path === "/candidate" ? true : previousAuto),
               },
               "802-11-wireless": {
                 mode: typed("infrastructure"),
-                ssid: typed([0, 255, 195, 40, 92]),
+                ssid: typed(path === "/candidate" ? [0, 255, 195, 40, 92] : [65]),
                 hidden: typed(true),
               },
               "802-11-wireless-security": { "key-mgmt": typed("sae") },
@@ -72,7 +79,13 @@ async function fixture({
       if (members[0] === "GetSecrets") {
         expect(members.slice(1)).toEqual(["s", "802-11-wireless-security"]);
         return JSON.stringify(
-          typed([{ "802-11-wireless-security": { psk: typed(" secret\\café ") } }]),
+          typed([
+            {
+              "802-11-wireless-security": {
+                psk: typed(path === "/candidate" ? " secret\\café " : "previous-password"),
+              },
+            },
+          ]),
         );
       }
     }
@@ -116,6 +129,9 @@ async function fixture({
     profilesRoot,
     bootRoot,
     journal,
+    disconnect: () => {
+      disconnected = true;
+    },
     reboot: () => {
       boot = "boot-two";
     },
@@ -406,4 +422,99 @@ it("reports an observation failure separately after the live join succeeds", asy
     bootCopy: { state: "failed", reason: null, failure: "io-failed" },
   });
   expect(JSON.stringify(f.journal)).not.toContain("private secret detail");
+});
+
+it("refreshes the prior network boot copy after a rejected join is rolled back", async () => {
+  const f = await fixture({ failActivation: true });
+  await f.service.accept(fields, { source: "person", person: "waiter-1" });
+  await f.service.work();
+  expect((await f.service.status()).bootCopy).toEqual({
+    state: "current",
+    reason: null,
+    failure: null,
+  });
+  expect(
+    parseWifiRecord(await fs.readFile(join(f.bootRoot, "waitron-recovery/wifi.json"))),
+  ).toEqual({
+    kind: "loaded",
+    network: { ssidHex: "41", keyMgmt: "sae", psk: "previous-password", hidden: true },
+  });
+});
+
+it("allows another attempt after both the new and the previous networks cannot connect", async () => {
+  const f = await fixture({ failActivation: true, failPrevious: true });
+  await f.service.accept(fields, { source: "person", person: "waiter-1" });
+  await expect(f.service.work()).resolves.toBeUndefined();
+  expect((await f.service.status()).change).toEqual({
+    ...pending,
+    state: "refused",
+    reason: "failed",
+  });
+  expect(await f.service.accept(fields, { source: "person", person: "waiter-1" })).toEqual({
+    ok: true,
+  });
+});
+
+it("does not reconnect the unchanged previous network when the candidate could not load", async () => {
+  const f = await fixture({ failLoad: true });
+  await f.service.accept(fields, { source: "person", person: "waiter-1" });
+  expect(f.run.mock.calls.filter(([, args]) => args.includes("up"))).toEqual([]);
+});
+
+it("retains a verified boot copy when the saved network has not connected during startup", async () => {
+  const f = await fixture();
+  await f.service.accept(fields, { source: "person", person: "waiter-1" });
+  await f.service.work();
+  f.disconnect();
+  f.reboot();
+  await f.service.work();
+  expect((await f.service.status()).bootCopy).toEqual({
+    state: "current",
+    reason: null,
+    failure: null,
+  });
+  expect(
+    parseWifiRecord(await fs.readFile(join(f.bootRoot, "waitron-recovery/wifi.json"))),
+  ).toEqual({ kind: "loaded", network: fields });
+});
+
+it("keeps the working new profile if writing status fails after demoting the old profile", async () => {
+  const f = await fixture();
+  await f.service.accept(fields, { source: "person", person: "waiter-1" });
+  const original = f.run.getMockImplementation();
+  f.run.mockImplementation(async (command, args) => {
+    const result = await original(command, args);
+    if (command === "nmcli" && args.includes(previous) && args.includes("no"))
+      await fs.chmod(f.hostRoot, 0o777);
+    return result;
+  });
+  await expect(f.service.work()).rejects.toThrow("unsafe network path");
+  await fs.chmod(f.hostRoot, 0o700);
+  expect(await fs.readdir(f.profilesRoot)).toHaveLength(1);
+  expect((await f.service.status()).change).toEqual({ ...pending, state: "applied" });
+});
+
+it("ignores the retained non-autoconnecting profile when joining again while disconnected", async () => {
+  const f = await fixture();
+  await f.service.accept(fields, { source: "person", person: "waiter-1" });
+  await f.service.work();
+  f.disconnect();
+  const first = JSON.parse(await fs.readFile(join(f.hostRoot, "network.json"), "utf8"));
+  expect(await f.service.accept(fields, { source: "person", person: "waiter-1" })).toEqual({
+    ok: true,
+  });
+  const next = JSON.parse(await fs.readFile(join(f.hostRoot, "network.json"), "utf8"));
+  expect(next.previous).toBe(first.uuid);
+});
+
+it("still refuses a disconnected join when two saved infrastructure profiles can autoconnect", async () => {
+  const f = await fixture();
+  await f.service.accept(fields, { source: "person", person: "waiter-1" });
+  await f.service.work();
+  f.disconnect();
+  await f.run("nmcli", ["connection", "modify", "uuid", previous, "connection.autoconnect", "yes"]);
+  expect(await f.service.accept(fields, { source: "person", person: "waiter-1" })).toEqual({
+    ok: false,
+    reason: "host_failed",
+  });
 });

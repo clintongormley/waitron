@@ -604,3 +604,15 @@ it("refuses a competing network scan without invoking its adapter", () => {
     reason: "busy",
   });
 });
+
+it.each([0, 1])("takes the worker lock before its adapter (lock refusal %s)", (rc) => {
+  const sb = sandbox({ WB_FLOCK_RC: String(rc) });
+  writeFileSync(
+    join(dirname(sb.paths.networkHost), "network-change.mjs"),
+    "console.log('worker ran');",
+  );
+  const result = ask(sb, "", ["--network-change"]);
+  expect(result.status).toBe(rc);
+  expect(result.stdout).toBe(rc ? "" : "worker ran\n");
+  expect(sb.calls()).toContainEqual(["flock", "-w", "15", "9"]);
+});

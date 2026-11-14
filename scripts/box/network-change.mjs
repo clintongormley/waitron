@@ -137,28 +137,49 @@ export function createNetworkChange({
     }
     await safe(candidatePath(state), false, true);
     await fs.rm(candidatePath(state), { force: true });
+    const directory = await fs.open(profilesRoot, "r");
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
   }
   async function restore(state) {
     await removeCandidate(state);
     if (state.previous)
-      await run("nmcli", [
-        "--wait",
-        "10",
-        "connection",
-        "up",
-        "uuid",
-        state.previous,
-        "ifname",
-        state.ifname,
-      ]);
+      try {
+        await run("nmcli", [
+          "--wait",
+          "10",
+          "connection",
+          "up",
+          "uuid",
+          state.previous,
+          "ifname",
+          state.ifname,
+        ]);
+      } catch {
+        /* A saved router may be unavailable; that must not bar the next join. */
+      }
   }
   async function publish(state) {
     let bootCopy;
     try {
-      const radio = await networkRadio(bus);
-      if (!radio?.active || radio.connection === "/") throw Error("no active profile");
-      const [path] = await bus.get(radio.connection, `${NM}.Connection.Active`, "Connection");
-      const settings = await bus.call(path, `${NM}.Settings.Connection`, "GetSettings");
+      const wanted = state.change.state === "applied" ? state.uuid : state.previous;
+      let selected;
+      for (const path of await bus.call(
+        "/org/freedesktop/NetworkManager/Settings",
+        `${NM}.Settings`,
+        "ListConnections",
+      )) {
+        const settings = await bus.call(path, `${NM}.Settings.Connection`, "GetSettings");
+        if (settings.connection?.uuid?.data === wanted) {
+          selected = { path, settings };
+          break;
+        }
+      }
+      if (!selected) throw Error("saved profile unavailable");
+      const { path, settings } = selected;
       const wireless = settings["802-11-wireless"];
       const security = settings["802-11-wireless-security"];
       const secrets = security
@@ -183,6 +204,18 @@ export function createNetworkChange({
     }
     state.bootCopy = bootCopy;
     await save(state);
+  }
+  async function finish(state) {
+    if (state.change.state === "applied" && state.previous)
+      await run("nmcli", [
+        "connection",
+        "modify",
+        "uuid",
+        state.previous,
+        "connection.autoconnect",
+        "no",
+      ]);
+    await publish(state);
   }
   return {
     async status() {
@@ -218,6 +251,7 @@ export function createNetworkChange({
             const connection = settings.connection;
             if (
               connection?.type?.data !== "802-11-wireless" ||
+              connection.autoconnect?.data === false ||
               (settings["802-11-wireless"]?.mode?.data ?? "infrastructure") !== "infrastructure" ||
               (connection["interface-name"]?.data &&
                 connection["interface-name"].data !== radio.name)
@@ -254,7 +288,7 @@ export function createNetworkChange({
       } catch {
         if (state) {
           try {
-            await restore(state);
+            await removeCandidate(state);
             state.phase = "finished";
             state.change.state = "refused";
             state.change.reason = "failed";
@@ -270,7 +304,8 @@ export function createNetworkChange({
       const state = await load();
       if (!state) return;
       if (state.phase === "finished") {
-        if (state.change.state === "applied") await publish(state);
+        if (state.change.state === "applied" || state.bootCopy.state === "pending")
+          await finish(state);
         return;
       }
       try {
@@ -296,15 +331,6 @@ export function createNetworkChange({
           "connection.autoconnect",
           "yes",
         ]);
-        if (state.previous)
-          await run("nmcli", [
-            "connection",
-            "modify",
-            "uuid",
-            state.previous,
-            "connection.autoconnect",
-            "no",
-          ]);
         state.phase = "finished";
         state.change.state = "applied";
         await save(state);
@@ -314,9 +340,10 @@ export function createNetworkChange({
         state.change.state = "refused";
         state.change.reason = "failed";
         await save(state);
+        await publish(state);
         return;
       }
-      await publish(state);
+      await finish(state);
     },
   };
 }
