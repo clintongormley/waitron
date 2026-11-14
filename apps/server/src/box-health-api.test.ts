@@ -404,3 +404,43 @@ describe("errors other than a full disk", () => {
     expect(await response.json()).toEqual({ error: { code: "storage.disk_full", params: {} } });
   });
 });
+
+it.each(["clock-challenge", "clock-confirm", "clock-set"])(
+  "refuses a default Manager at %s with the box administration permission",
+  async (route) => {
+    const { deps } = mount(suite.db);
+    const app = new Hono();
+    const unexpected = async () => {
+      throw new Error("A refused clock request reached fiscal work");
+    };
+    mountBoxHealthApi(
+      app,
+      {
+        ...deps,
+        clockConfirm: {
+          ...deps.clockConfirm,
+          backend: Object.assign(deps.clockConfirm.backend, {
+            confirmClockStop: unexpected,
+            confirmClockStep: unexpected,
+          }),
+          requestFromBox: () => false,
+          correction: {
+            inTurn: (run) => run(),
+            steps: () => 0,
+            set: unexpected,
+          },
+        },
+      },
+      () => {},
+    );
+    const response = await app.request(`/api/box/${route}`, {
+      method: "POST",
+      headers: { cookie: manager.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ challengeId: "not-issued", deviceAt: Date.now() }),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
+    });
+  },
+);

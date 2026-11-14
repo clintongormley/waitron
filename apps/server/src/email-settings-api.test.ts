@@ -19,6 +19,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
+import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import { smtpRig, smtpTestTls } from "./testing/smtp-settings-fixture.js";
@@ -933,4 +934,51 @@ it("maps an unusable proposed From to its field before any SMTP contact", async 
     error: { code: "email.settings_invalid", params: { field: "from" } },
   });
   expect(contacted).toBe(false);
+});
+
+it("lets a default Manager open a captured demo inbox and read its message", async () => {
+  const venue = await setupVenue();
+  const app = mount("demo");
+  const message = {
+    id: "demo-message",
+    from: { name: "Waitron", address: "no-reply@waitron.test" },
+    to: [{ name: "Manager", address: "manager@example.test" }],
+    subject: "Demo invoice",
+    date: "2026-11-14T12:00:00Z",
+    text: "Your demo invoice",
+  };
+  const summary = {
+    id: message.id,
+    from: message.from,
+    to: message.to,
+    subject: message.subject,
+    snippet: message.text,
+    createdAt: message.date,
+    read: false,
+  };
+  mountEmailInboxApi(
+    app,
+    {
+      db: suite.db,
+      resolveMode: async () =>
+        (
+          await resolveInvoiceEmailDelivery(suite.db, ring, {
+            onboardingIntent: "demo",
+            devMode: false,
+          })
+        ).mode,
+      mailpit: {
+        list: async () => ({ count: 1, messages: [summary] }),
+        read: async () => message,
+      },
+    },
+    () => {},
+  );
+  const headers = { cookie: venue.manager };
+  const inbox = await app.request("/management-api/email", { headers });
+  expect(inbox.status).toBe(200);
+  expect(await inbox.json()).toEqual({ mode: "local_capture", count: 1, messages: [summary] });
+  const opened = await app.request("/management-api/email/message/demo-message", { headers });
+  expect(opened.status).toBe(200);
+  expect(await opened.json()).toEqual(message);
 });
