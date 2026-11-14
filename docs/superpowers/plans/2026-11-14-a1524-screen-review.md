@@ -14,3 +14,5 @@
 **Execution:** TDD each changed behaviour; run `pnpm --filter <owning-package> exec vitest run <named-file>`. Preserve behavioural assertions. Inspect EN/ES, both themes, phone/desktop and help mode; never commit screenshots. Update `apps/server/src/guide/{en,es}/{products,content-and-images}.md` for the row menu and chooser, preserving heading ids. Remove A1524 from `docs/backlog.md` when delivered. Normal hook and current-head scoped CI follow.
 
 **Estimate:** production +170/−70 lines; tests +180/−20; support +0/−0; docs +35/−15. Native-table retention and the header chooser were cleared by the watcher; Rename and Delete belong in the row menu (15:36).
+
+**As built, 2026-11-14:** main renamed `catalogue-screen` to `products-screen` and `@waitron/catalogue` to `@waitron/menu` before the branch review. The nested Courses check now lives in `apps/dashboard/src/screens/products-screen.test.ts`.

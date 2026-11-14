@@ -427,6 +427,7 @@ it("shows the empty-library box only after the unfiltered search answers, never 
   search("missing");
   await vi.waitFor(() => expect(api.listImages).toHaveBeenCalledTimes(2));
   expect(empty()).toBeNull();
+  expect(text()).not.toContain("No images found.");
   miss.resolve({ images: [], total: 0 });
   await vi.waitFor(() => expect(text()).toContain("No images found."));
   expect(empty()).toBeNull();
@@ -437,6 +438,7 @@ it("shows the empty-library box only after the unfiltered search answers, never 
   expect(empty()).toBeNull();
   await vi.waitFor(() => expect(api.listImages).toHaveBeenCalledTimes(3));
   expect(empty()).toBeNull();
+  expect(text()).not.toContain("No images found.");
   cleared.reject(new Error("offline"));
   await vi.waitFor(() => expect(text()).toContain("The image library could not be loaded."));
   expect(empty()).toBeNull();

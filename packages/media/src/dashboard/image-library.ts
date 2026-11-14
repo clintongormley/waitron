@@ -1373,7 +1373,7 @@ export class ImageLibrary extends LitElement {
           </article>`;
         })}
       </div>
-      ${this.#batchImages().length === 0 && !this.loadError ? (!this.picker && this.answeredSearch === "" && this.total === 0 ? this.#batchChooser(true) : html`<p>${t("image.empty")}</p>`) : nothing}
+      ${this.#batchImages().length === 0 && !this.loadError && (this.picker || this.answeredSearch !== null) ? (!this.picker && this.answeredSearch === "" && this.total === 0 ? this.#batchChooser(true) : html`<p>${t("image.empty")}</p>`) : nothing}
       <nav aria-label=${t("image.page")}>
         <wt-button
           variant="secondary"

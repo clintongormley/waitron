@@ -1857,8 +1857,11 @@ describe("the menus list's Changes column", () => {
     await vi.waitFor(async () => {
       await table(el).updateComplete;
       expect(heads(el)).toHaveLength(3);
+      expect(heads(el)[1]).toBe(t("menus.status"));
+      expect(link(el, "menu-lunch")?.closest("td")).toBe(
+        row(el, "menu-lunch").querySelectorAll("td")[1],
+      );
     });
-    expect(heads(el)[1]).toBe(t("menus.status"));
   }
 
   describe.each([
