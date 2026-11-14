@@ -391,9 +391,10 @@ describe("a stepdown", () => {
     const r = rig(suite.node, { duties });
     const response = await r.app.request("/stepdown", { method: "POST" });
     expect(response.status).toBe(500);
-    expect(r.calls.slice(0, 3)).toEqual([
+    expect(r.calls.slice(0, 4)).toEqual([
       "certificateDiagnosis",
       "boxEmails",
+      "spareSettings",
       "handoverDestinationDuty",
     ]);
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
