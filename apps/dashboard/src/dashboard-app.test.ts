@@ -1036,6 +1036,28 @@ describe("dashboard-app", () => {
     );
   });
 
+  it("leaves no strip of scrolled content below a form's held action row in the page column", async () => {
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    // As index.html's body and #app do, so the page column scrolls rather than the page.
+    host.style.height = "600px";
+    await flush(el);
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    const form = document.createElement("div");
+    form.innerHTML =
+      '<div style="height: 3000px">Fields</div><wt-form-actions><button>Save</button></wt-form-actions>';
+    main.append(form);
+    const row = form.querySelector("wt-form-actions")!;
+    await row.updateComplete;
+    form.scrollIntoView({ block: "start" });
+    const view = main.getBoundingClientRect();
+    const box = row.getBoundingClientRect();
+    expect(box.top).toBeGreaterThan(view.top);
+    expect(box.bottom).toBeCloseTo(
+      view.bottom - parseFloat(getComputedStyle(main).borderBottomWidth),
+      0,
+    );
+  });
+
   it("shows login when no session, business overview after a manager logs in", async () => {
     // getMe rejects at boot (no session), then resolves as a MANAGER after login.
     const api = stubApi({

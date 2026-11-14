@@ -2008,6 +2008,23 @@ test("keeps a body row's new message in view without scrolling the body", async 
   );
 });
 
+test("covers the body's bottom padding below a held body row, so nothing scrolls into view under it", async () => {
+  const { el, body } = await openAtPhoneSize(
+    '<div data-lines style="height: 1800px">Lines</div><wt-form-actions><button>Check</button></wt-form-actions>',
+  );
+  const row = el.querySelector("wt-form-actions")!;
+  await frame();
+  await frame();
+  const view = body.getBoundingClientRect();
+  const box = row.getBoundingClientRect();
+  expect(box.bottom, "the row is held above the body's bottom padding").toBeLessThan(
+    view.bottom - 1,
+  );
+  const x = box.left + box.width / 2;
+  for (const y of [box.bottom + 1, (box.bottom + view.bottom) / 2, view.bottom - 1])
+    expect(document.elementFromPoint(x, y), `at ${y}`).toBe(row);
+});
+
 /** A body row with a field 300 px below it, the body scrolled until the row lies above its view. */
 async function openScrolledPastRow() {
   const opened = await openAtPhoneSize(

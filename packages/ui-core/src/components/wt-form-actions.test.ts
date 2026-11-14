@@ -525,3 +525,51 @@ test("takes no room for a message its container shows instead", async () => {
   await row.updateComplete;
   expect(row.getBoundingClientRect().height).toBe(0);
 });
+
+/** A 200 px scroller with 24 px of bottom padding, which it names to the row. */
+const PADDED_SCROLLER = `<div style="height: 200px; overflow-y: auto; padding-bottom: 24px; box-sizing: border-box; --wt-form-actions-scroller-padding: 24px">
+  <input aria-label="First" style="display: block; height: 16px; box-sizing: border-box" />
+  <div data-gap style="height: 120px"></div>
+  <input aria-label="Second" style="display: block; height: 16px; box-sizing: border-box" />
+  <div style="height: 800px">Lines</div>
+  <wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>
+</div>`;
+
+test("while held, paints the padding the scroller names below it, so nothing shows through there", async () => {
+  const scroller = await mount(PADDED_SCROLLER);
+  const row = scroller.querySelector<WtFormActions>("wt-form-actions")!;
+  await row.updateComplete;
+  await nextFrame();
+  const view = scroller.getBoundingClientRect();
+  const box = row.getBoundingClientRect();
+  expect(box.bottom).toBeCloseTo(view.bottom - 24, 0);
+  const x = box.left + box.width / 2;
+  for (const y of [box.bottom + 1, view.bottom - 1])
+    expect(document.elementFromPoint(x, y), `at ${y}`).toBe(row);
+
+  scroller.scrollTop = scroller.scrollHeight;
+  await nextFrame();
+  const rested = row.getBoundingClientRect();
+  expect(
+    document.elementFromPoint(x, rested.bottom + 12),
+    "nothing drawn below a row at rest",
+  ).toBe(scroller);
+});
+
+test("scrolls a field that focus reaches under the painted padding below the held row", async () => {
+  const scroller = await mount(PADDED_SCROLLER);
+  const row = scroller.querySelector<WtFormActions>("wt-form-actions")!;
+  await row.updateComplete;
+  await nextFrame();
+  const [first, second] = scroller.querySelectorAll("input");
+  const gap = scroller.querySelector<HTMLElement>("[data-gap]")!;
+  // The second field 4 px below the held row, in the padding it paints.
+  gap.style.height = `${row.getBoundingClientRect().bottom + 4 - gap.getBoundingClientRect().top}px`;
+  expect(second!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    scroller.getBoundingClientRect().bottom,
+  );
+  first!.focus();
+  await userEvent.tab();
+  expect(document.activeElement).toBe(second);
+  await expectClearOfRow(scroller, row, second!);
+});

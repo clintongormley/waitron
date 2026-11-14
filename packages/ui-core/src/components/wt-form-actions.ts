@@ -59,9 +59,24 @@ export class WtFormActions extends LitElement {
         border-top: 1px solid transparent;
       }
 
+      /* The scroller's bottom padding, which a held row stops above and content would show
+         through. */
+      .below {
+        display: none;
+        position: absolute;
+        inset-inline: 0;
+        top: 100%;
+        height: var(--wt-form-actions-scroller-padding, 0px);
+        background: var(--wt-form-actions-surface, var(--wt-color-surface));
+      }
+
       @container scroll-state(stuck: bottom) {
         .bar {
           border-top-color: var(--wt-color-border);
+        }
+
+        .below {
+          display: block;
         }
       }
 
@@ -134,8 +149,12 @@ export class WtFormActions extends LitElement {
     for (let at = flatParent(this); at; at = flatParent(at)) if (at === field) return;
     requestAnimationFrame(() => {
       const row = this.getBoundingClientRect();
+      const covered = Math.max(
+        row.bottom,
+        this.renderRoot.querySelector(".below")!.getBoundingClientRect().bottom,
+      );
       const box = field.getBoundingClientRect();
-      if (box.bottom <= row.top || box.top >= row.bottom) return;
+      if (box.bottom <= row.top || box.top >= covered) return;
       this.scroller().scrollBy({ top: box.bottom - row.top });
     });
   };
@@ -184,6 +203,7 @@ export class WtFormActions extends LitElement {
           </div>
         </div>
       </div>
+      <div class="below"></div>
     `;
   }
 }
