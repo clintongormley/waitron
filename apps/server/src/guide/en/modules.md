@@ -11,7 +11,7 @@ check reader status and unfinished payments on **Card payments**.
 
 The **Enabled**, **Disabled** and **All** filters show a module's state separately from its
 configuration. **Add a module** shows disabled modules in the same list. Choose **All categories**
-to see all optional modules. Bookings can be switched; the other optional modules cannot be switched yet.
+to see all optional modules.
 
 ## Turn a card provider on or off {#provider-state}
 
@@ -32,6 +32,22 @@ Your saved bookings stay on this box when Bookings is off.
 If the main box repeatedly fails to start, its recovery page offers **Switch Bookings off and start again**.
 Open the secure address and enter an active administrator's password, or choose **Stop** to leave it unchanged.
 An administrator without a password cannot use that recovery action.
+
+## Turn Payments or Spanish workforce rules on or off {#module-state}
+
+As an administrator, choose **Turn off** or **Turn on** in the module's row menu and confirm.
+**Waiting for restart** means your choice is saved. Open **Box status** in Settings and choose
+**Restart the box** when you can pause service. Check and resend any kitchen send interrupted by the restart.
+
+Before turning Payments off, turn every card provider off, removing or unpairing its readers first.
+After restarting, you can still take cash and enter cards taken on a separate terminal. Earlier
+payments, refunds and payment checks remain available. To add readers again, turn Payments on,
+restart, then turn the provider on.
+
+With Spanish workforce rules off, you can still plan rotas and record working time. Spanish-rule
+checks and the Spain time-record export are unavailable until you turn the module on and restart.
+Your personal-data download keeps your clock records in `clock-entries.json`; its Spanish-format
+`time-record.pdf` and `time-record.csv` files are omitted while the module is off.
 
 ## Check abandoned-order refunds {#abandoned-refunds}
 

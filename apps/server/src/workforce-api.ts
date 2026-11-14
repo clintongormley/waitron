@@ -28,6 +28,7 @@ import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
 
 export interface WorkforceApiDeps {
   exporter?: ModuleTimeRecordExport;
+  resolveRules?: typeof resolveWorkTimeRuleset;
   db: Database;
   // The chain a clock event or correction would be appended under. No handler below reads it yet:
   // it is plumbed ahead of a clock-in route.
@@ -119,7 +120,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const period = requirePeriod(c.req.query("period"), "period");
       const result = await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
-        const ruleset = await resolveWorkTimeRuleset(tx);
+        const ruleset = await (deps.resolveRules ?? resolveWorkTimeRuleset)(tx);
         const date = new Date(`${period}T00:00:00Z`);
         date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
         const dayAt = (days: number) =>
@@ -283,10 +284,12 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         const version = await backend.getRosterVersion(tx, {
           versionId,
         });
-        const ruleset = await resolveWorkTimeRuleset(tx).catch((error: unknown) => {
-          if (error instanceof AppError && error.code === "convenio.not_found") return undefined;
-          throw error;
-        });
+        const ruleset = await (deps.resolveRules ?? resolveWorkTimeRuleset)(tx).catch(
+          (error: unknown) => {
+            if (error instanceof AppError && error.code === "convenio.not_found") return undefined;
+            throw error;
+          },
+        );
         const previous = await tx
           .select({ id: rosterVersions.id })
           .from(rosterVersions)
@@ -392,3 +395,5 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     }),
   );
 }
+
+export { WORK_TIME_RULES_NOT_FOUND } from "@waitron/workforce-es";

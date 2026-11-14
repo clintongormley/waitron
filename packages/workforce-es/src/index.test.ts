@@ -17,6 +17,8 @@ describe("the public surface", () => {
         "WORKFORCE_ES_CONFIGURATION_TRANSFER",
         "WORKFORCE_ES_MIGRATIONS",
         "WORKFORCE_ES_VOCABULARY",
+        "WORK_TIME_RULES_NOT_FOUND",
+        "workTimeRulesConfig",
         "convenioConfig",
         "overtimeModel",
         "resolveWorkTimeRuleset",

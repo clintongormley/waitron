@@ -2,12 +2,7 @@ import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
-import {
-  CLOUD_STAFF_CERT_FILE,
-  SECRETS_ENV_FILE,
-  SERVER_PEM_FILE,
-  installAppendOnlyTriggers,
-} from "@waitron/store";
+import { CLOUD_STAFF_CERT_FILE, SECRETS_ENV_FILE, SERVER_PEM_FILE } from "@waitron/store";
 import {
   boxHostClient,
   boxHostRequests,
@@ -31,7 +26,6 @@ import {
 import {
   APPEND_ONLY_CHECK_MS,
   assertAppendOnlyIntact,
-  existingOptionalAppendOnlyTables,
   missingBeforeMigration,
   refuseTrading,
   tamperWatchJob,
@@ -56,7 +50,7 @@ import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
-import { liveResourceTypesForModules } from "./live-resources.js";
+import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -167,7 +161,7 @@ import {
   enabledTableRemovals,
   VENUE_SERVICE,
 } from "./modules.js";
-import { readModuleConfig, writeModuleConfig } from "./module-config.js";
+import { readModuleConfig, writeModuleConfig, modulesForMigration } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
 import {
   loadConfig,
@@ -367,7 +361,7 @@ import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
 import { mountOrdersApi } from "./orders-api.js";
-import { mountWorkforceApi } from "./workforce-api.js";
+import { mountWorkforceApi, WORK_TIME_RULES_NOT_FOUND } from "./workforce-api.js";
 import { mountManagementAttendanceApi } from "./management-attendance-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
@@ -1293,7 +1287,7 @@ async function bootServer(
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   let attendanceSchemaBeforeMigrations: number | undefined;
-  let retainedOptionalTables: string[];
+  let migrationModules: readonly WaitronModule[] = availableModules;
   let letGoOfCheckedAddresses: () => Promise<void>;
   try {
     // The first moment this start holds a node handle.
@@ -1330,7 +1324,6 @@ async function bootServer(
       config.environment,
       availableModules.flatMap((module) => (module.fiscal === undefined ? [] : [module.fiscal])),
     );
-    retainedOptionalTables = existingOptionalAppendOnlyTables(stampProbe.venue, availableModules);
     attendanceSchemaBeforeMigrations = stampProbe.venue.execute<{ schema_version: number }>(
       sql`pragma schema_version`,
     ).rows[0]!.schema_version;
@@ -1340,7 +1333,7 @@ async function bootServer(
 
   // `applyMigrations` opens and closes its own store, so running it BEFORE the long-lived open below
   // keeps the two from overlapping and leaves nothing open behind a failed migration. Setup mode
-  // migrates the FULL schema, which the wizard needs; trading mode migrates only the enabled set.
+  // migrates the full schema; trading also keeps installed optional sets current while Off.
   const firstPass = migrationOptionsFor(
     config.node === undefined
       ? []
@@ -1358,22 +1351,22 @@ async function bootServer(
     const moduleProbe = await openVenueDatabase(config.venueDir);
     try {
       moduleConfig = await readModuleConfig(moduleProbe.venue);
+      migrationModules = await modulesForMigration(
+        moduleProbe,
+        availableModules,
+        enabledModules(availableModules, moduleConfig),
+      );
     } finally {
       await moduleProbe.close();
     }
   }
-  const setsToMigrate =
+  const enabledAtStart =
     config.node === undefined ? availableModules : enabledModules(availableModules, moduleConfig);
   const migrationOptions = migrationOptionsFor(
-    orderedMigrationSets(setsToMigrate),
+    orderedMigrationSets(migrationModules),
     config.migrationsRoot,
   );
-  const appendOnlyTables = [
-    ...new Set([
-      ...migrationOptions.flatMap((set) => set.appendOnlyTables ?? []),
-      ...retainedOptionalTables,
-    ]),
-  ];
+  const appendOnlyTables = migrationOptions.flatMap((set) => set.appendOnlyTables ?? []);
   const restoredTriggers = [
     ...firstPassRestored,
     ...(await missingBeforeMigration(
@@ -1410,8 +1403,6 @@ async function bootServer(
   const freeSpace = createFreeSpaceState({ log });
   const db = store.venue;
   if (config.node === undefined) moduleConfig = await readModuleConfig(db);
-  // Off modules keep their existing tables protected without running their migrations.
-  installAppendOnlyTriggers(db, retainedOptionalTables);
   assertAppendOnlyIntact(db, appendOnlyTables);
   // A missing trigger also shows up after a crash between a set's migration and its trigger
   // install, or on the first start of a release that marks an existing table append-only, so this
@@ -1423,8 +1414,6 @@ async function bootServer(
     log("warn", "append_only.triggers_restored", { triggers: restoredTriggers });
   }
 
-  // Drift visibility: log the enabled set against what the database has actually migrated. A
-  // soft-disabled module's data is kept; a disabled module with a set of its own is not migrated.
   let appliedModuleVersions: Record<string, number> = {};
   if (config.node !== undefined) {
     const myModuleVersions = await schemaVersionsByModule(store, availableModules);
@@ -1435,7 +1424,7 @@ async function bootServer(
         .map(([n]) => n),
     );
     const r = reconcile(
-      modulesWithSets(setsToMigrate).map((m) => m.name),
+      modulesWithSets(enabledAtStart).map((m) => m.name),
       migrated,
     );
     if (r.softDisabled.length > 0 || r.toMigrate.length > 0) {
@@ -2091,7 +2080,7 @@ async function bootServer(
       node: store.node,
       ring,
       nodeId: node.nodeId,
-      modules: setsToMigrate,
+      modules: enabledAtStart,
       log,
     });
     undoOnFailure.push(() => returnRecords.stop());
@@ -2134,7 +2123,7 @@ async function bootServer(
               stateDir: config.stateDir,
               ring,
               nodeId: node.nodeId,
-              modules: setsToMigrate,
+              modules: enabledAtStart,
             },
             log,
           ),
@@ -2434,7 +2423,7 @@ async function bootServer(
   const filingModule = await readFilingModule(db, config.node);
   // Resolved through the generic slot so `boot.ts` names no regime package
   // (`scripts/module-seams.test.ts`).
-  const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
+  const enabledFiscal = fiscalSlot(enabledAtStart, filingModule);
   const declarationsSeat = enabledFiscal.declarations;
   if (declarationsSeat !== undefined)
     keptDeclarations = keptDeclarationsReader(db, declarationsSeat);
@@ -2445,7 +2434,7 @@ async function bootServer(
   const startClockWaits = () =>
     startClockWaiting({ state: startClock, filesRecords, witnesses: clockWitnesses });
   const nodeBackend = gateSeatOnStartClock(
-    makeFiscalBackend(setsToMigrate, filingModule, db, env),
+    makeFiscalBackend(enabledAtStart, filingModule, db, env),
     startClockHolds,
   );
   // Only a node that can add a record is asked: a mirror's copy may hold its own node's chain from
@@ -2541,7 +2530,7 @@ async function bootServer(
         db,
         venueLocale,
         onboardingIntent: config.onboardingIntent,
-        modules: setsToMigrate.map((module) => module.name),
+        modules: enabledAtStart.map((module) => module.name),
         credentialKeyRing: totpKeyRing,
         rpId: config.managementRpId,
         origin: config.managementOrigin,
@@ -2633,14 +2622,20 @@ async function bootServer(
   const printStop = new AbortController();
   undoOnFailure.push(async () => printStop.abort());
   const liveEvents = new LiveEvents();
-  const changeSources = setsToMigrate.flatMap((module) => module.changes ?? []);
+  const changeSources = migrationModules.flatMap((module) => module.changes ?? []);
+  const resourceTypes = liveResourceTypes(
+    changeSources,
+    availableModules.flatMap((module) =>
+      (module.settings ?? []).map((document) => document.module),
+    ),
+  );
   await installChangeFeed(db, changeSources);
   mountLiveApi(
     app,
     {
       db,
       bus: liveEvents,
-      resourceTypes: liveResourceTypesForModules(setsToMigrate),
+      resourceTypes,
     },
     log,
   );
@@ -2702,7 +2697,7 @@ async function bootServer(
     {
       db,
       bus: liveEvents,
-      resourceTypes: liveResourceTypesForModules(setsToMigrate),
+      resourceTypes,
       devMode: config.devMode,
     },
     log,
@@ -2725,7 +2720,7 @@ async function bootServer(
     db,
     config.onboardingIntent,
     config.paymentTestProviders,
-    setsToMigrate.some((module) => module.name === "payments"),
+    enabledAtStart.some((module) => module.name === "payments"),
   );
   // One pool, shared by the pay route and the payments management surface below, so a reader added
   // or a credential rotated there evicts the exact provider the next sale uses.
@@ -2763,8 +2758,8 @@ async function bootServer(
     ALL_MODULES.filter((module) => (appliedModuleVersions[migrationSetOf(module)] ?? 0) > 0),
   );
   const workforceEnabled =
-    !fencedOrMirror && setsToMigrate.some((module) => module.name === "workforce");
-  const timeRecordExporter = selectTimeRecordExport(setsToMigrate);
+    !fencedOrMirror && enabledAtStart.some((module) => module.name === "workforce");
+  const timeRecordExporter = selectTimeRecordExport(enabledAtStart);
   const attendanceRecorder = workforceEnabled ? recordAttendanceFact : undefined;
   const invoiceEmailAvailable = async () =>
     (await resolveInvoiceEmailDelivery(db, ring, config)).mode !== "unconfigured";
@@ -2778,13 +2773,12 @@ async function bootServer(
       liveEvents,
       clock: tillClock,
       cfg: tradingContext,
-      // From the ENABLED set: a disabled module with a set of its own is not migrated, so its
-      // annotator must not run.
-      floorAnnotators: enabledFloorAnnotators(setsToMigrate),
+      floorAnnotators: enabledFloorAnnotators(enabledAtStart),
       tableRemovals,
       secureCookies,
       cardProvider,
       pool: cardPool,
+      paymentsEnabled: enabledAtStart.some((module) => module.name === "payments"),
       disk: diskFull,
       clockUnconfirmed: startClockHolds,
       providers: CARD_PROVIDERS,
@@ -2869,7 +2863,7 @@ async function bootServer(
         {
           ...peerDeps,
           stateDir: config.stateDir,
-          modules: setsToMigrate,
+          modules: enabledAtStart,
           migrationsRoot: config.migrationsRoot,
         },
         operation,
@@ -3079,7 +3073,7 @@ async function bootServer(
                   ? startClockAgreed(clockWitnesses.witnesses())
                   : null,
             },
-            setsToMigrate,
+            enabledAtStart,
           ),
           deviceSources: devicePrinterNoticeSources({ now }),
           clock: tillClock,
@@ -3129,6 +3123,7 @@ async function bootServer(
         ring,
         environment: config.environment,
         pool: cardPool,
+        paymentsEnabled: enabledAtStart.some((module) => module.name === "payments"),
         providers: CARD_PROVIDERS,
         simulator: cardProvider,
         attendance: attendanceRecorder,
@@ -3144,7 +3139,7 @@ async function bootServer(
       modules: availableModules,
       isPrimary: () => holders.singletonRole.current === "primary",
       migrationsRoot: config.migrationsRoot,
-      enabled: setsToMigrate.map((module) => module.name),
+      enabled: enabledAtStart.map((module) => module.name),
       providers: CARD_PROVIDERS,
     },
     log,
@@ -3207,7 +3202,7 @@ async function bootServer(
         cfg: {
           nodeId: tradingContext.nodeId,
         },
-        modules: setsToMigrate,
+        modules: enabledAtStart,
         moduleVersions: appliedModuleVersions,
       },
       log,
@@ -3317,14 +3312,14 @@ async function bootServer(
       node: store.node,
       ring,
       nodeId: tradingContext.nodeId,
-      modules: setsToMigrate,
+      modules: enabledAtStart,
       requireWritable: () => routeCtx.recordGeneration!.requireWritable(),
       wake: drainWaker.wake,
       now,
     },
     log,
   );
-  for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
+  for (const m of enabledAtStart) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.
   mountReportApi(
     app,
@@ -3363,7 +3358,18 @@ async function bootServer(
   );
   mountWorkforceApi(
     app,
-    { db, cfg: { nodeId: tradingContext.nodeId }, exporter: timeRecordExporter },
+    {
+      db,
+      cfg: { nodeId: tradingContext.nodeId },
+      exporter: timeRecordExporter,
+      ...(enabledAtStart.some((module) => module.name === "workforce-es")
+        ? {}
+        : {
+            resolveRules: async () => {
+              throw new AppError(WORK_TIME_RULES_NOT_FOUND, {});
+            },
+          }),
+    },
     log,
   );
   if (workforceEnabled && isSingletonPrimary)
@@ -3379,7 +3385,7 @@ async function bootServer(
     );
   const describeShifts: NonNullable<WaitronModule["describeShifts"]> = async (tx, shiftIds) => {
     const descriptions = new Map<string, string>();
-    for (const module of setsToMigrate) {
+    for (const module of enabledAtStart) {
       if (module.describeShifts === undefined) continue;
       for (const [id, description] of await module.describeShifts(tx, shiftIds))
         descriptions.set(id, description);
@@ -3395,7 +3401,7 @@ async function bootServer(
       readTradingAdmission: () => tradingAdmission.snapshot(),
       venueLocale,
       onboardingIntent: config.onboardingIntent,
-      modules: setsToMigrate.map((m) => m.name),
+      modules: enabledAtStart.map((m) => m.name),
       credentialKeyRing: totpKeyRing,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
@@ -3601,7 +3607,7 @@ async function bootServer(
     }),
   );
   const emailNoticeLog = createStaffNoticeLog(log);
-  const emailNoticeSources = enabledStaffNoticeSources(setsToMigrate);
+  const emailNoticeSources = enabledStaffNoticeSources(enabledAtStart);
   const boxEmails = startBoxEmailDuty({
     db,
     now,
@@ -3684,7 +3690,7 @@ async function bootServer(
     log,
   });
   jobRunner.add(clockWatchJob(clockWatch, CLOCK_WATCH_MS));
-  const paymentsEnabled = setsToMigrate.some((module) => module.name === "payments");
+  const paymentsEnabled = enabledAtStart.some((module) => module.name === "payments");
   const serverAlertSources: AlertSource[] = [
     jobFailingAlertSource({ views: () => jobRunner.views(), now }),
     clockSyncAlertSource({
@@ -3730,7 +3736,7 @@ async function bootServer(
   }
   const alertRegistry = createAlertRegistry({
     claims: [...ALL_ALERT_CLAIMS, ZONE_REPAIR_ALERT_CLAIM],
-    sources: [...enabledAlertSources(setsToMigrate), ...serverAlertSources],
+    sources: [...enabledAlertSources(enabledAtStart), ...serverAlertSources],
   });
   mountAlertsApi(app, { db, registry: alertRegistry, now }, log);
   mountDiskStopApi(app, { db, disk: diskFull, registry: alertRegistry, now }, log);
@@ -3774,7 +3780,7 @@ async function bootServer(
   const pageNoticeLog = createStaffNoticeLog(log);
   const pageNoticeSources = deviceNoticeSources(
     { disk: diskFull, space: freeSpace },
-    setsToMigrate,
+    enabledAtStart,
   );
   const fiscalOutbox = enabledFiscal.outbox;
   mountBoxHealthApi(
@@ -3869,7 +3875,7 @@ async function bootServer(
       db,
       nodeDb: store.node,
       node: tradingContext,
-      modules: setsToMigrate,
+      modules: enabledAtStart,
       now,
     },
     log,
@@ -3979,7 +3985,7 @@ async function bootServer(
       nodeDb: store.node,
       ring,
       node: tradingContext,
-      modules: setsToMigrate,
+      modules: enabledAtStart,
       turns: backupTurns,
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),
       backups: () => backupSupervisor.current(),
@@ -4059,7 +4065,7 @@ async function bootServer(
     const result = await promoteMirrorToPrimary(
       {
         ...promoteDeps,
-        modules: setsToMigrate,
+        modules: enabledAtStart,
         withModuleOperations,
         persistTradingEnv: async () => {
           const next: TradingConfig = {
@@ -4114,7 +4120,7 @@ async function bootServer(
       nodeDb: store.node,
       nodeId: tradingContext.nodeId,
       credentialKeyRing: totpKeyRing,
-      modules: setsToMigrate,
+      modules: enabledAtStart,
       run: promoteRun,
       requestFromBox: seams.requestFromBox,
       requestProvenFromBox: seams.requestProvenFromBox,
@@ -4330,7 +4336,7 @@ async function bootServer(
           {
             drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
             reconcile: reconcilePassFor({
-              paymentsEnabled: setsToMigrate.some((module) => module.name === "payments"),
+              paymentsInstalled: migrationModules.some((module) => module.name === "payments"),
               duties: auditDuties,
               credentialProvisioned: (purpose) => credentialProvisioned(db, purpose),
               runDue: (at2, duties) =>

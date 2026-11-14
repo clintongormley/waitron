@@ -1,5 +1,3 @@
-import type { WaitronModule } from "@waitron/module";
-import { appendOnlyTablesIn } from "@waitron/sync-enrolment";
 import { sql } from "drizzle-orm";
 import { openVenueDatabase, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
@@ -48,18 +46,6 @@ function existingAppendOnlyTables(db: Database, tables: readonly string[]): stri
       .rows.map((row) => row.name),
   );
   return tables.filter((table) => existing.has(table.toLowerCase()));
-}
-
-export function existingOptionalAppendOnlyTables(
-  db: Database,
-  modules: readonly Pick<WaitronModule, "tier" | "classification">[],
-): string[] {
-  return existingAppendOnlyTables(
-    db,
-    modules
-      .filter((module) => module.tier === "toggleable")
-      .flatMap((module) => appendOnlyTablesIn(module.classification ?? [])),
-  );
 }
 
 export interface RefuseTradingDeps {

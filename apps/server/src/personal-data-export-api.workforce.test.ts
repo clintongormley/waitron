@@ -76,6 +76,7 @@ const FILES = [
   "rota.json",
   "absences.json",
   "attendance.json",
+  "clock-entries.json",
   "staff-roles.json",
   "time-record.pdf",
   "time-record.csv",

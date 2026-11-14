@@ -274,7 +274,7 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
 describe("the reconciliation pass follows the payments module's switch", () => {
   const ran: TickResult = { ran: [], deferred: 0, beyondHorizon: 0, skipped: [], nextDueAt: NOW };
 
-  it("with payments switched off, asks for no credential and runs no reconciliation duty", async () => {
+  it("without installed payments tables, asks for no credential and runs no reconciliation duty", async () => {
     let asked = 0;
     let runs = 0;
     const reconcile = reconcilePassFor({
@@ -284,7 +284,7 @@ describe("the reconciliation pass follows the payments module's switch", () => {
           credentialPurpose: "payments.stripe",
         },
       ],
-      paymentsEnabled: false,
+      paymentsInstalled: false,
       credentialProvisioned: () => {
         asked += 1;
         return Promise.resolve(true);
@@ -308,7 +308,7 @@ describe("the reconciliation pass follows the payments module's switch", () => {
     const selected: string[][] = [];
     let stripeReady = false;
     const reconcile = reconcilePassFor({
-      paymentsEnabled: true,
+      paymentsInstalled: true,
       duties: [
         { duty: stripe, credentialPurpose: "payments.stripe" },
         { duty: sumup, credentialPurpose: "payments.sumup" },
@@ -328,7 +328,7 @@ describe("the reconciliation pass follows the payments module's switch", () => {
     ]);
   });
 
-  it("with payments on and the credential provisioned, runs the duty", async () => {
+  it("with installed tables and the credential provisioned, runs the duty", async () => {
     let runs = 0;
     const reconcile = reconcilePassFor({
       duties: [
@@ -337,7 +337,7 @@ describe("the reconciliation pass follows the payments module's switch", () => {
           credentialPurpose: "payments.stripe",
         },
       ],
-      paymentsEnabled: true,
+      paymentsInstalled: true,
       credentialProvisioned: () => Promise.resolve(true),
       runDue: () => {
         runs += 1;
@@ -348,7 +348,7 @@ describe("the reconciliation pass follows the payments module's switch", () => {
     expect(runs).toBe(1);
   });
 
-  it("with payments on but no credential, runs nothing", async () => {
+  it("with installed tables but no credential, runs nothing", async () => {
     let runs = 0;
     const reconcile = reconcilePassFor({
       duties: [
@@ -357,7 +357,7 @@ describe("the reconciliation pass follows the payments module's switch", () => {
           credentialPurpose: "payments.stripe",
         },
       ],
-      paymentsEnabled: true,
+      paymentsInstalled: true,
       credentialProvisioned: () => Promise.resolve(false),
       runDue: () => {
         runs += 1;

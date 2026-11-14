@@ -1,5 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
+import { unzipSync } from "fflate";
+import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -15,8 +17,9 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { eq } from "drizzle-orm";
 import { jobOrigin } from "@waitron/shared";
-import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, WorkforceBackend, timeEntries } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
@@ -214,3 +217,94 @@ describe("the server's working-time part", () => {
     ).not.toThrow();
   });
 });
+
+it.each([false, true])(
+  "keeps own clock-entry JSON with Spanish rules enabled=%s",
+  async (enabled) => {
+    const original = await withTransaction(
+      suite.db,
+      async (tx) =>
+        (await tx.select().from(timeEntries).where(eq(timeEntries.personId, marthaId)))[0]!,
+    );
+    await withTransaction(suite.db, (tx) =>
+      new WorkforceBackend().requestCorrection(tx, {
+        nodeId: original.nodeId,
+        correctsEntryId: original.id,
+        at: "2026-01-02T00:35:00.000Z",
+        offsetMinutes: -120,
+        reason: "Correct clock-in time",
+        actorPersonId: marthaId,
+        origin: jobOrigin("dashboard"),
+      }),
+    );
+    const modules = ALL_MODULES.filter((module) => enabled || module.name !== "workforce-es");
+    const app = new Hono();
+    mountPersonalDataExportApi(
+      app,
+      {
+        db: suite.db,
+        modules,
+        serverParts: timeRecordPersonalData(modules),
+        venueLocale: "en-GB",
+        now: () => AT,
+      },
+      logger,
+    );
+    const response = await app.request("/management-api/me/personal-data/export", {
+      headers: { cookie },
+    });
+    expect(response.status).toBe(200);
+    const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    expect(!!archive["time-record.csv"]).toBe(enabled);
+    const payload = text(archive["clock-entries.json"]!);
+    const { entries } = JSON.parse(payload);
+    expect(entries).toHaveLength(7);
+    expect(Object.keys(entries[0]).sort()).toEqual([
+      "authorKind",
+      "capturedBySource",
+      "correctionActorId",
+      "correctionDirection",
+      "correctionReason",
+      "correctionStatus",
+      "correctsEntryId",
+      "entryKind",
+      "eventAt",
+      "eventOffsetMinutes",
+      "id",
+      "missingEntryKind",
+      "payPeriodClosureId",
+      "personId",
+      "recordedAt",
+      "recordedByPersonId",
+      "respondsToEntryId",
+      "selfApproved",
+    ]);
+    expect(entries.map((entry: { personId: string }) => entry.personId)).toEqual(
+      Array(7).fill(marthaId),
+    );
+    expect(entries[0]).toMatchObject({
+      eventAt: "2026-01-02T00:30:00.000Z",
+      eventOffsetMinutes: -120,
+      entryKind: "in",
+      capturedBySource: "dashboard",
+    });
+    expect(
+      entries.find((entry: { entryKind: string }) => entry.entryKind === "correction"),
+    ).toMatchObject({
+      correctsEntryId: original.id,
+      correctionReason: "Correct clock-in time",
+      correctionStatus: "requested",
+      correctionActorId: marthaId,
+      recordedByPersonId: marthaId,
+      selfApproved: false,
+      authorKind: "worker",
+      correctionDirection: "worker_request",
+      missingEntryKind: null,
+      respondsToEntryId: null,
+      payPeriodClosureId: null,
+    });
+    expect(payload).not.toContain(colleagueId);
+    expect(payload).not.toContain(COLLEAGUE_NAME);
+    expect(payload).not.toContain("Martha Lewis");
+  },
+);

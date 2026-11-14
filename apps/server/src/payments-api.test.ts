@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { recordIncidentOnce } from "@waitron/core";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
@@ -226,7 +227,11 @@ function mountApp(
   venue: Venue,
   providers: readonly CardProviderContribution[] = PROVIDERS,
   db: Database = suite.db,
-  { log = noopLog, fetch }: { log?: Logger; fetch?: typeof globalThis.fetch } = {},
+  {
+    log = noopLog,
+    fetch,
+    paymentsEnabled = true,
+  }: { log?: Logger; fetch?: typeof globalThis.fetch; paymentsEnabled?: boolean } = {},
 ): Hono {
   const app = new Hono();
   mountPaymentsApi(
@@ -241,6 +246,7 @@ function mountApp(
       environment: "preproduction",
       pool,
       providers,
+      paymentsEnabled,
       ...(fetch === undefined ? {} : { fetch }),
     },
     log,
@@ -3428,3 +3434,41 @@ describe("abandoned-refund outcome read", () => {
     ]);
   });
 });
+
+it.each(["saved-off", "unapplied"])(
+  "refuses provider On and reader adoption with Payments %s",
+  async (state) => {
+    const venue = await seedVenueWithStaff();
+    const [admin] = await seedPersons(suite.db, { displayName: "Administrator", role: "admin" });
+    const session = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId: admin!.id }),
+    );
+    const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
+    const app = mountApp(venue, PROVIDERS, suite.db, { paymentsEnabled: state !== "unapplied" });
+    expect((await connectStripe(app, venue)).status).toBe(200);
+    if (state === "saved-off") await seedModuleSettings(suite.db, { payments: false });
+    for (const [method, path, body] of [
+      ["PUT", "/management-api/payments/providers/stripe/state", { enabled: true, revision: 0 }],
+      [
+        "POST",
+        "/management-api/payments/readers",
+        { providerId: "stripe", reference: "tmr_off", name: "Front" },
+      ],
+      [
+        "POST",
+        "/management-api/payments/readers/adopt",
+        { providerId: "stripe", providerRef: "tmr_off", name: "Front" },
+      ],
+    ] as const) {
+      const response = await send(app, method, path, { cookie, body });
+      expect({ status: response.status, body: await response.json() }).toMatchObject({
+        status: 409,
+        body: { error: { code: "module.disabled" } },
+      });
+    }
+    expect(await suite.db.select().from(cardReaders)).toEqual([]);
+    expect(
+      await tryGetCredential(suite.db, RING, { purpose: stripeSeat.credentialPurpose }),
+    ).not.toBeNull();
+  },
+);

@@ -7,7 +7,11 @@ export type {
 } from "./registro-jornada.js";
 export { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 export { WORKFORCE_ES_VOCABULARY } from "./vocabulary.js";
-export { convenioConfig, overtimeModel } from "./schema/convenio-config.js";
+export {
+  convenioConfig,
+  convenioConfig as workTimeRulesConfig,
+  overtimeModel,
+} from "./schema/convenio-config.js";
 export { resolveWorkTimeRuleset } from "./convenio.js";
 
 export { WORKFORCE_ES_CLASSIFICATION, WORKFORCE_ES_CHANGE_SOURCES } from "./classification.js";
@@ -19,3 +23,5 @@ import "./errors.js";
 
 export { prepareTimeRecordExport, WORKFORCE_ES_RECORD_EXPORT } from "./record-export.js";
 export { WORKFORCE_ES_BACKUP_VERIFICATION } from "./backup-verification.js";
+
+export { WORK_TIME_RULES_NOT_FOUND } from "./errors.js";

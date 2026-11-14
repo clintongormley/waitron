@@ -9,3 +9,5 @@ declare module "@waitron/shared" {
     "convenio.not_found": Record<string, never>;
   }
 }
+
+export const WORK_TIME_RULES_NOT_FOUND = "convenio.not_found";

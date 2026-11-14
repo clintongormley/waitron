@@ -91,6 +91,11 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         ],
         kept: ["Nothing in the box deletes these questions, emails, answers or activity records."],
       },
+      "clock-entries.json": {
+        holds:
+          "your clock-ins, clock-outs, breaks, corrections and confirmations, with their times, time offsets, capture sources and the ids of the people involved.",
+        use: "Kept as the venue's record of the hours you worked.",
+      },
       "staff-roles.json": {
         holds:
           "the staff roles you can fill, and the area and staff role of each of your shifts that has been given one.",
@@ -214,6 +219,11 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         kept: [
           "Nada en el servidor Waitron del local borra estas preguntas, correos, respuestas ni registros de actividad.",
         ],
+      },
+      "clock-entries.json": {
+        holds:
+          "tus entradas, salidas, descansos, correcciones y confirmaciones, con sus horas, desfases horarios, fuentes de captura y los identificadores de las personas que intervinieron.",
+        use: "Se guarda como el registro del local de las horas que trabajaste.",
       },
       "staff-roles.json": {
         holds:

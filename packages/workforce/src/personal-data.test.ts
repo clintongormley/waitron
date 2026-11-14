@@ -734,12 +734,13 @@ const attendanceOf = (files: { name: string; text: string }[]) => {
 };
 
 describe("WORKFORCE_PERSONAL_DATA", () => {
-  it("declares its four files", () => {
+  it("declares its personal-data files", () => {
     expect(WORKFORCE_PERSONAL_DATA.files).toEqual([
       "employment.json",
       "rota.json",
       "absences.json",
       "attendance.json",
+      "clock-entries.json",
     ]);
   });
 
@@ -942,6 +943,7 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
       "employment.json",
       "absences.json",
       "attendance.json",
+      "clock-entries.json",
     ]);
     const text = attendanceOf(files);
     expect(text).toBe(asFile(MARTA_ATTENDANCE));
@@ -1035,7 +1037,7 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
       createdAt: "2026-06-03T07:00:00.000Z",
     });
     const files = await download(person);
-    expect(files.map((f) => f.name)).toEqual(["attendance.json"]);
+    expect(files.map((f) => f.name)).toEqual(["attendance.json", "clock-entries.json"]);
     expect(files[0]!.text).toBe(
       asFile({
         questions: [
@@ -1091,6 +1093,7 @@ describe("prepare's reads", () => {
       "attendance_questions",
       "attendance_response_commands",
       "attendance_operation_facts",
+      "time_entries",
     ]);
     expect(plans.flatMap((p) => p.plan.filter((line) => line.startsWith("SCAN")))).toEqual([]);
   });
