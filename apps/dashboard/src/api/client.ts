@@ -5045,11 +5045,15 @@ export class DashboardApi {
 
   // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────
 
-  setBookingsState(
+  setModuleState(
+    id: string,
     enabled: boolean,
     revision: number,
   ): Promise<{ enabled: boolean; applied: boolean; revision: number }> {
-    return this.#request("/management-api/modules/bookings/state", "PUT", { enabled, revision });
+    return this.#request(`/management-api/modules/${encodeURIComponent(id)}/state`, "PUT", {
+      enabled,
+      revision,
+    });
   }
 
   listModules(): Promise<ModuleRow[]> {

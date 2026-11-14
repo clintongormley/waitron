@@ -5684,3 +5684,57 @@ describe("simplified invoice original HTTP requests", () => {
     },
   );
 });
+
+it("keeps cash and hand-keyed cards available while refusing reader collection with Payments Off", async () => {
+  const billId = await bill120();
+  const app = new Hono();
+  mountTillApi(
+    app,
+    {
+      admission: testTradingAdmission(),
+      db: suite.db,
+      backend,
+      clock,
+      cfg: venue.cfg,
+      secureCookies: false,
+      venueLocale: LOCALE,
+      paymentsEnabled: false,
+      cardProvider: new SimulatorPaymentProvider(suite.db),
+    },
+    quiet,
+  );
+  const path = `/api/working-orders/${billId}/payments`;
+  const sendPayment = async (method: string, entry?: string) =>
+    app.request(path, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: venue.cookie },
+      body: JSON.stringify(
+        await observedPaymentBody(suite.db, path, {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "10.00",
+          method,
+          ...(entry ? { entry } : {}),
+          applied: "10.00",
+          tip: "0.00",
+          ...(method === "cash" ? { tendered: "10.00" } : {}),
+        }),
+      ),
+    });
+  const refused = await sendPayment("card", "reader");
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ error: { code: "module.disabled" } });
+  expect(
+    await inTx((tx) =>
+      tx.select().from(billPayments).where(eq(billPayments.workingOrderId, billId)),
+    ),
+  ).toEqual([]);
+  for (const [method, entry] of [
+    ["cash", undefined],
+    ["card", "manual"],
+  ] as const) {
+    const response = await sendPayment(method, entry);
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+    expect(await response.json()).toMatchObject({ outcome: "received" });
+  }
+});

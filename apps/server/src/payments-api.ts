@@ -1,3 +1,4 @@
+import { MODULES_SETTINGS } from "./modules.js";
 import { resolveVenueClock } from "@waitron/reporting";
 import { refundAudit, type RefundAuditRun } from "./refund-audit.js";
 import { backupAuditDay, type BackupAuditRun } from "./backup-audit-day.js";
@@ -144,6 +145,7 @@ import {
  */
 export interface PaymentsApiDeps {
   admission: TradingAdmission;
+  paymentsEnabled?: boolean;
   db: Database;
   /** For filing the sale of a stuck payment the provider reports captured. */
   backend: FiscalBackend;
@@ -182,6 +184,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.provider_merchant_ambiguous": 409,
   "payment.provider_in_use": 409,
   "payment.provider_disabled": 409,
+  "module.disabled": 409,
   "settings.out_of_date": 409,
   "settings.invalid": 500,
   "payment.pairing_refused": 422,
@@ -517,7 +520,15 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     if (credential === undefined)
       throw new AppError("reader.provider_disconnected", { providerId: seat.providerId });
   };
+  const requirePaymentsEnabled = async (tx: Transaction): Promise<void> => {
+    if (
+      deps.paymentsEnabled === false ||
+      (await readSettings(tx, MODULES_SETTINGS)).doc.modules.payments === false
+    )
+      throw new AppError("module.disabled", { module: "payments" });
+  };
   const requireEnabled = async (tx: Transaction, seat: CardProviderContribution): Promise<void> => {
+    await requirePaymentsEnabled(tx);
     const { doc } = await readSettings(tx, PAYMENTS_SETTINGS);
     if (doc.providers[seat.providerId] === false)
       throw new AppError("payment.provider_disabled", { providerId: seat.providerId });
@@ -958,6 +969,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           managementSessionId: sessionId,
           permission: "payments.providers.manage",
         });
+        if (body.enabled) await requirePaymentsEnabled(tx);
         if (!body.enabled) {
           const readers = await tx
             .select({ name: cardReaders.name })

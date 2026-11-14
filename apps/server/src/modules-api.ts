@@ -19,6 +19,7 @@ const run = createErrorBoundary(
     "settings.invalid": 500,
     "settings.out_of_date": 409,
     "module.not_prepared": 409,
+    "module.providers_enabled": 409,
     "node.read_only": 403,
   },
   "modules.failed",
@@ -52,13 +53,9 @@ export function mountModulesApi(
           .map((module) => ({
             id: module.name,
             category: "module",
-            enabled:
-              module.name === "bookings"
-                ? modules.doc.modules.bookings !== false
-                : deps.enabled.includes(module.name),
-            ...(module.name === "bookings"
-              ? { applied: deps.enabled.includes(module.name), revision: modules.revision }
-              : {}),
+            enabled: modules.doc.modules[module.name] !== false,
+            applied: deps.enabled.includes(module.name),
+            revision: modules.revision,
           })),
         ...deps.providers.map((provider) => ({
           id: provider.providerId,
@@ -71,7 +68,7 @@ export function mountModulesApi(
       ]);
     }),
   );
-  app.put("/management-api/modules/bookings/state", (c) =>
+  app.put("/management-api/modules/:id/state", (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -89,9 +86,19 @@ export function mountModulesApi(
           permission: "person.admin",
         });
         if (!deps.isPrimary()) throw new AppError("node.read_only", {});
+        const id = c.req.param("id");
+        const module = deps.modules.find(
+          (entry) => entry.name === id && entry.tier === "toggleable",
+        );
+        if (!module) throw new AppError("module.not_prepared", { module: id });
+        if (id === "payments" && !body.enabled) {
+          const { doc } = await readSettings(tx, PAYMENTS_SETTINGS);
+          if (deps.providers.some((provider) => doc.providers[provider.providerId] !== false))
+            throw new AppError("module.providers_enabled", {});
+        }
         if (body.enabled) {
-          const set = deps.modules.find((module) => module.name === "bookings")?.migrations;
-          if (!set) throw new AppError("module.not_prepared", { module: "bookings" });
+          const set = module.migrations;
+          if (!set) throw new AppError("module.not_prepared", { module: id });
           const installed = await journalHashes({ venue: tx, node: tx }, set);
           const shipped = imageMigrationHashes(set, deps.migrationsRoot);
           if (
@@ -99,18 +106,18 @@ export function mountModulesApi(
             installed.length !== shipped.length ||
             !shipped.every((hash) => installed.includes(hash))
           )
-            throw new AppError("module.not_prepared", { module: "bookings" });
+            throw new AppError("module.not_prepared", { module: id });
         }
         const { doc } = await readSettings(tx, MODULES_SETTINGS);
         return saveSettings(tx, MODULES_SETTINGS, {
-          doc: { modules: { ...doc.modules, bookings: body.enabled as boolean } },
+          doc: { modules: { ...doc.modules, [id]: body.enabled as boolean } },
           expectedRevision: body.revision as number,
           personId: authorizedBy,
         });
       });
       return c.json({
-        enabled: saved.doc.modules.bookings !== false,
-        applied: deps.enabled.includes("bookings"),
+        enabled: saved.doc.modules[c.req.param("id")] !== false,
+        applied: deps.enabled.includes(c.req.param("id")),
         revision: saved.revision,
       });
     }),

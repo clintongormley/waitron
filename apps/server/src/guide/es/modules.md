@@ -11,7 +11,7 @@ consulta el estado de los lectores y los pagos pendientes en **Pagos con tarjeta
 
 Los filtros **Habilitado**, **Deshabilitado** y **Todos** muestran el estado de un módulo por separado
 de su configuración. **Añadir un módulo** muestra los módulos deshabilitados en la misma lista.
-Elige **Todas las categorías** para ver todos los módulos opcionales. Reservas se puede activar o desactivar; los demás módulos opcionales aún no.
+Elige **Todas las categorías** para ver todos los módulos opcionales.
 
 ## Activar o desactivar un proveedor de tarjetas {#provider-state}
 
@@ -33,6 +33,21 @@ Las reservas guardadas permanecen en este equipo cuando Reservas está desactiva
 Si el servidor principal falla repetidamente al arrancar, su página de recuperación ofrece **Desactivar Reservas y volver a arrancar**.
 Abre la dirección segura e introduce la contraseña de un administrador activo, o elige **Parar** para dejarlo sin cambios.
 Un administrador sin contraseña no puede usar esa acción de recuperación.
+
+## Activar o desactivar Pagos o Normativa laboral española {#module-state}
+
+Como administrador, elige **Desactivar** o **Activar** en el menú de la fila del módulo y confirma.
+**Pendiente de reinicio** indica que tu elección está guardada. Abre **Estado del servidor** en Ajustes
+y elige **Reiniciar el servidor** cuando puedas pausar el servicio. Comprueba y repite cualquier envío a cocina interrumpido por el reinicio.
+
+Antes de desactivar Pagos, desactiva todos los proveedores de tarjeta; elimina o desvincula sus lectores primero.
+Tras reiniciar, puedes seguir cobrando en efectivo y registrando tarjetas cobradas en un terminal independiente.
+Los pagos anteriores, reembolsos y comprobaciones de pagos siguen disponibles. Para volver a añadir lectores,
+activa Pagos, reinicia y activa el proveedor.
+
+Con Normativa laboral española desactivada, puedes seguir planificando turnos y registrando la jornada.
+Las comprobaciones de normativa española y la exportación española del registro horario no están disponibles
+hasta que actives el módulo y reinicies.
 
 ## Revisar devoluciones de pedidos abandonados {#abandoned-refunds}
 

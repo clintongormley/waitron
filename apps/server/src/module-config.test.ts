@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { isEnabled, parseModuleConfig } from "@waitron/module";
-import { readModuleConfig, writeModuleConfig } from "./module-config.js";
+import { readModuleConfig, writeModuleConfig, modulesForMigration } from "./module-config.js";
 import { ALL_MODULES, MODULES_SETTINGS } from "./modules.js";
 
 const TOGGLEABLE = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
@@ -64,4 +64,35 @@ describe("writeModuleConfig ↔ readModuleConfig", () => {
     const roundTripped = await readModuleConfig(suite.db);
     for (const m of ALL_MODULES) expect(isEnabled(roundTripped, m.name)).toBe(true);
   });
+});
+
+it.each([
+  { tier: "toggleable", want: ["retained"] },
+  { tier: "mandatory", want: [] },
+  { tier: "provision-only", want: [] },
+] as const)("keeps only installed optional sets while Off ($tier)", async ({ tier, want }) => {
+  const selected = await modulesForMigration(
+    { venue: suite.db, node: suite.node },
+    [
+      {
+        name: "retained",
+        version: "0.0.0",
+        requires: { core: "*" },
+        tier,
+        migrations: ALL_MODULES.find((module) => module.name === "core")!.migrations,
+      },
+      {
+        name: "absent",
+        version: "0.0.0",
+        requires: { core: "*" },
+        tier: "toggleable",
+        migrations: {
+          ...ALL_MODULES.find((module) => module.name === "core")!.migrations!,
+          table: "__drizzle_migrations_absent",
+        },
+      },
+    ],
+    [],
+  );
+  expect(selected.map((module) => module.name)).toEqual(want);
 });

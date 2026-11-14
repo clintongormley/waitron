@@ -1528,18 +1528,18 @@ start serves the recovery page at once, with no count of failed starts (`refused
   (`apps/server/src/rejoin-command.ts`): each migrates before any start can look, so none raises
   the warning.
 
-**2026-11-14, A646:** startup also selects existing tables from toggleable modules' append-only
-classifications. It records missing trigger names before migrating, installs missing pairs on those
-retained tables, and includes them in the startup check and trading watch. It does not migrate an
-Off module or create its absent tables. `boot.failed-start.test.ts` checks all three retained
-Payments tables with populated rows, the warning, changed-trigger refusal and unchanged entries in an already-current journal;
-that last assertion does not establish whether the set was passed to the migrator.
-`boot.restore.test.ts` checks a dropped Payments-Off trigger during trading, and
-`boot.payments-off-alerts.test.ts` checks a never-installed Payments set stays absent.
-The contained upgrade data check uses the same retained selection, installer and assertion;
-`boot.upgrade.test.ts` checks missing-pair repair and replaced-trigger refusal there. That check
-reports the data-check result without the startup repair warning. The installer and stored-text
-comparison retain the limits above.
+**2026-11-14, A646:** startup and the contained upgrade data check migrate enabled sets and
+already-installed optional sets, including when Off. They share `modulesForMigration`; unselected
+provision-only sets remain outside this selection. The selected migration declarations supply the
+append-only tables to the existing installer, startup assertion and trading watch. Missing pairs are
+counted before migration for the startup warning. A disabled optional set without a journal remains absent.
+`boot.failed-start.test.ts` checks the three retained Payments tables with populated rows, missing-pair
+repair, warning, changed-trigger refusal and unchanged entries in an already-current journal.
+`boot.restore.test.ts` checks a dropped Payments-Off trigger during trading;
+`boot.payments-off-alerts.test.ts` checks never-installed absence, an added shipped Payments migration,
+retained pending-payment recovery and reconciliation while Off. `boot.upgrade.test.ts` checks the
+upgrade data check's repair and replaced-trigger refusal; it reports no startup repair warning.
+The installer and stored-text comparison retain the limits above.
 
 No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner
 decision 2026-09-05). Two root guards enforce the classification on every non-docs push:

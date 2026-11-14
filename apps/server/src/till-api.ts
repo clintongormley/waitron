@@ -285,6 +285,7 @@ import {
 } from "./zone-access.js";
 
 export interface TillApiDeps {
+  paymentsEnabled?: boolean;
   exporter?: ModuleTimeRecordExport;
   admission: TradingAdmission;
   attendance?: AttendanceRecorder;
@@ -418,6 +419,7 @@ export async function resolveCardCollector(
   deviceId: string | undefined,
   requestedReaderId: string | undefined,
 ): Promise<{ provider: PaymentProvider; reader?: { id: string; providerRef: string } }> {
+  if (deps.paymentsEnabled === false) throw new AppError("module.disabled", { module: "payments" });
   if (deps.cardProvider?.provider === "simulator") {
     if (requestedReaderId !== undefined) {
       throw new AppError("reader.not_found", { id: requestedReaderId });
@@ -436,6 +438,7 @@ export async function resolveCardCollector(
 /** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
 export const STATUS: Record<string, ContentfulStatusCode> = {
   "settings.invalid": 500,
+  "module.disabled": 409,
   "venue.time_zone_not_ready": 409,
   "print_job.not_found": 404,
   "print_job.not_resendable": 409,

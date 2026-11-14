@@ -78,11 +78,19 @@ it("shows a failed catalogue read and retries without substituting an empty list
   expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 });
 
-it("wraps the module preparation note on a Spanish phone display", async () => {
+it("wraps the pending restart note on a Spanish phone display", async () => {
   await page.viewport(390, 900);
   try {
     setLocale("es-ES");
-    const el = await mount();
+    const el = await mount(
+      modulesClient({
+        listModules: vi
+          .fn()
+          .mockResolvedValue([
+            { id: "payments", category: "module", enabled: true, applied: false, revision: 1 },
+          ]),
+      }),
+    );
     const reason = el
       .shadowRoot!.querySelector("wt-data-table")!
       .shadowRoot!.querySelector("[part=switch-reason]")!;
@@ -232,42 +240,41 @@ it("refreshes a stale provider revision so the open confirmation can be retried"
   );
 });
 
-it.each(["/manage/modules/state/all", "/manage/modules"])(
-  "confirms a Bookings change and shows its saved state waiting for the separate restart at %s",
-  async (path) => {
-    history.replaceState(null, "", path);
-    const api = modulesClient({
-      listModules: vi
-        .fn()
-        .mockResolvedValueOnce([
-          { id: "bookings", category: "module", enabled: true, applied: true, revision: 2 },
-        ])
-        .mockResolvedValue([
-          { id: "bookings", category: "module", enabled: false, applied: true, revision: 3 },
-        ]),
-      setBookingsState: vi.fn().mockResolvedValue({ enabled: false, applied: true, revision: 3 }),
-    });
-    const el = await mount(api);
-    expect(
-      el
-        .shadowRoot!.querySelector("wt-data-table")!
-        .shadowRoot!.querySelector("[data-test=switch-bookings]"),
-    ).toBeNull();
-    el.canManageModules = true;
-    await el.updateComplete;
-    el.shadowRoot!.querySelector("wt-data-table")!
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=switch-bookings]")!
-      .click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("tills reconnect");
-    expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("kitchen");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
-    await vi.waitFor(() => expect(rows(el).join()).toContain("Waiting for restart"));
-    expect(rows(el).join()).toContain("Disabled");
-    expect(api.setBookingsState).toHaveBeenCalledWith(false, 2);
-    expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
-  },
-);
+it.each(
+  ["bookings", "payments", "workforce-es"].flatMap((id) =>
+    ["/manage/modules/state/all", "/manage/modules"].map((path) => ({ id, path })),
+  ),
+)("confirms $id and keeps its pending state visible at $path", async ({ id, path }) => {
+  history.replaceState(null, "", path);
+  const api = modulesClient({
+    listModules: vi
+      .fn()
+      .mockResolvedValueOnce([
+        { id, category: "module", enabled: true, applied: true, revision: 2 },
+      ])
+      .mockResolvedValue([{ id, category: "module", enabled: false, applied: true, revision: 3 }]),
+    setModuleState: vi.fn().mockResolvedValue({ enabled: false, applied: true, revision: 3 }),
+  });
+  const el = await mount(api);
+  expect(
+    el
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector(`[data-test="switch-${id}"]`),
+  ).toBeNull();
+  el.canManageModules = true;
+  await el.updateComplete;
+  el.shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>(`[data-test="switch-${id}"]`)!
+    .click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("tills reconnect");
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("kitchen");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
+  await vi.waitFor(() => expect(rows(el).join()).toContain("Waiting for restart"));
+  expect(rows(el).join()).toContain("Disabled");
+  expect(api.setModuleState).toHaveBeenCalledWith(id, false, 2);
+  expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
+});
 it("keeps a refused Bookings confirmation available and refreshes a stale revision", async () => {
   const api = modulesClient({
     listModules: vi
@@ -278,7 +285,7 @@ it("keeps a refused Bookings confirmation available and refreshes a stale revisi
       .mockResolvedValue([
         { id: "bookings", category: "module", enabled: true, applied: true, revision: 1 },
       ]),
-    setBookingsState: vi
+    setModuleState: vi
       .fn()
       .mockRejectedValueOnce({ code: "settings.out_of_date" })
       .mockResolvedValue({ enabled: false, applied: true, revision: 2 }),
@@ -301,5 +308,26 @@ it("keeps a refused Bookings confirmation available and refreshes a stale revisi
     "Someone else saved these settings",
   );
   confirm().click();
-  await vi.waitFor(() => expect(api.setBookingsState).toHaveBeenLastCalledWith(false, 1));
+  await vi.waitFor(() => expect(api.setModuleState).toHaveBeenLastCalledWith("bookings", false, 1));
+});
+
+it("keeps the Payments provider prerequisite refusal beside the confirmation", async () => {
+  const el = await mount(
+    modulesClient({
+      setModuleState: vi.fn().mockRejectedValue({ code: "module.providers_enabled" }),
+    }),
+  );
+  el.canManageModules = true;
+  await el.updateComplete;
+  el.shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>("[data-test=switch-payments]")!
+    .click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.getAttribute("error")).toContain(
+      "card providers",
+    ),
+  );
+  expect(el.shadowRoot!.querySelector("wt-dialog")).not.toBeNull();
 });

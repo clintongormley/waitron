@@ -83,18 +83,17 @@ export const NOTHING_TO_RECONCILE: TickResult = {
 };
 
 export interface ReconcilePassDeps {
-  /** With payments switched off its tables, `scheduled_runs` among them, are not migrated. */
-  paymentsEnabled: boolean;
+  paymentsInstalled: boolean;
   /** Asked per pass, so a credential provisioned while the host runs is served on the next pass. */
   duties: readonly { duty: PeriodDuty; credentialPurpose: Purpose }[];
   credentialProvisioned: (purpose: Purpose) => Promise<boolean>;
   runDue: (now: Date, duties: PeriodDuty[]) => Promise<TickResult>;
 }
 
-/** Select each provisioned provider's duty while payments is on. */
+/** Select each provisioned provider's duty when its tables are installed. */
 export function reconcilePassFor(deps: ReconcilePassDeps): (now: Date) => Promise<TickResult> {
   return async (now) => {
-    if (!deps.paymentsEnabled) return NOTHING_TO_RECONCILE;
+    if (!deps.paymentsInstalled) return NOTHING_TO_RECONCILE;
     const duties: PeriodDuty[] = [];
     for (const entry of deps.duties) {
       if (await deps.credentialProvisioned(entry.credentialPurpose)) duties.push(entry.duty);

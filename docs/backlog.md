@@ -132,8 +132,7 @@ stays in one area.
 **6. After the first venue.** The remaining bundles, which are nice to have. Take
 them only when a lane has nothing better.
 
-**Features the owner ranked on 2026-10-16 that are still open:** A803 bills and tables, A646 the
-Modules page, and A664 archiving or deleting old data.
+**Features the owner ranked on 2026-10-16 that are still open:** A803 bills and tables, and A664 archiving or deleting old data.
 
 **Remote access unblocks the customer-facing features, so it comes first among them (owner,
 2026-10-22).** Online booking (A1013), the table's QR code (A508), online ordering for collection
@@ -2323,13 +2322,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   their shared BillVenue device names and venue/operation samples remain.
 
 - **Correct every sentence known to be false, then finish comment pruning** (bundle of 26, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning)
-
-- **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; two switches remain).**
-  [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md); [plan](superpowers/plans/2026-11-11-a646-modules-and-card-providers.md).
-  Administrators can turn card providers on or off while keeping credentials for earlier payments.
-  Bookings can be switched with a separate administrator restart, and failed-start recovery can switch it off. Workforce-es and Payments switches remain; retained optional-module tables are protected. Workforce and staffing stay mandatory under A1002. Exports with optional modules off load with those modules on and empty.
-  Google sign-in is no longer part of it (owner, 2026-11-11): see A1507 under Later and parked.
-  [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 
 - **Printer, reader and device delete wording and tidying** (bundle of 2, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording-and-tidying)
 

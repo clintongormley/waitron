@@ -8,9 +8,17 @@ import { en, es } from "./strings.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "module.providers_enabled": {
+    en: "Turn off all card providers before turning Payments off. Open Card providers and remove or unpair each provider's readers first.",
+    es: "Desactiva todos los proveedores de tarjeta antes de desactivar Pagos. Abre Proveedores de tarjeta y elimina o desvincula sus lectores primero.",
+  },
+  "module.disabled": {
+    en: "Payments is off or waiting for restart. Open Modules, turn Payments on and restart the box before adding readers or turning a provider on.",
+    es: "Pagos está desactivado o pendiente de reinicio. Abre Módulos, activa Pagos y reinicia el servidor antes de añadir lectores o activar un proveedor.",
+  },
   "module.not_prepared": {
-    en: "This box cannot turn Bookings on with this version of Waitron. Bookings stays off and saved bookings are kept.",
-    es: "Esta versión no puede activar Reservas en este equipo. Reservas sigue desactivado y las reservas guardadas se conservan.",
+    en: "This box is not prepared to turn this module on. The change was not saved. Install the current Waitron version, restart the box and try again.",
+    es: "Este equipo no está preparado para activar este módulo. No se ha guardado el cambio. Instala la versión actual de Waitron, reinicia el servidor e inténtalo de nuevo.",
   },
   "person.job_roles_changed": {
     en: "Someone changed this person's job roles while you were editing. Reload to see them; your changes are kept until you do.",

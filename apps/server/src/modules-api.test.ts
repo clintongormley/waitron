@@ -7,10 +7,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { startManagementSession } from "@waitron/identity";
 import { ALL_MODULES, CARD_PROVIDERS } from "@waitron/composition";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { PAYMENTS_SETTINGS } from "@waitron/payments";
+import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
+import { PAYMENTS_MIGRATIONS, PAYMENTS_SETTINGS } from "@waitron/payments";
 import { mountModulesApi } from "./modules-api.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, BOOKINGS_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, BOOKINGS_MIGRATIONS, PAYMENTS_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
+});
 import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
 import { MODULES_SETTINGS } from "./modules.js";
 
@@ -48,8 +51,8 @@ it("lists optional modules even when disabled, plus every provider, without mand
   const response = await app().request("/management-api/modules", { headers: { cookie: manager } });
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual([
-    { id: "workforce-es", category: "module", enabled: false },
-    { id: "payments", category: "module", enabled: true },
+    { id: "workforce-es", category: "module", enabled: true, applied: false, revision: 0 },
+    { id: "payments", category: "module", enabled: true, applied: true, revision: 0 },
     { id: "bookings", category: "module", enabled: true, applied: false, revision: 0 },
     { id: "sumup", category: "card-provider", enabled: true, revision: 0 },
     { id: "stripe", category: "card-provider", enabled: true, revision: 0 },
@@ -159,11 +162,83 @@ it.each([null, "true", 1])("refuses enabled=%s without saving", async (enabled) 
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ error: { code: "management.request_invalid" } });
 });
-it("refuses On without the exact prepared Bookings journal, but can still save Off", async () => {
-  await suite.db.execute(sql`update __drizzle_migrations_bookings set hash = 'different image'`);
-  const response = await switchBookings(admin, true);
-  expect(response.status).toBe(409);
-  expect(await response.json()).toMatchObject({ error: { code: "module.not_prepared" } });
-  expect((await readSettings(suite.db, MODULES_SETTINGS)).revision).toBe(0);
-  expect((await switchBookings()).status).toBe(200);
+it.each([
+  ["bookings", "__drizzle_migrations_bookings"],
+  ["payments", "__drizzle_migrations_payments"],
+  ["workforce-es", "__drizzle_migrations_workforce_es"],
+])("requires %s's own prepared journal without changing data on refusal", async (id, table) => {
+  const rows = suite.db.all<{ rowid: number; hash: string }>(
+    sql`select rowid, hash from ${sql.identifier(table)}`,
+  );
+  await suite.db.execute(sql`update ${sql.identifier(table)} set hash = 'different image'`);
+  try {
+    const response = await app().request(`/management-api/modules/${id}/state`, {
+      method: "PUT",
+      headers: { cookie: admin, "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: true, revision: 0 }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "module.not_prepared", params: { module: id } },
+    });
+    expect((await readSettings(suite.db, MODULES_SETTINGS)).revision).toBe(0);
+    if (id === "bookings") expect((await switchBookings()).status).toBe(200);
+  } finally {
+    for (const row of rows)
+      await suite.db.execute(
+        sql`update ${sql.identifier(table)} set hash = ${row.hash} where rowid = ${row.rowid}`,
+      );
+  }
 });
+
+it.each(["workforce-es", "payments"])(
+  "switches %s without changing applied state or other overrides",
+  async (id) => {
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, PAYMENTS_SETTINGS, {
+        doc: { providers: { stripe: false, sumup: false } },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+    const mounted = app([id]);
+    const off = await mounted.request(`/management-api/modules/${id}/state`, {
+      method: "PUT",
+      headers: { cookie: admin, "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: false, revision: 0 }),
+    });
+    expect(off.status).toBe(200);
+    expect(await off.json()).toEqual({ enabled: false, applied: true, revision: 1 });
+    expect((await readSettings(suite.db, MODULES_SETTINGS)).doc.modules).toEqual({ [id]: false });
+    const on = await mounted.request(`/management-api/modules/${id}/state`, {
+      method: "PUT",
+      headers: { cookie: admin, "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: true, revision: 1 }),
+    });
+    expect(on.status).toBe(200);
+    expect(await on.json()).toEqual({ enabled: true, applied: true, revision: 2 });
+  },
+);
+it("requires every provider Off before Payments Off, without saving a refusal", async () => {
+  const response = await app().request("/management-api/modules/payments/state", {
+    method: "PUT",
+    headers: { cookie: admin, "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: false, revision: 0 }),
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: { code: "module.providers_enabled" } });
+  expect((await readSettings(suite.db, MODULES_SETTINGS)).revision).toBe(0);
+});
+it.each(["workforce", "staffing", "fiscal-none", "unknown"])(
+  "refuses unsupported module %s",
+  async (id) => {
+    const response = await app().request(`/management-api/modules/${id}/state`, {
+      method: "PUT",
+      headers: { cookie: admin, "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: false, revision: 0 }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "module.not_prepared" } });
+    expect((await readSettings(suite.db, MODULES_SETTINGS)).revision).toBe(0);
+  },
+);

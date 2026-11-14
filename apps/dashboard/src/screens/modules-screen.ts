@@ -190,7 +190,7 @@ export class ModulesScreen extends LitElement {
         (entry) => entry.id === row.id && entry.category === row.category,
       );
       if (row.category === "module")
-        await this.api.setBookingsState(!row.enabled, current?.revision ?? row.revision ?? 0);
+        await this.api.setModuleState(row.id, !row.enabled, current?.revision ?? row.revision ?? 0);
       else
         await this.api.setPaymentProviderState(
           row.id,
@@ -216,8 +216,7 @@ export class ModulesScreen extends LitElement {
       {
         key: "name",
         label: text("modules.name"),
-        cell: (row) =>
-          html`${this.#name(row)}${row.category === "module" && row.id !== "bookings" ? html`<span part="switch-reason">${text("modules.switch_unavailable")}</span>` : nothing}`,
+        cell: (row) => this.#name(row),
       },
       {
         key: "state",
@@ -247,10 +246,10 @@ export class ModulesScreen extends LitElement {
         label: "",
         pinned: "end",
         cell: (row) =>
-          row.category === "module" && row.id === "bookings" && this.canManageModules
+          row.category === "module" && this.canManageModules
             ? html`<wt-row-actions label=${this.#name(row)}
                 ><wt-button
-                  data-test="switch-bookings"
+                  data-test=${`switch-${row.id}`}
                   variant="secondary"
                   @click=${() => {
                     this.switching = row;
@@ -342,7 +341,7 @@ export class ModulesScreen extends LitElement {
               }}
             >
               <p>
-                ${text(this.switching.category === "module" ? "modules.bookings_explanation" : this.switching.enabled ? "modules.off_explanation" : "modules.on_explanation")}
+                ${text(this.switching.category === "module" ? `modules.${this.switching.id === "workforce-es" ? "workforce_es" : this.switching.id}_explanation` : this.switching.enabled ? "modules.off_explanation" : "modules.on_explanation")}
               </p>
               ${
                 this.switchError && this.switching.category === "card-provider"

@@ -1,16 +1,16 @@
-import { VENUE_FILE, NODE_FILE, installAppendOnlyTriggers } from "@waitron/store";
+import { VENUE_FILE, NODE_FILE } from "@waitron/store";
 import { once } from "node:events";
 import { join } from "node:path";
 import { catalogues, lockVenueDatabase, openVenueDatabase, withTransaction } from "@waitron/db";
 import { readMenuStructure } from "@waitron/catalogue";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
-import { assertAppendOnlyIntact, existingOptionalAppendOnlyTables } from "./append-only-watch.js";
+import { assertAppendOnlyIntact } from "./append-only-watch.js";
 import { enabledModules, orderedMigrationSets, type ModuleConfig } from "@waitron/module";
 import { assertNoStartAgainDeletion } from "@waitron/provisioning";
 import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { ALL_MODULES } from "./modules.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
-import { readModuleConfig } from "./module-config.js";
+import { readModuleConfig, modulesForMigration } from "./module-config.js";
 import { assertNotAhead } from "./upgrade-schema-check.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { isCopyIntact } from "./handover-integrity.js";
@@ -50,7 +50,7 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
   const hold = await lockVenueDatabase(config.venueDir);
   try {
     await assertNotAhead(config.venueDir, config.migrationsRoot);
-    let retainedOptionalTables: string[];
+    let migrationModules;
     const probe = await openVenueDatabase(config.venueDir);
     try {
       await assertDeploymentMatches(
@@ -59,23 +59,27 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
         available.flatMap((module) => (module.fiscal === undefined ? [] : [module.fiscal])),
       );
       moduleConfig = await readModuleConfig(probe.venue);
-      retainedOptionalTables = existingOptionalAppendOnlyTables(probe.venue, available);
+      migrationModules = await modulesForMigration(
+        probe,
+        available,
+        enabledModules(available, moduleConfig),
+      );
     } finally {
       await probe.close();
     }
     const modules = enabledModules(available, moduleConfig);
-    const options = migrationOptionsFor(orderedMigrationSets(modules), config.migrationsRoot);
+    const options = migrationOptionsFor(
+      orderedMigrationSets(migrationModules),
+      config.migrationsRoot,
+    );
     await applyMigrations(config.venueDir, options);
     const store = await openVenueDatabase(config.venueDir);
     try {
       const db = store.venue;
-      installAppendOnlyTriggers(db, retainedOptionalTables);
-      assertAppendOnlyIntact(db, [
-        ...new Set([
-          ...options.flatMap((set) => set.appendOnlyTables ?? []),
-          ...retainedOptionalTables,
-        ]),
-      ]);
+      assertAppendOnlyIntact(
+        db,
+        options.flatMap((set) => set.appendOnlyTables ?? []),
+      );
       for (const file of [VENUE_FILE, NODE_FILE]) {
         if (!(await isCopyIntact(join(config.venueDir, file))))
           throw new Error(`Upgrade integrity check failed: ${file}`);

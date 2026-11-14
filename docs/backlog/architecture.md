@@ -3,58 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Modules, data and code health". This file holds
 their full text.
 
-## A646 — a Modules page where the administrator switches optional modules on and sets them up
-
-- **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17 00:05, watcher window).**
-  Agreement receipt: `~/waitron-campaign-f/archive/questions-to-2026-10-23.md:1169`.
-  [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Administrators can turn card providers on or off after removing their readers; credentials remain available for earlier-payment recovery. Bookings can be switched on or off with a separate administrator restart; the failed-start recovery page can switch it off with an active administrator's password. Workforce-es and Payments switches remain to build; workforce and staffing stay mandatory under A1002. The [remaining-switches plan](../superpowers/plans/2026-11-14-a646-remaining-module-switches.md) was read by Claude and cleared by the watcher on 2026-11-14 at 14:22; A646 stays OPEN.
-  [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
-  static mockups (removed from the repository on 2026-11-02). The
-  [switched-off modules' append-only protection](#unselected-fiscal-modules-append-only-tables-are-neither-re-protected-nor-checked)
-  stays OPEN for unselected fiscal modules; retained optional-module tables are protected. Bookings owns no append-only table and has its own set.
-  **Owner, 2026-11-11: Google sign-in leaves A646** ("Move google signin to the backlog, with the
-  intention of doing it with a single key via waitron, but this is definitely not a go live
-  requirement"); it is A1507 in [later.md](later.md#a1507-google-sign-in-built-in-through-one-waitron-owned-google-setup).
-  The Google parts of the design below (an optional Google module, its credentials on this page,
-  the every-administrator check before switching it off) are withdrawn.
-  The agreed revision uses one complete optional catalogue, initially Enabled; Add a module filters
-  that same list to Disabled. Category is independent, and Card payments links to Card providers
-  with All states. Rows offer Configure where settings exist (watcher, 2026-11-11 17:15), plus Enable/Disable when switching is available, with persistent red reasons
-  when Disable is forbidden. Configure opens a modal and saves settings only; state changes need
-  separate confirmation and server checks. Stripe/SumUp remain Payments
-  contributions. The two remaining optional module switches are unavailable. Reuse provider
-  reader-add checks; Off requires readers removed first, while credentials remain available for refunds and checks.
-  Cut live module-code switching, pending-operation records and rerouting every `modules.json` reader
-  (watcher, 2026-11-11 14:54).
-  **Owner, 2026-11-06 23:03 (A1384 export answer, copied into Lane K queue):** an export from a box with a module off must load on a new box, and “that module starts on and empty”. Configuration import accepts missing optional sets and wholly absent optional-module tables (including Staffing in Workforce’s set), empties those configuration tables and still refuses partial tables, rows naming an absent set, and missing mandatory or provision-only sets; the boundary tests and `boot.setup-routes.test.ts` cover this.
-  **Watcher, 2026-11-07 21:38:** the later 4 November rationalisation wins: applied module state in shared settings. The older design's separate applied-state tables and sealed ID are superseded.
-
-  **2026-11-14, fl10:** module selection now lives in `settings.modules` inside `venue.db` and travels with database copies. The list below records the earlier 14 October read.
-
-  **What exists today**, read 2026-10-14, not tried on a box:
-  - Google login is part of the identity package, not a module. Its OAuth client ID and secret come
-    only from `WAITRON_GOOGLE_CLIENT_ID` and `WAITRON_GOOGLE_CLIENT_SECRET`
-    (`apps/server/src/config.ts`); no screen sets them. This entry replaces the open point "an
-    operator screen for Google provider credentials" in the #298/#305/#317 list under Users,
-    sign-in and the dashboard shell.
-  - Which modules are on is a `modules.json` file on the box (`apps/server/src/module-config.ts`):
-    every module is on unless the file says `false`, a `mandatory` module cannot be switched off,
-    and nothing in the dashboard edits the file. Every module ships in every image, so "install"
-    means switching on and setting up. Tiers are in `packages/composition/src/modules.ts`.
-  - SumUp and Stripe are separate packages but not modules: they plug into the payments module as
-    card providers (`packages/composition/src/card-providers.ts`, and
-    `packages/dashboard-modules/src/card-providers.ts` for their dashboard panels), so they have no
-    switch of their own today.
-
-  **What the owner asked for:**
-  1. A Modules page listing the optional modules, where the administrator switches each on or off
-     and fills in its settings. The owner called it a "system section"; the dashboard has no System
-     group today (its groups end with Settings), so where it sits is part of the design.
-  2. (Withdrawn 2026-11-11: Google login as an optional module set on this page; now A1507.)
-  3. SumUp and Stripe are set up from that page too. Card payments links to the list, filtered to
-     card providers.
-
-
 ## Remaining table restrictions after the grants-record audit
 
 Each unresolved table has its own entry in [the backlog](../backlog.md). The
@@ -1278,6 +1226,19 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 ## Decisions and deliberate limits
 
 **Venue identity (owner, 2026-11-02).** Cloud assigns its venue id; a box not connected to Cloud backs up where its owner chooses. A1308 slice 5 completes the removal of the old location object. The [venue-id design](../superpowers/specs/2026-11-04-a1301-venue-id-design.md) records the decision and its defaults.
+
+### A646 — a Modules page where the administrator switches optional modules on and sets them up
+
+Owner design decision, 2026-10-17 00:05 (Lane F archive/questions-to-2026-10-23.md:1169):
+optional modules and card providers share the Modules page. Workforce and staffing stay mandatory
+under A1002; Spanish workforce rules, Payments and Bookings use saved choices and a separate restart.
+Watcher clearance, Lane D questions.md, 2026-11-14 14:22/14:40: Payments Off requires every provider
+Off; installed optional sets keep migrating while Off, absent disabled sets stay absent, and earlier-payment
+recovery continues. Unselected fiscal protection remains [open](#unselected-fiscal-modules-append-only-tables-are-neither-re-protected-nor-checked).
+The owner withdrew Google sign-in from A646 on 2026-11-11; it is A1507 in [later.md](later.md#a1507-google-sign-in-built-in-through-one-waitron-owned-google-setup).
+An export with an optional module Off loads on a new box with that module On and empty (owner, 2026-11-06 23:03, A1384).
+See the [design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and [remaining-switches plan](../superpowers/plans/2026-11-14-a646-remaining-module-switches.md).
+
 
 **Three till refusals keep their statuses (A394-9, owner 2026-11-10: "Leave them, write it down (Rec.)").**
 On the till, `service_zone.not_found`, `table.not_found`/`table.inactive` and `reader.not_found`

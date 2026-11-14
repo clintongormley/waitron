@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { WorkforceBackend } from "@waitron/workforce";
-import { jobOrigin } from "@waitron/shared";
+import { AppError, jobOrigin } from "@waitron/shared";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { makeRuleset } from "@waitron/workforce/test/fixtures.js";
 import { Hono } from "hono";
@@ -66,13 +66,23 @@ const suite = useVenueDb({
   },
 });
 
-function mountApp(): Hono {
+function mountApp(rulesEnabled = true): Hono {
   const app = new Hono();
   // A placeholder nodeId: no route here appends a clock event (only roster/swap/absence), so it is
   // plumbed into cfg but never reaches the chain.
   mountWorkforceApi(
     app,
-    { db: suite.db, cfg: { nodeId: "00000000-0000-4000-8000-000000000000" } },
+    {
+      db: suite.db,
+      cfg: { nodeId: "00000000-0000-4000-8000-000000000000" },
+      ...(rulesEnabled
+        ? {}
+        : {
+            resolveRules: async () => {
+              throw new AppError("convenio.not_found", {});
+            },
+          }),
+    },
     noopLog,
   );
   return app;
@@ -976,4 +986,32 @@ it("uses the enabled provider for planned-versus-actual paid time", async () => 
   expect(await response.json()).toContainEqual(
     expect.objectContaining({ personId, workedMinutes: 400 }),
   );
+});
+
+it("keeps ordinary rotas but ignores retained Spanish rules while workforce-es is Off", async () => {
+  await suite.db
+    .insert(convenioConfig)
+    .values({ id: 1 })
+    .onConflictDoNothing({ target: convenioConfig.id });
+  const app = mountApp(false);
+  const response = await send(app, "GET", "/management-api/roster/breaches?period=2026-12-07");
+  expect(response.status).toBe(409);
+  expect(await refusal(response)).toEqual([409, "convenio.not_found", {}]);
+  const create = await send(app, "POST", "/management-api/roster", {
+    body: { period: "2026-12-07" },
+  });
+  expect(create.status).toBe(201);
+  const { versionId } = await create.json();
+  await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+    body: {
+      personId,
+      startsAt: "2026-12-07T08:00:00Z",
+      startsOffsetMinutes: 0,
+      endsAt: "2026-12-07T20:00:00Z",
+      endsOffsetMinutes: 0,
+    },
+  });
+  const published = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
+  expect(published.status).toBe(200);
+  expect(await published.json()).toEqual({ breaches: [] });
 });

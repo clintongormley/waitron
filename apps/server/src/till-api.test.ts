@@ -4939,3 +4939,30 @@ describe("settling edit answers", () => {
     },
   );
 });
+
+it("refuses integrated reader pay while Payments is Off before any collection", async () => {
+  const token = await openSession(suite.db);
+  const app = new Hono();
+  mountTillApi(
+    app,
+    {
+      ...deps(suite.db),
+      paymentsEnabled: false,
+      cardProvider: { provider: "simulator" } as PaymentProvider,
+    },
+    collect([]),
+  );
+  const response = await app.request("/api/pay", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+    },
+    body: JSON.stringify({
+      id: randomUUID(),
+      lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+    }),
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: { code: "module.disabled" } });
+});

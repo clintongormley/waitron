@@ -2134,17 +2134,20 @@ it("confirms fresh sign-in through the shared session endpoint", async () => {
   ]);
 });
 
-it("sends the Bookings saved-state revision without requesting a restart", async () => {
-  const fetchImpl = vi
-    .fn()
-    .mockResolvedValue(jsonResponse({ enabled: false, applied: true, revision: 3 }));
-  const api = new DashboardApi("", fetchImpl);
-  expect(await api.setBookingsState(false, 2)).toEqual({
-    enabled: false,
-    applied: true,
-    revision: 3,
-  });
-  expect(callsOf(fetchImpl)).toEqual([
-    ["/management-api/modules/bookings/state", "PUT", { enabled: false, revision: 2 }],
-  ]);
-});
+it.each(["bookings", "payments", "workforce-es"])(
+  "sends %s saved-state revision without requesting a restart",
+  async (id) => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ enabled: false, applied: true, revision: 3 }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.setModuleState(id, false, 2)).toEqual({
+      enabled: false,
+      applied: true,
+      revision: 3,
+    });
+    expect(callsOf(fetchImpl)).toEqual([
+      [`/management-api/modules/${id}/state`, "PUT", { enabled: false, revision: 2 }],
+    ]);
+  },
+);
