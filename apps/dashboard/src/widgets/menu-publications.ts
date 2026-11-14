@@ -3,6 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
+  bottomMessage,
+  FormFeedback,
   draftScopeFor,
   focusFirstInvalid,
   saveActionState,
@@ -260,7 +262,7 @@ export class MenuPublicationsPanel extends LitElement {
   @state() private time = "";
   @state() private occurrence = "";
   @state() private repeated: RepeatedTime | null = null;
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private scheduleRefusal: ScheduleRefusal | null = null;
   /** A write that failed once its window had gone: nothing else would say so. */
   @state() private lateRefusal = false;
@@ -477,7 +479,7 @@ export class MenuPublicationsPanel extends LitElement {
     this.time = moving?.local.time ?? "";
     this.occurrence = "";
     this.repeated = null;
-    this.attempted = false;
+    this.#feedback.reset();
     this.scheduleRefusal = null;
     this.lateRefusal = false;
     this.#disposeDraft();
@@ -581,7 +583,7 @@ export class MenuPublicationsPanel extends LitElement {
         return;
     }
     if (saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.scheduleRefusal = null;
     if (moving === null && preview === null) {
       this.scheduleRefusal = { field: null, code: null, params: {}, placed: null };
@@ -781,15 +783,15 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   #renderSchedule(): TemplateResult {
-    const own = this.attempted ? this.#ownErrors() : {};
+    const own = this.#feedback.attempted ? this.#ownErrors() : {};
     const refusal = this.scheduleRefusal;
     const errors = { ...own };
     if (refusal?.field != null) errors[refusal.field] ??= refusalMessage(refusal);
     const marked = Object.values(errors).some(Boolean);
-    const bottom = [
-      ...(refusal !== null && refusal.field === null ? [refusalMessage(refusal)] : []),
-      ...(marked ? [t("form.fix_fields")] : []),
-    ].join(" ");
+    const bottom = bottomMessage(
+      refusal !== null && refusal.field === null ? refusalMessage(refusal) : null,
+      marked ? t("form.fix_fields") : null,
+    );
     const invalid = Object.keys(own).length > 0;
     const submitAction = saveActionState(this.#scope);
     const repeated = this.repeated;

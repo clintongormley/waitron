@@ -264,12 +264,21 @@ describe("the schedule form's Schedule", () => {
     const { el } = await mount();
     await openSchedule(el);
     await enter(el, "date", "2026-10-10");
+    await press(el);
+    expect(field(el, "time").error).toBe("Choose a time.");
+    const closed = new Promise<void>((resolve) =>
+      form(el).addEventListener("wt-close", () => resolve(), { once: true }),
+    );
     await form(el).requestClose("cancel");
+    await closed;
     await flush(el);
     expect(form(el).open).toBe(false);
     await openSchedule(el);
     expect(field(el, "date").value).toBe("");
     expect(await actionState(el)).toEqual(quiet);
+    await enter(el, "date", "2026-10-10");
+    expect(field(el, "time").error).toBe("");
+    expect(await bottom(el)).toBe("");
   });
 
   it("Close after a change with no leave coordinator closes the form, sending nothing", async () => {

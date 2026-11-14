@@ -10,8 +10,9 @@ import {
 import { formatMoney } from "@waitron/shared";
 import {
   baseStyles,
+  bottomMessage,
+  FormFeedback,
   draftScopeFor,
-  focusFirstInvalid,
   submitOnEnter,
   type DataTableColumn,
   type DraftScope,
@@ -82,7 +83,7 @@ export class InvoiceCustomerDialog extends LitElement {
   @state() private fieldRefusal = "";
   @state() private refusal: Refusal | null = null;
   /** The form says nothing about the field until Find is first pressed. */
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   #generation = 0;
   #download = 0;
   #scope?: DraftScope<Draft>;
@@ -106,7 +107,7 @@ export class InvoiceCustomerDialog extends LitElement {
     this.taxId = "";
     this.identifierType = "tax-number";
     this.identifierCountryCode = "";
-    this.attempted = false;
+    this.#feedback.reset();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -198,9 +199,9 @@ export class InvoiceCustomerDialog extends LitElement {
 
   async #find(): Promise<void> {
     if (this.searching || this.downloading || this.#awaitingInput()) return;
-    this.attempted = true;
+    this.#feedback.press();
     if (this.#ownProblem() !== "") {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const generation = ++this.#generation;
@@ -365,14 +366,14 @@ export class InvoiceCustomerDialog extends LitElement {
   }
 
   override render() {
-    const ownProblem = this.attempted && !this.#awaitingInput() ? this.#ownProblem() : "";
+    const ownProblem = this.#feedback.attempted && !this.#awaitingInput() ? this.#ownProblem() : "";
     const problem = ownProblem || this.fieldRefusal;
-    const errors = this.attempted ? this.#ownErrors() : {};
+    const errors = this.#feedback.attempted ? this.#ownErrors() : {};
     const fieldError = (field: keyof Draft) =>
       errors[field] || (this.refusedField === field ? this.fieldRefusal : "");
     const ready = !this.#awaitingInput() && ownProblem === "" && !this.downloading;
     const findRefusal = this.refusal?.action === "find" ? this.#refusalText(this.refusal) : "";
-    const bottom = [findRefusal, problem ? t("form.fix_fields") : ""].filter(Boolean).join(" ");
+    const bottom = bottomMessage(findRefusal, problem ? t("form.fix_fields") : "");
     const dialog = () => this.shadowRoot!.querySelector<WtDialog>("wt-dialog");
     return html`<wt-dialog
       .open=${this.open}
