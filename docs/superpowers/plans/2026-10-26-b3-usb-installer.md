@@ -1,5 +1,7 @@
 > 2026-11-12: the watcher cleared the [host-only network read](2026-11-12-b3-19-network-status.md), with installed-image qualification, ahead of the later interface.
 
+> 2026-11-14: [Wi-Fi host slice 1](2026-11-14-b3-wifi-host.md) extends the installed executable with scan/join and boot-copy publication/restart repair. The read entry point remains read-only. Its earlier join-refusal control proves only that entry point; canonical scan/join now have positive and malformed/actor-refusal controls. Forget, external-change reconciliation and dashboard controls remain later work.
+
 > 2026-11-11: the [console warning cut](2026-11-11-b3-18c-console-warning.md) adds paired Spanish/English wording and the checked Live marking. The watcher deferred graphics to later kiosk/physical work; it is not dropped.
 
 > 2026-11-06: PR 9's plan (the server's routes for six of the host's requests, behind `system.manage`, built and mounted at boot): [2026-11-06-b3-9-host-routes.md](2026-11-06-b3-9-host-routes.md); `tag.write`'s duty is left to its own pull request (its D11).

@@ -1,5 +1,7 @@
 # B3, fifth pull request: publishing the Wi-Fi boot copy
 
+> 2026-11-14: [Wi-Fi host slice 1](2026-11-14-b3-wifi-host.md) binds the publisher factory to an installed boot-mount inspector and persists its status. The fixed library entries retain their unverified-mount refusal; descriptions of the unbound publisher below record the November 3 cut.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
 **Goal:** Build the part of slice 3 Task 3.1 that puts the Wi-Fi boot copy on the boot partition and takes it off again, which an unprivileged macOS machine and CI's root Vitest project can fully test.

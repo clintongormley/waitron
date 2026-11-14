@@ -55,16 +55,16 @@ install -D -m 0755 "$repo/scripts/box/upgrades/bootstrap.sh" "$root/opt/waitron-
 )
 install -m 0644 "$root/opt/waitron-host/node-v26.7.0/LICENSE" "$root/app/third-party/node-host-LICENSE"
 install -d -m 0755 "$root/opt/waitron-host/box"
-for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host network-host host-protocol wifi-record wifi-boot-copy; do
+for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host network-host network-manager network-change host-protocol wifi-record wifi-boot-copy; do
   install -m 0644 "$repo/scripts/box/$module.mjs" "$root/opt/waitron-host/box/"
 done
 install -D -m 0644 "$repo/scripts/box/upgrades/contracts.mjs" "$root/opt/waitron-host/box/upgrades/contracts.mjs"
 install -D -m 0755 "$repo/deploy/box/waitron-box.sh" "$root/usr/local/lib/waitron/waitron-box.sh"
-for unit in waitron-box.socket waitron-box@.service; do
+for unit in waitron-box.socket waitron-box@.service waitron-network-change.service; do
   install -m 0644 "$repo/deploy/box/$unit" "$root/etc/systemd/system/"
 done
 chroot "$root" groupadd --system --gid 10001 waitron-box
-systemctl --root="$root" enable waitron-box.socket
+systemctl --root="$root" enable waitron-box.socket waitron-network-change.service
 for unit in waitron-disk-start waitron-disk-ready; do
   install -m 0644 "$repo/deploy/box/$unit.service" "$root/etc/systemd/system/"
 done

@@ -1,5 +1,7 @@
 > 2026-11-05: PR 7's plan (the box host protocol: B3's requests, their actor and replies): [2026-11-05-b3-7-host-protocol.md](../plans/2026-11-05-b3-7-host-protocol.md); the clock requests stay on slice 9b's wire and shell handler (its D1), and the host knows its caller by the socket alone (its D2); a change carries the person but not the permission, which the host names from the verb (its D7), and `tag.write` carries no person (its D6).
 
+> 2026-11-14: [Wi-Fi host slice 1](../plans/2026-11-14-b3-wifi-host.md) connects installed scan/join and boot-copy publication/restart repair to the existing protected API. The watcher cleared the split on 14 November at 14:41; forget, outside-change reconciliation and dashboard controls remain later work. No new owner design approval is claimed.
+
 > 2026-11-03: PR 6's plan (the disk recovery key as systemd's letters, and reading a typed key back): [2026-11-03-b3-6-disk-key-letters.md](../plans/2026-11-03-b3-6-disk-key-letters.md); the passphrase is the formatted text itself, as `systemd-cryptenroll` enrols it, so the box re-forms a typed key before `cryptsetup` sees it (its D2).
 
 > 2026-11-03: PR 5's plan (publishing and removing the Wi-Fi boot copy, and its state) and its re-map against main: [2026-11-03-b3-5-wifi-publication.md](../plans/2026-11-03-b3-5-wifi-publication.md); a "no copy" answer of any reason, not only cable-only, removes `wifi.json` unless its checks refuse (its D7, D4).

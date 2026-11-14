@@ -18,6 +18,7 @@ TIMESYNC_SYNCHRONIZED="${WAITRON_TEST_HOST_ROOT:-}/run/systemd/timesync/synchron
 READ_SECONDS="${WAITRON_TEST_READ_SECONDS:-5}"
 TAG_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/name-tag-host.mjs"
 NETWORK_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/network-host.mjs"
+NETWORK_CHANGE="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/network-change.mjs"
 
 # 2024-10-28T00:00:00Z and 2100-01-01T00:00:00Z, in milliseconds.
 FIRST_TARGET_MS=1730073600000
@@ -152,6 +153,13 @@ clock_set() {
 
 main() {
   local instance line rc arrived rest target requester reply read_limit=701
+  if [ "${1:-}" = --network-change ]; then
+    umask 077
+    mkdir -p -m 0700 "$STATE_DIR"
+    exec 9> "$STATE_DIR/network.lock"
+    flock -w 15 9 || exit 1
+    exec node "$NETWORK_CHANGE"
+  fi
   if [ "${1:-}" = --restore ]; then
     instance="${2:-}"
     [[ $instance =~ $UNIT_NAME ]] || exit 2
@@ -160,7 +168,7 @@ main() {
   fi
   instance="${1:-}"
   [[ $instance =~ $UNIT_NAME ]] || exit 2
-  [ -f "$TAG_HOST" ] && read_limit=4097
+  { [ -f "$TAG_HOST" ] || [ -f "$NETWORK_HOST" ]; } && read_limit=4097
   IFS= read -r -t "$READ_SECONDS" -n "$read_limit" line
   rc=$?
   arrived="$(uptime_ms)"
@@ -175,11 +183,17 @@ main() {
     if reply="$(printf '%s' "$line" | node "$TAG_HOST")"; then answer "$reply"; else refuse host_failed; fi
     exit 0
   fi
-  if [ ${#line} -gt 700 ]; then refuse request_invalid; exit 0; fi
-  if [[ "$line" = "network.read "* ]] && [ -f "$NETWORK_HOST" ]; then
+  if [[ "$line" = "network.read "* || "$line" = "network.scan "* || "$line" = "network.join "* ]] && [ -f "$NETWORK_HOST" ]; then
+    if [[ "$line" != "network.read "* ]]; then
+      umask 077
+      mkdir -p -m 0700 "$STATE_DIR"
+      exec 9> "$STATE_DIR/network.lock"
+      if ! flock -n 9; then refuse busy; exit 0; fi
+    fi
     if reply="$(printf '%s' "$line" | node "$NETWORK_HOST")"; then answer "$reply"; else refuse host_failed; fi
     exit 0
   fi
+  if [ ${#line} -gt 700 ]; then refuse request_invalid; exit 0; fi
   case "$line" in
     clock.status) clock_status ;;
     "clock.set "*)

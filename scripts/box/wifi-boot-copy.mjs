@@ -146,7 +146,7 @@ function statusOf(state, reason, failure) {
 }
 
 /**
- * Test seam and the future host service's constructor; publish never takes a path.
+ * Test seam and the host service's constructor; publish never takes a path.
  * Throws code "wifi_copy.deps_invalid", reason "deps-invalid", at construction, before any io or
  * inspectBootMount call, when deps is not exactly WifiCopyDeps's keys (io optional, and then
  * exactly the eight file operations). publish rejects with code "wifi_copy.decision_invalid",
@@ -340,13 +340,14 @@ const fixedPublisher = createWifiBootCopyPublisher({
   bootRoot: BOOT_ROOT,
   ownerUid: 0,
   inspectBootMount: async () => {
-    throw new Error("no boot mount check exists yet");
+    throw new Error("unverified boot mount");
   },
 });
 
 /**
- * Fixed production entry point. No boot-mount check exists until the Linux pull request, so a
- * valid decision answers failed / mount-unverified with no file call. Rejects with code
+ * The fixed entry refuses unverified mounts; the installed host supplies its inspector to the
+ * publisher factory. A valid decision here answers failed / mount-unverified without file calls.
+ * Rejects with code
  * "wifi_copy.decision_invalid", reason "decision-invalid", as publish does.
  * @param {import("./wifi-record.mjs").WifiCopyDecision} decision
  * @returns {Promise<WifiCopyStatus>}

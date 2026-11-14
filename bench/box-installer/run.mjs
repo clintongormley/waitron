@@ -570,8 +570,10 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
         `printf %%s ${Buffer.from(code).toString("base64")} | base64 -d | ${denied ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : ""}node`;
       const network = `const net=require("node:net"),os=require("node:os");const c=net.connect("/run/waitron-box/box.sock");let text="";c.setTimeout(5000,()=>{c.destroy();process.exitCode=1});c.on("connect",()=>c.write('network.read {"actor":{"source":"server"}}\\n'));c.on("data",b=>text+=b);c.on("end",()=>console.log("B3_NETWORK:"+JSON.stringify({reply:JSON.parse(text),interfaces:os.networkInterfaces()})));c.on("error",e=>{throw e});`;
       const networkProbe = `printf %%s ${Buffer.from(network).toString("base64")} | base64 -d | setpriv --reuid=10001 --regid=10001 --clear-groups node`;
+      const networkOperations = `const net=require("node:net");const ask=line=>new Promise((resolve,reject)=>{const c=net.connect("/run/waitron-box/box.sock");let text="";c.setTimeout(5000,()=>{c.destroy();reject(Error("host deadline"))});c.on("connect",()=>c.write(line+"\\n"));c.on("data",b=>text+=b);c.on("end",()=>resolve(JSON.parse(text)));c.on("error",reject)});(async()=>{const actor={source:"person",person:"rehearsal-owner"};const scan=await ask("network.scan "+JSON.stringify({actor}));const join=await ask("network.join "+JSON.stringify({ssidHex:"41",keyMgmt:"wpa-psk",psk:"rehearsal-password",hidden:false,actor}));console.log("B3_NETWORK_OPS:"+JSON.stringify({scan,join}))})().catch(e=>{console.error(e);process.exitCode=1});`;
+      const operationsProbe = `printf %%s ${Buffer.from(networkOperations).toString("base64")} | base64 -d | setpriv --reuid=10001 --regid=10001 --clear-groups node`;
       const checks =
-        `; ${networkProbe}` +
+        `; ${networkProbe}; ${operationsProbe}` +
         (caseName === "existing-stick"
           ? `; ${probe(clock)}; ${probe(deny, true)}${name === "again" ? `; ${probe(stayedUpCheck)}` : ""}`
           : "");
@@ -841,13 +843,14 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       try {
         const observed = JSON.parse(rigLine(guest.serial, "B3_INSTALLED:"));
         const networkUntil = Date.now() + 20_000;
-        while (!rigLine(guest.serial, "B3_NETWORK:")) {
+        while (!rigLine(guest.serial, "B3_NETWORK:") || !rigLine(guest.serial, "B3_NETWORK_OPS:")) {
           if (Date.now() >= networkUntil) throw new Error("network probe did not finish");
           await new Promise((done) => setTimeout(done, 100));
         }
         const network = JSON.parse(rigLine(guest.serial, "B3_NETWORK:"));
         observed.network = network.reply;
         observed.networkInterfaces = network.interfaces;
+        observed.networkOperations = JSON.parse(rigLine(guest.serial, "B3_NETWORK_OPS:"));
         if (caseName === "existing-stick") {
           const until = Date.now() + 20_000;
           while (

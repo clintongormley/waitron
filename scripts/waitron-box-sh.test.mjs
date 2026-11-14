@@ -575,3 +575,45 @@ it("forwards a network read without a write lock, retaining unknown_request when
   rmSync(host);
   expect(answer(sb, line)).toEqual({ ok: false, reason: "unknown_request" });
 });
+
+it.each(["scan", "join"])(
+  "forwards network.%s under the shared network lock without needing tag support",
+  (verb) => {
+    const sb = sandbox();
+    const received = join(sb.dir, "received");
+    writeFileSync(
+      sb.paths.networkHost,
+      `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(received)}, fs.readFileSync(0)); console.log('{"ok":true}');`,
+    );
+    const request =
+      verb === "scan"
+        ? 'network.scan {"actor":{"source":"person","person":"owner"}}'
+        : `network.join ${" ".repeat(900)}`;
+    expect(answer(sb, request)).toEqual({ ok: true });
+    expect(readFileSync(received, "utf8")).toBe(request);
+    expect(sb.calls()).toContainEqual(["flock", "-n", "9"]);
+    expect(touchesClock(sb.calls())).toEqual([]);
+  },
+);
+
+it("refuses a competing network scan without invoking its adapter", () => {
+  const sb = sandbox({ WB_FLOCK_RC: "1" });
+  writeFileSync(sb.paths.networkHost, "throw Error('must not run');");
+  expect(answer(sb, 'network.scan {"actor":{"source":"person","person":"owner"}}')).toEqual({
+    ok: false,
+    reason: "busy",
+  });
+});
+
+it.each([0, 1])("takes the worker lock before its adapter (lock refusal %s)", (rc) => {
+  const sb = sandbox({ WB_FLOCK_RC: String(rc) });
+  writeFileSync(
+    join(dirname(sb.paths.networkHost), "network-change.mjs"),
+    "console.log('worker ran');",
+  );
+  const result = ask(sb, "", ["--network-change"]);
+  expect(existsSync(join(sb.paths.state, "network.lock"))).toBe(true);
+  expect(result.status).toBe(rc);
+  expect(result.stdout).toBe(rc ? "" : "worker ran\n");
+  expect(sb.calls()).toContainEqual(["flock", "-w", "15", "9"]);
+});
