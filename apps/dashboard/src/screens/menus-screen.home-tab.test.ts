@@ -805,7 +805,9 @@ describe("the Home page tab's shortcuts", () => {
       await preview(el)!.updateComplete;
       await new Promise((resolve) => requestAnimationFrame(resolve));
       expect(preview(el)!.device).toBe("till");
-      for (const grid of frameOf(el).querySelectorAll<HTMLElement>(".grid"))
+      const grids = frameOf(el).querySelectorAll<HTMLElement>(".grid");
+      expect(grids).toHaveLength(2);
+      for (const grid of grids)
         expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(4);
     });
 

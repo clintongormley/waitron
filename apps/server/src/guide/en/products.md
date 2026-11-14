@@ -279,7 +279,7 @@ Choose **Till** to check the **Table order preview**: it represents a till as wi
 with space reserved for the order. Use it to judge how many columns fit beside the order.
 At narrower widths, the menu takes the full frame, as it does when the till shows Menu on its own.
 
-To replace a hidden shortcut, remove it with its bin button, then add a product or section
+To replace a shortcut marked **Not shown**, remove it with its bin button, then add a product or section
 that this menu shows.
 
 ## Copy a menu {#copy-menu}
