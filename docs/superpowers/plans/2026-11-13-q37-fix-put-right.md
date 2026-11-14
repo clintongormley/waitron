@@ -1000,7 +1000,7 @@ since Task 1c. No `clock.behind_chain` test (above). `ENABLED_REMEDIES` gains
 the same commit. The saved decision's `action` includes `operationDate`, so a repeat with the same
 `actionKey` and a different day is `filing_case.action_mismatch`.
 
-Every code the replacement path can throw for a real case is listed in `REMEDY_KINDS`'s refusal
+Every code the replacement path can throw for a real case is listed in `REMEDY_REFUSALS`' refusal
 table with its status, so the dialog can word it: at least `sale.replacement_not_first`,
 `fiscal.correction_unsupported` (AEAT still holds a version), `fiscal.sale_not_recorded`, the
 series codes `recordReplacement`/`requireCorrectiveSeries` throw when the node has no live
