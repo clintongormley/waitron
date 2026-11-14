@@ -1176,7 +1176,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   whether to keep pinning it is the owner's call.
 - **Test titles in `packages/menu` a comments-only change cannot touch** — OPEN (found by
   #603). Four titles, in `dietary.test.ts`, `product-modifiers.test.ts` and `migrations.test.ts`.
-  [Detail](catalogue.md#test-titles-in-packagescatalogue-a-comments-only-change-cannot-touch)
+  [Detail](catalogue.md#test-titles-in-packagesmenu-a-comments-only-change-cannot-touch)
 - **A test comment still names the old savepoint error.**
   `packages/fiscal-verifactu/src/correction-path.e2e.test.ts:308` says its control "fails with
   `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword

@@ -28,9 +28,8 @@ function fixture(files) {
     "user.name=Path test",
     "-c",
     "user.email=paths@example.test",
-    "-c",
-    "core.hooksPath=/dev/null",
     "commit",
+    "-s",
     "-qm",
     "fixture",
   );
