@@ -6,7 +6,13 @@ import { join } from "node:path";
 import type { Database } from "@waitron/db";
 import { lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
-import { connectionPair, drizzleNodeSqlite, VENUE_FILE, JOURNAL_SUFFIX } from "@waitron/store";
+import {
+  connectionPair,
+  drizzleNodeSqlite,
+  VENUE_FILE,
+  NODE_FILE,
+  JOURNAL_SUFFIX,
+} from "@waitron/store";
 import {
   canonicalFirstSetupRoots,
   openImmutableWhenWalEmpty,
@@ -38,8 +44,9 @@ type Roots = { stateDir: string; venueDir: string };
 export async function readRecoveryDatabase<T>(
   roots: Roots,
   body: (db: Database) => Promise<T>,
+  file: typeof VENUE_FILE | typeof NODE_FILE = VENUE_FILE,
 ): Promise<T> {
-  const path = join(roots.venueDir, VENUE_FILE);
+  const path = join(roots.venueDir, file);
   const info = await lstat(path);
   if (!info.isFile()) throw new AppError("setup.not_ready", {});
   if (

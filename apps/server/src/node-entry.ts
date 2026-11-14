@@ -594,6 +594,7 @@ async function runAdmittedEntry(
       recoveryApp({
         bookings: {
           roots: { stateDir: deps.stateDir, venueDir: deps.venueDir },
+          baseEnv: deps.baseEnv,
           onFinished: async () => {
             exit(0);
           },

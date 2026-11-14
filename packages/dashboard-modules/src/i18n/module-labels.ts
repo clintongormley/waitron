@@ -39,7 +39,7 @@ registerCatalogue({
     "modules.open_readers": "Open Card payments",
     "modules.restart_pending": "Waiting for restart",
     "modules.bookings_explanation":
-      "Save this change, then use Restart in the administrator menu when service can pause. Bookings stay saved. The tills reconnect; a kitchen send during restart may need resending.",
+      "Save this change, then open Box status in Settings and choose Restart the box when service can pause. Bookings stay saved. The tills reconnect; a kitchen send during restart may need resending.",
     "modules.switch_unavailable": "Switching this module is not available yet.",
     "modules.configure_providers": "Configure card providers",
     "modules.guide": "How to set up modules",
@@ -77,7 +77,7 @@ registerCatalogue({
     "modules.open_readers": "Abrir Pagos con tarjeta",
     "modules.restart_pending": "Pendiente de reinicio",
     "modules.bookings_explanation":
-      "Guarda el cambio y usa Reiniciar en el menú de administración cuando puedas pausar el servicio. Las reservas se conservan. Las cajas se reconectan; puede que debas repetir un envío a cocina durante el reinicio.",
+      "Guarda el cambio y abre Estado del servidor en Ajustes; elige Reiniciar el servidor cuando puedas pausar el servicio. Las reservas se conservan. Las cajas se reconectan; puede que debas repetir un envío a cocina durante el reinicio.",
     "modules.switch_unavailable": "Aún no se puede cambiar el estado de este módulo.",
     "modules.configure_providers": "Configurar proveedores de tarjeta",
     "modules.guide": "Cómo configurar los módulos",

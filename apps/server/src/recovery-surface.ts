@@ -353,27 +353,23 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
         ? startAgainPage
         : drawEnvironment;
 
-  const bookings =
-    deps.state.refused || deps.uncounted || deps.refusedAtStart ? undefined : deps.bookings;
+  const bookings = deps.state.refused ? undefined : deps.bookings;
   const drawBookings = async (view: EnvironmentView) => {
+    if (view.message?.kind !== "moved")
+      return addBookings(await drawBase({ locale: view.locale, secure: view.secure }), view);
     const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
     const section = await renderBookingsRecovery(bookings!, view);
-    return renderPage(
-      deps,
-      log,
-      view.locale,
-      freeBytes,
-      deps.state,
-      view.message?.kind === "moved" ? "" : section,
-      view.message?.kind === "moved" ? section : undefined,
-    );
+    return renderPage(deps, log, view.locale, freeBytes, deps.state, "", section);
   };
-  const draw = async (view: EnvironmentView) => {
-    const base = await drawBase(view);
+  const addBookings = async (base: string, view: EnvironmentView) => {
     if (!bookings) return base;
     const retry = '<form method="post" action="/recovery-api/retry">';
     return base.replace(retry, `${await renderBookingsRecovery(bookings, view)}${retry}`);
   };
+  const draw = async (view: EnvironmentView) => addBookings(await drawBase(view), view);
+  const withBookings =
+    (render: (view: EnvironmentView) => Promise<string>) => async (view: EnvironmentView) =>
+      addBookings(await render(view), { locale: view.locale, secure: view.secure });
   if (bookings) mountBookingsRecovery(app, bookings, drawBookings, deps.log);
 
   app.get("/", async (c) => {
@@ -389,9 +385,10 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
     });
 
   if (deps.environment !== undefined)
-    mountEnvironmentChoice(app, deps.environment, drawEnvironment, deps.log);
+    mountEnvironmentChoice(app, deps.environment, withBookings(drawEnvironment), deps.log);
 
-  if (deps.restore !== undefined) mountRestoreDiscard(app, deps.restore, drawRestore, deps.log);
+  if (deps.restore !== undefined)
+    mountRestoreDiscard(app, deps.restore, withBookings(drawRestore), deps.log);
 
   // Named one by one, to leave out the clear count and the trigger names.
   app.get("/recovery-api/status", (c) => {

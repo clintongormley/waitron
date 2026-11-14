@@ -7,8 +7,11 @@ import {
   readSettings,
   saveSettings,
   withTransaction,
+  type NodeDatabase,
 } from "@waitron/db";
-import { VENUE_FILE } from "@waitron/store";
+import { readNodeModeRow } from "@waitron/node-db";
+import { loadBoxEnv } from "./box-env.js";
+import { VENUE_FILE, NODE_FILE } from "@waitron/store";
 import { MODULES_SETTINGS } from "./modules.js";
 import { readRecoveryDatabase } from "./recovery-environment.js";
 import { readRestoreAdminVerifiers } from "./restore-request.js";
@@ -31,14 +34,23 @@ import "./errors.js";
 
 export interface BookingsRecoveryDeps {
   roots: { stateDir: string; venueDir: string };
+  baseEnv: NodeJS.ProcessEnv;
   onFinished: () => Promise<void>;
 }
 async function eligible(deps: BookingsRecoveryDeps): Promise<boolean> {
   const state = await readRecoveryState(deps.roots.stateDir);
+  if (state.level !== "recovery" || state.refused || state.lastErrorCode === "storage.disk_full")
+    return false;
+  const nodeId = (await loadBoxEnv(deps.baseEnv, deps.roots.stateDir)).WAITRON_NODE_ID;
+  if (!nodeId) return false;
+  const role = await readRecoveryDatabase(
+    deps.roots,
+    (db) => readNodeModeRow(db as NodeDatabase, nodeId),
+    NODE_FILE,
+  );
   return (
-    state.level === "recovery" &&
-    !state.refused &&
-    state.lastErrorCode !== "storage.disk_full" &&
+    role?.mode === "primary" &&
+    role.singletonRole === "primary" &&
     (await readRecoveryDatabase(
       deps.roots,
       async (db) => (await readSettings(db, MODULES_SETTINGS)).doc.modules.bookings !== false,

@@ -662,8 +662,7 @@ export const BOOKINGS_RECOVERY_TEXT = {
     stop: "Stop",
     wrong: "That password does not belong to an active administrator.",
     unavailable: "Bookings could not be switched off. Nothing was restarted.",
-    notFinished:
-      "Bookings could not be switched off and the failed starts cleared. Waitron has not restarted. Try again.",
+    notFinished: "This action did not finish. Waitron has not restarted. Try again.",
     done: "Bookings is off. Waitron is starting again; reload this page shortly.",
     stopped: "Nothing was changed. Bookings stays as it was.",
   },
@@ -674,8 +673,7 @@ export const BOOKINGS_RECOVERY_TEXT = {
     stop: "Parar",
     wrong: "Esa contraseña no pertenece a un administrador activo.",
     unavailable: "No se ha podido desactivar Reservas. No se ha reiniciado nada.",
-    notFinished:
-      "No se ha podido desactivar Reservas y restablecer los arranques fallidos. Waitron no se ha reiniciado. Inténtalo de nuevo.",
+    notFinished: "Esta acción no ha terminado. Waitron no se ha reiniciado. Inténtalo de nuevo.",
     done: "Reservas está desactivado. Waitron está arrancando de nuevo; recarga esta página en unos instantes.",
     stopped: "No se ha cambiado nada. Reservas sigue como estaba.",
   },

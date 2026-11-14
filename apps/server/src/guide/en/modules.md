@@ -25,10 +25,10 @@ credentials are saved; it is separate from **Enabled**.
 ## Turn Bookings on or off {#bookings-state}
 
 As an administrator, choose **Turn off** or **Turn on** in the Bookings row menu and confirm.
-**Waiting for restart** means the change is saved. Use **Restart** in the administrator menu
+**Waiting for restart** means the change is saved. Open **Box status** in Settings and choose **Restart the box**
 when you can pause service. Tills reconnect; check and resend any kitchen send interrupted by the restart.
 Your saved bookings stay on this box when Bookings is off.
 
-If Waitron repeatedly fails to start, its recovery page offers **Switch Bookings off and start again**.
+If the main box repeatedly fails to start, its recovery page offers **Switch Bookings off and start again**.
 Open the secure address and enter an active administrator's password, or choose **Stop** to leave it unchanged.
 An administrator without a password cannot use that recovery action.

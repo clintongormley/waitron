@@ -35,8 +35,7 @@ export function imageMigrationHashes(set: MigrationSetSource, root: string | nul
  * **`sqlite_master` is asked, rather than a refusal being caught**, for the reason
  * `appliedSchemaVersion` gives.
  *
- * NO `order by`. The hashes are compared as a SET by the only caller (`unknownHashes`), and there
- * is nothing to order by: drizzle creates this table with `id SERIAL PRIMARY KEY`, and `SERIAL` is
+ * There is nothing to order by: drizzle creates this table with `id SERIAL PRIMARY KEY`, and `SERIAL` is
  * not a SQLite type, so the column is an ordinary one with no default and every row's `id` is `NULL`.
  *
  * Only `hash` is read. `created_at` is deliberately untouched: drizzle compares only that column

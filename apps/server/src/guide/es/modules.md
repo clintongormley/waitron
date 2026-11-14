@@ -26,10 +26,10 @@ credenciales están guardadas; es independiente de **Habilitado**.
 ## Activar o desactivar Reservas {#bookings-state}
 
 Como administrador, elige **Desactivar** o **Activar** en el menú de la fila de Reservas y confirma.
-**Pendiente de reinicio** indica que el cambio está guardado. Usa **Reiniciar** en el menú de administración
+**Pendiente de reinicio** indica que el cambio está guardado. Abre **Estado del servidor** en Ajustes y elige **Reiniciar el servidor**
 cuando puedas pausar el servicio. Las cajas se reconectan; comprueba y repite cualquier envío a cocina interrumpido por el reinicio.
 Las reservas guardadas permanecen en este equipo cuando Reservas está desactivado.
 
-Si Waitron falla repetidamente al arrancar, su página de recuperación ofrece **Desactivar Reservas y volver a arrancar**.
+Si el servidor principal falla repetidamente al arrancar, su página de recuperación ofrece **Desactivar Reservas y volver a arrancar**.
 Abre la dirección segura e introduce la contraseña de un administrador activo, o elige **Parar** para dejarlo sin cambios.
 Un administrador sin contraseña no puede usar esa acción de recuperación.
