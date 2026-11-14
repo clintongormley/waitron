@@ -168,5 +168,5 @@ echo A950_RESTORED_OK
 }
 
 export function upgradeUnit(payload) {
-  return `[Unit]\nRequires=docker.service\nAfter=docker.service NetworkManager.service\nFailureAction=poweroff-force\n[Service]\nType=oneshot\nStandardOutput=tty\nStandardError=tty\nTTYPath=/dev/console\nExecStart=/bin/bash -ec 'printf %%s ${Buffer.from(payload).toString("base64")} | base64 -d | bash -e'\nTimeoutStartSec=900\n`;
+  return `[Unit]\nRequires=docker.service\nAfter=docker.service NetworkManager.service\nFailureAction=poweroff-force\n[Service]\nType=oneshot\nStandardOutput=tty\nStandardError=tty\nTTYPath=/dev/console\nExecStart=/bin/bash -ec 'printf %%s ${Buffer.from(payload).toString("base64")} | base64 -d | bash -e'\nTimeoutStartSec=1200\n`;
 }
