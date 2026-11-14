@@ -8,7 +8,7 @@ import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@wa
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
 import type { ReconcileDeps, SettlementRecord } from "./reconcile.js";
-import { insertCapturedPayment, insertInitiated } from "./store.js";
+import { claimAbandonedCapture, insertCapturedPayment, insertInitiated } from "./store.js";
 import { listOpenHolds, recordHoldOutcome } from "./holds.js";
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
@@ -481,6 +481,70 @@ async function setOrderStatus(seeded: Seeded, status: "settled" | "abandoned"): 
 }
 
 describe("orphan remediation", () => {
+  it("counts prepared payments once and reports their own settlement amounts", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "prepared-inside", "ext-inside", "10.00");
+    await capture(seeded, "prepared-outside", "ext-outside", "20.00");
+    const outsideAt = new Date("2026-07-03T12:00:00Z");
+    await suite.db.execute(sql`
+      update payments set settled_at = ${outsideAt.toISOString()}
+      where payment_ref = 'prepared-outside'`);
+    await setOrderStatus(seeded, "abandoned");
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(
+      {
+        ...deps(
+          new FakeSettlementReport([
+            settlement({ references: ["unrelated"], amount: decimal("99.00") }),
+            settlement({ references: ["ext-inside"] }),
+            settlement({
+              references: ["ext-outside"],
+              amount: decimal("20.00"),
+              settledAt: outsideAt,
+            }),
+          ]),
+          reverse.fn,
+        ),
+        prepareOrphans: async (tx) => {
+          const prepared = [];
+          for (const input of [
+            {
+              paymentRef: "prepared-inside",
+              externalRef: "ext-inside",
+              amount: decimal("10.00"),
+              settledAt: OLD_SETTLED,
+            },
+            {
+              paymentRef: "prepared-outside",
+              externalRef: "ext-outside",
+              amount: decimal("20.00"),
+              settledAt: outsideAt,
+            },
+          ]) {
+            const row = await claimAbandonedCapture(tx, {
+              ...input,
+              provider: PROVIDER,
+              at: NOW,
+            });
+            if (row !== undefined) prepared.push(row);
+          }
+          return prepared;
+        },
+      },
+      PERIOD,
+      NOW,
+    );
+
+    expect(result.checked).toBe(2);
+    expect(
+      result.orphan.map(({ paymentRef, settledAmount }) => ({ paymentRef, settledAmount })),
+    ).toEqual([
+      { paymentRef: "prepared-inside", settledAmount: "10.00" },
+      { paymentRef: "prepared-outside", settledAmount: "20.00" },
+    ]);
+    expect(reverse.calls).toEqual(["prepared-inside", "prepared-outside"]);
+  });
+
   it("auto-reverses an orphan on an ABANDONED order and stamps the marker", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
