@@ -174,7 +174,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  for (const duty of running.splice(0)) await duty.stop();
+  for (const duty of running.splice(0)) await duty?.stop();
   vi.useRealTimers();
   await rm(mainDir, { recursive: true, force: true });
   await rm(spareDir, { recursive: true, force: true });
