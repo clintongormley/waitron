@@ -69,12 +69,13 @@ export function housekeepingJob(deps: {
   return {
     name: "housekeeping",
     applies: deps.isPrimary,
+    firstPassAfterMs: 1000,
     minSleepMs: 60000,
     maxSleepMs: deps.maxWaitMs,
     backoff: { firstMs: 60000, maxMs: 3600000 },
     async pass(ctx) {
       const clock = await deps.readClock();
-      due ??= nextFireMs(schedule, clock, ctx.now, deps.jitterSeed);
+      due ??= ctx.now.getTime();
       if (ctx.now.getTime() >= due) {
         await clearOldPrintPayloads(deps.db, ctx.now, ctx.signal);
         due = nextFireMs(schedule, clock, deps.now(), deps.jitterSeed);

@@ -101,7 +101,37 @@ describe("print payload housekeeping", () => {
     expect(lengths().map((row) => row.size)).toEqual([0, 0, 3, 3]);
   });
 
-  it("waits until 04:00 venue time and leaves the next pass to the next local day", async () => {
+  it("clears old payloads when the box restarts after 04:00 on seven successive days", async () => {
+    const p = await printer();
+    const sizes: number[] = [];
+    for (let day = 0; day < 7; day++) {
+      const at = new Date(now.getTime() + day * 86400000 + 3 * 3600000);
+      const row = await job(p.id, {
+        createdAt: new Date(at.getTime() - 8 * 86400000).toISOString(),
+      });
+      const duty = housekeepingJob({
+        db: suite.db,
+        isPrimary: () => true,
+        readClock: async () => ({
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+          cutoverChanges: [],
+        }),
+        jitterSeed: "node",
+        now: () => at,
+        log: () => {},
+        maxWaitMs: 3600000,
+      });
+      await duty.pass({ now: at, signal: new AbortController().signal });
+      sizes.push(
+        (await suite.db.select().from(printJobs).where(eq(printJobs.id, row.id)))[0]!.payload
+          .byteLength,
+      );
+    }
+    expect(sizes).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("runs catch-up once, then follows 04:00 venue time and the next local day", async () => {
     const p = await printer();
     const row = await job(p.id);
     let at = new Date("2026-11-14T02:00:00.000Z");
@@ -124,6 +154,12 @@ describe("print payload housekeeping", () => {
     expect((await duty.pass({ now: at, signal: new AbortController().signal })).nextDueAt).toEqual(
       new Date("2026-11-14T03:00:00.000Z"),
     );
+    expect(lengths()[0]!.size).toBe(0);
+    await suite.db
+      .update(printJobs)
+      .set({ payload: new Uint8Array([1, 2, 3]) })
+      .where(eq(printJobs.id, row.id));
+    await duty.pass({ now: at, signal: new AbortController().signal });
     expect(lengths()[0]!.size).toBe(3);
     at = new Date("2026-11-14T03:00:00.000Z");
     expect((await duty.pass({ now: at, signal: new AbortController().signal })).nextDueAt).toEqual(

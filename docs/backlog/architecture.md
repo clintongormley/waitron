@@ -1005,8 +1005,9 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   (CLAUDE.md §3: declare every foreign key). Their old reason — `persons` lived in another
   migration set — ended when A760 moved it into core.
 - **A print job's payload sits ahead of its status columns.** `print_jobs.payload` averaged 20 KB
-  on the bench's first full year (built 2026-11-06, since rebuilt), so any walk over print-job rows reads about five pages a job (the table was
-  8 GB of the 12 GB year), and the printers-down check (`stationPrintersDownQuery` in
+  on the bench's first full year (built 2026-11-06, since rebuilt; the table was 8 GB of the 12 GB year).
+  **2026-11-14, A1532:** that measurement predates the one-week payload sweep; eligible old rows
+  now hold empty blobs. The printers-down check (`stationPrintersDownQuery` in
   `apps/server/src/station-outputs-down.ts`) groups over every stuck job of a printer. It matters
   only with many stuck jobs. Put the payload after the columns reads filter on.
 

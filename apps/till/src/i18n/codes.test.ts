@@ -995,14 +995,10 @@ it("tells staff an open correction carries on from Correct invoice", () => {
 });
 
 it.each([
-  ["en", "Orders", "week", "refund receipts"],
-  ["es", "Pedidos", "semana", "recibos de devolución"],
-])("explains expired print payloads and their next step in %s", (locale, orders, week, refunds) => {
+  ["en", "Orders", "week"],
+  ["es", "Pedidos", "semana"],
+])("explains expired print payloads and their next step in %s", (locale, orders, week) => {
   const sale = codeMessage("print_job.sale_payload_expired", locale);
   expect(sale).toContain(orders);
   expect(sale).toContain(week);
-  const opaque = codeMessage("print_job.payload_expired", locale);
-  expect(opaque).toContain(refunds);
-  expect(opaque).toContain(week);
-  expect(opaque).not.toContain(orders);
 });

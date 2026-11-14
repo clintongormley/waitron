@@ -4284,18 +4284,6 @@ async function bootServer(
     }),
   );
 
-  jobRunner.add(
-    housekeepingJob({
-      db,
-      isPrimary: () => holders.singletonRole.current === "primary",
-      readClock: () => withTransaction(db, (tx) => resolveVenueClock(tx, tradingContext.nodeId)),
-      jitterSeed: tradingContext.nodeId,
-      now,
-      log,
-      maxWaitMs: timings.maxTickMs,
-    }),
-  );
-
   const controller = new AbortController();
   // `config.environment` is the value `assertDeploymentMatches` pinned against the database at boot.
   //
@@ -4637,5 +4625,17 @@ async function bootServer(
         membershipTerm: evidence.membershipTerm,
       }),
     );
+  jobRunner.add(
+    housekeepingJob({
+      db,
+      isPrimary: () => holders.singletonRole.current === "primary",
+      readClock: () => withTransaction(db, (tx) => resolveVenueClock(tx, tradingContext.nodeId)),
+      jitterSeed: tradingContext.nodeId,
+      now,
+      log,
+      maxWaitMs: timings.maxTickMs,
+    }),
+  );
+
   return started;
 }

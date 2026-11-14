@@ -17,7 +17,10 @@ undecided exhausted failure, and linked queued/sending/unknown invoice delivery.
 
 **Build and reuse.** Create `apps/server/src/housekeeping.ts` with `housekeepingJob`
 using jr7's planned deps (`db`, `isPrimary`, `readClock`, `jitterSeed`, `now`, `log`) and only
-this payload step. Use `nextFireMs` for 04:00 venue time, no startup sweep; add new `boot.ts` registration for the existing
+this payload step. Use `nextFireMs` for 04:00 venue time, plus one delayed bounded pass after each successful
+start (Claude build review B proposed catch-up; watcher 18:53/18:58 cleared it). Reuse the runner's
+`firstPassAfterMs`, register at the end of boot, and keep completion process-local with no saved record.
+Repeated starts can repeat an empty scan. No other housekeeping steps run in this slice. Add `boot.ts` registration for the existing
 primary-only, stop-at-stepdown `housekeeping` catalogue seat. Reuse its catalogue, wording,
 runner backoff and stop handling. Scan bounded rowid windows forward; recheck eligibility in
 each `withTransaction`, retain all other values, and yield a real event-loop turn/check the
@@ -30,8 +33,9 @@ before preview. No printing-package API or transport-gate change.
 Declare `print_job.sale_payload_expired` / `print_job.payload_expired` in server `errors.ts`;
 map them to 409 in `print-api.ts`, `till-api.ts` and `orders-api.ts`. Add English/Spanish
 wording in dashboard and till `src/i18n/codes.ts`: bytes were removed after a week; rebuild
-sale receipts/invoices from Orders. Other printouts cannot be reprinted; the till explicitly
-names kitchen tickets, refund receipts, payment slips and reports as examples.
+sale receipts/invoices from Orders. Other printouts cannot be reprinted; the dashboard explicitly
+names kitchen tickets, refund receipts, payment slips and reports as examples. The till has only the
+sale/Orders code: watcher 18:53 cleared cutting the opaque mapping/text with no till caller.
 Use `saleId` to distinguish them. Keep existing reprint availability and request-error UI.
 Watcher 17:49 withdraws the 17:47 exception: all expired queue reprints refuse and point
 sale receipts/invoices to Orders; there is no alternate-printer exception. Consumer trace includes
@@ -40,7 +44,7 @@ preview and practice preview; the latter already accepts empty bytes, so add no 
 
 **Tests, failing first.** Server `housekeeping.test.ts` owns age boundaries, each terminal
 case, preserved retryable/undecided failures (including moved/unpaired), repeat sweeps, cursor
-progress over ineligible rows, yielding/stop, daily scheduling and unchanged audit/link/problem
+progress over ineligible rows, yielding/stop, seven daily restarts after 04:00, normal daily scheduling and unchanged audit/link/problem
 rows. Reuse generic runner/backoff tests; `boot.failed-start.test.ts` checks registration/cleanup.
 `invoice-print-api.test.ts` owns refusal with no new job/delivery, once. Add one 409 case
 at each print/till/Orders API; the till mount also serves transaction-receipt-api. Add the
@@ -66,3 +70,6 @@ new records/protocols/deadlines/approval systems and fiscal writers out.
 resend helper: `orders-api.ts` calls `requestPrintDelivery`, which builds fresh receipt bytes.
 Its new test is a 200 fresh-layout control; no Orders expiry-status mapping is added. The print
 and till mounts retain their 409 cases. This corrects the earlier call-chain assumption above.
+
+**Review correction size:** catch-up adds one runner delay property and changes the initial due value;
+boot registration moves after the last startup step. The restart test adds about 30 lines; no new storage.
