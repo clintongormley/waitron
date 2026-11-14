@@ -115,6 +115,13 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     authenticates:
       "a `backup-settings` envelope signed by the box the held chart names `serving-primary`, under a key this box stores for it or the held chart vouches for (`peerKeyOf`), naming this box; answers only the digest of what it then holds",
   },
+  {
+    method: "POST",
+    path: "/api/node/handover/emergency/backup",
+    boxes: ["mirror"],
+    authenticates:
+      "own-origin HTTPS, fresh node.manage sign-in, no open handover, source silence and a checked archive admitting this mirror under its held main box (handover-emergency-api.ts)",
+  },
 ];
 
 export function pathMatches(rowPath: string, requestPath: string): boolean {

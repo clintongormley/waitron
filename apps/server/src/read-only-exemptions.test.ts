@@ -83,6 +83,7 @@ describe("the read-only exemption list", () => {
       ["POST", "/api/node/handover/emergency/declare", ["mirror"]],
       ["POST", "/api/node/handover/emergency/preview", ["mirror"]],
       ["POST", "/api/node/backup-settings", ["mirror"]],
+      ["POST", "/api/node/handover/emergency/backup", ["mirror"]],
     ]);
     for (const row of READ_ONLY_EXEMPTIONS) expect(row.authenticates.trim()).not.toBe("");
   });
@@ -90,6 +91,12 @@ describe("the read-only exemption list", () => {
   it("exempts a row only on the boxes it names, and only for its method and exact path", () => {
     const mirror = { mirror: true, fenced: false };
     const fenced = { mirror: false, fenced: true };
+    expect(
+      isReadOnlyExempt({ method: "POST", path: "/api/node/handover/emergency/backup" }, mirror),
+    ).toBe(true);
+    expect(
+      isReadOnlyExempt({ method: "POST", path: "/api/node/handover/emergency/backup" }, fenced),
+    ).toBe(false);
     expect(isReadOnlyExempt({ method: "POST", path: "/api/box/retire" }, fenced)).toBe(true);
     expect(isReadOnlyExempt({ method: "POST", path: "/api/box/retire" }, mirror)).toBe(false);
     for (const box of [mirror, fenced]) {
