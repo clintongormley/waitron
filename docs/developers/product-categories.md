@@ -575,7 +575,8 @@ section-image triggers are in core's set (`packages/db/drizzle/0000_baseline.sql
 migrations were frozen at A760 and deleted on 2026-11-07 (A1422); read one with
 `git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.
 
-Before opening a development venue on this branch, run `wa-wt reset demo <worktree-name>`.
+Before opening a development venue on this branch, run `wa-wt reset demo <worktree-name>` (from
+Claude, for its own copy: `wa-wt reset own demo <worktree-name>`).
 The folder migration does not convert old JSON names or preserve the removed fields. A venue
 opened without that reset can display a name as JSON text. Do not add a data backfill for this
 preproduction change.

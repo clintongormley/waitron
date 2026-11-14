@@ -652,7 +652,8 @@ Screens remain English or Spanish.
 
 Changing `WAITRON_DEMO_REGION` keeps an existing venue's stored geography and data.
 To replace a throwaway venue you own, run
-`WAITRON_DEMO_REGION=catalonia wa-wt reset demo <worktree-name>`.
+`WAITRON_DEMO_REGION=catalonia wa-wt reset demo <worktree-name>` (the owner's shared demo venue), or,
+from Claude, `WAITRON_DEMO_REGION=catalonia wa-wt reset own demo <worktree-name>` (Claude's own copy).
 
 ## Root receipts moved on 2026-11-02
 

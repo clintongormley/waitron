@@ -23,8 +23,10 @@ always uses the first port slot (till 5190, dashboard 5191, server 8080) and the
 the previous one. Claude's stacks take the other seven slots, each 100 above the last, with a venue
 and settings of their own under `$HOME/workspace/.waitron-dev/claude/<name>`, and never stop the
 owner's. The venue is a directory of SQLite files on the host. `wa-wt ls` names every running
-instance, who started it, and its URLs. Use `wa-wt logs <name>`, `wa-wt reset demo <name>`, and
-`wa-wt down <name>` to act on one while more than one runs. Rules and limits:
+instance, who started it, and its URLs. Use `wa-wt logs <name>` and `wa-wt down <name>` to act on
+one while more than one runs. The owner rebuilds the shared demo venue with `wa-wt reset demo
+<name>`; Claude rebuilds it only from main (`wa-wt reset demo waitron`) and rebuilds its own copy
+with `wa-wt reset own demo <name>`. Rules and limits:
 `docs/developers/workflow-guide.md` → _The owner's dev stack and Claude's_.
 
 `docker-compose.yml` declares one service, `mailpit` — the practice email inbox. No container holds
