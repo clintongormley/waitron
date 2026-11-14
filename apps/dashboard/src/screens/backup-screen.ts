@@ -162,6 +162,14 @@ const WEEKDAYS: { n: number; labelKey: Parameters<typeof t>[0] }[] = [
   { n: 0, labelKey: "backup.weekday.sun" },
 ];
 
+function revealIcon(visible: boolean): TemplateResult {
+  return html`<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+    <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
+    <circle cx="8" cy="8" r="2"></circle>
+    ${visible ? svg`<path d="m2 2 12 12"></path>` : nothing}
+  </svg>`;
+}
+
 @customElement("dashboard-backup-screen")
 export class BackupScreen extends LitElement {
   static override styles = [
@@ -1240,11 +1248,12 @@ export class BackupScreen extends LitElement {
           <wt-button
             slot="end"
             variant="ghost"
+            class="secret-toggle"
             data-test="toggle-configuration-passphrase"
             aria-label=${this.configurationPassphraseVisible ? t("login.hide_password") : t("login.show_password")}
             @click=${() =>
               (this.configurationPassphraseVisible = !this.configurationPassphraseVisible)}
-            >${this.configurationPassphraseVisible ? t("login.hide_password") : t("login.show_password")}</wt-button
+            >${revealIcon(this.configurationPassphraseVisible)}</wt-button
           >
         </wt-input>
         <wt-input
@@ -1264,10 +1273,11 @@ export class BackupScreen extends LitElement {
           <wt-button
             slot="end"
             variant="ghost"
+            class="secret-toggle"
             data-test="toggle-configuration-confirm"
             aria-label=${this.configurationConfirmVisible ? t("login.hide_password") : t("login.show_password")}
             @click=${() => (this.configurationConfirmVisible = !this.configurationConfirmVisible)}
-            >${this.configurationConfirmVisible ? t("login.hide_password") : t("login.show_password")}</wt-button
+            >${revealIcon(this.configurationConfirmVisible)}</wt-button
           >
         </wt-input>
         <wt-form-actions data-test="configuration-actions" .error=${bottom}>

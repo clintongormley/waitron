@@ -1,6 +1,7 @@
 import { useLocale } from "../testing/locale-setup.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget, quietRejection } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -2510,4 +2511,31 @@ it("starts Rotate quietly after Apply, then corrects a short key and submits it 
   expect(api.rotateBackupKey).toHaveBeenCalledExactlyOnceWith({
     recoveryKey: "correct-horse-battery-staple",
   });
+});
+
+describe("configuration export at phone width", () => {
+  const viewport = { width: window.innerWidth, height: window.innerHeight };
+  afterEach(async () => {
+    await page.viewport(viewport.width, viewport.height);
+  });
+
+  it.each(["en-GB", "es-ES"])(
+    "keeps each passphrase label clear of its show button at 390 px (%s)",
+    async (locale) => {
+      setLocale(locale);
+      await page.viewport(390, 850);
+      const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      for (const id of ["configuration-passphrase", "configuration-confirm"]) {
+        const field = q(el, `[data-test=${id}]`) as WtInput;
+        await field.updateComplete;
+        const label = field.shadowRoot!.querySelector(".field-label")!.getBoundingClientRect();
+        const button = q(el, `[data-test=toggle-${id}]`)!.getBoundingClientRect();
+        expect(label.width).toBeGreaterThan(0);
+        expect(label.right).toBeLessThanOrEqual(button.left);
+      }
+    },
+  );
 });
