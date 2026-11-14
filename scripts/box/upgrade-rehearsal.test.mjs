@@ -10,6 +10,7 @@ import {
 import { spawn, spawnSync } from "node:child_process";
 import { setTimeout, clearTimeout } from "node:timers";
 import { tmpdir } from "node:os";
+import { URL } from "node:url";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { copyStoppedTree } from "./upgrades/copy.mjs";
