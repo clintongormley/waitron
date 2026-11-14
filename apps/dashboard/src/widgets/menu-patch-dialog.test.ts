@@ -328,6 +328,58 @@ for (const [width, height] of [
     }
   });
 
+it("scrolls only the form on a wide patch, keeps search and tree in place, and stacks after resize", async () => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(1280, 600);
+  try {
+    const document = longLunch();
+    document.offers["mi-soup"]!.image = "media:soup";
+    const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+    await pick(el, "Soup");
+    const body = modal(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="menu-patch-search"]')!;
+    const tree = el.shadowRoot!.querySelector<HTMLElement>('[data-test="tree"]')!;
+    const editor = form(el);
+    await vi.waitFor(() => expect(editor.scrollHeight).toBeGreaterThan(editor.clientHeight));
+    const searchTop = search.getBoundingClientRect().top;
+    const treeTop = tree.getBoundingClientRect().top;
+    const photo = editor.querySelector("dashboard-image-upload")!;
+    await photo.updateComplete;
+    const preview = photo.shadowRoot!.querySelector<HTMLImageElement>("img")!;
+    preview.src =
+      'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"/>';
+    await preview.decode();
+    editor.scrollTop = editor.scrollHeight;
+    expect(preview.clientHeight).toBeGreaterThan(0);
+    expect(photo.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      editor.getBoundingClientRect().bottom,
+    );
+    expect(search.getBoundingClientRect().top).toBe(searchTop);
+    expect(tree.getBoundingClientRect().top).toBe(treeTop);
+    expect(body.scrollTop).toBe(0);
+    expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
+    tree.scrollTop = 200;
+    await pick(el, "Salad");
+    expect(form(el).scrollTop).toBe(0);
+    expect(tree.scrollTop).toBe(200);
+    await page.viewport(390, 844);
+    await vi.waitFor(() =>
+      expect(form(el).getBoundingClientRect().top).toBeGreaterThan(
+        tree.getBoundingClientRect().top,
+      ),
+    );
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    await pick(el, "Soup");
+    await vi.waitFor(() =>
+      expect(form(el).querySelector("h3")!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        body.getBoundingClientRect().bottom,
+      ),
+    );
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+});
+
 it("leaves room in the scrolling tree for a row's focus ring", async () => {
   const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, longLunch())) }));
   const tree = el.shadowRoot!.querySelector<HTMLElement>('[data-test="tree"]')!;
@@ -1854,8 +1906,9 @@ for (const [width, height] of [
       await type(el, "wt-input", "customer-name-es", "Sopa");
       await type(el, "wt-price-input", "price", "4");
       const body = modal(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
-      expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
-      body.scrollTop = body.scrollHeight;
+      const scroller = width > 400 ? form(el) : body;
+      await vi.waitFor(() => expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight));
+      scroller.scrollTop = scroller.scrollHeight;
       setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
       await el.updateComplete;
       await modal(el).updateComplete;
@@ -2722,9 +2775,13 @@ for (const [width, height] of [
       const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, longLunch())) }));
       await pick(el, "Lemonade");
       const body = modal(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
-      body.scrollTop = body.scrollHeight;
+      const scroller = width > 400 ? form(el) : body;
+      await vi.waitFor(() => expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight));
+      scroller.scrollTop = scroller.scrollHeight;
       const heading = form(el).querySelector("h3")!;
-      expect(heading.getBoundingClientRect().top).toBeLessThan(body.getBoundingClientRect().top);
+      expect(heading.getBoundingClientRect().top).toBeLessThan(
+        scroller.getBoundingClientRect().top,
+      );
       const link = form(el).querySelectorAll<HTMLElement>('[data-test="variant-link"]')[1]!;
       link.focus();
       await userEvent.keyboard("{Enter}");
@@ -2737,7 +2794,7 @@ for (const [width, height] of [
       const reach = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
       expect(parseFloat(style.outlineWidth)).toBeGreaterThan(0);
       expect(focused.getBoundingClientRect().top - reach).toBeGreaterThanOrEqual(
-        body.getBoundingClientRect().top,
+        scroller.getBoundingClientRect().top,
       );
     } finally {
       await page.viewport(before.width, before.height);

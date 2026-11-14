@@ -167,6 +167,34 @@ export class MenuPatchDialog extends LitElement {
         align-items: flex-start;
         gap: var(--wt-space-5);
       }
+      wt-modal[wide-edit]::part(body) {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .layout.wide {
+        flex: 1;
+        min-height: 0;
+        flex-wrap: nowrap;
+        align-items: stretch;
+      }
+      .wide .side {
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+      .wide nav {
+        min-height: 0;
+        max-block-size: none;
+      }
+      .wide .form {
+        overflow: auto;
+        align-content: start;
+        scrollbar-gutter: stable;
+        /* Keep keyboard rings and help badges inside the scrolling box. */
+        padding: var(--wt-space-2) calc(var(--wt-help-badge-target) / 2);
+        scroll-padding: var(--wt-space-2);
+        margin-block: calc(-1 * var(--wt-space-2));
+        margin-inline: calc(-1 * var(--wt-help-badge-target) / 2);
+      }
       .side {
         display: grid;
         gap: var(--wt-space-3);
@@ -198,8 +226,6 @@ export class MenuPatchDialog extends LitElement {
       nav > ul {
         padding-inline-start: 0;
       }
-      /* The tree scrolls in its own box, so a pick low in it leaves the form beside it in view. A
-         dish's form can be taller than the dialog, so the form is not the part held in place. */
       nav {
         max-block-size: calc(var(--wt-tap-min) * 12);
         overflow: auto;
@@ -304,6 +330,16 @@ export class MenuPatchDialog extends LitElement {
   @property() menuName = "";
   @property({ type: Boolean }) open = false;
 
+  @state() private wideEdit = false;
+  #layout: Element | null = null;
+  #resizeFrame = 0;
+  readonly #resize = new ResizeObserver(([entry]) => {
+    cancelAnimationFrame(this.#resizeFrame);
+    this.#resizeFrame = requestAnimationFrame(() => {
+      this.wideEdit = entry!.contentRect.width >= 768;
+    });
+  });
+
   @state() private live: LiveMenu | null = null;
   @state() private notPublished = false;
   @state() private readError: string | null = null;
@@ -390,6 +426,15 @@ export class MenuPatchDialog extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("open") || changed.has("menuId")) this.#follow();
     this.#takeScope();
+  }
+
+  override updated(): void {
+    const layout = this.renderRoot.querySelector(".layout");
+    if (layout === this.#layout) return;
+    this.#resize.disconnect();
+    cancelAnimationFrame(this.#resizeFrame);
+    this.#layout = layout;
+    if (layout !== null) this.#resize.observe(layout);
   }
 
   /** Taken only while on the page: disposing the scope redraws the dialog, and a scope taken while
@@ -602,6 +647,9 @@ export class MenuPatchDialog extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#resize.disconnect();
+    cancelAnimationFrame(this.#resizeFrame);
+    this.#layout = null;
     this.#releaseScope();
     super.disconnectedCallback();
   }
@@ -892,8 +940,10 @@ export class MenuPatchDialog extends LitElement {
     this.picked = targetKey(target);
     await this.updateComplete;
     const form = this.renderRoot.querySelector('[data-test="form"]')!;
-    form.scrollIntoView({ block: "nearest" });
-    if (pressed !== null && !pressed.isConnected) form.querySelector("h3")!.focus();
+    if (this.wideEdit) form.scrollTop = 0;
+    else form.scrollIntoView({ block: "nearest" });
+    if (pressed !== null && !pressed.isConnected)
+      form.querySelector("h3")!.focus({ preventScroll: this.wideEdit });
   }
 
   get #taxes() {
@@ -926,6 +976,7 @@ export class MenuPatchDialog extends LitElement {
         : fill("menu_patch.heading", { number: String(this.live.number), menu: this.menuName });
     return html`<wt-modal
       size="wide"
+      ?wide-edit=${this.wideEdit && this.step === "edit" && this.#showsDraft()}
       .open=${this.open}
       heading=${heading}
       aria-label=${this.menuName}
@@ -1083,7 +1134,7 @@ export class MenuPatchDialog extends LitElement {
     const shown = search === undefined ? tree : matching(tree, search);
     const picked = this.picked === null ? undefined : findNode(tree, this.picked);
     const marked = new Set(this.#keysToCorrect());
-    return html`<div class="layout">
+    return html`<div class=${this.wideEdit ? "layout wide" : "layout"}>
       <div class="side">
         <wt-input
           name="menu-patch-search"

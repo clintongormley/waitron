@@ -134,8 +134,8 @@ notes and allergy instructions keep their own text. See [kitchen paper](kitchen-
 ## Add a photograph once {#upload}
 
 For several photos, open **Image library** and drop them anywhere on the page, or select
-**choose files**. Uploads start immediately. A file named `patatas-bravas.jpg` starts as
-**Patatas bravas** in your default content language. The progress line counts uploaded photos;
+**Choose photos** at the top of the page. Uploads start immediately. A file named
+`patatas-bravas.jpg` starts as **Patatas bravas** in your default content language. The progress line counts uploaded photos;
 a new photo has a **New** badge. If one upload fails, you see its file name and the reason, and
 the other uploads continue.
 

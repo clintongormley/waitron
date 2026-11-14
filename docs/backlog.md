@@ -511,27 +511,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   today. A cover charge applies only to orders eaten in (A1522's setting). The only way to charge
   more on the terrace today is to make it a department of its own with its own menu. Not designed.
 
-- **A1524. Products and menus screens: the owner's review (owner, 2026-11-14).** Four screens.
-  - **Courses page layout.** Each course's name is at the far left and its switch at the far right,
-    with most of the page between them. Only the switch's column has a visible heading ("On the
-    till"), and its "?" floats past the switch. The bin sits beside the switch, not in the row's
-    end menu. The rows are tall for one line, and the title sits almost on the table, lined up with
-    the bottom of "Add course" rather than its middle. The page draws its own table
-    (`apps/dashboard/src/widgets/course-list.ts`); match the other list screens. The switch leaves
-    this page in A1526, so lay the page out for names, order and the row menu.
-  - **Menus list: a search bar**, as Products and Modifiers have, with the column chooser on the
-    same line rather than alone on a row of its own (`apps/dashboard/src/screens/menus-screen.ts`).
-  - **Image library: no standing drop box.** Dropping photos already works anywhere on the page, and
-    the page says "Drop N photos to upload them" while files are dragged over it
-    (`packages/media/src/dashboard/image-library.ts`). The "Drop photos anywhere on this page…" box
-    goes, and comes back only as the empty page when the library has no photos.
-  - **Menu patch window: picking an item in the list makes the list and the title jump.** `#pick`
-    scrolls the form into view on every pick (`apps/dashboard/src/widgets/menu-patch-dialog.ts`,
-    `form.scrollIntoView`), which is meant for the narrow layout, where the form sits under the
-    list. On a wide screen a dish's form is taller than the window, so the whole window scrolls and
-    carries the title, the search and the list with it. On a wide screen only the form scrolls,
-    which also stops the image preview being cut off at the bottom.
-
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
   the recommendations; mobile-data access to A670's published menu remains to build.
   The [cleared new-selection plan](superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
