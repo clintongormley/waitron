@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { categories, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { plantStoredSiblingCategory, racePair, useCatalogueDb } from "../test/fixtures.js";
+import { plantStoredSiblingCategory, racePair, useMenuDb } from "../test/fixtures.js";
 import { createCategory, listCategories, readCategory, updateCategory } from "./categories.js";
-import { deleteCatalogueItems, deleteCategory, moveCatalogueItems } from "./product-items.js";
+import { deleteProductItems, deleteCategory, moveProductItems } from "./product-items.js";
 
 /** A category's name is unique among the categories with the same parent, the root included. */
-const suite = useCatalogueDb();
+const suite = useMenuDb();
 const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);
 const taken = (name: string) => ({ code: "category.name_taken", params: { field: "name", name } });
 
@@ -92,7 +92,7 @@ describe("delete moving the contents up", () => {
     await app((tx) => createCategory(tx, { name: "Food", parentId: drinks }));
     const before = await snapshot();
     await expect(
-      app((tx) => deleteCatalogueItems(tx, { productIds: [], categoryIds: [drinks] }, "move_up")),
+      app((tx) => deleteProductItems(tx, { productIds: [], categoryIds: [drinks] }, "move_up")),
     ).rejects.toMatchObject(taken("Food"));
     expect(await snapshot()).toEqual(before);
   });
@@ -107,7 +107,7 @@ describe("bulk move", () => {
     const other = await app((tx) => createCategory(tx, { name: "beer", parentId: food }));
     const before = await snapshot();
     await expect(
-      app((tx) => moveCatalogueItems(tx, { productIds: [], categoryIds: [other.id] }, drinks)),
+      app((tx) => moveProductItems(tx, { productIds: [], categoryIds: [other.id] }, drinks)),
     ).rejects.toMatchObject(taken("beer"));
     expect(await snapshot()).toEqual(before);
   });
@@ -116,17 +116,17 @@ describe("bulk move", () => {
     const right = await app((tx) => createCategory(tx, { name: "wine", parentId: food }));
     await expect(
       app((tx) =>
-        moveCatalogueItems(tx, { productIds: [], categoryIds: [left.id, right.id] }, null),
+        moveProductItems(tx, { productIds: [], categoryIds: [left.id, right.id] }, null),
       ),
     ).rejects.toMatchObject(taken("wine"));
   });
   it("moves a category whose name the target does not hold", async () => {
-    await app((tx) => moveCatalogueItems(tx, { productIds: [], categoryIds: [beer] }, food));
+    await app((tx) => moveProductItems(tx, { productIds: [], categoryIds: [beer] }, food));
     expect((await app((tx) => readCategory(tx, beer))).parentId).toBe(food);
   });
   it("does not refuse a move within the parent a category already has", async () => {
     await plant("beer", drinks);
-    await app((tx) => moveCatalogueItems(tx, { productIds: [], categoryIds: [beer] }, drinks));
+    await app((tx) => moveProductItems(tx, { productIds: [], categoryIds: [beer] }, drinks));
     expect((await app((tx) => readCategory(tx, beer))).parentId).toBe(drinks);
   });
 });
@@ -143,7 +143,7 @@ describe("bulk delete moving the contents up, judged as a whole", () => {
       return { Parent: parent, Collision: collision, child };
     });
     const categoryIds = [ids[first as "Parent"], ids[second as "Parent"]];
-    await app((tx) => deleteCatalogueItems(tx, { productIds: [], categoryIds }, "move_up"));
+    await app((tx) => deleteProductItems(tx, { productIds: [], categoryIds }, "move_up"));
     const after = await snapshot();
     expect(after.find((folder) => folder.id === ids.child)).toMatchObject({ parentId: null });
     expect(after.map((folder) => folder.id)).not.toContain(ids.Parent);
@@ -155,7 +155,7 @@ describe("bulk delete moving the contents up, judged as a whole", () => {
     await plant("Wine", drinks);
     const before = await snapshot();
     await expect(
-      app((tx) => deleteCatalogueItems(tx, { productIds: [], categoryIds: [drinks] }, "move_up")),
+      app((tx) => deleteProductItems(tx, { productIds: [], categoryIds: [drinks] }, "move_up")),
     ).rejects.toMatchObject(taken("Wine"));
     expect(await snapshot()).toEqual(before);
   });
@@ -167,7 +167,7 @@ describe("categories already sharing a name", () => {
     const right = await plant("wine", drinks);
     const before = await snapshot();
     await expect(
-      app((tx) => moveCatalogueItems(tx, { productIds: [], categoryIds: [left, right] }, food)),
+      app((tx) => moveProductItems(tx, { productIds: [], categoryIds: [left, right] }, food)),
     ).rejects.toMatchObject(taken("wine"));
     expect(await snapshot()).toEqual(before);
   });
@@ -177,7 +177,7 @@ describe("categories already sharing a name", () => {
     expect(await app((tx) => updateCategory(tx, beer, { name: "Ale" }))).toMatchObject({
       name: "Ale",
     });
-    await app((tx) => moveCatalogueItems(tx, { productIds: [], categoryIds: [food] }, drinks));
+    await app((tx) => moveProductItems(tx, { productIds: [], categoryIds: [food] }, drinks));
     expect((await app((tx) => readCategory(tx, food))).parentId).toBe(drinks);
   });
 });

@@ -35,12 +35,12 @@ const run = createErrorBoundary(
     "management_session.expired": 401,
     "authorization.not_permitted": 403,
     "person.suspended": 403,
-    "catalogue.not_found": 404,
+    "menu.not_found": 404,
     "settings.invalid": 500,
     "settings.out_of_date": 409,
     "management.request_invalid": 400,
   },
-  "catalogue.failed",
+  "menu.failed",
 );
 async function sharingStatus(tx: Transaction, serving: () => boolean) {
   const { doc, revision } = await readSettings(tx, GUEST_MENU_SETTINGS);
@@ -95,7 +95,7 @@ export function mountGuestMenuApi(
       const answer = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "catalogue.manage",
+          permission: "menu.manage",
         });
         return sharingStatus(tx, deps.serving);
       });
@@ -114,7 +114,7 @@ export function mountGuestMenuApi(
       const answer = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "catalogue.manage",
+          permission: "menu.manage",
         });
         const current = await readSettings(tx, GUEST_MENU_SETTINGS);
         const parsed = GUEST_MENU_SETTINGS.parse({
@@ -133,14 +133,14 @@ export function mountGuestMenuApi(
       return c.json({ ...answer, ...(await deliveryStatus()) });
     }),
   );
-  app.get("/management-api/catalogues/:id/guest-preview", (c) =>
+  app.get("/management-api/menus/:id/guest-preview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const result = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "catalogue.manage",
+          permission: "menu.manage",
         });
         const live = await readLiveMenu(tx, menuId);
         if (live === null) return null;
@@ -166,7 +166,7 @@ export function mountGuestMenuApi(
       return c.json(result);
     }),
   );
-  app.post("/management-api/catalogues/:id/guest-paper", (c) =>
+  app.post("/management-api/menus/:id/guest-paper", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -174,7 +174,7 @@ export function mountGuestMenuApi(
       const captured = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "catalogue.manage",
+          permission: "menu.manage",
         });
         const parsed = GUEST_MENU_SETTINGS.parse({ enabled: false, paper: body.paper });
         if (!parsed.ok || !parsed.doc.paper)

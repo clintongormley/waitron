@@ -31,8 +31,8 @@ const products: TillProduct[] = [
     vatClass: "general",
     category: null,
     allergens: null,
-    catalogueId: "cat-default",
-    catalogueName: "Carta",
+    menuId: "cat-default",
+    menuName: "Carta",
   },
 ];
 

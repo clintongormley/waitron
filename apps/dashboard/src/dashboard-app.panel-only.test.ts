@@ -84,7 +84,7 @@ function stubApi(modules: string[]): DashboardApi {
       modules,
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
-    getCatalogueSettings: vi
+    getMenuSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "reduced", defaultColor: null }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),

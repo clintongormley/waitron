@@ -41,7 +41,7 @@ const home: MenuHome = {
 function client(addHomeShortcut: () => Promise<unknown>, afterAdd: () => Promise<MenuHome>) {
   let added = false;
   const api = {
-    listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+    listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
     listLibraryProducts: async () =>
       ["p-lager", "p-burger"].map((id) => ({
         id,
@@ -51,7 +51,7 @@ function client(addHomeShortcut: () => Promise<unknown>, afterAdd: () => Promise
         variants: [],
       })),
     listCategories: async () => [],
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     getMenuStatuses: async () => ({ menu: { state: "unpublished", clashes: 0 } }),
     addHomeShortcut: vi.fn(async () => {

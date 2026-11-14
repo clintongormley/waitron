@@ -29,7 +29,7 @@ import { lookUpInvoices } from "./invoice-lookup-api.js";
 import { orderZoneCondition } from "./zone-access.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { addProductToMenu, createCatalogue, createProduct } from "@waitron/menu";
+import { addProductToMenu, createMenu, createProduct } from "@waitron/menu";
 import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
 import { hashPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
@@ -409,9 +409,9 @@ beforeAll(async () => {
       orderStart: "table",
     });
     // A menu the Deli sells from, offered in the bar as well.
-    const specials = await createCatalogue(tx, { name: "Deli specials" });
+    const specials = await createMenu(tx, { name: "Deli specials" });
     const pastrami = await createProduct(tx, {
-      catalogueId: specials.id,
+      menuId: specials.id,
       categoryId: null,
       name: "Pastrami",
       pricingUnit: "each",

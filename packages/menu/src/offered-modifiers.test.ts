@@ -4,8 +4,8 @@ import { CORE_MIGRATIONS, products as productRows, withTransaction } from "@wait
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   addProductToMenu,
   createProduct,
   listAvailableProducts,
@@ -88,18 +88,18 @@ const ids: Record<keyof typeof products, string> = {
   cheese: "",
   olives: "",
 };
-let catalogueId = "";
+let menuId = "";
 /** The burger's one `menu_items` row — the offer a diner orders from. */
 let offerId = "";
 
 beforeEach(async () => {
   await seedVenueWithSeries(fx.db);
   await run(async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Deli" });
-    catalogueId = menu.id;
+    const menu = await createMenu(tx, { name: "Deli" });
+    menuId = menu.id;
     for (const [key, fields] of Object.entries(products)) {
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         unitId: null,
         ...fields,
@@ -112,7 +112,7 @@ beforeEach(async () => {
       grossPrice: "9.50",
     });
     offerId = offer.id;
-    await assignCatalogueToVenue(tx, menu.id);
+    await assignMenuToVenue(tx, menu.id);
   });
 });
 
@@ -393,7 +393,7 @@ describe("what a menu offer publishes", () => {
         "en",
       );
     });
-    const offer = (await run((tx) => listMenuOffers(tx, [catalogueId]))).find(
+    const offer = (await run((tx) => listMenuOffers(tx, [menuId]))).find(
       (entry) => entry.productId === ids.burger,
     )!;
     expect(offer.offeredModifiers.map((entry) => entry.kind)).toEqual(["extras", "options"]);
@@ -452,7 +452,7 @@ describe("an extra that is a parent with Active variants", () => {
         available,
         active,
       });
-      // The catalogue refuses an Active variant on a product an extras list offers
+      // The menu refuses an Active variant on a product an extras list offers
       // (`product.offered_as_extra`), so the Active one is made by writing its row.
       const [thick] = await setProductVariants(
         tx,
@@ -572,7 +572,7 @@ describe("listAvailableProducts and listMenuOffers", () => {
     });
 
     const offers = await run(async (tx) => {
-      return listMenuOffers(tx, [catalogueId]);
+      return listMenuOffers(tx, [menuId]);
     });
 
     const walk = offers.find((offer) => offer.id === offerId)!.offeredModifiers;

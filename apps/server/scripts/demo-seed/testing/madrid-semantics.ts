@@ -210,7 +210,7 @@ export async function canonicalMadridSemantics(
         key = [...parts("kind", "subject_id", "at"), JSON.stringify(data)];
         break;
       }
-      case "catalogues":
+      case "menus":
       case "categories":
       case "departments":
       case "device_profiles":

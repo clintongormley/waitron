@@ -7,7 +7,7 @@ import {
 } from "./business-day-schedule.js";
 import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 import {
-  catalogues,
+  menus,
   categories,
   floorPlanSets,
   departments,
@@ -357,10 +357,10 @@ async function writeMenuPeriod(
     throw new AppError("menu_period.invalid", { field: "staffMenuIds" });
   for (const menuId of [period.menuId, ...staffMenuIds]) {
     const [menu] = await tx
-      .select({ id: catalogues.id })
-      .from(catalogues)
-      .where(and(eq(catalogues.id, menuId), eq(catalogues.active, true)));
-    if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
+      .select({ id: menus.id })
+      .from(menus)
+      .where(and(eq(menus.id, menuId), eq(menus.active, true)));
+    if (menu === undefined) throw new AppError("menu.not_found", { menuId: menuId });
   }
   if (periodId !== null) {
     const [own] = await tx
@@ -694,19 +694,19 @@ export async function readOpeningHoursModel(tx: Transaction, at: Date): Promise<
     cutover,
   );
   const zones = await readZoneClosedTimes(tx, cutover, seasonList);
-  const menus = await tx
-    .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
-    .from(catalogues)
-    .orderBy(asc(catalogues.name), asc(catalogues.id));
+  const menuRows = await tx
+    .select({ id: menus.id, name: menus.name, active: menus.active })
+    .from(menus)
+    .orderBy(asc(menus.name), asc(menus.id));
   const graph = await loadSectionGraph(tx);
   const routingUses = await readRoutingUses(tx);
-  const menuNames = new Map(menus.map((menu) => [menu.id, menu.name]));
+  const menuNames = new Map(menuRows.map((menu) => [menu.id, menu.name]));
   return {
     ...status,
     timeZone: clock.timeZone,
     clockReadable: moment !== null,
     dayCutover: cutover,
-    menus: menus.map((menu) => ({
+    menus: menuRows.map((menu) => ({
       ...menu,
       includes: directIncludedMenus(graph, menu.id).map((id) => menuNames.get(id)!),
     })),

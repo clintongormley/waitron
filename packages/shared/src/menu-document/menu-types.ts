@@ -129,17 +129,17 @@ export interface AvailableProduct {
   /** The product's DEFAULT kitchen course (`products.course_id`), or null when it has none. Not part
    * of the priceable projection, so it is dropped when a row is resolved into a `PriceableProduct`. */
   courseId: string | null;
-  catalogueId: string;
-  /** The catalogue's display name (`catalogues.name`), for grouping products by menu in the till. Also
+  menuId: string;
+  /** The menu's display name (`menus.name`), for grouping products by menu in the till. Also
    * not part of the priceable projection. */
-  catalogueName: string;
+  menuName: string;
   /** The ordered extras and options lists this PRODUCT puts in front of a diner — see
    * {@link OfferedModifier}. No menu offer is involved, so each extras entry is the list as the
    * product itself carries it. */
   offeredModifiers: OfferedModifier[];
 }
 
-export interface AccessibleCatalogue {
+export interface AccessibleMenu {
   id: string;
   name: string;
   isDefault: boolean;

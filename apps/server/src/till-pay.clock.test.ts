@@ -4,8 +4,8 @@ import { expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -27,10 +27,10 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     await inTx(venue, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Menu" });
+      const menu = await createMenu(tx, { name: "Menu" });
       const category = await createCategory(tx, { name: "Food" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: "Dish",
         pricingUnit: "each",
@@ -38,7 +38,7 @@ useVenueDb({
         vatClass: "general",
       });
       productId = product.id;
-      await assignCatalogueToVenue(tx, catalogue.id);
+      await assignMenuToVenue(tx, menu.id);
       counter = await offerProducts(tx, venue.cfg, { productIds: [productId] });
     });
   },

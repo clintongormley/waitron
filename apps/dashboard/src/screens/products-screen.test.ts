@@ -5,7 +5,7 @@ import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type {
-  CatalogueSummary,
+  MenuSummary,
   CategorySummary,
   Course,
   DashboardApi,
@@ -24,7 +24,7 @@ import type { ProductChildKind } from "../state/product-child-create.js";
 import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { CourseList } from "../widgets/course-list.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
-import type { CatalogueBrowser } from "../widgets/product-browser.js";
+import type { ProductBrowser } from "../widgets/product-browser.js";
 import {
   cleanupWidgets,
   closeReportsDelivered,
@@ -35,7 +35,7 @@ import {
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { CatalogueScreen } from "./products-screen.js";
+import { ProductsScreen } from "./products-screen.js";
 import { ROOT_KEY } from "../widgets/product-list.js";
 
 class PlacementLeaveHost extends LitElement {
@@ -46,7 +46,7 @@ class PlacementLeaveHost extends LitElement {
 }
 customElements.define("placement-leave-test-host", PlacementLeaveHost);
 
-const catalogues: CatalogueSummary[] = [
+const menus: MenuSummary[] = [
   { id: "cat-a", name: "Dishes", active: true, version: 1 },
   { id: "cat-b", name: "ES drinks", active: true, version: 1 },
 ];
@@ -109,7 +109,7 @@ const products: Product[] = [
   {
     id: "p1",
     modifiers: [],
-    catalogueId: "cat-a",
+    menuId: "cat-a",
     categoryId: "c1",
     primaryCategoryId: "c1",
     name: "Croquettes",
@@ -241,11 +241,11 @@ const sections: SectionDetails[] = [
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const api = {
-    getCatalogueSettings: vi
+    getMenuSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
-    listCatalogues: vi.fn().mockResolvedValue(catalogues),
+    listMenus: vi.fn().mockResolvedValue(menus),
     listCategories: vi.fn().mockResolvedValue(categories),
     listUnits: vi.fn().mockResolvedValue(units),
     listExtraLists: vi.fn().mockResolvedValue(extraLists),
@@ -299,17 +299,17 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return api;
 }
 
-async function flush(el: CatalogueScreen): Promise<void> {
+async function flush(el: ProductsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
 }
-const editor = (el: CatalogueScreen): ProductEditor =>
+const editor = (el: ProductsScreen): ProductEditor =>
   el.shadowRoot!.querySelector("dashboard-product-editor")!;
-const step = (el: CatalogueScreen): AddToMenus =>
+const step = (el: ProductsScreen): AddToMenus =>
   el.shadowRoot!.querySelector("dashboard-add-to-menus")!;
-const list = (el: CatalogueScreen): CatalogueBrowser =>
-  el.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
-async function productTable(el: CatalogueScreen) {
+const list = (el: ProductsScreen): ProductBrowser =>
+  el.shadowRoot!.querySelector("dashboard-product-browser")!;
+async function productTable(el: ProductsScreen) {
   await list(el).updateComplete;
   const products = list(el).shadowRoot!.querySelector("dashboard-product-list")!;
   await products.updateComplete;
@@ -325,7 +325,7 @@ function emit(source: Element, type: string, detail: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 /** One change in the open editor, so its Save has something to send. */
-async function editKitchenName(el: CatalogueScreen): Promise<void> {
+async function editKitchenName(el: ProductsScreen): Promise<void> {
   emit(editor(el).shadowRoot!.querySelector('[name="kitchen-name"]')!, "wt-change", {
     value: "FRIED CROQUETTES",
   });
@@ -335,7 +335,7 @@ async function editKitchenName(el: CatalogueScreen): Promise<void> {
 afterEach(cleanupWidgets);
 afterEach(() => localStorage.clear());
 
-describe("catalogue-screen", () => {
+describe("menu-screen", () => {
   it("loads all product editor libraries and de-duplicates products from every menu", async () => {
     const oneCourse = {
       id: "k1",
@@ -346,7 +346,7 @@ describe("catalogue-screen", () => {
       heldUntilFired: true,
     };
     const api = stubApi({ listCourses: vi.fn().mockResolvedValue([oneCourse]) });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect(api.listUnits).toHaveBeenCalledOnce();
     expect(api.listCategories).toHaveBeenCalledOnce();
@@ -356,14 +356,14 @@ describe("catalogue-screen", () => {
     expect(list(el).routing).toMatchObject({ cells: [], defaultStationId: null });
     expect(list(el).products).toEqual(products);
     expect(list(el).courses).toEqual([oneCourse]);
-    expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('select[name="product-menu"]')).toBeNull();
   });
 
   it("keeps products available when the optional folder routing read is refused", async () => {
     const api = stubApi({
       getFolderRouting: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect(list(el).products).toEqual(products);
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
@@ -375,7 +375,7 @@ describe("catalogue-screen", () => {
       stubApi({ getFolderRouting: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData: new LiveData() },
     );
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect(list(el).routing).toBeNull();
     expect(list(el).routingFailed).toBe(true);
@@ -390,14 +390,14 @@ describe("catalogue-screen", () => {
     const api = stubApi({
       getFolderRouting: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect(list(el).routingFailed).toBe(true);
   });
 
   it("marks routing failed when a refresh after a good read fails, and not before", async () => {
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect(list(el).routingFailed).toBe(false);
     expect(list(el).routing).not.toBeNull();
@@ -409,7 +409,7 @@ describe("catalogue-screen", () => {
 
   it("clears a failed refresh's message once the server answers again", async () => {
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     const alert = () => el.shadowRoot!.querySelector("[role=alert]");
     vi.mocked(api.listUnits).mockRejectedValue({ code: "connection.failed" });
@@ -429,7 +429,7 @@ describe("catalogue-screen", () => {
       stubApi({ updateProductEditor: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData: new LiveData() },
     );
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     const alert = () => el.shadowRoot!.querySelector("[role=alert]");
     emit(list(el), "edit-product", { productId: "p1" });
@@ -455,7 +455,7 @@ describe("catalogue-screen", () => {
   });
 
   async function editDuringOutage(api: DashboardApi & { liveData: LiveData }) {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     const alert = () => el.shadowRoot!.querySelector("[role=alert]");
     vi.mocked(api.listUnits).mockRejectedValue({ code: "connection.failed" });
@@ -502,16 +502,16 @@ describe("catalogue-screen", () => {
 
   it("loads the products once the server answers again after a failed first load", async () => {
     const api = Object.assign(
-      stubApi({ listCatalogues: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      stubApi({ listMenus: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData: new LiveData() },
     );
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     const alert = () => el.shadowRoot!.querySelector("[role=alert]");
     await vi.waitFor(() =>
       expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed")),
     );
     expect(api.listProducts).not.toHaveBeenCalled();
-    vi.mocked(api.listCatalogues).mockResolvedValue(catalogues);
+    vi.mocked(api.listMenus).mockResolvedValue(menus);
     api.liveData.refresh();
     await vi.waitFor(() => expect(list(el).products).toEqual(products));
     expect(alert()).toBeNull();
@@ -523,7 +523,7 @@ describe("catalogue-screen", () => {
         .fn()
         .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=add-language]")).toBeNull();
     expect(el.shadowRoot!.querySelector("dashboard-add-content-language")).toBeNull();
@@ -532,7 +532,7 @@ describe("catalogue-screen", () => {
 
   it("confirms Archive and switches the product off without changing its availability", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "delete-product", { productId: "p1" });
     await el.updateComplete;
@@ -565,7 +565,7 @@ describe("catalogue-screen", () => {
     setLocale(locale);
     try {
       const api = stubApi();
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "delete-product", { productId: "p1" });
       await flush(el);
@@ -583,7 +583,7 @@ describe("catalogue-screen", () => {
     const api = stubApi({
       listProducts: vi.fn().mockResolvedValue([{ ...products[0]!, name: "Croquettes $&" }]),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "delete-product", { productId: "p1" });
     await flush(el);
@@ -609,7 +609,7 @@ describe("catalogue-screen", () => {
           offered("unrelated", "Archive unrelated drinks", "other"),
         ]),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "delete-product", { productId: "p1" });
     await flush(el);
@@ -622,7 +622,7 @@ describe("catalogue-screen", () => {
     const api = stubApi({
       updateProductEditor: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "delete-product", { productId: "p1" });
     await el.updateComplete;
@@ -654,7 +654,7 @@ describe("catalogue-screen", () => {
         },
       }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     let message: Element | null;
     if (path === "archive") {
@@ -695,15 +695,15 @@ describe("catalogue-screen", () => {
       });
       return { promise, resolve, reject };
     };
-    const dialogOf = (el: CatalogueScreen) =>
+    const dialogOf = (el: ProductsScreen) =>
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
-    const bodyOf = (el: CatalogueScreen) =>
+    const bodyOf = (el: ProductsScreen) =>
       dialogOf(el).querySelector("p")!.textContent!.replace(/\s+/g, " ").trim();
     async function openArchive(api: DashboardApi, productId = "p1", locale = "en-GB") {
       const before = currentLocale();
       setLocale(locale);
       onTestFinished(() => setLocale(before));
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "delete-product", { productId });
       await flush(el);
@@ -815,7 +815,7 @@ describe("catalogue-screen", () => {
         })),
       })),
     );
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     const table = await productTable(el);
     const products = list(el).shadowRoot!.querySelector("dashboard-product-list")!;
@@ -856,7 +856,7 @@ describe("catalogue-screen", () => {
       release = () => resolve({ ...value, id: "new" });
     });
     const api = stubApi({ createProductEditor: vi.fn().mockReturnValue(pending) });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "add-product", { categoryId: null });
     await el.updateComplete;
@@ -870,7 +870,7 @@ describe("catalogue-screen", () => {
   });
 
   it("draws the title alone in the header", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
@@ -880,14 +880,14 @@ describe("catalogue-screen", () => {
   });
 
   /** Lets a closing native dialog hand focus back, which it does a task after it closes. */
-  async function afterDialogCloses(el: CatalogueScreen): Promise<void> {
+  async function afterDialogCloses(el: ProductsScreen): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => requestAnimationFrame(resolve));
     await el.updateComplete;
   }
 
   it("opens the product editor, with no category, from the All products menu", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
@@ -901,7 +901,7 @@ describe("catalogue-screen", () => {
   });
 
   it("files a new product in the category whose menu added it, and in none for a category that is gone", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
@@ -918,7 +918,7 @@ describe("catalogue-screen", () => {
   it("keeps every menu's Add product disabled until the units have loaded", async () => {
     const api = stubApi({ listUnits: vi.fn().mockResolvedValue([]) });
     Object.assign(api, { liveData: new LiveData() });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     const item = async () =>
       (await productTable(el)).shadowRoot!.querySelector<HTMLElement>(
@@ -931,7 +931,7 @@ describe("catalogue-screen", () => {
   });
 
   it("returns focus to the ⋮ of the row whose Add product made a product, once the Add to menus step closes", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
@@ -951,7 +951,7 @@ describe("catalogue-screen", () => {
   });
 
   it("returns focus to that row's ⋮ after the product editor is cancelled", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
@@ -969,7 +969,7 @@ describe("catalogue-screen", () => {
   });
 
   it("opens the category a new product was saved into, so the product shows", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
@@ -984,7 +984,7 @@ describe("catalogue-screen", () => {
     const api = stubApi({
       updateProductEditor: vi.fn().mockRejectedValue({ code: "product.invalid" }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1009,7 +1009,7 @@ describe("catalogue-screen", () => {
         },
       ]),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1026,7 +1026,7 @@ describe("catalogue-screen", () => {
 
   it("sends the save body without untouched availability, keeping the complete editor value", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1040,7 +1040,7 @@ describe("catalogue-screen", () => {
 
   it("loads both kinds of modifier list and hands them to the product editor", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect(api.listExtraLists).toHaveBeenCalled();
     expect(api.listOptionLists).toHaveBeenCalled();
@@ -1052,7 +1052,7 @@ describe("catalogue-screen", () => {
   // without them its Modifiers column can only print the missing-choice placeholder.
   it("hands both kinds of modifier list to the products list as well", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect(list(el).extraLists).toEqual(extraLists);
     expect(list(el).optionLists).toEqual(optionLists);
@@ -1060,7 +1060,7 @@ describe("catalogue-screen", () => {
 
   it("creates an extras list from inside the product editor and attaches it", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1084,7 +1084,7 @@ describe("catalogue-screen", () => {
 
   it("creates an options list from inside the product editor and attaches it", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1105,7 +1105,7 @@ describe("catalogue-screen", () => {
 
   it("keeps a typed name and price, and the attached list, when its attached list's row opens the list editor", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1202,7 +1202,7 @@ describe("catalogue-screen", () => {
               .mockResolvedValue({ ...value, modifiers: [{ kind: "extras", id: "ex-1" }] }),
           });
     async function openProduct(api: DashboardApi, kind: Kind) {
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
@@ -1233,7 +1233,7 @@ describe("catalogue-screen", () => {
         ],
         [
           "a click that leaves focus where it was",
-          async (row: HTMLElement, el: CatalogueScreen) => {
+          async (row: HTMLElement, el: ProductsScreen) => {
             editor(el).shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.focus();
             activator(row).click();
           },
@@ -1352,7 +1352,7 @@ describe("catalogue-screen", () => {
 
   it("edits an attached list of either kind through its own nested form", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1390,7 +1390,7 @@ describe("catalogue-screen", () => {
       createExtraList: vi.fn().mockRejectedValue(refusal),
       createOptionList: vi.fn().mockRejectedValue({ ...refusal, code: "options.invalid" }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1431,7 +1431,7 @@ describe("catalogue-screen", () => {
         status: 409,
       }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1449,7 +1449,7 @@ describe("catalogue-screen", () => {
 
   it("ignores a closed form's second cancel, which by then belongs to another form", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1467,8 +1467,8 @@ describe("catalogue-screen", () => {
     expect([options.open, extras.open, editor(el).childOpen]).toEqual([true, false, true]);
   });
 
-  async function openNested(api: DashboardApi, kind: ProductChildKind): Promise<CatalogueScreen> {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  async function openNested(api: DashboardApi, kind: ProductChildKind): Promise<ProductsScreen> {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1477,7 +1477,7 @@ describe("catalogue-screen", () => {
     return el;
   }
   async function submitNested(
-    el: CatalogueScreen,
+    el: ProductsScreen,
     form: LitElement,
     value: unknown,
   ): Promise<void> {
@@ -1632,7 +1632,7 @@ describe("catalogue-screen", () => {
   // Opened by a real click: opened by a synthetic click with this case run first, one Escape also
   // closed the editor behind it (HeadlessChrome 153; C74).
   it("closes only the unit form when Escape is pressed in it, leaving the product editor open", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
@@ -1666,7 +1666,7 @@ describe("catalogue-screen", () => {
     // is clicked in script, so the dialogs' own return of focus lands on neither target and only
     // the hand-back can. The real click on the chooser's heading comes first because without it one
     // Escape closed the chooser as well as the form.
-    async function openUnitForm(el: CatalogueScreen) {
+    async function openUnitForm(el: ProductsScreen) {
       const product = editor(el);
       product.shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.focus();
       emit(product.shadowRoot!.querySelector("wt-price-input")!, "wt-unit-click", {});
@@ -1684,7 +1684,7 @@ describe("catalogue-screen", () => {
       return form;
     }
     async function mountWithProduct(api: DashboardApi) {
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
@@ -1797,7 +1797,7 @@ describe("catalogue-screen", () => {
         status: 400,
       }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1816,7 +1816,7 @@ describe("catalogue-screen", () => {
         status: 400,
       }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1869,7 +1869,7 @@ describe("catalogue-screen", () => {
         getProductEditor: vi.fn().mockResolvedValue(sent),
         updateProductEditor: vi.fn().mockRejectedValue({ code, params, status: 404 }),
       });
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
@@ -1893,7 +1893,7 @@ describe("catalogue-screen", () => {
         .fn()
         .mockRejectedValue({ code: "category.not_found", params: { categoryId: "c9" } }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1911,7 +1911,7 @@ describe("catalogue-screen", () => {
         status: 400,
       }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -1954,7 +1954,7 @@ describe("catalogue-screen", () => {
           status: 409,
         }),
       });
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
@@ -2038,7 +2038,7 @@ describe("catalogue-screen", () => {
         status: 409,
       }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -2058,7 +2058,7 @@ describe("catalogue-screen", () => {
 
   it("closes after a successful write even when the product refresh fails", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
@@ -2071,7 +2071,7 @@ describe("catalogue-screen", () => {
 
   it("creates a related unit without replacing the dirty parent draft", async () => {
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "add-product", { categoryId: null });
     await el.updateComplete;
@@ -2154,22 +2154,22 @@ describe("catalogue-screen", () => {
         ...overrides,
       });
     }
-    const coursesWindow = (el: CatalogueScreen) =>
+    const coursesWindow = (el: ProductsScreen) =>
       el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-test=courses-dialog]")!;
-    const courseList = (el: CatalogueScreen) =>
+    const courseList = (el: ProductsScreen) =>
       el.shadowRoot!.querySelector<LitElement>("dashboard-course-list");
-    const inList = (el: CatalogueScreen, selector: string) =>
+    const inList = (el: ProductsScreen, selector: string) =>
       courseList(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;
-    const deleteConfirm = (el: CatalogueScreen) =>
+    const deleteConfirm = (el: ProductsScreen) =>
       courseList(el)!
         .shadowRoot!.querySelector("wt-delete-dialog")
         ?.shadowRoot?.querySelector('wt-button[data-test="delete-confirm"]')
         ?.shadowRoot?.querySelector("button") ?? null;
-    const courseBox = (el: CatalogueScreen) =>
+    const courseBox = (el: ProductsScreen) =>
       editor(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
         'wt-combobox[name="product-course"]',
       )!;
-    async function shownCourse(el: CatalogueScreen): Promise<string | undefined> {
+    async function shownCourse(el: ProductsScreen): Promise<string | undefined> {
       const box = courseBox(el) as unknown as LitElement;
       await box.updateComplete;
       return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
@@ -2178,7 +2178,7 @@ describe("catalogue-screen", () => {
     /** Opens the product, types an unsaved name, then chooses Edit courses… with real clicks. */
     async function openCourses(api: DashboardApi, courseId: string | null = null) {
       (api.getProductEditor as ReturnType<typeof vi.fn>).mockResolvedValue({ ...value, courseId });
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
@@ -2207,13 +2207,13 @@ describe("catalogue-screen", () => {
       return el;
     }
     /** Deletes a course nothing refers to from the window: its Delete, then the confirmation. */
-    async function deleteInWindow(el: CatalogueScreen, id: string): Promise<void> {
+    async function deleteInWindow(el: ProductsScreen, id: string): Promise<void> {
       inList(el, `[data-test="remove-${id}"]`).click();
       await vi.waitFor(() => expect(deleteConfirm(el)).not.toBeNull());
       deleteConfirm(el)!.click();
     }
     /** Opens the list's new row and types a name into it, leaving focus in the field. */
-    async function typeNewCourse(el: CatalogueScreen, name: string): Promise<void> {
+    async function typeNewCourse(el: ProductsScreen, name: string): Promise<void> {
       await userEvent.click(inList(el, '[data-test="add-course"]'));
       await courseList(el)!.updateComplete;
       const field = inList(el, 'wt-input[name="course-name"]') as unknown as LitElement;
@@ -2223,12 +2223,12 @@ describe("catalogue-screen", () => {
       input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
       input.focus();
     }
-    async function addCourse(el: CatalogueScreen, name: string): Promise<void> {
+    async function addCourse(el: ProductsScreen, name: string): Promise<void> {
       await typeNewCourse(el, name);
       await userEvent.keyboard("{Enter}");
       await vi.waitFor(() => expect(inList(el, '[data-test="name-k-new"]')).not.toBeNull());
     }
-    async function done(el: CatalogueScreen): Promise<void> {
+    async function done(el: ProductsScreen): Promise<void> {
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
       await flush(el);
       await flush(el);
@@ -2566,12 +2566,12 @@ describe("catalogue-screen", () => {
     it.each([
       [
         "Done",
-        (el: CatalogueScreen) =>
+        (el: ProductsScreen) =>
           el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!.click(),
       ],
       [
         "Escape",
-        async (el: CatalogueScreen) => {
+        async (el: ProductsScreen) => {
           const closed = dialogClosed(coursesWindow(el));
           await userEvent.keyboard("{Escape}");
           await closed;
@@ -2686,7 +2686,7 @@ describe("catalogue-screen", () => {
     const api = stubApi({
       getProductEditor: vi.fn().mockReturnValue(new Promise((done) => (resolve = done))),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     emit(editor(el), "wt-cancel", {});
@@ -2696,9 +2696,9 @@ describe("catalogue-screen", () => {
   });
 
   it("opens the product named in the address", async () => {
-    history.replaceState(null, "", "/manage/catalogue/product/p1");
+    history.replaceState(null, "", "/manage/products/product/p1");
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(true);
   });
@@ -2707,17 +2707,17 @@ describe("catalogue-screen", () => {
     history.replaceState(
       null,
       "",
-      "/manage/catalogue/product/00000000-0000-4000-8000-000000000000",
+      "/manage/products/product/00000000-0000-4000-8000-000000000000",
     );
     const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(false);
   });
 
   it("keeps a new product's editor when the address comes back from another page naming no product", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    history.replaceState(null, "", "/manage/products");
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
@@ -2726,23 +2726,23 @@ describe("catalogue-screen", () => {
     expect(editor(el).open).toBe(true);
     history.replaceState(null, "", "/manage/profile");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    history.replaceState(null, "", "/manage/catalogue");
+    history.replaceState(null, "", "/manage/products");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     expect(editor(el).open).toBe(true);
   });
 
   it("closes a product opened from the list when Back takes its name out of the address", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    history.replaceState(null, "", "/manage/products");
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
     expect(editor(el).open).toBe(true);
-    expect(location.pathname).toBe("/manage/catalogue/product/p1");
-    history.replaceState(null, "", "/manage/catalogue");
+    expect(location.pathname).toBe("/manage/products/product/p1");
+    history.replaceState(null, "", "/manage/products");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     expect(editor(el).open).toBe(false);
@@ -2823,9 +2823,9 @@ describe("catalogue-screen", () => {
         const previous = currentLocale();
         onTestFinished(() => setLocale(previous));
         setLocale(locale);
-        history.replaceState(null, "", "/manage/catalogue/product/v1");
+        history.replaceState(null, "", "/manage/products/product/v1");
         const api = variantApi();
-        const first = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+        const first = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
         await flush(first.el);
         expect(
           editor(first.el).shadowRoot!.querySelector("wt-modal")!.getAttribute("heading"),
@@ -2835,7 +2835,7 @@ describe("catalogue-screen", () => {
           ...variantValue,
           inherited: { ...variantValue.inherited!, name: "Croquettes renamed" },
         });
-        const second = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+        const second = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
         await flush(second.el);
         expect(
           editor(second.el).shadowRoot!.querySelector("wt-modal")!.getAttribute("heading"),
@@ -2844,9 +2844,9 @@ describe("catalogue-screen", () => {
     );
 
     it("opens the variant named in the address", async () => {
-      history.replaceState(null, "", "/manage/catalogue/product/v1");
+      history.replaceState(null, "", "/manage/products/product/v1");
       const api = variantApi();
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       expect(api.getProductEditor).toHaveBeenCalledWith("v1");
       expect(editor(el).open).toBe(true);
@@ -2854,16 +2854,16 @@ describe("catalogue-screen", () => {
     });
 
     it("opens a variant's page from its parent's variants section, and saves to the variant", async () => {
-      history.replaceState(null, "", "/manage/catalogue");
+      history.replaceState(null, "", "/manage/products");
       const api = variantApi();
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
       emit(editor(el), "wt-open-product", { productId: "v1" });
       await flush(el);
       expect(editor(el).value).toEqual(variantValue);
-      expect(location.pathname).toBe("/manage/catalogue/product/v1");
+      expect(location.pathname).toBe("/manage/products/product/v1");
       emit(editor(el), "wt-submit", { value: variantValue });
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", variantValue);
@@ -2873,13 +2873,13 @@ describe("catalogue-screen", () => {
     // later. Neither a report that lands while the variant is still loading, nor one that lands
     // after the variant's window is already showing, is the person cancelling.
     it("keeps a variant opened from its parent when its load outlasts the parent's window closing", async () => {
-      history.replaceState(null, "", "/manage/catalogue");
+      history.replaceState(null, "", "/manage/products");
       const api = variantApi();
       let release!: () => void;
       const loaded = new Promise<ProductEditorValue>((resolve) => {
         release = () => resolve(variantValue);
       });
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
@@ -2891,13 +2891,13 @@ describe("catalogue-screen", () => {
       await flush(el);
       expect(editor(el).open).toBe(true);
       expect(editor(el).value).toEqual(variantValue);
-      expect(location.pathname).toBe("/manage/catalogue/product/v1");
+      expect(location.pathname).toBe("/manage/products/product/v1");
     });
 
     it("keeps a variant opened from its parent when it loads before the closed window reports", async () => {
-      history.replaceState(null, "", "/manage/catalogue");
+      history.replaceState(null, "", "/manage/products");
       const api = variantApi();
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
@@ -2912,7 +2912,7 @@ describe("catalogue-screen", () => {
       await el.updateComplete;
       expect(editor(el).open).toBe(true);
       expect(editor(el).value).toEqual(variantValue);
-      expect(location.pathname).toBe("/manage/catalogue/product/v1");
+      expect(location.pathname).toBe("/manage/products/product/v1");
     });
 
     it("names extras removed for active variants with their parent and updates names after a live replacement and reopen", async () => {
@@ -2940,7 +2940,7 @@ describe("catalogue-screen", () => {
           ],
         },
       ]);
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "delete-product", { productId: "p1" });
       await flush(el);
@@ -2985,7 +2985,7 @@ describe("catalogue-screen", () => {
           ],
         })),
       ]);
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "delete-product", { productId: "v1" });
       await flush(el);
@@ -2995,13 +2995,13 @@ describe("catalogue-screen", () => {
     });
 
     it("confirms a variant's Archive and switches the variant off through its own write", async () => {
-      history.replaceState(null, "", "/manage/catalogue");
+      history.replaceState(null, "", "/manage/products");
       const api = variantApi();
       // Sold out as well, so a write that resets availability while removing is caught.
       vi.mocked(api.getProductEditor).mockImplementation((id: string) =>
         Promise.resolve(id === "v1" ? { ...variantValue, available: false } : value),
       );
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "delete-product", { productId: "v1" });
       await el.updateComplete;
@@ -3047,13 +3047,13 @@ describe("catalogue-screen", () => {
     });
 
     it("says how many menus a variant comes off, asking about the variant itself", async () => {
-      history.replaceState(null, "", "/manage/catalogue");
+      history.replaceState(null, "", "/manage/products");
       const before = currentLocale();
       setLocale("en-GB");
       onTestFinished(() => setLocale(before));
       const api = variantApi();
       (api as unknown as Record<string, unknown>).countProductMenus = vi.fn().mockResolvedValue(2);
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "delete-product", { productId: "v1" });
       await flush(el);
@@ -3069,11 +3069,11 @@ describe("catalogue-screen", () => {
     });
 
     it("reports a failed reload after a written archive as a load failure", async () => {
-      history.replaceState(null, "", "/manage/catalogue");
+      history.replaceState(null, "", "/manage/products");
       const api = variantApi();
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
-      vi.mocked(api.listProducts).mockRejectedValue({ code: "catalogue.not_found" });
+      vi.mocked(api.listProducts).mockRejectedValue({ code: "menu.not_found" });
       emit(list(el), "delete-product", { productId: "v1" });
       await flush(el);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
@@ -3084,7 +3084,7 @@ describe("catalogue-screen", () => {
         active: false,
       });
       expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
-        codeMessage("catalogue.not_found"),
+        codeMessage("menu.not_found"),
       );
       expect(el.shadowRoot!.querySelector("[data-test=delete-dialog]")!.hasAttribute("open")).toBe(
         false,
@@ -3103,7 +3103,7 @@ describe("catalogue-screen", () => {
     });
 
     it("names the extras lists that refuse a save inside the variant's own editor", async () => {
-      history.replaceState(null, "", "/manage/catalogue/product/v1");
+      history.replaceState(null, "", "/manage/products/product/v1");
       const api = variantApi();
       vi.mocked(api.getProductEditor).mockResolvedValue(variantValue);
       vi.mocked(api.updateProductEditor).mockRejectedValue({
@@ -3117,7 +3117,7 @@ describe("catalogue-screen", () => {
         },
         status: 409,
       });
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(editor(el), "wt-submit", { value: { ...variantValue, active: false } });
       await flush(el);
@@ -3142,8 +3142,8 @@ describe("catalogue-screen", () => {
   });
 
   describe("the Add to menus step after a create", () => {
-    async function create(api: DashboardApi): Promise<CatalogueScreen> {
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    async function create(api: DashboardApi): Promise<ProductsScreen> {
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "add-product", { categoryId: null });
       await el.updateComplete;
@@ -3152,17 +3152,17 @@ describe("catalogue-screen", () => {
       await flush(el);
       return el;
     }
-    const place = (el: CatalogueScreen, menuId: string, sectionId: string) =>
+    const place = (el: ProductsScreen, menuId: string, sectionId: string) =>
       step(el).shadowRoot!.querySelector<HTMLInputElement>(
         `fieldset[data-menu="${menuId}"] input[value="${sectionId}"]`,
       )!;
-    async function choose(el: CatalogueScreen, ...places: [string, string][]): Promise<void> {
+    async function choose(el: ProductsScreen, ...places: [string, string][]): Promise<void> {
       for (const [menuId, sectionId] of places) {
         place(el, menuId, sectionId).click();
         await step(el).updateComplete;
       }
     }
-    const control = (el: CatalogueScreen, test: string) =>
+    const control = (el: ProductsScreen, test: string) =>
       step(el).shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!;
 
     for (const partial of [false, true]) {
@@ -3395,7 +3395,7 @@ describe("catalogue-screen", () => {
 
     it("does not follow a save of an existing product with the step", async () => {
       const api = stubApi();
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
@@ -3428,7 +3428,7 @@ describe("catalogue-screen", () => {
     const before = currentLocale();
     setLocale("en-GB");
     onTestFinished(() => setLocale(before));
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi({
         getContentLanguages: vi.fn().mockResolvedValue(config),
         listProducts: vi.fn().mockResolvedValue([
@@ -3452,12 +3452,12 @@ describe("catalogue-screen", () => {
     );
   });
 
-  it("tells the product list the catalogue has loaded only once its products have", async () => {
+  it("tells the product list the menu has loaded only once its products have", async () => {
     const pending: ((value: Product[]) => void)[] = [];
     const api = stubApi({
       listProducts: vi.fn(() => new Promise<Product[]>((resolve) => pending.push(resolve))),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect(list(el).loaded).toBe(false);
     for (const resolve of pending) resolve([]);
@@ -3466,24 +3466,24 @@ describe("catalogue-screen", () => {
 });
 
 it("reads and writes the opened category in the address", async () => {
-  history.replaceState(null, "", "/manage/catalogue/category/c1");
-  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+  history.replaceState(null, "", "/manage/products/category/c1");
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
     api: stubApi(),
   });
   await flush(el);
-  const browser = el.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
+  const browser = el.shadowRoot!.querySelector("dashboard-product-browser")!;
   expect(browser.categoryId).toBe("c1");
   emit(browser, "open-category", { categoryId: "b" });
   await el.updateComplete;
-  expect(location.pathname).toBe("/manage/catalogue/category/b");
+  expect(location.pathname).toBe("/manage/products/category/b");
   emit(browser, "open-category", { categoryId: null });
   await el.updateComplete;
-  expect(location.pathname).toBe("/manage/catalogue");
+  expect(location.pathname).toBe("/manage/products");
 });
 
-describe("catalogue-screen sticky headings", () => {
-  async function mountBounded(props: Partial<CatalogueScreen>, api = stubApi()) {
-    const { el, host } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+describe("menu-screen sticky headings", () => {
+  async function mountBounded(props: Partial<ProductsScreen>, api = stubApi()) {
+    const { el, host } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api,
       ...props,
     });
@@ -3494,19 +3494,19 @@ describe("catalogue-screen sticky headings", () => {
     return { el, host };
   }
 
-  it("keeps the no-catalogue prompt its own height", async () => {
+  it("keeps the no-menu prompt its own height", async () => {
     const { el } = await mountBounded(
       {},
-      stubApi({ listCatalogues: vi.fn().mockResolvedValue([]) }),
+      stubApi({ listMenus: vi.fn().mockResolvedValue([]) }),
     );
-    const prompt = el.shadowRoot!.querySelector<HTMLElement>("[data-test=no-catalogue]")!;
+    const prompt = el.shadowRoot!.querySelector<HTMLElement>("[data-test=no-menu]")!;
     expect(prompt.getBoundingClientRect().height).toBeLessThan(100);
   });
 });
 
 describe("media editor entry", () => {
   it("opens the existing product editor with focus on its photo control", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
@@ -3523,8 +3523,8 @@ describe("media editor entry", () => {
   it("honours a photo deep link from the Structure menu", async () => {
     const old = location.href;
     try {
-      history.replaceState(null, "", "/manage/catalogue/product/p1?field=image");
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      history.replaceState(null, "", "/manage/products/product/p1?field=image");
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
         api: stubApi(),
       });
       await expect.poll(() => editor(el).open).toBe(true);
@@ -3542,8 +3542,8 @@ describe("media editor entry", () => {
 });
 
 it("clears the photo entry target when the product editor closes", async () => {
-  history.replaceState(null, "", "/manage/catalogue/product/p1?field=image");
-  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+  history.replaceState(null, "", "/manage/products/product/p1?field=image");
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
     api: stubApi(),
   });
   await flush(el);
@@ -3555,7 +3555,7 @@ it("clears the photo entry target when the product editor closes", async () => {
 });
 
 it("closing a guarded linked product retires its field query before opening another editor", async () => {
-  history.replaceState(null, "", "/manage/catalogue");
+  history.replaceState(null, "", "/manage/products");
   const guard = new NavigationGuard(window, {
     isDirty: () => false,
     request: async (proceed) => {
@@ -3564,14 +3564,14 @@ it("closing a guarded linked product retires its field query before opening anot
     },
   });
   onTestFinished(() => guard.dispose());
-  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
     api: stubApi(),
   });
   await flush(el);
-  await guard.write("/manage/catalogue/product/p1?field=name");
+  await guard.write("/manage/products/product/p1?field=name");
   await expect.poll(() => editor(el).value?.id).toBe("p1");
   emit(editor(el), "wt-cancel", {});
-  await expect.poll(() => location.pathname).toBe("/manage/catalogue");
+  await expect.poll(() => location.pathname).toBe("/manage/products");
   expect(location.search).toBe("");
   emit(list(el), "edit-product", { productId: "p1" });
   await expect.poll(() => editor(el).open).toBe(true);
@@ -3583,8 +3583,8 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
   const pending = new Promise<{ defaultProductVatClass: "reduced"; defaultColor: null }>((yes) => {
     resolve = yes;
   });
-  const api = stubApi({ getCatalogueSettings: vi.fn(() => pending) });
-  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  const api = stubApi({ getMenuSettings: vi.fn(() => pending) });
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
   await expect.poll(() => editor(el)?.units.length).toBeGreaterThan(0);
   await expect.poll(() => editor(el)?.locales.length).toBeGreaterThan(0);
   await flush(el);
@@ -3620,7 +3620,7 @@ it("paints All products' square, an uncategorised product and a new product's in
   };
   const api = Object.assign(
     stubApi({
-      getCatalogueSettings: vi
+      getMenuSettings: vi
         .fn()
         .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: "#b12525" }),
       listProducts: vi
@@ -3631,7 +3631,7 @@ it("paints All products' square, an uncategorised product and a new product's in
     }),
     { liveData },
   );
-  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
   await flush(el);
   const fills = async () => {
     const root = (await productTable(el)).shadowRoot!;
@@ -3652,7 +3652,7 @@ it("paints All products' square, an uncategorised product and a new product's in
     ).backgroundColor;
   expect(inherited()).toBe("rgb(177, 37, 37)");
 
-  vi.mocked(api.getCatalogueSettings).mockResolvedValue({
+  vi.mocked(api.getMenuSettings).mockResolvedValue({
     defaultProductVatClass: "general",
     defaultColor: "#256bb1",
   });
@@ -3666,13 +3666,13 @@ it("reads the venue's default into a new editor without replacing an open draft"
   const liveData = new LiveData();
   const api = Object.assign(
     stubApi({
-      getCatalogueSettings: vi
+      getMenuSettings: vi
         .fn()
         .mockResolvedValue({ defaultProductVatClass: "super_reduced", defaultColor: null }),
     }),
     { liveData },
   );
-  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
   await flush(el);
   emit(list(el), "add-product", { categoryId: null });
   await el.updateComplete;
@@ -3688,12 +3688,12 @@ it("reads the venue's default into a new editor without replacing an open draft"
     }),
   );
   await editor(el).updateComplete;
-  vi.mocked(api.getCatalogueSettings).mockResolvedValue({
+  vi.mocked(api.getMenuSettings).mockResolvedValue({
     defaultProductVatClass: "reduced",
     defaultColor: null,
   });
   liveData.refresh();
-  await expect.poll(() => vi.mocked(api.getCatalogueSettings).mock.calls.length).toBe(2);
+  await expect.poll(() => vi.mocked(api.getMenuSettings).mock.calls.length).toBe(2);
   await flush(el);
   await editor(el).updateComplete;
   expect(tax().value).toBe("zero");
@@ -3707,12 +3707,12 @@ it("reads the venue's default into a new editor without replacing an open draft"
 
 describe("archived product entry", () => {
   it("reads archived details passively from the existing background client", async () => {
-    history.replaceState(null, "", "/manage/catalogue");
+    history.replaceState(null, "", "/manage/products");
     const background = stubApi({
       getProductEditor: vi.fn().mockResolvedValue({ ...value, active: false }),
     });
     const api = { ...stubApi(), background } as DashboardApi;
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "view-product", { productId: "p1" });
     await flush(el);
@@ -3725,7 +3725,7 @@ describe("archived product entry", () => {
   it.each(["row", "variant", "link"])(
     "opens details through %s without opening the editor",
     async (entry) => {
-      history.replaceState(null, "", "/manage/catalogue");
+      history.replaceState(null, "", "/manage/products");
       const archived = { ...value, active: false, id: entry === "variant" ? "v1" : "p1" };
       const api = stubApi({
         getProductEditor: vi.fn().mockResolvedValue(archived),
@@ -3755,8 +3755,8 @@ describe("archived product entry", () => {
           },
         ]),
       });
-      if (entry === "link") history.replaceState(null, "", "/manage/catalogue/product/p1");
-      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      if (entry === "link") history.replaceState(null, "", "/manage/products/product/p1");
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       if (entry !== "link") emit(list(el), "view-product", { productId: archived.id });
       await flush(el);
@@ -3769,12 +3769,12 @@ describe("archived product entry", () => {
       emit(details!, "wt-close", {});
       await flush(el);
       expect(details?.open).toBe(false);
-      expect(location.pathname).toBe("/manage/catalogue");
+      expect(location.pathname).toBe("/manage/products");
     },
   );
 
   it("keeps active products in the editor", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
@@ -3791,7 +3791,7 @@ describe("archived product entry", () => {
 it("A462 Products root closure clears category URL through native tree events", async () => {
   const previousUrl = location.href;
   onTestFinished(() => history.replaceState(null, "", previousUrl));
-  history.replaceState(null, "", "/manage/catalogue");
+  history.replaceState(null, "", "/manage/products");
   localStorage.clear();
   sessionStorage.clear();
   const api = stubApi({
@@ -3803,7 +3803,7 @@ it("A462 Products root closure clears category URL through native tree events", 
       { id: "b", name: "Beer", parentId: "d", color: null },
     ]),
   });
-  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
   await vi.waitFor(() => expect(list(el)?.categories).toHaveLength(2));
   const table = await productTable(el);
   const root = table.shadowRoot!;
@@ -3813,15 +3813,15 @@ it("A462 Products root closure clears category URL through native tree events", 
     await productTable(el);
   }
   expect(list(el).categoryId).toBe("b");
-  expect(location.pathname).toBe("/manage/catalogue/category/b");
-  const search = list(el).shadowRoot!.querySelector('[name="catalogue-search"]')!;
+  expect(location.pathname).toBe("/manage/products/category/b");
+  const search = list(el).shadowRoot!.querySelector('[name="menu-search"]')!;
   emit(search, "wt-change", { value: "Beer" });
   await productTable(el);
   for (let i = 0; i < 2; i++) {
     root.querySelector<HTMLButtonElement>('tr[data-row-key="folder:b"] .row-activate')!.click();
     await productTable(el);
     expect(list(el).categoryId).toBe("b");
-    expect(location.pathname).toBe("/manage/catalogue/category/b");
+    expect(location.pathname).toBe("/manage/products/category/b");
   }
   emit(search, "wt-change", { value: "" });
   await productTable(el);
@@ -3834,7 +3834,7 @@ it("A462 Products root closure clears category URL through native tree events", 
   await productTable(el);
   expect(sent).toEqual([{ categoryId: null }]);
   expect(list(el).categoryId).toBeNull();
-  expect(location.pathname).toBe("/manage/catalogue");
+  expect(location.pathname).toBe("/manage/products");
   expect(root.querySelectorAll("tr[data-row-key]")).toHaveLength(1);
   expect(editor(el).open).toBe(false);
   expect(api.createProductEditor).not.toHaveBeenCalled();
@@ -3849,7 +3849,7 @@ it.each(["allergen.kinds_required", "allergen.invalid_kind"])(
         .fn()
         .mockRejectedValue({ code, params: { code: "gluten" }, status: 400 }),
     });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);

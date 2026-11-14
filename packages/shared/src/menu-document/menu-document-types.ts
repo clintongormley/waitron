@@ -369,7 +369,7 @@ export interface LocalTime {
   repeated: boolean;
 }
 
-/** `GET /management-api/catalogues/:id/publications`. */
+/** `GET /management-api/menus/:id/publications`. */
 export interface MenuPublicationsAnswer {
   timeZone: string;
   live: (NonNullable<MenuPublications["live"]> & { local: LocalTime }) | null;

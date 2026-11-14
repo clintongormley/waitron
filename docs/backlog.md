@@ -483,7 +483,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   (`apps/server/scripts/demo-seed/seed-sales.ts`) have no bill behind them. Fix: seed each sale
   under a settled bill, as the till does. Found by A275 Task 5.
 
-### Menus and the catalogue
+### Menus and the menu
 
 - **A1522. One product, the right VAT eaten here or taken away (owner, 2026-11-14).** Each product
   gets a second VAT class for takeaway, each department says whether it sells eaten in, taken away
@@ -499,19 +499,19 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
   the recommendations; mobile-data access to A670's published menu remains to build.
   The [cleared new-selection plan](superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
-  [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)
+  [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/menu.md#a1517-allergen-points-to-revisit-before-go-live)
 
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).**
   [Detail](backlog/ci.md#menu-prices-narrow-layout-ci-failure-still-needs-a-cause-a613)
 
-- **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/catalogue.md#bundle-tabs-selected-visible)
+- **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
 - **A884. Deleting an options or extras list leaves it on the published menus until they are
   republished.**
-  [Detail](backlog/catalogue.md#a884-deleting-an-options-or-extras-list-leaves-it-on-the-published-menus-until-they-are-republished)
+  [Detail](backlog/menu.md#a884-deleting-an-options-or-extras-list-leaves-it-on-the-published-menus-until-they-are-republished)
 
 - **A885. Say that lines already on an open order keep their VAT class after a republish.**
-  [Detail](backlog/catalogue.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
+  [Detail](backlog/menu.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
 
 - **A670 — read-only online menu, then fixed A4 presets (owner decisions, 2026-11-13).**
   Serve read-only guests from Cloud’s last delivered published copy; live forwarding stays with ordering.
@@ -519,11 +519,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Managers can preview a published menu in guest languages and enable local sharing of the default publication. The watcher cleared the
   [build plan](superpowers/plans/2026-11-13-a670-guest-menu-build.md), including browser Print / Save as PDF.
   Fixed A4 presets offer browser Print / Save as PDF. The box delivers the published copy to Cloud and reports confirmation; mobile-data qualification remains. No ordering.
-  [Detail](backlog/catalogue.md#a670--guest-menu-sharing-and-fixed-a4-presets)
+  [Detail](backlog/menu.md#a670--guest-menu-sharing-and-fixed-a4-presets)
 
-- **wt-data-table: heading wrap, long names, odds and ends** (bundle of 9, size M). Holds A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
+- **wt-data-table: heading wrap, long names, odds and ends** (bundle of 9, size M). Holds A543. [Detail](backlog/menu.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
 
-- **One language fallback rule** (bundle of 5, 1 important, size M). [Detail](backlog/catalogue.md#bundle-one-language-fallback-rule)
+- **One language fallback rule** (bundle of 5, 1 important, size M). [Detail](backlog/menu.md#bundle-one-language-fallback-rule)
 
 - **Translation report excludes image names (C122, #1006).** The media module's
   `contentTranslations` seat supplies only a kind and an id. Showing a name or editor link needs
@@ -531,99 +531,99 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The media library still reads every matching image for search and name sorting, inside the venue
   write lock** — OPEN (found 2026-09-23, task F1's review wave).
-  [Detail](backlog/catalogue.md#the-media-library-still-reads-every-matching-image-for-search-and-name-sorting-inside-the-venue-write-lock)
+  [Detail](backlog/menu.md#the-media-library-still-reads-every-matching-image-for-search-and-name-sorting-inside-the-venue-write-lock)
 
 - **Two price rules disagree about a value that is not negative** — OPEN (found 2026-09-21, task
   N4).
-  [Detail](backlog/catalogue.md#two-price-rules-disagree-about-a-value-that-is-not-negative)
+  [Detail](backlog/menu.md#two-price-rules-disagree-about-a-value-that-is-not-negative)
 
-- **Menu home preview rendering** (size M). [Detail](backlog/catalogue.md#menu-home-preview-rendering)
+- **Menu home preview rendering** (size M). [Detail](backlog/menu.md#menu-home-preview-rendering)
 
-- **Tree drag shared** (bundle of 2, size M). [Detail](backlog/catalogue.md#bundle-tree-drag-shared)
+- **Tree drag shared** (bundle of 2, size M). [Detail](backlog/menu.md#bundle-tree-drag-shared)
 
-- **After A760 moves the bundle format: An import checks rows as a save does** (bundle of 4, size S). Holds A1074. [Detail](backlog/catalogue.md#bundle-after-a760-moves-the-bundle-format-an-import-checks-rows-as-a-save-does)
+- **After A760 moves the bundle format: An import checks rows as a save does** (bundle of 4, size S). Holds A1074. [Detail](backlog/menu.md#bundle-after-a760-moves-the-bundle-format-an-import-checks-rows-as-a-save-does)
 
 - **A person who may not read routing sees the "Kitchen routing unavailable" line above the
   Products list, which tells them to try again later**, because a refused read counts as a failed
   one, and trying again changes nothing for them. Left open by W86 (#1203) and A655.
 
-- **Translate all followups** (bundle of 9, size M). [Detail](backlog/catalogue.md#bundle-translate-all-followups)
+- **Translate all followups** (bundle of 9, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
 
 - **Translate all: shared collect-page test vectors.** Nothing compares the fake Cloud's paging
   (`apps/server/test/translation-cloud-fixture.ts`) with Cloud's own; vectors Cloud generates and
   both sides check would catch drift in CI. A contract change for Cloud's side.
-  [Detail](backlog/catalogue.md#translate-all-shared-collect-page-test-vectors)
+  [Detail](backlog/menu.md#translate-all-shared-collect-page-test-vectors)
 
 - **Product folders, menus that include menus, and prep station routing: partly built (design
   approved 2026-09-30).**
-  [Detail](backlog/catalogue.md#product-folders-menus-that-include-menus-and-prep-station-routing-partly-built-design-approved-2026-09-30)
+  [Detail](backlog/menu.md#product-folders-menus-that-include-menus-and-prep-station-routing-partly-built-design-approved-2026-09-30)
 
 - **Sales classification and the menus plan — what they left open.** `Product.categoryId` and
   `primaryCategoryId` always hold the same value.
   Include demo and readiness sales when finishing classification.
-  [Detail](backlog/catalogue.md#sales-classification-and-the-menus-plan--what-they-left-open)
+  [Detail](backlog/menu.md#sales-classification-and-the-menus-plan--what-they-left-open)
 
 - **Category authoring serialises across the whole database, and nobody has measured what that
   costs.**
-  [Detail](backlog/catalogue.md#category-authoring-serialises-across-the-whole-database-and-nobody-has-measured-what-that-costs)
+  [Detail](backlog/menu.md#category-authoring-serialises-across-the-whole-database-and-nobody-has-measured-what-that-costs)
 
-- **Extras list forms** (bundle of 3, size M). [Detail](backlog/catalogue.md#bundle-extras-list-forms)
+- **Extras list forms** (bundle of 3, size M). [Detail](backlog/menu.md#bundle-extras-list-forms)
 
 - **Loose ends left by A343 (a menu's Price overrides tab tidied, #1368).** The Price overrides
   tab's save message comes after the whole table in tab order, so a keyboard user cannot reach Undo
   from a field within its 5 seconds (decided as built, not tested with a user).
-  [Detail](backlog/catalogue.md#loose-ends-left-by-a343-a-menus-price-overrides-tab-tidied-1368)
+  [Detail](backlog/menu.md#loose-ends-left-by-a343-a-menus-price-overrides-tab-tidied-1368)
 
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version** —
   owner, 2026-10-07; PR 1 landed (#2510), PRs 2–5 not started: the owner put them back on the
   backlog on 2026-11-09 ("it can go on the backlog"). PR 1 gave Undo for a menu's name, Home display,
   own section's name, photo or colour, and a dish's or one variant's price here, plus edit links
   on shared and included changes. Left for later (PRs 2–5): includes, products, sections, order and shortcuts.
-  [Detail](backlog/catalogue.md#a353--previews-changes-an-undo-link-that-puts-one-change-back-to-the-live-version)
+  [Detail](backlog/menu.md#a353--previews-changes-an-undo-link-that-puts-one-change-back-to-the-live-version)
 
 - **A1375 — A353's Undo: two rare ways a refusal is never shown** — a preview arriving between
   placing a refusal and the redraw, or a language switched off and on within one reload.
-  [Detail](backlog/catalogue.md#a1375--a353s-undo-two-rare-ways-a-refusal-is-never-shown)
+  [Detail](backlog/menu.md#a1375--a353s-undo-two-rare-ways-a-refusal-is-never-shown)
 
 - **A1377 — A353's Undo: two wordings for the owner** — a deleted menu's price Undo, and a
   success line with two colons.
-  [Detail](backlog/catalogue.md#a1377--a353s-undo-two-wordings-for-the-owner)
+  [Detail](backlog/menu.md#a1377--a353s-undo-two-wordings-for-the-owner)
 
 - **A1373 — The Preview credits a product's own price change seen through an include to the
   included menu**, not the shared product, when no menu sets a price of its own; telling it apart
   from an included menu clearing its price needs the published menu document to record where each
   live price came from.
-  [Detail](backlog/catalogue.md#a1373--the-preview-credits-a-products-own-price-change-seen-through-an-include-to-the-included-menu)
+  [Detail](backlog/menu.md#a1373--the-preview-credits-a-products-own-price-change-seen-through-an-include-to-the-included-menu)
 
 - **The course dropdown says "— none —" where the folded Kitchen line says "Course: None
   specified"** (`product.no_course`, `modifiers.none_specified`,
   `apps/dashboard/src/i18n/strings.ts`) — left open by A211 (#1096).
 
 - **Left open by #1188's review, none started** — the pricing unit dialog (W66, #1188).
-  [Detail](backlog/catalogue.md#left-open-by-1188s-review-none-started-the-pricing-unit-dialog-w66)
+  [Detail](backlog/menu.md#left-open-by-1188s-review-none-started-the-pricing-unit-dialog-w66)
 
 - **A category's naming square does not announce the inherited colour's source.**
-  [Detail](backlog/catalogue.md#a-categorys-naming-square-does-not-announce-the-inherited-colours-source)
+  [Detail](backlog/menu.md#a-categorys-naming-square-does-not-announce-the-inherited-colours-source)
 
 - **From #541's review, neither blocking:** the product list shows a variant's blank price as its
   parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
-  the owner's call. [Detail](backlog/catalogue.md#from-541s-review-neither-blocking)
+  the owner's call. [Detail](backlog/menu.md#from-541s-review-neither-blocking)
 
-- **Dishes sold by measure and their extras** (bundle of 4, 2 important, size M). [Detail](backlog/catalogue.md#bundle-dishes-sold-by-measure-and-their-extras)
+- **Dishes sold by measure and their extras** (bundle of 4, 2 important, size M). [Detail](backlog/menu.md#bundle-dishes-sold-by-measure-and-their-extras)
 
-- **The extras form cannot pick a variant**, though the catalogue accepts one as an extras item
+- **The extras form cannot pick a variant**, though the menu accepts one as an extras item
   (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next
   action:** decide whether the picker should list variants.
 
-- **Each unit literal** (bundle of 2, size S). [Detail](backlog/catalogue.md#bundle-each-unit-literal)
+- **Each unit literal** (bundle of 2, size S). [Detail](backlog/menu.md#bundle-each-unit-literal)
 
 - **The combined end-to-end journey has not been walked**
-  [Detail](backlog/catalogue.md#the-combined-end-to-end-journey-has-not-been-walked)
+  [Detail](backlog/menu.md#the-combined-end-to-end-journey-has-not-been-walked)
 
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
-- **The menu patch window: split the file first** (bundle of 9, size M). [Detail](backlog/catalogue.md#bundle-the-menu-patch-window-split-the-file-first)
+- **The menu patch window: split the file first** (bundle of 9, size M). [Detail](backlog/menu.md#bundle-the-menu-patch-window-split-the-file-first)
 
 - **A1150. Allergens and diet labels come from the live product on every screen** (owner,
   2026-10-27). Needs its own design before it is built. Today the till's menu and product info
@@ -972,7 +972,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Custom item on the Counter (A738 residual; undecided).** The dashed + Custom item tile and its
   window remain unbuilt. The window needs a name, price, required VAT rate and destination
   (nowhere or a station). Decide the permission and whether an underlying product supplies the
-  catalogue, reports and invoice-line identity before building an arbitrary-price path.
+  menu, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
 - **A666 — A floor join that moves tables together is sent once without seats and refused before
@@ -2293,7 +2293,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff display names.
   The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
   The shared boot provision-body and stream-pause fixtures use Administrator for their staff display sample.
-  The catalogue include-folder, menu-patch and menu-schedule route suites use English staff display names.
+  The menu include-folder, menu-patch and menu-schedule route suites use English staff display names.
   Other local and shared staff-name samples still need triage; preserve deliberate name and locale cases.
   Logger personal-name samples use English names, except the deliberate accented `Àngel` cases
   and short-email `ana@bo.es` sample;
@@ -2519,7 +2519,7 @@ partial scope; the detail for a live thread is in its area.
 | #   | Sub-project                  | State                                                                                                                                                                                                                                                                                                                                                                                                                             | Remaining                                                                                                                                                                     |
 | --- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Design system                | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons; the dashboard shell restyle — collapsible nav, account menu, profile modal (#333)                                                                                                                                                                                                                                | sorting `wt-combobox` options (_Users, sign-in and the dashboard shell_)                                                                                                      |
-| 2   | Sales spine                  | Immutable hash-chained sales, per-node series, catalogue, the one-taxpayer model                                                                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
+| 2   | Sales spine                  | Immutable hash-chained sales, per-node series, menu, the one-taxpayer model                                                                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
 | 3   | Fiscal layer                 | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`)                                                                                                                                                                                                                                                                                   | F3 asesor/XSD confirmations; the owner's real-certificate checks after A795 lands (A888); cert distribution to a promoted node      |
 | 4   | Payment layer                | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329)                                                                                                                                                                                                                                                    | webhook `recordSale` hand-off; reconcile remediation UI; Tap-to-Pay on the handheld (_Payments and card readers_)                                                             |
 | 5   | Identity                     | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in and for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby                                                        | security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce                                                                |
@@ -2631,7 +2631,7 @@ while it holds decisions still open.
 | [Star CloudPRNT](superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md) and [Epson Server Direct Print](superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md) | not started beyond the `cloud_poll` columns; low priority                                                                                                                  | _Printers, the print agent and receipts_                                  |
 | [Failover printing](superpowers/specs/2026-08-26-failover-printing-design.md)                                                                                                                     | partly built (the job lease, network printers any agent may claim, unprinted kitchen tickets shown on the till, #750)                                                      | _Printers, the print agent and receipts_, _Replication, failover and the cloud_ |
 | [Every device enrolled, fail closed](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)                                                                                    | partly built; deferred                                                                                                                                                     | The till, devices and table service                                       |
-| [Language fallback](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)                                                                                                     | partly built                                                                                                                                                               | _Menus and the catalogue_ (_Language resolution follow-ons_)              |
+| [Language fallback](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)                                                                                                     | partly built                                                                                                                                                               | _Menus and the menu_ (_Language resolution follow-ons_)              |
 | [Native app capabilities](superpowers/specs/2026-08-30-native-app-capabilities.md)                                                                                                                | reference; nothing committed                                                                                                                                               | the go-native decision                                                    |
 | [Logging and diagnostics](superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md)                                                                                                  | Slice 1 built (#192)                                                                                                                                                       | _Alerts, logging and diagnostics_                                         |
 | [Fiscal certificate distribution](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) and its plan                                                                                   | reverted (#281); describes a removed mechanism                                                                                                                             | _Replication, failover and the cloud_                                     |
@@ -2640,9 +2640,9 @@ while it holds decisions still open.
 | [Failover prototype](superpowers/specs/2026-09-16-sqlite-failover-prototype-design.md) and its plan                                                                                               | done (#425); `bench/sqlite-failover` points at it                                                                                                                          | _Replication, failover and the cloud_                                     |
 | [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)                                                                                               | slices 1 and 2 built; 3 to 5 not started                                                                                                                                   | _Replication, failover and the cloud_                                     |
 | [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)                                                                                      | decisions; the reader dropdown exists                                                                                                                                      | _Payments and card readers_ (Slice 2)                                     |
-| [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan                                                                         | built (#729 last); owner decisions still open; its home layouts superseded by W93's [Device Home Page design](superpowers/specs/2026-10-05-w93-device-home-page-design.md) | _Menus and the catalogue_ (_Sales classification and the menus plan — what they left open_) |
+| [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan                                                                         | built (#729 last); owner decisions still open; its home layouts superseded by W93's [Device Home Page design](superpowers/specs/2026-10-05-w93-device-home-page-design.md) | _Menus and the menu_ (_Sales classification and the menus plan — what they left open_) |
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan                                                                                 | all 18 tasks landed (Task 17 last, #991); what they left open is under The till, devices and table service                                                                 | The till, devices and table service                                       |
-| [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan                                                                             | built (#738 last); a code comment points at it                                                                                                                             | _Menus and the catalogue_ (_Sales classification and the menus plan — what they left open_) |
+| [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan                                                                             | built (#738 last); a code comment points at it                                                                                                                             | _Menus and the menu_ (_Sales classification and the menus plan — what they left open_) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md)                                                                                                                             | server built (#721); the till side built by lane B item B15 (#956)                                                                                                         | The till, devices and table service                                       |
 | [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan                                                                                      | all three branches built (#732, P2b in #877, and P2c in #884); a real pairing at the box to go                                                                             | _Printers, the print agent and receipts_                                  |
 

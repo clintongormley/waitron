@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
+import { menus, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
@@ -25,7 +25,7 @@ beforeEach(async () => {
   await suite.db.execute(sql`delete from product_units`);
   await suite.db.execute(sql`delete from units`);
   await suite.db.execute(sql`delete from products`);
-  await suite.db.execute(sql`delete from catalogues`);
+  await suite.db.execute(sql`delete from menus`);
   await suite.db.execute(sql`delete from management_sessions`);
   await suite.db.execute(sql`delete from persons`);
   await seedTaxpayer(suite.db);
@@ -41,25 +41,25 @@ beforeEach(async () => {
   });
 });
 
-/** A catalogue to hang fixture products off. */
-async function seedCatalogue(tx: Transaction): Promise<string> {
+/** A menu to hang fixture products off. */
+async function seedMenu(tx: Transaction): Promise<string> {
   const [menu] = await tx
-    .insert(catalogues)
+    .insert(menus)
     .values({ name: "Menu" })
-    .returning({ id: catalogues.id });
+    .returning({ id: menus.id });
   return menu!.id;
 }
 
-/** One product in `catalogueId`, measured in `unitId`. `unitPrice` is a count of whole cents. */
+/** One product in `menuId`, measured in `unitId`. `unitPrice` is a count of whole cents. */
 async function seedProduct(
   tx: Transaction,
-  catalogueId: string,
+  menuId: string,
   name: string,
   unitId: string,
 ): Promise<string> {
   const [product] = await tx
     .insert(products)
-    .values({ catalogueId, name, pricingUnit: "each", unitPrice: 100, vatClass: "general" })
+    .values({ menuId, name, pricingUnit: "each", unitPrice: 100, vatClass: "general" })
     .returning({ id: products.id });
   await tx.insert(productUnits).values({ productId: product!.id, unitId });
   return product!.id;
@@ -347,7 +347,7 @@ describe("unit management routes", () => {
     ).json()) as { id: string };
 
     const [a, b] = await withTransaction(suite.db, async (tx) => {
-      const menuId = await seedCatalogue(tx);
+      const menuId = await seedMenu(tx);
       const ids: string[] = [];
       for (const name of ["A", "B"]) {
         ids.push(await seedProduct(tx, menuId, name, from.id));
@@ -375,7 +375,7 @@ describe("unit management routes", () => {
     ).json()) as { id: string };
 
     const p1 = await withTransaction(suite.db, async (tx) =>
-      seedProduct(tx, await seedCatalogue(tx), "A", unit.id),
+      seedProduct(tx, await seedMenu(tx), "A", unit.id),
     );
 
     const res = await send("GET", `/management-api/units/${unit.id}/products`);
@@ -394,7 +394,7 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
     const { productId, listId } = await withTransaction(suite.db, async (tx) => {
-      const productId = await seedProduct(tx, await seedCatalogue(tx), "Ham", unit.id);
+      const productId = await seedProduct(tx, await seedMenu(tx), "Ham", unit.id);
       const list = await createExtraList(
         tx,
         { name: "Toppings", items: [{ productId, portion: "0.055", price: "0.01" }] },
@@ -450,7 +450,7 @@ describe("unit management routes", () => {
     ).json()) as { id: string };
 
     const p1 = await withTransaction(suite.db, async (tx) =>
-      seedProduct(tx, await seedCatalogue(tx), "A", unit.id),
+      seedProduct(tx, await seedMenu(tx), "A", unit.id),
     );
 
     const res = await send("POST", `/management-api/units/${unit.id}/products/reassign`, {
@@ -522,7 +522,7 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
     const p1 = await withTransaction(suite.db, async (tx) =>
-      seedProduct(tx, await seedCatalogue(tx), "A", unit.id),
+      seedProduct(tx, await seedMenu(tx), "A", unit.id),
     );
     for (const unitId of ["not-a-uuid", 7, undefined]) {
       const response = await send("POST", `/management-api/units/${unit.id}/products/reassign`, {
@@ -579,7 +579,7 @@ it.each(["target", "each"])(
     const source = await makeUnit("source");
     const target = await makeUnit("target");
     const [active, archived] = await withTransaction(suite.db, async (tx) => {
-      const menu = await seedCatalogue(tx);
+      const menu = await seedMenu(tx);
       const active = await seedProduct(tx, menu, "Active", source.id);
       const archived = await seedProduct(tx, menu, "Archived", source.id);
       await tx

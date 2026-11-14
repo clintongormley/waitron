@@ -3,18 +3,18 @@ import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { compareBackupTables, type BackupTablePolicy } from "@waitron/db";
 import type { BackupModuleStatus, BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
-import { CATALOGUE_TABLES } from "./classification.js";
+import { MENU_TABLES } from "./classification.js";
 import { documentImages, menuDocumentHash, MENU_DOCUMENT_FORMAT } from "./menu-document.js";
 import type { MenuDocument } from "@waitron/shared";
 import * as schema from "@waitron/db/schema/menu.js";
 
 const immutableTables = ["menu_versions", "menu_version_images"];
-export const CATALOGUE_BACKUP_VERIFICATION: BackupVerificationContribution = {
+export const MENU_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,
   data: {
     kind: "custom",
-    tables: [...CATALOGUE_TABLES],
+    tables: [...MENU_TABLES],
     immutableTables,
     checks: ["data"],
   },
@@ -27,15 +27,15 @@ export const CATALOGUE_BACKUP_VERIFICATION: BackupVerificationContribution = {
     const equal = await compareBackupTables({
       before: context.before,
       after: context.after,
-      policies: CATALOGUE_TABLES.map((table): BackupTablePolicy => ({
+      policies: MENU_TABLES.map((table): BackupTablePolicy => ({
         table,
         immutable: immutableTables.includes(table),
         addedColumns:
           table === "content_suggestion_jobs" ? { collect_cursor: null, collected_refs: "[]" } : {},
       })),
     });
-    const before = await checkCatalogue(context.before);
-    const after = await checkCatalogue(context.after);
+    const before = await checkMenu(context.before);
+    const after = await checkMenu(context.after);
     const status =
       before === "unsupported" || after === "unsupported"
         ? "unsupported"
@@ -60,7 +60,7 @@ async function has(query: BackupQuery, table: string): Promise<boolean> {
     ])) !== undefined
   );
 }
-async function checkCatalogue(query: BackupQuery): Promise<BackupModuleStatus> {
+async function checkMenu(query: BackupQuery): Promise<BackupModuleStatus> {
   let status: BackupModuleStatus = "passed";
   for (const value of Object.values(schema)) {
     if (!isTable(value)) continue;

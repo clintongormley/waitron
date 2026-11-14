@@ -21,11 +21,11 @@ afterEach(() => {
   setLocale("en-GB");
 });
 
-type Catalogue = Record<StringKey, string>;
+type Menu = Record<StringKey, string>;
 type Api = Pick<DashboardApi, "getBackupSettingsEvidence">;
 
-function words(catalogue: Catalogue, key: StringKey, values: Record<string, string> = {}) {
-  return catalogue[key].replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
+function words(menu: Menu, key: StringKey, values: Record<string, string> = {}) {
+  return menu[key].replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
 }
 async function mount(api: Api, locale = "en-GB") {
   setLocale(locale);
@@ -50,7 +50,7 @@ const CAUSES: {
   name: string;
   failure: Pick<BackupLoadFailure, "code" | "detail"> & Partial<BackupLoadFailure>;
   boxKeyNumbers?: BackupSettingsEvidence["boxKeyNumbers"];
-  expected: (c: Catalogue) => string;
+  expected: (c: Menu) => string;
 }[] = [
   {
     name: "an unknown key number, one box key",
@@ -123,7 +123,7 @@ const CAUSES: {
   },
 ];
 
-for (const [locale, catalogue] of [
+for (const [locale, menu] of [
   ["en-GB", en],
   ["es-ES", es],
 ] as const)
@@ -139,9 +139,9 @@ for (const [locale, catalogue] of [
         locale,
       );
       await expect.poll(() => text(q(el, "[data-test=failure-cause]"))).not.toBe("");
-      expect(text(q(el, "[data-test=failure-cause]"))).toBe(cause.expected(catalogue));
+      expect(text(q(el, "[data-test=failure-cause]"))).toBe(cause.expected(menu));
       expect(el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.heading).toBe(
-        catalogue["backup_evidence.heading"],
+        menu["backup_evidence.heading"],
       );
     });
 

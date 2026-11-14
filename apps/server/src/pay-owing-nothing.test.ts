@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  catalogues,
+  menus,
   categories,
   drawerOpens,
   saleSettlements,
@@ -53,16 +53,16 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     counter = await inTx(venue, async (tx) => {
-      const [catalogue] = await tx
-        .select({ id: catalogues.id })
-        .from(catalogues)
-        .where(eq(catalogues.name, "Carta"));
+      const [menu] = await tx
+        .select({ id: menus.id })
+        .from(menus)
+        .where(eq(menus.name, "Carta"));
       const [category] = await tx
         .select({ id: categories.id })
         .from(categories)
         .where(eq(categories.name, "Platos"));
       const water = await createProduct(tx, {
-        catalogueId: catalogue!.id,
+        menuId: menu!.id,
         categoryId: category!.id,
         name: "Agua",
         customerName: { [venue.cfg.locale]: "Agua del grifo" },

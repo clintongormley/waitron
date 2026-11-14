@@ -1,5 +1,5 @@
 import {
-  catalogues,
+  menus,
   readTaxpayer,
   readVenue,
   readSettings,
@@ -17,10 +17,10 @@ import {
 import type { VatClass } from "@waitron/shared";
 import { readSavedContentLanguages, writeContentLanguages } from "./content-languages.js";
 import { createMenuShell } from "./menu-structure.js";
-import { assignCatalogueToVenue } from "./operations.js";
+import { assignMenuToVenue } from "./operations.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
 import { MENU_SETTINGS } from "./settings.js";
-import { readDefaultCatalogueId } from "./operations.js";
+import { readDefaultMenuId } from "./operations.js";
 
 /** The starter units, by their English staff names; their words in other languages are in
  * `starter-content.ts`. */
@@ -55,7 +55,7 @@ export const FIRST_MENU_NAME = "Menu";
 // The pale blue swatch of CATEGORY_PALETTE (packages/ui/src/category-color.ts).
 const NEW_VENUE_DEFAULT_COLOR = "#abcced";
 
-export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
+export const MENU_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the venue's initial menu and content languages",
     async run(tx, _node, _operation, options) {
@@ -80,7 +80,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       });
       // Every write below goes through its drizzle table rather than through raw SQL, because
       // `id`, `created_at` and `updated_at` are supplied by `$defaultFn` in JavaScript
-      // (`packages/db/src/schema/columns.ts`), so a raw `insert into catalogues (name)` writes a
+      // (`packages/db/src/schema/columns.ts`), so a raw `insert into menus (name)` writes a
       // null id and is refused.
       if ((await readSavedContentLanguages(tx)) === undefined)
         await writeContentLanguages(tx, { defaultLanguage, languages: [...languages] }, [], null);
@@ -113,15 +113,15 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
           expectedRevision: revision,
           personId: null,
         });
-      let catalogueId = await readDefaultCatalogueId(tx);
-      if (catalogueId === null) {
+      let menuId = await readDefaultMenuId(tx);
+      if (menuId === null) {
         const [created] = await tx
-          .insert(catalogues)
+          .insert(menus)
           .values({ name: starterName(STARTER_MENU_NAMES, FIRST_MENU_NAME, starter.staffLanguage) })
-          .returning({ id: catalogues.id, name: catalogues.name });
-        catalogueId = created!.id;
-        await createMenuShell(tx, catalogueId, created!.name);
-        await assignCatalogueToVenue(tx, catalogueId);
+          .returning({ id: menus.id, name: menus.name });
+        menuId = created!.id;
+        await createMenuShell(tx, menuId, created!.name);
+        await assignMenuToVenue(tx, menuId);
       }
       return "initial menu ready";
     },

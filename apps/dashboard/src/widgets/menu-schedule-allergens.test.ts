@@ -94,7 +94,7 @@ describe("scheduling with allergen warnings", () => {
       [...q(el, '[data-test="publish-confirmation"]').querySelectorAll("a")].map((a) =>
         a.getAttribute("href"),
       ),
-    ).toEqual(["/manage/catalogue/product/bread", "/manage/catalogue/product/large"]);
+    ).toEqual(["/manage/products/product/bread", "/manage/products/product/large"]);
     q(el, '[data-test="schedule-submit"]').click();
     await el.updateComplete;
     expect(api.scheduleMenuPublication).not.toHaveBeenCalled();

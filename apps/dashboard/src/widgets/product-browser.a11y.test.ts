@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { CatalogueBrowser } from "./product-browser.js";
+import { ProductBrowser } from "./product-browser.js";
 import type { DashboardApi, Product } from "../api/client.js";
 const product = (
   id: string,
@@ -16,7 +16,7 @@ const product = (
   primaryCategoryId,
   categoryId: primaryCategoryId,
   active,
-  catalogueId: "c",
+  menuId: "c",
   modifiers: [],
   customerName: null,
   unitId: "u",
@@ -57,10 +57,10 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
 });
-describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
+describe.each(["light", "dark"] as const)("menu browser (%s)", (theme) => {
   async function mountPlain() {
-    const mounted = await mountWidget<CatalogueBrowser>(
-      "dashboard-catalogue-browser",
+    const mounted = await mountWidget<ProductBrowser>(
+      "dashboard-product-browser",
       { products: PRODUCTS, api: {} as DashboardApi, categories: [] },
       theme,
     );
@@ -85,8 +85,8 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
   });
 
   it("renders the line saying routing could not be read accessibly", async () => {
-    const { el, host } = await mountWidget<CatalogueBrowser>(
-      "dashboard-catalogue-browser",
+    const { el, host } = await mountWidget<ProductBrowser>(
+      "dashboard-product-browser",
       {
         products: PRODUCTS,
         api: {} as DashboardApi,
@@ -119,8 +119,8 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
   it.each(["top", "open", "search", "naming", "selection", "move", "delete"])(
     "renders %s accessibly",
     async (state) => {
-      const { el, host } = await mountWidget<CatalogueBrowser>(
-        "dashboard-catalogue-browser",
+      const { el, host } = await mountWidget<ProductBrowser>(
+        "dashboard-product-browser",
         {
           products: PRODUCTS,
           api: {
@@ -151,7 +151,7 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
         theme,
       );
       if (state === "search") {
-        el.shadowRoot!.querySelector('[name="catalogue-search"]')!.dispatchEvent(
+        el.shadowRoot!.querySelector('[name="menu-search"]')!.dispatchEvent(
           new CustomEvent("wt-change", { detail: { value: "beer" } }),
         );
         await el.updateComplete;
@@ -210,8 +210,8 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
   it.each(["row", "box", "refused"] as const)(
     "renders the colour chooser opened from a %s square accessibly",
     async (from) => {
-      const { el, host } = await mountWidget<CatalogueBrowser>(
-        "dashboard-catalogue-browser",
+      const { el, host } = await mountWidget<ProductBrowser>(
+        "dashboard-product-browser",
         {
           products: PRODUCTS,
           api: {
@@ -256,8 +256,8 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
     ["routed", false],
     ["unreadable", true],
   ] as const)("renders the categories' routing marks %s accessibly", async (_state, failed) => {
-    const { el, host } = await mountWidget<CatalogueBrowser>(
-      "dashboard-catalogue-browser",
+    const { el, host } = await mountWidget<ProductBrowser>(
+      "dashboard-product-browser",
       {
         products: PRODUCTS,
         api: {} as DashboardApi,

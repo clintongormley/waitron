@@ -5,7 +5,7 @@ import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import type { CatalogueSummary, MenuStructure, MenuStructureNode } from "../api/client.js";
+import type { MenuSummary, MenuStructure, MenuStructureNode } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 
 export interface PlacementSection {
@@ -32,7 +32,7 @@ export interface PlacementFailure {
 
 /** Each menu's sections as its structure nests them; `structures[i]` is `menus[i]`'s. */
 export function placementMenus(
-  menus: readonly CatalogueSummary[],
+  menus: readonly MenuSummary[],
   structures: readonly MenuStructure[],
 ): PlacementMenu[] {
   const build = (nodes: readonly MenuStructureNode[], menuIndex: number): PlacementSection[] =>

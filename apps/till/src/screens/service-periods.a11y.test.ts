@@ -14,7 +14,7 @@ import type { TillProduct } from "../api/client.js";
 
 const coffee: TillProduct = {
   id: "coffee",
-  catalogueId: "breakfast",
+  menuId: "breakfast",
   menuItemId: "coffee-offer",
   menuVersionId: "v1",
   productId: "coffee",

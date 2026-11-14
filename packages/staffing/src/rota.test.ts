@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   kitchenStations,
   withTransaction,
   type Transaction,
@@ -132,7 +132,7 @@ async function rawShift(
 async function servicePeriod(departmentId: string) {
   return tx(async (t) => {
     const menuId = randomUUID();
-    await t.insert(catalogues).values({ id: menuId, name: `Menu ${menuId}` });
+    await t.insert(menus).values({ id: menuId, name: `Menu ${menuId}` });
     const [period] = await t
       .insert(menuPeriods)
       .values({ departmentId, menuId, name: "Service" })

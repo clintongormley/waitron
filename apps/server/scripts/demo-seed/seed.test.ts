@@ -333,7 +333,7 @@ describe("seedDemoRestaurant", () => {
       const [menu] = await venueMenus(tx);
       const folder = await createCategory(tx, { name: "Test-only packaged snacks" });
       const snack = await createProduct(tx, {
-        catalogueId: menu!.id,
+        menuId: menu!.id,
         name: "Test-only packet of crisps",
         categoryId: folder.id,
         pricingUnit: "each",
@@ -427,9 +427,9 @@ describe("seedDemoRestaurant", () => {
       }>(sql`
         select d.name as department, p.name, c.name as menu,
           (select group_concat(sc.name, ',') from menu_period_staff_menus s
-            join catalogues sc on sc.id = s.menu_id where s.period_id = p.id) as staff_menus
+            join menus sc on sc.id = s.menu_id where s.period_id = p.id) as staff_menus
         from menu_periods p join departments d on d.id = p.department_id
-        join catalogues c on c.id = p.menu_id
+        join menus c on c.id = p.menu_id
         order by d.name, p.name`);
       expect(periods).toEqual([
         { department: "Deli", name: "Open", menu: "Deli takeaway", staff_menus: null },
@@ -523,7 +523,7 @@ describe("seedDemoRestaurant", () => {
           union
           select department_id, menu_id, display_order + 1 from menu_period_staff_menus
         ) dm on dm.department_id = z.department_id
-        join catalogues c on c.id = dm.menu_id
+        join menus c on c.id = dm.menu_id
         group by z.name, d.name, z.order_start, dp.order_start, z.is_counter_default
         order by z.name`);
       const serviceZoneRows = serviceZoneRaw.map((row) => ({
@@ -553,7 +553,7 @@ describe("seedDemoRestaurant", () => {
           cast(p.unit_price as integer) as unit_price
         from menu_items mi
         join products p on p.id = mi.product_id
-        join catalogues c on c.id = mi.menu_id
+        join menus c on c.id = mi.menu_id
         where p.name = 'House Negroni'
         order by c.name`);
       const { rows: optionListRaw } = await tx.execute<{

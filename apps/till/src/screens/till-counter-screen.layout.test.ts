@@ -34,7 +34,7 @@ function product(key: string, name: string, unitPrice: string): TillProduct {
     id: `p-${key}`,
     productId: `p-${key}`,
     menuItemId: `mi-drinks-${key}`,
-    catalogueId: "drinks",
+    menuId: "drinks",
     available: true,
     name,
     unitPrice,

@@ -13,7 +13,7 @@ import type {
   DevicePassBoard,
   KitchenScreenKind,
   TillApi,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 
 const previousLocale = currentLocale();
@@ -39,7 +39,7 @@ const till = {
   servers: [],
 };
 
-const counterOffers: ZoneOfferCatalogue = {
+const counterOffers: ZoneOffers = {
   service: {
     open: true,
     zoneOpen: true,

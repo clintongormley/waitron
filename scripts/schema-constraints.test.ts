@@ -78,9 +78,9 @@ const EXPECTED_FOREIGN_KEYS = [
   ["daily_close_chain", ["node_id"], "nodes"],
   ["daily_closes", ["node_id"], "nodes"],
   ["menu_periods", ["department_id"], "departments"],
-  ["menu_periods", ["menu_id"], "catalogues"],
+  ["menu_periods", ["menu_id"], "menus"],
   ["menu_period_staff_menus", ["period_id", "department_id"], "menu_periods"],
-  ["menu_period_staff_menus", ["menu_id"], "catalogues"],
+  ["menu_period_staff_menus", ["menu_id"], "menus"],
   ["department_receipts", ["department_id"], "departments"],
   ["special_day_dates", ["special_day_id"], "special_days"],
   ["department_days", ["department_id"], "departments"],
@@ -188,15 +188,15 @@ const EXPECTED_FOREIGN_KEYS = [
   ["menu_item_variant_overrides", ["menu_item_id", "product_id"], "menu_items"],
   ["menu_item_variant_overrides", ["product_id", "variant_id"], "products"],
   ["menu_details", ["default_home_layout_id"], "sections"],
-  ["menu_details", ["menu_id"], "catalogues"],
+  ["menu_details", ["menu_id"], "menus"],
   ["menu_details", ["root_section_id"], "sections"],
-  ["menu_items", ["menu_id"], "catalogues"],
-  ["menu_publications", ["menu_id"], "catalogues"],
+  ["menu_items", ["menu_id"], "menus"],
+  ["menu_publications", ["menu_id"], "menus"],
   ["menu_publications", ["version_id", "menu_id"], "menu_versions"],
-  ["menu_scheduled_publications", ["menu_id"], "catalogues"],
+  ["menu_scheduled_publications", ["menu_id"], "menus"],
   ["menu_scheduled_publications", ["version_id", "menu_id"], "menu_versions"],
   ["menu_version_images", ["version_id"], "menu_versions"],
-  ["menu_versions", ["menu_id"], "catalogues"],
+  ["menu_versions", ["menu_id"], "menus"],
   ["menu_items", ["product_id"], "products"],
   ["option_labels", ["list_id"], "option_lists"],
   ["order_amendments", ["captured_by_node_id"], "nodes"],
@@ -250,10 +250,10 @@ const EXPECTED_FOREIGN_KEYS = [
   ["product_modifiers", ["product_id"], "products"],
   ["product_units", ["product_id"], "products"],
   ["product_units", ["unit_id"], "units"],
-  ["products", ["catalogue_id"], "catalogues"],
+  ["products", ["menu_id"], "menus"],
   ["products", ["category_id"], "categories"],
   ["products", ["course_id"], "kitchen_courses"],
-  ["products", ["parent_id", "catalogue_id"], "products"],
+  ["products", ["parent_id", "menu_id"], "products"],
   ["purchase_invoice_vat", ["purchase_invoice_id"], "purchase_invoices"],
   ["recovery_codes", ["person_id"], "persons"],
   ["registro_sif", ["node_id"], "nodes"],
@@ -278,7 +278,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["section_members", ["child_section_id"], "sections"],
   ["section_members", ["product_id"], "products"],
   ["section_members", ["section_id"], "sections"],
-  ["sections", ["owner_menu_id"], "catalogues"],
+  ["sections", ["owner_menu_id"], "menus"],
   ["sessions", ["device_id"], "devices"],
   ["shift_swaps", ["decided_by_person_id"], "persons"],
   ["shift_swaps", ["from_shift_id"], "shifts"],
@@ -357,7 +357,7 @@ const EXPECTED_FOREIGN_KEYS = [
 
 /** Every unique index that is not a primary key, by the name its declaration gives it. */
 const EXPECTED_UNIQUE_INDEXES = [
-  "catalogues_one_default_uq",
+  "menus_one_default_uq",
   "adjustment_lines_adjustment_line_key",
   "adjustment_reasons_name_key",
   "bill_identities_party_number_key",
@@ -459,7 +459,7 @@ const EXPECTED_UNIQUE_INDEXES = [
   "printers_local_key_key",
   "product_modifiers_product_extra_uq",
   "product_modifiers_product_option_uq",
-  "products_id_catalogue_key",
+  "products_id_menu_key",
   "products_parent_id_key",
   "purchase_invoices_supplier_number_key",
   "registro_sif_activo_uq",
@@ -939,7 +939,7 @@ function uniqueIndexNamesIn(connection) {
 
 /**
  * Every named check constraint in the built schema, read out of the `CREATE TABLE` text: SQLite
- * keeps no catalogue of check constraints, so `sqlite_master.sql` is the only place a name can be
+ * keeps no menu of check constraints, so `sqlite_master.sql` is the only place a name can be
  * read from.
  */
 function checkConstraintNamesIn(connection) {

@@ -251,7 +251,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   and their consumers stay with A976, as do the filing order-portion samples.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
   under A976.
-  Catalogue display names, seasonal venue and zone names and printer-screen display labels
+  Menu display names, seasonal venue and zone names and printer-screen display labels
   also stay with A976, along with counter-screen display text, station-screen display names,
   kitchen-ticket grouping, payment/queue widget display text, variant media fixtures and
   device/printer deletion fixture text.
@@ -299,7 +299,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
   tickets), the party venue's dishes, the Spanish ticket words and unit
   names its es-ES venue prints, and its Spanish alphabetical-order case. The kitchen-print
-  concurrency suite (`kitchen-print.concurrency.test.ts`) creates an English location, catalogue,
+  concurrency suite (`kitchen-print.concurrency.test.ts`) creates an English location, menu,
   station, printer and product but keeps its es-ES locale and the operation description "Venta en
   establecimiento", and the shared-printers suite (`kitchen-print.shared-printers.test.ts`) creates
   only English names. The print-problems suite (`apps/server/src/print-problems.test.ts`)
@@ -396,13 +396,13 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   Keep accent tests, including combobox searches, AEAT names and official text. Media's main
   library suite takes its Spanish Save label, card actions, usage labels, preview, default-language
   marker and form message from
-  the catalogue; its direct error-wording
+  the menu; its direct error-wording
   and browser language-name checks remain. Keep deliberate Spanish/French metadata, the filename
   suite's accent-sensitive sample and the framing suite's deliberate multilingual metadata.
   The combobox accessibility suite's sample wording is English; its themes, keyboard,
   selection, disabled contrast and accessibility checks remain.
   The bookings dashboard's form, day-list, client, validation, draft and accessibility suites
-  use English sample names; form and picker labels read the catalogue. Keep printing’s accented
+  use English sample names; form and picker labels read the menu. Keep printing’s accented
   glyph cases and preserve text lengths when translating its remaining samples.
   Bookings’ native booking, route, clock, floor, table-removal and schema suites use English
   sample location, operation, contact and note text. Venue-service period-deletion and zone-closure
@@ -421,14 +421,14 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   Special-day HTTP route samples use English venue, operation, zone and custom-day names;
   dates, permissions, refusal details, saved paint and name ordering stay.
   Remaining helper and screen fixtures stay
-  with this item. Catalogue import-validation samples use English menu, dessert and drink names;
+  with this item. Menu import-validation samples use English menu, dessert and drink names;
   accented-name collision and multilingual unit examples remain. Continue package by package
   from `scripts/english-only-still-to-clean.ts`. UI switch behavior and accessibility
   suites use English sample labels and descriptions. Disclosure accessibility samples use English
   headings, summaries and body text; deliberate EN/ES summary examples remain. Printing layout
   and printer samples use English; layout samples keep their character counts and word boundaries.
   Database kitchen-course, station and station-printer suites use English sample names.
-  Floor-plan, catalogue-membership and ticket-item samples use English names and notes.
+  Floor-plan, menu-membership and ticket-item samples use English names and notes.
   Layouts' receipt, address and operation-description samples use English.
   Database zone and party-label suites use English sample zone, group and guest names.
   UI-core input and textarea samples use English label and note text; phone-label checks
@@ -445,11 +445,11 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   The kitchen-notice suite uses English station samples; its statement-count checks remain.
   Native allergy, kitchen-note and bill-identity suites use English sample location names;
   their allergy assignments, note revisions and bill-number checks remain.
-  Catalogue stored-name-key samples use English dish and template names; accented folding,
+  Menu stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
-  Catalogue pricing samples use English dish and modifier text; pricing checks retain
+  Menu pricing samples use English dish and modifier text; pricing checks retain
   their existing amounts, quantities, dates and language keys.
-  Catalogue menu-removal and availability suites use English dish samples; removal,
+  Menu menu-removal and availability suites use English dish samples; removal,
   sibling-price, archived-product and availability checks remain.
   Dashboard hardware save-state, equipment-label and page-printer panel suites use English
   sample names; IDs, permissions, saved choices and save-state checks stay in place.
@@ -479,7 +479,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   product and station names to what they create; they keep their `es-ES` invoice locale and
   `es-ES` description values, the operation description "Venta en establecimiento", the supplier
   name "Café del Puerto SL", the modelo 303 terms and the Spanish category-print heading check.
-  The catalogue API suite (`apps/server/src/menu-api.test.ts`) gives English menu, category,
+  The menu API suite (`apps/server/src/menu-api.test.ts`) gives English menu, category,
   product, variant, kitchen, options-list, label and extras-list names to what it creates; it
   keeps the customer names and descriptions it gives under `es`, `fr` and other language keys,
   its `es-ES` locale and the operation description "Venta". The full-manifest suite
@@ -598,7 +598,7 @@ The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund
   Check protected golden fixtures and fiscal-provider contracts before changing those names.
   Keep accented search fixtures unchanged. Shared helper display samples and their consumers
   stay with A976.
-  Other fixture text stays with A976, including catalogue
+  Other fixture text stays with A976, including menu
   display names, seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
   payment/queue widget display text, the table-action suite's beer/cake display names,
@@ -656,7 +656,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff display names.
   The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
   The shared boot provision-body and stream-pause fixtures use Administrator for their staff display sample.
-  The catalogue include-folder, menu-patch and menu-schedule route suites use English staff display names.
+  The menu include-folder, menu-patch and menu-schedule route suites use English staff display names.
   Other local and shared staff-name samples still need triage; preserve deliberate name and locale cases.
   Logger personal-name samples use English names, except the deliberate accented `Àngel` cases
   and short-email `ana@bo.es` sample;
@@ -704,7 +704,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   summaries and body text; deliberate EN/ES summary examples remain. Printing layout and printer
   samples use English, with the layout samples retaining their character counts and word boundaries.
   Database kitchen-course, station and station-printer suites use English sample names.
-  Floor-plan, catalogue-membership and ticket-item samples use English names and notes.
+  Floor-plan, menu-membership and ticket-item samples use English names and notes.
   Layouts' receipt, address and operation-description samples use English.
   Database zone and party-label suites use English sample zone, group and guest names.
   UI-core input and textarea samples use English label and note text; phone-label checks
@@ -721,17 +721,17 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   The kitchen-notice suite uses English station samples; its statement-count checks remain.
   Native allergy, kitchen-note and bill-identity suites use English sample location names;
   their allergy assignments, note revisions and bill-number checks remain.
-  Catalogue stored-name-key samples use English dish and template names; accented folding,
+  Menu stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
-  Catalogue pricing samples use English dish and modifier text; pricing checks retain
+  Menu pricing samples use English dish and modifier text; pricing checks retain
   their existing amounts, quantities, dates and language keys.
-  Catalogue menu-removal and availability suites use English dish samples; removal,
+  Menu menu-removal and availability suites use English dish samples; removal,
   sibling-price, archived-product and availability checks remain.
   Dashboard hardware save-state, equipment-label and page-printer panel suites use English
   sample names; IDs, permissions, saved choices and save-state checks stay in place.
   Dashboard overview behavior and accessibility suites use English dish and variant samples;
   currency, ordering, overflow and deliberate EN/ES checks stay in place.
-  Catalogue import-validation samples use English menu, dessert and drink names;
+  Menu import-validation samples use English menu, dessert and drink names;
   accented-name collision and multilingual unit examples remain.
   The server's split-extras test venue and its suites use English customer, kitchen and location
   names; staff names, language keys and the venue's locale stay, and its operation description
@@ -744,7 +744,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
   tickets), the party venue's dishes, the Spanish ticket words and unit
   names its es-ES venue prints, and its Spanish alphabetical-order case. The kitchen-print
-  concurrency suite (`kitchen-print.concurrency.test.ts`) creates an English location, catalogue,
+  concurrency suite (`kitchen-print.concurrency.test.ts`) creates an English location, menu,
   station, printer and product but keeps its es-ES locale and the operation description "Venta en
   establecimiento", and the shared-printers suite (`kitchen-print.shared-printers.test.ts`) creates
   only English names. The print-problems suite (`apps/server/src/print-problems.test.ts`)
@@ -866,7 +866,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   product and station names to what they create; they keep their `es-ES` invoice locale and
   `es-ES` description values, the operation description "Venta en establecimiento", the supplier
   name "Café del Puerto SL", the modelo 303 terms and the Spanish category-print heading check.
-  The catalogue API suite (`apps/server/src/menu-api.test.ts`) gives English menu, category,
+  The menu API suite (`apps/server/src/menu-api.test.ts`) gives English menu, category,
   product, variant, kitchen, options-list, label and extras-list names to what it creates; it
   keeps the customer names and descriptions it gives under `es`, `fr` and other language keys,
   its `es-ES` locale and the operation description "Venta". The full-manifest suite
@@ -973,13 +973,13 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   hex characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
   the NUL; closing it needs a migration. Found by #609 (`packages/media`), not fixable in a
   comments-only change.
-- **A negative catalogue price can still be stored by a direct call** — OPEN (left by #487).
-  [Detail](catalogue.md#a-negative-catalogue-price-can-still-be-stored-by-a-direct-call)
+- **A negative menu price can still be stored by a direct call** — OPEN (left by #487).
+  [Detail](menu.md#a-negative-menu-price-can-still-be-stored-by-a-direct-call)
 - **Loose ends left by A322 (#1372, an included menu can show its sections directly).** A folder's
   fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
-  [Detail](catalogue.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
+  [Detail](menu.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
 - **Loose ends left by A263 (#1151)** — OPEN, unqueued.
-  [Detail](catalogue.md#what-1151-left-open-2026-10-03)
+  [Detail](menu.md#what-1151-left-open-2026-10-03)
 - **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
   and only the editor's parser refuses a blank; `option_lists.name`, `option_labels.name` and
   `extra_lists.name` share the pattern (`packages/db/drizzle/0000_baseline.sql`). **Next
@@ -1019,16 +1019,16 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   repeats. A668-1's Claude probe recorded that result. A1308's one allergen column normalises them
   on write. Decide whether direct declarations should be refused instead, then check product requests
   with repeated kinds.
-- **Catalogue names (W72): there is no unique index, and no backfill.**
-  [Detail](catalogue.md#catalogue-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
+- **Menu names (W72): there is no unique index, and no backfill.**
+  [Detail](menu.md#menu-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
 - **Two signals say whether a dish is sold by weight, and they can disagree in storage.** Since B4
   the order path reads only the unit (`priceOrderLines`), so no sale reads `products.pricing_unit`.
   **Next action:** keep it in step with the unit or drop it.
-  [Detail](catalogue.md#two-signals-say-whether-a-dish-is-sold-by-weight-and-they-can-disagree-in-storage)
-- **The catalogue picker was deleted and nothing replaced it.** `selectedCatalogueId`
-  (`products-screen.ts`) takes the first catalogue in the list, which is also the one every new
+  [Detail](menu.md#two-signals-say-whether-a-dish-is-sold-by-weight-and-they-can-disagree-in-storage)
+- **The menu picker was deleted and nothing replaced it.** `selectedMenuId`
+  (`products-screen.ts`) takes the first menu in the list, which is also the one every new
   product is created in; with two, the second becomes unreachable from the dashboard. **Next
-  action:** decide whether more than one catalogue is a case Waitron supports.
+  action:** decide whether more than one menu is a case Waitron supports.
 - **A backup setting in `trading.env` or `secrets.env` is not compared at a handover.** Only a hand
   edit puts one there (the writers read, not run). Two such boxes pass and can differ in a hidden recovery key. Left open by A1018 Slice 5 (Ruling R21).
 - **If a later slice moves `local` tables into `node.db`**, that slice decides again how the drain
@@ -1114,7 +1114,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   runs at a time.
 - **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
   engine** — OPEN (found by #603). Read only, not run: both were PostgreSQL's integer maximum.
-  [Detail](catalogue.md#max_modifier_integer-and-the-extras-contracts-whole-bound-have-no-stated-reason-on-this-engine)
+  [Detail](menu.md#max_modifier_integer-and-the-extras-contracts-whole-bound-have-no-stated-reason-on-this-engine)
 - **`assertRefsExist` still reads lists in sorted key order** — OPEN (found by #603). Read only, not
   run: that order (`packages/menu/src/product-modifiers.ts`) served PostgreSQL's lock ordering
   only.
@@ -1124,7 +1124,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   whether to keep pinning it is the owner's call.
 - **Test titles in `packages/menu` a comments-only change cannot touch** — OPEN (found by
   #603). Four titles, in `dietary.test.ts`, `product-modifiers.test.ts` and `migrations.test.ts`.
-  [Detail](catalogue.md#test-titles-in-packagesmenu-a-comments-only-change-cannot-touch)
+  [Detail](menu.md#test-titles-in-packagesmenu-a-comments-only-change-cannot-touch)
 - **A test comment still names the old savepoint error.**
   `packages/fiscal-verifactu/src/correction-path.e2e.test.ts:308` says its control "fails with
   `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword
@@ -1329,7 +1329,7 @@ units list and product screens show each person's own language. The rule's home 
 reasoning is in `docs/superpowers/plans/2026-10-27-a918-starter-content-translations.md`.
 
 **A646 module controls and Google access (owner, 2026-10-17).** The revised design is agreed:
-Enabled-default catalogue, Add a module selects Disabled, row-menu Configure/Disable, a Configure
+Enabled-default menu, Add a module selects Disabled, row-menu Configure/Disable, a Configure
 modal, red in-row reasons and settings saves separate from Enable/Disable. Disabling Google
 protects every active administrator: the applying administrator gives fresh non-Google proof;
 every other active administrator needs supported recorded password/passkey enrollment. Planning is authorised by the watcher's 2026-11-01 note; build waits for A739 and starts with retained disabled-module protection.
@@ -1384,4 +1384,4 @@ that does not exist. Also left by #493's review: the case pinning the adapter ha
 lives in `packages/store/src/index.test.ts`, not beside the file it reverts
 (`packages/store/src/node-sqlite-adapter.ts`).
 
-- **One rule for the old table permission questions (owner, 2026-11-06).** The A805 audit left one "decide this table's restriction" question per table. For non-tax tables, no new database refusal is added unless someone shows how a wrong delete or update could really happen. That closed the questions for: `bookings`, `card_readers`, `catalogues`, `change_log`, `convenio_config`, `departments`, `devices`, `employments`, `floor_zones`, `incidents`, `join_requests`, `kitchen_stations`, `management_sessions`, `menu_items`, `node_membership`, `persons`, `print_agents`, `print_jobs`, `printers`, `products`, `scheduled_runs`, `sessions`, `ticket_items`. The tax and card tables' refusals go into A1308.
+- **One rule for the old table permission questions (owner, 2026-11-06).** The A805 audit left one "decide this table's restriction" question per table. For non-tax tables, no new database refusal is added unless someone shows how a wrong delete or update could really happen. That closed the questions for: `bookings`, `card_readers`, `menus`, `change_log`, `convenio_config`, `departments`, `devices`, `employments`, `floor_zones`, `incidents`, `join_requests`, `kitchen_stations`, `management_sessions`, `menu_items`, `node_membership`, `persons`, `print_agents`, `print_jobs`, `printers`, `products`, `scheduled_runs`, `sessions`, `ticket_items`. The tax and card tables' refusals go into A1308.

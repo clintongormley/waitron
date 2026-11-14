@@ -17,8 +17,8 @@ import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/see
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   updateProduct,
@@ -45,7 +45,7 @@ let cfg: TradingContext;
 let anna: { id: string };
 /** A supervisor, who holds the refund permission a sent dish's cancel needs. */
 let sara: { id: string };
-// The one product seeded into the venue's catalogue, so a tab can open with a real line
+// The one product seeded into the venue's menu, so a tab can open with a real line
 // (`openTab`/`addTabRound` price it and the `check_locales` trigger demands its `es-ES` description
 // key match the venue's `es-ES` locale).
 let productId: string;
@@ -89,12 +89,12 @@ const suite = useVenueDb({
       role: "supervisor",
     });
     sara = { id: supervisor!.id };
-    // Through the catalogue verbs, so the active/assignment filters are real.
+    // Through the menu verbs, so the active/assignment filters are real.
     const product = await withTransaction(db, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Daily menu" });
+      const cat = await createMenu(tx, { name: "Daily menu" });
       const drinksCategory = await createCategory(tx, { name: "Drinks" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: drinksCategory.id,
         name: "Agua mineral",
         pricingUnit: "each",
@@ -102,14 +102,14 @@ const suite = useVenueDb({
         vatClass: "general",
       });
       const bread = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: drinksCategory.id,
         name: "Bread",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
       });
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       return { id: p.id, breadId: bread.id };
     });
     productId = product.id;
@@ -610,9 +610,9 @@ describe("table + tab routes", () => {
 
   it("PUT accepts a later included choice on the same lunch line", async () => {
     const choice = await withTransaction(suite.db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Lunch choices" });
+      const menu = await createMenu(tx, { name: "Lunch choices" });
       const extra = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Included coffee",
         pricingUnit: "each",

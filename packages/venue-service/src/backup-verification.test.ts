@@ -56,7 +56,7 @@ beforeEach(() => {
       sql`insert into order_service_contexts (working_order_id, zone_id, department_id, service_mode) values ('order', 'zone', 'department', 'table_tab')`,
     );
     db.run(
-      sql`insert into catalogues (id,name,created_at,updated_at) values ('menu','Current menu','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
+      sql`insert into menus (id,name,created_at,updated_at) values ('menu','Current menu','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
       sql`insert into menu_periods (id,department_id,name,menu_id) values ('period','department','Lunch','menu')`,

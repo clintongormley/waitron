@@ -20,10 +20,10 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
+  assignMenuToVenue,
   assignProductUnit,
   clearProductUnit,
-  createCatalogue,
+  createMenu,
   createCategory,
   createExtraList,
   addProductToMenu,
@@ -88,7 +88,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 import { deviceRequestCfg } from "./testing/session-device.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
-// catalogue, sell, and read the filed record back.
+// menu, sell, and read the filed record back.
 const LOCALE = "es-ES";
 
 const suite = useVenueDb({
@@ -154,7 +154,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 }
 
 /**
- * A fresh venue with a seeded catalogue: one `each` product (1.50 gross, general/21%) and one
+ * A fresh venue with a seeded menu: one `each` product (1.50 gross, general/21%) and one
  * `weight` product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(options: { variants?: boolean } = {}): Promise<{
@@ -201,12 +201,12 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
 
   await readyDepartment();
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
-  const catalogue = await withTransaction(suite.db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+  const menu = await withTransaction(suite.db, async (tx) => {
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const food = await createCategory(tx, { name: "Food" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: food.id,
       name: "Jamón cortado",
       pricingUnit: "weight",
@@ -214,7 +214,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       vatClass: "reduced",
     });
     const water = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua mineral",
       pricingUnit: "each",
@@ -222,7 +222,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       vatClass: "general",
       kitchenName: "COLD BAR",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const zone = await tx.execute<{ id: string }>(sql`
       select id from floor_zones
       where is_counter_default`);
@@ -280,7 +280,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     };
   });
   const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
-  return { cfg, seriesId: brandSeriesId(venue.seriesIds[0]!), ...catalogue, offers };
+  return { cfg, seriesId: brandSeriesId(venue.seriesIds[0]!), ...menu, offers };
 }
 
 beforeAll(() => {
@@ -353,7 +353,7 @@ describe("recordTillSale", () => {
     });
     expect(result.total).toBe("8.20");
     // The filed sale line carries the SAME six names as the frozen order line — filing copies the
-    // snapshot rather than resolving the catalogue a second time.
+    // snapshot rather than resolving the menu a second time.
     const snapshots = await suite.db.execute<StoredNames & { unit_price_gross?: number | null }>(
       sql`
       -- unit_price_gross counts whole cents, and the assertion below is on that COUNT, not on an
@@ -470,7 +470,7 @@ describe("recordTillSale", () => {
     expect(paper).toContain("Agua mineral");
   });
 
-  it("keeps distinct variants and their parked facts after live catalogue edits", async () => {
+  it("keeps distinct variants and their parked facts after live menu edits", async () => {
     const { cfg, zoneId, waterOfferId, waterProductId, variantIds } = await setupVenue({
       variants: true,
     });
@@ -770,7 +770,7 @@ describe("receiptQr", () => {
   });
 });
 
-describe("priceOrderLines re-keys bare catalogue content to the venue invoice_locales", () => {
+describe("priceOrderLines re-keys bare menu content to the venue invoice_locales", () => {
   // `customerName` is the per-language text the re-key acts on. The staff `name` is deliberately a
   // string no assertion expects, so a line that fell back to it instead of re-keying the customer
   // name would fail rather than pass by coincidence.
@@ -812,10 +812,10 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     await readyDepartment();
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
     const productId = await withTransaction(suite.db, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const cat = await createMenu(tx, { name: "Delicatessen" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const product = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: drinks.id,
         name: "Bare staff name",
         customerName,
@@ -823,7 +823,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       return product.id;
     });
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
@@ -1067,7 +1067,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
-      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const cat = await createMenu(tx, { name: "Delicatessen" });
       const food = await createCategory(tx, { name: "Food" });
       const dish = (
         name: string,
@@ -1076,7 +1076,7 @@ describe("ordering extras and options — parent + child lines", () => {
         pricingUnit: "each" | "weight" = "each",
       ) =>
         createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: food.id,
           name,
           pricingUnit,
@@ -1087,7 +1087,7 @@ describe("ordering extras and options — parent + child lines", () => {
       // (CLAUDE.md §3).
       const extraProduct = (name: string, vatClass: "general" | "reduced") =>
         createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: food.id,
           name: `${name} staff`,
           customerName: { [defaultLanguage]: `${name} customer` },
@@ -1220,7 +1220,7 @@ describe("ordering extras and options — parent + child lines", () => {
       await writeProductModifiers(tx, combo.id, [{ kind: "options", id: sauceList.id }]);
       await writeProductModifiers(tx, platedDish.id, [{ kind: "extras", id: sideDishList.id }]);
 
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       return {
         burgerId: burger.id,
         menuProductId: menu.id,
@@ -1536,13 +1536,13 @@ describe("ordering extras and options — parent + child lines", () => {
     const workingOrderId = randomUUID();
     const seeded = await withTransaction(suite.db, async (tx) => {
       const [bacon] = await tx
-        .select({ catalogueId: products.catalogueId })
+        .select({ menuId: products.menuId })
         .from(products)
         .where(eq(products.id, v.baconId));
       const [variant] = await tx
         .insert(products)
         .values({
-          catalogueId: bacon!.catalogueId,
+          menuId: bacon!.menuId,
           parentId: v.baconId,
           name: `${own.stem} staff`,
           customerName: { [v.defaultLanguage]: `${own.stem} customer` },
@@ -1554,7 +1554,7 @@ describe("ordering extras and options — parent + child lines", () => {
         })
         .returning({ id: products.id });
       const dish = await createProduct(tx, {
-        catalogueId: bacon!.catalogueId,
+        menuId: bacon!.menuId,
         categoryId: null,
         name: "Tostada",
         pricingUnit: "each",
@@ -1704,7 +1704,7 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(filed.map((line) => line.optionSnapshots)).toEqual([[largeSnapshot(v.defaultLanguage)]]);
   });
 
-  it("files an extras pick as a snapshot-only child line, with no catalogue key on the table", async () => {
+  it("files an extras pick as a snapshot-only child line, with no menu key on the table", async () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
@@ -1741,7 +1741,7 @@ describe("ordering extras and options — parent + child lines", () => {
     });
 
     // `sale_lines` may name the picked product, as a value (sales classification spec §3), but no
-    // foreign key ties a filed line to the catalogue, and it has no column for the offer or the list.
+    // foreign key ties a filed line to the menu, and it has no column for the offer or the list.
     const { columns, keys } = await withTransaction(suite.db, async (tx) => {
       // An unknown table yields no rows, so `toContain("option_snapshots")` keeps the
       // `not.toContain` assertions from passing on an empty answer.
@@ -1833,7 +1833,7 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.lines[2]!.parentLineNo).toBe(filedParent!.lineNo);
   });
 
-  // The catalogue refuses an Active variant on a product an extras list offers
+  // The menu refuses an Active variant on a product an extras list offers
   // (`product.offered_as_extra`), so the variant is saved Inactive and its row made Active directly.
   const gainActiveVariant = async (tx: Transaction, productId: string) => {
     await setProductVariants(

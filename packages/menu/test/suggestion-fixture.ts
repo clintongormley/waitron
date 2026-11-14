@@ -13,7 +13,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { contentLanguageChoices } from "@waitron/shared";
-import { createCatalogue, createProduct } from "../src/operations.js";
+import { createMenu, createProduct } from "../src/operations.js";
 import { writeContentLanguages } from "../src/content-languages.js";
 import {
   readActiveSuggestionJob,
@@ -40,7 +40,7 @@ export async function addProduct(
   customerName: Record<string, string> | null,
 ): Promise<string> {
   const product = await createProduct(tx, {
-    catalogueId: menuId,
+    menuId: menuId,
     categoryId: null,
     unitId: null,
     name: `STAFF ${label}`,
@@ -73,7 +73,7 @@ export async function seedSuggestionVenue(
   await seedVenueSettings(db);
   return withTransaction(db, async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "ca", languages: ["ca", "es", "en"] });
-    const menu = await createCatalogue(tx, {
+    const menu = await createMenu(tx, {
       name: "STAFF Carta",
       names: { ca: "CLIENT-CA Carta", es: "CLIENT-ES Carta", en: "CLIENT-EN Menu" },
     });
@@ -181,7 +181,7 @@ export async function addOversizedFamily(
   const [variant] = await tx
     .insert(products)
     .values({
-      catalogueId: menuId,
+      menuId: menuId,
       parentId: productId,
       name: "STAFF Wide glass",
       kitchenName: "KITCHEN Wide glass",
@@ -202,7 +202,7 @@ export async function addPlainProducts(
     const rows = Array.from({ length: Math.min(100, count - start) }, (_, offset) => {
       const n = start + offset;
       return {
-        catalogueId: menuId,
+        menuId: menuId,
         name: `STAFF Tapa ${n}`,
         kitchenName: `KITCHEN Tapa ${n}`,
         customerName: { ca: `CLIENT-CA Tapa ${n}`, es: `CLIENT-ES Tapa ${n}` },

@@ -73,7 +73,7 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
     withTransaction(deps.db, async (tx) => {
       await authorizeManager(tx, {
         managementSessionId: sessionId,
-        permission: "catalogue.manage",
+        permission: "menu.manage",
       });
       return action(tx);
     });

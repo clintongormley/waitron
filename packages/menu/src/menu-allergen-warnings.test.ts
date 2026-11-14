@@ -7,7 +7,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, product, type MenusFixture } from "../test/menus-fixture.js";
 import { createProduct, updateProduct } from "./operations.js";
 import { previewMenu, publishMenu } from "./menu-publication.js";
@@ -15,7 +15,7 @@ import { queueMenuPublication } from "./menu-schedule.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { addMember } from "./sections.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const unknown = (id: string, name: string, parentName: string | null = null) => ({
   id,
@@ -92,7 +92,7 @@ describe("unreviewed offered allergens", () => {
       await app(async (tx) => {
         await updateProduct(tx, f.soup, { allergens: null, ordering });
         await createProduct(tx, {
-          catalogueId: f.lunch,
+          menuId: f.lunch,
           categoryId: null,
           name: "Unplaced",
           pricingUnit: "each",

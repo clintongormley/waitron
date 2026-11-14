@@ -18,11 +18,11 @@ export interface LibraryImage extends ImageMetadata {
 }
 export type ImageUsage =
   | { kind: "section"; id: string; internalName: string; ownerMenuId: string }
-  | { kind: "product"; id: string; catalogueId: string; name: string; active: boolean }
+  | { kind: "product"; id: string; menuId: string; name: string; active: boolean }
   | {
       kind: "variant";
       id: string;
-      catalogueId: string;
+      menuId: string;
       name: string;
       active: boolean;
     }

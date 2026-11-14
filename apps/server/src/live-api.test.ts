@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   diningTables,
   installChangeFeed,
   subscribeToChanges,
@@ -367,7 +367,7 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   const reader = response.body!.getReader();
   try {
     await reader.read();
-    await suite.db.insert(catalogues).values({ name: "Unwatched change" });
+    await suite.db.insert(menus).values({ name: "Unwatched change" });
     await suite.db.insert(diningTables).values({ zoneId: zone!.id, label: "T9" });
     const waiting = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from change_log`,

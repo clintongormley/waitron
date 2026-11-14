@@ -22,7 +22,7 @@ function sell(day: string, lines: LineSpec[]) {
   return sellLines(suite.db, venue, at(day), lines);
 }
 
-/** Today's set-up, as the catalogue's `currentClassifications` would answer it. */
+/** Today's set-up, as the menu's `currentClassifications` would answer it. */
 const TODAY: Record<string, SaleLineClassification> = {
   "p-negroni": classified(
     chain(["cat-drinks", "Drinks"], ["cat-spirits", "Spirits"], ["cat-cocktails", "Cocktails"]),

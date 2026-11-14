@@ -1,4 +1,4 @@
-import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
+import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
@@ -48,7 +48,7 @@ it("deleted zones leave active zone reads while their department is retained", a
       departmentId: department.id,
     });
     const kept = await createServiceZone(tx, { name: "Dining room", departmentId: department.id });
-    const menu = await createCatalogue(tx, { name: "Dining menu" });
+    const menu = await createMenu(tx, { name: "Dining menu" });
     const { document } = await buildMenuDocument(tx, menu.id);
     await publishMenu(tx, menu.id, menuDocumentHash(document), "person-1");
     await offerMenuThroughZone(tx, kept.id, menu.id);

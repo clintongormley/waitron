@@ -6,8 +6,8 @@ export type { AllergenEntry };
 import type { BusinessDayClock, DepartmentReceiptWrite } from "@waitron/shared";
 import type { PlanPlacement, VenueThemeAnswer } from "@waitron/ui";
 import type { ThemeChoices, ThemeWarning } from "@waitron/ui-core/theme";
-import type { CatalogueSettings } from "@waitron/menu/src/settings-types.js";
-export type { CatalogueSettings };
+import type { MenuDefaults } from "@waitron/menu/src/settings-types.js";
+export type { MenuDefaults };
 import type { Setting, CombinedOffer, ValueSource, Place } from "@waitron/shared";
 export type { Setting, CombinedOffer, ValueSource, Place };
 import type { ContentLanguageRules, ContentLanguages, DeleteImpact } from "@waitron/shared";
@@ -519,7 +519,7 @@ export interface PasskeyVerification {
   response: unknown;
 }
 
-// ── Catalogue-management types ──────────────────────────────────────────────────────────────────
+// ── Menu-management types ──────────────────────────────────────────────────────────────────
 
 export type PricingUnit = "each" | "weight";
 
@@ -532,7 +532,7 @@ export type AllergenDeclaration = Record<string, AllergenEntry> | null;
 export { DIETARY_LABELS, DIETARY_SUITABILITY } from "@waitron/shared";
 export type { DietaryLabel, DietarySuitability, ContainsTag, DietOverride } from "@waitron/shared";
 
-export interface CatalogueSummary {
+export interface MenuSummary {
   id: string;
   name: string;
   active: boolean;
@@ -550,7 +550,7 @@ export interface CategoryInput {
   parentId?: string | null;
   color?: string | null;
 }
-export interface CatalogueSelection {
+export interface ProductSelection {
   productIds: string[];
   categoryIds: string[];
 }
@@ -3071,19 +3071,19 @@ export class DashboardApi {
     return this.#request<{ personId: string }>("/management-api/passkey/auth/verify", "POST", body);
   }
 
-  // ── Catalogue management ──────────────────────────────────────────────────────────────────────
+  // ── Menu management ──────────────────────────────────────────────────────────────────────
 
-  listCatalogues(): Promise<CatalogueSummary[]> {
-    return this.#request<CatalogueSummary[]>("/management-api/catalogues", "GET");
+  listMenus(): Promise<MenuSummary[]> {
+    return this.#request<MenuSummary[]>("/management-api/menus", "GET");
   }
 
-  getCatalogueSettings(): Promise<CatalogueSettings> {
-    return this.#request<CatalogueSettings>("/management-api/catalogue-settings", "GET");
+  getMenuSettings(): Promise<MenuDefaults> {
+    return this.#request<MenuDefaults>("/management-api/menu-settings", "GET");
   }
 
-  saveCatalogueDefaultColor(color: string | null): Promise<CatalogueSettings> {
-    return this.#request<CatalogueSettings>(
-      "/management-api/catalogue-settings/default-color",
+  saveMenuDefaultColor(color: string | null): Promise<MenuDefaults> {
+    return this.#request<MenuDefaults>(
+      "/management-api/menu-settings/default-color",
       "PUT",
       { color },
     );
@@ -3194,71 +3194,71 @@ export class DashboardApi {
     return this.#request<void>("/management-api/content-languages", "PUT", config);
   }
 
-  createCatalogue(
+  createMenu(
     name: string,
     details: Omit<SectionInput, "internalName"> = {},
-  ): Promise<CatalogueSummary> {
-    return this.#request<CatalogueSummary>("/management-api/catalogues", "POST", {
+  ): Promise<MenuSummary> {
+    return this.#request<MenuSummary>("/management-api/menus", "POST", {
       name,
       ...details,
     });
   }
 
-  duplicateCatalogue(id: string, name: string): Promise<CatalogueSummary> {
-    return this.#request<CatalogueSummary>(
-      `/management-api/catalogues/${encodeURIComponent(id)}/duplicate`,
+  duplicateMenu(id: string, name: string): Promise<MenuSummary> {
+    return this.#request<MenuSummary>(
+      `/management-api/menus/${encodeURIComponent(id)}/duplicate`,
       "POST",
       { name },
     );
   }
 
-  renameCatalogue(id: string, name: string): Promise<void> {
-    return this.#request<void>(`/management-api/catalogues/${id}`, "PATCH", { name });
+  renameMenu(id: string, name: string): Promise<void> {
+    return this.#request<void>(`/management-api/menus/${id}`, "PATCH", { name });
   }
 
   getMenuRead(id: string, parts: readonly MenuReadPart[]): Promise<MenuReadResult> {
     const query = parts.map((part) => `part=${encodeURIComponent(part)}`).join("&");
     return this.#request<MenuReadResult>(
-      `/management-api/catalogues/${encodeURIComponent(id)}/read?${query}`,
+      `/management-api/menus/${encodeURIComponent(id)}/read?${query}`,
       "GET",
     );
   }
 
   getMenuStructure(id: string): Promise<MenuStructure> {
-    return this.#request<MenuStructure>(`/management-api/catalogues/${id}/structure`, "GET");
+    return this.#request<MenuStructure>(`/management-api/menus/${id}/structure`, "GET");
   }
 
   getMenuPrices(id: string): Promise<MenuPriceRow[]> {
-    return this.#request<MenuPriceRow[]>(`/management-api/catalogues/${id}/prices`, "GET");
+    return this.#request<MenuPriceRow[]>(`/management-api/menus/${id}/prices`, "GET");
   }
 
   /** Every menu's publication status, keyed by menu id. */
   getMenuStatuses(): Promise<Record<string, MenuStatus>> {
-    return this.#request<Record<string, MenuStatus>>("/management-api/catalogues/status", "GET");
+    return this.#request<Record<string, MenuStatus>>("/management-api/menus/status", "GET");
   }
 
   getMenuStatus(id: string): Promise<MenuStatus> {
-    return this.#request<MenuStatus>(`/management-api/catalogues/${id}/status`, "GET");
+    return this.#request<MenuStatus>(`/management-api/menus/${id}/status`, "GET");
   }
 
   getMenuPreview(id: string): Promise<MenuPreview> {
-    return this.#request<MenuPreview>(`/management-api/catalogues/${id}/preview`, "GET");
+    return this.#request<MenuPreview>(`/management-api/menus/${id}/preview`, "GET");
   }
 
   /** The menu's working Device Home Page: every shortcut in order, the ones its structure no longer
    * reaches marked, and both devices' display settings. */
   getMenuHome(menuId: string): Promise<MenuHome> {
-    return this.#request<MenuHome>(`/management-api/catalogues/${menuId}/home`, "GET");
+    return this.#request<MenuHome>(`/management-api/menus/${menuId}/home`, "GET");
   }
 
   /** A target the menu's structure does not reach is refused `menu.shortcut_unreachable`. */
   addHomeShortcut(menuId: string, ref: MemberRef): Promise<SectionMember> {
-    return this.#request(`/management-api/catalogues/${menuId}/home/shortcuts`, "POST", { ref });
+    return this.#request(`/management-api/menus/${menuId}/home/shortcuts`, "POST", { ref });
   }
 
   removeHomeShortcut(menuId: string, memberId: string): Promise<void> {
     return this.#request<void>(
-      `/management-api/catalogues/${menuId}/home/shortcuts/${memberId}`,
+      `/management-api/menus/${menuId}/home/shortcuts/${memberId}`,
       "DELETE",
     );
   }
@@ -3270,7 +3270,7 @@ export class DashboardApi {
     to: number,
   ): Promise<SectionMember<TileRef>[]> {
     return this.#request(
-      `/management-api/catalogues/${menuId}/home/shortcuts/${memberId}/position`,
+      `/management-api/menus/${menuId}/home/shortcuts/${memberId}/position`,
       "PUT",
       { to },
     );
@@ -3278,7 +3278,7 @@ export class DashboardApi {
 
   /** A value outside the device's range is refused `menu.home_display_invalid`. */
   setHomeDisplay(menuId: string, device: HomeDevice, patch: Partial<HomeDisplay>): Promise<void> {
-    return this.#request<void>(`/management-api/catalogues/${menuId}/home-display`, "PATCH", {
+    return this.#request<void>(`/management-api/menus/${menuId}/home-display`, "PATCH", {
       device,
       ...patch,
     });
@@ -3286,7 +3286,7 @@ export class DashboardApi {
 
   /** `expectedHash` is the preview's; a menu edited since is refused `menu.changed_since_preview`. */
   publishMenu(id: string, expectedHash: string): Promise<PublishedMenuVersion> {
-    return this.#request<PublishedMenuVersion>(`/management-api/catalogues/${id}/publish`, "POST", {
+    return this.#request<PublishedMenuVersion>(`/management-api/menus/${id}/publish`, "POST", {
       expectedHash,
     });
   }
@@ -3328,7 +3328,7 @@ export class DashboardApi {
   } | null> {
     const query = language === undefined ? "" : `?language=${encodeURIComponent(language)}`;
     return this.#request(
-      `/management-api/catalogues/${encodeURIComponent(menuId)}/guest-preview${query}`,
+      `/management-api/menus/${encodeURIComponent(menuId)}/guest-preview${query}`,
       "GET",
     );
   }
@@ -3345,7 +3345,7 @@ export class DashboardApi {
     },
   ): Promise<{ html: string }> {
     return this.#request(
-      `/management-api/catalogues/${encodeURIComponent(menuId)}/guest-paper`,
+      `/management-api/menus/${encodeURIComponent(menuId)}/guest-paper`,
       "POST",
       options,
     );
@@ -3353,7 +3353,7 @@ export class DashboardApi {
 
   /** `null` when the menu has never been published. */
   getLiveMenu(menuId: string): Promise<LiveMenu | null> {
-    return this.#request<LiveMenu | null>(`/management-api/catalogues/${menuId}/live`, "GET");
+    return this.#request<LiveMenu | null>(`/management-api/menus/${menuId}/live`, "GET");
   }
 
   /** A live version other than `baseVersionId` is refused `menu_patch.base_changed`. */
@@ -3362,7 +3362,7 @@ export class DashboardApi {
     body: { baseVersionId: string; changes: MenuPatchChange[] },
   ): Promise<MenuPatchResult> {
     return this.#request<MenuPatchResult>(
-      `/management-api/catalogues/${menuId}/patch`,
+      `/management-api/menus/${menuId}/patch`,
       "POST",
       body,
     );
@@ -3370,7 +3370,7 @@ export class DashboardApi {
 
   getMenuPublications(menuId: string): Promise<MenuPublicationsAnswer> {
     return this.#request<MenuPublicationsAnswer>(
-      `/management-api/catalogues/${menuId}/publications`,
+      `/management-api/menus/${menuId}/publications`,
       "GET",
     );
   }
@@ -3380,7 +3380,7 @@ export class DashboardApi {
     input: { expectedHash: string; activatesAt: ActivationTime },
   ): Promise<QueuedEdition> {
     return this.#request<QueuedEdition>(
-      `/management-api/catalogues/${menuId}/publications`,
+      `/management-api/menus/${menuId}/publications`,
       "POST",
       input,
     );
@@ -3392,7 +3392,7 @@ export class DashboardApi {
     input: { activatesAt: ActivationTime },
   ): Promise<QueuedEdition> {
     return this.#request<QueuedEdition>(
-      `/management-api/catalogues/${menuId}/publications/${versionId}`,
+      `/management-api/menus/${menuId}/publications/${versionId}`,
       "PATCH",
       input,
     );
@@ -3400,7 +3400,7 @@ export class DashboardApi {
 
   cancelMenuPublication(menuId: string, versionId: string): Promise<void> {
     return this.#request<void>(
-      `/management-api/catalogues/${menuId}/publications/${versionId}/cancel`,
+      `/management-api/menus/${menuId}/publications/${versionId}/cancel`,
       "POST",
     );
   }
@@ -3412,7 +3412,7 @@ export class DashboardApi {
     input: { grossPrice?: string | null },
   ): Promise<void> {
     return this.#request<void>(
-      `/management-api/catalogues/${menuId}/items/${menuItemId}`,
+      `/management-api/menus/${menuId}/items/${menuItemId}`,
       "PATCH",
       input,
     );
@@ -3426,26 +3426,26 @@ export class DashboardApi {
     price: string | null,
   ): Promise<void> {
     return this.#request<void>(
-      `/management-api/catalogues/${menuId}/items/${menuItemId}/variants/${variantId}`,
+      `/management-api/menus/${menuId}/items/${menuItemId}/variants/${variantId}`,
       "PATCH",
       { price },
     );
   }
 
-  setVenueDefaultCatalogue(catalogueId: string): Promise<void> {
-    return this.#request<void>("/management-api/venue/default-catalogue", "PUT", { catalogueId });
+  setVenueDefaultMenu(menuId: string): Promise<void> {
+    return this.#request<void>("/management-api/venue/default-menu", "PUT", { menuId });
   }
 
   listCategories(): Promise<CategorySummary[]> {
     return this.#request<CategorySummary[]>("/management-api/categories", "GET");
   }
 
-  moveCatalogueItems(selection: CatalogueSelection, to: string | null): Promise<void> {
+  moveProductItems(selection: ProductSelection, to: string | null): Promise<void> {
     return this.#request("/management-api/folders/move", "POST", { ...selection, to });
   }
 
-  deleteCatalogueItems(
-    selection: CatalogueSelection,
+  deleteProductItems(
+    selection: ProductSelection,
     contents: FolderContents,
     shown: ShownFolderCounts[],
   ): Promise<void> {
@@ -3520,8 +3520,8 @@ export class DashboardApi {
     );
   }
 
-  listProducts(catalogueId: string): Promise<Product[]> {
-    return this.#request<Product[]>(`/management-api/catalogues/${catalogueId}/products`, "GET");
+  listProducts(menuId: string): Promise<Product[]> {
+    return this.#request<Product[]>(`/management-api/menus/${menuId}/products`, "GET");
   }
 
   getFolderRouting(): Promise<RoutingView> {
@@ -3537,11 +3537,11 @@ export class DashboardApi {
   }
 
   createProductEditor(
-    catalogueId: string,
+    menuId: string,
     input: ProductEditorSaveBody,
   ): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>(
-      `/management-api/catalogues/${catalogueId}/product-editor`,
+      `/management-api/menus/${menuId}/product-editor`,
       "POST",
       input,
     );
@@ -3646,7 +3646,7 @@ export class DashboardApi {
   }
   updateMenuDetails(id: string, input: SectionInput): Promise<void> {
     const { internalName, ...details } = input;
-    return this.#request(`/management-api/catalogues/${id}`, "PATCH", {
+    return this.#request(`/management-api/menus/${id}`, "PATCH", {
       name: internalName,
       ...details,
     });

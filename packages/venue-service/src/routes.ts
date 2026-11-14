@@ -111,7 +111,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_timetable.invalid": 400,
   "menu_period.invalid": 400,
   "zone.name_taken": 409,
-  "catalogue.not_found": 404,
+  "menu.not_found": 404,
   "route.subject_not_found": 400,
   "route.station_inactive": 400,
   "route.period_invalid": 409,
@@ -144,7 +144,7 @@ const runBodyIds = (...codes: string[]) =>
 const runBodyZone = runBodyIds("service_zone.not_found");
 const runBodyDepartment = runBodyIds("department.not_found");
 const runBodyPaint = runBodyIds("department.not_found", "service_zone.not_found");
-const runBodyMenus = runBodyIds("catalogue.not_found");
+const runBodyMenus = runBodyIds("menu.not_found");
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
 const COLLECTION_NUMBER = new Set(["none", "numbered"]);
 

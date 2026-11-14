@@ -1,7 +1,7 @@
 import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createCatalogue } from "@waitron/menu";
+import { createMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
@@ -49,7 +49,7 @@ async function venue() {
     const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     const deli = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
     await configureZone(tx, { zoneId: barZone, departmentId: restaurant });
-    const menuId = (await createCatalogue(tx, { name: "Menu" })).id;
+    const menuId = (await createMenu(tx, { name: "Menu" })).id;
     for (const [departmentId, startsAt, endsAt] of [
       [restaurant, "09:00", "12:00"],
       [deli, "14:00", "18:00"],

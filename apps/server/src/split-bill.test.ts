@@ -21,8 +21,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { listStationNotices } from "@waitron/venue-service";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   EACH_UNIT,
@@ -82,10 +82,10 @@ async function setupVenue(): Promise<Seeded> {
     simplifiedInvoiceLimit: null,
   } satisfies TradingContext);
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Daily menu" });
+    const cat = await createMenu(tx, { name: "Daily menu" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const water = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
@@ -93,14 +93,14 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "general",
     });
     const ham = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Jamón",
       pricingUnit: "weight",
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     offersByCfg.set(cfg, offers);
     const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });

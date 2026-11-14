@@ -1,6 +1,6 @@
 import { and, eq, gt, inArray } from "drizzle-orm";
 import {
-  catalogues,
+  menus,
   extraListItems,
   menuScheduledPublications,
   menuVersions,
@@ -57,9 +57,9 @@ export async function publishedMenusHolding(
   const served = new Map(
     (
       await tx
-        .select({ id: catalogues.id, name: catalogues.name })
-        .from(catalogues)
-        .where(eq(catalogues.active, true))
+        .select({ id: menus.id, name: menus.name })
+        .from(menus)
+        .where(eq(menus.active, true))
     ).map((row) => [row.id, row.name]),
   );
   const holding = new Map<string, Map<string, HoldingMenu>>();

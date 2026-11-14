@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { readCatalogueSettings, saveCatalogueSettings } from "@waitron/menu";
+import { readMenuSettings, saveMenuSettings } from "@waitron/menu";
 import {
   readVenue,
   saveVenueFields,
@@ -111,7 +111,7 @@ async function readVenueDefaults(
   tx: Transaction,
   { venue, rules }: ReceiptLanguageState,
 ): Promise<VenueDefaults> {
-  const { defaultProductVatClass } = await readCatalogueSettings(tx);
+  const { defaultProductVatClass } = await readMenuSettings(tx);
   return {
     receiptLanguage: venue.invoiceLocales[0]!,
     receiptLanguageChoices: [...rules.choices],
@@ -358,7 +358,7 @@ export function mountVenueSettingsApi(
           );
         }
         if ("defaultProductVatClass" in request)
-          await saveCatalogueSettings(
+          await saveMenuSettings(
             tx,
             {
               defaultProductVatClass: request.defaultProductVatClass,

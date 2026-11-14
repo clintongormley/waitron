@@ -11,7 +11,7 @@ import {
 
 const noDupes = (t: readonly string[]) => new Set(t).size === t.length;
 
-describe("catalogue tuples", () => {
+describe("menu tuples", () => {
   it("form factors are unique and include till/phone/kds", () => {
     expect(noDupes(FORM_FACTORS)).toBe(true);
     for (const f of ["till", "phone-portrait", "kds"]) expect(FORM_FACTORS).toContain(f);

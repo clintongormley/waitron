@@ -26,7 +26,7 @@ import {
   importConfigurationTables,
   validateConfigurationBundle,
 } from "./configuration-transfer.js";
-import { readDefaultCatalogueId } from "@waitron/menu";
+import { readDefaultMenuId } from "@waitron/menu";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const passphrase = "SYNTHETIC transfer passphrase";
@@ -695,8 +695,8 @@ const gbVenue = {
 it("exports the venue's own fields and the default flag in its menu rows", async () => {
   const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
   const target = await applyVenue(planVenue(gbVenue, modules), { db: suite.db, modules });
-  const defaultCatalogueId = await readDefaultCatalogueId(suite.db);
-  expect(defaultCatalogueId).toEqual(expect.any(String));
+  const defaultMenuId = await readDefaultMenuId(suite.db);
+  expect(defaultMenuId).toEqual(expect.any(String));
   const bundle = await buildConfigurationBundle(
     suite.db,
     target,
@@ -726,8 +726,8 @@ it("exports the venue's own fields and the default flag in its menu rows", async
       "rectificativeSeriesCode",
     ].sort(),
   );
-  expect(bundle).not.toHaveProperty("defaultCatalogueId");
-  expect(bundle.tables.catalogues!.find((row) => row.id === defaultCatalogueId)?.is_default).toBe(
+  expect(bundle).not.toHaveProperty("defaultMenuId");
+  expect(bundle.tables.menus!.find((row) => row.id === defaultMenuId)?.is_default).toBe(
     1,
   );
 });
@@ -749,7 +749,7 @@ it("lists only the exported modules' versions, so setup accepts a box's export t
   expect(() => validateConfigurationBundle(bundle, modules, enabledVersions)).not.toThrow();
 });
 
-it("exports the default menu flag in catalogue rows without a top-level defaultCatalogueId", async () => {
+it("exports the default menu flag in menu rows without a top-level defaultMenuId", async () => {
   const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
   const target = await applyVenue(planVenue(gbVenue, modules), { db: suite.db, modules });
   const bundle = await buildConfigurationBundle(
@@ -759,8 +759,8 @@ it("exports the default menu flag in catalogue rows without a top-level defaultC
     new Date("2026-11-11T12:00:00Z"),
     {},
   );
-  expect(Object.hasOwn(bundle, "defaultCatalogueId")).toBe(false);
-  expect(bundle.tables.catalogues).toEqual([expect.objectContaining({ is_default: 1 })]);
+  expect(Object.hasOwn(bundle, "defaultMenuId")).toBe(false);
+  expect(bundle.tables.menus).toEqual([expect.objectContaining({ is_default: 1 })]);
 });
 
 it("refuses the previous configuration format before reading its contents", () => {

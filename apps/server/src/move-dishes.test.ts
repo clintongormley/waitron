@@ -67,12 +67,12 @@ useVenueDb({
     v = await setupPartyVenue(db);
     ids = await inTx(v, async (tx) => {
       const [burgerRow] = await tx
-        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .select({ menuId: products.menuId, categoryId: products.categoryId })
         .from(products)
         .where(eq(products.id, v.productId("Burger")));
       const product = (name: string, pricingUnit: "each" | "weight", unitPrice: string) =>
         createProduct(tx, {
-          catalogueId: burgerRow!.catalogueId,
+          menuId: burgerRow!.menuId,
           categoryId: burgerRow!.categoryId,
           name,
           customerName: { [v.cfg.locale]: `${name} (customer)` },

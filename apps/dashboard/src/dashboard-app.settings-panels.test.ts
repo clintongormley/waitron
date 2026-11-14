@@ -105,7 +105,7 @@ function stubApi(role = "manager", permissions = ["test.use", "venue.view"]): Da
       modules: ["widgets"],
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
-    getCatalogueSettings: vi
+    getMenuSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "reduced", defaultColor: null }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
@@ -268,7 +268,7 @@ it("replaces a removed Receipts deep link with Venue details for a manager with 
   expect(page(el).shadowRoot!.querySelector("wt-tabs")!.value).toBe("venue-details");
 });
 
-it("shows the VAT class for new products in the Defaults card to venue.configure without catalogue.manage", async () => {
+it("shows the VAT class for new products in the Defaults card to venue.configure without menu.manage", async () => {
   const el = await mount("/manage/venue-settings/view/venue-details", "manager", [
     "venue.view",
     "venue.configure",

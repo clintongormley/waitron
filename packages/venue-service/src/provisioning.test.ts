@@ -8,7 +8,7 @@ import {
   deviceProfileKitchenScreenStations,
   floorZones,
   withTransaction,
-  catalogues,
+  menus,
   kitchenStations,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -44,12 +44,12 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     "uses the chosen %s names for fresh service starters",
     async (staffLanguage) => {
       const [menu] = await db
-        .insert(catalogues)
+        .insert(menus)
         .values({ name: "House menu" })
-        .returning({ id: catalogues.id });
+        .returning({ id: menus.id });
       await seedVenue(db, {
         invoiceLocales: [staffLanguage === "en" ? "es-ES" : "en-GB"],
-        defaultCatalogueId: menu!.id,
+        defaultMenuId: menu!.id,
       });
       const node = { nodeId: await seedNode(db) };
       await withTransaction(db, (tx) =>
@@ -153,14 +153,14 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
 
   it("places Open once and preserves its authored ranges on a second seed", async () => {
     const [menu] = await db
-      .insert(catalogues)
+      .insert(menus)
       .values({ name: "First menu" })
-      .returning({ id: catalogues.id });
+      .returning({ id: menus.id });
     await seedVenue(db, {
       name: "First venue",
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
-      defaultCatalogueId: menu!.id,
+      defaultMenuId: menu!.id,
     });
     const node = { nodeId: await seedNode(db) };
     const seed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
@@ -195,14 +195,14 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
 
   it("names the default department after the venue", async () => {
     const [menu] = await db
-      .insert(catalogues)
+      .insert(menus)
       .values({ name: "First menu" })
-      .returning({ id: catalogues.id });
+      .returning({ id: menus.id });
     await seedVenue(db, {
       name: "The Square",
       invoiceLocales: ["es-ES"],
       operationDescription: "Restaurant",
-      defaultCatalogueId: menu!.id,
+      defaultMenuId: menu!.id,
     });
     const node = { nodeId: await seedNode(db) };
 
@@ -356,15 +356,15 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
     await expect(runSeed()).resolves.toBe("default department and counter zone ready");
-    const menus = await db
-      .insert(catalogues)
+    const menuRows = await db
+      .insert(menus)
       .values([{ name: "Provisioned" }, { name: "Authored" }])
-      .returning({ id: catalogues.id });
+      .returning({ id: menus.id });
     await db.execute(sql`
-      update catalogues set is_default = (id = ${menus[0]!.id})`);
+      update menus set is_default = (id = ${menuRows[0]!.id})`);
     await db.execute(sql`
       insert into menu_periods (id, department_id, name, menu_id)
-      select ${randomUUID()}, department_id, 'Authored', ${menus[1]!.id}
+      select ${randomUUID()}, department_id, 'Authored', ${menuRows[1]!.id}
       from floor_zones`);
     await db.execute(
       sql`update floor_zones set order_start = 'counter', paid_when = 'ticket_then_pay'`,
@@ -382,19 +382,19 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     expect(departments.rows[0]!.count).toBe(1);
     expect(zones.rows[0]!.count).toBe(1);
     expect(policies.rows).toEqual([{ order_start: "counter", paid_when: "ticket_then_pay" }]);
-    expect(periods.rows).toEqual([{ menu_id: menus[1]!.id }]);
+    expect(periods.rows).toEqual([{ menu_id: menuRows[1]!.id }]);
   });
 
   it("seeds the venue's Open period and preserves authored name, colour and staff order on a re-run", async () => {
     const [menu] = await db
-      .insert(catalogues)
+      .insert(menus)
       .values({ name: "Carta" })
-      .returning({ id: catalogues.id });
+      .returning({ id: menus.id });
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
-      defaultCatalogueId: menu!.id,
+      defaultMenuId: menu!.id,
     });
     const node = { nodeId: await seedNode(db) };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
@@ -415,9 +415,9 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       sql`update menu_periods set name = 'Authored hours', colour = 'blue' where id = ${periodId}`,
     );
     const [staff] = await db
-      .insert(catalogues)
+      .insert(menus)
       .values({ name: "Staff" })
-      .returning({ id: catalogues.id });
+      .returning({ id: menus.id });
     await db.execute(sql`insert into menu_period_staff_menus (period_id, department_id, menu_id, display_order)
       select id, department_id, ${staff!.id}, 5 from menu_periods where id = ${periodId}`);
     await runSeed();

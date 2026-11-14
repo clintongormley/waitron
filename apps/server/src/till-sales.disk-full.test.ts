@@ -8,8 +8,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { invoiceSeries, withTransaction } from "@waitron/db";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -36,10 +36,10 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     await inTx(venue, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Free menu" });
+      const cat = await createMenu(tx, { name: "Free menu" });
       const category = await createCategory(tx, { name: "Free" });
       const water = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: category.id,
         name: "Water",
         pricingUnit: "each",
@@ -47,7 +47,7 @@ useVenueDb({
         vatClass: "general",
       });
       freeId = water.id;
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       const [zone] = [await seedZone(tx, { name: "Free counter" })];
       free = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },

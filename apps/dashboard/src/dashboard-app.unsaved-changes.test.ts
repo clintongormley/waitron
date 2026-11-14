@@ -69,7 +69,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, request?: DashboardA
       }),
       getProfile: async () => profile,
       getGoogleConfig: async () => ({ configured: false }),
-      getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+      getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
       getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
       getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
@@ -626,9 +626,9 @@ it("a guarded product deep link accepts the product and screen in one history st
   request();
   await expect.poll(() => m.question.open).toBe(true);
   await choose(m, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/catalogue/product/product-1");
+  await expect.poll(() => location.pathname).toBe("/manage/products/product/product-1");
   expect(pushed).toHaveBeenCalledTimes(1);
-  expect(m.app.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+  expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   expect(unload()).toBe(false);
 });
 
@@ -838,11 +838,11 @@ it.each([
     use: {
       kind: "product",
       id: "product-one",
-      catalogueId: "catalogue-one",
+      menuId: "menu-one",
       name: "Staff bread",
       active: true,
     },
-    path: "/manage/catalogue/product/product-one",
+    path: "/manage/products/product/product-one",
   },
   { use: { kind: "included-menu" }, path: "/manage/menus/menu/menu-two/view/structure" },
   { use: { kind: "menu-preview" }, path: "/manage/menus/menu/menu-one/view/preview" },
@@ -873,7 +873,7 @@ it.each([
           sessionDefault: "en-GB",
           venueName: "Venue",
           permissions: [
-            "catalogue.manage",
+            "menu.manage",
             "venue.view",
             "venue.configure",
             "product.manage",
@@ -882,7 +882,7 @@ it.each([
           ],
           modules: ["media", "venue-service"],
         }),
-        listCatalogues: async () => [
+        listMenus: async () => [
           { id: "menu-one", name: "Lunch", active: true, version: 1 },
           { id: "menu-two", name: "Dinner", active: true, version: 1 },
         ],
@@ -1196,8 +1196,8 @@ describe("a product swatch link under the app's link router", () => {
     expect(leaked()).toBe(false);
     expect(write).toHaveBeenCalled();
     const url = new URL(String(write.mock.calls[0]![0]));
-    expect(`${url.pathname}${url.search}`).toBe("/manage/catalogue/product/probe?field=image");
-    await expect.poll(() => location.pathname).toBe("/manage/catalogue/product/probe");
+    expect(`${url.pathname}${url.search}`).toBe("/manage/products/product/probe?field=image");
+    await expect.poll(() => location.pathname).toBe("/manage/products/product/probe");
   });
 });
 
@@ -1294,10 +1294,10 @@ describe("a price override row's Edit product link under the app's link router",
     // The first write is the link's; the app then rewrites the same address in place.
     expect(write).toHaveBeenCalled();
     expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe(
-      `/manage/catalogue/product/${id}`,
+      `/manage/products/product/${id}`,
     );
-    await expect.poll(() => location.pathname).toBe(`/manage/catalogue/product/${id}`);
-    expect(m.app.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    await expect.poll(() => location.pathname).toBe(`/manage/products/product/${id}`);
+    expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   });
 });
 
@@ -1345,10 +1345,10 @@ describe("a Structure tab product row's Edit product link under the app's link r
     expect(leaked).toBe(false);
     expect(write).toHaveBeenCalled();
     expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe(
-      "/manage/catalogue/product/p-burger",
+      "/manage/products/product/p-burger",
     );
-    await expect.poll(() => location.pathname).toBe("/manage/catalogue/product/p-burger");
-    expect(m.app.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+    await expect.poll(() => location.pathname).toBe("/manage/products/product/p-burger");
+    expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   });
 });
 
@@ -1366,7 +1366,7 @@ describe("allergen warning product links with a dirty schedule", () => {
         permissions: ["product.manage", "venue.view"],
         modules: [],
       }),
-      listCatalogues: async () => [],
+      listMenus: async () => [],
       listProducts: async () => [],
       listLibraryProducts: async () => [],
       listCategories: async () => [],
@@ -1422,7 +1422,7 @@ describe("allergen warning product links with a dirty schedule", () => {
     await panel.updateComplete;
     expect(schedule).not.toHaveBeenCalled();
     expect(unload()).toBe(true);
-    const link = q(`a[href="/manage/catalogue/product/${id}"]`);
+    const link = q(`a[href="/manage/products/product/${id}"]`);
     expect(link).not.toBeNull();
     const pushed = vi.spyOn(history, "pushState");
     await userEvent.click(link);
@@ -1434,7 +1434,7 @@ describe("allergen warning product links with a dirty schedule", () => {
     await userEvent.click(link);
     await expect.poll(() => m.question.open).toBe(true);
     await choose(m, "discard");
-    await expect.poll(() => location.pathname).toBe(`/manage/catalogue/product/${id}`);
+    await expect.poll(() => location.pathname).toBe(`/manage/products/product/${id}`);
     expect(pushed).toHaveBeenCalledTimes(1);
     expect(schedule).not.toHaveBeenCalled();
     expect(unload()).toBe(false);

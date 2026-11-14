@@ -402,7 +402,7 @@ declare module "@waitron/shared" {
      */
     "deployment.environment_mismatch": { databaseEnvironment: string; hostEnvironment: string };
     /**
-     * The demo seed was asked to write sample data — catalogue, staff and back-dated fiscal
+     * The demo seed was asked to write sample data — menu, staff and back-dated fiscal
      * records — under a production stamp. Refused before anything is written: a production chain
      * can never be corrected (CLAUDE.md §5). `environment` is the resolved host value — always
      * `production`, the only value refused — and not a secret.
@@ -466,7 +466,7 @@ declare module "@waitron/shared" {
     "reader.battery_low": { reader: string; percent: number };
     "reader.status_unavailable": { reader: string };
     "reader.offline": { reader: string };
-    /** The till was asked to ring a sale with no lines; refused before any catalogue read or fiscal write. */
+    /** The till was asked to ring a sale with no lines; refused before any menu read or fiscal write. */
     "sale.empty_basket": Record<string, never>;
     "sale.charged_not_recorded": {
       workingOrderId: string;
@@ -1215,7 +1215,7 @@ declare module "@waitron/shared" {
     "setup.cert_hostnames_empty": Record<string, never>;
 
     /** A setup or provisioning field cannot be used. Fiscal venue validators and the core and
-     * catalogue configuration checks (`packages/db/src/configuration-transfer.ts`,
+     * menu configuration checks (`packages/db/src/configuration-transfer.ts`,
      * `packages/menu/src/configuration-transfer.ts`) also raise this code;
      * editing routes translate it to their own request error. `field` carries only the field name,
      * never its value, because certificate fields can contain credentials. */

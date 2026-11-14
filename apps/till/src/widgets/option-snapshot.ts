@@ -1,4 +1,4 @@
-// Deep-import the catalogue leaf: the `@waitron/menu` barrel would pull drizzle and the DB layer
+// Deep-import the menu leaf: the `@waitron/menu` barrel would pull drizzle and the DB layer
 // into the browser bundle.
 import {
   customerOptionSnapshotLabels,

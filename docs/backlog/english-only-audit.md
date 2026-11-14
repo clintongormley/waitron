@@ -1,13 +1,13 @@
 # A913 — non-English text in general code: the audit
 
-_2026-11-14, A1308 mn1: `catalogue-allergen-workflow.test.ts` is now `menu-allergen-workflow.test.ts`, and the seed script `seed-catalogue.ts` is now `seed-menus.ts`. The older names below record the audited tree._
+_2026-11-14, A1308 mn1: `menu-allergen-workflow.test.ts` is now `menu-allergen-workflow.test.ts`, and the seed script `seed-menu.ts` is now `seed-menus.ts`. The older names below record the audited tree._
 
 _2026-11-10, A1488: the working-time export writes its coded values and yes/no values as words in the file's language; the access-holder row in Bucket B records the earlier tree._
 
 _2026-11-10, A1308 slice 4b: `WAITRON_TILL_LOCALE` is gone; kitchen-ticket units and the other `cfg.locale` readers follow the venue's display language (`readVenueLocale`). References below describe the earlier setting._
 
 > **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
-> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> Their scenarios are ordinary server tests in `menu-allergen-workflow.test.ts` and
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../packages/reporting/examples/modelo-303.md)
 > carries the reporting example. References below describe the earlier scripts.
 
@@ -169,7 +169,7 @@ as a practice venue — `apps/server/src/setup-api.ts:528–529, 787–789`):
 | file:line | text | English beside it? |
 | --- | --- | --- |
 | `apps/server/scripts/demo-seed/menu.ts` (70 maps) | customer names and descriptions in en, es, ca, ca-ES-valencia, gl | Yes |
-| `menu.ts:30–944` | about 33 staff and kitchen names: «Croquetas», «CROQ JAMON», «PUNTO CARNE», «GUARNICIÓN POLLO»… | **No**; written even in an English demo (`seed-catalogue.ts:170, 174`); `menu.ts:22–23` explains the option lists' staff names as deliberate, the others carry no stated reason |
+| `menu.ts:30–944` | about 33 staff and kitchen names: «Croquetas», «CROQ JAMON», «PUNTO CARNE», «GUARNICIÓN POLLO»… | **No**; written even in an English demo (`seed-menu.ts:170, 174`); `menu.ts:22–23` explains the option lists' staff names as deliberate, the others carry no stated reason |
 | `menu.ts:840` | `{ en: "Menú del Día", … }` | The English slot holds Spanish |
 | `data-sets/casa-delgado-es.ts`, `floor.ts`, `seed-adjustments.ts`, `seed-floor.ts:259` | menu, zone, status, reason names | Yes |
 | `staff.ts:24–38` | «Marta Ruiz», «Lucía Fernández»… | Personal names |
@@ -193,7 +193,7 @@ the provisioned station breaks that lookup; finding it by `is_default` (as `dev-
 | `apps/till/src/screens/till-ticket-view.ts:110, 141`, `widgets/counter-waiting.ts:16`, `table-targets.ts:66, 75`, `station-queue.ts:485`, `tender-pay.ts:47, 79` | «Descuento 12,5%», «fecha de expedición», «Mesa 4», «Entrantes», «(datáfono)» | English |
 | `packages/core/src/record-substitution.ts:43–67` | «factura de canje», «siempre debe llevar el destinatario» — quotes with no source named | Cite or drop |
 | `packages/db/src/schema/purchase-invoices.ts:18–51`, `purchasing/src/types.ts:5` | «factura recibida», «régimen general», «recargo de equivalencia» | English, or a cited term |
-| `packages/db/src/schema/floor-zones.ts:7`, `dining-tables.ts:19`, `venue-service/src/dashboard/hours-view.ts:66`, `catalogue/src/pricing.ts:142` | «Comedor», «Terraza 3», a Spanish date example, «céntimo» | English |
+| `packages/db/src/schema/floor-zones.ts:7`, `dining-tables.ts:19`, `venue-service/src/dashboard/hours-view.ts:66`, `menu/src/pricing.ts:142` | «Comedor», «Terraza 3», a Spanish date example, «céntimo» | English |
 | demo scripts and seed | `caja1`, `AGUA`, `JAMON`, `MENU_DEL_DIA`, `cocina`, `diaId`, `clase`, `casilla`, key `período`, comments «cierre Z», «descuadre», «rectificativa»; 45 photos named after Spanish dishes (`demo-seed/media/jamon-iberico.png`…) | English names |
 
 ## Bucket F — other

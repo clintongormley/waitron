@@ -481,8 +481,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "clock.unusable": 409,
   "clock.unconfirmed": 409,
   "fiscal.foreign_recipient_unsupported": 409,
-  // Adding a line refuses a classification snapshot the catalogue's data cannot make valid:
-  // permanent until the catalogue is fixed, and not the till's fault.
+  // Adding a line refuses a classification snapshot the menu's data cannot make valid:
+  // permanent until the menu is fixed, and not the till's fault.
   "sale_classification.invalid": 409,
   "person.suspended": 403,
   "device_profile.not_admitted": 403,

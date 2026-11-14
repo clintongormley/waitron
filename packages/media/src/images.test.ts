@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import {
   withTransaction,
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   products,
   workingOrderLines,
   type Transaction,
@@ -13,7 +13,7 @@ import {
 import {
   writeContentLanguages,
   readContentLanguages,
-  createCatalogue,
+  createMenu,
   createProduct,
   createUnit,
   setProductVariants,
@@ -195,14 +195,14 @@ describe("metadata and references", () => {
       // Through the table definitions, not raw SQL: `id`, `created_at` and `updated_at` are
       // JavaScript generators (`$defaultFn`), never a column DEFAULT, so a raw insert that names
       // neither is refused with `NOT NULL constraint failed`.
-      const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
-        id: catalogues.id,
+      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
+        id: menus.id,
       });
       // `unit_price` counts whole cents, so 200 is the 2.00 this fixture means.
       const [inserted] = await tx
         .insert(products)
         .values({
-          catalogueId: menu!.id,
+          menuId: menu!.id,
           name: "Bread",
           pricingUnit: "each",
           unitPrice: 200,
@@ -215,7 +215,7 @@ describe("metadata and references", () => {
         {
           kind: "product",
           id: inserted!.id,
-          catalogueId: menu!.id,
+          menuId: menu!.id,
           name: "Bread",
           active: false,
         },
@@ -236,15 +236,15 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Large loaf" } },
         { fallbackLanguage: "en" },
       );
-      const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
-        id: catalogues.id,
+      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
+        id: menus.id,
       });
       // The PRODUCT carries no photo; only its variant does, which is the case a product-only scan
       // misses — the variant photo would be deletable while the variant still points at it.
       const [product] = await tx
         .insert(products)
         .values({
-          catalogueId: menu!.id,
+          menuId: menu!.id,
           name: "Bread",
           pricingUnit: "each",
           unitPrice: 200,
@@ -255,7 +255,7 @@ describe("metadata and references", () => {
       const [variant] = await tx
         .insert(products)
         .values({
-          catalogueId: menu!.id,
+          menuId: menu!.id,
           parentId: product!.id,
           name: "Large",
           unitPrice: 300,
@@ -267,7 +267,7 @@ describe("metadata and references", () => {
           kind: "variant",
           id: variant!.id,
           productId: product!.id,
-          catalogueId: menu!.id,
+          menuId: menu!.id,
           name: "Bread (Large)",
           active: true,
         },
@@ -291,13 +291,13 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Loaf" } },
         { fallbackLanguage: "en" },
       );
-      const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
-        id: catalogues.id,
+      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
+        id: menus.id,
       });
       const [product] = await tx
         .insert(products)
         .values({
-          catalogueId: menu!.id,
+          menuId: menu!.id,
           name: "Bread",
           pricingUnit: "each",
           unitPrice: 200,
@@ -308,9 +308,9 @@ describe("metadata and references", () => {
       // No photo of its own: it borrows the parent's, which is the parent's use, not its own.
       await tx
         .insert(products)
-        .values({ catalogueId: menu!.id, parentId: product!.id, name: "Large", unitPrice: 300 });
+        .values({ menuId: menu!.id, parentId: product!.id, name: "Large", unitPrice: 300 });
       const uses = [
-        { kind: "product", id: product!.id, catalogueId: menu!.id, name: "Bread", active: true },
+        { kind: "product", id: product!.id, menuId: menu!.id, name: "Bread", active: true },
       ];
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
       expect((await readImage(tx, image.id)).usageCount).toBe(1);
@@ -326,27 +326,27 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Loaf" } },
         { fallbackLanguage: "en" },
       );
-      const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
-        id: catalogues.id,
+      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
+        id: menus.id,
       });
-      const catalogueId = menu!.id;
-      const top = { catalogueId, pricingUnit: "each", unitPrice: 200, vatClass: "general" };
+      const menuId = menu!.id;
+      const top = { menuId, pricingUnit: "each", unitPrice: 200, vatClass: "general" };
       await tx.insert(products).values([
         { ...top, id: "p-on", name: "Bread", image: image.filename },
         { ...top, id: "p-off", name: "Cake", active: false },
       ]);
       // Every variant id sorts BEFORE its product's, so the products-first order is the reader's.
       await tx.insert(products).values([
-        { catalogueId, id: "a-kept", parentId: "p-on", name: "Large", image: image.filename },
+        { menuId, id: "a-kept", parentId: "p-on", name: "Large", image: image.filename },
         {
-          catalogueId,
+          menuId,
           id: "a-of-inactive",
           parentId: "p-off",
           name: "Slice",
           image: image.filename,
         },
         {
-          catalogueId,
+          menuId,
           id: "a-removed",
           parentId: "p-on",
           name: "Small",
@@ -358,12 +358,12 @@ describe("metadata and references", () => {
         kind: "variant",
         id,
         productId,
-        catalogueId,
+        menuId,
         name,
         active,
       });
       expect(await listImageUsages(tx, image.id)).toEqual([
-        { kind: "product", id: "p-on", catalogueId, name: "Bread", active: true },
+        { kind: "product", id: "p-on", menuId, name: "Bread", active: true },
         variant("a-kept", "p-on", "Bread (Large)", true),
         variant("a-of-inactive", "p-off", "Cake (Slice)", false),
         variant("a-removed", "p-on", "Bread (Small)", false),
@@ -739,8 +739,8 @@ it("protects an image used by sections, a menu's own list among them, and counts
   await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Drinks" } }, {});
-    const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
-      id: catalogues.id,
+    const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
+      id: menus.id,
     });
     const [root] = await tx
       .insert(sections)
@@ -780,14 +780,14 @@ it("protects the photo an include's folder names, even switched off, and counts 
   await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Folder photo" } }, {});
-    const [lunch] = await tx.insert(catalogues).values({ name: "Lunch Menu" }).returning({
-      id: catalogues.id,
+    const [lunch] = await tx.insert(menus).values({ name: "Lunch Menu" }).returning({
+      id: menus.id,
     });
     const [drinksMenu] = await tx
-      .insert(catalogues)
-      .values({ name: "Drinks catalogue" })
+      .insert(menus)
+      .values({ name: "Drinks menu" })
       .returning({
-        id: catalogues.id,
+        id: menus.id,
       });
     const [lunchRoot] = await tx
       .insert(sections)
@@ -844,8 +844,8 @@ it("lists a folder photo held by a member that includes no section, under its mi
   await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Folder photo" } }, {});
-    const [lunch] = await tx.insert(catalogues).values({ name: "Lunch Menu" }).returning({
-      id: catalogues.id,
+    const [lunch] = await tx.insert(menus).values({ name: "Lunch Menu" }).returning({
+      id: menus.id,
     });
     const [lunchRoot] = await tx
       .insert(sections)
@@ -905,7 +905,7 @@ it("ignores a retired venue logo for usage counts and deletion", async () => {
 it("protects an image only a live menu version names, and releases it once another version is live", async () => {
   const {
     addMember,
-    createCatalogue,
+    createMenu,
     createProduct,
     previewMenu,
     publishMenu,
@@ -917,9 +917,9 @@ it("protects an image only a live menu version names, and releases it once anoth
     publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1");
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
-    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const menu = await createMenu(tx, { name: "Lunch Menu" });
     const lemonade = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Lemonade",
       pricingUnit: "each",
@@ -956,7 +956,7 @@ it("protects an image only a queued menu edition names, counts it as a use, and 
   const {
     addMember,
     cancelMenuPublication,
-    createCatalogue,
+    createMenu,
     createProduct,
     previewMenu,
     publishMenu,
@@ -967,9 +967,9 @@ it("protects an image only a queued menu edition names, counts it as a use, and 
   await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
-    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const menu = await createMenu(tx, { name: "Lunch Menu" });
     const lemonade = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Lemonade",
       pricingUnit: "each",
@@ -1016,7 +1016,7 @@ it("lists a live version and a queued edition of one menu in number order, then 
   const {
     activateDueMenuPublications,
     addMember,
-    createCatalogue,
+    createMenu,
     createProduct,
     previewMenu,
     publishMenu,
@@ -1027,9 +1027,9 @@ it("lists a live version and a queued edition of one menu in number order, then 
   await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
-    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const menu = await createMenu(tx, { name: "Lunch Menu" });
     const lemonade = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Lemonade",
       pricingUnit: "each",
@@ -1080,7 +1080,7 @@ it("lists a live version and a queued edition of one menu in number order, then 
 it("protects the photo of a product a live menu version offers only as an extra", async () => {
   const {
     addMember,
-    createCatalogue,
+    createMenu,
     createExtraList,
     createProduct,
     previewMenu,
@@ -1094,10 +1094,10 @@ it("protects the photo of a product a live menu version offers only as an extra"
     publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1");
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemon" } }, {});
-    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const menu = await createMenu(tx, { name: "Lunch Menu" });
     const make = (name: string, photoName: string | null) =>
       createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name,
         pricingUnit: "each",
@@ -1207,16 +1207,16 @@ describe("relevance scores and tie-breaks", () => {
   });
 });
 
-describe("free default choice with incomplete catalogue and image text", () => {
-  it("switches with all nine catalogue kinds and a real image gap without rewriting their rows", async () => {
+describe("free default choice with incomplete menu and image text", () => {
+  it("switches with all nine menu kinds and a real image gap without rewriting their rows", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
-      const menu = await createCatalogue(tx, {
+      const menu = await createMenu(tx, {
         name: "Staff menu",
         names: { en: "Customer menu" },
       });
-      const included = await createCatalogue(tx, {
+      const included = await createMenu(tx, {
         name: "Staff included menu",
         names: { en: "Customer included" },
       });
@@ -1248,7 +1248,7 @@ describe("free default choice with incomplete catalogue and image text", () => {
         "en",
       );
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "ES potatoes",
         kitchenName: "KITCHEN POTATOES",

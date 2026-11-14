@@ -106,7 +106,7 @@ type State =
 function api(state: State): DashboardApi {
   const never = () => new Promise(() => undefined);
   return {
-    listCatalogues:
+    listMenus:
       state === "failed"
         ? vi.fn().mockRejectedValue(new Error("offline"))
         : state === "loading"
@@ -123,7 +123,7 @@ function api(state: State): DashboardApi {
     listSections: vi.fn().mockResolvedValue(sections),
     listLibraryProducts: vi.fn().mockResolvedValue([lager]),
     listCategories: vi.fn().mockResolvedValue([]),
-    getCatalogueSettings: vi
+    getMenuSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getMenuStructure:

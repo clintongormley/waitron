@@ -5,8 +5,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   listAvailableProducts,
@@ -96,7 +96,7 @@ interface SeededVenue {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back two
+ * Stand up a fresh chained venue + registered SIF, then seed a menu and read back two
  * `each`/general(21%) products.
  */
 async function setupVenue(): Promise<SeededVenue> {
@@ -133,10 +133,10 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const available = await withTransaction(suite.db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
@@ -144,14 +144,14 @@ async function setupVenue(): Promise<SeededVenue> {
       vatClass: "general",
     });
     await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     return (await listAvailableProducts(tx)).products;
   });
   const coffee = available.find((p) => p.name === "Café")!;

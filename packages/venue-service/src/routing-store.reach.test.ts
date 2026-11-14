@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  createCatalogue,
+  createMenu,
   createCategory,
   createExtraList,
   createProduct,
@@ -67,11 +67,11 @@ async function fixture(tx: Transaction) {
     ])
     .returning();
   const food = (await createCategory(tx, { name: "Food" })).id;
-  const menu = await createCatalogue(tx, { name: "Menu" });
+  const menu = await createMenu(tx, { name: "Menu" });
   const product = async (name: string, categoryId: string | null) =>
     (
       await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         name,
         categoryId,
         pricingUnit: "each",
@@ -85,7 +85,7 @@ async function fixture(tx: Transaction) {
   const cheese = await product("Cheese", null);
   const [large] = await tx
     .insert(products)
-    .values({ catalogueId: menu.id, parentId: burger, name: "Large", categoryId: null })
+    .values({ menuId: menu.id, parentId: burger, name: "Large", categoryId: null })
     .returning();
   const list = await createExtraList(
     tx,

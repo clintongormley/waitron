@@ -245,9 +245,9 @@ The review left detached `readOnly` changes and a retained table's scroll/sort u
 The station dialog widens or narrows with the chosen station's name, so its
   buttons shift a little as a station is picked (it did so before this batch).
 
-### Catalogue ResizeObserver warning
+### Menu ResizeObserver warning
 
-The historical catalogue-only warning was not reproduced.
+The historical menu-only warning was not reproduced.
 
 ## Text size after A179 (#988)
 
@@ -427,7 +427,7 @@ Shared form plumbing, an untraced dialog focus line and retiring the summary onc
 
 The backup saved-key acknowledgement stays a prerequisite. Request refusals keep retry available;
 a marked field still uses the shared bottom correction sentence. Purchase-line refusals carry no
-line number, so they stay at the bottom. Catalogue and venue generic wording stays where no more
+line number, so they stay at the bottom. Menu and venue generic wording stays where no more
 specific existing sentence applies.
 
 The smaller Forms plan accepts the malformed-value exclusions: Boolean and enum controls, setup's

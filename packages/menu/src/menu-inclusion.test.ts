@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { useCatalogueDb, seedLegacySellingUnits } from "../test/fixtures.js";
-import { createCatalogue, createProduct, updateMenuDetails } from "./operations.js";
+import { useMenuDb, seedLegacySellingUnits } from "../test/fixtures.js";
+import { createMenu, createProduct, updateMenuDetails } from "./operations.js";
 import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
 import {
   addMember,
@@ -17,7 +17,7 @@ import { addShortcut, readMenuHome } from "./menu-home.js";
 import { listContentTranslationGaps } from "./content-languages.js";
 import { loadSectionGraph } from "./section-graph.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const section = (sectionId: string) => ({ kind: "section" as const, sectionId });
 const product = (productId: string) => ({ kind: "product" as const, productId });
@@ -25,9 +25,9 @@ async function fixture() {
   await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
-    const a = await createCatalogue(tx, { name: "Evening" });
-    const b = await createCatalogue(tx, { name: "Drinks" });
-    const c = await createCatalogue(tx, { name: "Wines" });
+    const a = await createMenu(tx, { name: "Evening" });
+    const b = await createMenu(tx, { name: "Drinks" });
+    const c = await createMenu(tx, { name: "Wines" });
     return {
       a: a.id,
       b: b.id,
@@ -99,7 +99,7 @@ describe("menu inclusions and owned sections", () => {
     const [lager, merlot] = await app(async (tx) => {
       const make = (name: string) =>
         createProduct(tx, {
-          catalogueId: f.a,
+          menuId: f.a,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -147,7 +147,7 @@ describe("menu inclusions and owned sections", () => {
       { id: f.a, name: "Evening" },
     ]);
     await fx.db.execute(
-      (await import("drizzle-orm")).sql`update catalogues set active = 0 where id = ${f.c}`,
+      (await import("drizzle-orm")).sql`update menus set active = 0 where id = ${f.c}`,
     );
     expect(
       (await app((tx) => readMenuStructure(tx, f.a))).includable.map((m) => m.id),
@@ -156,14 +156,14 @@ describe("menu inclusions and owned sections", () => {
   it("retains direct included-by membership while an included menu is inactive", async () => {
     const f = await fixture();
     const { sql } = await import("drizzle-orm");
-    await fx.db.execute(sql`update catalogues set active = 0 where id = ${f.b}`);
+    await fx.db.execute(sql`update menus set active = 0 where id = ${f.b}`);
     await app((tx) => addMember(tx, f.ar, section(f.br)));
     expect((await app((tx) => readMenuStructure(tx, f.b))).includedBy).toEqual([
       { id: f.a, name: "Evening" },
     ]);
     const { includedMenus } = await import("./menu-inclusion.js");
     expect(includedMenus(await app(loadSectionGraph), f.a)).toEqual([]);
-    await fx.db.execute(sql`update catalogues set active = 1 where id = ${f.b}`);
+    await fx.db.execute(sql`update menus set active = 1 where id = ${f.b}`);
     expect(includedMenus(await app(loadSectionGraph), f.a)).toEqual([f.b]);
   });
   it("writes menu presentation to its root on creation and update", async () => {
@@ -186,7 +186,7 @@ describe("menu inclusions and owned sections", () => {
   it("reports partial customer names for menu roots and owned sections", async () => {
     await seedTaxpayer(fx.db);
     await app(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Staff menu", names: { en: "Guest menu" } });
+      const menu = await createMenu(tx, { name: "Staff menu", names: { en: "Guest menu" } });
       const root = await requireMenuRoot(tx, menu.id);
       const own = await createSectionIn(tx, root, {
         internalName: "Staff section",
@@ -203,7 +203,7 @@ describe("menu inclusions and owned sections", () => {
     const f = await fixture();
     const wine = await app((tx) =>
       createProduct(tx, {
-        catalogueId: f.c,
+        menuId: f.c,
         categoryId: null,
         name: "Merlot",
         pricingUnit: "each",
@@ -217,11 +217,11 @@ describe("menu inclusions and owned sections", () => {
       await addMember(tx, f.cr, product(wine.id));
     });
     const { sql } = await import("drizzle-orm");
-    await fx.db.execute(sql`update catalogues set active = 0 where id = ${f.c}`);
+    await fx.db.execute(sql`update menus set active = 0 where id = ${f.c}`);
     const { includedMenus, placesOf } = await import("./menu-inclusion.js");
     expect(includedMenus(await app(loadSectionGraph), f.b)).toEqual([]);
     expect(placesOf(await app(loadSectionGraph), f.a, wine.id)).toEqual({ own: false, via: [] });
-    await fx.db.execute(sql`update catalogues set active = 1 where id = ${f.c}`);
+    await fx.db.execute(sql`update menus set active = 1 where id = ${f.c}`);
     expect(placesOf(await app(loadSectionGraph), f.a, wine.id)).toEqual({ own: false, via: [f.b] });
   });
   it("refuses a malformed direct member ref with the domain code", async () => {
@@ -237,7 +237,7 @@ describe("menu inclusions and owned sections", () => {
     const child = await app((tx) => createSectionIn(tx, parent.id, { internalName: "Child" }));
     const dish = await app((tx) =>
       createProduct(tx, {
-        catalogueId: f.a,
+        menuId: f.a,
         categoryId: null,
         name: "Kept product",
         pricingUnit: "each",

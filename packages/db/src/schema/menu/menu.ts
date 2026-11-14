@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { catalogues, products } from "../menus.js";
+import { menus, products } from "../menus.js";
 import { count, id, label, money, newId, table } from "../columns.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type { HomeOrder, HomeTileMode } from "@waitron/shared";
@@ -33,7 +33,7 @@ export const menuDetails = table(
   (t) => [
     foreignKey({
       columns: [t.menuId],
-      foreignColumns: [catalogues.id],
+      foreignColumns: [menus.id],
       name: "menu_details_menu_fk",
     }),
     foreignKey({
@@ -68,7 +68,7 @@ export const menuItems = table(
     unique("menu_items_menu_product_key").on(t.menuId, t.productId),
     foreignKey({
       columns: [t.menuId],
-      foreignColumns: [catalogues.id],
+      foreignColumns: [menus.id],
       name: "menu_items_menu_fk",
     }).onDelete("cascade"),
     foreignKey({

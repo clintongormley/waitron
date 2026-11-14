@@ -31,7 +31,7 @@ export function deviceZonesFixture(
   };
 }
 
-export function deviceZonesFor(catalogue: {
+export function deviceZonesFor(menu: {
   context: {
     zoneId: string;
     departmentId: string;
@@ -46,13 +46,13 @@ export function deviceZonesFor(catalogue: {
     serviceMode: "table_tab" | "prepay" | "ticket_then_pay";
   }[];
 }): DeviceZoneSelection {
-  const zones = catalogue.zones ?? [
+  const zones = menu.zones ?? [
     {
-      id: catalogue.context.zoneId,
-      name: catalogue.context.zoneId,
-      departmentId: catalogue.context.departmentId,
-      departmentName: catalogue.context.departmentName,
-      serviceMode: catalogue.context.serviceMode,
+      id: menu.context.zoneId,
+      name: menu.context.zoneId,
+      departmentId: menu.context.departmentId,
+      departmentName: menu.context.departmentName,
+      serviceMode: menu.context.serviceMode,
     },
   ];
   return {
@@ -60,7 +60,7 @@ export function deviceZonesFor(catalogue: {
     snapshot: "scope",
     zones,
     selectedZoneIds: zones.map((zone) => zone.id),
-    startingZoneId: catalogue.context.zoneId,
+    startingZoneId: menu.context.zoneId,
     adjusted: false,
     saved: false,
   };

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6ab1825e-a249-47f2-802c-392c85719f24",
+  "id": "c7259026-bf50-42f8-bea0-2a3efaebbc95",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -6486,8 +6486,46 @@
         }
       }
     },
-    "catalogues": {
-      "name": "catalogues",
+    "categories": {
+      "name": "categories",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "menus": {
+      "name": "menus",
       "columns": {
         "id": {
           "name": "id",
@@ -6543,53 +6581,15 @@
         }
       },
       "indexes": {
-        "catalogues_one_default_uq": {
-          "name": "catalogues_one_default_uq",
+        "menus_one_default_uq": {
+          "name": "menus_one_default_uq",
           "columns": [
             "is_default"
           ],
           "isUnique": true,
-          "where": "\"catalogues\".\"is_default\" = 1"
+          "where": "\"menus\".\"is_default\" = 1"
         }
       },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "categories": {
-      "name": "categories",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -6605,8 +6605,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "catalogue_id": {
-          "name": "catalogue_id",
+        "menu_id": {
+          "name": "menu_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -6795,10 +6795,10 @@
         }
       },
       "indexes": {
-        "products_catalogue_id_idx": {
-          "name": "products_catalogue_id_idx",
+        "products_menu_id_idx": {
+          "name": "products_menu_id_idx",
           "columns": [
-            "catalogue_id"
+            "menu_id"
           ],
           "isUnique": false
         },
@@ -6816,11 +6816,11 @@
           ],
           "isUnique": false
         },
-        "products_id_catalogue_key": {
-          "name": "products_id_catalogue_key",
+        "products_id_menu_key": {
+          "name": "products_id_menu_key",
           "columns": [
             "id",
-            "catalogue_id"
+            "menu_id"
           ],
           "isUnique": true
         },
@@ -6834,12 +6834,12 @@
         }
       },
       "foreignKeys": {
-        "products_catalogue_id_catalogues_id_fk": {
-          "name": "products_catalogue_id_catalogues_id_fk",
+        "products_menu_id_menus_id_fk": {
+          "name": "products_menu_id_menus_id_fk",
           "tableFrom": "products",
-          "tableTo": "catalogues",
+          "tableTo": "menus",
           "columnsFrom": [
-            "catalogue_id"
+            "menu_id"
           ],
           "columnsTo": [
             "id"
@@ -6873,17 +6873,17 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "products_parent_id_catalogue_id_products_id_catalogue_id_fk": {
-          "name": "products_parent_id_catalogue_id_products_id_catalogue_id_fk",
+        "products_parent_id_menu_id_products_id_menu_id_fk": {
+          "name": "products_parent_id_menu_id_products_id_menu_id_fk",
           "tableFrom": "products",
           "tableTo": "products",
           "columnsFrom": [
             "parent_id",
-            "catalogue_id"
+            "menu_id"
           ],
           "columnsTo": [
             "id",
-            "catalogue_id"
+            "menu_id"
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
@@ -12539,7 +12539,7 @@
         "menu_details_menu_fk": {
           "name": "menu_details_menu_fk",
           "tableFrom": "menu_details",
-          "tableTo": "catalogues",
+          "tableTo": "menus",
           "columnsFrom": [
             "menu_id"
           ],
@@ -12634,7 +12634,7 @@
         "menu_items_menu_fk": {
           "name": "menu_items_menu_fk",
           "tableFrom": "menu_items",
-          "tableTo": "catalogues",
+          "tableTo": "menus",
           "columnsFrom": [
             "menu_id"
           ],
@@ -13659,7 +13659,7 @@
         "sections_owner_menu_fk": {
           "name": "sections_owner_menu_fk",
           "tableFrom": "sections",
-          "tableTo": "catalogues",
+          "tableTo": "menus",
           "columnsFrom": [
             "owner_menu_id"
           ],
@@ -13709,7 +13709,7 @@
         "menu_publications_menu_fk": {
           "name": "menu_publications_menu_fk",
           "tableFrom": "menu_publications",
-          "tableTo": "catalogues",
+          "tableTo": "menus",
           "columnsFrom": [
             "menu_id"
           ],
@@ -13822,7 +13822,7 @@
         "menu_scheduled_publications_menu_fk": {
           "name": "menu_scheduled_publications_menu_fk",
           "tableFrom": "menu_scheduled_publications",
-          "tableTo": "catalogues",
+          "tableTo": "menus",
           "columnsFrom": [
             "menu_id"
           ],
@@ -13994,7 +13994,7 @@
         "menu_versions_menu_fk": {
           "name": "menu_versions_menu_fk",
           "tableFrom": "menu_versions",
-          "tableTo": "catalogues",
+          "tableTo": "menus",
           "columnsFrom": [
             "menu_id"
           ],
@@ -16205,7 +16205,7 @@
         "menu_period_staff_menus_menu_fk": {
           "name": "menu_period_staff_menus_menu_fk",
           "tableFrom": "menu_period_staff_menus",
-          "tableTo": "catalogues",
+          "tableTo": "menus",
           "columnsFrom": [
             "menu_id"
           ],
@@ -16323,7 +16323,7 @@
         "menu_periods_menu_fk": {
           "name": "menu_periods_menu_fk",
           "tableFrom": "menu_periods",
-          "tableTo": "catalogues",
+          "tableTo": "menus",
           "columnsFrom": [
             "menu_id"
           ],

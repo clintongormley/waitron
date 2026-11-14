@@ -13,7 +13,7 @@ import type { CounterWaitingOrder, HeldOrderSummary, TillProduct } from "../api/
 
 const coffee: TillProduct = {
   id: "p1",
-  catalogueId: "cat-default",
+  menuId: "cat-default",
   name: "Café",
   pricingUnit: "each",
   unitPrice: "1.50",

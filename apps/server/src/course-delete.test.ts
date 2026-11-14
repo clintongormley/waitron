@@ -37,7 +37,7 @@ describe("permanent course deletion", () => {
       await tx.update(products).set({ courseId: id }).where(eq(products.id, parentId));
       await tx.insert(products).values({
         id: variantId,
-        catalogueId: parent!.catalogueId,
+        menuId: parent!.menuId,
         parentId,
         name: "Small",
         courseId: id,

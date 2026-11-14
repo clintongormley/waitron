@@ -18,7 +18,7 @@ import {
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import {
-  catalogues,
+  menus,
   departmentDayRanges,
   departmentDays,
   departments,
@@ -64,7 +64,7 @@ import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu
 import { readStarterStaffLanguage } from "./starter-language.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
-import { readDefaultCatalogueId } from "@waitron/menu";
+import { readDefaultMenuId } from "@waitron/menu";
 
 export interface Department {
   id: string;
@@ -193,7 +193,7 @@ export async function createDepartment(
     .values({ departmentId: row!.id, orderStart: input.orderStart ?? "counter" });
   const staffLanguage = await readStarterStaffLanguage(tx);
   await addStarterServiceSteps(tx, row!.id, staffLanguage);
-  const menuId = await readDefaultCatalogueId(tx);
+  const menuId = await readDefaultMenuId(tx);
   if (menuId !== null) await placeOpenPeriod(tx, row!.id, menuId, staffLanguage);
   return row!;
 }
@@ -760,7 +760,7 @@ export async function liveDocumentsByZone(
 async function zonePeriodMembership(tx: Transaction, zoneId?: string) {
   const where = and(
     zoneId === undefined ? undefined : eq(floorZones.id, zoneId),
-    eq(catalogues.active, true),
+    eq(menus.active, true),
     eq(floorZones.active, true),
   );
   const customer = await tx
@@ -771,7 +771,7 @@ async function zonePeriodMembership(tx: Transaction, zoneId?: string) {
     })
     .from(menuPeriods)
     .innerJoin(floorZones, eq(floorZones.departmentId, menuPeriods.departmentId))
-    .innerJoin(catalogues, eq(catalogues.id, menuPeriods.menuId))
+    .innerJoin(menus, eq(menus.id, menuPeriods.menuId))
     .where(where)
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
   const staff = await tx
@@ -783,7 +783,7 @@ async function zonePeriodMembership(tx: Transaction, zoneId?: string) {
     .from(menuPeriodStaffMenus)
     .innerJoin(menuPeriods, eq(menuPeriods.id, menuPeriodStaffMenus.periodId))
     .innerJoin(floorZones, eq(floorZones.departmentId, menuPeriods.departmentId))
-    .innerJoin(catalogues, eq(catalogues.id, menuPeriodStaffMenus.menuId))
+    .innerJoin(menus, eq(menus.id, menuPeriodStaffMenus.menuId))
     .where(where)
     .orderBy(
       asc(menuPeriods.name),

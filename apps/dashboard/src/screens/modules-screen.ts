@@ -81,9 +81,9 @@ export class ModulesScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) request!: DashboardRequest;
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
-  @state() private catalogue?: ModuleRow[];
+  @state() private menu?: ModuleRow[];
   @state() private providers?: PaymentProviderRow[];
-  @state() private catalogueError = "";
+  @state() private menuError = "";
   @state() private providersError = "";
   @state() private category = "all";
   @state() private filter = "enabled";
@@ -105,11 +105,11 @@ export class ModulesScreen extends LitElement {
     },
     dashboardPath,
   );
-  readonly #catalogueQuery = new DashboardQueries(
+  readonly #menuQuery = new DashboardQueries(
     this,
     () => this.api,
     (error) => {
-      this.catalogueError = codeOf(error);
+      this.menuError = codeOf(error);
     },
   );
   readonly #providerQuery = new DashboardQueries(
@@ -130,9 +130,9 @@ export class ModulesScreen extends LitElement {
   }
   async #load(): Promise<void> {
     await Promise.all([
-      this.#catalogueQuery.watch("listModules", [], (rows) => {
-        this.catalogue = rows;
-        this.catalogueError = "";
+      this.#menuQuery.watch("listModules", [], (rows) => {
+        this.menu = rows;
+        this.menuError = "";
       }),
       this.#providerQuery.watch("listPaymentProviders", [], (rows) => {
         this.providers = rows;
@@ -186,7 +186,7 @@ export class ModulesScreen extends LitElement {
     this.switchError = "";
     this.readerNames = [];
     try {
-      const current = this.catalogue?.find(
+      const current = this.menu?.find(
         (entry) => entry.id === row.id && entry.category === row.category,
       );
       if (row.category === "module")
@@ -266,7 +266,7 @@ export class ModulesScreen extends LitElement {
                     >${text("modules.configure")}</wt-button
                   >${
                     this.canManageProviders &&
-                    this.catalogue?.find(
+                    this.menu?.find(
                       (module) => module.id === "payments" && module.category === "module",
                     )?.enabled !== false
                       ? html`<wt-button
@@ -291,7 +291,7 @@ export class ModulesScreen extends LitElement {
       editor?.category === "card-provider"
         ? this.panels.find((panel) => panel.providerId === editor.id)
         : undefined;
-    const rows = this.catalogue?.filter(
+    const rows = this.menu?.filter(
       (row) =>
         (this.category !== "card-providers" || row.category === "card-provider") &&
         (this.filter === "all" || row.enabled === (this.filter === "enabled")),
@@ -324,7 +324,7 @@ export class ModulesScreen extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#filters(this.category, event.detail.value)}
         ></wt-combobox>
       </div>
-      ${this.catalogueError || this.providersError ? html`<p class="error" role="alert">${codeMessage(this.catalogueError || this.providersError)} <wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button></p>` : nothing}
+      ${this.menuError || this.providersError ? html`<p class="error" role="alert">${codeMessage(this.menuError || this.providersError)} <wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button></p>` : nothing}
       ${rows ? html`<wt-data-table aria-label=${text("nav.modules")} .emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${rows} .columns=${this.#columns()} .rowKey=${(row: ModuleRow) => `${row.category}:${row.id}`} .wrapToFit=${true}></wt-data-table>` : html`<p>${text("modules.loading")}</p>`}
       <p><a href=${guideHref("modules.set-up")}>${text("modules.guide")}</a></p>
       ${

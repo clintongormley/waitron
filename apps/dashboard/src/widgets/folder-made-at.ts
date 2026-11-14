@@ -47,7 +47,7 @@ export function folderMadeAt(
   categories: readonly CategorySummary[],
 ): Map<string, FolderMadeAt> {
   const stationNames = new Map(routing.stations.map(({ id, name }) => [id, name]));
-  // The tree is the catalogue's live category list, which the routing read can lag behind.
+  // The tree is the menu's live category list, which the routing read can lag behind.
   const rules: RoutingRules = {
     ...selectionRulesFromModel(routing),
     parentOf: new Map(categories.map(({ id, parentId }) => [id, parentId])),

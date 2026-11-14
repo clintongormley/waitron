@@ -15,11 +15,11 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { createMenu, createProduct } from "./operations.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
-import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
+import { MENU_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 
 // Every raw `insert into product_modifiers` below supplies its own `id`: the column's value comes
 // from drizzle's `$defaultFn`, which a raw statement never reaches. Raw because these cases prove
@@ -44,11 +44,11 @@ const options: { doneness: string; dressing: string } = { doneness: "", dressing
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
   await run(async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: "Deli" });
+    const menu = await createMenu(tx, { name: "Deli" });
     const product = async (name: string, unitPrice: string) =>
       (
         await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: null,
           name,
           unitId: null,
@@ -518,8 +518,8 @@ describe("what a product's attachment write refuses", () => {
   });
 });
 
-describe("a product's attachment list in the catalogue's configuration transfer", () => {
-  const transferred = CATALOGUE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+describe("a product's attachment list in the menu's configuration transfer", () => {
+  const transferred = MENU_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
 
   it("copies both kinds of list before the rows that point at them", () => {
     // `importConfigurationTables` inserts in this order.

@@ -228,7 +228,7 @@ describe("returned-box membership reconciliation at boot", () => {
       expect(node.status).toBe(200);
       expect(await node.json()).toMatchObject({ acceptingSales: false });
 
-      const write = await fetch(`${base}/management-api/catalogues`, {
+      const write = await fetch(`${base}/management-api/menus`, {
         method: "POST",
         body: "{}",
       });

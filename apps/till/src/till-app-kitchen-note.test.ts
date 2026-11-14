@@ -25,7 +25,7 @@ import type {
   TabLines,
   TillApi,
   TillProduct,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 
 const till = {
@@ -44,7 +44,7 @@ const till = {
   servers: [],
 };
 
-const offers: ZoneOfferCatalogue = {
+const offers: ZoneOffers = {
   service: {
     open: true,
     zoneOpen: true,
@@ -67,7 +67,7 @@ const offers: ZoneOfferCatalogue = {
 const product = (id: string, name: string, unitPrice: string): TillProduct => ({
   id,
   menuItemId: `mi-${id}`,
-  catalogueId: "cat-default",
+  menuId: "cat-default",
   name,
   pricingUnit: "each",
   unitPrice,

@@ -97,8 +97,8 @@ const columnsOf = (table: Parameters<typeof getTableColumns>[0], minted: readonl
     .filter((name) => !minted.includes(name));
 /** Ids minted per database; a parent line is compared by its `line_no` instead. */
 const MINTED_ID_COLUMNS = ["id", "sale_id", "parent_line_id"];
-/** Catalogue rows' ids, minted per database like the line ids. */
-const CATALOGUE_ID_COLUMNS = ["product_id", "parent_product_id", "menu_id", "menu_version_id"];
+/** Menu rows' ids, minted per database like the line ids. */
+const MENU_ID_COLUMNS = ["product_id", "parent_product_id", "menu_id", "menu_version_id"];
 const LINE_COLUMNS = columnsOf(saleLines, MINTED_ID_COLUMNS);
 /** The sale header's columns but the ids minted per database. */
 const SALE_COLUMNS = columnsOf(sales, [
@@ -210,7 +210,7 @@ async function fileFullComps(db: Database) {
       )
       .map((row) => ({
         ...row,
-        ...Object.fromEntries(CATALOGUE_ID_COLUMNS.map((column) => [column, row[column] !== null])),
+        ...Object.fromEntries(MENU_ID_COLUMNS.map((column) => [column, row[column] !== null])),
         classification: JSON.parse(row.classification as string, (key, value: unknown) =>
           key === "id" ? undefined : value,
         ) as unknown,

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCatalogue, createProduct } from "@waitron/menu";
+import { createMenu, createProduct } from "@waitron/menu";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -143,9 +143,9 @@ async function configurationArtifact() {
   );
   await withTransaction(source.db, async (tx) => {
     await tx.update(invoiceSeries).set({ nextNumber: 42 });
-    const catalogue = await createCatalogue(tx, { name: "Imported menu" });
+    const menu = await createMenu(tx, { name: "Imported menu" });
     await createProduct(tx, {
-      catalogueId: catalogue.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Imported gazpacho",
       pricingUnit: "each",

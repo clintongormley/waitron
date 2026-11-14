@@ -20,7 +20,7 @@ import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
-import type { TillApi, FloorZone, ZoneOfferCatalogue } from "./api/client.js";
+import type { TillApi, FloorZone, ZoneOffers } from "./api/client.js";
 import type { TillShell } from "./widgets/till-shell.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -84,7 +84,7 @@ const floorZones: FloorZone[] = zones.map((zone) => ({
   layoutSetName: null,
   layoutDue: null,
 }));
-const catalogue = (id: string): ZoneOfferCatalogue => ({
+const zoneOffers = (id: string): ZoneOffers => ({
   service: {
     open: true,
     zoneOpen: true,
@@ -183,8 +183,8 @@ async function mount(
     }),
     getDeviceZones: vi.fn().mockResolvedValue(chosen),
     setDeviceZones: vi.fn().mockResolvedValue(chosen),
-    listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue(chosen.startingZoneId ?? "bar")),
-    listZoneOffers: vi.fn(async (id: string) => catalogue(id)),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers(chosen.startingZoneId ?? "bar")),
+    listZoneOffers: vi.fn(async (id: string) => zoneOffers(id)),
     setServiceZone: vi.fn(),
     listStaff: vi.fn().mockResolvedValue([]),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
@@ -605,7 +605,7 @@ describe("live device zones", () => {
       },
     };
     const { el, api } = await mount(selection(["bar", "room"], "room"), {
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("bar")),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers("bar")),
       getTablesState: vi.fn().mockResolvedValue([table]),
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [], printProblems: [] }),
@@ -732,7 +732,7 @@ it("a click on another Counter zone is refused with basket lines and during a su
 
 it("choosing a Counter zone from Floor opens Counter once and closes its checked list", async () => {
   const { el, api } = await mount(selection(["bar", "shop", "room"], "room"), {
-    listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("bar")),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers("bar")),
   });
   expect(counter(el)).toBeNull();
   const menu = shell(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-zones]")!;
@@ -913,8 +913,8 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
 });
 
 it("a line added while a zone read is pending keeps the original zone and price", async () => {
-  let answer!: (value: ZoneOfferCatalogue) => void;
-  const pending = new Promise<ZoneOfferCatalogue>((resolve) => {
+  let answer!: (value: ZoneOffers) => void;
+  const pending = new Promise<ZoneOffers>((resolve) => {
     answer = resolve;
   });
   const { el, api } = await mount(selection(["bar", "shop"], "bar"), {
@@ -930,7 +930,7 @@ it("a line added while a zone read is pending keeps the original zone and price"
   expect(api.listZoneOffers).toHaveBeenCalledOnce();
   const store = counter(el)!.store!;
   store.addProduct(counter(el)!.products[0]!, "1");
-  answer(catalogue("shop"));
+  answer(zoneOffers("shop"));
   await pending;
   await el.updateComplete;
   expect(counter(el)!.selectedServiceZoneId).toBe("bar");
@@ -1630,7 +1630,7 @@ describe("a handheld's zones", () => {
         ],
       });
     const { el } = await mountHandheld(selection(["garden"], "garden"), formFactor, {
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("bar")),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers("bar")),
       getTablesState: vi.fn().mockResolvedValue([table]),
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [], printProblems: [] }),
@@ -1851,7 +1851,7 @@ describe("a handheld's zones", () => {
         ...selection(["garden"], "garden"),
         snapshot: "restored",
       });
-      api.listDefaultZoneOffers.mockResolvedValue(catalogue("garden"));
+      api.listDefaultZoneOffers.mockResolvedValue(zoneOffers("garden"));
       await userEvent.click(empty(el)!.querySelector<HTMLElement>("[data-retry-device-zones]")!);
       expect(await floorZoneIds(el)).toEqual(["garden"]);
       expect(empty(el)).toBeNull();
@@ -2689,7 +2689,7 @@ describe("a handheld's zones", () => {
     ),
   };
   const routeOffers = () => {
-    const offers = catalogue("bar");
+    const offers = zoneOffers("bar");
     return { ...offers, zones: offers.zones!.filter((zone) => zone.serviceMode !== "table_tab") };
   };
   const acceptZones = (el: TillApp) =>

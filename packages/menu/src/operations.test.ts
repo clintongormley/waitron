@@ -13,24 +13,24 @@ import type { PriceableProduct } from "./pricing.js";
 import type { PricingUnit } from "@waitron/shared";
 import { customerPresentationText } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
-import { readDefaultCatalogueId } from "./operations.js";
+import { readDefaultMenuId } from "./operations.js";
 import {
-  assignCatalogueToVenue,
-  catalogueExists,
-  createCatalogue,
+  assignMenuToVenue,
+  menuExists,
+  createMenu,
   createCategory,
   addProductToMenu,
   createProduct,
-  deactivateCatalogue,
+  deactivateMenu,
   deactivateProduct,
   listAvailableProducts,
-  listCatalogues,
+  listMenus,
   listCategories,
   listMenuOffers,
   listProducts,
   readInvoiceLocales,
   readReceiptLanguage,
-  setVenueDefaultCatalogue,
+  setVenueDefaultMenu,
   updateMenuDetails,
   updateCategory,
   updateMenuItem,
@@ -39,16 +39,16 @@ import {
 import type { AvailableProduct } from "./operations.js";
 import { createUnit, EACH_UNIT } from "./units.js";
 import {
-  seedCatalogueFixture,
+  seedMenuFixture,
   seedLegacySellingUnits,
   seedVenueWithSeries,
   storedUnitId,
-  useCatalogueDb,
+  useMenuDb,
 } from "../test/fixtures.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 // The till resolves an AvailableProduct's customer-facing text (customerName, falling back to the
-// staff name) before pricing — the three-name model's seam between a catalogue read and a sale
+// staff name) before pricing — the three-name model's seam between a menu read and a sale
 // line, owned by product-presentation.ts rather than re-implemented here.
 const toPriceable = (p: AvailableProduct): PriceableProduct => ({
   ...p,
@@ -66,15 +66,15 @@ const toPriceable = (p: AvailableProduct): PriceableProduct => ({
 });
 
 // Query behaviour. Each case starts with empty authoring tables.
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 beforeEach(() => seedLibraryImages(fx.db, "x.webp", "y.png"));
 
-describe("catalogue operations", () => {
+describe("menu operations", () => {
   it("round-trips independent product description and kitchen name, and clears both", async () => {
     await asVenue(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Lunch" });
+      const menu = await createMenu(tx, { name: "Lunch" });
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Coffee",
         customerName: { en: "Coffee", es: "Café" },
@@ -103,10 +103,10 @@ describe("catalogue operations", () => {
   it("offers one product on two menus with distinct identities and prices", async () => {
     await asVenue(async (tx) => {
       const category = await createCategory(tx, { name: "Cocktails" });
-      const upstairs = await createCatalogue(tx, { name: "Upstairs" });
-      const downstairs = await createCatalogue(tx, { name: "Downstairs" });
+      const upstairs = await createMenu(tx, { name: "Upstairs" });
+      const downstairs = await createMenu(tx, { name: "Downstairs" });
       const product = await createProduct(tx, {
-        catalogueId: upstairs.id,
+        menuId: upstairs.id,
         categoryId: category.id,
         name: "Negroni",
         unitId: eachUnitId,
@@ -152,15 +152,15 @@ describe("catalogue operations", () => {
           productId: product.id,
           grossPrice: "8.00",
         }),
-      ).rejects.toMatchObject({ code: "catalogue.not_found" });
+      ).rejects.toMatchObject({ code: "menu.not_found" });
     });
   });
 
   it("keeps a category-less product visible with its null category", async () => {
     await asVenue(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Counter" });
+      const menu = await createMenu(tx, { name: "Counter" });
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Water",
         unitId: eachUnitId,
@@ -226,13 +226,13 @@ describe("catalogue operations", () => {
       return fn(tx);
     });
 
-  it("creates and lists catalogues", async () => {
+  it("creates and lists menus", async () => {
     await asVenue(async (tx) => {
-      const deli = await createCatalogue(tx, { name: "Deli" });
-      const stall = await createCatalogue(tx, { name: "Drinks stall" });
+      const deli = await createMenu(tx, { name: "Deli" });
+      const stall = await createMenu(tx, { name: "Drinks stall" });
       expect(deli.active).toBe(true);
       expect(deli.version).toBe(1);
-      const cats = await listCatalogues(tx);
+      const cats = await listMenus(tx);
       expect(cats.map((c) => c.name).sort()).toEqual(["Deli", "Drinks stall"]);
       expect(cats.map((c) => c.id).sort()).toEqual([deli.id, stall.id].sort());
     });
@@ -248,12 +248,12 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("creates and lists a catalogue's products", async () => {
+  it("creates and lists a menu's products", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
-      const other = await createCatalogue(tx, { name: "Other" });
+      const cat = await createMenu(tx, { name: "Deli" });
+      const other = await createMenu(tx, { name: "Other" });
       const ham = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "sliced ham",
         unitId: kgUnitId,
@@ -261,16 +261,16 @@ describe("catalogue operations", () => {
         vatClass: "reduced",
       });
       const water = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
-      // A product in a DIFFERENT catalogue must not leak into this catalogue's listing.
+      // A product in a DIFFERENT menu must not leak into this menu's listing.
       await createProduct(tx, {
-        catalogueId: other.id,
+        menuId: other.id,
         categoryId: null,
         name: "olives",
         unitId: eachUnitId,
@@ -303,11 +303,11 @@ describe("catalogue operations", () => {
   // random v4 UUID, so a caller that needs creation order cannot get it from these two columns.
   it("settles a created_at tie on the product id rather than on insert order", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const sameMoment = new Date("2026-09-22T10:00:00.000Z");
       const row = (id: string, name: string) => ({
         id,
-        catalogueId: cat.id,
+        menuId: cat.id,
         name,
         pricingUnit: "each",
         unitPrice: 100,
@@ -330,11 +330,11 @@ describe("catalogue operations", () => {
 
   it("reads a product with no unit as the synthetic Each unit", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       // Create a normal product, then remove its product_units row so the read exercises the
       // null-join branch of a product that has no stored unit at all.
       const product = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "loose sweets",
         pricingUnit: "each",
@@ -353,9 +353,9 @@ describe("catalogue operations", () => {
 
   it("creates a product with no unit when unitId is null", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const created = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "loose sweets",
         unitId: null,
@@ -370,9 +370,9 @@ describe("catalogue operations", () => {
 
   it("clears a product's unit when updated to null", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const created = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -391,9 +391,9 @@ describe("catalogue operations", () => {
 
   it("leaves a product's unit unchanged when neither unitId nor pricingUnit is patched", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const created = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -407,9 +407,9 @@ describe("catalogue operations", () => {
 
   it("legacy pricingUnit 'each' creates a product with no unit", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const created = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "loose sweets",
         pricingUnit: "each",
@@ -423,10 +423,10 @@ describe("catalogue operations", () => {
 
   it("refuses an empty unit id on create and on update, leaving the stored unit as it was", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       await expect(
         createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: null,
           name: "Stray",
           unitId: "",
@@ -437,7 +437,7 @@ describe("catalogue operations", () => {
       expect(await listProducts(tx, cat.id)).toEqual([]);
 
       const created = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -454,11 +454,11 @@ describe("catalogue operations", () => {
 
   it("refuses a create naming an unknown category before writing the product", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const missing = crypto.randomUUID();
       await expect(
         createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: missing,
           name: "Stray",
           unitId: eachUnitId,
@@ -471,12 +471,12 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("refuses a create naming an unknown catalogue with catalogue.not_found", async () => {
+  it("refuses a create naming an unknown menu with menu.not_found", async () => {
     const missing = crypto.randomUUID();
     await expect(
       asVenue((tx) =>
         createProduct(tx, {
-          catalogueId: missing,
+          menuId: missing,
           categoryId: null,
           name: "Stray",
           unitId: eachUnitId,
@@ -484,15 +484,15 @@ describe("catalogue operations", () => {
           vatClass: "general",
         }),
       ),
-    ).rejects.toMatchObject({ code: "catalogue.not_found", params: { catalogueId: missing } });
+    ).rejects.toMatchObject({ code: "menu.not_found", params: { menuId: missing } });
   });
 
-  it("names the catalogue before the category when both are unknown", async () => {
+  it("names the menu before the category when both are unknown", async () => {
     const missing = crypto.randomUUID();
     await expect(
       asVenue((tx) =>
         createProduct(tx, {
-          catalogueId: missing,
+          menuId: missing,
           categoryId: crypto.randomUUID(),
           name: "Stray",
           unitId: eachUnitId,
@@ -500,15 +500,15 @@ describe("catalogue operations", () => {
           vatClass: "general",
         }),
       ),
-    ).rejects.toMatchObject({ code: "catalogue.not_found", params: { catalogueId: missing } });
+    ).rejects.toMatchObject({ code: "menu.not_found", params: { menuId: missing } });
   });
 
   it("still rejects a create with neither unitId nor pricingUnit", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       await expect(
         createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: null,
           name: "mystery",
           unitPrice: "0.00",
@@ -520,10 +520,10 @@ describe("catalogue operations", () => {
 
   it("rejects a create whose legacy pricingUnit is neither 'each' nor 'weight'", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       await expect(
         createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: null,
           name: "mystery",
           // A stray legacy value must be rejected at the boundary, not treated as weight.
@@ -540,9 +540,9 @@ describe("catalogue operations", () => {
 
   it("rejects an update whose legacy pricingUnit is neither 'each' nor 'weight'", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const product = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -560,9 +560,9 @@ describe("catalogue operations", () => {
 
   it("attaches legacy product creates to the taxpayer's real seeded unit", async () => {
     await asVenue(async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Deli" });
+      const menu = await createMenu(tx, { name: "Deli" });
       const ham = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "ham",
         pricingUnit: "weight",
@@ -587,9 +587,9 @@ describe("catalogue operations", () => {
 
   it("keeps the legacy pricing sentinel coherent when a product's unit changes", async () => {
     await asVenue(async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Deli" });
+      const menu = await createMenu(tx, { name: "Deli" });
       const ham = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -601,7 +601,7 @@ describe("catalogue operations", () => {
         select pricing_unit from products
         where id = ${ham.id}`);
       expect(stored.rows).toEqual([{ pricing_unit: "each" }]);
-      const [updated] = await listProducts(tx, catalogue.id);
+      const [updated] = await listProducts(tx, menu.id);
       expect(updated).toMatchObject({
         unitId: eachUnitId,
         pricingUnit: "each",
@@ -612,9 +612,9 @@ describe("catalogue operations", () => {
 
   it("keeps the real unit assignment coherent when a legacy product changes pricing basis", async () => {
     await asVenue(async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Deli" });
+      const menu = await createMenu(tx, { name: "Deli" });
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "ham",
         pricingUnit: "each",
@@ -626,7 +626,7 @@ describe("catalogue operations", () => {
         select unit_id from product_units
         where product_id = ${product.id}`);
       expect(assignments.rows).toEqual([{ unit_id: kgUnitId }]);
-      const [updated] = await listProducts(tx, catalogue.id);
+      const [updated] = await listProducts(tx, menu.id);
       expect(updated).toMatchObject({
         unitId: kgUnitId,
         pricingUnit: "weight",
@@ -637,9 +637,9 @@ describe("catalogue operations", () => {
 
   it("updates a product's price and description", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const water = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -658,10 +658,10 @@ describe("catalogue operations", () => {
 
   it("threads a product's image through create, update and list", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       // Created WITH an image: the stored reference round-trips out of createProduct and listProducts.
       const withImage = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -672,7 +672,7 @@ describe("catalogue operations", () => {
       expect(withImage.image).toBe(libraryImageName("x.webp"));
       // Omitting `image` leaves it null (no picture — distinct from allergens' PENDING null).
       const noImage = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -696,9 +696,9 @@ describe("catalogue operations", () => {
 
   it("archives a product through updateProduct and refuses switching it back on", async () => {
     const { cat, p } = await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -721,10 +721,10 @@ describe("catalogue operations", () => {
 
   it("creates a product inactive when active:false, active by default when omitted", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       // Created INACTIVE in one write: the flag round-trips out of createProduct.
       const hidden = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "seasonal",
         unitId: eachUnitId,
@@ -735,7 +735,7 @@ describe("catalogue operations", () => {
       expect(hidden.active).toBe(false);
       // Omitting `active` leaves the column default (true).
       const shown = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -752,9 +752,9 @@ describe("catalogue operations", () => {
 
   it("creates a product with the ordering it is given, public when it is given none", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const base = {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         unitId: eachUnitId,
         unitPrice: "1.50",
@@ -784,9 +784,9 @@ describe("catalogue operations", () => {
 
   it("changes a product's ordering through updateProduct and leaves it alone when not named", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "bacon",
         unitId: eachUnitId,
@@ -802,9 +802,9 @@ describe("catalogue operations", () => {
 
   it("updateProduct publishes the declaration sorted and de-duplicated", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "Bread",
         unitId: eachUnitId,
@@ -826,9 +826,9 @@ describe("catalogue operations", () => {
 
   it("round-trips a product's allergens", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "bread",
         unitId: eachUnitId,
@@ -844,9 +844,9 @@ describe("catalogue operations", () => {
 
   it("defaults allergens to null (unreviewed) when omitted", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -859,10 +859,10 @@ describe("catalogue operations", () => {
 
   it("rejects an invalid allergen code on create", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       await expect(
         createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: null,
           name: "mystery",
           unitId: eachUnitId,
@@ -876,9 +876,9 @@ describe("catalogue operations", () => {
 
   it("validates allergens on update and clears them with null", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "cake",
         unitId: eachUnitId,
@@ -905,9 +905,9 @@ describe("catalogue operations", () => {
 
   it("listAvailableProducts returns allergens", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "milk",
         unitId: eachUnitId,
@@ -915,7 +915,7 @@ describe("catalogue operations", () => {
         vatClass: "general",
         allergens: { milk: {} },
       });
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       const [available] = (await listAvailableProducts(tx)).products;
       expect(available!.allergens).toEqual({ milk: {} });
     });
@@ -923,7 +923,7 @@ describe("catalogue operations", () => {
 
   it("listAvailableProducts carries a measure unit's switch, and no key for one without it", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Bar" });
+      const cat = await createMenu(tx, { name: "Bar" });
       const ml = await createUnit(
         tx,
         {
@@ -941,7 +941,7 @@ describe("catalogue operations", () => {
         ["olives", eachUnitId],
       ] as const) {
         await createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: null,
           name,
           unitId,
@@ -949,7 +949,7 @@ describe("catalogue operations", () => {
           vatClass: "general",
         });
       }
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       const available = (await listAvailableProducts(tx)).products;
 
       expect(available.find((p) => p.name === "vermut")!.unit.measure).toBe(true);
@@ -959,9 +959,9 @@ describe("catalogue operations", () => {
 
   it("listAvailableProducts carries the diet profile", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "falafel wrap",
         unitId: eachUnitId,
@@ -970,7 +970,7 @@ describe("catalogue operations", () => {
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
       });
 
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       const [available] = (await listAvailableProducts(tx)).products;
 
       expect(available!.diet).toMatchObject({ vegan: "no", halal: "yes", contains: ["meat"] });
@@ -980,9 +980,9 @@ describe("catalogue operations", () => {
 
   it("createProduct publishes the manual allergen map", async () => {
     const result = await withTransaction(fx.db, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
+      const cat = await createMenu(tx, { name: "C" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "sandwich",
         unitId: eachUnitId,
@@ -999,9 +999,9 @@ describe("catalogue operations", () => {
   // the dashboard's editor can seed its controls from the manual value. No override reads `null`.
   it("exposes diet_override on the management product read", async () => {
     const [withOverride, without] = await withTransaction(fx.db, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
+      const cat = await createMenu(tx, { name: "C" });
       const forced = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "falafel",
         unitId: eachUnitId,
@@ -1010,7 +1010,7 @@ describe("catalogue operations", () => {
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
       });
       const plain = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "plain",
         unitId: eachUnitId,
@@ -1027,12 +1027,12 @@ describe("catalogue operations", () => {
   // A caller-supplied id that names no product is a SILENT no-op, as for every other patch field.
   it("updateProduct with allergens on a nonexistent id does not throw and affects no row", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
+      const cat = await createMenu(tx, { name: "C" });
       const missing = "00000000-0000-0000-0000-0000000000ff";
       await expect(
         updateProduct(tx, missing, { allergens: { eggs: {} } }),
       ).resolves.toBeUndefined();
-      // No row was created or altered: the catalogue stays empty.
+      // No row was created or altered: the menu stays empty.
       expect(await listProducts(tx, cat.id)).toEqual([]);
     });
   });
@@ -1048,9 +1048,9 @@ describe("catalogue operations", () => {
 
   it("createProduct with no override publishes an unknown (cautious) diet profile", async () => {
     const [row] = await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
+      const cat = await createMenu(tx, { name: "C" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "plain",
         unitId: eachUnitId,
@@ -1067,9 +1067,9 @@ describe("catalogue operations", () => {
   // the override, so they surface on `diet` straight away.
   it("createProduct persists dietOverride and folds it into published diet", async () => {
     const [row] = await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
+      const cat = await createMenu(tx, { name: "C" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "falafel",
         unitId: eachUnitId,
@@ -1085,10 +1085,10 @@ describe("catalogue operations", () => {
 
   it("createProduct rejects a diet override that both adds and removes a contains-tag", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
+      const cat = await createMenu(tx, { name: "C" });
       await expect(
         createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: null,
           name: "x",
           unitId: eachUnitId,
@@ -1102,9 +1102,9 @@ describe("catalogue operations", () => {
 
   it("updateProduct rejects a conflicting diet override", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
+      const cat = await createMenu(tx, { name: "C" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "x",
         unitId: eachUnitId,
@@ -1122,9 +1122,9 @@ describe("catalogue operations", () => {
   // An unrelated edit (no dietOverride key) must NOT disturb the published diet profile.
   it("updateProduct without a dietOverride key leaves diet untouched", async () => {
     const [row] = await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
+      const cat = await createMenu(tx, { name: "C" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "x",
         unitId: eachUnitId,
@@ -1138,11 +1138,11 @@ describe("catalogue operations", () => {
     expect(row!.diet).toMatchObject({ vegan: "no" });
   });
 
-  it("renames a catalogue", async () => {
+  it("renames a menu", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       await updateMenuDetails(tx, cat.id, { name: "Delicatessen" });
-      const [seen] = await listCatalogues(tx);
+      const [seen] = await listMenus(tx);
       expect(seen!.name).toBe("Delicatessen");
     });
   });
@@ -1158,10 +1158,10 @@ describe("catalogue operations", () => {
 
   it("lists only the active products of the venue's menus, with the category name resolved", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const food = await createCategory(tx, { name: "Food" });
       const p1 = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: food.id,
         name: "sliced ham",
         unitId: kgUnitId,
@@ -1169,7 +1169,7 @@ describe("catalogue operations", () => {
         vatClass: "reduced",
       });
       const p2 = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -1177,7 +1177,7 @@ describe("catalogue operations", () => {
         vatClass: "general",
       });
       await deactivateProduct(tx, p2.id);
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       const { products: available } = await listAvailableProducts(tx);
       expect(available.map((p) => p.id)).toEqual([p1.id]);
       expect(available[0]!.category).toBe("Food");
@@ -1189,16 +1189,16 @@ describe("catalogue operations", () => {
 
   it("lists the products of every active menu, with no venue list", async () => {
     await asVenue(async (tx) => {
-      const main = await createCatalogue(tx, { name: "Main" });
-      const lunch = await createCatalogue(tx, { name: "Lunch" });
-      const old = await createCatalogue(tx, { name: "Old" });
+      const main = await createMenu(tx, { name: "Main" });
+      const lunch = await createMenu(tx, { name: "Lunch" });
+      const old = await createMenu(tx, { name: "Old" });
       for (const [menu, name] of [
         [main, "Steak"],
         [lunch, "Set menu"],
         [old, "Hidden"],
       ] as const) {
         await createProduct(tx, {
-          catalogueId: menu.id,
+          menuId: menu.id,
           categoryId: null,
           name,
           unitId: eachUnitId,
@@ -1206,12 +1206,12 @@ describe("catalogue operations", () => {
           vatClass: "general",
         });
       }
-      await assignCatalogueToVenue(tx, main.id);
-      await deactivateCatalogue(tx, old.id);
+      await assignMenuToVenue(tx, main.id);
+      await deactivateMenu(tx, old.id);
       const { products: rows } = await listAvailableProducts(tx);
-      expect(rows.map(({ name, catalogueName }) => ({ name, catalogueName }))).toEqual([
-        { name: "Set menu", catalogueName: "Lunch" },
-        { name: "Steak", catalogueName: "Main" },
+      expect(rows.map(({ name, menuName }) => ({ name, menuName }))).toEqual([
+        { name: "Set menu", menuName: "Lunch" },
+        { name: "Steak", menuName: "Main" },
       ]);
     });
   });
@@ -1219,9 +1219,9 @@ describe("catalogue operations", () => {
   it("lists every active menu's products when the venue has no default", async () => {
     await asVenue(async (tx) => {
       for (const name of ["Lunch", "Main"]) {
-        const menu = await createCatalogue(tx, { name });
+        const menu = await createMenu(tx, { name });
         await createProduct(tx, {
-          catalogueId: menu.id,
+          menuId: menu.id,
           categoryId: null,
           name,
           unitId: eachUnitId,
@@ -1257,16 +1257,16 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("setVenueDefaultCatalogue moves the default flag and leaves one default", async () => {
+  it("setVenueDefaultMenu moves the default flag and leaves one default", async () => {
     await asVenue(async (tx) => {
-      const house = await createCatalogue(tx, { name: "House" });
-      const day = await createCatalogue(tx, { name: "Day" });
-      await setVenueDefaultCatalogue(tx, house.id);
-      await setVenueDefaultCatalogue(tx, day.id);
+      const house = await createMenu(tx, { name: "House" });
+      const day = await createMenu(tx, { name: "Day" });
+      await setVenueDefaultMenu(tx, house.id);
+      await setVenueDefaultMenu(tx, day.id);
       expect(
         (
           await tx.execute<{ id: string; is_default: number }>(sql`
-        select id, is_default from catalogues order by name`)
+        select id, is_default from menus order by name`)
         ).rows,
       ).toEqual([
         { id: day.id, is_default: 1 },
@@ -1275,87 +1275,87 @@ describe("catalogue operations", () => {
     });
   });
 
-  it("setVenueDefaultCatalogue moves the default and leaves the old default an active menu", async () => {
+  it("setVenueDefaultMenu moves the default and leaves the old default an active menu", async () => {
     await asVenue(async (tx) => {
-      const house = await createCatalogue(tx, { name: "Casa" });
-      const day = await createCatalogue(tx, { name: "Día" });
-      await assignCatalogueToVenue(tx, house.id);
-      await setVenueDefaultCatalogue(tx, day.id);
-      expect(await readDefaultCatalogueId(tx)).toBe(day.id);
-      expect((await listCatalogues(tx)).find(({ id }) => id === house.id)).toMatchObject({
+      const house = await createMenu(tx, { name: "Casa" });
+      const day = await createMenu(tx, { name: "Día" });
+      await assignMenuToVenue(tx, house.id);
+      await setVenueDefaultMenu(tx, day.id);
+      expect(await readDefaultMenuId(tx)).toBe(day.id);
+      expect((await listMenus(tx)).find(({ id }) => id === house.id)).toMatchObject({
         active: true,
       });
     });
   });
 
-  it("setVenueDefaultCatalogue sets the default when the venue had none", async () => {
+  it("setVenueDefaultMenu sets the default when the venue had none", async () => {
     await asVenue(async (tx) => {
-      const house = await createCatalogue(tx, { name: "Casa" });
-      await setVenueDefaultCatalogue(tx, house.id);
-      expect(await readDefaultCatalogueId(tx)).toBe(house.id);
+      const house = await createMenu(tx, { name: "Casa" });
+      await setVenueDefaultMenu(tx, house.id);
+      expect(await readDefaultMenuId(tx)).toBe(house.id);
     });
   });
 
-  describe.each([["setVenueDefaultCatalogue", setVenueDefaultCatalogue]] as const)(
+  describe.each([["setVenueDefaultMenu", setVenueDefaultMenu]] as const)(
     "%s with an id naming nothing",
     (_name, write) => {
-      it("refuses an unknown catalogue with catalogue.not_found", async () => {
+      it("refuses an unknown menu with menu.not_found", async () => {
         const missing = crypto.randomUUID();
         await expect(asVenue((tx) => write(tx, missing))).rejects.toMatchObject({
-          code: "catalogue.not_found",
-          params: { catalogueId: missing },
+          code: "menu.not_found",
+          params: { menuId: missing },
         });
       });
     },
   );
 
-  it("catalogueExists is true for an existing catalogue and false for an absent id", async () => {
+  it("menuExists is true for an existing menu and false for an absent id", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Casa" });
-      expect(await catalogueExists(tx, cat.id)).toBe(true);
-      expect(await catalogueExists(tx, "00000000-0000-0000-0000-000000000000")).toBe(false);
+      const cat = await createMenu(tx, { name: "Casa" });
+      expect(await menuExists(tx, cat.id)).toBe(true);
+      expect(await menuExists(tx, "00000000-0000-0000-0000-000000000000")).toBe(false);
     });
   });
 
   it("returns null category for an available product with no category", async () => {
     await asVenue(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       const [available] = (await listAvailableProducts(tx)).products;
       expect(available!.category).toBeNull();
       expect(available!.courseId).toBeNull();
     });
   });
 
-  it("returns [] for a venue with no catalogue assigned", async () => {
+  it("returns [] for a venue with no menu assigned", async () => {
     await asVenue(async (tx) => {
       expect((await listAvailableProducts(tx)).products).toEqual([]);
     });
   });
 
-  it("hides every product of a deactivated catalogue", async () => {
+  it("hides every product of a deactivated menu", async () => {
     await asVenue(async (tx) => {
-      const fixture = await seedCatalogueFixture(tx);
+      const fixture = await seedMenuFixture(tx);
       expect((await listAvailableProducts(tx)).products.length).toBe(2);
-      await deactivateCatalogue(tx, fixture.catalogueId);
+      await deactivateMenu(tx, fixture.menuId);
       expect((await listAvailableProducts(tx)).products).toEqual([]);
     });
   });
 
-  it("returns products from a seeded catalogue that priceBasket can consume directly", async () => {
+  it("returns products from a seeded menu that priceBasket can consume directly", async () => {
     await asVenue(async (tx) => {
-      await seedCatalogueFixture(tx);
+      await seedMenuFixture(tx);
       const { products: available } = await listAvailableProducts(tx);
       expect(available.map((p) => p.category).sort()).toEqual(["Drinks", "Food"]);
-      // The till prices catalogue rows by first resolving each one's customer-facing text; the
+      // The till prices menu rows by first resolving each one's customer-facing text; the
       // resolved rows feed straight into priceBasket.
       const priced = priceBasket(
         available.map((product) => ({ product: toPriceable(product), quantity: "1" })),
@@ -1388,8 +1388,8 @@ describe("catalogue operations", () => {
       dietOverride: null,
       dietaryDeclarations: [],
       courseId: null,
-      catalogueId: "00000000-0000-0000-0000-000000000001",
-      catalogueName: "Deli",
+      menuId: "00000000-0000-0000-0000-000000000001",
+      menuName: "Deli",
       offeredModifiers: [],
     };
     const priceable = toPriceable(sample);
@@ -1419,9 +1419,9 @@ describe("menu offers nest a product's variants", () => {
   beforeEach(async () => {
     await seedVenueWithSeries(fx.db);
     f = await run(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Bar" });
+      const menu = await createMenu(tx, { name: "Bar" });
       const parent = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Wine by the glass",
         pricingUnit: "each",
@@ -1457,7 +1457,7 @@ describe("menu offers nest a product's variants", () => {
     // A second product on the same menu KEEPS the price this menu sets, whatever its own does.
     const kept = await run(async (tx) => {
       const product = await createProduct(tx, {
-        catalogueId: f.menuId,
+        menuId: f.menuId,
         categoryId: null,
         name: "Cava",
         pricingUnit: "each",
@@ -1495,7 +1495,7 @@ describe("menu offers nest a product's variants", () => {
   it("creates an offer with a blank price, and a blank-price offer follows its product's price", async () => {
     const created = await run(async (tx) => {
       const product = await createProduct(tx, {
-        catalogueId: f.menuId,
+        menuId: f.menuId,
         categoryId: null,
         name: "Vermut",
         pricingUnit: "each",
@@ -1663,9 +1663,9 @@ describe("a variant's published allergens and diet", () => {
   beforeEach(async () => {
     await seedVenueWithSeries(fx.db);
     ({ parentId, variantId } = await run(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Bar" });
+      const menu = await createMenu(tx, { name: "Bar" });
       const parent = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Latte",
         pricingUnit: "each",
@@ -1835,16 +1835,16 @@ describe("what a menu offers: its structure, Active and Available decide", () =>
 
 describe("a product's own colour", () => {
   const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, action);
-  let catalogueId: string;
+  let menuId: string;
   let productId: string;
   let variantId: string;
   beforeEach(async () => {
     await seedTaxpayer(fx.db);
     await seedLegacySellingUnits(fx.db);
-    ({ catalogueId, productId, variantId } = await app(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Menu" });
+    ({ menuId, productId, variantId } = await app(async (tx) => {
+      const menu = await createMenu(tx, { name: "Menu" });
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Wine",
         pricingUnit: "each",
@@ -1866,7 +1866,7 @@ describe("a product's own colour", () => {
         ],
         "en",
       );
-      return { catalogueId: menu.id, productId: product.id, variantId: variant!.id };
+      return { menuId: menu.id, productId: product.id, variantId: variant!.id };
     }));
   });
 
@@ -1877,7 +1877,7 @@ describe("a product's own colour", () => {
   it("stores a product's own colour, lists it, and clears it", async () => {
     await app((tx) => updateProduct(tx, productId, { color: "#256bb1" }));
     expect(await storedColor(productId)).toBe("#256bb1");
-    const listed = await app((tx) => listProducts(tx, catalogueId));
+    const listed = await app((tx) => listProducts(tx, menuId));
     expect(listed.find((product) => product.id === productId)).toMatchObject({ color: "#256bb1" });
     await app((tx) => updateProduct(tx, productId, { color: null }));
     expect(await storedColor(productId)).toBeNull();

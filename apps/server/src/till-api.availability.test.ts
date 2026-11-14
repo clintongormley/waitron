@@ -52,7 +52,7 @@ beforeEach(async () => {
     );
     variantId = variants[0]!.id;
     const extra = await createProduct(tx, {
-      catalogueId: v.counter.menuId,
+      menuId: v.counter.menuId,
       name: "Bacon",
       categoryId: null,
       pricingUnit: "each",
@@ -199,7 +199,7 @@ it("requires a signed-in person", async () => {
 it("refuses an existing product outside the zone's published offer", async () => {
   const outsider = await withTransaction(suite.db, (tx) =>
     createProduct(tx, {
-      catalogueId: v.counter.menuId,
+      menuId: v.counter.menuId,
       name: "Unpublished soup",
       categoryId: null,
       pricingUnit: "each",

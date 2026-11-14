@@ -1,5 +1,5 @@
 import type { ProductEditorSaveBody } from "@waitron/shared";
-import type { CatalogueSettings } from "../api/client.js";
+import type { MenuDefaults } from "../api/client.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
@@ -18,7 +18,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
-  CatalogueSummary,
+  MenuSummary,
   CategorySummary,
   DashboardApi,
   ExtraList,
@@ -56,8 +56,8 @@ import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js"
 import { archiveExtraListWarning } from "../widgets/archive-extra-lists.js";
 import { refusalText } from "../widgets/archive-refusal.js";
 
-@customElement("dashboard-catalogue-screen")
-export class CatalogueScreen extends LitElement {
+@customElement("dashboard-products-screen")
+export class ProductsScreen extends LitElement {
   static override styles = [
     baseStyles,
     pageTitleStyles,
@@ -87,9 +87,9 @@ export class CatalogueScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  @state() private catalogueSettings: CatalogueSettings | null = null;
+  @state() private menuSettings: MenuDefaults | null = null;
   @state() private contentLanguages: ContentLanguages | null = null;
-  @state() private catalogues: CatalogueSummary[] = [];
+  @state() private menus: MenuSummary[] = [];
   @state() private categories: CategorySummary[] = [];
   @state() private units: Unit[] = [];
   @state() private extraLists: ExtraList[] = [];
@@ -99,7 +99,7 @@ export class CatalogueScreen extends LitElement {
   @state() private routing: RoutingModel | null = null;
   @state() private routingFailed = false;
   @state() private courses: Course[] = [];
-  @state() private selectedCatalogueId = "";
+  @state() private selectedMenuId = "";
   @state() private editorOpen = false;
   @state() private detailsOpen = false;
   @state() private editorValue: ProductEditorValue | null = null;
@@ -139,7 +139,7 @@ export class CatalogueScreen extends LitElement {
 
   #writeProductWord(product: string | null, removeQuery: readonly string[] = []): void {
     void this.#url.write({ product }, true, removeQuery);
-    if (this.#url.read("dashboard") === "catalogue")
+    if (this.#url.read("dashboard") === "products")
       this.#addressProduct = this.#url.read("product");
   }
 
@@ -150,7 +150,7 @@ export class CatalogueScreen extends LitElement {
     const category = this.#url.read("category");
     const url = new URL(guard.href);
     url.pathname = [
-      `${dashboardPath.basePath}/catalogue/product/${encodePathSegment(id)}`,
+      `${dashboardPath.basePath}/products/product/${encodePathSegment(id)}`,
       ...(category === null ? [] : [`category/${encodePathSegment(category)}`]),
     ].join("/");
     guard.rewrite(url);
@@ -194,7 +194,7 @@ export class CatalogueScreen extends LitElement {
   readonly #url = new UrlStateController(
     this,
     () => {
-      if (this.#url.read("dashboard") !== "catalogue") return;
+      if (this.#url.read("dashboard") !== "products") return;
       this.categoryId = this.#url.read("category");
       const before = this.#addressProduct;
       this.#linkedProduct = this.#addressProduct = this.#url.read("product");
@@ -242,8 +242,8 @@ export class CatalogueScreen extends LitElement {
     this.#loadFailed = false;
     try {
       await Promise.all([
-        this.#queries.watch("getCatalogueSettings", [], (value) => {
-          this.catalogueSettings = value;
+        this.#queries.watch("getMenuSettings", [], (value) => {
+          this.menuSettings = value;
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
           this.contentLanguages = value;
@@ -269,15 +269,15 @@ export class CatalogueScreen extends LitElement {
         this.#queries.watch("listOptionLists", [], (value) => {
           this.optionLists = value;
         }),
-        this.#queries.watch("listCatalogues", [], (value) => {
-          this.catalogues = value;
+        this.#queries.watch("listMenus", [], (value) => {
+          this.menus = value;
         }),
         this.#queries.watch("listCourses", [], (value) => {
           this.courses = value;
         }),
       ]);
-      if (!this.catalogues.some(({ id }) => id === this.selectedCatalogueId))
-        this.selectedCatalogueId = this.catalogues[0]?.id ?? "";
+      if (!this.menus.some(({ id }) => id === this.selectedMenuId))
+        this.selectedMenuId = this.menus[0]?.id ?? "";
       await this.#reloadProducts();
       this.productsLoaded = true;
     } catch (error) {
@@ -298,14 +298,14 @@ export class CatalogueScreen extends LitElement {
   }
 
   async #reloadProducts(): Promise<void> {
-    if (!this.catalogues.length) {
+    if (!this.menus.length) {
       this.products = [];
       this.#queries.release("listProducts");
       return;
     }
     await this.#queries.watchGroup(
       "listProducts",
-      this.catalogues.map(({ id }) => [id]),
+      this.menus.map(({ id }) => [id]),
       (lists) => {
         this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
       },
@@ -466,7 +466,7 @@ export class CatalogueScreen extends LitElement {
     try {
       let created: ProductEditorValue | null = null;
       if (this.editorValue === null)
-        created = await this.api.createProductEditor(this.selectedCatalogueId, event.detail.body);
+        created = await this.api.createProductEditor(this.selectedMenuId, event.detail.body);
       else await this.api.updateProductEditor(this.editorValue.id, event.detail.body);
       written = true;
       this.#editor()?.closeSaved(event.detail.value);
@@ -498,7 +498,7 @@ export class CatalogueScreen extends LitElement {
     this.placementMenus = null;
     this.placementLoadError = null;
     this.placementFailures = [];
-    const menus = [...this.catalogues];
+    const menus = [...this.menus];
     try {
       await this.#placementQueries.watchGroup(
         "getMenuStructure",
@@ -538,7 +538,7 @@ export class CatalogueScreen extends LitElement {
   }
 
   #browser() {
-    return this.shadowRoot?.querySelector("dashboard-catalogue-browser") ?? null;
+    return this.shadowRoot?.querySelector("dashboard-product-browser") ?? null;
   }
 
   /** An add hands focus back to the ⋮ of the row it started from once its last window closes. */
@@ -704,11 +704,11 @@ export class CatalogueScreen extends LitElement {
     const errorText = this.errorKey ? refusalText(this.errorKey, this.refusalParams) : "";
     return html`
       <div class="header">
-        <h1>${t("nav.catalogue")}</h1>
+        <h1>${t("nav.products")}</h1>
       </div>
       ${
-        this.catalogues.length
-          ? html`<dashboard-catalogue-browser
+        this.menus.length
+          ? html`<dashboard-product-browser
               .api=${this.api}
               .categoryId=${this.categoryId}
               @open-category=${(event: CustomEvent<{ categoryId: string | null }>) => {
@@ -723,9 +723,9 @@ export class CatalogueScreen extends LitElement {
               .categories=${this.categories}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
-              .canAddProduct=${this.catalogueSettings !== null && locales.length > 0 && this.units.length > 0}
+              .canAddProduct=${this.menuSettings !== null && locales.length > 0 && this.units.length > 0}
               .loaded=${this.productsLoaded}
-              .defaultColor=${this.catalogueSettings?.defaultColor ?? null}
+              .defaultColor=${this.menuSettings?.defaultColor ?? null}
               @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {
                 event.stopPropagation();
                 this.#addFrom = event.detail.categoryId;
@@ -743,8 +743,8 @@ export class CatalogueScreen extends LitElement {
                 event.stopPropagation();
                 this.#openDelete(event.detail.productId);
               }}
-            ></dashboard-catalogue-browser>`
-          : html`<p data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
+            ></dashboard-product-browser>`
+          : html`<p data-test="no-menu">${t("products.empty_prompt")}</p>`
       }
       ${this.errorKey ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
       <dashboard-product-details
@@ -769,8 +769,8 @@ export class CatalogueScreen extends LitElement {
         .locales=${locales}
         .value=${this.editorValue}
         .initialField=${this.editorInitialField}
-        .defaultVatClass=${this.catalogueSettings?.defaultProductVatClass ?? "general"}
-        .defaultColor=${this.catalogueSettings?.defaultColor ?? null}
+        .defaultVatClass=${this.menuSettings?.defaultProductVatClass ?? "general"}
+        .defaultColor=${this.menuSettings?.defaultColor ?? null}
         .newCategoryId=${this.newCategoryId}
         .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}
@@ -957,6 +957,6 @@ interface ChildRefusals {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "dashboard-catalogue-screen": CatalogueScreen;
+    "dashboard-products-screen": ProductsScreen;
   }
 }

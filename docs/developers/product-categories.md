@@ -1,7 +1,7 @@
 # Product categories
 
 To find products and keep each sale counted once, organise products into categories on the Products
-screen at `/manage/catalogue`. Each category is a reporting category with one internal name, shown
+screen at `/manage/menu`. Each category is a reporting category with one internal name, shown
 on the Products screen as a row of its tree. It has no translations or image, and it may have a
 colour, which every product under it takes unless the product has one of its own or a coloured
 category nearer to it ([products.md](products.md), _Colour_). A product belongs to at most one category; one
@@ -16,7 +16,7 @@ by its category path. A matching category starts collapsed; open it to see its c
 matching products also keep their flat result. Clearing search keeps the branches you opened
 and opens their parents too. Column filters and Show archived affect
 products; categories stay. The address names the category last opened, as
-`/manage/catalogue/category/<id>`; closing that category, or one above it, names the closed
+`/manage/menu/category/<id>`; closing that category, or one above it, names the closed
 category's parent.
 
 A category has at most one parent, stored in `category_details.parent_id`. A save that would make
@@ -68,7 +68,7 @@ it; you cannot select or drag a variant on its own. The product editor shows a p
 its path, with a Change link that opens the category list as an indented tree
 ([Products](products.md#the-editor-form)).
 
-Reports can use the classification recorded with each sale, or today's catalogue classification.
+Reports can use the classification recorded with each sale, or today's menu classification.
 Moving a product or renaming a category does not rewrite recorded sale lines. See
 [the two report modes](../superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md#5-the-two-report-modes).
 
@@ -79,7 +79,7 @@ deciding cell, a period choice for the period running in the zone's department r
 own choice; an order with no zone, and the baseline above, use the cell's own choice. See
 [the routing grid plan](../superpowers/plans/2026-10-05-routing-grid.md), which replaced the
 claims and ordered exceptions of
-[the earlier design](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md).
+[the earlier design](../superpowers/specs/2026-09-30-menu-menus-routing-design.md).
 
 ## Categories are not sections
 
@@ -142,22 +142,22 @@ answer `content.translation_invalid` (400).
 
 ### Menu structure, prices and publication
 
-`GET /management-api/catalogues/:id/structure` gives
+`GET /management-api/menus/:id/structure` gives
 `{ rootSectionId, root, nodes, includable, includedBy }`. Section nodes carry presentation fields,
 `ownerMenuId` and `children`; an included menu root also carries `includedMenuId`, and `folder`
 (`{ showAsFolder, overrides }`), how this include shows it. `includable` lists active menus that
 would make no cycle as `{ id, name, rootSectionId }`; `includedBy` lists direct including menus as
 `{ id, name }`. Write the menu's top level through the member routes on `rootSectionId`. An
-unknown menu answers `catalogue.not_found` (404).
+unknown menu answers `menu.not_found` (404).
 
-Creating a menu (`POST /management-api/catalogues`) and renaming one
-(`PATCH /management-api/catalogues/:id`, with `{ name }`) also refuse a name held by another menu
+Creating a menu (`POST /management-api/menus`) and renaming one
+(`PATCH /management-api/menus/:id`, with `{ name }`) also refuse a name held by another menu
 with `menu.name_taken` (409, `field: "name"`). Inactive menus hold their names too. Comparisons
 ignore case, Unicode composition and surrounding whitespace, but retain accents and interior
 spacing. Existing duplicate names do not block presentation edits that keep the stored name;
 changing that name must pass the check.
 
-`POST /management-api/catalogues/:id/duplicate`, with `{ name }`, makes a new menu holding a copy
+`POST /management-api/menus/:id/duplicate`, with `{ name }`, makes a new menu holding a copy
 of this menu's working copy and answers 201 with the new menu (`{ id, name, active, version }`). It
 copies the menu's own sections and their members, its Home shortcuts, its display settings, its
 products' menu prices and its variant prices (`duplicateMenu`,
@@ -166,16 +166,16 @@ still name the other menu's sections. Published versions, scheduled publications
 are not copied, so the copy starts unpublished. A blank name answers `management.request_invalid`
 (400, `field: "name"`); a name another menu holds, ignoring case, Unicode normalization and
 surrounding whitespace, answers `menu.name_taken` (409, `field: "name"`). An unknown menu answers
-`catalogue.not_found` (404). The dashboard's Copy… asks for an empty, required new name before
+`menu.not_found` (404). The dashboard's Copy… asks for an empty, required new name before
 sending the request; Cancel creates nothing.
 
-`PATCH /management-api/catalogues/:id/items/:itemId` returns 204. Set `grossPrice` to a price or
+`PATCH /management-api/menus/:id/items/:itemId` returns 204. Set `grossPrice` to a price or
 null. Null clears this menu's price so the combined menu can supply it; omitting it keeps the saved
 value. The retired `active` and `offered` fields are refused with `management.request_invalid`
 (400, `field: "active"` or `field: "offered"`), whatever their value. An item no longer reached by
 this menu answers `menu_item.not_found` (404). Publish again to change what the till sells.
 
-`PATCH /management-api/catalogues/:id/items/:itemId/variants/:variantId` sets or clears this
+`PATCH /management-api/menus/:id/items/:itemId/variants/:variantId` sets or clears this
 menu's price for one Active size of the item's product, and leaves every other size's price as it
 is. The body is `{ price }`, a price or null; it returns 204. A missing `price`, or one
 that is neither a string nor null, answers `management.request_invalid` (400, `field: "price"`),
@@ -184,7 +184,7 @@ and any other key in the body answers the same code naming that key. A malformed
 sizes, `product.variant_not_found` (404); an item of another menu, or one this menu no longer reaches,
 `menu_item.not_found` (404).
 
-`GET /management-api/catalogues/:id/prices` gives one row per Active product reached by the
+`GET /management-api/menus/:id/prices` gives one row per Active product reached by the
 working structure, including sold-out products. An inactive menu gives no rows. Each row is
 `{ menuItemId, productId, name, categoryId, placements, override, effectivePrice, combined, available, variants }`,
 with `available` the product's own Available.
@@ -206,12 +206,12 @@ price to €3.00 resolves it. `variants` keeps the menu's size prices as
 and `available` the size's own Available; `combined.variants` explains each one's
 result.
 
-`GET /management-api/catalogues/:id/status` gives `{ state: "unpublished", clashes }`, or
+`GET /management-api/menus/:id/status` gives `{ state: "unpublished", clashes }`, or
 `{ state, clashes, version, publishedAt, hash }`, with `state` current or changed relative to the
 live version. `publishedAt` is when the live version became live: the moment of an immediate
 publish or a patch, or a queued edition's scheduled time, which a status read counts as live from
 that time on, before anything has marked it activated. `clashes` counts unresolved settings.
-`GET /management-api/catalogues/status` gives all menus' statuses keyed by menu id. `GET /management-api/catalogues/:id/preview` gives
+`GET /management-api/menus/status` gives all menus' statuses keyed by menu id. `GET /management-api/menus/:id/preview` gives
 `{ hash, changes, warnings, status, clashes, document }`. `clashes` lists the products, sizes and
 fields that need a decision. `document` is the proposed published document, with the combined
 structure and the Device Home Page as `home` (below); a shortcut whose target the document does not
@@ -221,14 +221,14 @@ the shortcuts differ from the live version's, and a `home_display_changed` chang
 `device`, that one device's display does. With no live version, the shortcuts count as changed when
 there are any, and a display when it differs from the default.
 
-`POST /management-api/catalogues/:id/publish`, with `{ expectedHash }`, gives
+`POST /management-api/menus/:id/publish`, with `{ expectedHash }`, gives
 `{ versionId, number }` (200). It first refuses unresolved settings with
 `menu.clashes_unresolved` (409, `menuId`, `count`), then refuses a changed working hash with
 `menu.changed_since_preview` (409, `menuId`). An unchanged menu returns its existing live version
 without writing another. Otherwise, while any edition is still queued, the publish would overtake
 it and is refused `menu_publication.overtakes_queued` (below). Missing or non-string `expectedHash`
 answers `management.request_invalid` (400). A malformed menu id answers `shared.invalid_id` (400),
-an unknown menu `catalogue.not_found` (404).
+an unknown menu `menu.not_found` (404).
 
 A menu edition can also be queued to go live at a set minute, then moved or cancelled until then.
 Its content is fixed when it is queued; a later change to the working menu is not in it. A patch
@@ -236,28 +236,28 @@ Its content is fixed when it is queued; a later change to the working menu is no
 with the same content and time; the original then reads `cancelled`, with the patch's moment as its
 `cancelledAt`. The routes below take the time as a date and time on the venue's clock,
 answer the instant, and list each time as that clock shows it. Each of them, the publish route and
-the two patch routes need the `catalogue.manage` permission (403 `authorization.not_permitted`). A
+the two patch routes need the `menu.manage` permission (403 `authorization.not_permitted`). A
 write that succeeds first marks the menu's editions whose time has come as activated, then makes its
 own change.
 
-- `POST /management-api/catalogues/:id/publications`, with
+- `POST /management-api/menus/:id/publications`, with
   `{ expectedHash, activatesAt: { date, time, occurrence? } }`, gives `{ versionId, number,
   activatesAt }` (201). It refuses, in this order, unresolved settings, a changed working hash (both
   as the publish route does), a time not after now with `menu_publication.time_past` (400,
   `activatesAt`), an overtaking placement, and a menu identical to its highest-numbered live or
   queued edition with `menu_publication.unchanged` (409, `menuId`, `number`).
-- `GET /management-api/catalogues/:id/publications` gives `{ timeZone, live, editions }`: `live` is
+- `GET /management-api/menus/:id/publications` gives `{ timeZone, live, editions }`: `live` is
   `{ versionId, number, since, local }` or null; `editions` lists every queued edition soonest
   first, then the ten most recently numbered settled ones, each
   `{ versionId, number, state, activatesAt, queuedAt, cancelledAt, contentHash, local }`. `local`
   is `{ date, time, offset, repeated }` on the venue clock. An edition whose time has passed reads
-  `activated` before anything has marked it. An unknown menu answers `catalogue.not_found` (404).
-- `PATCH /management-api/catalogues/:id/publications/:versionId`, with `{ activatesAt }`, moves a
+  `activated` before anything has marked it. An unknown menu answers `menu.not_found` (404).
+- `PATCH /management-api/menus/:id/publications/:versionId`, with `{ activatesAt }`, moves a
   queued edition and gives `{ versionId, number, activatesAt }` (200). It refuses a version with
   no schedule row on this menu with `menu_publication.not_found` (404, `menuId`, `versionId`), an
   activated or cancelled edition with `menu_publication.not_queued` (409, `menuId`, `versionId`,
   `state`), then a past time and an overtaking move.
-- `POST /management-api/catalogues/:id/publications/:versionId/cancel` cancels a queued edition
+- `POST /management-api/menus/:id/publications/:versionId/cancel` cancels a queued edition
   (204), refused `menu_publication.not_found` or `menu_publication.not_queued` as above. A
   cancelled edition's number is never used again.
 
@@ -285,17 +285,17 @@ every waiting edition again after itself.
 A manager can correct the live version itself, leaving the products and the working menu as they
 were.
 
-- `GET /management-api/catalogues/:id/live` gives `{ versionId, number, since, document }` for the
+- `GET /management-api/menus/:id/live` gives `{ versionId, number, since, document }` for the
   version live now, with `since` as `publishedAt` above, or `null` when the menu has none. An
-  unknown menu answers `catalogue.not_found` (404).
-- `POST /management-api/catalogues/:id/patch`, with `{ baseVersionId, changes }`, puts the changes
+  unknown menu answers `menu.not_found` (404).
+- `POST /management-api/menus/:id/patch`, with `{ baseVersionId, changes }`, puts the changes
   live at once as a new version under the next number and gives `{ versionId, number, requeued }`
   (200). `requeued` lists each queued edition's copy as `{ versionId, number, activatesAt }`, lowest
   number first. Each change is `{ target, field, value }`; the fields each kind of target takes are
   `PATCH_FIELDS` in `packages/menu/src/menu-patch-types.ts`. A missing or non-string
   `baseVersionId`, or a `changes` that is not a list, answers `management.request_invalid` (400,
   `field` naming it); a malformed menu id or `baseVersionId` answers `shared.invalid_id` (400). An
-  unknown menu answers `catalogue.not_found` (404), a menu with no live version
+  unknown menu answers `menu.not_found` (404), a menu with no live version
   `menu_patch.not_published` (409, `menuId`), and a live version other than `baseVersionId`
   `menu_patch.base_changed` (409, `menuId`, `baseVersionId`, `liveVersionId`, `liveNumber`). A change the route cannot apply
   answers `menu_patch.invalid` (400, `change` as its index, `field` naming `target`, `field` or the
@@ -322,7 +322,7 @@ placement to the menu. The shortcut writer checks that the menu's working struct
 target, including targets in included menus. Use the shortcut routes to write it: the generic
 section writes refuse its section with `menu_section.wrong_role` (409).
 
-`GET /management-api/catalogues/:id/home` gives `{ homeSectionId, shortcuts, handheld, till }`. A
+`GET /management-api/menus/:id/home` gives `{ homeSectionId, shortcuts, handheld, till }`. A
 shortcut is `{ memberId, position, ref, name, reachable, missingName }`. Its `ref` names a product, a
 section, or a deleted target as `{ kind: "missing", name }`. `reachable` checks working membership;
 `missingName` is null for a reachable target and otherwise records its name or section path.
@@ -337,16 +337,16 @@ and `order` is `home_first` (the shortcuts, then the menu) or `menu_first`. A ne
 
 | Route | Body and success | Refusals |
 | --- | --- | --- |
-| `GET /management-api/catalogues/:id/home` | 200, the Device Home Page, shortcuts in order, missing ones included | `catalogue.not_found` |
-| `PATCH /management-api/catalogues/:id/home-display` | `{ device, columns?, tiles?, order? }`, `device` being `handheld` or `till`; 204, changing only the fields given | `catalogue.not_found`, `management.request_invalid`, `menu.home_display_invalid` |
-| `POST /management-api/catalogues/:id/home/shortcuts` | `{ ref, position? }`; 201, `{ id, position, ref }` | `catalogue.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu_section.invalid`, `menu.shortcut_unreachable` |
-| `POST /management-api/catalogues/:id/home/shortcuts/:memberId/replace` | `{ ref }`; 200, the member, keeping its id and position | `catalogue.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu.shortcut_unreachable` |
-| `DELETE /management-api/catalogues/:id/home/shortcuts/:memberId` | 204 | `catalogue.not_found`, `menu_section.not_found` |
-| `PUT /management-api/catalogues/:id/home/shortcuts/:memberId/position` | `{ to }`; 200, the shortcuts as members `{ id, position, ref }` in their new order, missing slots included | `catalogue.not_found`, `menu_section.not_found`, `menu_section.invalid` |
+| `GET /management-api/menus/:id/home` | 200, the Device Home Page, shortcuts in order, missing ones included | `menu.not_found` |
+| `PATCH /management-api/menus/:id/home-display` | `{ device, columns?, tiles?, order? }`, `device` being `handheld` or `till`; 204, changing only the fields given | `menu.not_found`, `management.request_invalid`, `menu.home_display_invalid` |
+| `POST /management-api/menus/:id/home/shortcuts` | `{ ref, position? }`; 201, `{ id, position, ref }` | `menu.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu_section.invalid`, `menu.shortcut_unreachable` |
+| `POST /management-api/menus/:id/home/shortcuts/:memberId/replace` | `{ ref }`; 200, the member, keeping its id and position | `menu.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu.shortcut_unreachable` |
+| `DELETE /management-api/menus/:id/home/shortcuts/:memberId` | 204 | `menu.not_found`, `menu_section.not_found` |
+| `PUT /management-api/menus/:id/home/shortcuts/:memberId/position` | `{ to }`; 200, the shortcuts as members `{ id, position, ref }` in their new order, missing slots included | `menu.not_found`, `menu_section.not_found`, `menu_section.invalid` |
 
 Malformed ids answer `shared.invalid_id` (400) and malformed bodies `management.request_invalid`
 (400); on the display route that includes a `device` other than `handheld` or `till`
-(`field: "device"`). An unknown menu answers `catalogue.not_found` (404).
+(`field: "device"`). An unknown menu answers `menu.not_found` (404).
 `menu.home_display_invalid` (400, `device`, `field`) refuses a value that device cannot take,
 `field` being `columns`, `tiles` or `order`; with more than one wrong it names the first in that
 order. `menu.shortcut_unreachable` (409, `ref`) refuses a target outside the working structure,
@@ -504,7 +504,7 @@ category, and a variant still storing a deleted category has it cleared.
 
 ## API
 
-These routes require a management session with `catalogue.manage`, the catalogue write permission
+These routes require a management session with `menu.manage`, the menu write permission
 in `apps/server/src/menu-api.ts`. A category is `{ id, name, parentId, color }`, where `name`
 is a trimmed plain string, `parentId` is an ID or null, and `color` is a lowercase `#rrggbb` or
 null. A blank name is `category.invalid` (400); a non-string name is `management.request_invalid`
@@ -567,9 +567,9 @@ sending the removed `categoryIds` or `labelIds`, is refused with `product.invali
 ## Storage and development reset
 
 Both tables are in core's set: `categories` holds the name, and `category_details`, whose code is
-the catalogue module's, holds the parent and, since W92, the colour (`category_details.color`, added by catalogue `0025_category_color.sql`). The label
+the menu module's, holds the parent and, since W92, the colour (`category_details.color`, added by menu `0025_category_color.sql`). The label
 tables and the category image and colour columns of the old schema were dropped by the folder
-migrations. In that old history, catalogue dropped media's category-image triggers before dropping
+migrations. In that old history, menu dropped media's category-image triggers before dropping
 the column, and media dropped them again after its baseline on a fresh database. Since A760 the
 section-image triggers are in core's set (`packages/db/drizzle/0000_baseline.sql`). The old
 migrations were frozen at A760 and deleted on 2026-11-07 (A1422); read one with

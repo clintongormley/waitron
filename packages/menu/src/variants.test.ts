@@ -3,7 +3,7 @@ import { withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
-  createCatalogue,
+  createMenu,
   createProduct,
   addProductToMenu,
   listMenuOffers,
@@ -19,11 +19,11 @@ import {
   parentsWithActiveVariants,
 } from "./variants.js";
 import { createUnit } from "./units.js";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 
 // Aggregate round-trips. The cases with two transactions started together are in
 // variants.db.test.ts.
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 let productId: string;
 let offerId: string;
 let menuId: string;
@@ -40,7 +40,7 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
   await run(async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Bar" });
+    const menu = await createMenu(tx, { name: "Bar" });
     menuId = menu.id;
     const unit = await createUnit(
       tx,
@@ -54,7 +54,7 @@ beforeEach(async () => {
       "en",
     );
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Coffee",
       unitId: unit.id,
@@ -287,7 +287,7 @@ describe("product variants", () => {
         "en",
       );
       const other = await createProduct(tx, {
-        catalogueId: menuId,
+        menuId: menuId,
         categoryId: null,
         name: "Bravas",
         unitId: unit.id,
@@ -356,7 +356,7 @@ describe("which products have an Active variant", () => {
       const [product] = await listProducts(tx);
       const make = (name: string) =>
         createProduct(tx, {
-          catalogueId: menuId,
+          menuId: menuId,
           categoryId: null,
           name,
           unitId: product!.unitId,

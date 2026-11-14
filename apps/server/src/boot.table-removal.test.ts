@@ -224,12 +224,12 @@ for (const [mode, status] of [
                 cookie: `${MANAGEMENT_COOKIE}=${fixture.managementToken}`,
                 "Content-Type": "application/json",
               };
-              const catalogue = await fetch(
+              const menu = await fetch(
                 `http://127.0.0.1:${httpPort()}/management-api/modules`,
                 { headers },
               );
-              expect(catalogue.status).toBe(200);
-              const row = ((await catalogue.json()) as { id: string; revision: number }[]).find(
+              expect(menu.status).toBe(200);
+              const row = ((await menu.json()) as { id: string; revision: number }[]).find(
                 (row) => row.id === "bookings",
               )!;
               const saved = await fetch(

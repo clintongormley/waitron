@@ -2,7 +2,7 @@ import { beforeEach, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
+import { createMenu, addProductToMenu, createProduct } from "./operations.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { readProductExtras } from "./extra-projection.js";
 import { writeProductModifiers } from "./product-modifiers.js";
@@ -27,10 +27,10 @@ let dish = "";
 // `useVenueDb` empties every data table after each test, so the products are re-made per test.
 beforeEach(async () => {
   await withTransaction(suite.db, async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: "Deli" });
+    const menu = await createMenu(tx, { name: "Deli" });
     for (const [key, unitPrice] of Object.entries({ sourdough: "2.50", rye: "3.25" })) {
       const product = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: key,
         unitId: null,
@@ -41,7 +41,7 @@ beforeEach(async () => {
     }
     dish = (
       await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: null,
         name: "dish",
         unitId: null,
@@ -50,7 +50,7 @@ beforeEach(async () => {
       })
     ).id;
     await addProductToMenu(tx, {
-      menuId: catalogue.id,
+      menuId: menu.id,
       productId: dish,
       grossPrice: "7.00",
     });

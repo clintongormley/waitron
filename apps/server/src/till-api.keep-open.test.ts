@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createCatalogue, addProductToMenu } from "@waitron/menu";
+import { createMenu, addProductToMenu } from "@waitron/menu";
 import {
   createPinThrottle,
   hashPin,
@@ -72,7 +72,7 @@ beforeEach(async () => {
     const zone = (await createServiceZone(tx, { name: "Dining", departmentId: department })).id;
     const menus: { period: string; item: string }[] = [];
     for (const name of ["Lunch", "Afternoon"]) {
-      const menu = await createCatalogue(tx, { name });
+      const menu = await createMenu(tx, { name });
       const item = await addProductToMenu(tx, {
         menuId: menu.id,
         productId: v.productId("Burger"),

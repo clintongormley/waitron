@@ -605,7 +605,7 @@ package holds the bar from its first commit.
 First promotion PR #498 (21 packages); then one pull request each: `printing` (#500), `bookings`
 (#503), `tunnel` (#506), `print-agent-app` (#508), `provisioning` (#510), `payments-sumup` (#512),
 `payments-stripe` (#514), `server-kit` (#515), `sync-enrolment` (#518), `dashboard-kit` (#521),
-`fiscal-none` (#522), `setup` (#523), `print-agent` (#525), `identity` (#526), `catalogue` (#530),
+`fiscal-none` (#522), `setup` (#523), `print-agent` (#525), `identity` (#526), `menu` (#530),
 `apps/server` (#534), `apps/till` (#536), `apps/dashboard` (#538), `venue-service` (#546) and
 `media` (#547).
 
@@ -647,7 +647,7 @@ and were promoted together**, joining the five already there: `composition`, `co
 `scheduler`, 1.22 points over on statements; eighteen of the 21 are at 100% on all four.
 
 The 20 still under it, with the metric furthest below its bar — `printing` (functions, 1.23 short),
-`catalogue` (statements, 1.64), `bookings` (branches, 1.99), `tunnel` (functions, 2.48),
+`menu` (statements, 1.64), `bookings` (branches, 1.99), `tunnel` (functions, 2.48),
 `apps/server` (branches, 2.95), `apps/till` (branches, 3.10), `apps/print-agent` (branches, 3.65),
 `provisioning` (functions, 3.77), `payments-sumup` (functions, 3.89), `payments-stripe`
 (functions, 4.67), `server-kit` (branches, 5.00), `sync-enrolment` (functions, 5.15),
@@ -2087,8 +2087,8 @@ time. The new layout still needs its own CI timing measurement.
 
 **Shared bin B, 2026-10-26 (A1116):** main run `40266252596`, job `121389421810`,
 took 375 seconds overall. The test step took 335 seconds after 37 seconds of setup.
-Its log reports 141.56 seconds for catalogue, 139.46 for identity and 137.85 for workforce;
-the longest file was catalogue's `menu-publication.test.ts`, at 28.3 seconds. The two-process
+Its log reports 141.56 seconds for menu, 139.46 for identity and 137.85 for workforce;
+the longest file was menu's `menu-publication.test.ts`, at 28.3 seconds. The two-process
 bin accumulated several large package runs. That log does not identify a single slow operation
 inside those packages.
 
@@ -4237,7 +4237,7 @@ and a table that still exists afterwards holding fewer rows fails the step. A si
 drizzle's `__drizzle_migrations_*` bookkeeping must hold at least one.
 
 What it was shown to catch, measured 2026-10-01 (Node v26.7.0, its SQLite 3.53.4) by planting a
-migration at the end of the catalogue set and running
+migration at the end of the menu set and running
 `pnpm exec vitest run scripts/migration-upgrade.test.ts`: each plant passed the guard as it stood
 before A164 and failed it after.
 
@@ -4245,14 +4245,14 @@ before A164 and failed it after.
   value NULL`. The same statement on an EMPTY table was accepted (measured in a bare `node:sqlite`
   script), which is why the old guard passed it.
 - A drizzle-shaped rebuild of `labels` (create, copy, drop, rename), whose child `product_labels`
-  cascades — `Step catalogue/0099_plant lost rows the step before wrote: product_labels: 2 rows
+  cascades — `Step menu/0099_plant lost rows the step before wrote: product_labels: 2 rows
   before, 0 after`. With the row-count comparison deleted (and `RESETS`' `core/0012` entry, which
   depends on it, removed) the same plant passed: the comparison is what catches it.
 - `CREATE UNIQUE INDEX planted_uq ON labels (created_at)` — `UNIQUE constraint failed:
   labels.created_at`.
 
 **On 2026-10-01, seven shipped steps could not carry these rows**, found by running the walk with each failure
-logged and the database rebuilt empty at that step: catalogue `0003_menu_price_nullable` and
+logged and the database rebuilt empty at that step: menu `0003_menu_price_nullable` and
 `0008_menu_details` (the `menu_items` rebuild's `DROP TABLE` refused with `FOREIGN KEY constraint
 failed`), core `0044_drop_table_bill_pointer` (the same for `dining_tables`), core
 `0008_node_keyed_rows`, identity `0003_session_token_hash_required` and core `0026_line_vat_class`

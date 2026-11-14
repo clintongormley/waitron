@@ -48,7 +48,7 @@ import type {
   TableParty,
   TillApi,
   TillMenuOffer,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
@@ -90,7 +90,7 @@ function offer(id: string, name: string, courseId: string | null = null): TillMe
   } satisfies TillMenuOffer;
 }
 
-function catalogue(version: string, prices: Record<string, string> = {}): ZoneOfferCatalogue {
+function zoneOffers(version: string, prices: Record<string, string> = {}): ZoneOffers {
   const offers = [
     offer("offer-beer", "Beer", "drinks"),
     offer("offer-steak", "Steak", "mains"),
@@ -247,10 +247,10 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
-      ...catalogue("v1"),
-      context: { ...catalogue("v1").context, zoneId: "zc" },
+      ...zoneOffers("v1"),
+      context: { ...zoneOffers("v1").context, zoneId: "zc" },
     }),
-    listZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
+    listZoneOffers: vi.fn().mockResolvedValue(zoneOffers("v1")),
     menuState: vi.fn(() => new Promise(() => {})),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
@@ -2933,7 +2933,7 @@ describe("till-app: sending the draft", () => {
     });
     await openTable(el);
     await tap(el, "Beer");
-    api.listZoneOffers.mockResolvedValue(catalogue("v2"));
+    api.listZoneOffers.mockResolvedValue(zoneOffers("v2"));
 
     await act(el, "fire-all");
 
@@ -2960,7 +2960,7 @@ describe("till-app: sending the draft", () => {
     });
     await openTable(el);
     await tap(el, "Beer");
-    api.listZoneOffers.mockResolvedValue(catalogue("v2", { Beer: "6.00" }));
+    api.listZoneOffers.mockResolvedValue(zoneOffers("v2", { Beer: "6.00" }));
 
     await act(el, "fire-all");
     const dialog = el.shadowRoot!.querySelector("till-basket-refresh-dialog")!;
@@ -3481,7 +3481,7 @@ describe("till-app: a Send the session outlives", () => {
     await openTable(el);
     api.listZoneOffers.mockImplementationOnce(async () => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return catalogue("v2", { Beer: "6.00" });
+      return zoneOffers("v2", { Beer: "6.00" });
     });
     await tap(el, "Beer");
     await act(el, "fire-all");
@@ -4043,7 +4043,7 @@ describe("till-app: a later addition is decided from the table's own groups", ()
   });
 
   it("keeps an inactive course in Fire now through the rendered Send and saved-line request", async () => {
-    const inactive = catalogue("v1");
+    const inactive = zoneOffers("v1");
     inactive.offers[0]!.courseId = "retired";
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till(drillFormFactor), courses: placementCourses }),
@@ -4225,7 +4225,7 @@ describe("till-app: a table open that another overtakes", () => {
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       listZoneOffers: vi.fn(async () => {
         await new Promise<void>((resolve) => (answerOffers = resolve));
-        return catalogue("v1");
+        return zoneOffers("v1");
       }),
     });
     server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [beerLine] });
@@ -4332,7 +4332,7 @@ describe("till-app: a table open that the session outlives", () => {
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       listZoneOffers: vi.fn(async () => {
         await new Promise<void>((resolve) => (answerOffers = resolve));
-        return catalogue("v1");
+        return zoneOffers("v1");
       }),
     });
     await flush(el);
@@ -4457,7 +4457,7 @@ describe("till-app: the draft beside browsing, or on its own Order view", () => 
   it("on a 390 px phone, goes from Order to Menu, where the menu was scrolled", async () => {
     await page.viewport(390, 844);
     try {
-      const long = catalogue("v1");
+      const long = zoneOffers("v1");
       const tapas = Array.from({ length: 40 }, (_, n) => offer(`offer-tapa-${n}`, `Tapa ${n}`));
       long.offers = [...long.offers, ...tapas];
       long.menus[0]!.structure.members.push(
@@ -5360,7 +5360,7 @@ describe("till-app: other people's drafts and taking one over", () => {
       await openAs(el, SAM, "Sam");
       await onOrder(el);
       expect(panelOf(el).lines).toEqual(["Beer ×1"]);
-      const v2 = catalogue("v2");
+      const v2 = zoneOffers("v2");
       api.listZoneOffers.mockResolvedValue({
         ...v2,
         offers: v2.offers.map((each) =>
@@ -5446,7 +5446,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     );
 
   async function publish(el: TillApp, prices: Record<string, string> = {}): Promise<void> {
-    api.listZoneOffers.mockResolvedValue(catalogue("v2", prices));
+    api.listZoneOffers.mockResolvedValue(zoneOffers("v2", prices));
     api.menuState.mockResolvedValue(state("v2"));
     await poll(el);
   }
@@ -5637,7 +5637,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
   });
 
   it("asks nothing while a dish's choices are open in the table's menu, and asks at the next poll once they are closed", async () => {
-    const withChoices = (each: ZoneOfferCatalogue): ZoneOfferCatalogue => ({
+    const withChoices = (each: ZoneOffers): ZoneOffers => ({
       ...each,
       offers: each.offers.map((dish) =>
         dish.name !== "Steak"
@@ -5669,7 +5669,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     });
     const { el } = await mountApp({
       menuState: vi.fn().mockResolvedValue(state("v1")),
-      listZoneOffers: vi.fn().mockResolvedValue(withChoices(catalogue("v1"))),
+      listZoneOffers: vi.fn().mockResolvedValue(withChoices(zoneOffers("v1"))),
     });
     await openTable(el);
     await tap(el, "Beer");
@@ -5771,20 +5771,20 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     await openTable(el);
     await tap(el, "Beer");
     await saved(el);
-    let answerPollRead!: (offers: ZoneOfferCatalogue) => void;
+    let answerPollRead!: (offers: ZoneOffers) => void;
     api.listZoneOffers.mockImplementationOnce(
-      () => new Promise<ZoneOfferCatalogue>((resolve) => (answerPollRead = resolve)),
+      () => new Promise<ZoneOffers>((resolve) => (answerPollRead = resolve)),
     );
     api.menuState.mockResolvedValue(state("v2"));
     await poll(el);
-    api.listZoneOffers.mockResolvedValue(catalogue("v2", { Beer: "6.00" }));
+    api.listZoneOffers.mockResolvedValue(zoneOffers("v2", { Beer: "6.00" }));
     api.submitDraft.mockRejectedValueOnce({
       code: "product.unavailable",
       status: 409,
       productId: "product-offer-flan",
     });
     await act(el, "fire-all");
-    answerPollRead(catalogue("v2", { Beer: "6.00" }));
+    answerPollRead(zoneOffers("v2", { Beer: "6.00" }));
     await flush(el);
 
     await poll(el);
@@ -5823,9 +5823,9 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       menuState: vi.fn().mockResolvedValue(state("v1")),
       listZoneOffers: vi
         .fn()
-        .mockResolvedValueOnce(catalogue("v1"))
+        .mockResolvedValueOnce(zoneOffers("v1"))
         .mockRejectedValueOnce({ code: "server.internal", status: 500 })
-        .mockResolvedValue(catalogue("v1")),
+        .mockResolvedValue(zoneOffers("v1")),
     });
 
     await openTable(el);
@@ -5839,19 +5839,19 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("reads the offers once when a poll comes while the read for a line saved under another version is out", async () => {
     savedUnderV0();
-    let answer!: (offers: ZoneOfferCatalogue) => void;
+    let answer!: (offers: ZoneOffers) => void;
     const { el } = await mountApp({
       menuState: vi.fn().mockResolvedValue(state("v1")),
       listZoneOffers: vi
         .fn()
-        .mockResolvedValueOnce(catalogue("v1"))
+        .mockResolvedValueOnce(zoneOffers("v1"))
         .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve))),
     });
     await openTable(el);
 
     await poll(el);
     expect(api.listZoneOffers).toHaveBeenCalledTimes(2);
-    answer(catalogue("v1"));
+    answer(zoneOffers("v1"));
     await flush(el);
 
     expect(refreshText(el)).toContain("Beer €5.00");
@@ -5862,7 +5862,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     await openTable(el);
     await tap(el, "Beer");
     await saved(el);
-    api.listZoneOffers.mockResolvedValue(catalogue("v2", { Beer: "6.00" }));
+    api.listZoneOffers.mockResolvedValue(zoneOffers("v2", { Beer: "6.00" }));
     api.submitDraft.mockRejectedValueOnce({
       code: "menu.version_changed",
       status: 409,
@@ -5983,7 +5983,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     await openTable(el);
     await tap(el, "Flan");
     await saved(el);
-    const v2 = catalogue("v2");
+    const v2 = zoneOffers("v2");
     api.listZoneOffers.mockResolvedValue({
       ...v2,
       offers: v2.offers.filter((each) => each.id !== "offer-flan"),
@@ -6002,7 +6002,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     await tap(el, "Beer");
     await tap(el, "Flan");
     await saved(el);
-    const v2 = catalogue("v2");
+    const v2 = zoneOffers("v2");
     api.listZoneOffers.mockResolvedValue({
       ...v2,
       offers: v2.offers.filter((each) => each.id !== "offer-flan"),
@@ -6088,7 +6088,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
   it("asks to confirm the line at its new price alone, and saves it under the live version on Confirm", async () => {
     savedAt("v1", "offer-beer");
     const { el } = await mountApp({
-      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", { Beer: "6.00" })),
+      listZoneOffers: vi.fn().mockResolvedValue(zoneOffers("v2", { Beer: "6.00" })),
     });
 
     await openTable(el);
@@ -6106,8 +6106,8 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
     const { el } = await mountApp({
       listZoneOffers: vi
         .fn()
-        .mockResolvedValueOnce(catalogue("v1"))
-        .mockResolvedValue(catalogue("v2", { Beer: "6.00" })),
+        .mockResolvedValueOnce(zoneOffers("v1"))
+        .mockResolvedValue(zoneOffers("v2", { Beer: "6.00" })),
     });
 
     await openTable(el);
@@ -6138,7 +6138,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
   it("asks again at Send, rather than sending, when the question was put aside", async () => {
     savedAt("v1", "offer-beer");
     const { el } = await mountApp({
-      listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2")),
+      listZoneOffers: vi.fn().mockResolvedValue(zoneOffers("v2")),
       submitDraft: vi.fn(server.submitDraft).mockRejectedValueOnce({
         code: "menu.version_changed",
         status: 409,
@@ -6246,7 +6246,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
         noMerge: false,
       })),
     });
-    const offers = catalogue("v1");
+    const offers = zoneOffers("v1");
     const { el } = await mountApp({
       listZoneOffers: vi.fn().mockResolvedValue({
         ...offers,
@@ -6288,8 +6288,8 @@ describe("till-app: a draft line that cannot be sold now", () => {
     }
 
     /** Beer offers a lemon extra, and is sold in a measure when `measured`. */
-    function beerWithLemon(measured: boolean): ZoneOfferCatalogue {
-      const offers = catalogue("v1");
+    function beerWithLemon(measured: boolean): ZoneOffers {
+      const offers = zoneOffers("v1");
       return {
         ...offers,
         offers: offers.offers.map((each) =>
@@ -6370,8 +6370,8 @@ describe("till-app: a draft line that cannot be sold now", () => {
   });
 
   describe("a line whose dish is now sold only as an extra", () => {
-    const onlyFlanAsExtra = (): ZoneOfferCatalogue => {
-      const offers = catalogue("v1");
+    const onlyFlanAsExtra = (): ZoneOffers => {
+      const offers = zoneOffers("v1");
       return {
         ...offers,
         offers: offers.offers.map((each) =>
@@ -6546,7 +6546,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       vi.advanceTimersByTime(15_000);
       await flush(el, 6);
       expect(flagText(el)).toEqual([]);
-      const offers = catalogue("v1");
+      const offers = zoneOffers("v1");
       api.listZoneOffers.mockResolvedValue({
         ...offers,
         offers: offers.offers.map((each) =>
@@ -6598,8 +6598,8 @@ describe("till-app: a draft line that cannot be sold now", () => {
   });
 
   describe("a line kept while its menu was off the zone", () => {
-    const menuOff = (): ZoneOfferCatalogue => ({
-      ...catalogue("v1"),
+    const menuOff = (): ZoneOffers => ({
+      ...zoneOffers("v1"),
       menus: [],
       offers: [],
       defaultMenuId: null,
@@ -6657,7 +6657,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       return el;
     }
 
-    async function poll(el: TillApp, offers: ZoneOfferCatalogue, version: string): Promise<void> {
+    async function poll(el: TillApp, offers: ZoneOffers, version: string): Promise<void> {
       api.listZoneOffers.mockResolvedValue(offers);
       api.menuState.mockResolvedValue(at(version));
       vi.advanceTimersByTime(15_000);
@@ -6666,7 +6666,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
 
     /** Opens Table 4 while the zone offers no menu, puts that question aside, and then lets a poll
      * find `back` offered. */
-    async function menuComesBack(back: ZoneOfferCatalogue, version: string): Promise<TillApp> {
+    async function menuComesBack(back: ZoneOffers, version: string): Promise<TillApp> {
       const el = await openWithMenuOff();
       await answerRefresh(el, "cancel");
       await poll(el, back, version);
@@ -6684,7 +6684,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
     });
     it("names it and sends it as saved, asking nothing, when the menu is back under the version it was saved at", async () => {
       savedBeer({ quantity: "2", note: "no ice", courseId: "mains" });
-      const el = await menuComesBack(catalogue("v1"), "v1");
+      const el = await menuComesBack(zoneOffers("v1"), "v1");
 
       expect(rows(el)).toEqual(["Beer ×2"]);
       expect(flagText(el)).toEqual([]);
@@ -6706,7 +6706,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
 
     it("asks its price when the menu is back under a newer version, and sends it under that version once confirmed", async () => {
       savedBeer();
-      const el = await menuComesBack(catalogue("v2", { Beer: "6.00" }), "v2");
+      const el = await menuComesBack(zoneOffers("v2", { Beer: "6.00" }), "v2");
 
       expect(rows(el)).toEqual(["Beer ×1"]);
       expect(changedLines(el)).toEqual(["Beer €6.00"]);
@@ -6723,11 +6723,11 @@ describe("till-app: a draft line that cannot be sold now", () => {
     it("asks its price at the next poll when the menu came back under a newer version while the question raised at opening was still open", async () => {
       savedBeer();
       const el = await openWithMenuOff();
-      await poll(el, catalogue("v2", { Beer: "6.00" }), "v2");
+      await poll(el, zoneOffers("v2", { Beer: "6.00" }), "v2");
       expect(rows(el)).toEqual(["Beer ×1"]);
 
       await answerRefresh(el, "cancel");
-      await poll(el, catalogue("v2", { Beer: "6.00" }), "v2");
+      await poll(el, zoneOffers("v2", { Beer: "6.00" }), "v2");
 
       expect(changedLines(el)).toEqual(["Beer €6.00"]);
     });
@@ -6736,7 +6736,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       savedBeer({
         extras: [{ listId: "toppings", picks: [{ productId: "p-olives", quantity: 1 }] }],
       });
-      const el = await menuComesBack(catalogue("v1"), "v1");
+      const el = await menuComesBack(zoneOffers("v1"), "v1");
 
       expect(rows(el)).toEqual(["Beer ×1"]);
       expect(flagText(el)).toEqual([t("basket.blocked.extra")]);
@@ -8978,7 +8978,7 @@ describe("native app phone order view with mixed dish families", () => {
           const oldWidth = innerWidth,
             oldHeight = innerHeight;
           await page.viewport(width, 900);
-          const menu = catalogue("v1");
+          const menu = zoneOffers("v1");
           menu.offers[0]!.courseId = null;
           menu.offers[1]!.unit = {
             ...unit,

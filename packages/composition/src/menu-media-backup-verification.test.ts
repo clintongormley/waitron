@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_BACKUP_VERIFICATION, CATALOGUE_TABLES } from "@waitron/menu";
+import { MENU_BACKUP_VERIFICATION, MENU_TABLES } from "@waitron/menu";
 import { MEDIA_BACKUP_VERIFICATION, MEDIA_TABLES } from "@waitron/media";
 import { validateBackupVerificationContribution } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 
-describe("catalogue and media verification registration", () => {
+describe("menu and media verification registration", () => {
   it.each([
-    ["catalogue", CATALOGUE_BACKUP_VERIFICATION, CATALOGUE_TABLES],
+    ["menu", MENU_BACKUP_VERIFICATION, MENU_TABLES],
     ["media", MEDIA_BACKUP_VERIFICATION, MEDIA_TABLES],
   ] as const)("registers %s independently of the enabled-module list", (name, expected, tables) => {
     const descriptor = ALL_MODULES.find((module) => module.name === name)!;

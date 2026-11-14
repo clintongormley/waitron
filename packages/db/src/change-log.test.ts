@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { catalogues } from "./schema/menus.js";
+import { menus } from "./schema/menus.js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ResourceChange } from "@waitron/shared";
 import { installChangeFeed } from "./change-feed.js";
@@ -12,7 +12,7 @@ import { useVenueDb } from "./testing/venue-db.js";
 
 async function insertMenu(tx: Transaction): Promise<string> {
   const id = randomUUID();
-  await tx.insert(catalogues).values({ id, name: id });
+  await tx.insert(menus).values({ id, name: id });
   return id;
 }
 
@@ -46,7 +46,7 @@ describe("the change log", () => {
       // rollback case below proves may never happen.
       expect(seen).toEqual([]);
     });
-    expect(seen).toEqual([{ resources: [{ type: "catalogues", id }] }]);
+    expect(seen).toEqual([{ resources: [{ type: "menus", id }] }]);
   });
 
   it("publishes nothing when the transaction rolls back", async () => {
@@ -67,7 +67,7 @@ describe("the change log", () => {
     await withTransaction(suite.db, async (tx) => {
       id = await insertMenu(tx);
     });
-    expect(seen).toEqual([{ resources: [{ type: "catalogues", id }] }]);
+    expect(seen).toEqual([{ resources: [{ type: "menus", id }] }]);
   });
 
   it("stops delivering to a listener that has unsubscribed", async () => {

@@ -56,8 +56,8 @@ const product: TillProduct = {
   vatClass: "general",
   category: null,
   allergens: null,
-  catalogueId: "cat-default",
-  catalogueName: "Menu",
+  menuId: "cat-default",
+  menuName: "Menu",
 };
 const ticket = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTicketView>(

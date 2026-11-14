@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   units,
   contentSuggestionJobs,
   mediaImages,
@@ -18,13 +18,13 @@ import {
   validateBackupModuleResult,
   validateBackupVerificationContribution,
 } from "@waitron/module";
-import { CATALOGUE_BACKUP_VERIFICATION as OWNER } from "./index.js";
-import { CATALOGUE_TABLES } from "./classification.js";
+import { MENU_BACKUP_VERIFICATION as OWNER } from "./index.js";
+import { MENU_TABLES } from "./classification.js";
 import type { MenuDocument } from "@waitron/shared";
 
 /** This module's share of core's classification, which holds its tables. */
-const CATALOGUE_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
-  (CATALOGUE_TABLES as readonly string[]).includes(table),
+const MENU_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
+  (MENU_TABLES as readonly string[]).includes(table),
 );
 const migrations = [CORE_MIGRATIONS];
 const original = useVenueDb({ migrations });
@@ -33,7 +33,7 @@ const absent = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   // A source from before these tables existed: core's set now creates them, so they are dropped.
   setup: async (db) => {
-    for (const table of [...CATALOGUE_TABLES].reverse()) db.run(sql.raw(`drop table "${table}"`));
+    for (const table of [...MENU_TABLES].reverse()) db.run(sql.raw(`drop table "${table}"`));
   },
   // Never written; emptying it would reach core tables whose keys name the dropped ones.
   resetPerTest: false,
@@ -70,7 +70,7 @@ const hash = createHash("sha256").update(documentText).digest("hex");
 const passed = { status: "passed", checks: [{ code: "data", status: "passed" }] };
 beforeEach(async () => {
   for (const suite of [original, restored]) {
-    await suite.db.insert(catalogues).values({ id: menu, name: "Lunch" });
+    await suite.db.insert(menus).values({ id: menu, name: "Lunch" });
     await suite.db.insert(menuVersions).values({
       id: version,
       menuId: menu,
@@ -136,14 +136,14 @@ async function corrupt(suite: typeof original, statement: string) {
   }
 }
 
-describe("catalogue backup evidence", () => {
-  it("accepts unchanged captured catalogue", async () => {
+describe("menu backup evidence", () => {
+  it("accepts unchanged captured menu", async () => {
     expect(await run()).toEqual(passed);
   });
   it("checks a live version belongs to its publication menu", async () => {
     const other = "10000000-0000-4000-8000-000000000099";
     for (const suite of [original, restored]) {
-      await suite.db.insert(catalogues).values({ id: other, name: "Other" });
+      await suite.db.insert(menus).values({ id: other, name: "Other" });
       await suite.db.insert(menuPublications).values({
         menuId: menu,
         versionId: version,
@@ -264,7 +264,7 @@ describe("catalogue backup evidence", () => {
   });
   it("declares all tables without secrets entries or effects", () => {
     const owner = validateBackupVerificationContribution(OWNER);
-    expect(owner.data.tables).toEqual(CATALOGUE_CLASSIFICATION.map((c) => c.table));
+    expect(owner.data.tables).toEqual(MENU_CLASSIFICATION.map((c) => c.table));
     expect(owner.data.immutableTables).toEqual(["menu_versions", "menu_version_images"]);
     expect([owner.secrets, owner.entries, owner.effects]).toEqual([[], [], []]);
     expect(validateBackupModuleResult(passed, owner, false)).toEqual(passed);

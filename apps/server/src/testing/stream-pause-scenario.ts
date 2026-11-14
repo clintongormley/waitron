@@ -21,8 +21,8 @@ import { eq } from "drizzle-orm";
 import { Agent } from "undici";
 import { expect } from "vitest";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -360,17 +360,17 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         .set({ tokenHash: hashDeviceToken(DEVICE_TOKEN) })
         .where(eq(devices.id, deviceId));
       const offer = await withTransaction(seeding.venue, async (tx) => {
-        const catalogue = await createCatalogue(tx, { name: `Stream menu ${streamId}` });
+        const menu = await createMenu(tx, { name: `Stream menu ${streamId}` });
         const drinks = await createCategory(tx, { name: "Bebidas" });
         const water = await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: drinks.id,
           name: "Agua",
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",
         });
-        await assignCatalogueToVenue(tx, catalogue.id);
+        await assignMenuToVenue(tx, menu.id);
         const offers = await offerProducts(tx, {});
         return offers.offerFor(water.id);
       });

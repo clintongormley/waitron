@@ -3713,7 +3713,7 @@ it("puts Edit product in each row's ⋮, in a pinned actions column, and opens t
     expect(menus[0]!.getAttribute("data-test"), key).toBe(`actions-${key}`);
     const link = editLink(el, key);
     expect(text(link), key).toBe(t("product.edit"));
-    expect(link.getAttribute("href"), key).toBe(`/manage/catalogue/product/${pages[key]}`);
+    expect(link.getAttribute("href"), key).toBe(`/manage/products/product/${pages[key]}`);
   }
 
   const heard = vi.fn();
@@ -3873,7 +3873,7 @@ it.each(["es-ES", "en-GB"])(
   },
 );
 
-it("sorts by Available, available first and then sold out, and keeps each product's variants in the catalogue's order", async () => {
+it("sorts by Available, available first and then sold out, and keeps each product's variants in the menu's order", async () => {
   const el = await mount({
     rows: [
       { ...burger, available: false },
@@ -3934,7 +3934,7 @@ it("a sold-out product reads No in Available", async () => {
   expect(text(cell(el, "available", "mi-burger"))).not.toContain(t("product.active_badge"));
 });
 
-it("uses the server's variant price and fallback even when the catalogue differs", async () => {
+it("uses the server's variant price and fallback even when the menu differs", async () => {
   const source = {
     ...lemonade,
     combined: {

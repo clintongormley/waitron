@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { mountSetup } from "./setup-api.js";
 import type { WaitronModule } from "@waitron/module";
 import { sql } from "drizzle-orm";
-import { createCatalogue, createCategory, createProduct } from "@waitron/menu";
+import { createMenu, createCategory, createProduct } from "@waitron/menu";
 import { loadKeyRing } from "@waitron/credentials";
 import { kitchenStations, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -655,11 +655,11 @@ describe("routing cells in a staged import", () => {
         });
         const [station] = await tx.insert(kitchenStations).values({ name: "Bar" }).returning();
         const category = await createCategory(tx, { name: "Drinks" });
-        const menu = await createCatalogue(tx, {
+        const menu = await createMenu(tx, {
           name: `Configuration import menu`,
         });
         const product = await createProduct(tx, {
-          catalogueId: menu.id,
+          menuId: menu.id,
           categoryId: category.id,
           name: "Mojito",
           pricingUnit: "each",
@@ -668,7 +668,7 @@ describe("routing cells in a staged import", () => {
         });
         const [large] = await tx
           .insert(products)
-          .values({ catalogueId: menu.id, parentId: product.id, name: "Large", categoryId: null })
+          .values({ menuId: menu.id, parentId: product.id, name: "Large", categoryId: null })
           .returning();
         await setRoutingCell(
           tx,
@@ -914,16 +914,16 @@ describe("routing cells in a staged import", () => {
 
   it("refuses a bundle naming a part this box does not run as parts that differ, before any write", async () => {
     const { bundle, versions } = await exported();
-    expect(versions).not.toHaveProperty("catalogue");
+    expect(versions).not.toHaveProperty("menu");
     const old: ConfigurationBundle = {
       ...bundle,
-      // Catalogue's migration count just before the squash.
-      modules: { ...bundle.modules, catalogue: 36 },
+      // Menu's migration count just before the squash.
+      modules: { ...bundle.modules, menu: 36 },
     };
     const { stateDir, result } = await staged(old, versions);
     await expect(result).rejects.toMatchObject({
       code: "setup.configuration_parts_differ",
-      params: { exportOnly: ["catalogue"], serverOnly: [] },
+      params: { exportOnly: ["menu"], serverOnly: [] },
     });
     expect(await readdir(stateDir)).toEqual([]);
   });

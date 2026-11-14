@@ -116,7 +116,7 @@ export async function applyMigrationSet(db: Database, set: VenueMigrationSet): P
 }
 
 /**
- * Reads the plan off the catalogue.
+ * Reads the plan off the menu.
  *
  * `sqlite_sequence` holds the AUTOINCREMENT counters, exists only once some table declares one, and
  * is emptied with the rest. It is matched by the `sqlite_*` exclusion, so it is added back by name.

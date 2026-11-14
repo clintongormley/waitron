@@ -11,7 +11,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, product } from "../test/menus-fixture.js";
 import {
   archiveProducts,
@@ -26,14 +26,14 @@ import { cancelMenuPublication, queueMenuPublication } from "./menu-schedule.js"
 import { eq } from "drizzle-orm";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
-import { moveCatalogueItems, deleteCatalogueItems } from "./product-items.js";
+import { moveProductItems, deleteProductItems } from "./product-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { offerOf } from "../test/menus-fixture.js";
-import { deactivateCatalogue, deactivateProduct, updateProduct } from "./operations.js";
+import { deactivateMenu, deactivateProduct, updateProduct } from "./operations.js";
 
 import { setMainReportingCategory } from "./categories.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const T0 = new Date("2026-10-08T10:00:00.000Z");
 const later = new Date("2026-10-09T10:00:00.000Z");
@@ -159,7 +159,7 @@ describe("publishedMenusHolding", () => {
   it("does not count a deleted menu's live version", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.dinner);
-    await app((tx) => deactivateCatalogue(tx, f.dinner));
+    await app((tx) => deactivateMenu(tx, f.dinner));
     expect(await menuIds(f.burger)).toBeUndefined();
   });
 });
@@ -169,7 +169,7 @@ it.each([T0, later, new Date(later.getTime() + 60_000)])(
   async (at) => {
     const f = await menusFixture(fx.db);
     await queue(f.dinner, later);
-    await app((tx) => deactivateCatalogue(tx, f.dinner));
+    await app((tx) => deactivateMenu(tx, f.dinner));
     expect(await menuIds(f.burger, at)).toBeUndefined();
   },
 );
@@ -344,7 +344,7 @@ describe("archiving", () => {
     const before = await snapshot();
     await expect(
       app((tx) =>
-        deleteCatalogueItems(tx, { productIds: [f.burger], categoryIds: [f.softDrinks] }, "delete"),
+        deleteProductItems(tx, { productIds: [f.burger], categoryIds: [f.softDrinks] }, "delete"),
       ),
     ).rejects.toMatchObject({
       code: "product.on_live_menu",
@@ -367,7 +367,7 @@ describe("archiving", () => {
     await switchOff(f.lemonade);
     const before = await snapshot();
     await app((tx) =>
-      deleteCatalogueItems(tx, { productIds: [f.lemonade], categoryIds: [] }, "move_up"),
+      deleteProductItems(tx, { productIds: [f.lemonade], categoryIds: [] }, "move_up"),
     );
     expect(await snapshot()).toEqual(before);
   });
@@ -378,7 +378,7 @@ describe("archiving", () => {
       app((tx) => saveProductEditor(tx, "missing", f.dinner, value, "en")),
     ).rejects.toMatchObject({ code: "product.not_found", params: { productId: "missing" } });
     await expect(
-      app((tx) => deleteCatalogueItems(tx, { productIds: ["missing"], categoryIds: [] }, "delete")),
+      app((tx) => deleteProductItems(tx, { productIds: ["missing"], categoryIds: [] }, "delete")),
     ).rejects.toMatchObject({ code: "product.not_found", params: { productId: "missing" } });
   });
 });
@@ -702,7 +702,7 @@ it("keeps reporting-category and single-selection folder moves available after A
   await app((tx) => archiveProducts(tx, [f.burger]));
   await app((tx) => setMainReportingCategory(tx, f.burger, f.softDrinks));
   expect(await row(f.burger)).toMatchObject({ active: false, categoryId: f.softDrinks });
-  await app((tx) => moveCatalogueItems(tx, { productIds: [f.burger], categoryIds: [] }, null));
+  await app((tx) => moveProductItems(tx, { productIds: [f.burger], categoryIds: [] }, null));
   expect(await row(f.burger)).toMatchObject({ active: false, categoryId: null });
 });
 

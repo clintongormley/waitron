@@ -374,7 +374,7 @@ the product's own **Modifiers** section, in the order you want. See
 limits, and extra prices.
 
 When you park or complete an order, Waitron saves the chosen product and variant names, prep station name,
-prices and modifier answers. Later catalogue edits apply to new selections. The parked order,
+prices and modifier answers. Later menu edits apply to new selections. The parked order,
 station ticket, receipt and reprint continue to show the facts saved with that order.
 
 When you set up a Madrid demo in English, its staff and prep station names are in English. The till shows

@@ -25,8 +25,8 @@ import {
   withTransaction,
 } from "@waitron/db";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   addProductToMenu,
   createProduct,
@@ -70,7 +70,7 @@ import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { mountCatalogueApi } from "./menu-api.js";
+import { mountMenuApi } from "./menu-api.js";
 import type { TranslationItemPage } from "@waitron/menu/src/content-translation-types.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -166,7 +166,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
   };
 }
 
-/** Stand up a fresh chained venue + a one-`each`-product catalogue (1.50 gross, general/21 %), a
+/** Stand up a fresh chained venue + a one-`each`-product menu (1.50 gross, general/21 %), a
  *  staff person ("Cashier") and a supervisor ("Supervisor"), both with PIN "5555". The supervisor
  *  holds `cash.drawer`; the staff person does not — the pair the gated drawer matrix is written
  *  against. */
@@ -210,17 +210,17 @@ async function setupVenue(): Promise<{
   const cfg = tillConfigFromVenue(venue);
   venueReceiptPrinter = null;
   const { each, operatorId, supervisorId } = await withTransaction(suite.db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinksCategory = await createCategory(tx, { name: "Bebidas" });
     const product = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinksCategory.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const menuItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: product.id,
@@ -1185,13 +1185,13 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
         kitchenName: "KITCHEN WATER",
         customerName: { es: "Agua para clientes" },
       });
-      await publishWorkingMenu(tx, each.catalogueId);
+      await publishWorkingMenu(tx, each.menuId);
     });
     const printerId = await makePrinter();
     await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    mountCatalogueApi(
+    mountMenuApi(
       app,
       { db: suite.db, venueLocale: "es-ES", contentLanguageRules: { required: [], official: [] } },
       noopLog,
@@ -1257,7 +1257,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       kitchenName: "KITCHEN WATER",
       customerName: { es: "Agua recién traducida" },
     });
-    const preview = await withTransaction(suite.db, (tx) => previewMenu(tx, each.catalogueId));
+    const preview = await withTransaction(suite.db, (tx) => previewMenu(tx, each.menuId));
     expect(preview.document.offers[each.menuItemId]!.customerName).toEqual({
       es: "Agua recién traducida",
     });

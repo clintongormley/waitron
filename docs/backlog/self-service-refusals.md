@@ -1161,7 +1161,7 @@ persistent refusal has a repair. The wording change does not qualify that missin
 
 **2026-11-01 review qualification:** the replacement-dialog cases now check the Spanish
 connection/file/type choices, certificate-retention statement and Save/Cancel meanings
-independently of the translation catalogue. The complete expected sentences make added
+independently of the translation menu. The complete expected sentences make added
 referral text fail. The existing retry, corrected-submission and cancellation assertions remain.
 The coordinator cases also cover Keep and Discard after a refused check in both locales;
 their shared confirmation labels are English.

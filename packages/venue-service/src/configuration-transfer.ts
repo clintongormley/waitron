@@ -85,7 +85,7 @@ export function validateHolidayConfiguration(
 
 export function validateMenuTimetables(tables: Tables): void {
   const departments = ids(tables.departments);
-  const menus = ids(tables.catalogues);
+  const menus = ids(tables.menus);
   const periodDepartment = new Map<unknown, unknown>();
   const customerMenus = new Map<unknown, unknown>();
   const setDepartment = new Map<unknown, unknown>();

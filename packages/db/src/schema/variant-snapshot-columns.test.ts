@@ -9,7 +9,7 @@ import { VARIANT_LOCALES_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { catalogues, products } from "./menus.js";
+import { menus, products } from "./menus.js";
 import { workingOrderLines } from "./orders.js";
 
 /** An order opened from the dashboard, needing no device. */
@@ -21,7 +21,7 @@ const AT = "2026-07-20T19:20:30+00:00";
 const LOCALES = ["es", "ca"] as const;
 
 describe("B1 snapshot columns and the variant-descriptions locales trigger", () => {
-  // The venue, catalogue and order below are seeded ONCE in `beforeAll`, so the per-test reset
+  // The venue, menu and order below are seeded ONCE in `beforeAll`, so the per-test reset
   // `useVenueDb` runs by default would empty them after the first case. Each case that writes a
   // line uses its own `line_no` and reads back only its own row, so they do not need the reset.
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
@@ -37,13 +37,13 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
       operationDescription: "Hostelería",
     });
     const [cat] = await db
-      .insert(catalogues)
+      .insert(menus)
       .values({ name: "Deli" })
-      .returning({ id: catalogues.id });
+      .returning({ id: menus.id });
     const [prod] = await db
       .insert(products)
       .values({
-        catalogueId: cat!.id,
+        menuId: cat!.id,
         name: "Café solo",
         pricingUnit: "each",
         unitPrice: 130,

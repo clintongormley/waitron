@@ -5,7 +5,7 @@ const table = () => ({
   kind: "table",
   name: "products",
   table: "products",
-  module: "catalogue",
+  module: "menu",
   protection: "ordinary",
   rawSql:
     "CREATE TABLE products(id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT 'two words', CHECK(length(name)>0))",
@@ -21,7 +21,7 @@ const trigger = () => ({
   kind: "trigger",
   name: "protect",
   table: "products",
-  module: "catalogue",
+  module: "menu",
   protection: "ordinary",
   rawSql:
     "CREATE TRIGGER protect BEFORE DELETE ON products BEGIN SELECT RAISE(ABORT, 'two words'); END",
@@ -32,7 +32,7 @@ const index = () => ({
   kind: "index",
   name: "by_name",
   table: "products",
-  module: "catalogue",
+  module: "menu",
   protection: "ordinary",
   rawSql: "CREATE UNIQUE INDEX by_name ON products(lower(name)) WHERE name <> ''",
   unique: true,
@@ -43,7 +43,7 @@ const view = () => ({
   kind: "view",
   name: "named",
   table: "named",
-  module: "catalogue",
+  module: "menu",
   protection: "ordinary",
   rawSql: "CREATE VIEW named AS SELECT name FROM products",
   body: "SELECT name FROM products",
@@ -62,7 +62,7 @@ describe("complete historical schema comparison", () => {
         sourceEpoch: "epoch",
         sourceSha: "1".repeat(40),
         candidateSha: "2".repeat(40),
-        migrations: [{ hash: "3".repeat(64), module: "catalogue" }],
+        migrations: [{ hash: "3".repeat(64), module: "menu" }],
         disabledModules: [],
       };
       const mapping = {
@@ -71,7 +71,7 @@ describe("complete historical schema comparison", () => {
         sourceSha: context.sourceSha,
         candidateSha: context.candidateSha,
         migrationHash: "3".repeat(64),
-        module: "catalogue",
+        module: "menu",
         object: { subject: "schema", key: `${kind}:${old.name}` },
         field: "object",
         before: old,
@@ -122,7 +122,7 @@ describe("complete historical schema comparison", () => {
         sourceEpoch: "epoch",
         sourceSha: "1".repeat(40),
         candidateSha: "2".repeat(40),
-        migrations: [{ hash: "3".repeat(64), module: "catalogue" }],
+        migrations: [{ hash: "3".repeat(64), module: "menu" }],
         disabledModules: [],
       };
       const mapping = {
@@ -131,7 +131,7 @@ describe("complete historical schema comparison", () => {
         sourceSha: context.sourceSha,
         candidateSha: context.candidateSha,
         migrationHash: "3".repeat(64),
-        module: "catalogue",
+        module: "menu",
         object: { subject: "schema", key: `${kind}:${old.name}` },
         field: "object",
         before: old,
@@ -191,7 +191,7 @@ describe("complete historical schema comparison", () => {
       sourceEpoch: "epoch",
       sourceSha: "1".repeat(40),
       candidateSha: "2".repeat(40),
-      migrations: [{ hash: "3".repeat(64), module: "catalogue" }],
+      migrations: [{ hash: "3".repeat(64), module: "menu" }],
       disabledModules: [],
     };
     const mapping = {
@@ -200,7 +200,7 @@ describe("complete historical schema comparison", () => {
       sourceSha: cell.sourceSha,
       candidateSha: cell.candidateSha,
       migrationHash: "3".repeat(64),
-      module: "catalogue",
+      module: "menu",
       object: { subject: "schema", key: "table:products" },
       field: "object",
       before: old,

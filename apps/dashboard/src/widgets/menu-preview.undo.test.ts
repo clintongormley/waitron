@@ -161,7 +161,7 @@ it("offers Edit product on a shared-product change and opens the product editor 
   el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
   const link = editLink(el, "shared-price")!;
   expect(text(link)).toBe("Edit product");
-  expect(link.getAttribute("href")).toBe("/manage/catalogue/product/p-burger");
+  expect(link.getAttribute("href")).toBe("/manage/products/product/p-burger");
   expect(link.hasAttribute("data-own-click")).toBe(true);
   expect(click(link)).toBe(true);
   expect(heard.mock.calls).toEqual([[{ productId: "p-burger" }]]);

@@ -13,7 +13,7 @@ import {
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
-  createCatalogue,
+  createMenu,
   createProduct,
   writeContentLanguages,
   setProductVariants,
@@ -32,7 +32,7 @@ import type {
   TranslationCell as TranslationTarget,
 } from "@waitron/menu/src/content-translation-types.js";
 type TranslationBatch = { edits: TranslationCellEdit[] };
-import { mountCatalogueApi } from "./menu-api.js";
+import { mountMenuApi } from "./menu-api.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -63,7 +63,7 @@ beforeEach(async () => {
       ? withPassiveManagementRead(next)
       : next(),
   );
-  mountCatalogueApi(
+  mountMenuApi(
     http,
     {
       db: suite.db,
@@ -156,11 +156,11 @@ async function fixture() {
   await seedTaxpayer(suite.db);
   return app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
-    const menu = await createCatalogue(tx, {
+    const menu = await createMenu(tx, {
       name: "STAFF Lunch",
       names: { es: "CLIENT Almuerzo" },
     });
-    const child = await createCatalogue(tx, {
+    const child = await createMenu(tx, {
       name: "STAFF Drinks",
       names: { es: "CLIENT ES drinks" },
     });
@@ -168,7 +168,7 @@ async function fixture() {
     const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
     const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       unitId: null,
       name: "STAFF Bread",
@@ -1029,7 +1029,7 @@ describe("bounded multilingual translation HTTP contract", () => {
 it("uses the configured dashboard origin when a development proxy serves HTTP over a TLS upstream", async () => {
   const input = await batch(await many(1));
   const upstream = new Hono();
-  mountCatalogueApi(
+  mountMenuApi(
     upstream,
     {
       db: suite.db,
@@ -1054,7 +1054,7 @@ it("uses the configured dashboard origin when a development proxy serves HTTP ov
     en: "CLIENT English unit",
   });
 });
-it("the retained-cell read requires a live catalogue manager", async () => {
+it("the retained-cell read requires a live menu manager", async () => {
   const route = path + "/cells?cell=" + encodeURIComponent('["unit","missing","en","name"]');
   await error(await send("GET", undefined, null, route), 401, "management_session.required");
   await error(await send("GET", undefined, staffCookie, route), 403, "authorization.not_permitted");
@@ -1103,7 +1103,7 @@ it("projects eight languages and refuses nine without reducing the enabled langu
 it("uses the staff origin for remote translation saves and refuses another origin", async () => {
   const input = await batch(await many(1));
   const local = new Hono();
-  mountCatalogueApi(
+  mountMenuApi(
     local,
     {
       db: suite.db,

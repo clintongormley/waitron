@@ -937,10 +937,10 @@ design. A802's gross-reduction workflow does not authorise this build.
 The 2026-10-09 research found the only 0% rate in the VAT Law is art. 91.Cuatro, goods
 donated to non-profits; the 0% on basic foods ended on 30 September 2024.
 
-From **The product editor and catalogue (#345, #379, #387) — what is left open.**
+From **The product editor and menu (#345, #379, #387) — what is left open.**
 [Operator guide](../../apps/server/src/guide/en/products.md); [developer guide](../developers/products.md).
 
-- The selector shows the catalogue's zero-rate class under that name; pricing puts the
+- The selector shows the menu's zero-rate class under that name; pricing puts the
   whole gross in the base with zero VAT, and Veri\*Factu files it as `S1` — taxable, not exempt — at
   a 0.00 rate. AEAT separately requires a _non-subject_ operation to record its cause (`N1`,
   Articles 7, 14 and others; `N2`, place-of-supply rules), and nothing established that any of this

@@ -11,7 +11,7 @@ import {
 } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type {
-  CatalogueSummary,
+  MenuSummary,
   DashboardApi,
   MemberRef,
   MenuHome,
@@ -35,7 +35,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
   return {
     id,
     modifiers: [],
-    catalogueId: "cat-1",
+    menuId: "cat-1",
     categoryId: null,
     primaryCategoryId: null,
     name,
@@ -76,7 +76,7 @@ const products: Product[] = [
   product("p-chips", "Chips"),
 ];
 
-const menus: CatalogueSummary[] = [
+const menus: MenuSummary[] = [
   { id: "menu-lunch", name: "Lunch Menu", active: true, version: 1 },
   { id: "menu-dinner", name: "Dinner Menu", active: true, version: 1 },
 ];
@@ -222,10 +222,10 @@ const WRITES = [
 
 function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
   const client = {
-    listCatalogues: vi.fn().mockResolvedValue(menus),
+    listMenus: vi.fn().mockResolvedValue(menus),
     listLibraryProducts: vi.fn().mockResolvedValue(products),
     listCategories: vi.fn().mockResolvedValue([]),
-    getCatalogueSettings: vi
+    getMenuSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: vi
@@ -459,7 +459,7 @@ describe("the Home page tab's shortcuts", () => {
         ];
       if (scenario === "enabled alternate") nodes.push(productNode("m-own-burger", "p-burger"));
       const client = api({
-        listCatalogues: vi
+        listMenus: vi
           .fn()
           .mockResolvedValue([
             ...menus,
@@ -483,7 +483,7 @@ describe("the Home page tab's shortcuts", () => {
             : "home.not_shown_not_on_sale",
         ),
       );
-      expect(client.listCatalogues).toHaveBeenCalledTimes(1);
+      expect(client.listMenus).toHaveBeenCalledTimes(1);
     },
   );
 

@@ -11,7 +11,7 @@ export function filterProductsByMenu(
   selectedMenuId: string,
 ): TillProduct[] {
   if (selectedMenuId === "") return products;
-  return products.filter((product) => product.catalogueId === selectedMenuId);
+  return products.filter((product) => product.menuId === selectedMenuId);
 }
 
 export type DietPredicate = "vegan" | "vegetarian" | "no-meat" | "no-fish";

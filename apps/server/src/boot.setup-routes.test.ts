@@ -33,8 +33,8 @@ import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   readContentLanguages,
@@ -1012,19 +1012,19 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         .from(persons)
         .where(eq(persons.email, "admin@waitron.dev"));
       const offer = await withTransaction(venue.store.venue, async (tx) => {
-        const catalogue = await createCatalogue(tx, {
+        const menu = await createMenu(tx, {
           name: `Boot setup routes menu`,
         });
         const drinks = await createCategory(tx, { name: "Bebidas" });
         const water = await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: drinks.id,
           name: "Agua",
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",
         });
-        await assignCatalogueToVenue(tx, catalogue.id);
+        await assignMenuToVenue(tx, menu.id);
         const offers = await offerProducts(tx, {});
         return offers.offerFor(water.id);
       });

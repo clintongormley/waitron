@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  CATALOGUE_CHANGE_SOURCES,
+  MENU_CHANGE_SOURCES,
   listMenuPublications,
   menuPublications,
   menuScheduledPublications,
@@ -414,7 +414,7 @@ describe("menuActivationJob", () => {
   // Last in the file: the change-feed triggers it installs stay on the suite's database.
   it("is woken once by its own activation, which then finds nothing to do", async () => {
     const [v2] = await lunchWithQueue(6);
-    await installChangeFeed(fx.db, CATALOGUE_CHANGE_SOURCES);
+    await installChangeFeed(fx.db, MENU_CHANGE_SOURCES);
     const { duty, door, armed, armedCount, bus, clock, log } = startDuty();
     const unsubscribe = subscribeToChanges(changeSubscriber(bus, log));
     const changes: { begins: number; types: string[] }[] = [];

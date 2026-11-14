@@ -367,7 +367,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
     try {
-      const local = await fetch(`http://127.0.0.1:${localPort}/management-api/catalogues`);
+      const local = await fetch(`http://127.0.0.1:${localPort}/management-api/menus`);
       expect(local.headers.get("set-cookie")).toBeNull();
       expect(local.status).toBe(403);
       await local.arrayBuffer();
@@ -376,7 +376,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
           {
             hostname: "127.0.0.1",
             port: staffPort,
-            path: "/management-api/catalogues",
+            path: "/management-api/menus",
             servername: "staff.example.test",
             rejectUnauthorized: false,
             headers: { Host: "staff.example.test" },
@@ -418,7 +418,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       expect(about.status).toBe(200);
       expect(await about.json()).toMatchObject({ release: null });
       for (const path of [
-        "/management-api/catalogues",
+        "/management-api/menus",
         `/management-api/staff/${MIRROR_STAFF_ID}/personal-data/export`,
       ]) {
         const read = await fetch(`${base}${path}`);
@@ -438,7 +438,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         });
       }
 
-      const write = await fetch(`${base}/management-api/catalogues`, {
+      const write = await fetch(`${base}/management-api/menus`, {
         method: "POST",
         body: "{}",
       });
@@ -727,7 +727,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       });
       const base = `http://127.0.0.1:${httpPort()}`;
       try {
-        const read = await fetch(`${base}/management-api/catalogues`, {
+        const read = await fetch(`${base}/management-api/menus`, {
           headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
         });
         expect(read.status).toBe(venue === "mirror" ? 403 : 401);
@@ -767,7 +767,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     });
     try {
       for (const path of [
-        "/management-api/catalogues",
+        "/management-api/menus",
         `/management-api/staff/${MIRROR_STAFF_ID}/personal-data/export`,
       ]) {
         const read = await fetch(`http://127.0.0.1:${httpPort()}${path}`, {
@@ -818,7 +818,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     });
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
-      const read = await fetch(`${base}/management-api/catalogues`);
+      const read = await fetch(`${base}/management-api/menus`);
       expect(read.status).toBe(403);
       expect(read.headers.get("set-cookie")).toBeNull();
       expect(await read.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
@@ -980,7 +980,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       expect(reset.status).toBe(404);
 
       // No ambient viewer: the dashboard read primes no cookie.
-      const dash = await fetch(`${base}/management-api/catalogues`);
+      const dash = await fetch(`${base}/management-api/menus`);
       expect(dash.headers.get("set-cookie")).toBeNull();
     } finally {
       await server.close();

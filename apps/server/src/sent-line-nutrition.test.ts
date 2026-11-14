@@ -189,7 +189,7 @@ it("captures inherited variant declarations and keeps each extra's own facts, in
       v.cfg.locale,
     );
     const extra = await createProduct(tx, {
-      catalogueId: parent!.catalogueId,
+      menuId: parent!.menuId,
       categoryId: null,
       name: "Side",
       pricingUnit: "each",

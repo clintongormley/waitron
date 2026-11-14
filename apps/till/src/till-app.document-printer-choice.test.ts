@@ -113,8 +113,8 @@ async function sold(invoiceType = "F1", overrides: Record<string, unknown> = {})
       vatClass: "general",
       category: null,
       allergens: null,
-      catalogueId: "cat-default",
-      catalogueName: "Menu",
+      menuId: "cat-default",
+      menuName: "Menu",
     },
     "1",
   );

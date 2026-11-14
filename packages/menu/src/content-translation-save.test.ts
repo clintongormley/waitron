@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { contentLanguageChoices } from "@waitron/shared";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   contentSuggestions,
   extraLists,
   menuDetails,
@@ -19,7 +19,7 @@ import {
 } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { createMenu, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 import { saveContentTranslations } from "./content-translations.js";
@@ -45,13 +45,13 @@ async function fixture() {
   await seedVenueSettings(suite.db);
   return app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
-    const menu = await createCatalogue(tx, { name: "STAFF menu", names: { es: "CLIENT menu" } });
-    const child = await createCatalogue(tx, {
+    const menu = await createMenu(tx, { name: "STAFF menu", names: { es: "CLIENT menu" } });
+    const child = await createMenu(tx, {
       name: "STAFF child",
       names: { es: "CLIENT root", en: "CLIENT root" },
     });
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       unitId: null,
       name: "STAFF bread",
@@ -63,7 +63,7 @@ async function fixture() {
     const [variant] = await tx
       .insert(products)
       .values({
-        catalogueId: menu.id,
+        menuId: menu.id,
         parentId: product.id,
         name: "STAFF small",
         kitchenName: "KITCHEN small",
@@ -678,9 +678,9 @@ describe("translation cell batch boundaries", () => {
         .where(eq(sectionMembers.id, ids.included_menu));
     if (change === "child activity")
       await suite.db
-        .update(catalogues)
+        .update(menus)
         .set({ active: false })
-        .where(eq(catalogues.id, ids.childMenuId));
+        .where(eq(menus.id, ids.childMenuId));
     if (change === "variant activity")
       await suite.db.update(products).set({ active: false }).where(eq(products.id, ids.variant));
     const before = await snapshot();

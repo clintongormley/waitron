@@ -16,8 +16,8 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createExtraList,
   createProduct,
   setProductVariants,
@@ -142,12 +142,12 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
   });
 
   const products = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, {
+    const menu = await createMenu(tx, {
       name: `Vat class at line add menu ${cfg.nodeId}`,
     });
     const product = (name: string, unitPrice: string) =>
       createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name,
         pricingUnit: "each",
@@ -189,7 +189,7 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToVenue(tx, menu.id);
+    await assignMenuToVenue(tx, menu.id);
     return {
       beer: beer.id,
       burger: burger.id,
@@ -778,7 +778,7 @@ it.each([false, true])(
       await updateProduct(tx, v.products.burger, { setLunch: true, unitPrice: "18.00" });
       await updateProduct(tx, v.products.cheese, { vatClass: "general" });
       const includedCoffee = await createProduct(tx, {
-        catalogueId: v.counter.menuId,
+        menuId: v.counter.menuId,
         categoryId: null,
         name: "Included coffee",
         customerName: { es: "Included guest coffee" },

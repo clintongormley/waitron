@@ -1,8 +1,8 @@
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { catalogues, floorZones, products, readVenue } from "@waitron/db";
+import { menus, floorZones, products, readVenue } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { addProducts, createCatalogue, menuItems, requireMenuRoot } from "@waitron/menu";
+import { addProducts, createMenu, menuItems, requireMenuRoot } from "@waitron/menu";
 import {
   configureZone,
   createDepartment,
@@ -158,10 +158,10 @@ async function placeOnTopLevel(
 
 async function ownMenu(tx: Transaction): Promise<string> {
   const [existing] = await tx
-    .select({ id: catalogues.id })
-    .from(catalogues)
-    .where(eq(catalogues.name, MENU_NAME));
-  return existing?.id ?? (await createCatalogue(tx, { name: MENU_NAME })).id;
+    .select({ id: menus.id })
+    .from(menus)
+    .where(eq(menus.name, MENU_NAME));
+  return existing?.id ?? (await createMenu(tx, { name: MENU_NAME })).id;
 }
 
 async function topLevelProducts(tx: Transaction): Promise<string[]> {
@@ -169,8 +169,8 @@ async function topLevelProducts(tx: Transaction): Promise<string[]> {
     .select({ id: products.id })
     .from(products)
     .innerJoin(
-      catalogues,
-      and(eq(catalogues.id, products.catalogueId), eq(catalogues.active, true)),
+      menus,
+      and(eq(menus.id, products.menuId), eq(menus.active, true)),
     )
     .where(isNull(products.parentId))
     .orderBy(products.id);

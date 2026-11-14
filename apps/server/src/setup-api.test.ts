@@ -641,7 +641,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   });
 
   it("only ever stores a language the apps can render", async () => {
-    // `persons.locale` has no enum behind it, so a code with no catalogue would render as missing
+    // `persons.locale` has no enum behind it, so a code with no menu would render as missing
     // strings.
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();

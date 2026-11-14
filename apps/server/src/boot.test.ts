@@ -84,7 +84,7 @@ import {
   addMember,
   contentSuggestionJobs,
   contentSuggestions,
-  createCatalogue,
+  createMenu,
   createCategory,
   createProduct,
   menuPublications,
@@ -666,11 +666,11 @@ describe("startServer, against a migrated venue directory", () => {
       expect(await staff.json()).toEqual([]);
       await assertPassiveManagementReads(port);
 
-      // Fully gated, so 401 rather than 404; a 404 would mean `mountCatalogueApi` never ran.
-      const catalogues = await fetch(`http://127.0.0.1:${port}/management-api/catalogues`);
-      expect(catalogues.status).toBe(401);
-      expect(catalogues.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
-      expect((await catalogues.json()) as { error: { code: string } }).toMatchObject({
+      // Fully gated, so 401 rather than 404; a 404 would mean `mountMenuApi` never ran.
+      const menus = await fetch(`http://127.0.0.1:${port}/management-api/menus`);
+      expect(menus.status).toBe(401);
+      expect(menus.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
+      expect((await menus.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "management_session.required" },
       });
 
@@ -2759,10 +2759,10 @@ describe("startServer, against a migrated venue directory", () => {
     try {
       await seedTradingVenue(db);
       ({ menuId, queued } = await withTransaction(db, async (tx) => {
-        const menu = await createCatalogue(tx, { name: "Carta" });
+        const menu = await createMenu(tx, { name: "Carta" });
         const food = await createCategory(tx, { name: "Comida" });
         const soup = await createProduct(tx, {
-          catalogueId: menu.id,
+          menuId: menu.id,
           categoryId: food.id,
           name: "Soup",
           pricingUnit: "each",

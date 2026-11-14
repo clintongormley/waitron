@@ -85,7 +85,7 @@ export interface ContentSuggestionPage {
   next: string | null;
 }
 
-/** The GET route's reply; the server fills the two fields the catalogue cannot know. */
+/** The GET route's reply; the server fills the two fields the menu cannot know. */
 export interface ContentSuggestionRead extends ContentSuggestionPage {
   service: "on" | "off" | "not_connected";
   cloudOrigin: string | null;

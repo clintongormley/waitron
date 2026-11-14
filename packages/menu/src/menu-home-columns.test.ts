@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { captureError, withTransaction } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
 import { readMenuHome, setHomeDisplay } from "./menu-home.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 
 describe("home column limits", () => {
   it.each([

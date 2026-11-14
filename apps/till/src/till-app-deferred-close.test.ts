@@ -113,7 +113,7 @@ function addWater(el: TillApp): void {
   tableOrder(el).draftStore!.addProduct(
     {
       id: "water",
-      catalogueId: "cat-default",
+      menuId: "cat-default",
       menuItemId: "menu-item-water",
       name: "Water",
       pricingUnit: "each",
@@ -674,7 +674,7 @@ it("switches a presented bill's close off while a dish is unserved, saying what 
 const lunch = {
   id: "meal",
   menuItemId: "offer-meal",
-  catalogueId: "cat-default",
+  menuId: "cat-default",
   name: "Lunch",
   pricingUnit: "each" as const,
   unitPrice: "30.00",

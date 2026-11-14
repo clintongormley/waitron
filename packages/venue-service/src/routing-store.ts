@@ -653,9 +653,9 @@ type PreviewProduct = {
 type ExtraOffers = Map<string, Map<string, Set<string | null>>>;
 
 /**
- * A dish offers an extra when the live catalogue attaches it, in every zone, or when a published
+ * A dish offers an extra when the live menu attaches it, in every zone, or when a published
  * menu a zone serves offers it with the dish, in that zone: an order sells from the published
- * menu, and a catalogue edit is asked about before it is published.
+ * menu, and a menu edit is asked about before it is published.
  */
 async function readExtraOffers(
   tx: Transaction,

@@ -42,7 +42,7 @@ station lists them on that station's ticket. No **Contains** line, like missing
 nutritional information, does not establish that a dish is suitable. Check it with the waiter
 before preparing it.
 
-The guest's block keeps the instructions the station first received: later guest or catalogue
+The guest's block keeps the instructions the station first received: later guest or menu
 edits do not silently replace it on the dish card, the pass or a reprint. A dish's **Contains**
 line shows what the dish declared when the ticket was made; a reprint reads it again.
 

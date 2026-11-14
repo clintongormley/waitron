@@ -7,7 +7,7 @@ import {
   addDish,
   allergyView,
   api,
-  catalogue,
+  menu,
   dialog,
   draft,
   emit,
@@ -188,7 +188,7 @@ it("returns a sold-out refusal to dish recovery after allergy confirmation", asy
   const { el } = await mountApp({ submitDraft: submit });
   await openTable(el);
   await addDish(el);
-  const offers = catalogue("v1");
+  const offers = menu("v1");
   api.listZoneOffers!.mockResolvedValue({
     ...offers,
     offers: offers.offers.map((offer) =>
@@ -251,7 +251,7 @@ it("reconsiders dishes after a menu refusal instead of replaying their old ticks
   const { el } = await mountApp({ previewPartyAllergy: preview, submitDraft: submit });
   await openTable(el);
   await addDish(el);
-  api.listZoneOffers!.mockResolvedValue(catalogue("v2"));
+  api.listZoneOffers!.mockResolvedValue(menu("v2"));
   await userEvent.click(
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
   );

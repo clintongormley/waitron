@@ -58,11 +58,11 @@ describe("checkCopies", () => {
 
   it("reports a whole set missing, and a folder no set names", () => {
     rmSync(join(dir, "image", "drizzle", "core"), { recursive: true });
-    write(join(dir, "image", "drizzle", "catalogue", "0000_x.sql"), "x");
+    write(join(dir, "image", "drizzle", "menu", "0000_x.sql"), "x");
     expect(kinds()).toEqual([
       "missing image drizzle/core/0000_baseline.sql",
       "missing image drizzle/core/meta/_journal.json",
-      "extra image drizzle/catalogue",
+      "extra image drizzle/menu",
     ]);
   });
 

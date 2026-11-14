@@ -12,7 +12,7 @@ import {
 import { ALLERGEN_CODES } from "@waitron/shared";
 import type { DietProfile, TillProduct } from "./api/client.js";
 
-function product(id: string, catalogueId?: string): TillProduct {
+function product(id: string, menuId?: string): TillProduct {
   return {
     id,
     name: id,
@@ -22,7 +22,7 @@ function product(id: string, catalogueId?: string): TillProduct {
     vatClass: "general",
     category: null,
     allergens: null,
-    ...(catalogueId === undefined ? {} : { catalogueId }),
+    ...(menuId === undefined ? {} : { menuId }),
   };
 }
 

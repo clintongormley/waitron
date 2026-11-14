@@ -1,4 +1,4 @@
-import { catalogues, sectionMembers, sections, type Transaction } from "@waitron/db";
+import { menus, sectionMembers, sections, type Transaction } from "@waitron/db";
 import { FOLLOWING_FOLDER } from "./include-folder-presentation.js";
 import type {
   IncludeFolder,
@@ -61,9 +61,9 @@ export function toSectionMember(row: MemberRow): SectionMember<TileRef> {
 export function buildSectionGraph(
   sections: readonly SectionRow[],
   members: readonly MemberRow[],
-  menus: readonly { id: string; name: string; active: boolean }[] = [],
+  menuRows: readonly { id: string; name: string; active: boolean }[] = [],
 ): SectionGraph {
-  const byMenu = new Map(menus.map((row) => [row.id, row]));
+  const byMenu = new Map(menuRows.map((row) => [row.id, row]));
   const byId = new Map(sections.map((row) => [row.id, row]));
   const children = new Map<string, SectionMember<TileRef>[]>();
   const parents = new Map<string, Set<string>>();
@@ -119,10 +119,10 @@ export async function loadSectionGraph(tx: Transaction): Promise<SectionGraph> {
       folderOverrides: sectionMembers.folderOverrides,
     })
     .from(sectionMembers);
-  const menus = await tx
-    .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
-    .from(catalogues);
-  return buildSectionGraph(sectionRows, memberRows, menus);
+  const menuRows = await tx
+    .select({ id: menus.id, name: menus.name, active: menus.active })
+    .from(menus);
+  return buildSectionGraph(sectionRows, memberRows, menuRows);
 }
 
 function childSections(graph: SectionGraph, sectionId: string): string[] {
@@ -195,17 +195,17 @@ export function placementsByProduct(graph: SectionGraph, rootId: string): Map<st
 
 /** The menus whose root reaches the section, sorted. A Device Home Page holding it does not count. */
 export function menusContaining(graph: SectionGraph, sectionId: string): string[] {
-  const menus = new Set<string>();
+  const menuRows = new Set<string>();
   const seen = new Set<string>();
   const pending = [sectionId];
   while (pending.length > 0) {
     const current = pending.pop()!;
     if (seen.has(current)) continue;
     seen.add(current);
-    if (graph.role(current) === "menu_root") menus.add(graph.ownerMenu(current)!);
+    if (graph.role(current) === "menu_root") menuRows.add(graph.ownerMenu(current)!);
     pending.push(...graph.parents(current));
   }
-  return [...menus].sort();
+  return [...menuRows].sort();
 }
 
 /** The target's path within its owning menu, independent of including menus and Device Home

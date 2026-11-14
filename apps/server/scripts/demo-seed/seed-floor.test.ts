@@ -19,7 +19,7 @@ import { createTable } from "../../src/testing/live-table.js";
 
 import { DEMO_TABLES } from "./testing/data.js";
 import { seedFloor } from "./seed-floor.js";
-import { seedCatalogues } from "./seed-menus.js";
+import { seedMenus } from "./seed-menus.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 
 import type { SeedLocale } from "./locale.js";
@@ -69,7 +69,7 @@ describe("seedFloor", () => {
       },
     };
     const rows = await withTransaction(suite.db, async (tx) => {
-      const { menuIds } = await seedCatalogues(tx, { locale: LOCALE, dataSet });
+      const { menuIds } = await seedMenus(tx, { locale: LOCALE, dataSet });
       await seedFloor(tx, {
         locale: LOCALE,
         dataSet,
@@ -95,7 +95,7 @@ describe("seedFloor", () => {
   it("seeds no station hours and routes drinks downstairs at dinner", async () => {
     await provisionVenue();
     const result = await withTransaction(suite.db, async (tx) => {
-      const { menuIds } = await seedCatalogues(tx, {
+      const { menuIds } = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -145,7 +145,7 @@ describe("seedFloor", () => {
   it("seeds no configured station fallback", async () => {
     await provisionVenue();
     const rows = await withTransaction(suite.db, async (tx) => {
-      const { menuIds } = await seedCatalogues(tx, {
+      const { menuIds } = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });

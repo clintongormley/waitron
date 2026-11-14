@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { createMenu, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { listTranslationItems } from "./content-translation-pages.js";
 import type { TranslationQuery } from "./content-translation-types.js";
@@ -22,12 +22,12 @@ beforeEach(() => seedVenueSettings(suite.db));
 const context = { fallbackLanguage: "es", required: ["es"] };
 async function fixture(tx: Transaction) {
   await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
-  const menu = await createCatalogue(tx, {
+  const menu = await createMenu(tx, {
     name: "STAFF Menu",
     names: { es: "CLIENT ES Menu", en: "CLIENT Menu", ca: "CLIENT Carta" },
   });
   const product = await createProduct(tx, {
-    catalogueId: menu.id,
+    menuId: menu.id,
     categoryId: null,
     name: "STAFF Bread",
     customerName: { es: "CLIENT ES bread", en: "CLIENT Bread", ca: "UNPROJECTED Bread" },

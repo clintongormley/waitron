@@ -40,7 +40,7 @@ export function extraLine(extra: {
   return extra.perDish > 1 ? `${extra.name} x${extra.perDish}` : extra.name;
 }
 
-/** Resolve live catalogue text against enabled languages and the configured content default. */
+/** Resolve live menu text against enabled languages and the configured content default. */
 export function descriptionFor(
   descriptions: Record<string, string>,
   fallback: string,

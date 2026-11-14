@@ -366,8 +366,8 @@ describe("computeVatSummary", () => {
     ]);
   });
 
-  it("reports the filed difference-method tax exactly for catalogue sales", async () => {
-    // A gross-inclusive catalogue sale files its cuota by the DIFFERENCE method (gross − base), which
+  it("reports the filed difference-method tax exactly for menu sales", async () => {
+    // A gross-inclusive menu sale files its cuota by the DIFFERENCE method (gross − base), which
     // can land a rounding céntimo away from round(base × rate). The summary must return the filed
     // figure, not the multiplicative recompute (21.00 and 5.00 below).
     await seedSale(suite.db, venue, {

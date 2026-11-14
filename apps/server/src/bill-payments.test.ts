@@ -37,8 +37,8 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -220,12 +220,12 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     await tx
       .insert(personStaffRoles)
       .values({ personId: admin!.id, staffRoleId: await ensureFixtureJobRole(tx) });
-    const cat = await createCatalogue(tx, { name: `Bill payments menu ${provisioned.nodeId}` });
+    const cat = await createMenu(tx, { name: `Bill payments menu ${provisioned.nodeId}` });
     const dishes = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: dishes.id,
         name: item.name,
         customerName: { [LOCALE]: item.customer },
@@ -236,7 +236,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       });
       productIds.set(item.name, product.id);
     }
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const printer = await createPrinter(tx, {
       name: "Receipts",
       transport: "cloud_poll",

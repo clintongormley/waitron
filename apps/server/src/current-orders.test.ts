@@ -16,8 +16,8 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   createProduct,
@@ -187,14 +187,14 @@ async function setupVenue(): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   });
   return inTx(async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: `Current orders menu` });
+    const menu = await createMenu(tx, { name: `Current orders menu` });
     const category = await createCategory(tx, { name: "Platos" });
     const productId = {} as Record<Dish, string>;
     // Three different names, so a row showing the customer's or the kitchen's name fails.
     for (const [dish, unitPrice] of Object.entries(DISHES) as [Dish, string][]) {
       productId[dish] = (
         await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: category.id,
           name: dish,
           customerName: { [LOCALE]: `menu ${dish}` },
@@ -219,7 +219,7 @@ async function setupVenue(): Promise<Venue> {
       LOCALE,
     );
     await writeProductModifiers(tx, productId.steak, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToVenue(tx, catalogue.id);
+    await assignMenuToVenue(tx, menu.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
     await setRoutingCell(

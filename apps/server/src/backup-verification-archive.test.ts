@@ -328,11 +328,11 @@ describe("authenticated verification archive", () => {
     const f = await fixture();
     const source = {
       ...f.manifest,
-      modules: { media: 0, core: f.manifest.modules.core!, catalogue: 0 },
+      modules: { media: 0, core: f.manifest.modules.core!, menu: 0 },
     };
-    f.modules = ALL_MODULES.filter((m) => ["core", "catalogue", "media"].includes(m.name));
+    f.modules = ALL_MODULES.filter((m) => ["core", "menu", "media"].includes(m.name));
     rawManifest(f, JSON.stringify(source, null, 2));
-    f.expected.archive.modules = { catalogue: 0, core: f.manifest.modules.core!, media: 0 };
+    f.expected.archive.modules = { menu: 0, core: f.manifest.modules.core!, media: 0 };
     await seal(f);
     const validated = await validate(f);
     expect(validated.manifest.modules).toEqual(source.modules);

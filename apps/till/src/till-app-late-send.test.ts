@@ -17,7 +17,7 @@ import type {
   TillApi,
   TillMenuOffer,
   TillSaleResult,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
@@ -27,7 +27,7 @@ import {
   addDish as addSteak,
   allergyView,
   api as allergyApi,
-  catalogue as allergyCatalogue,
+  menu as allergyMenu,
   dialog as allergyDialog,
   draft as allergyDraft,
   mountApp as mountAllergyApp,
@@ -106,11 +106,11 @@ const lunchRunning = {
 };
 
 /** Breakfast running with the Breakfast menu orderable, or Lunch running with Breakfast ended earlier today. */
-function catalogue(
+function menu(
   phase: "breakfast" | "lunch",
   zoneId = "zone-dining-room",
-  serviceMode: ZoneOfferCatalogue["context"]["serviceMode"] = "table_tab",
-): ZoneOfferCatalogue {
+  serviceMode: ZoneOffers["context"]["serviceMode"] = "table_tab",
+): ZoneOffers {
   const running = phase === "breakfast" ? BREAKFAST_MENU.id : LUNCH.id;
   return {
     service: phase === "breakfast" ? breakfastRunning : lunchRunning,
@@ -155,7 +155,7 @@ function catalogue(
   };
 }
 
-function polled(current: ZoneOfferCatalogue): MenuState & { defaultMenuId?: string } {
+function polled(current: ZoneOffers): MenuState & { defaultMenuId?: string } {
   return {
     service: current.service,
     menus: current.menus.map((menu) => ({
@@ -170,7 +170,7 @@ function polled(current: ZoneOfferCatalogue): MenuState & { defaultMenuId?: stri
 }
 
 /** The counter's zone, which stays on Breakfast's menus throughout. */
-const BAR = catalogue("breakfast", "zone-bar", "prepay");
+const BAR = menu("breakfast", "zone-bar", "prepay");
 
 const tableFormFactor: FormFactor = "till";
 
@@ -223,7 +223,7 @@ const table = {
 
 let drafts: ReturnType<typeof draftServer>;
 let api: Record<string, ReturnType<typeof vi.fn>>;
-let current: ZoneOfferCatalogue;
+let current: ZoneOffers;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
   return {
@@ -327,7 +327,7 @@ const submissions = () => api.submitDraft!.mock.calls.map((call) => call[2] as D
 /** Seats table 2 under Breakfast and orders an Omelette and a Coffee from the Breakfast menu; no poll has
  * yet told the till that Breakfast ended, so nothing is marked. */
 async function breakfastTable(overrides: Record<string, unknown> = {}): Promise<TillApp> {
-  current = catalogue("breakfast");
+  current = menu("breakfast");
   const { el } = await mountApp(overrides);
   await flush(el);
   emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -352,7 +352,7 @@ async function breakfastTable(overrides: Record<string, unknown> = {}): Promise<
  * is not, because Lunch sells it too. */
 async function lateTable(overrides: Record<string, unknown> = {}): Promise<TillApp> {
   const el = await breakfastTable(overrides);
-  current = catalogue("lunch");
+  current = menu("lunch");
   await poll(el);
   expect(store.lines.map((line) => line.endedPeriod)).toEqual([
     { menuId: BREAKFAST_MENU.id, periodName: "Breakfast" },
@@ -1134,7 +1134,7 @@ describe("an allergy party's PIN rerun", () => {
       .mockRejectedValueOnce(WRONG_PIN)
       .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet));
     const el = await pinAsked(submitDraft);
-    allergyApi.listZoneOffers!.mockResolvedValue(allergyCatalogue("v2"));
+    allergyApi.listZoneOffers!.mockResolvedValue(allergyMenu("v2"));
 
     await authorize(el, "0123");
 
@@ -1258,7 +1258,7 @@ describe("an allergy party's send the till marked, refused for a menu version ch
     );
     await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
     await choose(el, "data-late-agreed");
-    allergyApi.listZoneOffers!.mockResolvedValue(allergyCatalogue("v2"));
+    allergyApi.listZoneOffers!.mockResolvedValue(allergyMenu("v2"));
     await answerAllergy(el, "Blue shirt", tickDish);
     await vi.waitFor(() => expect(submitDraft).toHaveBeenCalled());
     await flush(el, 15);
@@ -1350,7 +1350,7 @@ const CASH = { method: "cash", amount: "10" };
 const BREAKFAST_CONFIRMED = { menuIds: [BREAKFAST_MENU.id] };
 
 /** The counter's menus, which a counter case moves from Breakfast to Lunch. */
-let counterMenus: ZoneOfferCatalogue;
+let counterMenus: ZoneOffers;
 let counterFlow: "prepay" | "ticket_then_pay";
 const counterScreen = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
@@ -1384,9 +1384,9 @@ async function counterBasket(
     flow = "prepay",
   }: { products?: string[]; held?: boolean; flow?: "prepay" | "ticket_then_pay" } = {},
 ): Promise<TillApp> {
-  current = catalogue("breakfast");
+  current = menu("breakfast");
   counterFlow = flow;
-  counterMenus = catalogue("breakfast", "zone-bar", flow);
+  counterMenus = menu("breakfast", "zone-bar", flow);
   const { el } = await mountApp({
     listDefaultZoneOffers: vi.fn(async () => counterMenus),
     listZoneOffers: vi.fn(async (zoneId: string) =>
@@ -1422,7 +1422,7 @@ async function lateCounter(
   options: { products?: string[]; held?: boolean; flow?: "prepay" | "ticket_then_pay" } = {},
 ): Promise<TillApp> {
   const el = await counterBasket(overrides, options);
-  counterMenus = catalogue("lunch", "zone-bar", counterFlow);
+  counterMenus = menu("lunch", "zone-bar", counterFlow);
   await poll(el);
   expect(
     counterScreen(el)
@@ -1665,7 +1665,7 @@ describe("counter pay", () => {
 
   it("asks nothing and carries no confirmation when a stored dish's quantity is raised after its period", async () => {
     const el = await counterBasket({}, { products: [], held: true });
-    counterMenus = catalogue("lunch", "zone-bar", "prepay");
+    counterMenus = menu("lunch", "zone-bar", "prepay");
     await poll(el);
     counterScreen(el).store.setLineQuantity(0, "2");
     await flush(el);
@@ -1746,7 +1746,7 @@ describe("counter pay", () => {
           quantity: "1",
         })),
       );
-      counterMenus = catalogue("lunch", "zone-bar", "prepay");
+      counterMenus = menu("lunch", "zone-bar", "prepay");
       await poll(el);
       expect(counterScreen(el).store.lines.map((line) => line.endedPeriod?.menuId)).toEqual([
         BREAKFAST_MENU.id,

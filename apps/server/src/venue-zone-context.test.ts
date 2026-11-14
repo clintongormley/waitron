@@ -11,7 +11,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { type BusinessDayClock } from "@waitron/shared";
-import { createCatalogue } from "@waitron/menu";
+import { createMenu } from "@waitron/menu";
 import { createDepartment, saveMenuPeriod, replaceMenuWeek } from "@waitron/venue-service";
 import * as details from "./venue-details.js";
 import * as businessDay from "./business-day-start.js";
@@ -235,7 +235,7 @@ describe("retained clock candidate validation", () => {
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
     );
     await withTransaction(suite.db, async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Test menu" });
+      const menu = await createMenu(tx, { name: "Test menu" });
       const department = await createDepartment(tx, { name: "Dining", orderStart: "counter" });
       const period = await saveMenuPeriod(tx, department.id, {
         name: "Lunch",

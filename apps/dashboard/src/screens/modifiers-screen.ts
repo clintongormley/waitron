@@ -175,8 +175,8 @@ export class ModifiersScreen extends LitElement {
           this.locales = value;
           setContentLanguages(value);
         }),
-        this.#queries.watch("listCatalogues", [], (value) => {
-          this.#catalogueIds = value.map((catalogue) => catalogue.id);
+        this.#queries.watch("listMenus", [], (value) => {
+          this.#menuIds = value.map((menu) => menu.id);
         }),
       ]);
       await this.#loadProducts();
@@ -188,16 +188,16 @@ export class ModifiersScreen extends LitElement {
       this.loading = false;
     }
   }
-  #catalogueIds: string[] = [];
+  #menuIds: string[] = [];
   async #loadProducts(): Promise<void> {
-    if (this.#catalogueIds.length === 0) {
+    if (this.#menuIds.length === 0) {
       this.products = [];
       this.#queries.release("listProducts");
       return;
     }
     await this.#queries.watchGroup(
       "listProducts",
-      this.#catalogueIds.map((id) => [id] as [string]),
+      this.#menuIds.map((id) => [id] as [string]),
       (lists) => {
         this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
       },

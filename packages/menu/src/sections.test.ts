@@ -4,8 +4,8 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
-import { createCatalogue, createCategory, createProduct, listMenuOffers } from "./operations.js";
+import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
+import { createMenu, createCategory, createProduct, listMenuOffers } from "./operations.js";
 import { addShortcut, readMenuHome } from "./menu-home.js";
 import { setProductVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
@@ -26,7 +26,7 @@ import {
 
 // Section authoring and member writes. The cases with two transactions started together, and the
 // constraint experiments on the tables themselves, are in sections.db.test.ts.
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 beforeEach(() => seedVenueSettings(fx.db));
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
@@ -51,14 +51,14 @@ async function fixture(): Promise<Fixture> {
   await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
-    const lunch = await createCatalogue(tx, { name: "Lunch menu" });
-    const dinner = await createCatalogue(tx, { name: "Dinner menu" });
+    const lunch = await createMenu(tx, { name: "Lunch menu" });
+    const dinner = await createMenu(tx, { name: "Dinner menu" });
     const category = await createCategory(tx, { name: "Beverages" });
     // Three different names per product, so a read of the wrong one cannot pass by accident.
     const make = async (name: string) =>
       (
         await createProduct(tx, {
-          catalogueId: lunch.id,
+          menuId: lunch.id,
           categoryId: category.id,
           name: `${name} (staff)`,
           customerName: { en: `${name} (customer)` },
@@ -97,7 +97,7 @@ async function fixture(): Promise<Fixture> {
   });
 }
 
-/** The root or home section `createCatalogue` gave the menu. */
+/** The root or home section `createMenu` gave the menu. */
 async function menuOwned(role: "menu_root" | "home_layout", menuId: string): Promise<string> {
   const { rows } = await fx.db.execute<{ id: string }>(sql`
     select ${sql.raw(role === "menu_root" ? "root_section_id" : "default_home_layout_id")} as id
@@ -135,7 +135,7 @@ async function cloneProducts(templateId: string, count: number): Promise<string[
 
 async function createOwned(tx: Transaction, input: SectionInput) {
   const { rows } = await tx.execute<{ id: string }>(
-    sql`select root_section_id as id from menu_details join catalogues on catalogues.id = menu_details.menu_id where catalogues.name = 'Lunch menu' limit 1`,
+    sql`select root_section_id as id from menu_details join menus on menus.id = menu_details.menu_id where menus.name = 'Lunch menu' limit 1`,
   );
   return createSectionIn(tx, rows[0]!.id, input);
 }

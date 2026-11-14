@@ -7,8 +7,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalRecordRef, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   listAvailableProducts,
@@ -20,11 +20,11 @@ import { seedVenueWithSeries } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 /**
- * The end-to-end proof of the catalogue slice's central seam: catalogue data alone → the sale's
- * lines, `total` and VAT breakdown. It seeds a venue and a catalogue, reads the sellable products
+ * The end-to-end proof of the menu slice's central seam: menu data alone → the sale's
+ * lines, `total` and VAT breakdown. It seeds a venue and a menu, reads the sellable products
  * with `listAvailableProducts`, prices a basket with `priceBasket`, and hands the resulting
  * `{ lines, total, vatBreakdown }` straight to `@waitron/core`'s `recordSale`. Nothing here computes
- * a price or a breakdown by hand — every fiscal figure originates in the catalogue.
+ * a price or a breakdown by hand — every fiscal figure originates in the menu.
  *
  * This suite proves the DATA FLOW across three packages. A `FakeFiscalBackend` stands in for the
  * regime backend.
@@ -73,8 +73,8 @@ const clock: TrustedClock = {
   currentAnchor: () => null,
 };
 
-describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
-  it("rings a sale entirely from catalogue data", async () => {
+describe("menu → priceBasket → recordSale (end-to-end)", () => {
+  it("rings a sale entirely from menu data", async () => {
     const { nodeId, seriesId } = await seedVenueWithSeries(suite.db);
     const { deviceId } = await seedDevice(suite.db);
     const backend = new CapturingFakeBackend(suite.db);
@@ -84,9 +84,9 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
     const { saleId } = await withTransaction(suite.db, async (tx) => {
       await backend.registerNode(tx, nodeId);
 
-      // Seed a catalogue: one weight-priced product ("sliced ham") in a "Food" category. English
+      // Seed a menu: one weight-priced product ("sliced ham") in a "Food" category. English
       // strings only — this is a generic package under the english-only guard.
-      const cat = await createCatalogue(tx, { name: "Deli" });
+      const cat = await createMenu(tx, { name: "Deli" });
       const food = await createCategory(tx, { name: "Food" });
       const kgUnitId = (
         await createUnit(
@@ -102,16 +102,16 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
         )
       ).id;
       const product = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: food.id,
         name: "sliced ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
       });
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
 
-      // The till's read → pricing → fiscal write, all from catalogue data. An `AvailableProduct` is
+      // The till's read → pricing → fiscal write, all from menu data. An `AvailableProduct` is
       // NOT a `PriceableProduct`: it carries the staff `name` and the customer-facing `customerName`,
       // so the customer text is resolved through `product-presentation.ts` first — the one home for
       // the blank-falls-back-to-the-staff-name rule.
@@ -165,10 +165,10 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
     expect(backend.lastSale!.vatBreakdown).toEqual(priced!.vatBreakdown);
 
     // The sale was actually chained (the fake wrote its own record), and the line's analytics
-    // category was snapshotted onto `sale_lines.category` from the catalogue product's resolved
+    // category was snapshotted onto `sale_lines.category` from the menu product's resolved
     // category name.
     expect(await backend.recordsFor(nodeId)).toHaveLength(1);
-    // The staff name reaches `sale_lines.name` (NOT NULL) frozen from the catalogue row, and the
+    // The staff name reaches `sale_lines.name` (NOT NULL) frozen from the menu row, and the
     // customer-facing snapshot falls back to it because this product carries no customer name.
     // `descriptions` comes back as its stored TEXT here, not as an object: the json codec belongs
     // to the column declaration (`packages/db/src/schema/orders.ts`) and a raw `execute` never

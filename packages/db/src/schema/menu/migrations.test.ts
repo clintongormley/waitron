@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   captureError,
-  catalogues,
+  menus,
   categoryDetails,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
@@ -27,7 +27,7 @@ import type { Database } from "../../index.js";
 import { useVenueDb } from "../../testing/venue-db.js";
 import { seedTaxpayer } from "../../testing/seed.js";
 
-// One SQLite file with the core set applied, which holds the catalogue's tables.
+// One SQLite file with the core set applied, which holds the menu's tables.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
@@ -101,7 +101,7 @@ it("gives menu_details the six display settings, each required with its default 
   // of the six would add an entry that case refuses.
 });
 
-describe("the catalogue tables carry no taxpayer column", () => {
+describe("the menu tables carry no taxpayer column", () => {
   it("has no tenant_id column on any table in the set", async () => {
     const found: string[] = [];
     for (const table of TABLES)
@@ -111,7 +111,7 @@ describe("the catalogue tables carry no taxpayer column", () => {
   });
 
   /**
-   * The keys and links, read through the catalogues SQLite has.
+   * The keys and links, read through the menus SQLite has.
    *
    * **A foreign key and a primary key have no NAME here**, which is a fact about the generated
    * schema and not only about this test: drizzle-kit emits a SQLite foreign key as a bare
@@ -203,9 +203,9 @@ describe("the catalogue tables carry no taxpayer column", () => {
       "menu_item_variant_overrides(product_id, variant_id)":
         "products(parent_id, id) on delete restrict",
       "menu_details(default_home_layout_id)": "sections(id) on delete no action",
-      "menu_details(menu_id)": "catalogues(id) on delete no action",
+      "menu_details(menu_id)": "menus(id) on delete no action",
       "menu_details(root_section_id)": "sections(id) on delete no action",
-      "menu_items(menu_id)": "catalogues(id) on delete cascade",
+      "menu_items(menu_id)": "menus(id) on delete cascade",
       "menu_items(product_id)": "products(id) on delete restrict",
       "option_labels(list_id)": "option_lists(id) on delete cascade",
       "product_modifiers(extra_list_id)": "extra_lists(id) on delete cascade",
@@ -216,12 +216,12 @@ describe("the catalogue tables carry no taxpayer column", () => {
       "section_members(child_section_id)": "sections(id) on delete cascade",
       "section_members(product_id)": "products(id) on delete cascade",
       "section_members(section_id)": "sections(id) on delete cascade",
-      "sections(owner_menu_id)": "catalogues(id) on delete no action",
-      "menu_versions(menu_id)": "catalogues(id) on delete no action",
-      "menu_publications(menu_id)": "catalogues(id) on delete no action",
+      "sections(owner_menu_id)": "menus(id) on delete no action",
+      "menu_versions(menu_id)": "menus(id) on delete no action",
+      "menu_publications(menu_id)": "menus(id) on delete no action",
       "menu_publications(version_id, menu_id)": "menu_versions(id, menu_id) on delete no action",
       "menu_version_images(version_id)": "menu_versions(id) on delete no action",
-      "menu_scheduled_publications(menu_id)": "catalogues(id) on delete no action",
+      "menu_scheduled_publications(menu_id)": "menus(id) on delete no action",
       "menu_scheduled_publications(version_id, menu_id)":
         "menu_versions(id, menu_id) on delete no action",
     });
@@ -349,24 +349,24 @@ describe("core's set keeps no variant table of its own", () => {
   });
 });
 
-describe("the catalogue foreign keys refuse a missing or mismatched target", () => {
+describe("the menu foreign keys refuse a missing or mismatched target", () => {
   const missing = "00000000-0000-4000-8000-00000000dead";
 
   /** Rows seeded per test: the per-test reset empties every table after each case. */
-  async function catalogue() {
+  async function menu() {
     await seedTaxpayer(db);
     const menuId = (
-      await db.insert(catalogues).values({ name: "Lunch" }).returning({ id: catalogues.id })
+      await db.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id })
     )[0]!.id;
     const otherMenuId = (
-      await db.insert(catalogues).values({ name: "Dinner" }).returning({ id: catalogues.id })
+      await db.insert(menus).values({ name: "Dinner" }).returning({ id: menus.id })
     )[0]!.id;
     const product = async (name: string) =>
       (
         await db
           .insert(products)
           .values({
-            catalogueId: menuId,
+            menuId: menuId,
             name,
             pricingUnit: "each",
             unitPrice: 1,
@@ -412,7 +412,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       (
         await db
           .insert(products)
-          .values({ catalogueId: menuId, parentId, name, dietaryDeclarations: null })
+          .values({ menuId: menuId, parentId, name, dietaryDeclarations: null })
           .returning({ id: products.id })
       )[0]!.id;
     const soupBowlId = await productVariant(productId, "Soup bowl");
@@ -453,7 +453,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   }
 
   it("refuses an offer whose menu or product does not exist", async () => {
-    const c = await catalogue();
+    const c = await menu();
     await refusal(
       () =>
         db.insert(menuItems).values({
@@ -475,7 +475,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   });
 
   it("accepts an offer with a blank price, and still refuses a negative one", async () => {
-    const c = await catalogue();
+    const c = await menu();
     const row = { menuId: c.menuId, productId: c.otherProductId };
     const error = await captureError(() => db.insert(menuItems).values({ ...row, grossPrice: -1 }));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
@@ -488,7 +488,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   });
 
   it("refuses menu details whose menu, root or layout does not exist, and a root two menus share", async () => {
-    const c = await catalogue();
+    const c = await menu();
     const details = { menuId: c.menuId, rootSectionId: c.rootId, homeSectionId: c.layoutId };
     await refusal(
       () => db.insert(menuDetails).values({ ...details, menuId: missing }),
@@ -511,7 +511,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   });
 
   it("refuses category details whose category or parent does not exist", async () => {
-    const c = await catalogue();
+    const c = await menu();
     await refusal(
       () => db.insert(categoryDetails).values({ categoryId: missing }),
       "category_details_category_fk",
@@ -523,7 +523,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   });
 
   it("refuses a unit assignment whose product or unit does not exist", async () => {
-    const c = await catalogue();
+    const c = await menu();
     await refusal(
       () => db.insert(productUnits).values({ productId: missing, unitId: c.unitId }),
       "product_units_product_fk",
@@ -535,7 +535,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   });
 
   it("refuses a variant override whose offer or variant does not exist or does not match", async () => {
-    const c = await catalogue();
+    const c = await menu();
     const override = (values: { menuItemId: string; productId: string; variantId: string }) =>
       db.insert(menuItemVariantOverrides).values({ ...values, price: 100 });
     await refusal(
@@ -575,7 +575,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   });
 
   it("refuses a variant override with no price, or a negative price, and accepts 0", async () => {
-    const c = await catalogue();
+    const c = await menu();
     const row = { menuItemId: c.menuItemId, productId: c.productId, variantId: c.soupBowlId };
     for (const [price, check] of [
       [null, "menu_item_variant_overrides_overrides_ck"],
@@ -592,7 +592,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   });
 
   it("drops an offer's variant overrides with the offer, and keeps an overridden variant", async () => {
-    const c = await catalogue();
+    const c = await menu();
     await db.insert(menuItemVariantOverrides).values({
       menuItemId: c.menuItemId,
       productId: c.productId,
@@ -617,7 +617,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   });
 
   it("refuses an extras item whose list or product does not exist", async () => {
-    const c = await catalogue();
+    const c = await menu();
     const listId = await extraList("Breads");
     await refusal(
       () => db.insert(extraListItems).values({ listId: missing, productId: c.productId }),

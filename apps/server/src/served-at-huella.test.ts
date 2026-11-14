@@ -15,8 +15,8 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   addProductToMenu,
@@ -159,7 +159,7 @@ interface Shop {
 
 /**
  * Provision a shop in ITS OWN database, register its node's SIF under the SHARED emisor NIF,
- * seed an IDENTICAL two-product catalogue, and create one dining table.
+ * seed an IDENTICAL two-product menu, and create one dining table.
  *
  * The huella hashes the AEAT identity fields that `registros_identidad_uq` makes unique, so the two
  * records a test compares must share them — which only separate databases allow. The shared emisor
@@ -182,10 +182,10 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     }),
   );
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
     const agua = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
       pricingUnit: "each",
@@ -193,14 +193,14 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
       vatClass: "general",
     });
     const cafe = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: bebidas.id,
       name: "Café solo",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const aguaMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: agua.id,
@@ -463,7 +463,7 @@ async function attachExtra(
 ): Promise<{ listId: string; productId: string }> {
   return withTransaction(shop.db, async (tx) => {
     const panecillo = await createProduct(tx, {
-      catalogueId: shop.menuId,
+      menuId: shop.menuId,
       categoryId: null,
       name: EXTRA_PRODUCT_NAME,
       pricingUnit: "each",
@@ -556,7 +556,7 @@ async function overlayOf(shop: Shop, productId: string): Promise<OverlayAllergen
   });
 }
 
-// An extra product's allergen declaration is a catalogue field the sale path never freezes onto a
+// An extra product's allergen declaration is a menu field the sale path never freezes onto a
 // line (`buildLineExtras` in modifier-selection.ts copies no allergen field). Two shops file the
 // IDENTICAL basket and extra, one extra declaring an allergen and one none, and must file the
 // IDENTICAL huella.
@@ -568,7 +568,7 @@ describe("an extra's allergen declaration is not part of the huella", () => {
     const shopOverlay = await seedShop(suite.db, emisorNif);
     const shopPlain = await seedShop(suiteB.db, emisorNif);
 
-    // Only the catalogue allergen declaration differs; the child sale lines are identical.
+    // Only the menu allergen declaration differs; the child sale lines are identical.
     const overlayExtra = await attachExtra(shopOverlay, {
       allergens: { gluten: { kinds: ["wheat"] } },
     });

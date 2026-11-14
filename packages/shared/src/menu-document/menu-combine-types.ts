@@ -21,7 +21,7 @@ export interface CombinedOffer {
 }
 export interface CombineInput {
   productId: string;
-  catalogue: { price: Decimal; variants: { variantId: string; price: Decimal | null }[] };
+  product: { price: Decimal; variants: { variantId: string; price: Decimal | null }[] };
   own: {
     price: Decimal | null;
     variants: { variantId: string; price: Decimal | null }[];

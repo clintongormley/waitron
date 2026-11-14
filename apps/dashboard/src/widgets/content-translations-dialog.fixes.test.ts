@@ -308,7 +308,7 @@ describe("suggestion notes and discard", () => {
     expect(panel(el, "placeholder")?.textContent).toContain(t("suggestions.placeholder"));
     expect(panel(el, "internal")?.textContent).toContain("STAFF croqette");
     expect(panel(el, "internal")?.querySelector("a")?.getAttribute("href")).toBe(
-      "/manage/catalogue/product/one",
+      "/manage/products/product/one",
     );
     expect(action(el, "internal", "use-fix")).toBeNull();
     expect(panel(el, "stale")?.textContent).toContain(t("suggestions.stale"));
@@ -797,8 +797,8 @@ it("rechecks the displayed suggestion page without returning to the first page",
 });
 
 it.each([
-  ["product", "/manage/catalogue/product/off-page"],
-  ["variant", "/manage/catalogue/product/off-page"],
+  ["product", "/manage/products/product/off-page"],
+  ["variant", "/manage/products/product/off-page"],
   ["option_list", "/manage/modifiers/view/options/list/off-page"],
   ["option_label", "/manage/modifiers/view/options/list/owner%20id"],
   ["extra_list", "/manage/modifiers/view/extras/list/off-page"],

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, catalogues, kitchenStations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, menus, kitchenStations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
@@ -1197,7 +1197,7 @@ it("A724 paint routes carry exact period metadata for season and special-day gui
   const p = await painted();
   const periodId = await withTransaction(suite.db, async (tx) => {
     const menuId = randomUUID();
-    await tx.insert(catalogues).values({ id: menuId, name: "Lunch menu" });
+    await tx.insert(menus).values({ id: menuId, name: "Lunch menu" });
     const [period] = await tx
       .insert(menuPeriods)
       .values({ departmentId: p.departmentId, menuId, name: "Lunch", colour: "blue" })

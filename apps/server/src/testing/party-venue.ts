@@ -6,8 +6,8 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   addProductToMenu,
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   listAvailableProducts,
@@ -52,7 +52,7 @@ import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
 /**
  * A provisioned venue for the party suites: real Veri*Factu filing that never contacts AEAT, one
- * catalogue sold in the "tables" zone, and helpers that seat, order and pay as the till does.
+ * menu sold in the "tables" zone, and helpers that seat, order and pay as the till does.
  */
 const LOCALE = "es-ES";
 
@@ -150,11 +150,11 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     await tx
       .insert(personStaffRoles)
       .values({ personId: admin!.id, staffRoleId: await ensureFixtureJobRole(tx) });
-    const cat = await createCatalogue(tx, { name: `Party menu ${venue.nodeId}` });
+    const cat = await createMenu(tx, { name: `Party menu ${venue.nodeId}` });
     const platos = await createCategory(tx, { name: "Platos" });
     for (const product of MENU) {
       await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: platos.id,
         name: product.name,
         customerName: { [LOCALE]: product.customer },
@@ -164,7 +164,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
         vatClass: "general",
       });
     }
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const available = (await listAvailableProducts(tx)).products;
     const offers = {
       tables: await offerProducts(tx, cfg, { zone: "tables" }),
@@ -476,7 +476,7 @@ export async function pricedInZone(
   price: string,
 ): Promise<string> {
   return inTx(v, async (tx) => {
-    const menu = await createCatalogue(tx, { name: `Precios ${randomUUID().slice(0, 8)}` });
+    const menu = await createMenu(tx, { name: `Precios ${randomUUID().slice(0, 8)}` });
     const offer = await addProductToMenu(tx, {
       menuId: menu.id,
       productId: v.productId(productName),

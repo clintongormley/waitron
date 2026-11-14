@@ -32,7 +32,7 @@ function ongoingCodes(): string[] {
 }
 
 describe("ongoing alert codes reach the dashboard", () => {
-  it("every job in the catalogue has English and Spanish words", () => {
+  it("every job in the menu has English and Spanish words", () => {
     expect(
       JOB_NAMES.filter(
         (name) => !(ALERT_WORDS.job_name?.words[name]?.en && ALERT_WORDS.job_name.words[name]?.es),

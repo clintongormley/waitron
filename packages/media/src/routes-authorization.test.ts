@@ -11,7 +11,7 @@ import { MEDIA_ROUTES } from "./routes.js";
 import { sampleImage } from "./testing/sample-image.js";
 
 /**
- * Every image route refuses a caller without `catalogue.manage`, and refusing leaves the library
+ * Every image route refuses a caller without `menu.manage`, and refusing leaves the library
  * untouched. The accepting control in the other direction is inside `fixture` below, where the
  * manager's own upload must answer 201.
  */
@@ -120,7 +120,7 @@ it("denies every library operation to a staff caller and preserves existing imag
     const response = await app.request(path, options);
     expect(response.status, `${options.method ?? "GET"} ${path}`).toBe(403);
     expect(await response.json()).toEqual({
-      error: { code: "authorization.not_permitted", params: { permission: "catalogue.manage" } },
+      error: { code: "authorization.not_permitted", params: { permission: "menu.manage" } },
     });
   }
 
@@ -159,7 +159,7 @@ function watchWriteLock(beforeLock: () => Promise<void> = async () => {}) {
   return { db, watched };
 }
 
-it("refuses an upload without catalogue.manage without taking the write lock", async () => {
+it("refuses an upload without menu.manage without taking the write lock", async () => {
   await seedTaxpayer(suite.db);
   const headers = await session("staff");
   const { db, watched } = watchWriteLock();

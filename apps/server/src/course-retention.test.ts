@@ -20,8 +20,8 @@ import { seedKitchenStation, seedNode, seedTaxpayer, seedVenue } from "@waitron/
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   createExtraList,
@@ -89,10 +89,10 @@ async function setup() {
     const early = await createCourse(tx, { name: "Starters", displayOrder: 0 });
     const late = await createCourse(tx, { name: "Recorded mains", displayOrder: 7 });
     const other = await createCourse(tx, { name: "Other deleted", displayOrder: 9 });
-    const catalogue = await createCatalogue(tx, { name: "Menu" });
+    const menu = await createMenu(tx, { name: "Menu" });
     const category = await createCategory(tx, { name: "Food" });
     const dish = await createProduct(tx, {
-      catalogueId: catalogue.id,
+      menuId: menu.id,
       categoryId: category.id,
       name: "Staff steak",
       kitchenName: "K-STEAK",
@@ -102,7 +102,7 @@ async function setup() {
       vatClass: "general",
     });
     const sauce = await createProduct(tx, {
-      catalogueId: catalogue.id,
+      menuId: menu.id,
       categoryId: category.id,
       name: "Staff sauce",
       kitchenName: "K-SAUCE",
@@ -127,7 +127,7 @@ async function setup() {
     await setProductCourse(tx, dish.id, late.id);
     // Keep a reference so deletion retains the other row as well.
     await setProductCourse(tx, sauce.id, other.id);
-    await assignCatalogueToVenue(tx, catalogue.id);
+    await assignMenuToVenue(tx, menu.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const counter = await offerProducts(tx, cfg);
     return { early, late, other, dish, sauce, list, offers, counter };

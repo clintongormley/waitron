@@ -98,10 +98,10 @@ export const PERMISSION_TEXT: Readonly<Record<string, PermissionText>> = {
     label: "permission.workforce.self_approve",
     help: "permission.workforce.self_approve.help",
   },
-  "catalogue.manage": {
+  "menu.manage": {
     area: "venue",
-    label: "permission.catalogue.manage",
-    help: "permission.catalogue.manage.help",
+    label: "permission.menu.manage",
+    help: "permission.menu.manage.help",
   },
   "venue.view": {
     area: "venue",

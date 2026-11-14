@@ -4,7 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "../client.js";
 import { useVenueDb } from "./venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { catalogues } from "../schema/menus.js";
+import { menus } from "../schema/menus.js";
 import { deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
@@ -36,7 +36,7 @@ afterEach(async () => {
   await suite.db.execute(sql`delete from device_profiles`);
   await suite.db.execute(sql`delete from kitchen_stations`);
   await suite.db.execute(sql`delete from nodes`);
-  await suite.db.execute(sql`delete from catalogues`);
+  await suite.db.execute(sql`delete from menus`);
   await suite.db.execute(sql`delete from taxpayer`);
 });
 
@@ -103,15 +103,15 @@ describe("seedVenue", () => {
     });
   });
 
-  it("seedVenue writes defaultCatalogueId as the venue's catalogue", async () => {
-    const [catalogue] = await db
-      .insert(catalogues)
+  it("seedVenue writes defaultMenuId as the venue's menu", async () => {
+    const [menu] = await db
+      .insert(menus)
       .values({ name: "Menu" })
-      .returning({ id: catalogues.id });
-    await seedVenue(db, { defaultCatalogueId: catalogue!.id });
+      .returning({ id: menus.id });
+    await seedVenue(db, { defaultMenuId: menu!.id });
     expect(
-      await db.select({ id: catalogues.id }).from(catalogues).where(eq(catalogues.isDefault, true)),
-    ).toEqual([{ id: catalogue!.id }]);
+      await db.select({ id: menus.id }).from(menus).where(eq(menus.isDefault, true)),
+    ).toEqual([{ id: menu!.id }]);
   });
 
   it("seedVenue refuses a second venue", async () => {

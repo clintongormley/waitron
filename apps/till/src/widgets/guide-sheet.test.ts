@@ -14,7 +14,7 @@ import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 import "../till-app.js";
 import type { TillApp } from "../till-app.js";
-import type { TillApi, ZoneOfferCatalogue } from "../api/client.js";
+import type { TillApi, ZoneOffers } from "../api/client.js";
 import { SessionActivity } from "../session-activity.js";
 
 const originalLocale = currentLocale();
@@ -323,7 +323,7 @@ const counterTill = {
   servers: [],
 };
 
-const counterOffers: ZoneOfferCatalogue = {
+const counterOffers: ZoneOffers = {
   service: {
     open: true,
     zoneOpen: true,

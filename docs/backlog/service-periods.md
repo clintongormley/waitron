@@ -686,7 +686,7 @@ the season painter continues saving through the season-week route._
 
 - **The "VAT class for new products" default is a venue setting (owner, 2026-10-16, A755).** It sits
   on Venue settings' Defaults card beside the default receipt language, and both are saved together
-  under `venue.configure`, not `catalogue.manage`.
+  under `venue.configure`, not `menu.manage`.
 
 - **Venue settings' Venue card says why a field is locked in one sentence per reason at its foot
   (owner, 2026-10-17: accepted as built, A755)**, such as "Locked: the venue has recorded sales.",

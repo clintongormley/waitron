@@ -19,7 +19,7 @@ import {
 } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { decimal, HOME_DISPLAY_DEFAULTS, shownMembers } from "@waitron/shared";
-import { plantStoredCategory, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
+import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import {
   menusFixture,
   NO_ICE,
@@ -45,9 +45,9 @@ import { createCategory, updateCategory } from "./categories.js";
 import * as settings from "./settings.js";
 import { writeContentLanguages } from "./content-languages.js";
 import {
-  createCatalogue,
+  createMenu,
   createProduct,
-  deactivateCatalogue,
+  deactivateMenu,
   deactivateProduct,
   updateMenuDetails,
   updateMenuItem,
@@ -70,7 +70,7 @@ import { createExtraList } from "./extras.js";
 import { addShortcut, setHomeDisplay } from "./menu-home.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 beforeEach(() =>
   seedLibraryImages(
     fx.db,
@@ -327,7 +327,7 @@ describe("buildMenuDocument", () => {
     await menusFixture(fx.db);
     await expect(
       app((tx) => buildMenuDocument(tx, "00000000-0000-4000-8000-000000000000")),
-    ).rejects.toMatchObject({ code: "catalogue.not_found" });
+    ).rejects.toMatchObject({ code: "menu.not_found" });
   });
 
   it("keeps an empty slot for a shortcut whose target is not on the menu, and reports it", async () => {
@@ -376,14 +376,14 @@ describe("each offer's colour", () => {
 
   it("freezes the venue default on an offered product with nothing coloured above it", async () => {
     const f = await menusFixture(fx.db);
-    await app((tx) => settings.saveCatalogueDefaultColor(tx, "#777777"));
+    await app((tx) => settings.saveMenuDefaultColor(tx, "#777777"));
     expect(await offerFor(f.lunch, f.lemonade)).toHaveProperty("color", "#777777");
   });
 
   it("reads the venue default only for a menu that offers products", async () => {
     const f = await menusFixture(fx.db);
-    const empty = await app((tx) => createCatalogue(tx, { name: "Empty" }));
-    const reads = vi.spyOn(settings, "readCatalogueSettings");
+    const empty = await app((tx) => createMenu(tx, { name: "Empty" }));
+    const reads = vi.spyOn(settings, "readMenuSettings");
     await build(f.lunch);
     expect(reads).toHaveBeenCalledTimes(1);
     reads.mockClear();
@@ -422,9 +422,9 @@ describe("readDishFacts", () => {
     await seedTaxpayer(fx.db);
     await seedLegacySellingUnits(fx.db);
     ({ productId, variantId } = await app(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Menu" });
+      const menu = await createMenu(tx, { name: "Menu" });
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Wine",
         pricingUnit: "each",
@@ -1963,7 +1963,7 @@ describe("an include shown as a folder or directly", () => {
   it("an include inside the flattened menu keeps its own setting", async () => {
     const f = await menusFixture(fx.db);
     const wineRoot = await app(async (tx) => {
-      const wine = await createCatalogue(tx, { name: "Wine", names: { en: "Something red" } });
+      const wine = await createMenu(tx, { name: "Wine", names: { en: "Something red" } });
       const root = (await readMenuStructure(tx, wine.id)).rootSectionId;
       await addMember(tx, root, product(f.burger));
       await addMember(tx, f.drinks, section(root));
@@ -2006,7 +2006,7 @@ describe("an include shown as a folder or directly", () => {
   it("an inactive included menu still drops out", async () => {
     const f = await menusFixture(fx.db);
     const memberId = await includeIn(f.lunch, f.lunchRoot, f.drinks);
-    await app((tx) => deactivateCatalogue(tx, f.drinksMenu));
+    await app((tx) => deactivateMenu(tx, f.drinksMenu));
     const soup = await app((tx) => offerOf(tx, f.lunch, f.soup));
     for (const showAsFolder of [true, false]) {
       await setFolder(f.lunchRoot, memberId, { showAsFolder });
@@ -2311,7 +2311,7 @@ describe("an include shown as a folder or directly", () => {
     it("an include's setting changed inside an included menu is that menu's change", async () => {
       const f = await menusFixture(fx.db);
       const wineRoot = await app(async (tx) => {
-        const wine = await createCatalogue(tx, { name: "Wine", names: { en: "Something red" } });
+        const wine = await createMenu(tx, { name: "Wine", names: { en: "Something red" } });
         const root = (await readMenuStructure(tx, wine.id)).rootSectionId;
         await addMember(tx, root, product(f.burger));
         await addMember(tx, f.drinks, section(root));

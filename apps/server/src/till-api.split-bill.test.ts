@@ -30,8 +30,8 @@ import {
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -94,17 +94,17 @@ const suite = useVenueDb({
     staffMember = { id: person!.id };
     cfg = makeCfg(nodeId);
     const product = await withTransaction(db, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Menu" });
+      const cat = await createMenu(tx, { name: "Menu" });
       const drinksCategory = await createCategory(tx, { name: "Drinks" });
       const p = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: drinksCategory.id,
         name: "Espresso",
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToVenue(tx, cat.id);
+      await assignMenuToVenue(tx, cat.id);
       return p;
     });
     coffeeId = product.id;

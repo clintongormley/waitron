@@ -9,7 +9,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { libraryImageName } from "../test/library-images.js";
 import { menusFixture, offerOf, type MenusFixture } from "../test/menus-fixture.js";
 import {
@@ -28,7 +28,7 @@ import {
 import { updateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const NOW = new Date("2026-10-07T08:00:00.000Z");
@@ -175,8 +175,8 @@ describe("patchLiveMenu", () => {
   it("readLiveMenu refuses an id that names no menu", async () => {
     const missing = "00000000-0000-4000-8000-000000000000";
     await expect(app((tx) => readLiveMenu(tx, missing))).rejects.toMatchObject({
-      code: "catalogue.not_found",
-      params: { catalogueId: missing },
+      code: "menu.not_found",
+      params: { menuId: missing },
     });
   });
 
@@ -343,8 +343,8 @@ describe("patchLiveMenu", () => {
     it("a menu id that names no menu", async () => {
       const missing = "00000000-0000-4000-8000-000000000000";
       await refuses(async () => patch(v1, await priceChange("5.5"), NOW, missing), {
-        code: "catalogue.not_found",
-        params: { catalogueId: missing },
+        code: "menu.not_found",
+        params: { menuId: missing },
       });
     });
 

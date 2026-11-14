@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { catalogues } from "../menus.js";
+import { menus } from "../menus.js";
 import { count, enumCheck, enumType, id, json, label, newId, table, ts } from "../columns.js";
 import type { MenuDocument } from "@waitron/shared";
 
@@ -23,7 +23,7 @@ export const menuVersions = table(
   (t) => [
     foreignKey({
       columns: [t.menuId],
-      foreignColumns: [catalogues.id],
+      foreignColumns: [menus.id],
       name: "menu_versions_menu_fk",
     }),
     uniqueIndex("menu_versions_menu_number_uq").on(t.menuId, t.number),
@@ -48,7 +48,7 @@ export const menuPublications = table(
   (t) => [
     foreignKey({
       columns: [t.menuId],
-      foreignColumns: [catalogues.id],
+      foreignColumns: [menus.id],
       name: "menu_publications_menu_fk",
     }),
     foreignKey({
@@ -103,7 +103,7 @@ export const menuScheduledPublications = table(
   (t) => [
     foreignKey({
       columns: [t.menuId],
-      foreignColumns: [catalogues.id],
+      foreignColumns: [menus.id],
       name: "menu_scheduled_publications_menu_fk",
     }),
     foreignKey({

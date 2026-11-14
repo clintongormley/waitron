@@ -42,7 +42,7 @@ describe("collectHandoverSummaries", () => {
 
   it("skips a module without the seat", async () => {
     const modules = [
-      withHandover("catalogue"),
+      withHandover("menu"),
       withHandover("payments", { summarise: async () => null }),
     ];
     expect(await collectHandoverSummaries(modules, query)).toEqual({ payments: null });
@@ -92,7 +92,7 @@ describe("checkHandoverCopy", () => {
   it("answers ok when every given check answers ok, skipping modules without one", async () => {
     const asked: string[] = [];
     const modules = [
-      withHandover("catalogue"),
+      withHandover("menu"),
       withHandover("payments", { summarise: async () => 1 }),
       withHandover("fiscal-verifactu", {
         summarise: async () => 1,

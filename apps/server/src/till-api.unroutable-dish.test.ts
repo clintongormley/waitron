@@ -66,7 +66,7 @@ const noopLog: Logger = () => {};
 let v: PartyVenue;
 let app: Hono;
 let session: string;
-let catalogueId: string;
+let menuId: string;
 
 async function enrolTill(): Promise<string> {
   const [profile] = await seedDeviceProfiles(suite.db, {
@@ -116,11 +116,11 @@ beforeEach(async () => {
   session = `${login.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
   const [burger] = await inTx(v, (tx) =>
     tx
-      .select({ catalogueId: products.catalogueId })
+      .select({ menuId: products.menuId })
       .from(products)
       .where(eq(products.id, v.productId("Burger"))),
   );
-  catalogueId = burger!.catalogueId;
+  menuId = burger!.menuId;
 });
 
 async function station(name: string): Promise<string> {
@@ -152,7 +152,7 @@ async function dish(name: string, categoryId: string | null = null): Promise<Dis
   return inTx(v, async (tx) => {
     const staffName = `${name} ${randomUUID().slice(0, 8)}`;
     const product = await createProduct(tx, {
-      catalogueId,
+      menuId,
       categoryId,
       name: staffName,
       customerName: { [v.cfg.locale]: `Customer ${name}` },
@@ -882,7 +882,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     });
   });
 
-  it("names a catalogue dish no station can take beside a dish with no product, in line order", async () => {
+  it("names a menu dish no station can take beside a dish with no product, in line order", async () => {
     const coffee = await dish("Coffee");
     const { dish: routed } = await routedDish("Pulpo");
     const stranded = await strandedDish("Navajas");

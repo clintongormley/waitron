@@ -26,7 +26,7 @@ import type {
   TillApi,
   TillMenuOffer,
   UnsentDraft,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { ServerRouter } from "./api/server-router.js";
@@ -69,7 +69,7 @@ function offer(id: string, name: string, courseId: string | null = null): TillMe
   } satisfies TillMenuOffer;
 }
 
-function catalogue(version: string, prices: Record<string, string> = {}): ZoneOfferCatalogue {
+function menu(version: string, prices: Record<string, string> = {}): ZoneOffers {
   const offers = [
     offer("offer-beer", "Beer", "drinks"),
     offer("offer-steak", "Steak", "mains"),
@@ -254,12 +254,12 @@ function stubApi(formFactor: FormFactor, overrides: Record<string, unknown> = {}
     getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
-      ...catalogue("v1"),
-      context: { ...catalogue("v1").context, zoneId: "zc" },
+      ...menu("v1"),
+      context: { ...menu("v1").context, zoneId: "zc" },
     }),
     listZoneOffers: vi.fn(async (zoneId: string) => ({
-      ...catalogue("v1"),
-      context: { ...catalogue("v1").context, zoneId },
+      ...menu("v1"),
+      context: { ...menu("v1").context, zoneId },
     })),
     menuState: vi.fn(() => new Promise(() => {})),
     setServiceZone: vi.fn(),
@@ -648,7 +648,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
       listZoneOffers: vi.fn(async (zoneId: string) =>
         zoneId === "z2"
           ? new Promise(() => {})
-          : { ...catalogue("v1"), context: { ...catalogue("v1").context, zoneId } },
+          : { ...menu("v1"), context: { ...menu("v1").context, zoneId } },
       ),
     });
     await openTable(el);
@@ -674,7 +674,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1", "z2"])),
       listZoneOffers: vi.fn(async (zoneId: string) => {
         if (zoneId === "z2") throw new TypeError("Failed to fetch");
-        return { ...catalogue("v1"), context: { ...catalogue("v1").context, zoneId } };
+        return { ...menu("v1"), context: { ...menu("v1").context, zoneId } };
       }),
     });
     await openTable(el);

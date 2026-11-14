@@ -93,13 +93,13 @@ useVenueDb({
           hardwareUnit: "kg",
         })
         .returning({ id: units.id });
-      const [catalogue] = db.all<{ id: string }>(
-        sql`select id from catalogues where name = 'Carta'`,
+      const [menu] = db.all<{ id: string }>(
+        sql`select id from menus where name = 'Carta'`,
       );
       const [category] = db.all<{ id: string }>(
         sql`select id from categories where name = 'Platos'`,
       );
-      // 0.55 at 21% is invoiced 0.45 + 0.10 by the catalogue's gross arithmetic and 2.10 is
+      // 0.55 at 21% is invoiced 0.45 + 0.10 by the menu's gross arithmetic and 2.10 is
       // 1.74 + 0.36, while those bases taxed at 21% are 0.09 and 0.37; Café with two 0.50 extras at
       // 10% matches both ways.
       const created = new Map<string, string>();
@@ -110,7 +110,7 @@ useVenueDb({
         ["Leche", "1.00", "reduced"],
       ] as const) {
         const product = await createProduct(tx, {
-          catalogueId: catalogue!.id,
+          menuId: menu!.id,
           categoryId: category!.id,
           name,
           customerName: { [venue.cfg.locale]: `${name} de la casa` },
@@ -138,7 +138,7 @@ useVenueDb({
       );
       extraListId = extras.id;
       const ham = await createProduct(tx, {
-        catalogueId: catalogue!.id,
+        menuId: menu!.id,
         categoryId: category!.id,
         name: "Jamón",
         unitId: kg!.id,

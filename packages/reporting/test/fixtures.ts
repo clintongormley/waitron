@@ -16,7 +16,7 @@ import type { DeviceId, NodeId, SaleId, SaleLineClassification, SeriesId } from 
 import {
   billPaymentRefunds,
   billPayments,
-  catalogues,
+  menus,
   diningTables,
   invoiceSeries,
   parties,
@@ -390,7 +390,7 @@ export async function seedSubstitution(
 }
 
 /**
- * Fires ONE line onto an EXISTING working order — a throwaway catalogue + product (this package
+ * Fires ONE line onto an EXISTING working order — a throwaway menu + product (this package
  * takes no dependency on `@waitron/menu`), a `working_order_lines` row, and its `ticket_items`
  * row with `queued_at` backdated by `opts.ageMinutes`. Split out from {@link seedFiredOrder} so a
  * test can add a SECOND line to one order.
@@ -414,14 +414,14 @@ export async function seedFiredLine(
   // One clock reading for this line's three stamps, so they agree.
   const firedAtMs = Date.now();
   const firedAt = new Date(firedAtMs).toISOString();
-  const [catalogue] = await db
-    .insert(catalogues)
-    .values({ name: "Test catalogue" })
-    .returning({ id: catalogues.id });
+  const [menu] = await db
+    .insert(menus)
+    .values({ name: "Test menu" })
+    .returning({ id: menus.id });
   const [product] = await db
     .insert(products)
     .values({
-      catalogueId: catalogue!.id,
+      menuId: menu!.id,
       name: "Item",
       pricingUnit: "each",
       unitPrice: stringToCents("1.00"),

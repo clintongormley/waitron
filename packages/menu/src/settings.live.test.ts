@@ -6,23 +6,23 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { ResourceIdentity } from "@waitron/shared";
-import { useCatalogueDb } from "../test/fixtures.js";
-import { CATALOGUE_CHANGE_SOURCES } from "./classification.js";
-import { saveCatalogueDefaultColor } from "./settings.js";
+import { useMenuDb } from "../test/fixtures.js";
+import { MENU_CHANGE_SOURCES } from "./classification.js";
+import { saveMenuDefaultColor } from "./settings.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 
 it("announces each saved default colour to live subscribers, so open screens repaint", async () => {
-  await installChangeFeed(fx.db, [...CORE_CHANGE_SOURCES, ...CATALOGUE_CHANGE_SOURCES]);
+  await installChangeFeed(fx.db, [...CORE_CHANGE_SOURCES, ...MENU_CHANGE_SOURCES]);
   const announced: ResourceIdentity[] = [];
   const unsubscribe = subscribeToChanges((change) => {
     announced.push(...change.resources.filter(({ type }) => type === "settings.menu"));
   });
   try {
-    await withTransaction(fx.db, (tx) => saveCatalogueDefaultColor(tx, "#b12525"));
+    await withTransaction(fx.db, (tx) => saveMenuDefaultColor(tx, "#b12525"));
     const afterFirst = announced.length;
     expect(afterFirst).toBeGreaterThan(0);
-    await withTransaction(fx.db, (tx) => saveCatalogueDefaultColor(tx, "#256bb1"));
+    await withTransaction(fx.db, (tx) => saveMenuDefaultColor(tx, "#256bb1"));
     expect(announced.length).toBeGreaterThan(afterFirst);
     for (const identity of announced) expect(identity).toEqual({ type: "settings.menu" });
   } finally {

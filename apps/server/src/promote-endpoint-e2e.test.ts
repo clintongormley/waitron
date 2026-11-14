@@ -45,8 +45,8 @@ import {
   persons,
 } from "@waitron/identity";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -302,17 +302,17 @@ async function seedSaleVenue(admin: Database): Promise<string> {
     .onConflictDoNothing();
 
   const waterOffer = await withTransaction(admin, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Bebidas" });
     const water = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Mineral water",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const offers = await offerProducts(tx, {});
     return offers.offerFor(water.id);
   });
@@ -438,7 +438,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       expect((await readNodeMode(stores.main.node, seed.nodeId)).mode).toBe("mirror");
 
       // The gate is live, so the promote POST reaching its handler is the exemption's doing.
-      const write = await fetch(`${mirrorBase}/management-api/catalogues`, {
+      const write = await fetch(`${mirrorBase}/management-api/menus`, {
         method: "POST",
         body: "{}",
       });
@@ -502,12 +502,12 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       const sessionCookie = login.headers.get("set-cookie")!.split(";")[0]!;
       const bothCookies = `${sessionCookie}; ${DEVICE_COOKIE_HEADER}`;
 
-      const catalogue = (await (
+      const menu = (await (
         await fetch(`${primaryBase}/api/default-service-zone/offers`, {
           headers: { cookie: sessionCookie },
         })
       ).json()) as { offers: { id: string; pricingUnit: string }[] };
-      expect(catalogue.offers.find((offer) => offer.pricingUnit === "each")).toBeDefined();
+      expect(menu.offers.find((offer) => offer.pricingUnit === "each")).toBeDefined();
 
       const saleRes = await fetch(`${primaryBase}/api/sales`, {
         method: "POST",
@@ -856,7 +856,7 @@ describe("read-only-gate exemption for the promote POST — proven by deletion",
   it("WITH the exemption clause: an ordinary write POST is 403 but the promote POST reaches the handler", async () => {
     const app = appWith(promoteExempt);
 
-    const write = await app.request("/management-api/catalogues", { method: "POST", body: "{}" });
+    const write = await app.request("/management-api/menus", { method: "POST", body: "{}" });
     expect(write.status).toBe(403);
     expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 

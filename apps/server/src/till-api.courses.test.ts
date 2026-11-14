@@ -18,8 +18,8 @@ import {
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -92,11 +92,11 @@ const suite = useVenueDb({
       const mainCourse = await createCourse(tx, { name: "Principales", displayOrder: 1 });
       starterCourseId = starterCourse.id;
       mainCourseId = mainCourse.id;
-      const catalogue = await createCatalogue(tx, { name: "Carta" });
+      const menu = await createMenu(tx, { name: "Carta" });
       const category = await createCategory(tx, { name: "Comida" });
       const mk = async (description: string): Promise<string> => {
         const p = await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: category.id,
           name: description,
           pricingUnit: "each",
@@ -110,7 +110,7 @@ const suite = useVenueDb({
       await mk(BREAD); // loose — no course assigned
       await setProductCourse(tx, soupId, starterCourse.id);
       await setProductCourse(tx, steakId, mainCourse.id);
-      await assignCatalogueToVenue(tx, catalogue.id);
+      await assignMenuToVenue(tx, menu.id);
       counterOffers = await offerProducts(tx, cfg);
       tablesZoneId = (await offerProducts(tx, cfg, { zone: "tables" })).zoneId;
     });

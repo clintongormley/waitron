@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { validateCatalogueConfiguration } from "./configuration-transfer.js";
+import { validateMenuConfiguration } from "./configuration-transfer.js";
 
 function refusal(code: string, name: string) {
   return expect.objectContaining({ code, params: { field: "name", name } });
 }
 
-describe("validateCatalogueConfiguration: category names", () => {
+describe("validateMenuConfiguration: category names", () => {
   it("refuses two top-level categories sharing a name, with or without a details row", () => {
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         categories: [
           { id: "c1", name: "ES drinks" },
           { id: "c2", name: " es drinks " },
@@ -20,7 +20,7 @@ describe("validateCatalogueConfiguration: category names", () => {
 
   it("refuses two categories with one parent sharing a name", () => {
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         categories: [
           { id: "top", name: "Menu" },
           { id: "c1", name: "Desserts" },
@@ -36,7 +36,7 @@ describe("validateCatalogueConfiguration: category names", () => {
 
   it("accepts one name under different parents, and a parent sharing its child's name", () => {
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         categories: [
           { id: "lunch", name: "Lunch" },
           { id: "dinner", name: "Dinner" },
@@ -57,7 +57,7 @@ describe("validateCatalogueConfiguration: category names", () => {
 describe("relative variant import names", () => {
   it("accepts Single under Seagrams Gin and London Gin, and as a product", () => {
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         products: [
           { id: "s", name: "Seagrams Gin", active: 1, parent_id: null },
           { id: "l", name: "London Gin", active: 1, parent_id: null },
@@ -70,7 +70,7 @@ describe("relative variant import names", () => {
   });
   it("refuses Single twice under Seagrams Gin with omitted active flags", () => {
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         products: [
           { id: "s", name: "Seagrams Gin", parent_id: null },
           { id: "v1", name: "Single", parent_id: "s" },
@@ -81,10 +81,10 @@ describe("relative variant import names", () => {
   });
 });
 
-describe("validateCatalogueConfiguration: product names", () => {
+describe("validateMenuConfiguration: product names", () => {
   it("accepts an Active variant named like another Active product", () => {
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         products: [
           { id: "p1", name: "Café Solo", active: 1, parent_id: null },
           { id: "p2", name: "Café", active: 1, parent_id: null },
@@ -96,7 +96,7 @@ describe("validateCatalogueConfiguration: product names", () => {
 
   it("counts a product or variant with no Active flag as Active, as the column's default does", () => {
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         products: [
           { id: "p1", name: "Water", parent_id: null },
           { id: "p2", name: "water", parent_id: null },
@@ -104,7 +104,7 @@ describe("validateCatalogueConfiguration: product names", () => {
       }),
     ).toThrowError(refusal("product.name_taken", "water"));
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         products: [
           { id: "p1", name: "Café", parent_id: null },
           { id: "v1", name: "Café Solo", parent_id: "p1" },
@@ -118,7 +118,7 @@ describe("validateCatalogueConfiguration: product names", () => {
     "refuses a product whose Active flag is %j, which no export writes",
     (active) => {
       expect(() =>
-        validateCatalogueConfiguration({
+        validateMenuConfiguration({
           products: [{ id: "p1", name: "Water", active, parent_id: null }],
         }),
       ).toThrowError(
@@ -132,7 +132,7 @@ describe("validateCatalogueConfiguration: product names", () => {
 
   it("does not count an Inactive product, nor a variant of one, nor an Inactive variant", () => {
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         products: [
           { id: "p1", name: "Water", active: 1, parent_id: null },
           { id: "p2", name: "Water", active: 0, parent_id: null },
@@ -147,7 +147,7 @@ describe("validateCatalogueConfiguration: product names", () => {
 
   it("does not compare a category's name with a product's", () => {
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         categories: [{ id: "c1", name: "Water" }],
         products: [{ id: "p1", name: "Water", active: 1, parent_id: null }],
       }),
@@ -157,7 +157,7 @@ describe("validateCatalogueConfiguration: product names", () => {
   it.each([7, null, undefined])("refuses a category or product whose name is %j", (name) => {
     const row = name === undefined ? {} : { name };
     expect(() =>
-      validateCatalogueConfiguration({ categories: [{ id: "c1", ...row }] }),
+      validateMenuConfiguration({ categories: [{ id: "c1", ...row }] }),
     ).toThrowError(
       expect.objectContaining({
         code: "setup.request_invalid",
@@ -165,7 +165,7 @@ describe("validateCatalogueConfiguration: product names", () => {
       }),
     );
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         products: [{ id: "p1", ...row, active: 0, parent_id: null }],
       }),
     ).toThrowError(
@@ -177,11 +177,11 @@ describe("validateCatalogueConfiguration: product names", () => {
   });
 
   it("accepts a bundle without the tables", () => {
-    expect(() => validateCatalogueConfiguration({})).not.toThrow();
+    expect(() => validateMenuConfiguration({})).not.toThrow();
   });
 });
 
-describe("validateCatalogueConfiguration: colours", () => {
+describe("validateMenuConfiguration: colours", () => {
   const coloured = (table: string, color: unknown) =>
     table === "products"
       ? { products: [{ id: "p1", name: "Water", active: 1, parent_id: null, color }] }
@@ -191,7 +191,7 @@ describe("validateCatalogueConfiguration: colours", () => {
     "refuses a %s colour that is not lowercase #rrggbb",
     (table) => {
       for (const color of ["#256bb1;position:fixed;inset:0", "#256BB1", "red", "", 7]) {
-        expect(() => validateCatalogueConfiguration(coloured(table, color))).toThrowError(
+        expect(() => validateMenuConfiguration(coloured(table, color))).toThrowError(
           expect.objectContaining({
             code: "setup.request_invalid",
             params: { field: `${table}.color` },
@@ -205,13 +205,13 @@ describe("validateCatalogueConfiguration: colours", () => {
     "accepts a %s colour that is lowercase #rrggbb, null or absent",
     (table) => {
       for (const color of ["#256bb1", null, undefined]) {
-        expect(() => validateCatalogueConfiguration(coloured(table, color))).not.toThrow();
+        expect(() => validateMenuConfiguration(coloured(table, color))).not.toThrow();
       }
     },
   );
 });
 
-describe("validateCatalogueConfiguration: menu display settings", () => {
+describe("validateMenuConfiguration: menu display settings", () => {
   it.each([
     ["handheld_columns", 4],
     ["till_columns", 3],
@@ -220,7 +220,7 @@ describe("validateCatalogueConfiguration: menu display settings", () => {
     ["till_order", "first"],
   ])("refuses a menu_details row whose %s is %j", (column, value) => {
     expect(() =>
-      validateCatalogueConfiguration({ menu_details: [{ menu_id: "m1", [column]: value }] }),
+      validateMenuConfiguration({ menu_details: [{ menu_id: "m1", [column]: value }] }),
     ).toThrowError(
       expect.objectContaining({
         code: "setup.request_invalid",
@@ -231,7 +231,7 @@ describe("validateCatalogueConfiguration: menu display settings", () => {
 
   it("accepts a row holding all six at their defaults, and a row with none of them", () => {
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         menu_details: [
           {
             menu_id: "m1",
@@ -249,19 +249,19 @@ describe("validateCatalogueConfiguration: menu display settings", () => {
   });
 });
 
-describe("validateCatalogueConfiguration: many siblings", () => {
+describe("validateMenuConfiguration: many siblings", () => {
   it("judges a hundred thousand categories under one parent", () => {
     const categories = Array.from({ length: 100_000 }, (_, index) => ({
       id: `c${index}`,
       name: `Category ${index}`,
     }));
     const started = performance.now();
-    expect(() => validateCatalogueConfiguration({ categories })).not.toThrow();
+    expect(() => validateMenuConfiguration({ categories })).not.toThrow();
     expect(performance.now() - started).toBeLessThan(2_000);
   });
 });
 
-describe("validateCatalogueConfiguration: include folders", () => {
+describe("validateMenuConfiguration: include folders", () => {
   const sections = [
     { id: "lunch-root", role: "menu_root" },
     { id: "drinks-root", role: "menu_root" },
@@ -300,7 +300,7 @@ describe("validateCatalogueConfiguration: include folders", () => {
       7,
     ])
       expect(
-        () => validateCatalogueConfiguration(bundle({ folder_overrides })),
+        () => validateMenuConfiguration(bundle({ folder_overrides })),
         JSON.stringify(folder_overrides),
       ).toThrowError(refusedAs("section_members.folder_overrides"));
   });
@@ -317,13 +317,13 @@ describe("validateCatalogueConfiguration: include folders", () => {
       {},
     ])
       expect(
-        () => validateCatalogueConfiguration(bundle(member)),
+        () => validateMenuConfiguration(bundle(member)),
         JSON.stringify(member),
       ).not.toThrow();
   });
 
   it.each(["yes", 2, null, "1"])("refuses a show_as_folder of %j", (show_as_folder) => {
-    expect(() => validateCatalogueConfiguration(bundle({ show_as_folder }))).toThrowError(
+    expect(() => validateMenuConfiguration(bundle({ show_as_folder }))).toThrowError(
       refusedAs("section_members.show_as_folder"),
     );
   });
@@ -343,18 +343,18 @@ describe("validateCatalogueConfiguration: include folders", () => {
         [{ folder_overrides: '{"color":null}' }, "folder_overrides"],
       ] as const)
         expect(
-          () => validateCatalogueConfiguration(bundle({ ...placement, ...folder })),
+          () => validateMenuConfiguration(bundle({ ...placement, ...folder })),
           JSON.stringify({ ...placement, ...folder }),
         ).toThrowError(refusedAs(`section_members.${field}`));
       for (const folder of [{}, { show_as_folder: 1, folder_overrides: "{}" }])
         expect(() =>
-          validateCatalogueConfiguration(bundle({ ...placement, ...folder })),
+          validateMenuConfiguration(bundle({ ...placement, ...folder })),
         ).not.toThrow();
     }
   });
 });
 
-describe("validateCatalogueConfiguration: Inactive products stay off menus", () => {
+describe("validateMenuConfiguration: Inactive products stay off menus", () => {
   const sections = [
     { id: "lunch-root", role: "menu_root" },
     { id: "home", role: "home_layout" },
@@ -377,24 +377,24 @@ describe("validateCatalogueConfiguration: Inactive products stay off menus", () 
   it.each(["lunch-root", "beer", "home"])(
     "refuses an Inactive product placed in %s",
     (sectionId) => {
-      expect(() => validateCatalogueConfiguration(bundle(0, 1, sectionId))).toThrowError(
+      expect(() => validateMenuConfiguration(bundle(0, 1, sectionId))).toThrowError(
         refusedAs("section_members.product_id"),
       );
     },
   );
 
   it("refuses a menu price for an Inactive variant", () => {
-    expect(() => validateCatalogueConfiguration(bundle(1, 0, "beer"))).toThrowError(
+    expect(() => validateMenuConfiguration(bundle(1, 0, "beer"))).toThrowError(
       refusedAs("menu_item_variant_overrides.variant_id"),
     );
   });
 
   it("accepts the same rows with the product and variant Active, or with no Active flag", () => {
     for (const sectionId of ["lunch-root", "beer", "home"])
-      expect(() => validateCatalogueConfiguration(bundle(1, 1, sectionId))).not.toThrow();
+      expect(() => validateMenuConfiguration(bundle(1, 1, sectionId))).not.toThrow();
     const flagless = bundle(1, 1, "beer");
     expect(() =>
-      validateCatalogueConfiguration({
+      validateMenuConfiguration({
         ...flagless,
         products: flagless.products.map((row) => ({ ...row, active: undefined })),
       }),
@@ -418,13 +418,13 @@ describe("explicit unit staff identity on configuration import", () => {
       units: [unit, { ...unit, id: "other", name: { es: "Peso" }, abbreviation: { es: "p" } }],
     };
     const before = structuredClone(rows);
-    expect(() => validateCatalogueConfiguration(rows)).not.toThrow();
+    expect(() => validateMenuConfiguration(rows)).not.toThrow();
     expect(rows).toEqual(before);
   });
   it("validates the raw JSON strings carried by a configuration export without rewriting them", () => {
     const row = { ...unit, name: '{"de":"Gewicht","en":"Weight"}', abbreviation: "{}" };
     const before = structuredClone(row);
-    expect(() => validateCatalogueConfiguration({ units: [row] })).not.toThrow();
+    expect(() => validateMenuConfiguration({ units: [row] })).not.toThrow();
     expect(row).toEqual(before);
   });
   for (const field of ["staff_name", "staff_abbreviation"] as const) {
@@ -432,7 +432,7 @@ describe("explicit unit staff identity on configuration import", () => {
       `refuses imported ${field} %j`,
       (value) => {
         expect(() =>
-          validateCatalogueConfiguration({ units: [{ ...unit, [field]: value }] }),
+          validateMenuConfiguration({ units: [{ ...unit, [field]: value }] }),
         ).toThrowError(
           expect.objectContaining({
             code: "setup.request_invalid",
@@ -447,7 +447,7 @@ describe("explicit unit staff identity on configuration import", () => {
       `refuses malformed imported ${field} %j`,
       (value) => {
         expect(() =>
-          validateCatalogueConfiguration({ units: [{ ...unit, [field]: value }] }),
+          validateMenuConfiguration({ units: [{ ...unit, [field]: value }] }),
         ).toThrowError(
           expect.objectContaining({
             code: "setup.request_invalid",
@@ -458,7 +458,7 @@ describe("explicit unit staff identity on configuration import", () => {
     );
   }
   it.each([-1, 4, 1.5, "3"])("refuses imported precision %j", (precision) => {
-    expect(() => validateCatalogueConfiguration({ units: [{ ...unit, precision }] })).toThrowError(
+    expect(() => validateMenuConfiguration({ units: [{ ...unit, precision }] })).toThrowError(
       expect.objectContaining({
         code: "setup.request_invalid",
         params: { field: "units.precision" },

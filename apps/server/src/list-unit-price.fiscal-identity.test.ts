@@ -6,8 +6,8 @@ import { saleLines, sales, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   createProduct,
@@ -73,8 +73,8 @@ const columnsOf = (table: Parameters<typeof getTableColumns>[0], minted: readonl
 /** Ids minted per database, so they differ between the two runs; a parent line is compared by its
  * `line_no` instead. */
 const MINTED_ID_COLUMNS = ["id", "sale_id", "parent_line_id"];
-/** Catalogue rows' ids, minted per database like the line ids. */
-const CATALOGUE_ID_COLUMNS = ["product_id", "parent_product_id", "menu_id", "menu_version_id"];
+/** Menu rows' ids, minted per database like the line ids. */
+const MENU_ID_COLUMNS = ["product_id", "parent_product_id", "menu_id", "menu_version_id"];
 /** Every other `sale_lines` column but the new one, so a column added later is compared too. */
 const OTHER_LINE_COLUMNS = columnsOf(saleLines, [...MINTED_ID_COLUMNS, "list_unit_price_gross"]);
 
@@ -131,7 +131,7 @@ async function fileOneSale(db: Database) {
     simplifiedInvoiceLimit: null,
   });
   const seeded = await withTransaction(db, async (tx) => {
-    const menu = await createCatalogue(tx, {
+    const menu = await createMenu(tx, {
       name: `List unit price fiscal identity menu ${cfg.nodeId}`,
     });
     const bebidas = await createCategory(tx, { name: "Drinks" });
@@ -142,7 +142,7 @@ async function fileOneSale(db: Database) {
     const anadidos = await createCategory(tx, { name: "Extras" });
     const product = (name: string, categoryId: string, unitPrice: string) =>
       createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId,
         name: `${name} staff`,
         customerName: { es: `${name} cliente` },
@@ -167,7 +167,7 @@ async function fileOneSale(db: Database) {
       LOCALE,
     );
     await writeProductModifiers(tx, negroni.id, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToVenue(tx, menu.id);
+    await assignMenuToVenue(tx, menu.id);
     return { negroni: negroni.id, hielo: hielo.id, extrasListId: extras.id };
   });
   const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg));
@@ -219,12 +219,12 @@ describe("the unit price before any discount and the fiscal record", () => {
     expect(before.lines[0]!.list_unit_price_gross).toBeNull();
     expect(after.lines[0]!.list_unit_price_gross).toBe(900);
 
-    // Catalogue ids are minted per database, so they are compared as present or absent, and the
+    // Menu ids are minted per database, so they are compared as present or absent, and the
     // classification snapshot by its names.
     const withoutStoredPrice = (rows: Record<string, unknown>[]) =>
       rows.map((row) => ({
         ...row,
-        ...Object.fromEntries(CATALOGUE_ID_COLUMNS.map((column) => [column, row[column] !== null])),
+        ...Object.fromEntries(MENU_ID_COLUMNS.map((column) => [column, row[column] !== null])),
         classification: JSON.parse(row.classification as string, (key, value: unknown) =>
           key === "id" ? undefined : value,
         ) as unknown,

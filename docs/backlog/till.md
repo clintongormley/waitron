@@ -1554,7 +1554,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 
 - **A case the content-language decisions leave open, built with the plan's default unless the owner
   says otherwise**: receipts outside Catalonia stay free, Spanish by default.
-  [Detail](catalogue.md#a-case-the-content-language-decisions-leave-open-built-with-the-plans-default-unless-the-owner-says-otherwise)
+  [Detail](menu.md#a-case-the-content-language-decisions-leave-open-built-with-the-plans-default-unless-the-owner-says-otherwise)
 - **The owner has not yet confirmed the Seasons window's plan defaults** (A721, sent as an FYI,
   2026-10-17): Decisions 2, 12, 13, 14, 15 and 17 of the
   [A721 plan](../superpowers/plans/2026-10-17-a721-seasons-window.md), each in
@@ -2534,7 +2534,7 @@ Held, Fire and the table's Send controls retain their own meanings.
 Use the existing modifiers window for line details. Sent extras and notes remain read-only; moving
 a sent unpaid Counter dish uses its separate current movement facts. A739 owns the payment-window
 redesign. Sent-dish removal uses Cancel item. The custom item's permission and
-catalogue/report/invoice identity remain undecided.
+menu/report/invoice identity remain undecided.
 
 
 ### Installed modules release removed tables (A894, owner decision 2026-10-19)
@@ -3238,7 +3238,7 @@ order off a short screen.
 
 The dashed + Custom item tile and its window remain unbuilt. Keep the requested fields together:
 name, price, required VAT rate and destination (nowhere or a station). Decide who may use it and
-whether it needs an underlying product for the catalogue, reports and invoice lines. A weighed
+whether it needs an underlying product for the menu, reports and invoice lines. A weighed
 product does not supply an arbitrary-price path. The cleanup below does not settle those choices.
 
 ### A738. The counter screen: fewer distractions

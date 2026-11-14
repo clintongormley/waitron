@@ -191,7 +191,7 @@ function product(
   const base: Omit<Product, "variants"> = {
     id: "prod-1",
     modifiers: [],
-    catalogueId: "cat-1",
+    menuId: "cat-1",
     categoryId: "category-1",
     primaryCategoryId: "category-1",
     name: "Ham croquettes",
@@ -2529,7 +2529,7 @@ describe("the product list at phone width", () => {
 });
 
 describe("the product list as a tree", () => {
-  it("puts every category and product under an All products row with a named chevron, no selection, and the catalogue count", async () => {
+  it("puts every category and product under an All products row with a named chevron, no selection, and the menu count", async () => {
     const { root } = await mountTree({ selecting: true });
     const top = root.querySelector<HTMLElement>(`tr[data-row-key="${ROOT_KEY}"]`)!;
     expect(root.querySelector("tbody tr")).toBe(top);
@@ -2763,9 +2763,9 @@ describe("the product list as a tree", () => {
     const { root } = await mountTree();
     const all = root.querySelector('[data-test="actions-root"]')!;
     expect(all.getAttribute("label")).toBe(`${t("staff.actions")}: ${t("folders.all_products")}`);
-    expect(menuItems(all)).toEqual([t("catalogue.add_product"), t("folders.add_category")]);
+    expect(menuItems(all)).toEqual([t("products.add_product"), t("folders.add_category")]);
     expect(menuItems(root.querySelector('[data-test="actions-folder-d"]')!)).toEqual([
-      t("catalogue.add_product"),
+      t("products.add_product"),
       t("folders.add_category"),
       "—",
       t("folders.rename"),
@@ -3173,7 +3173,7 @@ describe("the product list as a tree", () => {
     el.addEventListener("name-color", () => (el.choosingColor = true));
     await userEvent.click(square);
     expect(focusedName(el)).toBe("category-name");
-    // Stands in for the catalogue's chooser, which takes the cursor while it is open and hands it
+    // Stands in for the menu's chooser, which takes the cursor while it is open and hands it
     // back to the input; that hand-back is pinned in product-browser.test.ts.
     outside.focus();
     expect(sent).toEqual([["name-color", {}]]);
@@ -3383,7 +3383,7 @@ describe("the product list as a tree", () => {
     expect(sent).toEqual(["cancel", "cancel"]);
   });
 
-  it("opens the All products menu, without moving focus, when the catalogue loads empty, and only that once", async () => {
+  it("opens the All products menu, without moving focus, when the menu loads empty, and only that once", async () => {
     const outside = document.createElement("button");
     document.body.append(outside);
     onTestFinished(() => outside.remove());
@@ -3406,7 +3406,7 @@ describe("the product list as a tree", () => {
     expect(popup().matches(":popover-open")).toBe(false);
   });
 
-  it("leaves the menu closed before the catalogue has loaded, and for one with something in it", async () => {
+  it("leaves the menu closed before the menu has loaded, and for one with something in it", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [],
       categories: [],
@@ -4968,7 +4968,7 @@ describe("product media link", () => {
     const media = root.querySelector<HTMLAnchorElement>('[data-test="color-cola"]');
     expect(media).not.toBeNull();
     expect(media!.tagName).toBe("A");
-    expect(media!.getAttribute("href")).toBe("/manage/catalogue/product/cola?field=image");
+    expect(media!.getAttribute("href")).toBe("/manage/products/product/cola?field=image");
     expect(media!.getAttribute("aria-label")).toBe(
       t("product.edit_named_inherited").replace("{name}", "Cola").replace("{from}", "Drinks"),
     );
@@ -5367,7 +5367,7 @@ describe("variant media slot", () => {
     const media = root.querySelector<HTMLAnchorElement>('[data-test="color-quarter"]')!;
     expect(media).not.toBeNull();
     expect(media.tagName).toBe("A");
-    expect(media.getAttribute("href")).toBe("/manage/catalogue/product/quarter?field=image");
+    expect(media.getAttribute("href")).toBe("/manage/products/product/quarter?field=image");
     expect(media.getAttribute("aria-label")).toBe(
       t("product.edit_named").replace("{name}", "1/4 Chicken"),
     );

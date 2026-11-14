@@ -47,7 +47,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
-      permissions: ["venue.view", "catalogue.manage", "hardware.manage", "system.manage"],
+      permissions: ["venue.view", "menu.manage", "hardware.manage", "system.manage"],
       modules: [],
     }),
     forgetLocales: () => {},
@@ -60,7 +60,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       loginDefault: "es-ES",
       venueName: "Deli Test SL",
     }),
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: vi
@@ -75,7 +75,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listMyShifts: vi.fn().mockResolvedValue([]),
     listMySwaps: vi.fn().mockResolvedValue([]),
     listMyAbsences: vi.fn().mockResolvedValue([]),
-    listCatalogues: vi.fn().mockResolvedValue([]),
+    listMenus: vi.fn().mockResolvedValue([]),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
     listPendingSwaps: vi.fn().mockResolvedValue([]),
@@ -332,7 +332,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
         venueName: "Deli Test SL",
-        permissions: ["venue.view", "catalogue.manage", "hardware.manage", "system.manage"],
+        permissions: ["venue.view", "menu.manage", "hardware.manage", "system.manage"],
         modules: [],
       }),
     });
@@ -464,17 +464,17 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  it("the catalogue screen renders accessibly with a single, well-ordered heading", async () => {
+  it("the menu screen renders accessibly with a single, well-ordered heading", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-catalogue]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-products]")!.click();
     await flush(el);
-    const catalogue = el.shadowRoot!.querySelector("dashboard-catalogue-screen");
-    expect(catalogue).toBeTruthy();
+    const menu = el.shadowRoot!.querySelector("dashboard-products-screen");
+    expect(menu).toBeTruthy();
     const h1s = [
       ...el.shadowRoot!.querySelectorAll("h1"),
-      ...(catalogue!.shadowRoot?.querySelectorAll("h1") ?? []),
+      ...(menu!.shadowRoot?.querySelectorAll("h1") ?? []),
     ];
     expect(h1s).toHaveLength(1);
     await expectNoA11yViolations(host);

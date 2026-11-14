@@ -488,7 +488,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That person could not be found",
     es: "No se ha encontrado a esa persona",
   },
-  "catalogue.not_found": {
+  "menu.not_found": {
     en: "That menu could not be found",
     es: "No se ha encontrado esa carta",
   },

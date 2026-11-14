@@ -41,11 +41,11 @@ useVenueDb({
   setup: async (db) => {
     v = await setupPartyVenue(db);
     const [drinkProduct] = await db
-      .select({ catalogueId: products.catalogueId })
+      .select({ menuId: products.menuId })
       .from(products)
       .where(eq(products.id, v.productId("Caña")));
     const { listId, productIds } = await inTx(v, (tx) =>
-      addExtras(tx, v.cfg, drinkProduct!.catalogueId, v.productId("Caña"), [
+      addExtras(tx, v.cfg, drinkProduct!.menuId, v.productId("Caña"), [
         { name: "Cheese", customerName: "Queso extra", kitchenName: "QUESO", maxQuantity: 2 },
       ]),
     );

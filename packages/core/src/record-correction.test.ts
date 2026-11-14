@@ -589,7 +589,7 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
     lineGross: "0.55",
   };
 
-  /** 0.55 at 21% as the catalogue invoices it, gross minus base: 0.45 + 0.10. Taxing the 0.45 base
+  /** 0.55 at 21% as the menu invoices it, gross minus base: 0.45 + 0.10. Taxing the 0.45 base
    * instead gives 0.09. */
   function sellMosto(backend: FiscalBackend) {
     return sell(backend, {

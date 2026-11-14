@@ -18,7 +18,7 @@ import {
   readContentLanguages,
   readReceiptLanguage,
 } from "@waitron/menu";
-import { seedCatalogues } from "./seed-menus.js";
+import { seedMenus } from "./seed-menus.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedStaff } from "./seed-staff.js";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
@@ -74,7 +74,7 @@ export async function seedDemoRestaurant(
   await withTransaction(db, (tx) => readIssueZone(tx, { nodeId: venue.nodeId }));
 
   const { products, invoiceLocale, passStationIds } = await withTransaction(db, async (tx) => {
-    const { productsByImage, menuIds, stationIds } = await seedCatalogues(tx, {
+    const { productsByImage, menuIds, stationIds } = await seedMenus(tx, {
       locale,
       dataSet,
     });

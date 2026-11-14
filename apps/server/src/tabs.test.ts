@@ -36,8 +36,8 @@ import {
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   addProductToMenu,
@@ -136,10 +136,10 @@ async function setupVenue(): Promise<Seeded> {
     tableId,
     offers,
   } = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Daily menu" });
+    const cat = await createMenu(tx, { name: "Daily menu" });
     const drinks = await createCategory(tx, { name: "ES drinks" });
     const coffeeProduct = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "ES coffee",
       pricingUnit: "each",
@@ -147,14 +147,14 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "general",
     });
     const waterProduct = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const coffeeMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: coffeeProduct.id,
@@ -1027,7 +1027,7 @@ describe("readTabLines", () => {
     expect(line).toMatchObject({ sentAt: expect.any(String), firedAt: null, state: null });
   });
 
-  it("returns the STORED locked gross price, never a re-price after the catalogue changes", async () => {
+  it("returns the STORED locked gross price, never a re-price after the menu changes", async () => {
     const { cfg, coffeeId, tableId, coffeeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: coffeeOffer, quantity: "1" }] }),
@@ -3538,7 +3538,7 @@ describe("the kitchen screen and the expo board are told which lines were sold i
       await updateUnit(tx, seededEach!.id, { abbreviation: { es: "pz" } }, "es");
       const dish = (name: string, unitId: string | null, unitPrice: string) =>
         createProduct(tx, {
-          catalogueId: seeded.menuId,
+          menuId: seeded.menuId,
           categoryId: null,
           name,
           unitId,

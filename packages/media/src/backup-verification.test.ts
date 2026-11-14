@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   mediaImages,
   mediaImageData,
   mediaImageBlobs,
@@ -175,7 +175,7 @@ describe("media backup evidence", () => {
   });
   it("current configuration requires a photo identity even when its bytes survive as a blob", async () => {
     for (const suite of [original, restored]) {
-      await suite.db.insert(catalogues).values({ id: menu, name: "Menu" });
+      await suite.db.insert(menus).values({ id: menu, name: "Menu" });
       await suite.db.insert(sections).values({
         id: menu,
         ownerMenuId: menu,
@@ -198,7 +198,7 @@ describe("media backup evidence", () => {
     [[], "invalid"],
   ] as const)("checks retained folder picture configuration %j", async (value, want) => {
     for (const suite of [original, restored]) {
-      await suite.db.insert(catalogues).values({ id: menu, name: "Menu" });
+      await suite.db.insert(menus).values({ id: menu, name: "Menu" });
       await suite.db
         .insert(sections)
         .values({ id: menu, ownerMenuId: menu, internalName: "Section", names: { en: "Section" } });
@@ -255,7 +255,7 @@ describe("media backup evidence", () => {
       },
     };
     for (const suite of [original, restored]) {
-      await suite.db.insert(catalogues).values({ id: menu, name: "Old menu", active: false });
+      await suite.db.insert(menus).values({ id: menu, name: "Old menu", active: false });
       await suite.db.insert(menuVersions).values({
         id: version,
         menuId: menu,

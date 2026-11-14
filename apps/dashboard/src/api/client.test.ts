@@ -17,7 +17,7 @@ describe("DashboardApi", () => {
   it("moves a mixed folder selection through its dedicated route", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await api.moveCatalogueItems({ productIds: ["p"], categoryIds: ["f"] }, null);
+    await api.moveProductItems({ productIds: ["p"], categoryIds: ["f"] }, null);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/folders/move",
       expect.objectContaining({
@@ -32,7 +32,7 @@ describe("DashboardApi", () => {
     const shown = [
       { id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
     ];
-    await api.deleteCatalogueItems({ productIds: [], categoryIds: ["f"] }, "move_up", shown);
+    await api.deleteProductItems({ productIds: [], categoryIds: ["f"] }, "move_up", shown);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/folders/delete",
       expect.objectContaining({
@@ -47,7 +47,7 @@ describe("DashboardApi", () => {
     const shown = [
       { id: "f", folders: 1, products: 3, activeProducts: 2, routes: 3, ownRoutes: 3 },
     ];
-    await api.deleteCatalogueItems({ productIds: [], categoryIds: ["f"] }, "delete", shown);
+    await api.deleteProductItems({ productIds: [], categoryIds: ["f"] }, "delete", shown);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/folders/delete",
       expect.objectContaining({
@@ -535,24 +535,24 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("listCatalogues GETs the catalogues with credentials", async () => {
-    const catalogues = [{ id: "c1", name: "Lunch", active: true, version: 1 }];
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(catalogues));
+  it("listMenus GETs the menus with credentials", async () => {
+    const menus = [{ id: "c1", name: "Lunch", active: true, version: 1 }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(menus));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.listCatalogues()).toEqual(catalogues);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues", {
+    expect(await api.listMenus()).toEqual(menus);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/menus", {
       method: "GET",
       credentials: "include",
       signal: expect.any(AbortSignal),
     });
   });
 
-  it("createCatalogue POSTs the name and returns the created catalogue", async () => {
+  it("createMenu POSTs the name and returns the created menu", async () => {
     const created = { id: "c2", name: "Dinner", active: true, version: 1 };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createCatalogue("Dinner")).toEqual(created);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues", {
+    expect(await api.createMenu("Dinner")).toEqual(created);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/menus", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
@@ -560,12 +560,12 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("duplicateCatalogue POSTs the copy's name to the menu's duplicate route and returns the copy", async () => {
+  it("duplicateMenu POSTs the copy's name to the menu's duplicate route and returns the copy", async () => {
     const copy = { id: "c3", name: "Dinner (copy)", active: true, version: 1 };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(copy, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.duplicateCatalogue("c2", "Dinner (copy)")).toEqual(copy);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues/c2/duplicate", {
+    expect(await api.duplicateMenu("c2", "Dinner (copy)")).toEqual(copy);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/menus/c2/duplicate", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
@@ -573,15 +573,15 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("setVenueDefaultCatalogue PUTs the venue's default catalogueId", async () => {
+  it("setVenueDefaultMenu PUTs the venue's default menuId", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await api.setVenueDefaultCatalogue("c2");
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue/default-catalogue", {
+    await api.setVenueDefaultMenu("c2");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue/default-menu", {
       method: "PUT",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ catalogueId: "c2" }),
+      body: JSON.stringify({ menuId: "c2" }),
     });
   });
 
@@ -615,7 +615,7 @@ describe("DashboardApi", () => {
     const category = { id: "cat1", name: "Starters", parentId: null };
     const product = {
       id: "p1",
-      catalogueId: "menu1",
+      menuId: "menu1",
       categoryId: "cat1",
       primaryCategoryId: "cat1",
       name: "Croquettes",
@@ -699,11 +699,11 @@ describe("DashboardApi", () => {
     ]);
   });
 
-  it("listProducts GETs the addressed catalogue's products with credentials", async () => {
+  it("listProducts GETs the addressed menu's products with credentials", async () => {
     const products = [
       {
         id: "p1",
-        catalogueId: "c1",
+        menuId: "c1",
         categoryId: null,
         primaryCategoryId: null,
         name: "Black coffee",
@@ -719,7 +719,7 @@ describe("DashboardApi", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(products));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listProducts("c1")).toEqual(products);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues/c1/products", {
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/menus/c1/products", {
       method: "GET",
       credentials: "include",
       signal: expect.any(AbortSignal),
@@ -2002,7 +2002,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
 
   // ── Per-user language preference ───────────────────────────────────────────────────────────────
 
-  it("getLocales GETs the public locale catalogue and venue identity", async () => {
+  it("getLocales GETs the public locale menu and venue identity", async () => {
     const body = {
       locales: [
         { code: "es-ES", label: "Español" },

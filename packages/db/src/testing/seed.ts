@@ -23,7 +23,7 @@ import {
 } from "../venue-settings.js";
 import { readSettings, saveSettings } from "../settings.js";
 import { dayCutoverChanges } from "../schema/day-cutover-changes.js";
-import { catalogues } from "../schema/menus.js";
+import { menus } from "../schema/menus.js";
 import { createVenueSettings, saveVenueFields, readVenueSettings, type Venue } from "../venue.js";
 
 import { deviceProfileAdmissionRoles } from "../schema/identity/profile-admission.js";
@@ -106,13 +106,13 @@ export async function seedTaxpayer(db: Database | Transaction): Promise<void> {
 /** Writes the taxpayer row ({@link seedTaxpayer}) and the one venue; refuses a second venue. */
 export async function seedVenue(
   db: Database | Transaction,
-  overrides: Partial<Venue> & { defaultCatalogueId?: string | null } = {},
+  overrides: Partial<Venue> & { defaultMenuId?: string | null } = {},
 ): Promise<void> {
   const existing = await readSettings(db, VENUE_SETTINGS);
   if (existing.revision > 0) throw new Error("seedVenue: a venue document already exists");
   await seedTaxpayer(db);
   const {
-    defaultCatalogueId,
+    defaultMenuId,
     invoiceLocales,
     name,
     addressLine1,
@@ -125,13 +125,13 @@ export async function seedVenue(
     fiscalTerritory,
     operationDescription,
   } = overrides;
-  if (defaultCatalogueId !== undefined) {
-    await db.update(catalogues).set({ isDefault: false }).where(eq(catalogues.isDefault, true));
-    if (defaultCatalogueId !== null)
+  if (defaultMenuId !== undefined) {
+    await db.update(menus).set({ isDefault: false }).where(eq(menus.isDefault, true));
+    if (defaultMenuId !== null)
       await db
-        .update(catalogues)
+        .update(menus)
         .set({ isDefault: true })
-        .where(eq(catalogues.id, defaultCatalogueId));
+        .where(eq(menus.id, defaultMenuId));
   }
   const doc: Partial<VenueSettings> = {};
   for (const [key, value] of Object.entries({

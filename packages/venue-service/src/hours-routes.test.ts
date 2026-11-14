@@ -15,7 +15,7 @@ import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   departments,
   kitchenStations,
   specialDayDates,
@@ -114,7 +114,7 @@ async function fixture(): Promise<Fixture> {
       .values([{ name: "Pass" }, { name: "Grill" }])
       .returning();
     const [calendarMenu] = await tx
-      .insert(catalogues)
+      .insert(menus)
       .values({ name: `Calendar ${randomUUID()}` })
       .returning();
     const calendarPeriod = await saveMenuPeriod(tx, restaurant!.id, {
@@ -251,7 +251,7 @@ describe("reading Hours", () => {
         new Date(),
         1,
       );
-      const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
+      const [menu] = await tx.insert(menus).values({ name: randomUUID() }).returning();
       const period = await saveMenuPeriod(tx, fx.departmentIds.deli, {
         name: "Deli",
         menuId: menu!.id,

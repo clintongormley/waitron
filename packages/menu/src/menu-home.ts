@@ -53,7 +53,7 @@ export function homeDisplaysOf(row: HomeDisplayColumns): Record<HomeDevice, Home
 /** The menu's root, its Device Home Page section and both display settings. */
 async function requireMenuHome(tx: Transaction, menuId: string): Promise<HomeRow> {
   const [row] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
-  if (row === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
+  if (row === undefined) throw new AppError("menu.not_found", { menuId: menuId });
   return {
     rootSectionId: row.rootSectionId,
     homeSectionId: row.homeSectionId,

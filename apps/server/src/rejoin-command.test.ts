@@ -38,7 +38,7 @@ const base: Record<string, string | undefined> = {
 
 type OpenedVenue = { db: Database; close(): Promise<void> };
 
-// `readNodeMembership` reads the value only when the catalogue lists `node_membership`, so NO rows
+// `readNodeMembership` reads the value only when the menu lists `node_membership`, so NO rows
 // means no held document and the fake needs no query builder.
 function fakeVenue(execute?: Database["execute"]): OpenedVenue {
   return {

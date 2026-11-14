@@ -3,7 +3,7 @@ import type { DashboardApi, MenuReadPart } from "./client.js";
 
 const MENU_PUBLICATION_READS = [
   "settings.menu",
-  "catalogues",
+  "menus",
   "categories",
   "category_details",
   "settings.venue",
@@ -80,14 +80,14 @@ const TRANSLATION_READS = [
   "sections",
   "section_members",
   "menu_details",
-  "catalogues",
+  "menus",
   "units",
 ] as const;
 
 export const QUERY_DEPENDENCIES = {
   getZoneDeleteImpact: HIERARCHY_DELETE_READS,
   getDepartmentDeleteImpact: HIERARCHY_DELETE_READS,
-  getCatalogueSettings: ["settings.menu"],
+  getMenuSettings: ["settings.menu"],
   getContentLanguages: ["settings.venue"],
   getVenueTheme: ["custom_themes", "media_images"],
   listThemes: ["custom_themes"],
@@ -313,9 +313,9 @@ export const QUERY_DEPENDENCIES = {
   getStaffRoster: ["persons"],
   listPendingAbsences: ["absences"],
   listPendingSwaps: ["shift_swaps", "shifts"],
-  listCatalogues: ["catalogues"],
+  listMenus: ["menus"],
   // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
-  getMenuStructure: ["menu_details", "sections", "section_members", "catalogues"],
+  getMenuStructure: ["menu_details", "sections", "section_members", "menus"],
   // `menuPrices` (packages/menu/src/operations.ts): the structure's tables for the placements,
   // then each reached product's menu item, menu and price, and its variants' overrides.
   getMenuPrices: [
@@ -323,7 +323,7 @@ export const QUERY_DEPENDENCIES = {
     "sections",
     "section_members",
     "menu_items",
-    "catalogues",
+    "menus",
     "products",
     "menu_item_variant_overrides",
     "settings.venue",
@@ -352,7 +352,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   // `readMenuHome` (packages/menu/src/menu-home.ts): the details row, the section graph with
   // its menus, and each shortcut's name.
-  getMenuHome: ["menu_details", "sections", "section_members", "products", "catalogues"],
+  getMenuHome: ["menu_details", "sections", "section_members", "products", "menus"],
   listCategories: ["categories", "category_details"],
   getCategory: ["categories", "category_details"],
   listLibraryProducts: ["products"],
@@ -381,7 +381,7 @@ export const QUERY_DEPENDENCIES = {
     "departments",
     "sections",
     "section_members",
-    "catalogues",
+    "menus",
     "seasons",
     "department_days",
     "department_day_ranges",
@@ -557,8 +557,8 @@ export const QUERY_DEPENDENCIES = {
 export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;
 
 export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
-  "getCatalogueSettings",
-  "listCatalogues",
+  "getMenuSettings",
+  "listMenus",
   "getMenuStructure",
   "getMenuPrices",
   "getMenuHome",
@@ -640,7 +640,7 @@ function dependenciesOf<N extends DashboardQueryName>(
     return [...new Set(parts.flatMap((part) => [...reads[part]]))];
   }
   // At time of sale names each line's category from the snapshot the line recorded
-  // (`computeCategorySales`, packages/reporting/src/category-sales.ts), so no catalogue edit moves
+  // (`computeCategorySales`, packages/reporting/src/category-sales.ts), so no menu edit moves
   // it. A subset of the declared list, so `scripts/live-subscriptions.test.ts` still covers it.
   if (name === "getCategorySales" && (args as readonly unknown[])[2] === "at_time_of_sale") {
     const current: readonly string[] = CURRENT_CLASSIFICATION_READS;

@@ -16,20 +16,20 @@ import {
 } from "@waitron/shared";
 import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
-  moveCatalogueItems,
-  deleteCatalogueItems,
+  moveProductItems,
+  deleteProductItems,
   summariseFolders,
   menusHolding,
-  type CatalogueSelection,
+  type ProductSelection,
   type FolderContents,
   type ShownFolderCounts,
-  catalogueExists,
-  readCatalogueSettings,
-  saveCatalogueDefaultColor,
+  menuExists,
+  readMenuSettings,
+  saveMenuDefaultColor,
   readContentLanguages,
   listTranslationGapCounts,
   writeContentLanguages,
-  createCatalogue,
+  createMenu,
   duplicateMenu,
   createCategory,
   readCategory,
@@ -62,7 +62,7 @@ import {
   type IncludeFolderInput,
   type CategoryInput,
   createProduct,
-  listCatalogues,
+  listMenus,
   listCategories,
   menuPrices,
   menuStatus,
@@ -90,7 +90,7 @@ import {
   extraListDependants,
   extraOfferUsageForUnitChange,
   listProducts,
-  setVenueDefaultCatalogue,
+  setVenueDefaultMenu,
   updateMenuDetails,
   updateMenuItem,
   listMenuVariants,
@@ -118,8 +118,8 @@ import { setProductCourse } from "./kitchen.js";
 import type { Logger } from "./logger.js";
 import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
 
-/** Catalogue and content-language routes. One taxpayer per database, so nothing filters by one. */
-export interface CatalogueApiDeps {
+/** Menu and content-language routes. One taxpayer per database, so nothing filters by one. */
+export interface MenuApiDeps {
   managementOrigin?: string;
   /** The content languages the venue must keep; none when absent. */
   contentLanguageRules?: ContentLanguageRules;
@@ -127,8 +127,8 @@ export interface CatalogueApiDeps {
   venueLocale?: string;
 }
 
-/** The one permission that gates every `/management-api` catalogue route. */
-const CATALOGUE_WRITE_PERMISSION: Permission = "catalogue.manage";
+/** The one permission that gates every `/management-api` menu route. */
+const MENU_WRITE_PERMISSION: Permission = "menu.manage";
 
 const NO_CONTENT_LANGUAGE_RULES: ContentLanguageRules = { required: [], official: [] };
 
@@ -154,7 +154,7 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
   return result;
 }
 
-/** A section's, a menu's or an include folder's presentation body, shape only: the catalogue
+/** A section's, a menu's or an include folder's presentation body, shape only: the menu
  * function each route hands it to checks the values. */
 function sectionInput(body: Record<string, unknown>, creating: true): SectionInput;
 function sectionInput(body: Record<string, unknown>, creating: false): SectionPatch;
@@ -244,7 +244,7 @@ function sectionIdsBody(value: unknown): string[] {
   return ids;
 }
 
-function selectionBody(body: Record<string, unknown>): CatalogueSelection {
+function selectionBody(body: Record<string, unknown>): ProductSelection {
   const ids = (field: "productIds" | "categoryIds", kind: string): string[] => {
     const list = idList(body[field], field, kind);
     if (new Set(list).size !== list.length)
@@ -306,12 +306,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
-  // Raised by the `decimal()` inside the catalogue writes' `stringToCents`, not by this file:
+  // Raised by the `decimal()` inside the menu writes' `stringToCents`, not by this file:
   // `refuseNegativePrice` swallows its own `decimal()` throw.
   "shared.invalid_decimal": 400,
   // Raised by the op's `decimalToCents`, not by this file's screens.
   "shared.decimal_overflow": 400,
-  "catalogue.not_found": 404,
+  "menu.not_found": 404,
   "menu.name_taken": 409,
   "category.not_found": 404,
   "category.invalid": 400,
@@ -370,17 +370,17 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "product.on_live_menu": 409,
 };
 
-const run = createErrorBoundary(STATUS, "catalogue.failed");
+const run = createErrorBoundary(STATUS, "menu.failed");
 /** For a route where these codes can only name an id the request body sent, never its path
  * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
 const runBodyIds = (...codes: string[]) =>
   createErrorBoundary(
     { ...STATUS, ...Object.fromEntries(codes.map((code) => [code, 400] as const)) },
-    "catalogue.failed",
+    "menu.failed",
   );
-// A product create names its catalogue and its category in the body.
-const runCreateProduct = runBodyIds("catalogue.not_found", "category.not_found");
-const runBodyMenu = runBodyIds("catalogue.not_found");
+// A product create names its menu and its category in the body.
+const runCreateProduct = runBodyIds("menu.not_found", "category.not_found");
+const runBodyMenu = runBodyIds("menu.not_found");
 const runBodyCategory = runBodyIds("category.not_found");
 // A folder move or delete names its products and folders in the body.
 const runFolder = runBodyIds("category.not_found", "product.not_found");
@@ -389,7 +389,7 @@ const runBodySection = runBodyIds("menu_section.not_found");
 // PUT names variants in its body, and an unknown one there stays a 400.
 const runVariant = createErrorBoundary(
   { ...STATUS, "product.variant_not_found": 404 },
-  "catalogue.failed",
+  "menu.failed",
 );
 
 /**
@@ -402,7 +402,7 @@ function requireUuidParam(id: string, kind: string): string {
 }
 
 /**
- * Refuse a negative CATALOGUE price. Scoped to the catalogue deliberately: a corrective invoice's
+ * Refuse a negative MENU price. Scoped to the menu deliberately: a corrective invoice's
  * totals are negative on purpose, so "a price is never negative" is only true of prices this file
  * writes.
  *
@@ -440,19 +440,19 @@ function parseMenuVariants(value: unknown): MenuVariant[] {
   });
 }
 
-/** A SHAPE screen only; the venue menu-list writes check that the id names a catalogue. */
-async function requireCatalogueIdBody(c: Context): Promise<string> {
-  const body = await readJsonBody<{ catalogueId?: unknown }>(c);
-  if (typeof body.catalogueId !== "string") {
-    throw new AppError("management.request_invalid", { field: "catalogueId" });
+/** A SHAPE screen only; the venue menu-list writes check that the id names a menu. */
+async function requireMenuIdBody(c: Context): Promise<string> {
+  const body = await readJsonBody<{ menuId?: unknown }>(c);
+  if (typeof body.menuId !== "string") {
+    throw new AppError("management.request_invalid", { field: "menuId" });
   }
-  return requireUuidParam(body.catalogueId, "CatalogueId");
+  return requireUuidParam(body.menuId, "MenuId");
 }
 
-/** A read filtered by an absent catalogue would answer an empty list rather than name it. */
-async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Promise<void> {
-  if (!(await catalogueExists(tx, catalogueId))) {
-    throw new AppError("catalogue.not_found", { catalogueId });
+/** A read filtered by an absent menu would answer an empty list rather than name it. */
+async function assertMenuVisible(tx: Transaction, menuId: string): Promise<void> {
+  if (!(await menuExists(tx, menuId))) {
+    throw new AppError("menu.not_found", { menuId });
   }
 }
 
@@ -720,7 +720,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
 /** A menu's Device Home Page. A shortcut is a member of the menu's home section, but shortcuts
  * have their own routes: the generic member routes refuse every write into that section. */
 function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
-  const home = "/management-api/catalogues/:id/home";
+  const home = "/management-api/menus/:id/home";
   const shortcuts = `${home}/shortcuts` as const;
   const shortcut = `${shortcuts}/:memberId` as const;
   const menuId = (c: Context) => requireUuidParam(c.req.param("id")!, "MenuId");
@@ -733,7 +733,7 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       return c.json(await gated(c, session, (tx) => readMenuHome(tx, menu)));
     }),
   );
-  app.patch("/management-api/catalogues/:id/home-display", (c) =>
+  app.patch("/management-api/menus/:id/home-display", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const menu = menuId(c);
@@ -790,7 +790,7 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
 }
 
 export function translationContextFor(
-  deps: Pick<CatalogueApiDeps, "venueLocale" | "contentLanguageRules">,
+  deps: Pick<MenuApiDeps, "venueLocale" | "contentLanguageRules">,
 ): TranslationContext {
   return {
     fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
@@ -798,14 +798,14 @@ export function translationContextFor(
   };
 }
 
-export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
+export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
   const epoch = crypto.randomUUID();
   let sequence = 0;
   const gated: GatedWork = (c, sessionId, fn) =>
     withTransaction(deps.db, async (tx) => {
       const { authorizedBy } = await authorizeManager(tx, {
         managementSessionId: sessionId,
-        permission: CATALOGUE_WRITE_PERMISSION,
+        permission: MENU_WRITE_PERMISSION,
       });
       const result = await fn(tx, authorizedBy);
       if (c.req.method !== "GET") sequence++;
@@ -813,13 +813,13 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return result;
     });
 
-  app.get("/management-api/catalogue-settings", (c) =>
+  app.get("/management-api/menu-settings", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      return c.json(await gated(c, sessionId, (tx) => readCatalogueSettings(tx)));
+      return c.json(await gated(c, sessionId, (tx) => readMenuSettings(tx)));
     }),
   );
-  app.put("/management-api/catalogue-settings/default-color", (c) =>
+  app.put("/management-api/menu-settings/default-color", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<{ color?: unknown }>(c);
@@ -827,7 +827,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "color" });
       return c.json(
         await gated(c, sessionId, (tx, personId) =>
-          saveCatalogueDefaultColor(tx, body.color, personId),
+          saveMenuDefaultColor(tx, body.color, personId),
         ),
       );
     }),
@@ -958,16 +958,16 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.get("/management-api/catalogues", (c) =>
+  app.get("/management-api/menus", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(c, sessionId, (tx) => listCatalogues(tx));
+      const rows = await gated(c, sessionId, (tx) => listMenus(tx));
       return c.json(rows);
     }),
   );
 
   // One request for every menu's status, so the menus list does not ask once per row.
-  app.get("/management-api/catalogues/status", (c) =>
+  app.get("/management-api/menus/status", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const status = await gated(c, sessionId, (tx) => menuStatus(tx));
@@ -975,7 +975,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.post("/management-api/catalogues", (c) =>
+  app.post("/management-api/menus", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -983,7 +983,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
       const presentation = sectionInput({ ...body, internalName: name }, true);
       const created = await gated(c, sessionId, (tx) =>
-        createCatalogue(tx, {
+        createMenu(tx, {
           name,
           names: presentation.names,
           image: presentation.image,
@@ -994,7 +994,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.post("/management-api/catalogues/:id/duplicate", (c) =>
+  app.post("/management-api/menus/:id/duplicate", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1006,16 +1006,16 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.patch("/management-api/catalogues/:id", (c) =>
+  app.patch("/management-api/menus/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const body = await readJsonBody<Record<string, unknown>>(c);
       const presentation = sectionInput({ ...body, internalName: body.name }, false);
       if (presentation.internalName !== undefined && presentation.internalName.trim() === "")
         throw new AppError("management.request_invalid", { field: "name" });
       await gated(c, sessionId, (tx) =>
-        updateMenuDetails(tx, catalogueId, {
+        updateMenuDetails(tx, menuId, {
           name: presentation.internalName,
           names: presentation.names,
           image: presentation.image,
@@ -1026,7 +1026,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.get("/management-api/catalogues/:id/read", (c) =>
+  app.get("/management-api/menus/:id/read", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1046,7 +1046,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             if (part === "preview") return c.json(await previewMenu(tx, menuId));
             const status = (await menuStatus(tx, [menuId])).get(menuId);
             if (status === undefined)
-              throw new AppError("catalogue.not_found", { catalogueId: menuId });
+              throw new AppError("menu.not_found", { menuId: menuId });
             return c.json(status);
           });
           responses[part] = { status: response.status, body: await response.json() };
@@ -1057,7 +1057,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.get("/management-api/catalogues/:id/structure", (c) =>
+  app.get("/management-api/menus/:id/structure", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1065,7 +1065,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.get("/management-api/catalogues/:id/prices", (c) =>
+  app.get("/management-api/menus/:id/prices", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1073,19 +1073,19 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.get("/management-api/catalogues/:id/status", (c) =>
+  app.get("/management-api/menus/:id/status", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const status = await gated(c, sessionId, async (tx) =>
         (await menuStatus(tx, [menuId])).get(menuId),
       );
-      if (status === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
+      if (status === undefined) throw new AppError("menu.not_found", { menuId: menuId });
       return c.json(status);
     }),
   );
 
-  app.get("/management-api/catalogues/:id/preview", (c) =>
+  app.get("/management-api/menus/:id/preview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1093,7 +1093,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.post("/management-api/catalogues/:id/publish", (c) =>
+  app.post("/management-api/menus/:id/publish", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1107,7 +1107,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.get("/management-api/catalogues/:id/live", (c) =>
+  app.get("/management-api/menus/:id/live", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1115,7 +1115,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.post("/management-api/catalogues/:id/patch", (c) =>
+  app.post("/management-api/menus/:id/patch", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1140,7 +1140,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   const venueTimeZone = async (tx: Transaction): Promise<string> =>
     (await readVenueClock(tx)).timeZone;
 
-  app.post("/management-api/catalogues/:id/publications", (c) =>
+  app.post("/management-api/menus/:id/publications", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1154,13 +1154,13 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.get("/management-api/catalogues/:id/publications", (c) =>
+  app.get("/management-api/menus/:id/publications", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const answer = await gated(c, sessionId, async (tx): Promise<MenuPublicationsAnswer> => {
-        if (!(await catalogueExists(tx, menuId)))
-          throw new AppError("catalogue.not_found", { catalogueId: menuId });
+        if (!(await menuExists(tx, menuId)))
+          throw new AppError("menu.not_found", { menuId: menuId });
         const timeZone = checkedTimeZone(await venueTimeZone(tx));
         const { live, editions } = await listMenuPublications(tx, menuId);
         return {
@@ -1177,7 +1177,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.patch("/management-api/catalogues/:id/publications/:versionId", (c) =>
+  app.patch("/management-api/menus/:id/publications/:versionId", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1191,7 +1191,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.post("/management-api/catalogues/:id/publications/:versionId/cancel", (c) =>
+  app.post("/management-api/menus/:id/publications/:versionId/cancel", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1203,7 +1203,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.patch("/management-api/catalogues/:id/items/:itemId", (c) =>
+  app.patch("/management-api/menus/:id/items/:itemId", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1231,7 +1231,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.get("/management-api/catalogues/:id/items/:itemId/variants", (c) =>
+  app.get("/management-api/menus/:id/items/:itemId/variants", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1240,7 +1240,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.put("/management-api/catalogues/:id/items/:itemId/variants", (c) =>
+  app.put("/management-api/menus/:id/items/:itemId/variants", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1253,7 +1253,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.patch("/management-api/catalogues/:id/items/:itemId/variants/:variantId", (c) =>
+  app.patch("/management-api/menus/:id/items/:itemId/variants/:variantId", (c) =>
     runVariant(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1272,11 +1272,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
-  app.put("/management-api/venue/default-catalogue", (c) =>
+  app.put("/management-api/venue/default-menu", (c) =>
     runBodyMenu(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const catalogueId = await requireCatalogueIdBody(c);
-      await gated(c, sessionId, (tx) => setVenueDefaultCatalogue(tx, catalogueId));
+      const menuId = await requireMenuIdBody(c);
+      await gated(c, sessionId, (tx) => setVenueDefaultMenu(tx, menuId));
       return c.body(null, 204);
     }),
   );
@@ -1305,7 +1305,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<Record<string, unknown>>(c);
       const selection = selectionBody(body);
       const to = nullOrUuid(body.to, "to");
-      await gated(c, session, (tx) => moveCatalogueItems(tx, selection, to));
+      await gated(c, session, (tx) => moveProductItems(tx, selection, to));
       return c.body(null, 204);
     }),
   );
@@ -1320,7 +1320,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const shown = selection.categoryIds.length
         ? shownBody(body.shown, selection.categoryIds)
         : undefined;
-      await gated(c, session, (tx) => deleteCatalogueItems(tx, selection, contents, shown));
+      await gated(c, session, (tx) => deleteProductItems(tx, selection, contents, shown));
       return c.body(null, 204);
     }),
   );
@@ -1360,29 +1360,29 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.json({ menus: await gated(c, session, (tx) => menusHolding(tx, ids)) });
     }),
   );
-  app.get("/management-api/catalogues/:id/products", (c) =>
+  app.get("/management-api/menus/:id/products", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const rows = await gated(c, sessionId, async (tx) => {
-        await assertCatalogueVisible(tx, catalogueId);
-        return listProducts(tx, catalogueId);
+        await assertMenuVisible(tx, menuId);
+        return listProducts(tx, menuId);
       });
       return c.json(rows);
     }),
   );
 
-  app.post("/management-api/catalogues/:id/product-editor", (c) =>
+  app.post("/management-api/menus/:id/product-editor", (c) =>
     runBodyCategory(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const body = await readJsonBody<Record<string, unknown>>(c);
       const routing = screenRouting(body);
       const saved = await gated(c, sessionId, async (tx) => {
         const product = await saveProductEditor(
           tx,
           null,
-          catalogueId,
+          menuId,
           body,
           deps.venueLocale ?? FALLBACK_LOCALE,
         );
@@ -1439,7 +1439,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       // `allergens` is left to `createProduct`, which throws the authoritative `allergen.*` codes.
       const body = await readJsonBody<{
-        catalogueId?: unknown;
+        menuId?: unknown;
         categoryId?: unknown;
         name?: unknown;
         customerName?: unknown;
@@ -1459,8 +1459,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         modifierIds?: unknown;
         optionGroupIds?: unknown;
       }>(c);
-      if (typeof body.catalogueId !== "string") {
-        throw new AppError("management.request_invalid", { field: "catalogueId" });
+      if (typeof body.menuId !== "string") {
+        throw new AppError("management.request_invalid", { field: "menuId" });
       }
       if (typeof body.categoryId !== "string" && body.categoryId !== null) {
         throw new AppError("management.request_invalid", { field: "categoryId" });
@@ -1502,7 +1502,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       refuseRetiredFields(body);
       const modifiers = parseProductModifiers(body.modifiers);
       const input = {
-        catalogueId: body.catalogueId,
+        menuId: body.menuId,
         categoryId: body.categoryId,
         name: body.name.trim(),
         customerName,

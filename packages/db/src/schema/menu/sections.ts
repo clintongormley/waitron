@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { catalogues, products } from "../menus.js";
+import { menus, products } from "../menus.js";
 import { count, enumCheck, enumType, flag, id, json, label, newId, table } from "../columns.js";
 import type { IncludeFolderOverrides, SectionRole } from "@waitron/shared";
 
@@ -31,7 +31,7 @@ export const sections = table(
   (t) => [
     foreignKey({
       columns: [t.ownerMenuId],
-      foreignColumns: [catalogues.id],
+      foreignColumns: [menus.id],
       name: "sections_owner_menu_fk",
     }),
     check("sections_role_ck", enumCheck(t.role)),

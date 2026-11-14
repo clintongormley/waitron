@@ -466,7 +466,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **Rewriting rows one at a time inside a transaction can break a unique index the FINAL state
   satisfies.** Replacing the set — delete then insert — needs the `REFERENCES` grep first:
   nothing outside the table may hold a key into it.
-- **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
+- **Resolve shared menu data once before a basket's line loop.** Never await a zone, product or
   variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
   per-line resolver).
 - **A write of a table `scripts/write-path-tables.json` lists lives only in the files that

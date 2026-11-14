@@ -17,8 +17,8 @@ import type { NodeId, SeriesId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "../src/operations.js";
@@ -75,18 +75,18 @@ export async function plantStoredSiblingCategory(
 }
 
 /** Writes an Active product, or a variant of `parentId`, straight into its table, past every
- * product path, with the name columns a catalogue write sets: how a test sets up two Active rows
+ * product path, with the name columns a menu write sets: how a test sets up two Active rows
  * that already share a staff name. */
 export async function plantStoredProduct(
   tx: Transaction,
-  catalogueId: string,
+  menuId: string,
   name: string,
   parentId: string | null = null,
 ): Promise<string> {
   const [row] = await tx
     .insert(products)
     .values({
-      catalogueId,
+      menuId,
       ...nameColumns(name),
       parentId,
       ...(parentId === null
@@ -143,15 +143,15 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
   return { nodeId, seriesId };
 }
 
-export interface SeededCatalogue {
-  catalogueId: string;
+export interface SeededMenu {
+  menuId: string;
   categoryIds: { food: string; drinks: string };
   /** The `each`-priced product and the `weight`-priced product, keyed by pricing unit. */
   productIds: { each: string; weight: string };
 }
 
-export async function seedCatalogueFixture(tx: Transaction): Promise<SeededCatalogue> {
-  const catalogue = await createCatalogue(tx, { name: "Deli" });
+export async function seedMenuFixture(tx: Transaction): Promise<SeededMenu> {
+  const menu = await createMenu(tx, { name: "Deli" });
   const food = await createCategory(tx, { name: "Food" });
   const drinks = await createCategory(tx, { name: "Drinks" });
   const eachUnitId = (
@@ -181,7 +181,7 @@ export async function seedCatalogueFixture(tx: Transaction): Promise<SeededCatal
     )
   ).id;
   const slicedHam = await createProduct(tx, {
-    catalogueId: catalogue.id,
+    menuId: menu.id,
     categoryId: food.id,
     name: "sliced ham",
     unitId: kgUnitId,
@@ -189,23 +189,23 @@ export async function seedCatalogueFixture(tx: Transaction): Promise<SeededCatal
     vatClass: "reduced",
   });
   const water = await createProduct(tx, {
-    catalogueId: catalogue.id,
+    menuId: menu.id,
     categoryId: drinks.id,
     name: "water",
     unitId: eachUnitId,
     unitPrice: "1.50",
     vatClass: "general",
   });
-  await assignCatalogueToVenue(tx, catalogue.id);
+  await assignMenuToVenue(tx, menu.id);
   return {
-    catalogueId: catalogue.id,
+    menuId: menu.id,
     categoryIds: { food: food.id, drinks: drinks.id },
     productIds: { each: water.id, weight: slicedHam.id },
   };
 }
 
 /** The migrated database, emptied between tests by `useVenueDb`. */
-export function useCatalogueDb(): { readonly db: Database } {
+export function useMenuDb(): { readonly db: Database } {
   return useVenueDb({ migrations: [CORE_MIGRATIONS] });
 }
 

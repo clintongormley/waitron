@@ -1,7 +1,7 @@
 import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { createMenu, createProduct } from "./operations.js";
 import { createExtraList, deleteExtraList } from "./extras.js";
 import { createOptionList, deleteOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
@@ -26,11 +26,11 @@ let topping = "";
 
 beforeEach(async () => {
   await withTransaction(suite.db, async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: "Deli" });
+    const menu = await createMenu(tx, { name: "Deli" });
     const make = async (name: string, unitPrice: string) =>
       (
         await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: null,
           name,
           unitId: null,

@@ -674,7 +674,7 @@ it("says in Spanish that the special day has no dates", async () => {
       areas: specialDayStaffing().areas.map((area) => ({ ...area, dates: [] })),
     }),
   });
-  // Read from the catalogue: its word for dates is on the English-only list.
+  // Read from the menu: its word for dates is on the English-only list.
   const text = byTest(painter, "no-dates")!.textContent;
   expect(text).toBe(STAFFING_STRINGS.es["staffing.painter.no_dates"]);
   expect(text).not.toBe(STAFFING_STRINGS.en["staffing.painter.no_dates"]);

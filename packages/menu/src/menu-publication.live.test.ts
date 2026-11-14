@@ -1,22 +1,22 @@
 import { afterEach, expect, it } from "vitest";
 import { installChangeFeed, subscribeToChanges, withTransaction } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
-import { CATALOGUE_CHANGE_SOURCES } from "./classification.js";
+import { MENU_CHANGE_SOURCES } from "./classification.js";
 import { previewMenu, publishMenu } from "./menu-publication.js";
 import { activateDueMenuPublications, queueMenuPublication } from "./menu-schedule.js";
 import { updateProduct } from "./operations.js";
 
 // A file of its own: the triggers `installChangeFeed` puts on the suite's database stay there for
 // every later test in the file.
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 
 let unsubscribe = (): void => {};
 afterEach(() => unsubscribe());
 
 it("announces a publish to live subscribers, so another tab's menu status refreshes", async () => {
   const f = await menusFixture(fx.db);
-  await installChangeFeed(fx.db, CATALOGUE_CHANGE_SOURCES);
+  await installChangeFeed(fx.db, MENU_CHANGE_SOURCES);
   const types = new Set<string>();
   unsubscribe = subscribeToChanges((change) => {
     for (const resource of change.resources) types.add(resource.type);
@@ -30,7 +30,7 @@ it("announces a publish to live subscribers, so another tab's menu status refres
 
 it("announces an activation to live subscribers, so a menu that went live by schedule refreshes", async () => {
   const f = await menusFixture(fx.db);
-  await installChangeFeed(fx.db, CATALOGUE_CHANGE_SOURCES);
+  await installChangeFeed(fx.db, MENU_CHANGE_SOURCES);
   const queuedAt = new Date("2026-10-07T08:00:00.000Z");
   const activatesAt = new Date("2026-10-08T06:00:00.000Z");
   const first = await withTransaction(fx.db, (tx) => previewMenu(tx, f.lunch));

@@ -373,7 +373,7 @@ export type {
   MenuPriceVariant,
   MenuPriceRow,
   AvailableProduct,
-  AccessibleCatalogue,
+  AccessibleMenu,
   OfferedExtraItem,
   OfferedExtrasList,
   OfferedOptionsList,

@@ -238,14 +238,14 @@ describe("provisionVenue", () => {
     }
     expect(result.seriesIds).toHaveLength(3);
     expect(result.seeded.map((s) => s.module)).toEqual([
-      "catalogue",
+      "menu",
       "venue-service",
       "fiscal-verifactu",
       "adjustments",
     ]);
     const defaults = await db.execute<{ menus: number; periods: number; slots: number }>(sql`
       select
-        (select cast(count(*) as int) from catalogues) as menus,
+        (select cast(count(*) as int) from menus) as menus,
         (select cast(count(*) as int) from menu_periods p
           join departments d on d.id = p.department_id
           ) as periods,
@@ -275,7 +275,7 @@ describe("provisionVenue", () => {
     );
 
     expect(result.seeded.map((s) => s.module)).toEqual([
-      "catalogue",
+      "menu",
       "venue-service",
       "adjustments",
     ]);

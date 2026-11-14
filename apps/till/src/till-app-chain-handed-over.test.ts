@@ -33,8 +33,8 @@ const product: TillProduct = {
   vatClass: "general",
   category: null,
   allergens: null,
-  catalogueId: "cat-default",
-  catalogueName: "Drinks",
+  menuId: "cat-default",
+  menuName: "Drinks",
 };
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;

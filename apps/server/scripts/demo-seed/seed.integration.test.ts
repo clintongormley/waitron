@@ -188,8 +188,8 @@ describe("demo seed end-to-end", () => {
       });
     }
 
-    const casaProducts = read.products.filter((p) => p.catalogueName === "Casa Delgado");
-    const diaProducts = read.products.filter((p) => p.catalogueName === "Set lunch");
+    const casaProducts = read.products.filter((p) => p.menuName === "Casa Delgado");
+    const diaProducts = read.products.filter((p) => p.menuName === "Set lunch");
     expect(casaProducts.length).toBeGreaterThan(0);
     expect(diaProducts.length).toBeGreaterThan(0);
 
@@ -224,12 +224,12 @@ describe("demo seed end-to-end", () => {
         .select({ zoneId: floorZones.id })
         .from(floorZones)
         .where(and(eq(floorZones.isCounterDefault, true)));
-      const offerOf = async (product: { id: string; catalogueId: string }) => {
+      const offerOf = async (product: { id: string; menuId: string }) => {
         const [item] = await tx
           .select({ id: menuItems.id })
           .from(menuItems)
           .where(
-            and(eq(menuItems.menuId, product.catalogueId), eq(menuItems.productId, product.id)),
+            and(eq(menuItems.menuId, product.menuId), eq(menuItems.productId, product.id)),
           );
         return item!.id;
       };

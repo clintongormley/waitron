@@ -1032,7 +1032,7 @@ describe("till-menu-browser", () => {
       product(key, name, {
         menuItemId: `mi-${menu}-${key}`,
         menuVersionId: `v-${menu}`,
-        catalogueId: `menu-${menu}`,
+        menuId: `menu-${menu}`,
         ...extra,
       });
     const memberOn = (menu: "drinks" | "brunch", key: string): DocumentMember => ({
@@ -3091,8 +3091,8 @@ describe("A461 current-menu mixed search", () => {
 });
 
 describe("A461 served-menu section search", () => {
-  const espresso = product("espresso", "Espresso", { catalogueId: "other", unitPrice: "7.00" });
-  const cake = product("cake", "Coffee cake", { catalogueId: "other" });
+  const espresso = product("espresso", "Espresso", { menuId: "other", unitPrice: "7.00" });
+  const cake = product("cake", "Coffee cake", { menuId: "other" });
   const current = lunch({ structure: { members: [member("cafe")] }, ...withShortcuts([]) });
   const first = section("copy", "internal", { en: "Coffee first" }, [member("espresso")]);
   const second = section("copy", "internal", { en: "Coffee second" }, [member("cake")]);

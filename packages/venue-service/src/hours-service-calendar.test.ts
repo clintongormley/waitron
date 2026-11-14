@@ -2,7 +2,7 @@ import { rangeDates } from "./hours-rules.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, catalogues, departments, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, menus, departments, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { calendarDays } from "./hours.js";
@@ -38,7 +38,7 @@ async function fixture() {
         },
       ])
       .returning();
-    const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
+    const [menu] = await tx.insert(menus).values({ name: randomUUID() }).returning();
     const period = await saveMenuPeriod(tx, department!.id, {
       name: "Late",
       menuId: menu!.id,
@@ -122,7 +122,7 @@ describe("calendar follows department service periods", () => {
       const seasonId = (name: string) => seasons.find((season) => season.name === name)!.id;
       const lunch = await saveMenuPeriod(tx, f.department, {
         name: "Lunch",
-        menuId: (await tx.select().from(catalogues))[0]!.id,
+        menuId: (await tx.select().from(menus))[0]!.id,
         staffMenuIds: [],
       });
       const monday = (slots: readonly { periodId: string; startsAt: string; endsAt: string }[]) =>

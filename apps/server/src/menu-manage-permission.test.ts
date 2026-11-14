@@ -8,11 +8,11 @@ import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import { mountCatalogueApi } from "./menu-api.js";
+import { mountMenuApi } from "./menu-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import "./errors.js";
 
-// Every role holding `catalogue.manage` also holds `person.manage`, so no real person holds one
+// Every role holding `menu.manage` also holds `person.manage`, so no real person holds one
 // without the other: `authorizeManager` is wrapped to refuse whatever `gate.withheld` names.
 const gate = vi.hoisted(() => ({ withheld: null as string | null }));
 vi.mock("@waitron/identity", async (importOriginal) => {
@@ -70,7 +70,7 @@ const writes: [label: string, path: string, method: string, body: unknown][] = [
 
 function send(path: string, method: string, body: unknown) {
   const app = new Hono();
-  mountCatalogueApi(app, { db: suite.db, venueLocale: "en-GB" }, log);
+  mountMenuApi(app, { db: suite.db, venueLocale: "en-GB" }, log);
   mountUnitsApi(app, { db: suite.db, venueLocale: "en-GB" }, log);
   return app.request(path, {
     method,
@@ -79,21 +79,21 @@ function send(path: string, method: string, body: unknown) {
   });
 }
 
-describe("catalogue.manage gates the catalogue and units writes", () => {
+describe("menu.manage gates the menu and units writes", () => {
   it.each(writes)(
     "refuses %s to a session holding person.manage only",
     async (_l, path, method, body) => {
-      gate.withheld = "catalogue.manage";
+      gate.withheld = "menu.manage";
       const response = await send(path, method, body);
       expect(response.status).toBe(403);
       expect(await response.json()).toEqual({
-        error: { code: "authorization.not_permitted", params: { permission: "catalogue.manage" } },
+        error: { code: "authorization.not_permitted", params: { permission: "menu.manage" } },
       });
     },
   );
 
   it.each(writes)(
-    "serves %s to a session holding catalogue.manage only",
+    "serves %s to a session holding menu.manage only",
     async (_l, path, method, body) => {
       gate.withheld = "person.manage";
       const response = await send(path, method, body);

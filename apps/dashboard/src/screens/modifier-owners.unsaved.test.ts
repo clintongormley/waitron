@@ -18,11 +18,11 @@ afterEach(() => {
 class ModifierOwnersApp extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
-  catalogue = false;
+  menu = false;
   override render() {
     return html`${
-      this.catalogue
-        ? html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`
+      this.menu
+        ? html`<dashboard-products-screen .api=${this.api}></dashboard-products-screen>`
         : html`<dashboard-modifiers-screen .api=${this.api}></dashboard-modifiers-screen>`
     }${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
@@ -30,9 +30,9 @@ class ModifierOwnersApp extends LitElement {
 customElements.define("modifier-owners-leave-test-app", ModifierOwnersApp);
 function api(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const client = {
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
-    listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+    listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
     listCategories: async () => [],
     listUnits: async () => [],
     listExtraLists: async () => [
@@ -128,17 +128,17 @@ for (const kind of ["extras", "options"] as const) {
       }
       const { el: app } = await mountWidget<ModifierOwnersApp>("modifier-owners-leave-test-app", {
         api: client,
-        catalogue: related,
+        menu: related,
       });
       let product: ProductEditor | undefined;
       const screen = app.shadowRoot!.querySelector(
-        related ? "dashboard-catalogue-screen" : "dashboard-modifiers-screen",
+        related ? "dashboard-products-screen" : "dashboard-modifiers-screen",
       )!;
       if (related) {
         await vi.waitFor(() =>
-          expect(screen.shadowRoot!.querySelector("dashboard-catalogue-browser")).not.toBeNull(),
+          expect(screen.shadowRoot!.querySelector("dashboard-product-browser")).not.toBeNull(),
         );
-        screen.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
+        screen.shadowRoot!.querySelector("dashboard-product-browser")!.dispatchEvent(
           new CustomEvent("add-product", {
             detail: { categoryId: null },
             bubbles: true,
@@ -237,13 +237,13 @@ for (const kind of ["extras", "options"] as const) {
   it(`dirty Related ${kind} blocks leaving a clean Product`, async () => {
     const { el: app } = await mountWidget<ModifierOwnersApp>("modifier-owners-leave-test-app", {
       api: api(),
-      catalogue: true,
+      menu: true,
     });
-    const screen = app.shadowRoot!.querySelector("dashboard-catalogue-screen")!;
+    const screen = app.shadowRoot!.querySelector("dashboard-products-screen")!;
     await vi.waitFor(() =>
-      expect(screen.shadowRoot!.querySelector("dashboard-catalogue-browser")).not.toBeNull(),
+      expect(screen.shadowRoot!.querySelector("dashboard-product-browser")).not.toBeNull(),
     );
-    screen.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
+    screen.shadowRoot!.querySelector("dashboard-product-browser")!.dispatchEvent(
       new CustomEvent("add-product", {
         detail: { categoryId: null },
         bubbles: true,

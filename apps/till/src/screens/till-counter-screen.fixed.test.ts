@@ -15,7 +15,7 @@ afterEach(() => {
 
 const dish: TillProduct = {
   id: "croquetas",
-  catalogueId: "lunch",
+  menuId: "lunch",
   name: "Croquetas",
   customerName: { es: "Croquetas del cliente" },
   pricingUnit: "each",

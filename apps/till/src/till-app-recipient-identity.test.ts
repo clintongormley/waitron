@@ -22,7 +22,7 @@ import type {
   TabLine,
   TabLines,
   TillProduct,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 beforeEach(() => {
   setLocale("en");
@@ -32,7 +32,7 @@ afterEach(cleanupWidgets);
 const product = (id: string, name: string, unitPrice: string): TillProduct => ({
   id,
   menuItemId: `mi-${id}`,
-  catalogueId: "cat-default",
+  menuId: "cat-default",
   name,
   pricingUnit: "each",
   unitPrice,
@@ -126,14 +126,14 @@ async function placeCounter(overrides: Record<string, unknown> = {}) {
     const item = line.product!;
     return {
       ...menuOffer(item.menuItemId!, item.name),
-      menuId: item.catalogueId!,
+      menuId: item.menuId!,
       productId: item.id,
       unitPrice: item.unitPrice,
       grossPrice: item.unitPrice,
       unit: productUnit(item),
     };
   });
-  const catalogue: ZoneOfferCatalogue = {
+  const menu: ZoneOffers = {
     ...offers,
     context: { ...offers.context, serviceMode: "ticket_then_pay" },
     menus: servedMenus(
@@ -152,8 +152,8 @@ async function placeCounter(overrides: Record<string, unknown> = {}) {
       fullInvoices: true,
       capabilities: ["print-receipt", "take-orders"],
     }),
-    listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
-    listZoneOffers: vi.fn().mockResolvedValue(catalogue),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
+    listZoneOffers: vi.fn().mockResolvedValue(menu),
     retrieveWorkingOrder: vi.fn().mockResolvedValue(heldOrder(4)),
     getTabLines: vi.fn().mockResolvedValue(listing(4)),
     getInvoiceDeliveryOptions: vi

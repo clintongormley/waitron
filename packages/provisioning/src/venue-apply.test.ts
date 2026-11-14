@@ -96,7 +96,7 @@ it("uses the explicit English working language for module starters while keeping
     db: suite.db,
     modules: ALL_MODULES,
   });
-  expect.soft(suite.db.all(sql`select name from catalogues`)).toEqual([{ name: "Menu" }]);
+  expect.soft(suite.db.all(sql`select name from menus`)).toEqual([{ name: "Menu" }]);
   expect
     .soft(
       suite.db.all(sql`select staff_name from units where seed_key is not null order by seed_key`),
@@ -175,7 +175,7 @@ it("keeps authored starters and profiles when a retry changes the working langua
   await suite.db.execute(
     sql`update device_profiles set name = 'House counter' where name = 'Counter'`,
   );
-  await suite.db.execute(sql`update catalogues set name = 'House menu'`);
+  await suite.db.execute(sql`update menus set name = 'House menu'`);
   await suite.db.execute(
     sql`update kitchen_courses set name = 'House mains' where display_order = 2`,
   );
@@ -185,7 +185,7 @@ it("keeps authored starters and profiles when a retry changes the working langua
     modules: ALL_MODULES,
   });
   expect(await suite.db.select().from(deviceProfiles).orderBy(deviceProfiles.id)).toEqual(profiles);
-  expect(suite.db.all(sql`select name from catalogues`)).toEqual([{ name: "House menu" }]);
+  expect(suite.db.all(sql`select name from menus`)).toEqual([{ name: "House menu" }]);
   expect(suite.db.all(sql`select name from kitchen_courses order by display_order`)).toEqual(
     ["Sharing plates", "Starters", "House mains", "Desserts"].map((name) => ({ name })),
   );
@@ -494,7 +494,7 @@ describe("applyVenue", () => {
     expect(sif.rows[0]?.numero_instalacion).toBe("S000001");
     expect(result.seeded).toEqual([
       {
-        module: "catalogue",
+        module: "menu",
         report: "initial menu ready",
       },
       {
@@ -1070,7 +1070,7 @@ describe("applyVenue", () => {
       });
       expect(seeded).toContain(result.nodeId);
       expect(result.seeded.map((s) => s.module)).toEqual([
-        "catalogue",
+        "menu",
         "venue-service",
         "fiscal-verifactu",
         "adjustments",

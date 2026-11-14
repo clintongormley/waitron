@@ -12,15 +12,15 @@ import { routingCells } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
-import { mountCatalogueApi } from "./menu-api.js";
+import { mountMenuApi } from "./menu-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import "./errors.js";
 
 /**
- * The catalogue routes over the FULL migration manifest, so venue-service's routing tables
+ * The menu routes over the FULL migration manifest, so venue-service's routing tables
  * exist. `menu-api.test.ts` migrates
- * core + catalogue + identity only and covers the absent-table arm.
+ * core + menu + identity only and covers the absent-table arm.
  */
 const LOCALE = "es-ES";
 
@@ -187,9 +187,9 @@ it("refuses a category delete with 409 when a routing rule was added to one of i
 });
 
 interface Venue {
-  /** A live MANAGEMENT session cookie for a `manager` (holds `catalogue.manage`). */
+  /** A live MANAGEMENT session cookie for a `manager` (holds `menu.manage`). */
   managerCookie: string;
-  /** A live MANAGEMENT session cookie for a `staff` person (holds no `catalogue.manage`). */
+  /** A live MANAGEMENT session cookie for a `staff` person (holds no `menu.manage`). */
   staffCookie: string;
 }
 
@@ -250,10 +250,10 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-/** A Hono app carrying the catalogue routes over the suite's connection. */
+/** A Hono app carrying the menu routes over the suite's connection. */
 function mountApp(): Hono {
   const app = new Hono();
-  mountCatalogueApi(app, { db: suite.db }, noopLog);
+  mountMenuApi(app, { db: suite.db }, noopLog);
   return app;
 }
 
@@ -274,8 +274,8 @@ async function send(
   });
 }
 
-async function createCatalogue(app: Hono, cookie: string, name: string): Promise<string> {
-  const res = await send(app, "POST", "/management-api/catalogues", cookie, { name });
+async function createMenu(app: Hono, cookie: string, name: string): Promise<string> {
+  const res = await send(app, "POST", "/management-api/menus", cookie, { name });
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
 }
@@ -289,11 +289,11 @@ async function createCategory(app: Hono, cookie: string, name: string): Promise<
 async function createProduct(
   app: Hono,
   cookie: string,
-  catalogueId: string,
+  menuId: string,
   name: string,
 ): Promise<string> {
   const res = await send(app, "POST", "/management-api/products", cookie, {
-    catalogueId,
+    menuId,
     categoryId: null,
     name,
     pricingUnit: "each",
@@ -304,10 +304,10 @@ async function createProduct(
   return ((await res.json()) as { id: string }).id;
 }
 
-describe("Catalogue API — option groups, gates, by-id FKs", () => {
-  it("refuses every catalogue write route to a staff-role session — 403 authorization.not_permitted", async () => {
+describe("Menu API — option groups, gates, by-id FKs", () => {
+  it("refuses every menu write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Every write shares the permission gate; invalid resource ids must not reveal lookup results
-    // to a staff session that cannot manage the catalogue.
+    // to a staff session that cannot manage the menu.
     const { staffCookie } = await setupVenue();
     const app = mountApp();
 
@@ -319,11 +319,11 @@ describe("Catalogue API — option groups, gates, by-id FKs", () => {
     };
 
     await expect403(
-      await send(app, "POST", "/management-api/catalogues", staffCookie, { name: "Refused" }),
+      await send(app, "POST", "/management-api/menus", staffCookie, { name: "Refused" }),
     );
     await expect403(
       await send(app, "POST", "/management-api/products", staffCookie, {
-        catalogueId: "00000000-0000-0000-0000-000000000000",
+        menuId: "00000000-0000-0000-0000-000000000000",
         categoryId: null,
         name: "Refused",
         pricingUnit: "each",
@@ -333,19 +333,19 @@ describe("Catalogue API — option groups, gates, by-id FKs", () => {
     );
     const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
     await expect403(
-      await send(app, "POST", `/management-api/catalogues/${ZERO_UUID}/duplicate`, staffCookie, {
+      await send(app, "POST", `/management-api/menus/${ZERO_UUID}/duplicate`, staffCookie, {
         name: "Refused",
       }),
     );
     await expect403(
-      await send(app, "PUT", "/management-api/venue/default-catalogue", staffCookie, {
-        catalogueId: ZERO_UUID,
+      await send(app, "PUT", "/management-api/venue/default-menu", staffCookie, {
+        menuId: ZERO_UUID,
       }),
     );
   });
 
   it("refuses every modifier-list write route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // A `staff` session holds no `catalogue.manage`, so `authorizeManager` inside `gated` throws before
+    // A `staff` session holds no `menu.manage`, so `authorizeManager` inside `gated` throws before
     // any list op runs. Both segments, both kinds of write: `mountListSurface` registers one set of
     // handlers per kind
     // and each closes over its own `surface`, so one kind passing says nothing about the other.
@@ -382,7 +382,7 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   const venue = await setupVenue();
   const app = mountApp();
   const cookie = venue.managerCookie;
-  const menuResponse = await send(app, "POST", "/management-api/catalogues", cookie, {
+  const menuResponse = await send(app, "POST", "/management-api/menus", cookie, {
     name: "Menu",
   });
   const menu = (await menuResponse.json()) as { id: string };
@@ -400,7 +400,7 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   });
   const modifiers = listIds.map((id) => ({ kind: "options", id }));
   const create = await send(app, "POST", "/management-api/products", cookie, {
-    catalogueId: menu.id,
+    menuId: menu.id,
     categoryId: null,
     name: "Dish",
     pricingUnit: "each",
@@ -424,7 +424,7 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
       })
     ).status,
   ).toBe(200);
-  const list = await send(app, "GET", `/management-api/catalogues/${menu.id}/products`, cookie);
+  const list = await send(app, "GET", `/management-api/menus/${menu.id}/products`, cookie);
   expect(await list.json()).toMatchObject([{ id: product.id, modifiers: ordered }]);
 });
 
@@ -432,9 +432,9 @@ describe("sections and the reporting and routing they do not touch", () => {
   it("adds, moves and removes a routed product and deletes its section without changing its folder or rules", async () => {
     const v = await setupVenue();
     const app = mountApp();
-    const catalogueId = await createCatalogue(app, v.managerCookie, "Routed menu");
+    const menuId = await createMenu(app, v.managerCookie, "Routed menu");
     const categoryId = await createCategory(app, v.managerCookie, "Beverages");
-    const productId = await createProduct(app, v.managerCookie, catalogueId, "Water");
+    const productId = await createProduct(app, v.managerCookie, menuId, "Water");
     expect(
       (
         await send(app, "POST", "/management-api/folders/move", v.managerCookie, {
@@ -476,7 +476,7 @@ describe("sections and the reporting and routing they do not touch", () => {
         await send(
           app,
           "GET",
-          `/management-api/catalogues/${catalogueId}/structure`,
+          `/management-api/menus/${menuId}/structure`,
           v.managerCookie,
         )
       ).json()) as { rootSectionId: string }
@@ -521,7 +521,7 @@ describe("sections and the reporting and routing they do not touch", () => {
 it("duplicating a menu leaves every menu period naming the source and none naming the copy", async () => {
   const v = await setupVenue();
   const app = mountApp();
-  const source = await createCatalogue(app, v.managerCookie, "Dinner to duplicate");
+  const source = await createMenu(app, v.managerCookie, "Dinner to duplicate");
   const department = (
     await suite.db.execute<{ id: string }>(sql`select id from departments  limit 1`)
   ).rows[0]!.id;
@@ -542,7 +542,7 @@ it("duplicating a menu leaves every menu period naming the source and none namin
   const res = await send(
     app,
     "POST",
-    `/management-api/catalogues/${source}/duplicate`,
+    `/management-api/menus/${source}/duplicate`,
     v.managerCookie,
     { name: "Dinner to duplicate (copy)" },
   );

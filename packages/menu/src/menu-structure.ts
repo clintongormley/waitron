@@ -73,7 +73,7 @@ export async function menuRoot(tx: Transaction, menuId: string): Promise<string 
 export async function requireMenuRoot(tx: Transaction, menuId: string): Promise<string> {
   const rootSectionId = await menuRoot(tx, menuId);
   if (rootSectionId === undefined)
-    throw new AppError("catalogue.not_found", { catalogueId: menuId });
+    throw new AppError("menu.not_found", { menuId: menuId });
   return rootSectionId;
 }
 

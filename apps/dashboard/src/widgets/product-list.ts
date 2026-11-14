@@ -113,7 +113,7 @@ function dietaryInfoText(product: Product): string {
   return [...declared, ...overridden].join(", ");
 }
 
-export function acceptsCatalogueDrop(
+export function acceptsMenuDrop(
   keys: string[],
   folderId: string | null,
   categories: CategorySummary[],
@@ -376,7 +376,7 @@ export class ProductList extends LitElement {
   /** Whether the box's colour chooser is open: it takes the cursor without the person leaving the
    * box. */
   @property({ type: Boolean }) choosingColor = false;
-  /** Whether the catalogue has loaded, so that an empty one is known to be empty. */
+  /** Whether the menu has loaded, so that an empty one is known to be empty. */
   @property({ type: Boolean }) loaded = false;
   /** Off, archived products and variants are left out of the rows the table is given. */
   @state() private showArchived = false;
@@ -581,7 +581,7 @@ export class ProductList extends LitElement {
           ? row.parentKey
           : (this.#rowByKey.get(row.parentKey)?.parentKey ?? ROOT_KEY);
     if (
-      !acceptsCatalogueDrop(
+      !acceptsMenuDrop(
         this.#dragged,
         target === ROOT_KEY ? null : target.slice(7),
         this.categories,
@@ -918,7 +918,7 @@ export class ProductList extends LitElement {
     ];
   }
 
-  /** What each category holds directly, and under `null` the whole catalogue, counted once per change
+  /** What each category holds directly, and under `null` the whole menu, counted once per change
    * of the lists rather than once per row drawn. Archived products are left out, as Show archived
    * starts off. */
   #count(): Map<string | null, { categories: number; products: number }> {
@@ -1260,7 +1260,7 @@ export class ProductList extends LitElement {
         @click=${() => {
           if (this.canAddProduct) this.#send("add-product", { categoryId });
         }}
-        >${t("catalogue.add_product")}</wt-button
+        >${t("products.add_product")}</wt-button
       ><wt-button
         data-test=${`add-category-${test}`}
         @click=${() => this.#send("add-category", { parentId: categoryId })}
@@ -1548,7 +1548,7 @@ export class ProductList extends LitElement {
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
-        aria-label=${t("catalogue.title")}
+        aria-label=${t("products.title")}
         viewKey="waitron.products.table"
         rememberExpanded
         flatTreeSearch

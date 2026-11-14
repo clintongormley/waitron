@@ -32,13 +32,13 @@ const CORE = manifestSets().find((set) => set.name === "core")!;
 
 /**
  * Gives a freshly migrated file what a pre-squash one carried: `core` journal rows this image does
- * not ship, and the journal of `catalogue`, a set this image no longer has.
+ * not ship, and the journal of `menu`, a set this image no longer has.
  */
 async function withForeignCoreJournal(directory: string, hashes: readonly string[]): Promise<void> {
   const store = await openVenueDatabase(directory);
   try {
     await store.venue.execute(
-      sql`create table "__drizzle_migrations_catalogue" (id integer primary key, hash text not null, created_at numeric)`,
+      sql`create table "__drizzle_migrations_menu" (id integer primary key, hash text not null, created_at numeric)`,
     );
     await store.venue.execute(sql`delete from ${sql.identifier(CORE.table)}`);
     for (const [index, hash] of hashes.entries())
@@ -98,7 +98,7 @@ describe("the migration epoch", () => {
     const store = await openVenueDatabase(directory);
     try {
       const before = { venue: await fileState(store.venue), node: await fileState(store.node) };
-      expect(before.venue).toContain("__drizzle_migrations_catalogue");
+      expect(before.venue).toContain("__drizzle_migrations_menu");
 
       const refusal = assertNotAhead(store, manifestSets(), null);
       await expect(refusal).rejects.toMatchObject({

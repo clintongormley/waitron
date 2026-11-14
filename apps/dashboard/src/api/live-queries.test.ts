@@ -6,7 +6,7 @@ import { DashboardApi } from "./client.js";
 import { QUERY_DEPENDENCIES, dashboardQuery, type DashboardQueryName } from "./live-queries.js";
 
 it("quiets only the audited database queries while connected", () => {
-  const expected = `getCatalogueSettings listCatalogues getMenuStructure getMenuPrices getMenuHome
+  const expected = `getMenuSettings listMenus getMenuStructure getMenuPrices getMenuHome
     listCategories getCategory listLibraryProducts listProducts listUnits listOptionLists getOptionList
     listExtraLists getExtraList getVenueTheme listThemes listPrinters listPrinterProfiles
     listPrinterStationNames listPagePrinters listPrinterStations getPrinterDeleteImpact listReaders
@@ -190,7 +190,7 @@ it.each([
   [
     "getContentTranslationCells",
     [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
-    "catalogues",
+    "menus",
   ],
   [
     "getContentTranslationCells",
@@ -205,7 +205,7 @@ it.each([
   ["getContentSuggestions", [], "sections"],
   ["getContentSuggestions", [], "section_members"],
   ["getContentSuggestions", [], "menu_details"],
-  ["getContentSuggestions", [], "catalogues"],
+  ["getContentSuggestions", [], "menus"],
   ["getContentSuggestions", [], "units"],
   ["listHandledAlerts", [], "incidents"],
   ["listHandledAlerts", [], "persons"],
@@ -290,7 +290,7 @@ it.each([
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
   ["listLibraryProducts", [], ["products"]],
   // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
-  ["getMenuStructure", ["menu-1"], ["menu_details", "sections", "section_members", "catalogues"]],
+  ["getMenuStructure", ["menu-1"], ["menu_details", "sections", "section_members", "menus"]],
   [
     "getMenuPrices",
     ["menu-1"],
@@ -299,7 +299,7 @@ it.each([
       "sections",
       "section_members",
       "menu_items",
-      "catalogues",
+      "menus",
       "products",
       "menu_item_variant_overrides",
       "settings.venue",
@@ -317,7 +317,7 @@ it.each([
   [
     "getMenuHome",
     ["menu-1"],
-    ["menu_details", "sections", "section_members", "products", "catalogues"],
+    ["menu_details", "sections", "section_members", "products", "menus"],
   ],
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile, and the profile's department. Not `devices`,
@@ -452,7 +452,7 @@ it.each([
     ],
   ],
   // At time of sale names each line's category from the snapshot the line recorded, so no
-  // catalogue table moves the answer.
+  // menu table moves the answer.
   [
     "getCategorySales",
     ["2026-09-01", "2026-09-11", "at_time_of_sale", false],
@@ -487,7 +487,7 @@ it.each([
       "sections",
       "section_members",
       "menu_details",
-      "catalogues",
+      "menus",
       "units",
     ],
   ],
@@ -543,7 +543,7 @@ it("reads the categories' routing again when a period, its department or the pro
     "departments",
     "sections",
     "section_members",
-    "catalogues",
+    "menus",
   ])
     expect(query.dependencies).toContainEqual({ type });
 });
@@ -575,7 +575,7 @@ it.each(["getMenuPrices", "getMenuStatus", "getMenuStatuses", "getMenuPreview"] 
       for (const type of [
         "menu_items",
         "menu_item_variant_overrides",
-        "catalogues",
+        "menus",
         "sections",
         "section_members",
       ]) {
@@ -610,7 +610,7 @@ it.each(["getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
 );
 
 it.each(["getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
-  "refreshes %s when the catalogue settings change, since the venue default colour ends each offer's colour walk",
+  "refreshes %s when the menu settings change, since the venue default colour ends each offer's colour walk",
   async (name) => {
     const fetchImpl = vi.fn(async () => new Response("[]"));
     const api = new DashboardApi("", fetchImpl);
@@ -627,7 +627,7 @@ it.each(["getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
   },
 );
 
-it("leaves the category report at time of sale alone when the catalogue is edited", async () => {
+it("leaves the category report at time of sale alone when the menu is edited", async () => {
   const fetchImpl = vi.fn(async () => new Response("{}"));
   const api = new DashboardApi("", fetchImpl);
   const query = dashboardQuery(api, "getCategorySales", [
@@ -736,7 +736,7 @@ it("reads a shared menu snapshot through one encoded GET, preserving independent
   const query = dashboardQuery(api, "getMenuRead", ["menu&one", ["structure", "home", "status"]]);
   expect(await query.read()).toEqual(response);
   expect(paths).toEqual([
-    "/management-api/catalogues/menu%26one/read?part=structure&part=home&part=status",
+    "/management-api/menus/menu%26one/read?part=structure&part=home&part=status",
   ]);
   expect(headers[0]!.has("x-waitron-live")).toBe(false);
   expect(await query.read()).toEqual(response);
@@ -783,21 +783,21 @@ it("does not subscribe a Structure-only shared read to unrelated publication tab
     { type: "menu_details" },
     { type: "sections" },
     { type: "section_members" },
-    { type: "catalogues" },
+    { type: "menus" },
   ]);
 });
 
-it("subscribes catalogue defaults to their stored settings", async () => {
+it("subscribes menu defaults to their stored settings", async () => {
   const api = new DashboardApi(
     "",
     async () => new Response('{"defaultProductVatClass":"reduced"}'),
   );
-  const query = dashboardQuery(api, "getCatalogueSettings", []);
+  const query = dashboardQuery(api, "getMenuSettings", []);
   expect(query.dependencies).toEqual([{ type: "settings.menu" }]);
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced" });
 });
 
-it("subscribes the venue defaults to the clock document, venue document and catalogue settings", () => {
+it("subscribes the venue defaults to the clock document, venue document and menu settings", () => {
   const api = new DashboardApi("", async () => new Response("{}"));
   expect(dashboardQuery(api, "getVenueDefaults", []).dependencies).toEqual([
     { type: "settings.business_day" },
@@ -820,7 +820,7 @@ it.each([
   "sections",
   "section_members",
   "menu_details",
-  "catalogues",
+  "menus",
   "units",
 ])("refreshes translation targets passively when %s changes", async (type) => {
   const calls: RequestInit[] = [];
@@ -1280,7 +1280,7 @@ it("refreshes the live menu read only when a publication or version changes", as
   const observed = api.liveData.observe(dashboardQuery(api, "getLiveMenu", ["lunch"]), () => {});
   try {
     await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
-    expect(fetchImpl.mock.calls[0]![0]).toBe("/management-api/catalogues/lunch/live");
+    expect(fetchImpl.mock.calls[0]![0]).toBe("/management-api/menus/lunch/live");
     const before = fetchImpl.mock.calls.length;
     api.liveData.invalidate([{ type: "menu_versions", id: "v4" }]);
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(before + 1));

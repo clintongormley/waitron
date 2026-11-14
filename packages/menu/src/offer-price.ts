@@ -11,7 +11,7 @@ export const priceOrNull = (cents: number | null): Decimal | null =>
  *
  * `variantPrice` is the variant's RAW `products.unit_price`. The effective value
  * (`effectiveProductColumns.unitPrice`) is already `coalesce(variant, parent)` and never blank, so
- * passing it would skip the parent's menu price and charge the parent's catalogue price.
+ * passing it would skip the parent's menu price and charge the parent's menu price.
  *
  * An offer with no variant chosen walks the same chain with both variant steps blank: its menu
  * price (`menu_items.gross_price`, blank meaning "the product's own"), else the product's own.

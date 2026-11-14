@@ -38,7 +38,7 @@ beforeEach(async () => {
 
 describe("recorded lunch receipts", () => {
   it.each(["F2", "F1"] as const)(
-    "keeps %s lunch presentation after catalogue edits and on reprint",
+    "keeps %s lunch presentation after menu edits and on reprint",
     async (invoiceType) => {
       const { billId, partyId } = await billWith(venue, []);
       const lunchId = await withTransaction(suite.db, async (tx) => {

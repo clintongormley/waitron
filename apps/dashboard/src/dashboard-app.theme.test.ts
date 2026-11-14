@@ -137,7 +137,7 @@ function signedInApi(locale: Locale = "en-GB"): DashboardApi {
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
-    getCatalogueSettings: vi
+    getMenuSettings: vi
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     listMyShifts: vi.fn().mockResolvedValue([]),

@@ -21,7 +21,7 @@ import type {
   TableParty,
   TillApi,
   TillMenuOffer,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { ServerRouter } from "./api/server-router.js";
@@ -70,11 +70,11 @@ function offer(id: string, name: string, courseId: string | null = null): TillMe
   } satisfies TillMenuOffer;
 }
 
-function catalogue(
+function menu(
   version: string,
   prices: Record<string, string> = {},
   liveFields = "lf-1",
-): ZoneOfferCatalogue {
+): ZoneOffers {
   const offers = [
     offer("offer-beer", "Beer", "drinks"),
     offer("offer-steak", "Steak", "mains"),
@@ -253,10 +253,10 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
-      ...catalogue("v1"),
-      context: { ...catalogue("v1").context, zoneId: "zc" },
+      ...menu("v1"),
+      context: { ...menu("v1").context, zoneId: "zc" },
     }),
-    listZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
+    listZoneOffers: vi.fn().mockResolvedValue(menu("v1")),
     menuState: vi.fn(async () => state("v1")),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),

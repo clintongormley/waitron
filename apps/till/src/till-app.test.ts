@@ -81,7 +81,7 @@ import type {
   TillMenu,
   TillProduct,
   TillSaleResult,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
@@ -92,7 +92,7 @@ import type {
 } from "./api/tender-refund-types.js";
 import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
 
-// The venue's default menu (catalogue) — every product fixture below is tagged with its id, so the
+// The venue's default menu (zoneOffers) — every product fixture below is tagged with its id, so the
 // counter grid (which shows only the selected menu's products) renders them under the default selection.
 const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
 
@@ -106,8 +106,8 @@ const coffee: TillProduct = {
   vatClass: "general",
   category: null,
   allergens: null,
-  catalogueId: "cat-default",
-  catalogueName: "Carta",
+  menuId: "cat-default",
+  menuName: "Carta",
 };
 
 const ham: TillProduct = {
@@ -120,8 +120,8 @@ const ham: TillProduct = {
   vatClass: "reduced",
   category: "charcutería",
   allergens: null,
-  catalogueId: "cat-default",
-  catalogueName: "Carta",
+  menuId: "cat-default",
+  menuName: "Carta",
 };
 
 const heldSummary: HeldOrderSummary = {
@@ -330,20 +330,20 @@ function servedAs(menuItemId: string, productId: string) {
 }
 
 function fixtureOffers(
-  catalogue: { menus: TillMenu[]; products: TillProduct[] },
-  zonePolicy: Partial<ZoneOfferCatalogue["context"]> = {},
-): ZoneOfferCatalogue {
-  const defaultMenuId = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null;
-  const offers = catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
+  zoneOffers: { menus: TillMenu[]; products: TillProduct[] },
+  zonePolicy: Partial<ZoneOffers["context"]> = {},
+): ZoneOffers {
+  const defaultMenuId = zoneOffers.menus.find((menu) => menu.isDefault)?.id ?? null;
+  const offers = zoneOffers.products.map((product, index): ZoneOffers["offers"][number] => ({
     id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
-    menuId: product.catalogueId ?? defaultMenuId ?? "menu-fixture",
+    menuId: product.menuId ?? defaultMenuId ?? "menu-fixture",
     productId: product.productId ?? product.id,
     grossPrice: product.unitPrice,
     unitPrice: product.unitPrice,
     available: true,
     image: null,
     description: null,
-    menuName: product.catalogueName ?? catalogue.menus[0]?.name ?? "Menu",
+    menuName: product.menuName ?? zoneOffers.menus[0]?.name ?? "Menu",
     placements: [[]],
     name: product.name,
     customerName: product.customerName ?? null,
@@ -358,7 +358,7 @@ function fixtureOffers(
     // The source `TillProduct` types the declarations looser than the offer's wire shape (plain
     // `string[]`), so the fixture narrows them — the fixtures only ever supply real labels.
     dietaryDeclarations: (product.dietaryDeclarations ??
-      []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
+      []) as ZoneOffers["offers"][number]["dietaryDeclarations"],
     offeredModifiers: (product.offeredModifiers ?? []).map((entry) =>
       entry.kind === "extras"
         ? {
@@ -372,7 +372,7 @@ function fixtureOffers(
         : { ...entry, publishedDefaultLabelId: entry.defaultLabelId },
     ),
     variants: (product.variants ?? []).map(
-      (variant): ZoneOfferCatalogue["offers"][number]["variants"][number] => ({
+      (variant): ZoneOffers["offers"][number]["variants"][number] => ({
         id: variant.id,
         name: variant.name,
         customerName: variant.customerName ?? null,
@@ -389,7 +389,7 @@ function fixtureOffers(
         diet: product.diet ?? null,
         dietOverride: product.dietOverride ?? null,
         dietaryDeclarations: (product.dietaryDeclarations ??
-          []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
+          []) as ZoneOffers["offers"][number]["dietaryDeclarations"],
         courseId: product.courseId ?? null,
       }),
     ),
@@ -414,7 +414,7 @@ function fixtureOffers(
     defaultMenuId,
     // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
     // suites pin are the ones a till sends against the live version.
-    menus: servedMenus(catalogue.menus, offers) as ZoneOfferCatalogue["menus"],
+    menus: servedMenus(zoneOffers.menus, offers) as ZoneOffers["menus"],
     offers,
   };
 }
@@ -474,7 +474,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .mockResolvedValue(
         fixtureOffers(
           { menus: [defaultMenu], products: [coffee] },
-          overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>,
+          overrides.zonePolicy as Partial<ZoneOffers["context"]>,
         ),
       ),
     recordSale: vi.fn().mockResolvedValue(saleResult),
@@ -760,7 +760,7 @@ async function ringCoffee(
   store.addProduct(
     {
       id: "cafe",
-      catalogueId: "cat-default",
+      menuId: "cat-default",
       menuItemId: "menu-item-cafe-0",
       name: "Café",
       pricingUnit: "each",
@@ -1837,8 +1837,8 @@ describe("till-app", () => {
   });
 
   it("changes the counter zone and accepts a re-selection of the current zone", async () => {
-    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
-    defaultCatalogue.zones = [
+    const defaultZoneOffers = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
+    defaultZoneOffers.zones = [
       {
         id: "zone-counter",
         name: "Counter",
@@ -1854,20 +1854,20 @@ describe("till-app", () => {
         serviceMode: "ticket_then_pay",
       },
     ];
-    const deliCatalogue = fixtureOffers({
+    const deliMenu = fixtureOffers({
       menus: [{ id: "menu-deli", name: "Deli", isDefault: true }],
-      products: [{ ...ham, catalogueId: "menu-deli", catalogueName: "Deli" }],
+      products: [{ ...ham, menuId: "menu-deli", menuName: "Deli" }],
     });
-    deliCatalogue.context = {
+    deliMenu.context = {
       departmentName: "Restaurant",
       zoneId: "zone-deli",
       departmentId: "department-deli",
       serviceMode: "ticket_then_pay",
     };
-    const listZoneOffers = vi.fn().mockResolvedValue(deliCatalogue);
+    const listZoneOffers = vi.fn().mockResolvedValue(deliMenu);
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultCatalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultZoneOffers)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultZoneOffers),
       listZoneOffers,
     });
     const c = await toCounter(el);
@@ -1886,8 +1886,8 @@ describe("till-app", () => {
   });
 
   it("a kitchen queue that cannot be read after the counter zone loaded says the queue could not refresh, not that the zone could not load", async () => {
-    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
-    defaultCatalogue.zones = [
+    const defaultZoneOffers = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
+    defaultZoneOffers.zones = [
       {
         id: "zone-counter",
         name: "Counter",
@@ -1903,11 +1903,11 @@ describe("till-app", () => {
         serviceMode: "ticket_then_pay",
       },
     ];
-    const deliCatalogue = fixtureOffers({
+    const deliMenu = fixtureOffers({
       menus: [{ id: "menu-deli", name: "Deli", isDefault: true }],
-      products: [{ ...ham, catalogueId: "menu-deli", catalogueName: "Deli" }],
+      products: [{ ...ham, menuId: "menu-deli", menuName: "Deli" }],
     });
-    deliCatalogue.context = {
+    deliMenu.context = {
       departmentName: "Restaurant",
       zoneId: "zone-deli",
       departmentId: "department-deli",
@@ -1915,9 +1915,9 @@ describe("till-app", () => {
     };
     const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultCatalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
-      listZoneOffers: vi.fn().mockResolvedValue(deliCatalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultZoneOffers)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultZoneOffers),
+      listZoneOffers: vi.fn().mockResolvedValue(deliMenu),
       getStationQueue,
     });
     const c = await toCounter(el);
@@ -1941,8 +1941,8 @@ describe("till-app", () => {
   });
 
   it("visibly refuses a service-zone change while the basket has lines", async () => {
-    const catalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
-    catalogue.zones = [
+    const zoneOffers = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
+    zoneOffers.zones = [
       {
         id: "zone-counter",
         name: "Counter",
@@ -1960,8 +1960,8 @@ describe("till-app", () => {
     ];
     const listZoneOffers = vi.fn();
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(zoneOffers)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers),
       listZoneOffers,
     });
     const c = await toCounter(el);
@@ -1984,8 +1984,8 @@ describe("till-app", () => {
   });
 
   it("ignores a late counter-zone response and keeps the accepted zone for new orders", async () => {
-    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
-    defaultCatalogue.zones = ["counter", "upstairs", "deli"].map((id) => ({
+    const defaultZoneOffers = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
+    defaultZoneOffers.zones = ["counter", "upstairs", "deli"].map((id) => ({
       id,
       name: id,
       departmentId: id,
@@ -1994,23 +1994,23 @@ describe("till-app", () => {
     }));
     const upstairs = fixtureOffers({
       menus: [{ id: "upstairs-menu", name: "Upstairs", isDefault: true }],
-      products: [{ ...coffee, id: "upstairs-product", catalogueId: "upstairs-menu" }],
+      products: [{ ...coffee, id: "upstairs-product", menuId: "upstairs-menu" }],
     });
     upstairs.context.zoneId = "upstairs";
     const deli = fixtureOffers({
       menus: [{ id: "deli-menu", name: "Deli", isDefault: true }],
-      products: [{ ...ham, id: "deli-product", catalogueId: "deli-menu" }],
+      products: [{ ...ham, id: "deli-product", menuId: "deli-menu" }],
     });
     deli.context.zoneId = "deli";
-    let resolveUpstairs!: (value: ZoneOfferCatalogue) => void;
-    let resolveDeli!: (value: ZoneOfferCatalogue) => void;
+    let resolveUpstairs!: (value: ZoneOffers) => void;
+    let resolveDeli!: (value: ZoneOffers) => void;
     const requests = {
-      upstairs: new Promise<ZoneOfferCatalogue>((resolve) => (resolveUpstairs = resolve)),
-      deli: new Promise<ZoneOfferCatalogue>((resolve) => (resolveDeli = resolve)),
+      upstairs: new Promise<ZoneOffers>((resolve) => (resolveUpstairs = resolve)),
+      deli: new Promise<ZoneOffers>((resolve) => (resolveDeli = resolve)),
     };
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultCatalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultZoneOffers)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultZoneOffers),
       listZoneOffers: vi.fn((zoneId: "upstairs" | "deli") => requests[zoneId]),
     });
     const c = await toCounter(el);
@@ -8153,7 +8153,7 @@ describe("till-app", () => {
         till: HOME_DISPLAY_DEFAULTS.till,
       },
     };
-    const catalogue = {
+    const zoneOffers = {
       service: {
         open: true,
         zoneOpen: true,
@@ -8209,10 +8209,10 @@ describe("till-app", () => {
           grossPrice: "7.00",
         },
       ],
-    } satisfies ZoneOfferCatalogue;
+    } satisfies ZoneOffers;
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(zoneOffers)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         kitchenNote: {
           scope: { workingOrderId: "wo-happy" },
@@ -8250,8 +8250,8 @@ describe("till-app", () => {
       vatClass: "reduced",
       category: "Starter",
       allergens: null,
-      catalogueId: "menu-winter",
-      catalogueName: "Winter menu",
+      menuId: "menu-winter",
+      menuName: "Winter menu",
       diet: null,
       dietOverride: null,
       courseId: null,
@@ -9543,7 +9543,7 @@ describe("till-app", () => {
         tabTotal: "3000.01",
         party: { ...openTable.party!, outstanding: "3000.01" },
       };
-      it("loads the tab's lines and threads them (with the catalogue) to the screen", async () => {
+      it("loads the tab's lines and threads them (with the zoneOffers) to the screen", async () => {
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
@@ -9575,8 +9575,8 @@ describe("till-app", () => {
               name: "Negroni",
               customerName: { en: "Negroni for the customer" },
               unitPrice: "11.00",
-              catalogueId: "menu-dining",
-              catalogueName: "Dining",
+              menuId: "menu-dining",
+              menuName: "Dining",
             },
           ],
         });
@@ -9617,22 +9617,22 @@ describe("till-app", () => {
         const offersA = fixtureOffers({
           menus: [{ id: "menu-a", name: "Menu A", isDefault: true }],
           products: [
-            { ...coffee, id: "product-a", catalogueId: "menu-a", catalogueName: "Menu A" },
+            { ...coffee, id: "product-a", menuId: "menu-a", menuName: "Menu A" },
           ],
         });
         offersA.context.zoneId = "zone-a";
         const offersB = fixtureOffers({
           menus: [{ id: "menu-b", name: "Menu B", isDefault: true }],
           products: [
-            { ...coffee, id: "product-b", catalogueId: "menu-b", catalogueName: "Menu B" },
+            { ...coffee, id: "product-b", menuId: "menu-b", menuName: "Menu B" },
           ],
         });
         offersB.context.zoneId = "zone-b";
-        let resolveA!: (value: ZoneOfferCatalogue) => void;
-        let resolveB!: (value: ZoneOfferCatalogue) => void;
+        let resolveA!: (value: ZoneOffers) => void;
+        let resolveB!: (value: ZoneOffers) => void;
         const pending = {
-          "zone-a": new Promise<ZoneOfferCatalogue>((resolve) => (resolveA = resolve)),
-          "zone-b": new Promise<ZoneOfferCatalogue>((resolve) => (resolveB = resolve)),
+          "zone-a": new Promise<ZoneOffers>((resolve) => (resolveA = resolve)),
+          "zone-b": new Promise<ZoneOffers>((resolve) => (resolveB = resolve)),
         };
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([tableA, tableB]),
@@ -10580,7 +10580,7 @@ describe("till-app", () => {
      * (`ConfirmPaymentDetail`, widgets/tender-pay.ts). So by the time a permanent fiscal refusal
      * arrives, the customer HAS been charged and the till has no record of the sale. This pins that
      * the card tender reaches the same permanent-refusal message at all; what that message must and
-     * must not SAY is pinned on the catalogues themselves, in `i18n/strings.test.ts`, where both
+     * must not SAY is pinned on the menus themselves, in `i18n/strings.test.ts`, where both
      * languages can be checked without depending on which locale a rendered banner happens to be in. */
     const { el } = await mountApp({
       recordSale: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
@@ -14605,7 +14605,7 @@ describe("till-app", () => {
 
     it("keeps a signed-in operator's saved language when the browser reply arrives during login", async () => {
       let answerLocales!: (value: Awaited<ReturnType<TillApi["getLocales"]>>) => void;
-      let answerOffers!: (value: ZoneOfferCatalogue) => void;
+      let answerOffers!: (value: ZoneOffers) => void;
       const { el } = await mountApp({
         getLocales: vi.fn(
           () =>
@@ -14615,7 +14615,7 @@ describe("till-app", () => {
         ),
         listDefaultZoneOffers: vi.fn(
           () =>
-            new Promise<ZoneOfferCatalogue>((r) => {
+            new Promise<ZoneOffers>((r) => {
               answerOffers = r;
             }),
         ),
@@ -14925,8 +14925,8 @@ describe("till-app", () => {
       vatClass: "general",
       category: null,
       allergens: null,
-      catalogueId: "cat-food",
-      catalogueName: "Comida",
+      menuId: "cat-food",
+      menuName: "Comida",
     };
     const beer: TillProduct = {
       id: "cerveza",
@@ -14938,8 +14938,8 @@ describe("till-app", () => {
       vatClass: "general",
       category: null,
       allergens: null,
-      catalogueId: "cat-drinks",
-      catalogueName: "Bebidas",
+      menuId: "cat-drinks",
+      menuName: "Bebidas",
     };
     const twoMenuProducts = vi
       .fn()
@@ -15034,15 +15034,15 @@ describe("till-app", () => {
         serviceMode: "prepay",
       });
       /** The profile's starting zone: Comida by default, Bebidas beside it. */
-      const startOffers = async (): Promise<ZoneOfferCatalogue> => {
-        const catalogue = structuredClone(await twoMenuProducts());
-        catalogue.context = { ...catalogue.context, zoneId: "zone-start" };
-        catalogue.zones = [zone("zone-start", "Sala"), zone("zone-terrace", "Terraza")];
-        return catalogue;
+      const startOffers = async (): Promise<ZoneOffers> => {
+        const zoneOffers = structuredClone(await twoMenuProducts());
+        zoneOffers.context = { ...zoneOffers.context, zoneId: "zone-start" };
+        zoneOffers.zones = [zone("zone-start", "Sala"), zone("zone-terrace", "Terraza")];
+        return zoneOffers;
       };
       /** The terrace: Cócteles by default, Vinos beside it. */
-      const terraceOffers = (): ZoneOfferCatalogue => {
-        const catalogue = fixtureOffers({
+      const terraceOffers = (): ZoneOffers => {
+        const zoneOffers = fixtureOffers({
           menus: [
             { id: "cat-cocktails", name: "Cócteles", isDefault: true },
             { id: "cat-wine", name: "Vinos", isDefault: false },
@@ -15053,21 +15053,21 @@ describe("till-app", () => {
               id: "mojito",
               menuItemId: "menu-item-mojito",
               name: "Mojito",
-              catalogueId: "cat-cocktails",
-              catalogueName: "Cócteles",
+              menuId: "cat-cocktails",
+              menuName: "Cócteles",
             },
             {
               ...beer,
               id: "rioja",
               menuItemId: "menu-item-rioja",
               name: "Rioja",
-              catalogueId: "cat-wine",
-              catalogueName: "Vinos",
+              menuId: "cat-wine",
+              menuName: "Vinos",
             },
           ],
         });
-        catalogue.context = { ...catalogue.context, zoneId: "zone-terrace" };
-        return catalogue;
+        zoneOffers.context = { ...zoneOffers.context, zoneId: "zone-terrace" };
+        return zoneOffers;
       };
       const zoned = () => ({
         getDeviceZones: vi
@@ -15141,10 +15141,10 @@ describe("till-app", () => {
             .fn()
             .mockResolvedValue(deviceZonesFixture(["zone-start", "zone-terrace"], ["zone-dining"])),
           listZoneOffers: vi.fn(async (zoneId: string) => {
-            const catalogue = terraceOffers();
+            const zoneOffers = terraceOffers();
             return {
-              ...catalogue,
-              context: { ...catalogue.context, zoneId, serviceMode: "table_tab" },
+              ...zoneOffers,
+              context: { ...zoneOffers.context, zoneId, serviceMode: "table_tab" },
             };
           }),
           getTablesState: vi.fn().mockResolvedValue([terraceTable]),
@@ -15260,7 +15260,7 @@ describe("till-app", () => {
 
     /** The app-owned active menu id (the private `@state` the switcher and grid filter read). */
     const selected = (el: TillApp) =>
-      (el as unknown as { selectedCatalogueId: string }).selectedCatalogueId;
+      (el as unknown as { selectedMenuId: string }).selectedMenuId;
 
     it("keeps the last menu through payment and the next order without adding history", async () => {
       const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
@@ -16031,10 +16031,10 @@ describe("the device profile decides which screens a device offers", () => {
         permissions: string[];
       };
 
-    /** The next catalogue load waits until the returned function lets it load or fail. */
-    async function holdCatalogue(): Promise<(outcome?: "loads" | "fails") => void> {
-      const catalogue = await currentApi.listDefaultZoneOffers();
-      let finish!: (value: typeof catalogue) => void;
+    /** The next zoneOffers load waits until the returned function lets it load or fail. */
+    async function holdMenu(): Promise<(outcome?: "loads" | "fails") => void> {
+      const zoneOffers = await currentApi.listDefaultZoneOffers();
+      let finish!: (value: typeof zoneOffers) => void;
       let fail!: (error: unknown) => void;
       vi.mocked(currentApi.listDefaultZoneOffers).mockImplementationOnce(
         () =>
@@ -16044,15 +16044,15 @@ describe("the device profile decides which screens a device offers", () => {
           }),
       );
       return (outcome = "loads") =>
-        outcome === "loads" ? finish(catalogue) : fail({ code: "server.internal" });
+        outcome === "loads" ? finish(zoneOffers) : fail({ code: "server.internal" });
     }
 
     it.each(["loads", "fails"] as const)(
-      "leaves the newer person signed in when an older sign-in's catalogue %s last",
+      "leaves the newer person signed in when an older sign-in's zoneOffers %s last",
       async (outcome) => {
         const { el } = await mountApp();
         await flush(el);
-        const release = await holdCatalogue();
+        const release = await holdMenu();
         emit(lock(el)!, "logged-in", {
           personId: "manager",
           displayName: "Manager",
@@ -16158,7 +16158,7 @@ describe("the device profile decides which screens a device offers", () => {
       currentApi = stubApi();
       const { el } = await mountWidget<TillApp>("till-app", { api: currentApi, router });
       await flush(el);
-      const release = await holdCatalogue();
+      const release = await holdMenu();
       emit(lock(el)!, "logged-in", {
         personId: "manager",
         displayName: "Manager",
@@ -20792,14 +20792,14 @@ describe("switching the device's profile from the header", () => {
     fixtureOffers({
       menus: [foodMenu, drinksMenu],
       products: [
-        { ...coffee, catalogueId: "cat-food", catalogueName: "Comida" },
+        { ...coffee, menuId: "cat-food", menuName: "Comida" },
         {
           ...coffee,
           id: "cerveza",
           menuItemId: "menu-item-cerveza",
           name: "Cerveza",
-          catalogueId: "cat-drinks",
-          catalogueName: "Bebidas",
+          menuId: "cat-drinks",
+          menuName: "Bebidas",
         },
       ],
     }),
@@ -21393,14 +21393,14 @@ describe("switching the device's profile from the header", () => {
       departmentName: "Restaurant",
       serviceMode: "prepay" as const,
     }));
-    const offersIn = async (zoneId: string, menu: string): Promise<ZoneOfferCatalogue> => {
-      const catalogue = fixtureOffers({
+    const offersIn = async (zoneId: string, menu: string): Promise<ZoneOffers> => {
+      const zoneOffers = fixtureOffers({
         menus: [{ id: menu, name: menu, isDefault: true }],
-        products: [{ ...coffee, catalogueId: menu, catalogueName: menu }],
+        products: [{ ...coffee, menuId: menu, menuName: menu }],
       });
-      catalogue.context = { ...catalogue.context, zoneId };
-      catalogue.zones = zones;
-      return catalogue;
+      zoneOffers.context = { ...zoneOffers.context, zoneId };
+      zoneOffers.zones = zones;
+      return zoneOffers;
     };
     const listDefaultZoneOffers = vi
       .fn()
@@ -23996,10 +23996,10 @@ describe("A737 Find a bill page", () => {
   });
 
   it("Back during a table offer read prevents that table from opening afterwards", async () => {
-    let finish!: (value: ZoneOfferCatalogue) => void;
+    let finish!: (value: ZoneOffers) => void;
     const listZoneOffers = vi.fn(
       () =>
-        new Promise<ZoneOfferCatalogue>((done) => {
+        new Promise<ZoneOffers>((done) => {
           finish = done;
         }),
     );

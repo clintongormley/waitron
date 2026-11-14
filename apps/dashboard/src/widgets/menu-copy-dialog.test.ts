@@ -26,7 +26,7 @@ it.each(
         open: true,
         menu: { id: "lunch", name: "Lunch menu" },
         menus: [{ id: "dinner", name: "Dinner menu", active: true, version: 1 }],
-        api: { duplicateCatalogue: vi.fn() },
+        api: { duplicateMenu: vi.fn() },
       },
       theme,
     );
@@ -65,7 +65,7 @@ it("keeps a whitespace-only name quiet and disables Copy", async () => {
   const { el: form } = await mountWidget<MenuCopyDialog>("dashboard-menu-copy-dialog", {
     open: true,
     menu: { id: "lunch", name: "Lunch" },
-    api: { duplicateCatalogue: vi.fn() },
+    api: { duplicateMenu: vi.fn() },
   });
   const input = form.shadowRoot!.querySelector("wt-input")!;
   await input.updateComplete;
@@ -84,7 +84,7 @@ it("focuses Name after Copy is pressed with an already-used name", async () => {
     open: true,
     menu: { id: "lunch", name: "Lunch" },
     menus: [{ id: "dinner", name: "Dinner", active: true, version: 1 }],
-    api: { duplicateCatalogue: vi.fn() },
+    api: { duplicateMenu: vi.fn() },
   });
   const input = form.shadowRoot!.querySelector("wt-input")!;
   await input.updateComplete;
@@ -103,7 +103,7 @@ it("starts a different menu without submission messages", async () => {
     open: true,
     menu: { id: "lunch", name: "Lunch" },
     menus: [{ id: "dinner", name: "Dinner", active: true, version: 1 }],
-    api: { duplicateCatalogue: vi.fn() },
+    api: { duplicateMenu: vi.fn() },
   });
   const input = form.shadowRoot!.querySelector("wt-input")!;
   await input.updateComplete;

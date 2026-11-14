@@ -4,8 +4,8 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -59,10 +59,10 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     await inTx(venue, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Menu" });
+      const menu = await createMenu(tx, { name: "Menu" });
       const category = await createCategory(tx, { name: "Food" });
       const dish = await createProduct(tx, {
-        catalogueId: catalogue.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: "Dish",
         pricingUnit: "each",
@@ -70,7 +70,7 @@ useVenueDb({
         vatClass: "general",
       });
       dishId = dish.id;
-      await assignCatalogueToVenue(tx, catalogue.id);
+      await assignMenuToVenue(tx, menu.id);
       counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
     });
     marta = await seedPerson("manager", "Martha");

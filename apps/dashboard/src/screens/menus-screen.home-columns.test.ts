@@ -55,10 +55,10 @@ it.each(["en", "es-ES"])(
         },
       );
       const api = {
-        listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+        listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
         listLibraryProducts: async () => [],
         listCategories: async () => [],
-        getCatalogueSettings: async () => ({
+        getMenuSettings: async () => ({
           defaultProductVatClass: "general",
           defaultColor: null,
         }),

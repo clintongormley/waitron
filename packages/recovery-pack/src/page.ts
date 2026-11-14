@@ -30,7 +30,7 @@ export type PackPart = {
   /** A day, `YYYY-MM-DD`. */
   lastChanged?: string;
   check?: string;
-  /** Replaces the catalogue's reason on the cover for an `absent` or `not-set-up` part. */
+  /** Replaces the menu's reason on the cover for an `absent` or `not-set-up` part. */
   absentReason?: string;
   serverKeyLocation?: ServerKeyLocation;
 };

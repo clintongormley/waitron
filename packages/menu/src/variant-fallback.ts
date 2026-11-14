@@ -11,7 +11,7 @@ import { products, productUnits } from "@waitron/db";
  * unit and the colour are the inherited fields a variant cannot override: each always reads as its
  * parent's, whatever the variant's own `category_id`, `pricing_unit`, `color` or `product_units` row
  * holds. The three names are never inherited — a blank customer or kitchen name falls back to the
- * variant's OWN staff name — nor is anything that says what the row is (`id`, `catalogue_id`,
+ * variant's OWN staff name — nor is anything that says what the row is (`id`, `menu_id`,
  * `parent_id`, `variant_order`), whether it is sold (`active`, `available`, `ordering`), or when it
  * was written.
  *

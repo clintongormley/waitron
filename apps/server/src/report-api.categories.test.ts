@@ -15,7 +15,7 @@ import {
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
-import { createCatalogue, createCategory, createProduct } from "@waitron/menu";
+import { createMenu, createCategory, createProduct } from "@waitron/menu";
 import {
   hashPin,
   hashSessionToken,
@@ -168,7 +168,7 @@ const suite = useVenueDb({
     inactivePrinter = await printer({ name: "Old", active: false });
 
     await withTransaction(db, async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Bar" });
+      const menu = await createMenu(tx, { name: "Bar" });
       const drinks = await createCategory(tx, { name: "Beverages" });
       const softs = await createCategory(tx, { name: "Soft drinks", parentId: drinks.id });
       const loopA = await createCategory(tx, { name: "Loop A" });
@@ -176,7 +176,7 @@ const suite = useVenueDb({
       const product = async (name: string, categoryId: string | null) =>
         (
           await createProduct(tx, {
-            catalogueId: menu.id,
+            menuId: menu.id,
             categoryId,
             name,
             pricingUnit: "each",
@@ -191,7 +191,7 @@ const suite = useVenueDb({
       ids.ice = await product("Ice", null);
       ids.bread = await product("Bread", null);
       ids.loopProduct = await product("Loop product", loopB.id);
-      // A loop in today's tree, which a snapshot check refuses. Written directly: the catalogue's
+      // A loop in today's tree, which a snapshot check refuses. Written directly: the menu's
       // own writers refuse it.
       await tx.execute(
         sql`update category_details set parent_id = ${loopB.id} where category_id = ${loopA.id}`,
@@ -385,14 +385,14 @@ describe("GET /management-api/reports/categories", () => {
     expect(treeRows(body.tree).at(-1)).toBe("(not_recorded): 0.00/4.00 (1)");
   });
 
-  it("answers 409 sale_classification.invalid when today's catalogue fails the snapshot checks", async () => {
+  it("answers 409 sale_classification.invalid when today's menu fails the snapshot checks", async () => {
     const res = await report(`from=${DAY3}&to=${DAY3}&mode=current`);
     expect(res.status).toBe(409);
     expect(await errorOf(res)).toMatchObject({
       code: "sale_classification.invalid",
       params: { productId: ids.loopProduct, reason: "repeated_id" },
     });
-    // The recorded snapshot is unaffected by today's catalogue.
+    // The recorded snapshot is unaffected by today's menu.
     expect((await report(`from=${DAY3}&to=${DAY3}&mode=at_time_of_sale`)).status).toBe(200);
   });
 

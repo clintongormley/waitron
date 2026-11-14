@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { productUnits, withTransaction, type Transaction } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
 import { createExtraList } from "./extras.js";
 import {
@@ -11,7 +11,7 @@ import {
 import { writeProductModifiers } from "./product-modifiers.js";
 import { assignProductUnit, createUnit } from "./units.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 it("names a product's extras lists and only menus whose working offers carry them", async () => {

@@ -260,7 +260,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.access_invalid": 400,
   "device_profile.admission_invalid": 400,
   "printer.not_found": 404,
-  "catalogue.not_found": 404,
+  "menu.not_found": 404,
   "product.not_found": 404,
   "product.archived": 409,
 };

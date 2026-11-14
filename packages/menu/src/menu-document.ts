@@ -2,7 +2,7 @@ import { navigateMenuChanges, pathKey } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
 import { eq, inArray, type SQL } from "drizzle-orm";
 import {
-  catalogues,
+  menus,
   categories,
   menuDetails,
   optionLabels,
@@ -13,7 +13,7 @@ import {
 import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
-import { readCatalogueSettings } from "./settings.js";
+import { readMenuSettings } from "./settings.js";
 import { includedMenus } from "./menu-inclusion.js";
 import { clashesOf } from "./menu-combine.js";
 import type {
@@ -155,12 +155,12 @@ export async function buildMenuDocuments(
         tillColumns: menuDetails.tillColumns,
         tillTiles: menuDetails.tillTiles,
         tillOrder: menuDetails.tillOrder,
-        menuName: catalogues.name,
+        menuName: menus.name,
       })
       .from(menuDetails)
-      .innerJoin(catalogues, eq(catalogues.id, menuDetails.menuId))
+      .innerJoin(menus, eq(menus.id, menuDetails.menuId))
       .where(where)
-      .orderBy(catalogues.createdAt, catalogues.id);
+      .orderBy(menus.createdAt, menus.id);
   const loaded = graph ?? (await loadSectionGraph(tx));
   const requested = menuIds === undefined ? undefined : new Set(menuIds);
   const visit = (id: string): void => {
@@ -176,9 +176,9 @@ export async function buildMenuDocuments(
   else
     for (const batch of batches([...requested!]))
       details.push(...(await readDetails(inArray(menuDetails.menuId, batch))));
-  const menus = new Map<string, BuiltMenu>();
+  const menuRows = new Map<string, BuiltMenu>();
   const sectionNames = new Map<string, string>();
-  if (details.length === 0) return { graph: loaded, menus, sectionNames };
+  if (details.length === 0) return { graph: loaded, menus: menuRows, sectionNames };
   const offers = await listMenuOffers(
     tx,
     details.map((row) => row.menuId),
@@ -188,7 +188,7 @@ export async function buildMenuDocuments(
   const dishFacts = await readDishFacts(
     tx,
     offeredProducts,
-    offeredProducts.length === 0 ? null : (await readCatalogueSettings(tx)).defaultColor,
+    offeredProducts.length === 0 ? null : (await readMenuSettings(tx)).defaultColor,
   );
   const extraImages = await readEffectiveImages(tx, [
     ...new Set(
@@ -290,8 +290,8 @@ export async function buildMenuDocuments(
         format: MENU_DOCUMENT_FORMAT,
         includedMenuHashes: Object.fromEntries(
           includedMenus(loaded, row.menuId)
-            .filter((id) => menus.has(id))
-            .map((id) => [id, menus.get(id)!.workingHash]),
+            .filter((id) => menuRows.has(id))
+            .map((id) => [id, menuRows.get(id)!.workingHash]),
         ),
         menuId: row.menuId,
         menuName: row.menuName,
@@ -300,16 +300,16 @@ export async function buildMenuDocuments(
         home: { shortcuts, ...homeDisplaysOf(row) },
       },
     } satisfies Omit<BuiltMenu, "workingHash">;
-    menus.set(row.menuId, { ...built, workingHash: menuDocumentHash(built.document) });
+    menuRows.set(row.menuId, { ...built, workingHash: menuDocumentHash(built.document) });
   }
   if (menuIds !== undefined)
-    for (const id of menus.keys()) if (!menuIds.includes(id)) menus.delete(id);
-  return { graph: loaded, menus, sectionNames };
+    for (const id of menuRows.keys()) if (!menuIds.includes(id)) menuRows.delete(id);
+  return { graph: loaded, menus: menuRows, sectionNames };
 }
 
 export async function buildMenuDocument(tx: Transaction, menuId: string): Promise<BuiltMenu> {
   const built = (await buildMenuDocuments(tx, [menuId])).menus.get(menuId);
-  if (built === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
+  if (built === undefined) throw new AppError("menu.not_found", { menuId: menuId });
   return built;
 }
 

@@ -18,11 +18,11 @@ afterEach(() => {
 class UnitOwnersApp extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
-  catalogue = false;
+  menu = false;
   override render() {
     return html`${
-      this.catalogue
-        ? html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`
+      this.menu
+        ? html`<dashboard-products-screen .api=${this.api}></dashboard-products-screen>`
         : html`<dashboard-units-screen .api=${this.api}></dashboard-units-screen>`
     }${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
@@ -30,9 +30,9 @@ class UnitOwnersApp extends LitElement {
 customElements.define("unit-owners-leave-test-app", UnitOwnersApp);
 function api(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const client = {
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
-    listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+    listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
     listCategories: async () => [],
     listUnits: async () => [],
     listExtraLists: async () => [],
@@ -134,13 +134,13 @@ async function relatedUnit(parentName?: string) {
   const client = api();
   const { el: app } = await mountWidget<UnitOwnersApp>("unit-owners-leave-test-app", {
     api: client,
-    catalogue: true,
+    menu: true,
   });
-  const screen = app.shadowRoot!.querySelector("dashboard-catalogue-screen")!;
+  const screen = app.shadowRoot!.querySelector("dashboard-products-screen")!;
   await vi.waitFor(() =>
-    expect(screen.shadowRoot!.querySelector("dashboard-catalogue-browser")).not.toBeNull(),
+    expect(screen.shadowRoot!.querySelector("dashboard-product-browser")).not.toBeNull(),
   );
-  screen.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
+  screen.shadowRoot!.querySelector("dashboard-product-browser")!.dispatchEvent(
     new CustomEvent("add-product", {
       detail: { categoryId: null },
       bubbles: true,

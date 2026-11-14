@@ -167,7 +167,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     });
   }
   const timeZone = requireCountryTimeZone(country, request.timeZone);
-  // `persons.locale` only refuses an empty string, so a code the apps have no catalogue for would
+  // `persons.locale` only refuses an empty string, so a code the apps have no menu for would
   // be stored. `setPersonLocale` refuses one too.
   const adminLocale =
     request.admin.locale == null ? null : assertSupportedLocale(request.admin.locale);

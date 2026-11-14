@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { isAppError, type ContentLanguages } from "@waitron/shared";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import {
   menusFixture,
   NO_ICE,
@@ -20,7 +20,7 @@ import { applyMenuPatch, fixedLanguages, parseMenuPatch, patchFieldValue } from 
 import { PATCH_FIELDS, type MenuPatchChange } from "./menu-patch-types.js";
 import type { DocumentMember, FrozenOfferedModifier, MenuDocument } from "@waitron/shared";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const languages: ContentLanguages = { defaultLanguage: "en", languages: ["en", "es"] };
 
 async function liveLunch(

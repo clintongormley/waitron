@@ -10,9 +10,9 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { createCatalogue, updateMenuDetails } from "./operations.js";
+import { createMenu, updateMenuDetails } from "./operations.js";
 import { createOptionList, getOptionList, updateOptionList } from "./options.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { addMember, createSectionIn, readSection, updateSection } from "./sections.js";
@@ -20,7 +20,7 @@ import { requireMenuRoot } from "./menu-structure.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { folderPresentation } from "./include-folder-presentation.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 beforeEach(() => seedVenueSettings(fx.db));
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, body);
 type Names = Record<string, string> | null;
@@ -103,13 +103,13 @@ async function makeTarget(tx: Transaction, kind: string, names: Names): Promise<
       },
     };
   }
-  const menu = await createCatalogue(tx, {
+  const menu = await createMenu(tx, {
     name: "ES potatoes",
     ...(kind === "menu" ? { names: names ?? {} } : {}),
   });
   const root = await requireMenuRoot(tx, menu.id);
   if (kind === "included menu") {
-    const child = await createCatalogue(tx, {
+    const child = await createMenu(tx, {
       name: "ES drinks",
       names: { es: "Para beber", en: "Drinks" },
     });

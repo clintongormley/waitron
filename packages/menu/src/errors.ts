@@ -76,7 +76,7 @@ declare module "@waitron/shared" {
     /** `detected` names the type when it is recognisable: a fact about the bytes, never the
      * bytes. */
     "media.unsupported_type": { detected?: string };
-    "catalogue.not_found": { catalogueId: string };
+    "menu.not_found": { menuId: string };
     "menu.name_taken": { field: "name" };
     "menu.reset_required": { menuId: string };
     "menu.clashes_unresolved": { menuId: string; count: number };
@@ -211,7 +211,7 @@ declare module "@waitron/shared" {
      * till never offers such a product as an extra. `field` is `items.<i>.productId` of the first.
      */
     "extras.product_has_variants": { field: string; productId: string };
-    /** A configuration export's catalogue row holds a value no export writes; `field` is
+    /** A configuration export's menu row holds a value no export writes; `field` is
      * `<table>.<column>`. Declared with identical params in `apps/server/src/errors.ts`. */
     "setup.request_invalid": { field: string };
   }

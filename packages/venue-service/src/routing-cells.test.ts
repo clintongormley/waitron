@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createCatalogue, createCategory, createProduct } from "@waitron/menu";
+import { createMenu, createCategory, createProduct } from "@waitron/menu";
 import {
   captureError,
   CHECK_VIOLATION,
@@ -78,11 +78,11 @@ async function fixture(tx: Transaction) {
   const v = await venue(tx);
   const drinks = (await createCategory(tx, { name: "Drinks" })).id;
   const food = (await createCategory(tx, { name: "Food" })).id;
-  const menu = await createCatalogue(tx, { name: "Menu" });
+  const menu = await createMenu(tx, { name: "Menu" });
   const product = async (name: string) =>
     (
       await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         name,
         categoryId: drinks,
         pricingUnit: "each",
@@ -94,7 +94,7 @@ async function fixture(tx: Transaction) {
   const beer = await product("Beer");
   const [variant] = await tx
     .insert(products)
-    .values({ catalogueId: menu.id, parentId: mojito, name: "Large", categoryId: null })
+    .values({ menuId: menu.id, parentId: mojito, name: "Large", categoryId: null })
     .returning();
   return { ...v, drinks, food, mojito, beer, variant: variant!.id };
 }

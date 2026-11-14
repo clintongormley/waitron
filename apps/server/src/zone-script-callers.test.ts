@@ -129,12 +129,12 @@ describe("saved-zone script callers", () => {
       }
     },
   );
-  it("refuses installed Demo's unusable saved zone before seeding catalogue or sales", async () => {
+  it("refuses installed Demo's unusable saved zone before seeding menu or sales", async () => {
     const venue = await provision();
     await suite.db.run(
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
     );
-    const before = suite.db.all(sql`select * from catalogues`);
+    const before = suite.db.all(sql`select * from menus`);
     const refusal = await seedInstalledDemo(suite.db, venue, {
       country: "ES",
       admin: { locale: "en" },
@@ -142,7 +142,7 @@ describe("saved-zone script callers", () => {
       () => null,
       (error: unknown) => error,
     );
-    expect(suite.db.all(sql`select * from catalogues`)).toEqual(before);
+    expect(suite.db.all(sql`select * from menus`)).toEqual(before);
     expect(suite.db.all(sql`select * from sales`)).toEqual([]);
     expect(refusal).toMatchObject({ code: "venue.time_zone_invalid" });
   });

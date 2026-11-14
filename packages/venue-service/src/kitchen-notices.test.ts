@@ -5,7 +5,7 @@ import {
   EACH_UNIT,
   EACH_UNIT_ID,
   addProductToMenu,
-  createCatalogue,
+  createMenu,
   createProduct,
   deleteUnit,
   units,
@@ -567,9 +567,9 @@ describe("recordKitchenNotices", () => {
     const [seededEach, kg, gram, lookalike] = stored;
     await inTx((tx) => updateUnit(tx, seededEach!.id, { abbreviation: { en: "pc" } }, "en"));
     const offer = await inTx(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Snacks" });
+      const menu = await createMenu(tx, { name: "Snacks" });
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Small plate",
         pricingUnit: "each",

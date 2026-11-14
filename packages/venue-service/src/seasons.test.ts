@@ -3,7 +3,7 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
+import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   departmentDays,
@@ -218,7 +218,7 @@ async function autumnVenue() {
     const bar = (await createDepartment(tx, { name: "Bar", orderStart: "counter" })).id;
     await configureZone(tx, { zoneId: zone!.id, departmentId: restaurant });
     const period = async (name: string) => {
-      const menuId = (await createCatalogue(tx, { name: `${name}` })).id;
+      const menuId = (await createMenu(tx, { name: `${name}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
       return (await saveMenuPeriod(tx, restaurant, { name, menuId, staffMenuIds: [] })).id;

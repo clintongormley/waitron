@@ -976,7 +976,14 @@ CREATE TABLE `drawer_opens` (
       ))
 );
 --> statement-breakpoint
-CREATE TABLE `catalogues` (
+CREATE TABLE `categories` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `menus` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
@@ -986,17 +993,10 @@ CREATE TABLE `catalogues` (
 	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `catalogues_one_default_uq` ON `catalogues` (`is_default`) WHERE "catalogues"."is_default" = 1;--> statement-breakpoint
-CREATE TABLE `categories` (
-	`id` text PRIMARY KEY NOT NULL,
-	`name` text NOT NULL,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL
-);
---> statement-breakpoint
+CREATE UNIQUE INDEX `menus_one_default_uq` ON `menus` (`is_default`) WHERE "menus"."is_default" = 1;--> statement-breakpoint
 CREATE TABLE `products` (
 	`id` text PRIMARY KEY NOT NULL,
-	`catalogue_id` text NOT NULL,
+	`menu_id` text NOT NULL,
 	`parent_id` text,
 	`variant_order` integer DEFAULT 0 NOT NULL,
 	`set_lunch` integer DEFAULT false NOT NULL,
@@ -1022,19 +1022,19 @@ CREATE TABLE `products` (
 	`diet` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	FOREIGN KEY (`catalogue_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`parent_id`,`catalogue_id`) REFERENCES `products`(`id`,`catalogue_id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`parent_id`,`menu_id`) REFERENCES `products`(`id`,`menu_id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "products_top_level_owns_ck" CHECK("products"."parent_id" is not null or ("products"."vat_class" is not null and "products"."pricing_unit" is not null and "products"."unit_price" is not null and "products"."dietary_declarations" is not null)),
 	CONSTRAINT "products_pricing_unit_ck" CHECK("products"."pricing_unit" in ('each','weight')),
 	CONSTRAINT "products_vat_class_ck" CHECK("products"."vat_class" in ('general','reduced','super_reduced','zero'))
 );
 --> statement-breakpoint
-CREATE INDEX `products_catalogue_id_idx` ON `products` (`catalogue_id`);--> statement-breakpoint
+CREATE INDEX `products_menu_id_idx` ON `products` (`menu_id`);--> statement-breakpoint
 CREATE INDEX `products_name_key_idx` ON `products` (`name_key`);--> statement-breakpoint
 CREATE INDEX `products_course_idx` ON `products` (`course_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `products_id_catalogue_key` ON `products` (`id`,`catalogue_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `products_id_menu_key` ON `products` (`id`,`menu_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `products_parent_id_key` ON `products` (`parent_id`,`id`);--> statement-breakpoint
 CREATE TABLE `purchase_invoice_vat` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -1889,7 +1889,7 @@ CREATE TABLE `menu_details` (
 	`till_columns` integer DEFAULT 6 NOT NULL,
 	`till_tiles` text DEFAULT 'colours' NOT NULL,
 	`till_order` text DEFAULT 'home_first' NOT NULL,
-	FOREIGN KEY (`menu_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`root_section_id`) REFERENCES `sections`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`default_home_layout_id`) REFERENCES `sections`(`id`) ON UPDATE no action ON DELETE no action
 );
@@ -1900,7 +1900,7 @@ CREATE TABLE `menu_items` (
 	`menu_id` text NOT NULL,
 	`product_id` text NOT NULL,
 	`gross_price` integer,
-	FOREIGN KEY (`menu_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "menu_items_gross_price_ck" CHECK("menu_items"."gross_price" >= 0)
 );
@@ -2047,7 +2047,7 @@ CREATE TABLE `sections` (
 	`owner_menu_id` text NOT NULL,
 	`image` text,
 	`color` text,
-	FOREIGN KEY (`owner_menu_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`owner_menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "sections_role_ck" CHECK("sections"."role" in ('section', 'menu_root', 'home_layout'))
 );
 --> statement-breakpoint
@@ -2056,7 +2056,7 @@ CREATE TABLE `menu_publications` (
 	`menu_id` text PRIMARY KEY NOT NULL,
 	`version_id` text NOT NULL,
 	`published_at` text NOT NULL,
-	FOREIGN KEY (`menu_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`version_id`,`menu_id`) REFERENCES `menu_versions`(`id`,`menu_id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -2070,7 +2070,7 @@ CREATE TABLE `menu_scheduled_publications` (
 	`activated_at` text,
 	`cancelled_at` text,
 	`cancelled_by` text,
-	FOREIGN KEY (`menu_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`version_id`,`menu_id`) REFERENCES `menu_versions`(`id`,`menu_id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "menu_scheduled_publications_state_ck" CHECK("menu_scheduled_publications"."state" in ('queued', 'activated', 'cancelled')),
 	CONSTRAINT "menu_scheduled_publications_settled_ck" CHECK(("menu_scheduled_publications"."state" = 'queued' and "menu_scheduled_publications"."activated_at" is null and "menu_scheduled_publications"."cancelled_at" is null and "menu_scheduled_publications"."cancelled_by" is null) or ("menu_scheduled_publications"."state" = 'activated' and "menu_scheduled_publications"."activated_at" is not null and "menu_scheduled_publications"."cancelled_at" is null and "menu_scheduled_publications"."cancelled_by" is null) or ("menu_scheduled_publications"."state" = 'cancelled' and "menu_scheduled_publications"."cancelled_at" is not null and "menu_scheduled_publications"."cancelled_by" is not null and "menu_scheduled_publications"."activated_at" is null)),
@@ -2094,7 +2094,7 @@ CREATE TABLE `menu_versions` (
 	`content_hash` text NOT NULL,
 	`published_at` text NOT NULL,
 	`published_by` text NOT NULL,
-	FOREIGN KEY (`menu_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "menu_versions_number_ck" CHECK("menu_versions"."number" >= 1)
 );
 --> statement-breakpoint
@@ -2444,7 +2444,7 @@ CREATE TABLE `menu_period_staff_menus` (
 	`display_order` integer DEFAULT 0 NOT NULL,
 	PRIMARY KEY(`period_id`, `menu_id`),
 	FOREIGN KEY (`period_id`,`department_id`) REFERENCES `menu_periods`(`id`,`department_id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`menu_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `menu_periods` (
@@ -2456,7 +2456,7 @@ CREATE TABLE `menu_periods` (
 	`floor_plan_set_id` text,
 	FOREIGN KEY (`floor_plan_set_id`) REFERENCES `floor_plan_sets`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`menu_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "menu_periods_name_ck" CHECK(trim("menu_periods"."name") <> ''),
 	CONSTRAINT "menu_periods_colour_ck" CHECK("menu_periods"."colour" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey'))
 );

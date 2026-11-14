@@ -17,7 +17,7 @@ import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   departmentDayRanges,
   departmentDays,
   departments,
@@ -128,7 +128,7 @@ async function fixture(
       active: !options.disabled,
     });
     const menuId = randomUUID();
-    await tx.insert(catalogues).values({ id: menuId, name: "Menu" });
+    await tx.insert(menus).values({ id: menuId, name: "Menu" });
     const periodId = randomUUID();
     await tx.insert(menuPeriods).values({
       id: periodId,
@@ -668,7 +668,7 @@ describe("a waiting change checks the hours written while it waits", () => {
     await waiting(v);
     const menuId = randomUUID();
     await withTransaction(suite.db, (tx) =>
-      tx.insert(catalogues).values({ id: menuId, name: "Late" }),
+      tx.insert(menus).values({ id: menuId, name: "Late" }),
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -824,7 +824,7 @@ describe("a waiting change checks the hours written while it waits", () => {
         tradingName: "Bar",
       });
       const menuId = randomUUID();
-      await tx.insert(catalogues).values({ id: menuId, name: "Bar menu" });
+      await tx.insert(menus).values({ id: menuId, name: "Bar menu" });
       const periodId = randomUUID();
       await tx.insert(menuPeriods).values({ id: periodId, departmentId, menuId, name: "Bar" });
       await seasonDay(tx, { departmentId, seasonId: v.seasonId, weekday, periodId, ranges });
@@ -1965,7 +1965,7 @@ it("counts a range painted in every season once, so a capped list still names ev
       name: "Bar",
       tradingName: "Bar",
     });
-    await tx.insert(catalogues).values({ id: menuId, name: "Bar menu" });
+    await tx.insert(menus).values({ id: menuId, name: "Bar menu" });
     await tx
       .insert(menuPeriods)
       .values({ id: secondPeriodId, departmentId: secondId, menuId, name: "Bar" });
@@ -2129,7 +2129,7 @@ async function busyCalendar(count: number, run = 0) {
     }));
     for (const season of seasonIds) await tx.insert(seasons).values({ ...season });
     const menuId = randomUUID();
-    await tx.insert(catalogues).values({ id: menuId, name: "Menu" });
+    await tx.insert(menus).values({ id: menuId, name: "Menu" });
     const departmentsMade: { id: string; lunch: string; dinner: string }[] = [];
     for (let d = 0; d < 3; d++) {
       const id = fixed(2, d);

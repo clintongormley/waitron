@@ -1758,7 +1758,7 @@ In Select mode, put every grip in one leading column before the tree arrow and i
 Reserve that column on read-only rows. Keep the arrow and media slot inside
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
 holds a section's colour square or a product's colour square or photo. A photo has a ring in the product's own colour, falling back to its category's inherited
-colour, then to the venue's default. On an owned row the product slot is a link to the product's Edit dialog on the Catalogue
+colour, then to the venue's default. On an owned row the product slot is a link to the product's Edit dialog on the Menu
 screen, which opens with its photo field focused; on an included menu's row, or for a product the
 library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide
 media in both trees when the tree's box is at most 440px wide. In the Products list the product
@@ -1837,13 +1837,13 @@ after its last drawn row while in its lower half. Nothing is offered — no gap,
 release sends nothing — over the dragged row or anything drawn inside it, over a list inside a
 dragged section wherever that list is drawn, over a row inside an included menu, over another list
 that already holds the same product or section, over the dragged member's own list where it is drawn in
-another place, and, for a product no longer in the catalogue, anywhere but beside its siblings. On
+another place, and, for a product no longer in the menu, anywhere but beside its siblings. On
 a grip, ArrowUp and ArrowDown move the member one place within its own list. ArrowRight moves it to
 the end of the sibling drawn directly above it, when that sibling is a section the menu owns that
 does not already hold the same product or section and is not the moved section or one inside it.
 ArrowLeft moves a member out of its section to the place directly after that section, unless that
 list already holds the same product or section; at the top level it does nothing. Neither of
-these two keys moves a product no longer in the catalogue. Each key
+these two keys moves a product no longer in the menu. Each key
 announces the move, and the grip lists the four keys in `aria-keyshortcuts`. A move into another
 list sends the same request as Move to section… (`moveMembersInto`), so a moved product keeps the
 menu's price for it. The screen then reads the menu again and, while the menu on screen still has the
@@ -3150,7 +3150,7 @@ and nothing guards it across screens:
   a menu's Schedule and Change time on its Preview tab. Units' Change unit, the Products browser's
   Move and Delete dialog and the image picker act on what is selected rather than save a draft, so
   they keep their own rules; the reason for each is in
-  [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
+  [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--menu-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
 - batch 3a (the service-status rows and the new status's Save were retired by A757 slice 2,
   2026-10-19): the
   kitchen's late flags (retired by A756 PR 5, 2026-10-23); the venue details editor (now the Venue card, A755 below); My schedule's cover and time-off requests; the
@@ -3741,7 +3741,7 @@ shows a product description today (the reader check in A220, below).
 A220's reader check and the owner's decisions behind these hints (#1069, #1073), moved here from
 `docs/backlog.md`:
 
-**What a description reader shows — checked by running, 2026-10-02.** A throwaway catalogue test
+**What a description reader shows — checked by running, 2026-10-02.** A throwaway menu test
 built a product described only in Spanish (the default), a variant with its own Spanish description
 and a variant with none, then read them through `listProducts`'s effective read, the product
 editor's read, the published menu (`buildMenuDocument`) and the live offers the till receives

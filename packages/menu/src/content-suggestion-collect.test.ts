@@ -19,9 +19,9 @@ import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { createCategory } from "./categories.js";
 import {
-  createCatalogue,
+  createMenu,
   createProduct,
-  deactivateCatalogue,
+  deactivateMenu,
   deactivateProduct,
 } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
@@ -84,7 +84,7 @@ async function inVenue<T>(
   await seedTaxpayer(suite.db);
   return withTransaction(suite.db, async (tx) => {
     await writeContentLanguages(tx, config);
-    const menu = await createCatalogue(tx, {
+    const menu = await createMenu(tx, {
       name: "STAFF Lunch",
       names: Object.fromEntries(
         config.languages.map((language) => [language, `CLIENT-${language.toUpperCase()} Dinar`]),
@@ -102,7 +102,7 @@ async function product(
   categoryId: string | null = null,
 ): Promise<string> {
   const created = await createProduct(tx, {
-    catalogueId: lunch.menuId,
+    menuId: lunch.menuId,
     categoryId,
     unitId: null,
     name: `STAFF ${name}`,
@@ -125,7 +125,7 @@ async function variant(
   const [row] = await tx
     .insert(products)
     .values({
-      catalogueId: lunch.menuId,
+      menuId: lunch.menuId,
       parentId,
       name: `STAFF ${name}`,
       kitchenName: `KITCHEN ${name}`,
@@ -222,7 +222,7 @@ describe("what counts as still there", () => {
         abbreviation: { ca: "r." },
         precision: 0,
       });
-      const bar = await createCatalogue(tx, { name: "STAFF Bar", names: { ca: "CLIENT-CA Bar" } });
+      const bar = await createMenu(tx, { name: "STAFF Bar", names: { ca: "CLIENT-CA Bar" } });
       const barRoot = await rootOf(tx, bar.id);
       await tx.update(sections).set({ names: {} }).where(eq(sections.id, barRoot));
       const plats = await section(tx, lunch.menuId, "Plats", {});
@@ -234,12 +234,12 @@ describe("what counts as still there", () => {
       const spice = await optionList(tx, "Picant", { ca: "CLIENT-CA Picant" });
       await optionLabel(tx, spice, "Molt", null);
       await tx.update(optionLists).set({ active: false }).where(eq(optionLists.id, spice));
-      const terrace = await createCatalogue(tx, {
+      const terrace = await createMenu(tx, {
         name: "STAFF Terrassa",
         names: { ca: "CLIENT-CA Terrassa" },
       });
       await section(tx, terrace.id, "Postres", {});
-      await deactivateCatalogue(tx, terrace.id);
+      await deactivateMenu(tx, terrace.id);
 
       expect((await listAbsentTranslationRefs(tx)).map(suggestionRef)).toEqual(
         sortRefs([
@@ -264,7 +264,7 @@ describe("what counts as still there", () => {
       const vermut = await product(tx, lunch, "Vermut", null);
       const gran = await variant(tx, lunch, vermut, "Vermut gran", null);
       await tx.update(products).set({ active: false }).where(eq(products.id, vermut));
-      const drinks = await createCatalogue(tx, {
+      const drinks = await createMenu(tx, {
         name: "STAFF Drinks",
         names: { ca: "CLIENT-CA Begudes" },
       });
@@ -272,7 +272,7 @@ describe("what counts as still there", () => {
         kind: "section",
         sectionId: await rootOf(tx, drinks.id),
       });
-      await deactivateCatalogue(tx, drinks.id);
+      await deactivateMenu(tx, drinks.id);
       const refs: TranslationRef[] = [
         { kind: "product", id: pa },
         { kind: "product", id: "no-such-product" },
@@ -361,7 +361,7 @@ describe("the gaps a run starts from", () => {
           precision: 0,
         })
         .returning({ id: units.id });
-      const drinks = await createCatalogue(tx, {
+      const drinks = await createMenu(tx, {
         name: "STAFF Drinks",
         names: { ca: "CLIENT-CA Begudes", es: "CLIENT-ES Bebidas" },
       });
@@ -494,7 +494,7 @@ describe("collecting what is missing", () => {
       const punto = await optionList(tx, "Punto", { ca: "CLIENT-CA Punt", es: "CLIENT-ES Punto" });
       const poco = await optionLabel(tx, punto, "Poco", { ca: "CLIENT-CA Poc" });
       const sides = await extraList(tx, "Guarnición", { ca: "CLIENT-CA Guarnició" });
-      const drinks = await createCatalogue(tx, {
+      const drinks = await createMenu(tx, {
         name: "STAFF Drinks",
         names: { ca: "CLIENT-CA Begudes", es: "CLIENT-ES Bebidas" },
       });
@@ -638,7 +638,7 @@ describe("collecting what is missing", () => {
       const doneness = await optionList(tx, "Punt", null);
       const rare = await optionLabel(tx, doneness, "Poc", {});
       const sauces = await extraList(tx, "Salses", null);
-      const bar = await createCatalogue(tx, { name: "STAFF Bar", names: { ca: "CLIENT-CA Bar" } });
+      const bar = await createMenu(tx, { name: "STAFF Bar", names: { ca: "CLIENT-CA Bar" } });
       const barRoot = await rootOf(tx, bar.id);
       await tx.update(sections).set({ names: {} }).where(eq(sections.id, barRoot));
       const mains = await section(tx, lunch.menuId, "Plats", {});
@@ -798,7 +798,7 @@ describe("collecting what is missing", () => {
     await inVenue(THREE, async (tx, lunch) => {
       await tx.insert(products).values(
         Array.from({ length: 120 }, (_, index) => ({
-          catalogueId: lunch.menuId,
+          menuId: lunch.menuId,
           name: `STAFF Item ${index}`,
           kitchenName: `KITCHEN Item ${index}`,
           customerName: { ca: `CLIENT-CA Item ${index}` },

@@ -12,7 +12,7 @@ import {
   validateContentTranslations,
 } from "@waitron/menu";
 import {
-  catalogues,
+  menus,
   customThemes,
   products,
   type Transaction,
@@ -64,7 +64,7 @@ export type ImageUsage =
   | {
       kind: "product";
       id: string;
-      catalogueId: string;
+      menuId: string;
       /** The staff-facing product name (`products.name`) — plain text, not per-language. */
       name: string;
       active: boolean;
@@ -74,7 +74,7 @@ export type ImageUsage =
       /** The variant's own `products` row id; `productId` is its parent's. */
       id: string;
       productId: string;
-      catalogueId: string;
+      menuId: string;
       /** The product and relative variant staff names. */
       name: string;
       /** The variant AND its product are Active. */
@@ -197,7 +197,7 @@ async function listImageUsagesForFilename(
     .select({
       id: products.id,
       parentId: products.parentId,
-      catalogueId: products.catalogueId,
+      menuId: products.menuId,
       name: products.name,
       parentName: parentProducts.name,
       active: products.active,
@@ -221,29 +221,29 @@ async function listImageUsagesForFilename(
     .select({
       id: sectionMembers.id,
       menuId: sections.ownerMenuId,
-      menuName: catalogues.name,
+      menuName: menus.name,
       // Left-joined so a member that names no section is still listed, as `countUsages` and the
       // delete trigger still see it, under its own missing name.
       includedMenuName: sql<string>`coalesce(${includedRoots.internalName}, ${sectionMembers.missingName}, '')`,
     })
     .from(sectionMembers)
     .innerJoin(sections, eq(sections.id, sectionMembers.sectionId))
-    .innerJoin(catalogues, eq(catalogues.id, sections.ownerMenuId))
+    .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
     .leftJoin(includedRoots, eq(includedRoots.id, sectionMembers.childSectionId))
     .where(eq(folderImage, filename))
-    .orderBy(catalogues.name, sectionMembers.id);
+    .orderBy(menus.name, sectionMembers.id);
   const versionRows = await tx
     .select({
       id: menuVersions.id,
       menuId: menuVersions.menuId,
-      menuName: catalogues.name,
+      menuName: menus.name,
       number: menuVersions.number,
       livePointer: menuPublications.versionId,
       activatesAt: menuScheduledPublications.activatesAt,
     })
     .from(menuVersionImages)
     .innerJoin(menuVersions, eq(menuVersions.id, menuVersionImages.versionId))
-    .innerJoin(catalogues, eq(catalogues.id, menuVersions.menuId))
+    .innerJoin(menus, eq(menus.id, menuVersions.menuId))
     .leftJoin(menuPublications, eq(menuPublications.versionId, menuVersionImages.versionId))
     .leftJoin(
       menuScheduledPublications,
@@ -258,7 +258,7 @@ async function listImageUsagesForFilename(
         or(isNotNull(menuPublications.versionId), isNotNull(menuScheduledPublications.versionId)),
       ),
     )
-    .orderBy(catalogues.name, menuVersions.menuId, menuVersions.number);
+    .orderBy(menus.name, menuVersions.menuId, menuVersions.number);
   const departmentRows = await tx
     .select({ id: departments.id, name: departments.name, active: departments.active })
     .from(departmentReceipts)

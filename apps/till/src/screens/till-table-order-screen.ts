@@ -1789,7 +1789,7 @@ export class TillTableOrderScreen extends LitElement {
       store.canSelectProduct = (product) =>
         this.orderingAllowed &&
         this.productSelectable?.(product) !== false &&
-        this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable);
+        this.menus.some((menu) => menu.id === product.menuId && menu.orderable);
     return store;
   }
 
@@ -2602,7 +2602,7 @@ export class TillTableOrderScreen extends LitElement {
     return this.#lineGrossByLineNo.get(line.lineNo)!;
   }
 
-  /** The STAFF label the server froze onto the line, falling back to the live catalogue, then to the raw
+  /** The STAFF label the server froze onto the line, falling back to the live menu, then to the raw
    * id for a product deactivated since the line was added. */
   #nameForLine(line: TabLine): string {
     return line.name ?? this.#nameFor(line.productId);
@@ -2917,7 +2917,7 @@ export class TillTableOrderScreen extends LitElement {
     store.canSelectProduct = (product) =>
       this.orderingAllowed &&
       this.productSelectable?.(product) !== false &&
-      this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable);
+      this.menus.some((menu) => menu.id === product.menuId && menu.orderable);
     const menu = this.menuSelectionRequired
       ? this.menus.find((menu) => menu.id === this.selectedMenuId && menu.orderable)
       : shownMenu(this.menus, this.selectedMenuId);
@@ -2934,14 +2934,14 @@ export class TillTableOrderScreen extends LitElement {
       .menus=${this.menus}
       .servedProducts=${this.#searchProducts(
         this.products.filter((product) =>
-          this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable),
+          this.menus.some((menu) => menu.id === product.menuId && menu.orderable),
         ),
         "",
         this.selectedFilters,
       )}
       .unfilteredServedProducts=${this.#unfilteredSearchProducts(
         this.products.filter((product) =>
-          this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable),
+          this.menus.some((menu) => menu.id === product.menuId && menu.orderable),
         ),
         "",
         EMPTY_MENU_FILTERS,

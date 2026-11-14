@@ -82,7 +82,7 @@ case count. A wrapper can invoke the real file without naming any identifier ins
 A1009's 4 November 2026 CI run `41892351289` failed two host-zone cases after the demo-only
 checks were removed from `zone-script-callers.test.ts`: the child ran four cases while
 `src/testing/zone-process-matrix.ts` still expected eleven. The local wrapper reproduced both
-failures. The correction retains the live script cases and adds the replacement catalogue and
+failures. The correction retains the live script cases and adds the replacement menu and
 reporting suites to both fresh UTC and Madrid processes. Run
 `pnpm --filter @waitron/server exec vitest run src/zone-process-matrix.whole-files.test.ts`
 to exercise the child dispatch, exact counts, source names and original behavioral assertions.
@@ -375,7 +375,7 @@ not checked by anything.
 sentence on each field; this is the shape of it. Four fields are required:
 
 - `subject` — the migration set under test.
-- `subjectName` — the name the suite's own case names will use, `core` or `catalogue`. It names the
+- `subjectName` — the name the suite's own case names will use, `core` or `menu`. It names the
   SET, not the package, and it is read by whoever reads a failure.
 - `declarations` — the package's schema barrel, handed in as `import * as barrel from "./index.js"`.
   A module set whose table definitions have moved into a folder of `@waitron/db` or
@@ -388,7 +388,7 @@ sentence on each field; this is the shape of it. Four fields are required:
 - `declaresClosedVocabularies` — whether any column in this set is declared with a closed
   vocabulary. The caller states it and the suite checks the statement, rather than the suite
   counting. The vocabulary block is one case per such column, so a set with none leaves that list
-  empty, and an empty list of cases is indistinguishable from a list that passed. `catalogue` states
+  empty, and an empty list of cases is indistinguishable from a list that passed. `menu` states
   `false` and is the reason the field exists.
 
 Three more are optional:

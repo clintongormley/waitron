@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
-import { insertCatalogue, type Catalogue } from "./operations.js";
+import { insertMenu, type Menu } from "./operations.js";
 import { sectionPatchValues } from "./sections.js";
 import "./errors.js";
 
@@ -25,10 +25,10 @@ export async function duplicateMenu(
   tx: Transaction,
   sourceMenuId: string,
   name: string,
-): Promise<Catalogue> {
+): Promise<Menu> {
   const [details] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, sourceMenuId));
   if (details === undefined)
-    throw new AppError("catalogue.not_found", { catalogueId: sourceMenuId });
+    throw new AppError("menu.not_found", { menuId: sourceMenuId });
   const { internalName } = await sectionPatchValues(tx, { internalName: name });
   const owned = await tx.select().from(sections).where(eq(sections.ownerMenuId, sourceMenuId));
   const members = [];
@@ -48,7 +48,7 @@ export async function duplicateMenu(
     .innerJoin(menuItems, eq(menuItems.id, menuItemVariantOverrides.menuItemId))
     .where(eq(menuItems.menuId, sourceMenuId));
 
-  const copy = await insertCatalogue(tx, internalName!);
+  const copy = await insertMenu(tx, internalName!);
   const sectionIds = new Map(owned.map((section) => [section.id, newId()]));
   const itemIds = new Map(items.map((item) => [item.id, newId()]));
   // Readers break a position tie by member id, so the new ids keep the old ids' order.

@@ -156,7 +156,7 @@ describe("the menu timetable rows of a bundle", () => {
       ],
       floor_zones: [{ id: BARRA, active: 1, department_id: RESTAURANT }],
 
-      catalogues: [{ id: "m-desayunos" }, { id: "m-copas" }, { id: "m-cafe" }, { id: "m-deli" }],
+      menus: [{ id: "m-desayunos" }, { id: "m-copas" }, { id: "m-cafe" }, { id: "m-deli" }],
       menu_periods: [
         {
           id: MANANAS,
@@ -863,7 +863,7 @@ describe("service-period configuration", () => {
     return {
       department_sale_policies: [{ department_id: RESTAURANT }],
       departments: [{ id: RESTAURANT }],
-      catalogues: [{ id: "customer" }, { id: "staff" }],
+      menus: [{ id: "customer" }, { id: "staff" }],
       menu_periods: [
         {
           id: periodId,
@@ -1081,7 +1081,7 @@ describe("season weeks in a configuration bundle", () => {
       departments: [{ id: RESTAURANT }],
       floor_zones: [{ id: "terrace", active: 1, department_id: RESTAURANT }],
 
-      catalogues: [{ id: "m-lunch" }, { id: "m-late" }],
+      menus: [{ id: "m-lunch" }, { id: "m-late" }],
       menu_periods: [
         { id: LUNCH, department_id: RESTAURANT, name: "Lunch", colour: "blue", menu_id: "m-lunch" },
         { id: LATE, department_id: RESTAURANT, name: "Late", colour: "red", menu_id: "m-late" },
@@ -1357,7 +1357,7 @@ describe("special days in a configuration bundle", () => {
       departments: [{ id: RESTAURANT }],
       floor_zones: [{ id: "terrace", active: 1, department_id: RESTAURANT }],
 
-      catalogues: [{ id: "m-bar" }, { id: "m-lunch" }],
+      menus: [{ id: "m-bar" }, { id: "m-lunch" }],
       menu_periods: [
         { id: BAR_PERIOD, department_id: RESTAURANT, name: "Bar", colour: "red", menu_id: "m-bar" },
         { id: LUNCH, department_id: RESTAURANT, name: "Lunch", colour: "blue", menu_id: "m-lunch" },

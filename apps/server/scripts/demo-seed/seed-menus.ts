@@ -5,8 +5,8 @@ import {
   addMember,
   addProductToMenu,
   addProducts,
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   createSectionIn,
@@ -24,16 +24,16 @@ import {
   demoPlainText,
   demoLanguagesFor,
   type DemoDataSet,
-  type SeedCatalogue,
+  type SeedMenu,
 } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 
-export interface SeedCataloguesInput {
+export interface SeedMenusInput {
   locale: SeedLocale;
   dataSet: DemoDataSet;
 }
 
-export interface SeedCataloguesResult {
+export interface SeedMenusResult {
   /** image basename → product id; every seeded product appears exactly once. */
   productsByImage: Map<string, string>;
   menuItemsByProduct: Map<string, string>;
@@ -58,7 +58,7 @@ async function resolveStationIds(
     limit 1`);
   const kitchen = defaults[0]?.id;
   if (kitchen === undefined) {
-    throw new Error("seedCatalogues: the venue has no default station");
+    throw new Error("seedMenus: the venue has no default station");
   }
   await tx.execute(sql`
     update kitchen_stations set name = ${plain(names.kitchen)}, colour = 'orange'
@@ -81,7 +81,7 @@ async function resolveStationIds(
     )
     .returning({ id: kitchenStations.id });
   if (bar === undefined || upstairsBar === undefined || deli === undefined) {
-    throw new Error("seedCatalogues: failed to create the demo stations");
+    throw new Error("seedMenus: failed to create the demo stations");
   }
   return { kitchen, bar: bar.id, upstairsBar: upstairsBar.id, deli: deli.id };
 }
@@ -90,10 +90,10 @@ async function resolveStationIds(
  * The data set's restaurant menu becomes the venue's default menu; the others are added beside
  * it.
  */
-export async function seedCatalogues(
+export async function seedMenus(
   tx: Transaction,
-  { locale, dataSet }: SeedCataloguesInput,
-): Promise<SeedCataloguesResult> {
+  { locale, dataSet }: SeedMenusInput,
+): Promise<SeedMenusResult> {
   const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
   const stationIds = await resolveStationIds(tx, dataSet, locale);
   const venue = await readVenue(tx);
@@ -117,10 +117,10 @@ export async function seedCatalogues(
       )})
     limit 1`);
 
-  const seedOne = async (data: SeedCatalogue, existingMenuId?: string): Promise<string> => {
-    const catalogue =
+  const seedOne = async (data: SeedMenu, existingMenuId?: string): Promise<string> => {
+    const menu =
       existingMenuId === undefined
-        ? await createCatalogue(tx, {
+        ? await createMenu(tx, {
             name: plain(data.name),
             names: translated(data.customerName),
           })
@@ -130,7 +130,7 @@ export async function seedCatalogues(
         name: plain(data.name),
         names: translated(data.customerName),
       });
-    const rootSectionId = await requireMenuRoot(tx, catalogue.id);
+    const rootSectionId = await requireMenuRoot(tx, menu.id);
     for (const cat of data.categories) {
       const category = await createCategory(tx, {
         name: plain(cat.categoryName ?? cat.name),
@@ -168,7 +168,7 @@ export async function seedCatalogues(
             ).id
           : undefined;
         const created = await createProduct(tx, {
-          catalogueId: catalogue.id,
+          menuId: menu.id,
           categoryId: category.id,
           name: plain(product.staffName ?? product.customerName),
           customerName: translated(product.customerName),
@@ -210,12 +210,12 @@ export async function seedCatalogues(
       const rows = await tx
         .select({ id: menuItems.id, productId: menuItems.productId })
         .from(menuItems)
-        .where(and(eq(menuItems.menuId, catalogue.id), inArray(menuItems.productId, productIds)));
+        .where(and(eq(menuItems.menuId, menu.id), inArray(menuItems.productId, productIds)));
       if (rows.length !== productIds.length)
         throw new Error(`demo-seed: a product of '${plain(cat.name)}' has no row on its menu`);
       for (const row of rows) menuItemsByProduct.set(row.productId, row.id);
     }
-    return catalogue.id;
+    return menu.id;
   };
 
   const { restaurant, lunch, deli, drinksName, drinksCustomerName } = dataSet.menus;
@@ -254,7 +254,7 @@ export async function seedCatalogues(
     }
   }
 
-  await assignCatalogueToVenue(tx, casaId);
+  await assignMenuToVenue(tx, casaId);
 
   return {
     productsByImage,

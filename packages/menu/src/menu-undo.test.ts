@@ -369,7 +369,7 @@ describe("menuChangeAction", () => {
       ),
     );
     expect([...methods].sort()).toEqual([
-      "renameCatalogue",
+      "renameMenu",
       "setHomeDisplay",
       "setMenuVariantPrice",
       "updateMenuItem",

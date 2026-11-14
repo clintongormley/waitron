@@ -15,8 +15,8 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   createProduct,
@@ -142,7 +142,7 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
   });
 
   const seeded = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: `Issuance pass menu ${cfg.nodeId}` });
+    const menu = await createMenu(tx, { name: `Issuance pass menu ${cfg.nodeId}` });
     const category = (name: string, parentId?: string) =>
       createCategory(tx, { name, ...(parentId ? { parentId } : {}) });
     const drinks = await category("Bebidas");
@@ -154,7 +154,7 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     const additions = await category("Añadidos");
     const product = (name: string, categoryId: string | null, unitPrice: string) =>
       createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId,
         name: `${name} staff`,
         customerName: { es: `${name} cliente` },
@@ -198,7 +198,7 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToVenue(tx, menu.id);
+    await assignMenuToVenue(tx, menu.id);
     return {
       categories: { drinks, alcoholicDrinks, cocktails, spirits, coffees, food, additions },
       products: {

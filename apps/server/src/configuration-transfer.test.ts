@@ -25,8 +25,8 @@ import {
   addShortcut,
   deleteSection,
   readMenuHome,
-  createCatalogue,
-  setVenueDefaultCatalogue,
+  createMenu,
+  setVenueDefaultMenu,
   createCategory,
   createExtraList,
   addProductToMenu,
@@ -76,7 +76,7 @@ import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   activityLog,
   outgoingMail,
-  catalogues,
+  menus,
   saveVenueFields,
   readVenueSettings,
   categories,
@@ -127,8 +127,8 @@ import {
   categoryDetails,
   units,
   MENU_SETTINGS,
-  saveCatalogueSettings,
-  saveCatalogueDefaultColor,
+  saveMenuSettings,
+  saveMenuDefaultColor,
 } from "@waitron/menu";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
 import { convenioConfig, resolveWorkTimeRuleset } from "@waitron/workforce-es";
@@ -547,8 +547,8 @@ describe("configuration transfer database path", () => {
       ),
     );
     const chosen = await withTransaction(suite.db, async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Evening menu" });
-      await setVenueDefaultCatalogue(tx, menu.id);
+      const menu = await createMenu(tx, { name: "Evening menu" });
+      await setVenueDefaultMenu(tx, menu.id);
       return menu;
     });
     const versions = await schemaVersionsByModule(
@@ -573,9 +573,9 @@ describe("configuration transfer database path", () => {
       beforeCommit: (tx) => importConfigurationTables(tx, exported, ALL_MODULES, versions),
     });
     const defaults = await targetSuite.db
-      .select({ id: catalogues.id, name: catalogues.name })
-      .from(catalogues)
-      .where(eq(catalogues.isDefault, true));
+      .select({ id: menus.id, name: menus.name })
+      .from(menus)
+      .where(eq(menus.isDefault, true));
     expect(defaults).toEqual([{ id: expect.any(String), name: "Evening menu" }]);
     expect(defaults[0]!.id).not.toBe(chosen.id);
     expect((await readVenueSettings(targetSuite.db)).doc).toMatchObject({
@@ -865,11 +865,11 @@ describe("configuration transfer database path", () => {
         role: "admin",
       });
       await tx
-        .insert(catalogues)
+        .insert(menus)
         .values({ id: "11111111-aaaa-aaaa-aaaa-111111111111", name: "Prepared menu" });
       await tx.insert(products).values({
         id: "22222222-aaaa-aaaa-aaaa-222222222222",
-        catalogueId: "11111111-aaaa-aaaa-aaaa-111111111111",
+        menuId: "11111111-aaaa-aaaa-aaaa-111111111111",
         name: "Coffee",
         pricingUnit: "each",
         unitPrice: 150,
@@ -1202,7 +1202,7 @@ describe("configuration transfer database path", () => {
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, (tx) =>
-      saveCatalogueSettings(tx, { defaultProductVatClass: "zero" }),
+      saveMenuSettings(tx, { defaultProductVatClass: "zero" }),
     );
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
@@ -1236,7 +1236,7 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await withTransaction(suite.db, (tx) => saveCatalogueDefaultColor(tx, "#b12525"));
+    await withTransaction(suite.db, (tx) => saveMenuDefaultColor(tx, "#b12525"));
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -1263,9 +1263,9 @@ describe("configuration transfer database path", () => {
     });
     await withTransaction(suite.db, async (tx) => {
       const category = await createCategory(tx, { name: "Sweets", color: "#b12525" });
-      const menu = await createCatalogue(tx, { name: "Colour menu" });
+      const menu = await createMenu(tx, { name: "Colour menu" });
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: "Flan",
         pricingUnit: "each",
@@ -1306,9 +1306,9 @@ describe("configuration transfer database path", () => {
     });
     await withTransaction(suite.db, async (tx) => {
       const category = await createCategory(tx, { name: "Cakes", color: "#b12525" });
-      const menu = await createCatalogue(tx, { name: "Painted menu", color: "#aabbcc" });
+      const menu = await createMenu(tx, { name: "Painted menu", color: "#aabbcc" });
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: category.id,
         name: "Cake",
         pricingUnit: "each",
@@ -1379,7 +1379,7 @@ describe("configuration transfer database path", () => {
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Displayed menu" });
+      const menu = await createMenu(tx, { name: "Displayed menu" });
       await tx.execute(
         sql`update menu_details set till_columns = 8, handheld_order = 'menu_first' where menu_id = ${menu.id}`,
       );
@@ -1403,7 +1403,7 @@ describe("configuration transfer database path", () => {
       select d.handheld_columns, d.handheld_tiles, d.handheld_order,
              d.till_columns, d.till_tiles, d.till_order
       from menu_details d
-      join catalogues c on c.id = d.menu_id
+      join menus c on c.id = d.menu_id
       where c.name = 'Displayed menu'
     `);
 
@@ -1464,9 +1464,9 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     modules: ALL_MODULES,
   });
   const original = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Modifier menu" });
+    const menu = await createMenu(tx, { name: "Modifier menu" });
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Coffee",
       pricingUnit: "each",
@@ -1475,7 +1475,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     });
     // The extra is a product in its own right, and not sold on its own.
     const shot = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Coffee extra",
       pricingUnit: "each",
@@ -1546,7 +1546,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
 
     // A menu that sets no price of its own: blank has to arrive blank, not as zero.
     const tea = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Tea",
       pricingUnit: "each",
@@ -1605,7 +1605,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     expect(shot.rows).toEqual([{ ordering: "not_sold_separately" }]);
 
     const menus = await tx.execute<{ id: string }>(
-      sql`select id from catalogues where name = 'Modifier menu'`,
+      sql`select id from menus where name = 'Modifier menu'`,
     );
     const offers = await listMenuOffers(tx, [menus.rows[0]!.id]);
     const coffee = offers.find((offer) => offer.name === "Coffee")!;
@@ -1633,16 +1633,16 @@ it("transfers sections and their members, remapping ids, with a section's image"
   });
   const original = await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { es: "Bebidas" } }, {});
-    const menu = await createCatalogue(tx, { name: "Sections menu" });
+    const menu = await createMenu(tx, { name: "Sections menu" });
     const water = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Still water",
       pricingUnit: "each",
       unitPrice: "1.00",
       vatClass: "general",
     });
-    const drinksMenu = await createCatalogue(tx, {
+    const drinksMenu = await createMenu(tx, {
       name: "Drinks (internal)",
       names: { es: "Bebidas" },
       image: image.filename,
@@ -1677,9 +1677,9 @@ it("transfers sections and their members, remapping ids, with a section's image"
   });
   await withTransaction(targetSuite.db, async (tx) => {
     const [importedDrinks] = await tx
-      .select({ id: catalogues.id })
-      .from(catalogues)
-      .where(eq(catalogues.name, "Drinks (internal)"));
+      .select({ id: menus.id })
+      .from(menus)
+      .where(eq(menus.name, "Drinks (internal)"));
     const drinks = await readSection(
       tx,
       (await readMenuStructure(tx, importedDrinks!.id)).rootSectionId,
@@ -1701,9 +1701,9 @@ it("transfers sections and their members, remapping ids, with a section's image"
       { kind: "section", sectionId: beer!.id },
     ]);
     const [menu] = await tx
-      .select({ id: catalogues.id })
-      .from(catalogues)
-      .where(eq(catalogues.name, "Sections menu"));
+      .select({ id: menus.id })
+      .from(menus)
+      .where(eq(menus.name, "Sections menu"));
     const [root] = await tx
       .select({ id: sections.id })
       .from(sections)
@@ -1727,9 +1727,9 @@ it("an include's folder photo travels with the configuration", async () => {
       { image: photo, names: { es: "Foto de la barra" } },
       {},
     );
-    const lunch = await createCatalogue(tx, { name: "Folder lunch" });
-    const drinks = await createCatalogue(tx, { name: "Drinks (staff)", names: { es: "Bebidas" } });
-    const desserts = await createCatalogue(tx, { name: "Desserts (staff)" });
+    const lunch = await createMenu(tx, { name: "Folder lunch" });
+    const drinks = await createMenu(tx, { name: "Drinks (staff)", names: { es: "Bebidas" } });
+    const desserts = await createMenu(tx, { name: "Desserts (staff)" });
     const { rootSectionId } = await readMenuStructure(tx, lunch.id);
     const folder = await addMember(tx, rootSectionId, {
       kind: "section",
@@ -1766,15 +1766,15 @@ it("an include's folder photo travels with the configuration", async () => {
   await withTransaction(targetSuite.db, async (tx) => {
     const included = await tx
       .select({
-        staffName: catalogues.name,
+        staffName: menus.name,
         showAsFolder: sectionMembers.showAsFolder,
         overrides: sectionMembers.folderOverrides,
       })
       .from(sectionMembers)
       .innerJoin(sections, eq(sections.id, sectionMembers.childSectionId))
-      .innerJoin(catalogues, eq(catalogues.id, sections.ownerMenuId))
+      .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
       .where(eq(sections.role, "menu_root"))
-      .orderBy(catalogues.name);
+      .orderBy(menus.name);
     expect(included).toEqual([
       { staffName: "Desserts (staff)", showAsFolder: false, overrides: { image: null } },
       { staffName: "Drinks (staff)", showAsFolder: true, overrides: fixed },
@@ -1845,9 +1845,9 @@ it.each([3, 2])(
     });
     await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(tx, { image: photo, names: { es: "Limonada" } }, {});
-      const menu = await createCatalogue(tx, { name: "Published menu" });
+      const menu = await createMenu(tx, { name: "Published menu" });
       const lemonade = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Lemonade",
         pricingUnit: "each",
@@ -1906,9 +1906,9 @@ it.each([3, 2])(
     });
     await withTransaction(targetSuite.db, async (tx) => {
       const [menu] = await tx
-        .select({ id: catalogues.id })
-        .from(catalogues)
-        .where(eq(catalogues.name, "Published menu"));
+        .select({ id: menus.id })
+        .from(menus)
+        .where(eq(menus.name, "Published menu"));
       expect((await menuStatus(tx, [menu!.id])).get(menu!.id)).toEqual({
         state: "unpublished",
         clashes: 0,
@@ -3723,11 +3723,11 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
     modules: ALL_MODULES,
   });
   const original = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Missing slots" });
+    const menu = await createMenu(tx, { name: "Missing slots" });
     const root = (await readMenuStructure(tx, menu.id)).rootSectionId;
     const beer = await createSectionIn(tx, root, { internalName: "Beer" });
     const water = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Water",
       pricingUnit: "each",
@@ -3755,7 +3755,7 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   await withTransaction(targetSuite.db, async (tx) => {
-    const [menu] = await tx.select().from(catalogues).where(eq(catalogues.name, "Missing slots"));
+    const [menu] = await tx.select().from(menus).where(eq(menus.name, "Missing slots"));
     const home = await readMenuHome(tx, menu!.id);
     expect(menu!.id).not.toBe(original.menu);
     expect(home.homeSectionId).not.toBe(original.home);
@@ -3771,7 +3771,7 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
     const [water] = await tx
       .select({ id: products.id })
       .from(products)
-      .where(and(eq(products.catalogueId, menu!.id), eq(products.name, "Water")));
+      .where(and(eq(products.menuId, menu!.id), eq(products.name, "Water")));
     expect(preview.warnings).toEqual([
       { kind: "shortcut_missing", name: "Missing slots › Beer" },
       {
@@ -3788,8 +3788,8 @@ it("gives each imported product the folded key of its own name, whatever the bun
     modules: ALL_MODULES,
   });
   const idShaped = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Keys" });
-    const fields = { catalogueId: menu.id, categoryId: null, pricingUnit: "each" as const };
+    const menu = await createMenu(tx, { name: "Keys" });
+    const fields = { menuId: menu.id, categoryId: null, pricingUnit: "each" as const };
     await createProduct(tx, {
       ...fields,
       name: " Café Solo ",
@@ -3814,10 +3814,10 @@ it("gives each imported product the folded key of its own name, whatever the bun
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
-    .select({ name: products.name, nameKey: products.nameKey, catalogueId: products.catalogueId })
+    .select({ name: products.name, nameKey: products.nameKey, menuId: products.menuId })
     .from(products)
-    .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
-    .where(eq(catalogues.name, "Keys"));
+    .innerJoin(menus, eq(menus.id, products.menuId))
+    .where(eq(menus.name, "Keys"));
   expect(imported.map(({ name, nameKey }) => ({ name, nameKey }))).toEqual(
     expect.arrayContaining([
       { name: " Café Solo ", nameKey: "café solo" },
@@ -3825,12 +3825,12 @@ it("gives each imported product the folded key of its own name, whatever the bun
     ]),
   );
   expect(imported).toHaveLength(2);
-  const catalogueId = imported[0]!.catalogueId;
+  const menuId = imported[0]!.menuId;
   for (const name of ["café solo", idShaped]) {
     await expect(
       withTransaction(targetSuite.db, (tx) =>
         createProduct(tx, {
-          catalogueId,
+          menuId,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -4009,10 +4009,10 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
     modules: ALL_MODULES,
   });
   const sourceIds = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Ids" });
+    const menu = await createMenu(tx, { name: "Ids" });
     const category = await createCategory(tx, { name: menu.id });
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: category.id,
       name: category.id,
       pricingUnit: "each",
@@ -4059,15 +4059,15 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
   });
 
   const [menu] = await targetSuite.db
-    .select({ id: catalogues.id })
-    .from(catalogues)
-    .where(eq(catalogues.name, "Ids"));
+    .select({ id: menus.id })
+    .from(menus)
+    .where(eq(menus.name, "Ids"));
   const [category] = await targetSuite.db
     .select({ id: categories.id })
     .from(categories)
     .where(eq(categories.name, sourceIds.menu));
   const [product] = await targetSuite.db
-    .select({ id: products.id, catalogueId: products.catalogueId, categoryId: products.categoryId })
+    .select({ id: products.id, menuId: products.menuId, categoryId: products.categoryId })
     .from(products)
     .where(eq(products.name, sourceIds.category));
   const [variant] = await targetSuite.db
@@ -4078,7 +4078,7 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
   expect(category).toBeDefined();
   expect(product).toEqual({
     id: expect.any(String),
-    catalogueId: menu!.id,
+    menuId: menu!.id,
     categoryId: category!.id,
   });
   expect(variant).toEqual({ parentId: product!.id });
@@ -4089,7 +4089,7 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
   }>(sql`select id as zone_id from floor_zones`);
   expect(policies.rows.length).toBeGreaterThan(0);
   const targetMenus = new Set(
-    (await targetSuite.db.select({ id: catalogues.id }).from(catalogues)).map((row) => row.id),
+    (await targetSuite.db.select({ id: menus.id }).from(menus)).map((row) => row.id),
   );
   for (const policy of policies.rows) {
     expect(bundleIds.has(policy.zone_id)).toBe(false);
@@ -4110,10 +4110,10 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Duplicates" });
+    const menu = await createMenu(tx, { name: "Duplicates" });
     const category = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: category.id,
       name: "Water",
       pricingUnit: "each",
@@ -4179,9 +4179,9 @@ it("refuses an Inactive product in a menu list and a menu price for an Inactive 
     modules: ALL_MODULES,
   });
   const ids = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Inactive rows" });
+    const menu = await createMenu(tx, { name: "Inactive rows" });
     const gin = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Gin",
       pricingUnit: "each",
@@ -4260,9 +4260,9 @@ it("counts an exported product with no Active flag as Active, as the column stor
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Flagless" });
+    const menu = await createMenu(tx, { name: "Flagless" });
     await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Water",
       pricingUnit: "each",
@@ -5517,8 +5517,8 @@ it("transfers a department's customer and staff period menus to its zone under n
       name: "Menus bar",
       departmentId: department.id,
     });
-    const drinks = await createCatalogue(tx, { name: "Transferred drinks" });
-    const breakfasts = await createCatalogue(tx, { name: "Transferred breakfasts" });
+    const drinks = await createMenu(tx, { name: "Transferred drinks" });
+    const breakfasts = await createMenu(tx, { name: "Transferred breakfasts" });
     const period = await saveMenuPeriod(tx, department.id, {
       name: "Menus service",
       colour: "red",
@@ -5559,7 +5559,7 @@ it("transfers a department's customer and staff period menus to its zone under n
     from floor_zones z
     join menu_periods p on p.department_id=z.department_id and p.name='Menus service'
     join departments d on d.id = z.department_id
-    join catalogues c on c.id = p.menu_id
+    join menus c on c.id = p.menu_id
     where z.name = 'Menus bar'`);
   expect(zone.rows).toEqual([
     {
@@ -5580,8 +5580,8 @@ it("transfers a department's customer and staff period menus to its zone under n
   }>(sql`
     select c.name as customer, s.name as staff, p.colour, p.id as period_id, x.menu_id as staff_id
     from menu_periods p join departments d on d.id=p.department_id
-    join catalogues c on c.id=p.menu_id join menu_period_staff_menus x on x.period_id=p.id
-    join catalogues s on s.id=x.menu_id
+    join menus c on c.id=p.menu_id join menu_period_staff_menus x on x.period_id=p.id
+    join menus s on s.id=x.menu_id
     where d.name='Menus restaurant' and p.name='Menus service' order by x.display_order`);
   expect(periodMenus.rows).toEqual([
     {
@@ -5623,9 +5623,9 @@ it("exports and imports all seven cell classes into another venue, remapping eve
       .values([{ name: "Routes bar" }, { name: "Routes griddle" }])
       .returning();
     const category = await createCategory(tx, { name: "Routes drinks" });
-    const menu = await createCatalogue(tx, { name: "Routes menu" });
+    const menu = await createMenu(tx, { name: "Routes menu" });
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: category.id,
       name: "Routes mojito",
       pricingUnit: "each",
@@ -5732,16 +5732,16 @@ it("carries a cell's period choices with their cell, including a period whose me
       .values([{ name: "Periods bar" }, { name: "Periods griddle" }])
       .returning();
     const category = await createCategory(tx, { name: "Periods drinks" });
-    const menu = await createCatalogue(tx, { name: "Periods menu" });
+    const menu = await createMenu(tx, { name: "Periods menu" });
     const product = await createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: category.id,
       name: "Periods mojito",
       pricingUnit: "each",
       unitPrice: "7",
       vatClass: "general",
     });
-    const emptyMenu = await createCatalogue(tx, { name: "Periods empty menu" });
+    const emptyMenu = await createMenu(tx, { name: "Periods empty menu" });
     const period = await saveMenuPeriod(tx, department.id, {
       name: "Periods lunches",
       colour: "red",
@@ -6434,9 +6434,9 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       name: "Period transfer",
       orderStart: "table",
     });
-    const customer = await createCatalogue(tx, { name: "Period customer" });
-    const staffFirst = await createCatalogue(tx, { name: "Period staff first" });
-    const staffSecond = await createCatalogue(tx, { name: "Period staff second" });
+    const customer = await createMenu(tx, { name: "Period customer" });
+    const staffFirst = await createMenu(tx, { name: "Period staff first" });
+    const staffSecond = await createMenu(tx, { name: "Period staff second" });
     const period = await saveMenuPeriod(tx, department.id, {
       name: "Night transfer",
       colour: "blue",
@@ -6503,8 +6503,8 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       p.name, p.colour, c.name as customer, sc.name as staff, s.display_order,
       t.weekday, x.starts_at, x.ends_at
     from menu_periods p join departments d on d.id=p.department_id
-    join catalogues c on c.id=p.menu_id join menu_period_staff_menus s on s.period_id=p.id
-    join catalogues sc on sc.id=s.menu_id join department_days t on t.department_id=d.id
+    join menus c on c.id=p.menu_id join menu_period_staff_menus s on s.period_id=p.id
+    join menus sc on sc.id=s.menu_id join department_days t on t.department_id=d.id
     join department_day_ranges x on x.day_id=t.id and x.period_id=p.id
     where p.name='Night transfer' order by s.display_order`);
   expect(rows.rows).toEqual([
@@ -6999,9 +6999,9 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     await tx.delete(kitchenCourses);
     const course = await createCourse(tx, { name: "Retired dessert", displayOrder: 2 });
     const station = await createStation(tx, { name: "Retired pastry" });
-    const catalogue = await createCatalogue(tx, { name: "Archive menu" });
+    const menu = await createMenu(tx, { name: "Archive menu" });
     const product = await createProduct(tx, {
-      catalogueId: catalogue.id,
+      menuId: menu.id,
       name: "Archived flan",
       categoryId: null,
       pricingUnit: "each",
@@ -7402,7 +7402,7 @@ describe("dated business-day configuration transfer", () => {
         name: "Clock service",
         orderStart: "table",
       });
-      const menu = await createCatalogue(tx, { name: "Clock menu" });
+      const menu = await createMenu(tx, { name: "Clock menu" });
       const period = await saveMenuPeriod(tx, department.id, {
         name: "Clock period",
         menuId: menu.id,
@@ -7622,7 +7622,7 @@ describe("seasons in a configuration transfer", () => {
         (
           await saveMenuPeriod(tx, department.id, {
             name,
-            menuId: (await createCatalogue(tx, { name: `${name} menu` })).id,
+            menuId: (await createMenu(tx, { name: `${name} menu` })).id,
             staffMenuIds: [],
           })
         ).id;
@@ -7755,7 +7755,7 @@ describe("special days in a configuration transfer", () => {
       });
       const { id: bar } = await saveMenuPeriod(tx, department.id, {
         name: "Bar",
-        menuId: (await createCatalogue(tx, { name: "Fiesta bar menu" })).id,
+        menuId: (await createMenu(tx, { name: "Fiesta bar menu" })).id,
         staffMenuIds: [],
       });
       const terrace = await createServiceZone(tx, {

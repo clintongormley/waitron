@@ -307,7 +307,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
       expect((await res.json()).error.code).toBe("password.invalid");
 
       // Control on the same boot: the gate still refuses an ordinary write.
-      const write = await fetch(`${base}/management-api/catalogues`, {
+      const write = await fetch(`${base}/management-api/menus`, {
         method: "POST",
         body: "{}",
       });
@@ -353,7 +353,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
       await poll(async () => server.health.lastPassAt ?? undefined);
 
       // Control: the read-only gate IS mounted on this fenced node.
-      const write = await fetch(`${base}/management-api/catalogues`, {
+      const write = await fetch(`${base}/management-api/menus`, {
         method: "POST",
         body: "{}",
       });

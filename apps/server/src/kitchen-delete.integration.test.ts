@@ -24,7 +24,7 @@ import {
   listStations,
   setProductCourse,
 } from "./kitchen.js";
-import { mountCatalogueApi } from "./menu-api.js";
+import { mountMenuApi } from "./menu-api.js";
 import { deleteCourse, readCourseDeleteImpact } from "./course-delete.js";
 import { deleteStation, readStationDeleteImpact } from "./station-delete.js";
 import { eq } from "drizzle-orm";
@@ -110,7 +110,7 @@ it("keeps retained draft, group, course and ready station history through manage
     },
     () => {},
   );
-  mountCatalogueApi(app, { db: v.db }, () => {});
+  mountMenuApi(app, { db: v.db }, () => {});
   const login = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },

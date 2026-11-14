@@ -1,7 +1,7 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  catalogues,
+  menus,
   menuDetails,
   menuItems,
   menuItemVariantOverrides,
@@ -13,9 +13,9 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
+import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { duplicateMenu } from "./menu-copy.js";
-import { createCatalogue, createProduct, updateMenuItem } from "./operations.js";
+import { createMenu, createProduct, updateMenuItem } from "./operations.js";
 import { addShortcut, readMenuHome, setHomeDisplay } from "./menu-home.js";
 import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
 import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
@@ -25,7 +25,7 @@ import { membersOf } from "./section-members.js";
 import type { TileRef } from "@waitron/shared";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 interface Fixture {
@@ -50,19 +50,19 @@ async function fixture(): Promise<Fixture> {
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const lunch = (
-      await createCatalogue(tx, {
+      await createMenu(tx, {
         name: "Lunch",
         names: { en: "Lunch menu", es: "Menú del día" },
         color: "#aa3300",
       })
     ).id;
-    const desserts = (await createCatalogue(tx, { name: "Desserts" })).id;
+    const desserts = (await createMenu(tx, { name: "Desserts" })).id;
     const dessertsRoot = await requireMenuRoot(tx, desserts);
     const cakes = (await createSectionIn(tx, dessertsRoot, { internalName: "Cakes" })).id;
     const make = async (name: string, unitPrice: string) =>
       (
         await createProduct(tx, {
-          catalogueId: lunch,
+          menuId: lunch,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -231,7 +231,7 @@ describe("duplicateMenu", () => {
 
     expect(copy.id).not.toBe(f.lunch);
     expect(copy.name).toBe("Lunch (copy)");
-    const [stored] = await fx.db.select().from(catalogues).where(eq(catalogues.id, copy.id));
+    const [stored] = await fx.db.select().from(menus).where(eq(menus.id, copy.id));
     expect(stored!.name).toBe("Lunch (copy)");
 
     const source = await rowsOf(f.lunch);
@@ -367,7 +367,7 @@ describe("duplicateMenu", () => {
 
   it("keeps stored positions and the source's order where members share a position", async () => {
     await seedTaxpayer(fx.db);
-    const source = (await app((tx) => createCatalogue(tx, { name: "Tied" }))).id;
+    const source = (await app((tx) => createMenu(tx, { name: "Tied" }))).id;
     const entries = 20;
     await app(async (tx) => {
       const root = await requireMenuRoot(tx, source);
@@ -427,51 +427,51 @@ describe("duplicateMenu", () => {
     expect(await orders(copy)).toEqual(sourceOrders);
   });
 
-  it("refuses a menu that does not exist with catalogue.not_found", async () => {
+  it("refuses a menu that does not exist with menu.not_found", async () => {
     await seedTaxpayer(fx.db);
     await expect(
       app((tx) => duplicateMenu(tx, "00000000-0000-4000-8000-000000000000", "Copy")),
-    ).rejects.toMatchObject({ code: "catalogue.not_found" });
+    ).rejects.toMatchObject({ code: "menu.not_found" });
   });
 
   it("refuses a blank name and writes nothing", async () => {
     const f = await fixture();
-    const count = async () => (await fx.db.select().from(catalogues)).length;
-    const menus = await count();
+    const count = async () => (await fx.db.select().from(menus)).length;
+    const menuRows = await count();
     await expect(app((tx) => duplicateMenu(tx, f.lunch, "   "))).rejects.toMatchObject({
       code: "menu_section.invalid",
       params: { field: "internalName" },
     });
-    expect(await count()).toBe(menus);
+    expect(await count()).toBe(menuRows);
   });
   it.each(["Lunch", "  lUNCH  ", "Desserts"])(
     "refuses the taken copy name %j without changing either menu",
     async (name) => {
       const f = await fixture();
-      const before = await fx.db.select().from(catalogues);
+      const before = await fx.db.select().from(menus);
       const source = await rowsOf(f.lunch);
       const other = await rowsOf(f.desserts);
       await expect(app((tx) => duplicateMenu(tx, f.lunch, name))).rejects.toMatchObject({
         code: "menu.name_taken",
         params: { field: "name" },
       });
-      expect(await fx.db.select().from(catalogues)).toEqual(before);
+      expect(await fx.db.select().from(menus)).toEqual(before);
       expect(await rowsOf(f.lunch)).toEqual(source);
       expect(await rowsOf(f.desserts)).toEqual(other);
     },
   );
   it("compares an inactive menu's composed name without removing accents", async () => {
     const f = await fixture();
-    const held = await app((tx) => createCatalogue(tx, { name: "Caf\u00e9" }));
+    const held = await app((tx) => createMenu(tx, { name: "Caf\u00e9" }));
     await app((tx) =>
-      tx.update(catalogues).set({ active: false }).where(eq(catalogues.id, held.id)),
+      tx.update(menus).set({ active: false }).where(eq(menus.id, held.id)),
     );
-    const before = await fx.db.select().from(catalogues);
+    const before = await fx.db.select().from(menus);
     await expect(app((tx) => duplicateMenu(tx, f.lunch, "  CAFE\u0301  "))).rejects.toMatchObject({
       code: "menu.name_taken",
       params: { field: "name" },
     });
-    expect(await fx.db.select().from(catalogues)).toEqual(before);
+    expect(await fx.db.select().from(menus)).toEqual(before);
     const distinct = await app((tx) => duplicateMenu(tx, f.lunch, "Cafe"));
     expect(distinct.name).toBe("Cafe");
   });

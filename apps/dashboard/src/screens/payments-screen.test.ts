@@ -262,7 +262,7 @@ describe("payments-screen", () => {
     expect(getComputedStyle(name).fontWeight).toBe("800");
   });
 
-  it("links configuration to the complete provider catalogue rather than embedding connect forms", async () => {
+  it("links configuration to the complete provider menu rather than embedding connect forms", async () => {
     const { el } = await mount();
     expect(q(el, "[data-test=fake-connect-zeta]")).toBeNull();
     expect(q(el, "a[data-test=configure-providers]")?.getAttribute("href")).toBe(

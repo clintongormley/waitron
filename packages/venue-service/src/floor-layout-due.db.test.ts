@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { createCatalogue } from "@waitron/menu";
+import { createMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   floorPlanSets,
@@ -61,7 +61,7 @@ async function fixture() {
     for (const zoneId of [dining, terrace, garden])
       await configureZone(tx, { zoneId, departmentId: restaurant });
     await configureZone(tx, { zoneId: counter, departmentId: bar });
-    const menu = await createCatalogue(tx, { name: "Menu" });
+    const menu = await createMenu(tx, { name: "Menu" });
     const period = async (name: string) =>
       (await saveMenuPeriod(tx, restaurant, { name, menuId: menu.id, staffMenuIds: [] })).id;
     const lunch = await period("Lunch");
@@ -155,7 +155,7 @@ describe("which floor layout is due", () => {
   it("gives each department its own day", async () => {
     const f = await fixture();
     const bar = await run(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Bar menu" });
+      const menu = await createMenu(tx, { name: "Bar menu" });
       const period = async (name: string) =>
         (await saveMenuPeriod(tx, f.bar, { name, menuId: menu.id, staffMenuIds: [] })).id;
       const morning = await period("Morning");

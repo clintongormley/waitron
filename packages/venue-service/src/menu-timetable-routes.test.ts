@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
+import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   settings as businessDaySettingsTable,
@@ -71,7 +71,7 @@ async function routed() {
     await configureZone(tx, { zoneId: barZone, departmentId: restaurant });
     await configureZone(tx, { zoneId: counterZone, departmentId: deli });
     const menu = async (name: string) => {
-      const id = (await createCatalogue(tx, { name: `${name} ${fixtureId}` })).id;
+      const id = (await createMenu(tx, { name: `${name} ${fixtureId}` })).id;
       const { document } = await buildMenuDocument(tx, id);
       await publishMenu(tx, id, menuDocumentHash(document), "person-1");
       return id;
@@ -382,8 +382,8 @@ describe("the opening-hours routes", () => {
       }),
       400,
       {
-        code: "catalogue.not_found",
-        params: { catalogueId: unknown },
+        code: "menu.not_found",
+        params: { menuId: unknown },
       },
     );
     await answers(
@@ -393,7 +393,7 @@ describe("the opening-hours routes", () => {
         menuId: r.coffeeMenu,
       }),
       400,
-      { code: "catalogue.not_found", params: { catalogueId: unknown } },
+      { code: "menu.not_found", params: { menuId: unknown } },
     );
     await answers(
       await r.send("POST", `/departments/${unknown}/menu-periods`, r.manager, {
@@ -407,7 +407,7 @@ describe("the opening-hours routes", () => {
     await answers(
       await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, { menuId: unknown }),
       404,
-      { code: "catalogue.not_found", params: { catalogueId: unknown } },
+      { code: "menu.not_found", params: { menuId: unknown } },
     );
     await answers(
       await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
@@ -727,7 +727,7 @@ describe("retired menu timetable routes", () => {
     }
   });
 
-  it("chooses any active catalogue as a period's customer menu", async () => {
+  it("chooses any active menu as a period's customer menu", async () => {
     const r = await routed();
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       name: "Lunch",

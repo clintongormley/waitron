@@ -7,8 +7,8 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createExtraList,
   createProduct,
@@ -364,12 +364,12 @@ export async function provisionAdjustmentVenue(
       stationId: station!.id,
       printerId: printer.id,
     });
-    const cat = await createCatalogue(tx, { name: `Adjustment menu ${cfg.nodeId}` });
+    const cat = await createMenu(tx, { name: `Adjustment menu ${cfg.nodeId}` });
     const category = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: category.id,
         name: item.name,
         customerName: { [LOCALE]: item.customer },
@@ -416,7 +416,7 @@ export async function provisionAdjustmentVenue(
       LOCALE,
     );
     await writeProductModifiers(tx, productIds.get("Pizza")!, [{ kind: "extras", id: extras.id }]);
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const tables = await offerProducts(tx, cfg, { zone: "tables" });
     await setRoutingCell(
       tx,

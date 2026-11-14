@@ -48,7 +48,7 @@ const run = createErrorBoundary(
     "content.suggestion_not_found": 404,
     "content.translation_stale": 409,
   },
-  "catalogue.failed",
+  "menu.failed",
 );
 
 function invalid(): never {
@@ -76,7 +76,7 @@ function pageQuery(c: Context): ContentSuggestionQuery {
 }
 
 const authorize = (tx: Transaction, managementSessionId: string) =>
-  authorizeManager(tx, { managementSessionId, permission: "catalogue.manage" });
+  authorizeManager(tx, { managementSessionId, permission: "menu.manage" });
 
 export function mountContentSuggestionsApi(
   app: Hono,

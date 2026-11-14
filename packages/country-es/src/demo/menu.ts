@@ -1,5 +1,5 @@
 import type {
-  CountryDemoCatalogue,
+  CountryDemoMenu,
   CountryDemoCategory,
   CountryDemoProductOptionLists,
   CountryDemoProductExtraLists,
@@ -1389,7 +1389,7 @@ export const CASA_DELGADO = {
     gl: "A nosa carta",
   },
   categories: COMBINED_CASA_DELGADO_CATEGORIES.slice(3),
-} as const satisfies CountryDemoCatalogue<CasaDelgadoLanguage>;
+} as const satisfies CountryDemoMenu<CasaDelgadoLanguage>;
 
 export const DELI_TAKEAWAY = {
   name: {
@@ -1506,7 +1506,7 @@ export const DELI_TAKEAWAY = {
       ],
     },
   ],
-} as const satisfies CountryDemoCatalogue<CasaDelgadoLanguage>;
+} as const satisfies CountryDemoMenu<CasaDelgadoLanguage>;
 
 export const MENU_DEL_DIA = {
   name: {
@@ -1726,4 +1726,4 @@ export const MENU_DEL_DIA = {
       ],
     },
   ],
-} as const satisfies CountryDemoCatalogue<CasaDelgadoLanguage>;
+} as const satisfies CountryDemoMenu<CasaDelgadoLanguage>;

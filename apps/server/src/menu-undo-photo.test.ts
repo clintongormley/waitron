@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  createCatalogue,
+  createMenu,
   createProduct,
   previewMenu,
   publishMenu,
@@ -19,7 +19,7 @@ import { seedLegacySellingUnits, seedVenueWithSeries } from "@waitron/menu/test/
 import { offerOf } from "@waitron/menu/test/menus-fixture.js";
 import { mediaImages } from "@waitron/media";
 
-// The catalogue's own test database has no media tables, so it cannot store a section photo
+// The menu's own test database has no media tables, so it cannot store a section photo
 // (`mediaImageExists`); this case needs them.
 const PHOTO = `${"a".repeat(64)}.jpg`;
 
@@ -32,12 +32,12 @@ async function twoMenus() {
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const categoryId = (await createCategory(tx, { name: "Food" })).id;
-    const dinner = (await createCatalogue(tx, { name: "Dinner Menu" })).id;
-    const lunch = (await createCatalogue(tx, { name: "Lunch Menu" })).id;
+    const dinner = (await createMenu(tx, { name: "Dinner Menu" })).id;
+    const lunch = (await createMenu(tx, { name: "Lunch Menu" })).id;
     const make = async (name: string) =>
       (
         await createProduct(tx, {
-          catalogueId: dinner,
+          menuId: dinner,
           categoryId,
           name,
           pricingUnit: "each",

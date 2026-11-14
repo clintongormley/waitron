@@ -1,7 +1,7 @@
 import type { ChangeSource } from "@waitron/shared";
 
 /** The tables this module's code owns. They live in core's set, which classifies them. */
-export const CATALOGUE_TABLES = [
+export const MENU_TABLES = [
   "category_details",
   "units",
   "product_units",
@@ -23,7 +23,7 @@ export const CATALOGUE_TABLES = [
   "content_suggestions",
 ] as const;
 
-export const CATALOGUE_CHANGE_SOURCES: readonly ChangeSource[] = CATALOGUE_TABLES.map((table) => ({
+export const MENU_CHANGE_SOURCES: readonly ChangeSource[] = MENU_TABLES.map((table) => ({
   table,
   type: table,
 }));

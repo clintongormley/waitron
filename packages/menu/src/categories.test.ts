@@ -2,8 +2,8 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
-import { createCatalogue, createProduct, listProducts } from "./operations.js";
+import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
+import { createMenu, createProduct, listProducts } from "./operations.js";
 import {
   createCategory,
   listCategories,
@@ -11,12 +11,12 @@ import {
   updateCategory,
   setMainReportingCategory,
 } from "./categories.js";
-import { deleteCategory, moveCatalogueItems } from "./product-items.js";
+import { deleteCategory, moveProductItems } from "./product-items.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
 
 // Authoring results. The cases with two transactions started together are in
 // categories.db.test.ts.
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 beforeEach(() => seedVenueSettings(fx.db));
 const byId = <T extends { id: string }>(rows: readonly T[]): T[] =>
   [...rows].sort((a, b) => a.id.localeCompare(b.id));
@@ -28,10 +28,10 @@ async function fixture() {
   await app((tx) => writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }));
   const food = await app((tx) => createCategory(tx, { name: "Food" }));
   const drinks = await app((tx) => createCategory(tx, { name: "Drinks" }));
-  const menu = await app((tx) => createCatalogue(tx, { name: "Lunch" }));
+  const menu = await app((tx) => createMenu(tx, { name: "Lunch" }));
   const product = await app((tx) =>
     createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: null,
       name: "Toast",
       pricingUnit: "each",
@@ -192,7 +192,7 @@ describe("category authoring", () => {
       createCategory(tx, { name: "Starters", parentId: food.id, color: "#b12525" }),
     );
     await app((tx) =>
-      moveCatalogueItems(tx, { productIds: [], categoryIds: [child.id] }, drinks.id),
+      moveProductItems(tx, { productIds: [], categoryIds: [child.id] }, drinks.id),
     );
     expect(await app((tx) => readCategory(tx, child.id))).toEqual({
       id: child.id,
@@ -225,7 +225,7 @@ it("updateProduct's categoryId sets the main category, with no membership coupli
   const { app, food, drinks, product, menu } = await fixture();
   const second = await app((tx) =>
     createProduct(tx, {
-      catalogueId: menu.id,
+      menuId: menu.id,
       categoryId: drinks.id,
       name: "Coffee",
       pricingUnit: "each",

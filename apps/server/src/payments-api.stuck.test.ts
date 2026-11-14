@@ -24,8 +24,8 @@ import {
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -219,17 +219,17 @@ async function setup(
     simplifiedInvoiceLimit: null,
   });
   const seeded = await withTransaction(suite.db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const available = (await listAvailableProducts(tx)).products;
     const offers = await offerProducts(tx, cfg);
     const coffee = available.find((p) => p.name === "Café")!;

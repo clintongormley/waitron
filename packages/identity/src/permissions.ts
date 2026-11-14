@@ -13,7 +13,7 @@ export const CORE_PERMISSIONS = [
   { permission: "sale.refund", defaultHolders: ["supervisor", "manager"] },
   { permission: "sale.rectify", defaultHolders: ["supervisor", "manager"] },
   { permission: "person.manage", defaultHolders: ["manager"] },
-  { permission: "catalogue.manage", defaultHolders: ["manager"] },
+  { permission: "menu.manage", defaultHolders: ["manager"] },
   { permission: "person.admin", defaultHolders: ["manager"] },
   { permission: "person.email", defaultHolders: [] },
   { permission: "personal_data.export", defaultHolders: [] },

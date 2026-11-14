@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { stringToThousandths } from "@waitron/shared";
 import {
-  catalogues,
+  menus,
   CORE_MIGRATIONS,
   products,
   withTransaction,
@@ -28,18 +28,18 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 
 /**
- * Both rows go through their drizzle tables: `catalogues.id` and `products.id` come from each
+ * Both rows go through their drizzle tables: `menus.id` and `products.id` come from each
  * table's own `$defaultFn` rather than from a SQL default.
  */
 async function product(tx: Transaction, name: string) {
   const [menu] = await tx
-    .insert(catalogues)
+    .insert(menus)
     .values({ name: "Menu" })
-    .returning({ id: catalogues.id });
+    .returning({ id: menus.id });
   const [row] = await tx
     .insert(products)
     .values({
-      catalogueId: menu!.id,
+      menuId: menu!.id,
       name,
       pricingUnit: "each",
       unitPrice: 1,

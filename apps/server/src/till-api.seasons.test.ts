@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { workingOrders } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { addProductToMenu, createCatalogue, createProduct } from "@waitron/menu";
+import { addProductToMenu, createMenu, createProduct } from "@waitron/menu";
 import {
   createServiceZone,
   replaceMenuWeek,
@@ -48,9 +48,9 @@ async function seasonVenue() {
       const diningRoomId = (await createServiceZone(tx, { name: "Sala", departmentId: restaurant }))
         .id;
       const dish = async (menuName: string, name: string) => {
-        const menuId = (await createCatalogue(tx, { name: menuName })).id;
+        const menuId = (await createMenu(tx, { name: menuName })).id;
         const product = await createProduct(tx, {
-          catalogueId: menuId,
+          menuId: menuId,
           categoryId: null,
           name,
           pricingUnit: "each",

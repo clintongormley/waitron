@@ -480,8 +480,8 @@ describe("staged translation dialog", () => {
     expect(
       links.map((link) => [link.getAttribute("aria-label"), link.getAttribute("href")]),
     ).toEqual([
-      ["Abrir STAFF Bread", "/manage/catalogue/product/prod-1"],
-      ["Abrir STAFF Bread › STAFF Small", "/manage/catalogue/product/var-1"],
+      ["Abrir STAFF Bread", "/manage/products/product/prod-1"],
+      ["Abrir STAFF Bread › STAFF Small", "/manage/products/product/var-1"],
       ["Abrir STAFF Doneness", "/manage/modifiers/view/options/list/list-1"],
       ["Abrir STAFF Doneness › STAFF Rare", "/manage/modifiers/view/options/list/list-1"],
       ["Abrir STAFF Sides", "/manage/modifiers/view/extras/list/extras-1"],
@@ -838,7 +838,7 @@ describe("staged translation dialog", () => {
       q(unavailable.el, `[data-unavailable='["product","one","es","name"]']`)?.textContent?.trim(),
     ).toBe(t("translations.unavailable"));
     expect(q<HTMLAnchorElement>(unavailable.el, "a")!.getAttribute("href")).toBe(
-      "/manage/catalogue/product/one",
+      "/manage/products/product/one",
     );
     expect(
       q<HTMLElementTagNameMap["wt-button"]>(unavailable.el, "[data-test=save]")!.disabled,

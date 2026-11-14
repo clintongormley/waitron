@@ -9,8 +9,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPayments, withTransaction, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -143,14 +143,14 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
   };
   return withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, {
+    const cat = await createMenu(tx, {
       name: `Bill payments issue clock menu ${provisioned.nodeId}`,
     });
     const dishes = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
-        catalogueId: cat.id,
+        menuId: cat.id,
         categoryId: dishes.id,
         name: item.name,
         customerName: { [LOCALE]: item.customer },
@@ -161,7 +161,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       });
       productIds.set(item.name, product.id);
     }
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     const printer = await createPrinter(tx, {
       name: "Receipts",
       transport: "cloud_poll",

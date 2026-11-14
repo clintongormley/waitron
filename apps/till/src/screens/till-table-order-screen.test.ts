@@ -54,7 +54,7 @@ import {
 const coffee: TillProduct = {
   id: "cafe",
   menuItemId: "menu-item-cafe",
-  catalogueId: "menu-table",
+  menuId: "menu-table",
   name: "Café",
   customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
@@ -436,7 +436,7 @@ describe("till-table-order-screen", () => {
     const basket = el.shadowRoot!.querySelector("till-basket")!;
     expect(productGrid).not.toBeNull();
     expect(basket).not.toBeNull();
-    // The grid gets the catalogue, and the grid + the round basket share the SAME store (the current
+    // The grid gets the menu, and the grid + the round basket share the SAME store (the current
     // round) — never the tab's lines.
     expect(productGrid.products).toEqual(products);
     expect(productGrid.store).toBe(basket.store);
@@ -656,7 +656,7 @@ describe("till-table-order-screen", () => {
       expect(totalRight(row)).toBe(Math.round(row.getBoundingClientRect().right));
   });
 
-  it("shows the tab total from the LOCKED add-time prices (never a catalogue recompute)", async () => {
+  it("shows the tab total from the LOCKED add-time prices (never a menu recompute)", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
     await openTableMenu(el);
     // 2 × 1.50 + 1 × 1.50 = 4.50, summed at money scale from the locked unit prices.
@@ -665,11 +665,11 @@ describe("till-table-order-screen", () => {
     );
   });
 
-  it("resolves product names from the catalogue, falling back to the id for an unknown product", async () => {
+  it("resolves product names from the menu, falling back to the id for an unknown product", async () => {
     const ghost: TabLine = { ...pendingLine, lineNo: 3, productId: "ghost" };
     const { el } = await mount({ lines: [pendingLine, ghost] });
     const text = (await sentFallbackFor(el)).textContent ?? "";
-    expect(text).toContain("Café"); // resolved from the catalogue
+    expect(text).toContain("Café"); // resolved from the menu
     expect(text).toContain("ghost"); // deactivated/unknown product → the raw id
   });
 
@@ -5188,8 +5188,8 @@ describe("till-table-order-screen", () => {
       name: "Bocadillo",
       customerName: { es: "Bocadillo para el cliente" },
       courseId: null,
-      catalogueId: "cat-food",
-      catalogueName: "Comida",
+      menuId: "cat-food",
+      menuName: "Comida",
     };
     const beerProduct: TillProduct = {
       ...coffee,
@@ -5198,8 +5198,8 @@ describe("till-table-order-screen", () => {
       name: "Cerveza",
       customerName: { es: "Cerveza para el cliente" },
       courseId: null,
-      catalogueId: "cat-drinks",
-      catalogueName: "Bebidas",
+      menuId: "cat-drinks",
+      menuName: "Bebidas",
     };
     const foodMenu = servedMenu("cat-food", "Comida", true, [sandwich]);
     const drinksMenu = servedMenu("cat-drinks", "Bebidas", false, [beerProduct]);
@@ -5424,7 +5424,7 @@ it("shows a retained table line's recorded name and modifier answer after live n
   await resized(el);
   const row = el.shadowRoot!.querySelector("[data-sent-fallback-line]")!;
   expect(row.textContent).toContain("Nombre guardado");
-  // The saved snapshot resolves the modifier name and the chosen label, not the live catalogue name.
+  // The saved snapshot resolves the modifier name and the chosen label, not the live menu name.
   expect(row.textContent).toContain("Cortar");
   expect(row.textContent).not.toContain("Nuevo nombre");
 });

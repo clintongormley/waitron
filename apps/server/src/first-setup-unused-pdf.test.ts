@@ -235,8 +235,8 @@ it.each([
 });
 it.each([
   [
-    "catalogue",
-    "insert into catalogues(id, name, created_at, updated_at) values ('menu', 'Retained', '2026-10-16', '2026-10-16')",
+    "menu",
+    "insert into menus(id, name, created_at, updated_at) values ('menu', 'Retained', '2026-10-16', '2026-10-16')",
   ],
   [
     "used invoice name",

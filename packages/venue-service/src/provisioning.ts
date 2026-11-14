@@ -17,7 +17,7 @@ import { ensureDefaultSeasons } from "./seasons.js";
 import { addStarterServiceSteps } from "./service-steps.js";
 import { STARTER_COURSE_NAMES, STARTER_ZONE_NAMES } from "./starter-content.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
-import { readDefaultCatalogueId } from "@waitron/menu";
+import { readDefaultMenuId } from "@waitron/menu";
 
 export const COUNTER_ZONE_NAME = "Counter";
 
@@ -132,7 +132,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .limit(1);
       const zoneId = policy[0]!.zoneId;
       await ensureDefaultSeasons(tx, staffLanguage);
-      const menuId = await readDefaultCatalogueId(tx);
+      const menuId = await readDefaultMenuId(tx);
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;
         await placeOpenPeriod(tx, counterDepartmentId, menuId, staffLanguage);

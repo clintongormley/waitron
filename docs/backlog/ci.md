@@ -913,7 +913,7 @@ shape above has yet been seen in a real run.
 
 ## A419 dashboard CI stall remains unexplained (#1474)
 
-Run `37932573955` left `catalogue-screen.test.ts` unfinished; local focused and full-package runs
+Run `37932573955` left `menu-screen.test.ts` unfinished; local focused and full-package runs
 and diagnostic CI `37936013331` completed. No repair was established. Next: if it recurs, retain
 per-test progress and locate the waiting operation before changing the browser harness. Since A441
 every package test job prints each file's start and end and, every 60 s, the files still running

@@ -7,7 +7,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addProductToMenu,
-  createCatalogue,
+  createMenu,
   createExtraList,
   createProduct,
   readProductModifiers,
@@ -63,17 +63,17 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
       const diningZone = (
         await createServiceZone(tx, { name: "Dining room", departmentId: restaurant })
       ).id;
-      const menu = async (name: string) => (await createCatalogue(tx, { name })).id;
+      const menu = async (name: string) => (await createMenu(tx, { name })).id;
       const menus = {
         brunch: await menu("Brunch"),
         setLunch: await menu("Set lunch"),
         drinks: await menu("Drinks"),
         coffee: await menu("Coffee"),
       };
-      const product = async (catalogueId: string, name: string, unitPrice: string) =>
+      const product = async (menuId: string, name: string, unitPrice: string) =>
         (
           await createProduct(tx, {
-            catalogueId,
+            menuId,
             categoryId: null,
             name,
             pricingUnit: "each",

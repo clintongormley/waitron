@@ -14,7 +14,7 @@ export function demoSeedLocale(venue: VenueRequest): SeedLocale {
   );
 }
 
-/** Add sample catalogues, floor, staff, media and practice sales to a freshly provisioned Demo. */
+/** Add sample menus, floor, staff, media and practice sales to a freshly provisioned Demo. */
 export async function seedInstalledDemo(
   db: Database,
   result: VenueResult,

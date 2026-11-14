@@ -5,7 +5,7 @@ export const GUEST_MENU_SETTINGS = defineSettingsDocument<{
   enabled: boolean;
   paper?: GuestMenuPaperAppearance;
 }>({
-  module: "catalogue",
+  module: "menu",
   version: 1,
   transfers: false,
   defaults: () => ({ enabled: false }),

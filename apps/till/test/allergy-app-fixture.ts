@@ -23,7 +23,7 @@ import type {
   TableState,
   TillApi,
   TillMenuOffer,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "../src/api/client.js";
 import { showView } from "../src/screens/till-table-order-screen.test-helpers.js";
 export const unit = {
@@ -64,10 +64,10 @@ export function offer(id: string, name: string, courseId: string | null = null):
   } satisfies TillMenuOffer;
 }
 
-export function catalogue(
+export function menu(
   version: string,
   prices: Record<string, string> = {},
-): ZoneOfferCatalogue {
+): ZoneOffers {
   const offers = [
     offer("offer-beer", "Beer", "drinks"),
     offer("offer-steak", "Steak", "mains"),
@@ -225,10 +225,10 @@ export function stubApi(
     listStaff: vi.fn().mockResolvedValue([]),
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
-      ...catalogue("v1"),
-      context: { ...catalogue("v1").context, zoneId: "zc" },
+      ...menu("v1"),
+      context: { ...menu("v1").context, zoneId: "zc" },
     }),
-    listZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
+    listZoneOffers: vi.fn().mockResolvedValue(menu("v1")),
     menuState: vi.fn(() => new Promise(() => {})),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),

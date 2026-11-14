@@ -9,7 +9,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, product, section, type MenusFixture } from "../test/menus-fixture.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import {
@@ -24,10 +24,10 @@ import { buildMenuDocument } from "./menu-document.js";
 import { membersOf } from "./section-members.js";
 import { readSection } from "./sections.js";
 import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
-import { deactivateCatalogue, deactivateProduct, listMenuOffers } from "./operations.js";
+import { deactivateMenu, deactivateProduct, listMenuOffers } from "./operations.js";
 import { addMember, createSectionIn, deleteSection, removeMember } from "./sections.js";
 
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const MISSING = "00000000-0000-4000-8000-000000000000";
 
@@ -150,8 +150,8 @@ describe("the Device Home Page", () => {
     ];
     for (const call of calls)
       expect(await captureError(call)).toMatchObject({
-        code: "catalogue.not_found",
-        params: { catalogueId: MISSING },
+        code: "menu.not_found",
+        params: { menuId: MISSING },
       });
     expect(await tileRefs(await homeOf(f.lunch))).toEqual([{ position: 0, ref: product(f.soup) }]);
   });
@@ -339,7 +339,7 @@ describe("home tiles", () => {
       section(f.drinks),
       section(f.beer),
     ]);
-    await app((tx) => deactivateCatalogue(tx, f.drinksMenu));
+    await app((tx) => deactivateMenu(tx, f.drinksMenu));
     await app((tx) => addShortcut(tx, f.lunch, product(f.lager)));
     const { shortcuts } = await app((tx) => readMenuHome(tx, f.lunch));
     expect(shortcuts.every((t) => t.reachable && t.missingName === null)).toBe(true);
@@ -434,7 +434,7 @@ describe("home tiles", () => {
 
   it("accepts product tiles on an inactive menu, reached by its structure", async () => {
     const f = await menusFixture(fx.db);
-    await app((tx) => deactivateCatalogue(tx, f.lunch));
+    await app((tx) => deactivateMenu(tx, f.lunch));
     await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
     await app((tx) => addShortcut(tx, f.lunch, product(f.lager)));
     const { shortcuts } = await app((tx) => readMenuHome(tx, f.lunch));

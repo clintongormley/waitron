@@ -38,7 +38,7 @@ function runPeriod(period: LiquidationPeriod, opts: { year?: number } = {}): Pro
 
 describe("computeVatReturn", () => {
   it("aggregates the filed difference-method breakdown across two nodes, exactly", async () => {
-    // Catalogue (gross-inclusive) sales file cuotas by the DIFFERENCE method, which can land a céntimo
+    // Menu (gross-inclusive) sales file cuotas by the DIFFERENCE method, which can land a céntimo
     // away from round(base × rate). The 303 aggregate must sum the FILED per-invoice cuotas, never
     // re-round on the monthly base. Two nodes, both counted (no node predicate).
     const nodeB = await seedNodeAndSeries(suite.db);

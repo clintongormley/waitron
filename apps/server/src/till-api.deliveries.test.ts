@@ -19,8 +19,8 @@ import {
   withTransaction,
 } from "@waitron/db";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
   listAvailableProducts,
@@ -170,17 +170,17 @@ async function venue(): Promise<Venue> {
   const scriptCfg = { ...cfg, origin: jobOrigin("operator_script") };
   const fixtures = await withTransaction(suite.db, async (tx) => {
     await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
-    const catalogue = await createCatalogue(tx, { name: "Delicatessen" });
+    const menu = await createMenu(tx, { name: "Delicatessen" });
     const category = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
-      catalogueId: catalogue.id,
+      menuId: menu.id,
       categoryId: category.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, catalogue.id);
+    await assignMenuToVenue(tx, menu.id);
     const available = (await listAvailableProducts(tx)).products;
     const offers = await offerProducts(tx, scriptCfg, { orderStart: "counter" });
     const [staff] = await seedPersons(tx, {

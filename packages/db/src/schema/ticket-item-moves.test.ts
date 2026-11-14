@@ -8,7 +8,7 @@ import { captureError } from "../testing/errors.js";
 import { seedDeviceProfiles, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
-import { catalogues, products } from "./menus.js";
+import { menus, products } from "./menus.js";
 
 import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
@@ -38,14 +38,14 @@ describe("ticket_item_moves schema", () => {
     grill = station!.id;
     fryer = other!.id;
     const nodeId = await seedNode(db);
-    const [catalogue] = await db
-      .insert(catalogues)
+    const [menu] = await db
+      .insert(menus)
       .values({ name: "Menu" })
-      .returning({ id: catalogues.id });
+      .returning({ id: menus.id });
     const [product] = await db
       .insert(products)
       .values({
-        catalogueId: catalogue!.id,
+        menuId: menu!.id,
         name: "Food",
         pricingUnit: "each",
         unitPrice: 100,

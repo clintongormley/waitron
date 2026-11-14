@@ -15,8 +15,8 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   createCategory,
   createProduct,
 } from "@waitron/menu";
@@ -134,12 +134,12 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   });
   return withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, {
+    const cat = await createMenu(tx, {
       name: `Bill payments signed in menu ${provisioned.nodeId}`,
     });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const beer = await createProduct(tx, {
-      catalogueId: cat.id,
+      menuId: cat.id,
       categoryId: drinks.id,
       name: "Draft beer",
       customerName: { [LOCALE]: "Caña de cerveza" },
@@ -148,7 +148,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       unitPrice: "3.00",
       vatClass: "general",
     });
-    await assignCatalogueToVenue(tx, cat.id);
+    await assignMenuToVenue(tx, cat.id);
     return {
       cfg,
       seriesId: brandSeriesId(provisioned.seriesIds[0]!),

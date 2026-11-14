@@ -49,7 +49,7 @@ class ProductLeaveApp extends LitElement {
   override render() {
     return html`${
       this.screenApi
-        ? html`<dashboard-catalogue-screen .api=${this.screenApi}></dashboard-catalogue-screen>`
+        ? html`<dashboard-products-screen .api=${this.screenApi}></dashboard-products-screen>`
         : html`<dashboard-product-editor
             .open=${this.open}
             .value=${this.value}
@@ -245,9 +245,9 @@ for (const succeeds of [true, false]) {
     let refreshDirty: boolean | undefined;
     let written = false;
     const api = {
-      getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+      getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
-      listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+      listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
       listCategories: async () => [],
       listUnits: async () => [],
       listExtraLists: async () => [],
@@ -273,11 +273,11 @@ for (const succeeds of [true, false]) {
     const { el: app } = await mountWidget<ProductLeaveApp>("product-leave-test-app", {
       screenApi: api,
     });
-    const screen = app.shadowRoot!.querySelector("dashboard-catalogue-screen")!;
+    const screen = app.shadowRoot!.querySelector("dashboard-products-screen")!;
     await vi.waitFor(() =>
-      expect(screen.shadowRoot!.querySelector("dashboard-catalogue-browser")).not.toBeNull(),
+      expect(screen.shadowRoot!.querySelector("dashboard-product-browser")).not.toBeNull(),
     );
-    screen.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
+    screen.shadowRoot!.querySelector("dashboard-product-browser")!.dispatchEvent(
       new CustomEvent("add-product", {
         detail: { categoryId: null },
         bubbles: true,

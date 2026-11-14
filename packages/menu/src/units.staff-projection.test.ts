@@ -5,7 +5,7 @@ import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { createUnit } from "./units.js";
 import {
   addProductToMenu,
-  createCatalogue,
+  createMenu,
   createProduct,
   listAvailableProducts,
   listMenuOffers,
@@ -19,7 +19,7 @@ it.each(["products", "available", "offers"] as const)(
   async (surface) => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Deli" });
+      const menu = await createMenu(tx, { name: "Deli" });
       const unit = await createUnit(
         tx,
         {
@@ -32,7 +32,7 @@ it.each(["products", "available", "offers"] as const)(
         "en",
       );
       const weighed = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Staff potatoes",
         unitId: unit.id,
@@ -40,7 +40,7 @@ it.each(["products", "available", "offers"] as const)(
         vatClass: "general",
       });
       const each = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         name: "Staff cup",
         unitId: null,
@@ -49,7 +49,7 @@ it.each(["products", "available", "offers"] as const)(
       });
       await seedVenue(tx, {
         name: "Room",
-        defaultCatalogueId: menu.id,
+        defaultMenuId: menu.id,
         invoiceLocales: ["en-GB"],
         operationDescription: "Hospitality",
       });

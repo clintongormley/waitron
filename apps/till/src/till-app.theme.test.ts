@@ -14,7 +14,7 @@ import { themeLabels } from "./widgets/theme-chooser.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
-import type { TillApi, TillProduct, ZoneOfferCatalogue } from "./api/client.js";
+import type { TillApi, TillProduct, ZoneOffers } from "./api/client.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillShell } from "./widgets/till-shell.js";
 
@@ -143,7 +143,7 @@ const counterTill = {
   servers: [],
 };
 
-const counterOffers: ZoneOfferCatalogue = {
+const counterOffers: ZoneOffers = {
   service: {
     open: true,
     zoneOpen: true,
@@ -166,7 +166,7 @@ const counterOffers: ZoneOfferCatalogue = {
 const coffee: TillProduct = {
   id: "cafe",
   menuItemId: "mi-cafe",
-  catalogueId: "cat-default",
+  menuId: "cat-default",
   name: "Café",
   pricingUnit: "each",
   unitPrice: "1.50",

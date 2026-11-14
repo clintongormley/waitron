@@ -10,7 +10,7 @@ import {
 } from "./content-languages.js";
 
 describe("content languages", () => {
-  it("offers named languages beyond the interface catalogue without duplicate aliases", () => {
+  it("offers named languages beyond the interface menu without duplicate aliases", () => {
     const choices = contentLanguageChoices("en-GB");
     expect(choices).toEqual(
       expect.arrayContaining([
@@ -78,7 +78,7 @@ describe("content languages", () => {
     (language) => expect(contentLanguageCode(language)).toBe(language),
   );
 
-  it("matches full browser and receipt tags to catalogue languages", () => {
+  it("matches full browser and receipt tags to menu languages", () => {
     expect(contentLanguageCode("en-GB")).toBe("en");
     expect(contentLanguageCode("ES-es")).toBe("es");
   });

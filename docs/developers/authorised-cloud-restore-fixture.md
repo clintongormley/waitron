@@ -83,7 +83,7 @@ also requires preparing recovery against that capture's exact source identifier.
 The helper's archive includes synthetic state entries and is not qualified here as an input
 to the complete Cloud data verifier. This qualification runs the ordinary restore and its
 existing controls. It does not run Cloud capture, publication, verifier-container isolation,
-catalogue admission, v2 recovery, continuous-source absence or published-image qualification.
+menu admission, v2 recovery, continuous-source absence or published-image qualification.
 It supplies no portable artifact or production credential. The test tears down its generated
 secrets and files.
 

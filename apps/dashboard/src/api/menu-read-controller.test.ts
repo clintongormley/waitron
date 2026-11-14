@@ -57,7 +57,7 @@ it("keeps one shared menu watch when its tabs ask for the same selected parts", 
   );
   expect(s.requests).toEqual([
     {
-      path: "/management-api/catalogues/lunch/read?part=structure&part=home&part=status",
+      path: "/management-api/menus/lunch/read?part=structure&part=home&part=status",
       passive: false,
     },
   ]);
@@ -155,8 +155,8 @@ it("drops the old menu's pending refresh when another menu is opened", async () 
   await Promise.all([refresh, next]);
   await vi.advanceTimersByTimeAsync(1000);
   expect(s.requests.map(({ path }) => path)).toEqual([
-    "/management-api/catalogues/lunch/read?part=home",
-    "/management-api/catalogues/dinner/read?part=home",
+    "/management-api/menus/lunch/read?part=home",
+    "/management-api/menus/dinner/read?part=home",
   ]);
 });
 
@@ -326,8 +326,8 @@ it("replaces the subscription when the selected tab's parts change", async () =>
     s.values.push(value),
   );
   expect(s.requests.map(({ path }) => path)).toEqual([
-    "/management-api/catalogues/lunch/read?part=structure",
-    "/management-api/catalogues/lunch/read?part=structure&part=home&part=preview",
+    "/management-api/menus/lunch/read?part=structure",
+    "/management-api/menus/lunch/read?part=structure&part=home&part=preview",
   ]);
   s.columns(5);
   s.api.liveData.invalidate([{ type: "products" }]);
@@ -335,7 +335,7 @@ it("replaces the subscription when the selected tab's parts change", async () =>
     expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 5 } } } }),
   );
   expect(s.requests.map(({ path }) => path).slice(2)).toEqual([
-    "/management-api/catalogues/lunch/read?part=structure&part=home&part=preview",
+    "/management-api/menus/lunch/read?part=structure&part=home&part=preview",
   ]);
 });
 

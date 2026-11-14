@@ -4,7 +4,7 @@ import { beforeAll, expect, it } from "vitest";
 import { createProduct } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
-  catalogues,
+  menus,
   departments,
   deviceKitchenScreenRemovals,
   deviceKitchenScreens,
@@ -98,7 +98,7 @@ it("counts base and child routing rows once and clears only their union", async 
       .insert(departments)
       .values({ ...f.cfg, name: "Dining", tradingName: "Dining" })
       .returning();
-    const [menu] = await tx.insert(catalogues).values({ name: "Menu" }).returning();
+    const [menu] = await tx.insert(menus).values({ name: "Menu" }).returning();
     const periods = await tx
       .insert(menuPeriods)
       .values(
@@ -173,9 +173,9 @@ it("counts base and child routing rows once and clears only their union", async 
 it("clears owned daily dates and incoming destinations without reopening their owners", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
-    const [menu] = await tx.insert(catalogues).values({ name: "Daily menu" }).returning();
+    const [menu] = await tx.insert(menus).values({ name: "Daily menu" }).returning();
     const product = await createProduct(tx, {
-      catalogueId: menu!.id,
+      menuId: menu!.id,
       name: "Daily product",
       categoryId: null,
       pricingUnit: "each",

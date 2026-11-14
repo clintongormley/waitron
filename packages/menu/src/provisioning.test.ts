@@ -4,7 +4,7 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  catalogues,
+  menus,
   CORE_MIGRATIONS,
   readSettings,
   menuDetails,
@@ -16,17 +16,17 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
-import { CATALOGUE_PROVISIONING, FIRST_MENU_NAME } from "./provisioning.js";
+import { MENU_PROVISIONING, FIRST_MENU_NAME } from "./provisioning.js";
 import {
   MENU_SETTINGS,
-  readCatalogueSettings,
-  saveCatalogueSettings,
-  saveCatalogueDefaultColor,
+  readMenuSettings,
+  saveMenuSettings,
+  saveMenuDefaultColor,
 } from "./settings.js";
 import { racePair } from "../test/fixtures.js";
 import { getSeededUnit } from "./units.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
-import { readDefaultCatalogueId } from "./operations.js";
+import { readDefaultMenuId } from "./operations.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const expected: StarterTranslations<StarterContentLanguage> = STARTER_UNIT_NAMES;
@@ -71,14 +71,14 @@ async function storedUnits() {
     .orderBy(asc(units.seedKey));
 }
 
-describe("catalogue provisioning", () => {
+describe("menu provisioning", () => {
   it("makes the starter menu the default when there is none", async () => {
     const node = await venue("GB", "London", "en-GB");
-    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    await withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
     expect(
       (
         await suite.db.execute<{ name: string; is_default: number }>(sql`
-      select name, is_default from catalogues`)
+      select name, is_default from menus`)
       ).rows,
     ).toEqual([{ name: "Menu", is_default: 1 }]);
   });
@@ -89,16 +89,16 @@ describe("catalogue provisioning", () => {
     ["XX", "general"],
   ])("seeds the new-product VAT default for %s as %s", async (country, expected) => {
     const node = await venue(country, "Madrid", "es-ES");
-    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    await withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
     expect((await readSettings(suite.db, MENU_SETTINGS)).doc.defaultProductVatClass).toBe(expected);
   });
 
   it("preserves an authored VAT default when another node is seeded", async () => {
     const node = await venue("ES", "Madrid", "es-ES");
-    const run = () => withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    const run = () => withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
     await run();
     await withTransaction(suite.db, (tx) =>
-      saveCatalogueSettings(tx, { defaultProductVatClass: "zero" }),
+      saveMenuSettings(tx, { defaultProductVatClass: "zero" }),
     );
     await run();
     expect((await readSettings(suite.db, MENU_SETTINGS)).doc.defaultProductVatClass).toBe("zero");
@@ -106,8 +106,8 @@ describe("catalogue provisioning", () => {
 
   it("seeds the All products default colour as pale blue", async () => {
     const node = await venue("ES", "Madrid", "es-ES");
-    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
-    const settings = await withTransaction(suite.db, (tx) => readCatalogueSettings(tx));
+    await withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
+    const settings = await withTransaction(suite.db, (tx) => readMenuSettings(tx));
     expect(settings.defaultColor).toBe("#abcced");
   });
 
@@ -116,11 +116,11 @@ describe("catalogue provisioning", () => {
     async (authored) => {
       const node = await venue("ES", "Madrid", "es-ES");
       const run = () =>
-        withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+        withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
       await run();
-      await withTransaction(suite.db, (tx) => saveCatalogueDefaultColor(tx, authored));
+      await withTransaction(suite.db, (tx) => saveMenuDefaultColor(tx, authored));
       await run();
-      const settings = await withTransaction(suite.db, (tx) => readCatalogueSettings(tx));
+      const settings = await withTransaction(suite.db, (tx) => readMenuSettings(tx));
       expect(settings.defaultColor).toBe(authored);
     },
   );
@@ -143,7 +143,7 @@ describe("catalogue provisioning", () => {
     "seeds %s/%s content independently of the %s receipt locale",
     async (country, province, receipt, language, languages) => {
       const node = await venue(country, province, receipt);
-      await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+      await withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
       expect(await storedLanguages()).toEqual([{ default_language: language, languages }]);
       expect(await readVenueInvoiceLocales(suite.db)).toEqual([receipt]);
     },
@@ -151,7 +151,7 @@ describe("catalogue provisioning", () => {
 
   it("preserves authored languages and reuses the initial menu on another seed", async () => {
     const node = await venue("ES", "Madrid", "es-ES");
-    const run = () => withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    const run = () => withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
     await expect(run()).resolves.toBe("initial menu ready");
     await seedVenueSettings(suite.db, {
       defaultContentLanguage: "fr",
@@ -159,25 +159,25 @@ describe("catalogue provisioning", () => {
     });
     await run();
     expect(await storedLanguages()).toEqual([{ default_language: "fr", languages: ["fr", "de"] }]);
-    const menus = await suite.db.select({ count: sql<number>`count(*)` }).from(catalogues);
-    expect(menus).toEqual([{ count: 1 }]);
+    const menuRows = await suite.db.select({ count: sql<number>`count(*)` }).from(menus);
+    expect(menuRows).toEqual([{ count: 1 }]);
     // The initial menu got its root and default layout once, not once per seed.
-    const menu = { catalogueId: await readDefaultCatalogueId(suite.db) };
+    const menu = { menuId: await readDefaultMenuId(suite.db) };
     const owned = await suite.db
       .select({ role: sections.role })
       .from(sections)
-      .where(eq(sections.ownerMenuId, menu!.catalogueId!))
+      .where(eq(sections.ownerMenuId, menu!.menuId!))
       .orderBy(asc(sections.role));
     expect(owned).toEqual([{ role: "home_layout" }, { role: "menu_root" }]);
     expect(await suite.db.select().from(menuDetails)).toEqual([
-      expect.objectContaining({ menuId: menu!.catalogueId }),
+      expect.objectContaining({ menuId: menu!.menuId }),
     ]);
   });
 
   it("seeds the five units once and preserves edits and intentional deletion on another node", async () => {
     const node = await venue("ES", "Madrid", "es-ES");
     const run = (nodeId = node.nodeId) =>
-      withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, { ...node, nodeId }));
+      withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, { ...node, nodeId }));
     await run();
     expect(await getSeededUnit(suite.db, "each")).toBeNull();
     expect(await storedUnits()).toEqual([
@@ -238,7 +238,7 @@ describe("catalogue provisioning", () => {
 
 it("authors seeded staff pairs independently and preserves staff edits on reseed", async () => {
   const node = await venue("ES", "Madrid", "es-ES");
-  await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+  await withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
   const staffPairs = () =>
     suite.db
       .select({
@@ -259,7 +259,7 @@ it("authors seeded staff pairs independently and preserves staff edits on reseed
     .update(units)
     .set({ staffName: "Mass", staffAbbreviation: "M", name: {}, abbreviation: {} })
     .where(eq(units.seedKey, "kg"));
-  await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+  await withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
   expect((await staffPairs()).find((unit) => unit.seedKey === "kg")).toEqual({
     seedKey: "kg",
     staffName: "Mass",
@@ -291,7 +291,7 @@ it.each(["en", "es"] as const)(
   async (staffLanguage) => {
     const node = await venue("ES", "Madrid", staffLanguage === "en" ? "es-ES" : "en-GB");
     await withTransaction(suite.db, (tx) =>
-      CATALOGUE_PROVISIONING.seed!.run(tx, node, undefined, { staffLanguage }),
+      MENU_PROVISIONING.seed!.run(tx, node, undefined, { staffLanguage }),
     );
     expect(
       (await seededUnits()).map(({ seedKey, staffName, name }) => ({ seedKey, staffName, name })),
@@ -302,7 +302,7 @@ it.each(["en", "es"] as const)(
         name: { en: english, es: expected[english]!.es },
       })),
     );
-    expect(await suite.db.select({ name: catalogues.name }).from(catalogues)).toEqual([
+    expect(await suite.db.select({ name: menus.name }).from(menus)).toEqual([
       { name: staffLanguage === "en" ? "Menu" : STARTER_MENU_NAMES.Menu.es },
     ]);
   },
@@ -325,7 +325,7 @@ it.each(STARTER_VENUES)(
   "seeds each %s/%s (receipts %j) unit in the %s staff language with a name in each of %j",
   async (country, province, receipt, staffLanguage, languages) => {
     const node = await venue(country, province, receipt);
-    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    await withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
     expect(await seededUnits()).toEqual(
       STARTER_UNIT_ROWS.map(({ seedKey, english, abbreviation }) => ({
         seedKey,
@@ -347,7 +347,7 @@ it.each(STARTER_VENUES)(
   "gives every seeded %s/%s (receipts %j) unit its staff abbreviation in every language it names",
   async (country, province, receipt) => {
     const node = await venue(country, province, receipt);
-    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    await withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
     const seeded = await seededUnits();
     expect(seeded).toHaveLength(STARTER_UNIT_ROWS.length);
     for (const unit of seeded) {
@@ -363,18 +363,18 @@ it.each(STARTER_VENUES)(
   "names the first menu of %s/%s (receipts %j) in the %s staff language",
   async (country, province, receipt, staffLanguage) => {
     const node = await venue(country, province, receipt);
-    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    await withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
     const name = staffLanguage === "en" ? FIRST_MENU_NAME : STARTER_MENU_NAMES[FIRST_MENU_NAME].es;
-    const venueMenu = { catalogueId: await readDefaultCatalogueId(suite.db) };
-    const menus = await suite.db
-      .select({ name: catalogues.name })
-      .from(catalogues)
-      .where(eq(catalogues.id, venueMenu.catalogueId!));
-    expect(menus).toEqual([{ name }]);
+    const venueMenu = { menuId: await readDefaultMenuId(suite.db) };
+    const menuRows = await suite.db
+      .select({ name: menus.name })
+      .from(menus)
+      .where(eq(menus.id, venueMenu.menuId!));
+    expect(menuRows).toEqual([{ name }]);
     const owned = await suite.db
       .select({ role: sections.role, internalName: sections.internalName, names: sections.names })
       .from(sections)
-      .where(eq(sections.ownerMenuId, venueMenu.catalogueId!))
+      .where(eq(sections.ownerMenuId, venueMenu.menuId!))
       .orderBy(asc(sections.role));
     // The home layout is shown nowhere, so it keeps its English name in code (A918 slice 4, decision 5).
     expect(owned).toEqual([
@@ -386,7 +386,7 @@ it.each(STARTER_VENUES)(
 
 it("saves the pack defaults and starter-unit history only once", async () => {
   const node = await venue("ES", "Madrid", "es-ES");
-  const run = () => withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+  const run = () => withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
   await run();
   expect(await readSettings(suite.db, MENU_SETTINGS)).toEqual({
     revision: 1,
@@ -402,7 +402,7 @@ it("saves the pack defaults and starter-unit history only once", async () => {
 it("creates the starter units once, even when two seeds race", async () => {
   const node = await venue("ES", "Madrid", "es-ES");
   const seed = (tx: import("@waitron/db").Transaction) =>
-    CATALOGUE_PROVISIONING.seed!.run(tx, node);
+    MENU_PROVISIONING.seed!.run(tx, node);
   const results = await racePair(suite.db, seed, seed);
   expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
   expect(await storedUnits()).toHaveLength(5);
@@ -412,9 +412,9 @@ it("creates the starter units once, even when two seeds race", async () => {
 it("keeps defaults saved before the first seed and creates its units only once", async () => {
   const node = await venue("ES", "Madrid", "es-ES");
   await withTransaction(suite.db, (tx) =>
-    saveCatalogueSettings(tx, { defaultProductVatClass: "zero" }),
+    saveMenuSettings(tx, { defaultProductVatClass: "zero" }),
   );
-  const run = () => withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+  const run = () => withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
   await run();
   expect(await readSettings(suite.db, MENU_SETTINGS)).toEqual({
     revision: 2,

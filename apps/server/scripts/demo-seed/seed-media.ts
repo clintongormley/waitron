@@ -25,7 +25,7 @@ export function demoMediaPath(
 
 export interface SeedMediaInput {
   mediaDataSet: string;
-  /** Committed image basename → product id, from seedCatalogues. */
+  /** Committed image basename → product id, from seedMenus. */
   productsByImage: Map<string, string>;
 }
 

@@ -50,7 +50,7 @@ export function ticketLinesFrom(
       line.variantDescriptions ?? null,
       line.variantName ?? null,
     ),
-    // Frozen at filing: the receipt never re-reads the catalogue for these names.
+    // Frozen at filing: the receipt never re-reads the menu for these names.
     optionSnapshots: line.optionSnapshots,
     quantity:
       line.parentLineNo != null && line.unitName != null && (line.unitPrecision ?? 0) > 0

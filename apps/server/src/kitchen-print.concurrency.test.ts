@@ -6,7 +6,7 @@ import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
-import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createProduct } from "@waitron/menu";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
@@ -107,8 +107,8 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
     const { kitchenId, printerId, orderId, lineId } = await withTransaction(
       suite.db,
       async (tx) => {
-        const cat = await createCatalogue(tx, { name: "Menu" });
-        await assignCatalogueToVenue(tx, cat.id);
+        const cat = await createMenu(tx, { name: "Menu" });
+        await assignMenuToVenue(tx, cat.id);
         const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
         const { id: printerId } = await createPrinter(tx, {
           name: "Kitchen printer",
@@ -120,7 +120,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
           printerId,
         });
         const { id: product } = await createProduct(tx, {
-          catalogueId: cat.id,
+          menuId: cat.id,
           categoryId: null,
           name: "Ribeye",
           pricingUnit: "each",

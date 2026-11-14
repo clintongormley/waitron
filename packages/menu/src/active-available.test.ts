@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  assignCatalogueToVenue,
-  createCatalogue,
+  assignMenuToVenue,
+  createMenu,
   addProductToMenu,
   listAvailableProducts,
   listMenuOffers,
@@ -11,23 +11,23 @@ import {
 } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { createUnit } from "./units.js";
-import { seedVenueWithSeries, useCatalogueDb } from "../test/fixtures.js";
+import { seedVenueWithSeries, useMenuDb } from "../test/fixtures.js";
 
 // Active is whether the product exists for the venue, Available is "sold out for now".
 // The till sells a product only when it is BOTH, and each state is written without touching the
 // other — so every case below gives the two flags different values.
-const fx = useCatalogueDb();
+const fx = useMenuDb();
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
-let catalogueId = "";
+let menuId = "";
 let productId = "";
 let body: ProductEditorInput;
 
 beforeEach(async () => {
   await seedVenueWithSeries(fx.db);
   await run(async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Deli" });
-    catalogueId = menu.id;
+    const menu = await createMenu(tx, { name: "Deli" });
+    menuId = menu.id;
     const unit = await createUnit(
       tx,
       {
@@ -64,23 +64,23 @@ beforeEach(async () => {
       productId,
       grossPrice: "5.00",
     });
-    await assignCatalogueToVenue(tx, menu.id);
+    await assignMenuToVenue(tx, menu.id);
   });
 });
 
 async function save(flags: { active: boolean; available: boolean }) {
-  return run((tx) => saveProductEditor(tx, productId, catalogueId, { ...body, ...flags }, "en"));
+  return run((tx) => saveProductEditor(tx, productId, menuId, { ...body, ...flags }, "en"));
 }
 
 /** What the editor, the product list, the menu's offers and the sellable list say of the one product. */
 async function reads() {
   return run(async (tx) => {
     const editor = await readProductEditor(tx, productId);
-    const [listed] = await listProducts(tx, catalogueId);
+    const [listed] = await listProducts(tx, menuId);
     return {
       editor: { active: editor.active, available: editor.available },
       listed: { active: listed!.active, available: listed!.available },
-      offers: (await listMenuOffers(tx, [catalogueId])).map((offer) => offer.productId),
+      offers: (await listMenuOffers(tx, [menuId])).map((offer) => offer.productId),
       sellable: (await listAvailableProducts(tx)).products.map((p) => p.id),
     };
   });
@@ -131,7 +131,7 @@ describe("Active and Available", () => {
     };
     expect(await reads()).toEqual(archived);
     await expect(
-      run((tx) => addProductToMenu(tx, { menuId: catalogueId, productId })),
+      run((tx) => addProductToMenu(tx, { menuId: menuId, productId })),
     ).rejects.toMatchObject({ code: "menu_section.membership_invalid" });
     expect(await reads()).toEqual(archived);
   });
@@ -141,7 +141,7 @@ describe("Active and Available", () => {
       saveProductEditor(
         tx,
         null,
-        catalogueId,
+        menuId,
         { ...body, name: "Croquette", available: false },
         "en",
       ),
@@ -157,8 +157,8 @@ describe("Active and Available", () => {
   // offer carries the setting, and the till and the order path act on it.
   it("offers an Active, Available product the till whatever its ordering, and says which", async () => {
     for (const ordering of ["public", "staff_only", "not_sold_separately"] as const) {
-      await run((tx) => saveProductEditor(tx, productId, catalogueId, { ...body, ordering }, "en"));
-      const offers = await run((tx) => listMenuOffers(tx, [catalogueId]));
+      await run((tx) => saveProductEditor(tx, productId, menuId, { ...body, ordering }, "en"));
+      const offers = await run((tx) => listMenuOffers(tx, [menuId]));
       expect(offers.map((offer) => offer.ordering)).toEqual([ordering]);
       expect(offers.map((offer) => offer.productId)).toEqual([productId]);
     }

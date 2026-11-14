@@ -7,24 +7,24 @@ import type { DashboardApi } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, closeReportsDelivered } from "./test-helpers.js";
-import type { CatalogueBrowser } from "./product-browser.js";
+import type { ProductBrowser } from "./product-browser.js";
 import "./product-browser.js";
 registerIcons(DASHBOARD_ICONS);
-class CatalogueLeaveApp extends LitElement {
+class ProductsLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
   override render() {
-    return html`<dashboard-catalogue-browser
+    return html`<dashboard-product-browser
         .api=${this.api}
         .categories=${[
           { id: "d", name: "Drinks", parentId: null, color: null },
           { id: "f", name: "Food", parentId: null, color: null },
         ]}
-      ></dashboard-catalogue-browser
+      ></dashboard-product-browser
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
 }
-customElements.define("catalogue-leave-test-app", CatalogueLeaveApp);
+customElements.define("products-leave-test-app", ProductsLeaveApp);
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
@@ -33,13 +33,13 @@ const counts = { id: "d", folders: 1, products: 3, activeProducts: 2, routes: 1,
 async function fixture(operation: "move" | "delete", overrides: Partial<DashboardApi> = {}) {
   setLocale("en-GB");
   const api = {
-    moveCatalogueItems: vi.fn().mockResolvedValue(undefined),
-    deleteCatalogueItems: vi.fn().mockResolvedValue(undefined),
+    moveProductItems: vi.fn().mockResolvedValue(undefined),
+    deleteProductItems: vi.fn().mockResolvedValue(undefined),
     summariseFolders: vi.fn().mockResolvedValue([counts]),
     ...overrides,
   } as unknown as DashboardApi;
-  const { el: app } = await mountWidget<CatalogueLeaveApp>("catalogue-leave-test-app", { api });
-  const browser = app.shadowRoot!.querySelector<CatalogueBrowser>("dashboard-catalogue-browser")!;
+  const { el: app } = await mountWidget<ProductsLeaveApp>("products-leave-test-app", { api });
+  const browser = app.shadowRoot!.querySelector<ProductBrowser>("dashboard-product-browser")!;
   await browser.updateComplete;
   browser
     .shadowRoot!.querySelector("wt-icon-button[data-test=select]")!
@@ -101,13 +101,13 @@ it("a contents choice hidden by the fresh counts is no longer an unsaved submitt
   await expect
     .poll(() => f.modal.querySelector("[data-test=confirm]")?.hasAttribute("disabled"))
     .toBe(false);
-  expect(f.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(f.api.deleteProductItems).not.toHaveBeenCalled();
   expect(f.modal.textContent).toContain(t("folders.summary_changed"));
   expect(protectedUnload()).toBe(false);
   await cancel(f, "cancel");
   await expect.poll(() => f.browser.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect((await question(f)).open).toBe(false);
-  expect(f.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(f.api.deleteProductItems).not.toHaveBeenCalled();
 });
 async function question(f: Fixture) {
   await f.app.updateComplete;
@@ -148,8 +148,8 @@ for (const operation of ["move", "delete"] as const) {
       await cancel(f, "escape");
       await choose(f, "discard");
       await expect.poll(() => f.browser.shadowRoot!.querySelector("wt-modal")).toBeNull();
-      expect(f.api.moveCatalogueItems).not.toHaveBeenCalled();
-      expect(f.api.deleteCatalogueItems).not.toHaveBeenCalled();
+      expect(f.api.moveProductItems).not.toHaveBeenCalled();
+      expect(f.api.deleteProductItems).not.toHaveBeenCalled();
       expect(protectedUnload()).toBe(false);
       expect(
         f.browser.shadowRoot!.querySelector("[data-test=selected-count]")!.textContent!.trim(),
@@ -174,12 +174,12 @@ for (const operation of ["move", "delete"] as const) {
     expect(protectedUnload()).toBe(false);
     expect((await question(f)).open).toBe(false);
     if (operation === "move")
-      expect(f.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      expect(f.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
         { productIds: [], categoryIds: ["d"] },
         "f",
       );
     else
-      expect(f.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      expect(f.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
         { productIds: [], categoryIds: ["d"] },
         "delete",
         [counts],
@@ -187,7 +187,7 @@ for (const operation of ["move", "delete"] as const) {
   });
   it(`${operation} refusal retains its retry choice and protection`, async () => {
     const f = await fixture(operation, {
-      [operation === "move" ? "moveCatalogueItems" : "deleteCatalogueItems"]: vi
+      [operation === "move" ? "moveProductItems" : "deleteProductItems"]: vi
         .fn()
         .mockRejectedValue({ code: "category.name_taken" }),
     });
@@ -235,7 +235,7 @@ for (const operation of ["move", "delete"] as const) {
       refuse = reject;
     });
     const f = await fixture(operation, {
-      [operation === "move" ? "moveCatalogueItems" : "deleteCatalogueItems"]: vi
+      [operation === "move" ? "moveProductItems" : "deleteProductItems"]: vi
         .fn()
         .mockReturnValue(pending),
     });
@@ -281,7 +281,7 @@ it("departed move controls cannot change or submit a replacement operation", asy
   await chooseOption(replacement.querySelector("wt-combobox")!, "top");
   await f.browser.updateComplete;
   oldConfirm.click();
-  expect(f.api.moveCatalogueItems).not.toHaveBeenCalled();
+  expect(f.api.moveProductItems).not.toHaveBeenCalled();
   expect(protectedUnload()).toBe(true);
 });
 it("a deletion-count refresh keeps the staged disposition protected", async () => {
@@ -292,7 +292,7 @@ it("a deletion-count refresh keeps the staged disposition protected", async () =
   await edit(f);
   f.modal.querySelector<HTMLElement>("[data-test=confirm]")!.click();
   await expect.poll(() => f.modal.querySelector("[role=alert]")?.textContent).toBeTruthy();
-  expect(f.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(f.api.deleteProductItems).not.toHaveBeenCalled();
   expect(value(f)).toBe("delete");
   expect(protectedUnload()).toBe(true);
   await userEvent.keyboard("{Escape}");
@@ -314,6 +314,6 @@ for (const route of ["cancel", "close-report"] as const) {
     await closeReportsDelivered();
     expect(f.browser.shadowRoot!.querySelector("wt-modal")).toBe(replacement);
     expect(replacement.open).toBe(true);
-    expect(f.api.moveCatalogueItems).not.toHaveBeenCalled();
+    expect(f.api.moveProductItems).not.toHaveBeenCalled();
   });
 }

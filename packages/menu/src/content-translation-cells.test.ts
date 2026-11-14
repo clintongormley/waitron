@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { createMenu, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { addMember } from "./sections.js";
 import { setIncludeFolder } from "./include-folder.js";
@@ -30,9 +30,9 @@ const context = { fallbackLanguage: "es", required: ["es"] };
 
 async function fixture(tx: Transaction) {
   await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
-  const menu = await createCatalogue(tx, { name: "STAFF Menu", names: {} });
+  const menu = await createMenu(tx, { name: "STAFF Menu", names: {} });
   const product = await createProduct(tx, {
-    catalogueId: menu.id,
+    menuId: menu.id,
     categoryId: null,
     name: "STAFF Bread",
     customerName: {
@@ -289,7 +289,7 @@ describe("bounded translation field reads", () => {
         .insert(sections)
         .values({ internalName: "STAFF Mains", names: {}, ownerMenuId: root.menuId })
         .returning();
-      const child = await createCatalogue(tx, {
+      const child = await createMenu(tx, {
         name: "STAFF Drinks",
         names: { es: "CLIENT ES drinks", en: "CLIENT Drinks", ca: "CLIENT CA drinks" },
       });

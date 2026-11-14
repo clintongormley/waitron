@@ -22,7 +22,7 @@ import {
 } from "@waitron/identity";
 import { createDeviceProfile } from "@waitron/layouts";
 import {
-  createCatalogue,
+  createMenu,
   createProduct,
   addProductToMenu,
   previewMenu,
@@ -78,9 +78,9 @@ async function prepareSale(config: ServerConfig) {
         .values({ personId: person!.id, staffRoleId: staffRole!.id });
       await setProfileAdmission(tx, profile.id, { admittedStaffRoleIds: [staffRole!.id] });
       const venue = await readVenue(tx);
-      const menu = await createCatalogue(tx, { name });
+      const menu = await createMenu(tx, { name });
       const product = await createProduct(tx, {
-        catalogueId: menu.id,
+        menuId: menu.id,
         categoryId: null,
         unitId: null,
         name: `${name} item`,

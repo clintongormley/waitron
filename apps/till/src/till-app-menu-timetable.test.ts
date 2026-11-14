@@ -13,7 +13,7 @@ import type {
   TillApi,
   TillMenuOffer,
   TillSaleResult,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
@@ -77,8 +77,8 @@ function offers(
   zoneId: string,
   menus: Menu[],
   defaultMenuId: string,
-  serviceMode: ZoneOfferCatalogue["context"]["serviceMode"] = "prepay",
-): ZoneOfferCatalogue {
+  serviceMode: ZoneOffers["context"]["serviceMode"] = "prepay",
+): ZoneOffers {
   return {
     service: {
       open: true,
@@ -293,9 +293,9 @@ afterEach(() => {
 });
 
 describe("device and zone period memory", () => {
-  const running = (catalogue: ZoneOfferCatalogue, occurrence = "lunch-day-1") => ({
-    ...catalogue,
-    service: { ...catalogue.service, periodName: "Lunch", periodOccurrenceKey: occurrence },
+  const running = (menu: ZoneOffers, occurrence = "lunch-day-1") => ({
+    ...menu,
+    service: { ...menu.service, periodName: "Lunch", periodOccurrenceKey: occurrence },
   });
   const names = (el: TillApp) =>
     [
@@ -311,7 +311,7 @@ describe("device and zone period memory", () => {
     emit(counter(el), "menu-selected", { id });
     await flush(el);
   }
-  const catalogueApi = () => ({
+  const menuApi = () => ({
     listDefaultZoneOffers: vi.fn(async () => running(BAR_OFFERS)),
     listZoneOffers: vi.fn(async (id: string) =>
       running(id === "zone-terraza" ? TERRACE_OFFERS : BAR_OFFERS),
@@ -332,7 +332,7 @@ describe("device and zone period memory", () => {
   });
 
   it("restores a manual menu independently on each zone return", async () => {
-    const { el } = await mountApp(catalogueApi());
+    const { el } = await mountApp(menuApi());
     await signIn(el);
     await pick(el, "almuerzo");
     expect(names(el)).toEqual(["Menú del día"]);
@@ -347,7 +347,7 @@ describe("device and zone period memory", () => {
   });
 
   it("starts every empty-order sign-in at the saved starting zone and shares its menu across operators", async () => {
-    const { el } = await mountApp(catalogueApi());
+    const { el } = await mountApp(menuApi());
     await signIn(el);
     await pick(el, "almuerzo");
     await selectZone(el, "zone-terraza");
@@ -361,16 +361,16 @@ describe("device and zone period memory", () => {
   });
 
   it("restores the device menu after the app restarts without inheriting another device or profile", async () => {
-    const { el } = await mountApp(catalogueApi());
+    const { el } = await mountApp(menuApi());
     await signIn(el);
     await pick(el, "almuerzo");
     el.remove();
-    const { el: reloaded } = await mountApp(catalogueApi());
+    const { el: reloaded } = await mountApp(menuApi());
     await signIn(reloaded, "p2");
     expect(names(reloaded)).toEqual(["Menú del día"]);
     reloaded.remove();
     const { el: other } = await mountApp({
-      ...catalogueApi(),
+      ...menuApi(),
       getDeviceIdentity: vi.fn(async () => ({
         deviceId: "other",
         name: "Other",
@@ -381,7 +381,7 @@ describe("device and zone period memory", () => {
     expect(names(other)).toEqual(["Tostada"]);
     other.remove();
     const { el: profile } = await mountApp({
-      ...catalogueApi(),
+      ...menuApi(),
       getDeviceZones: vi.fn(async () => ({
         ...deviceZonesFixture(["zone-barra", "zone-terraza"]),
         profileId: "other-profile",
@@ -394,7 +394,7 @@ describe("device and zone period memory", () => {
   it("expires a manual menu on a new occurrence even with the same name, versions and default", async () => {
     let current = running(BAR_OFFERS);
     const { el } = await mountApp({
-      ...catalogueApi(),
+      ...menuApi(),
       listZoneOffers: vi.fn(async () => current),
       menuState: vi.fn(async () => ({
         ...state([BREAKFAST, LUNCH], "desayunos"),
@@ -413,7 +413,7 @@ describe("device and zone period memory", () => {
   it("defers the new occurrence selection until the basket clears while retaining its original price", async () => {
     let current = running(BAR_OFFERS);
     const { el } = await mountApp({
-      ...catalogueApi(),
+      ...menuApi(),
       listZoneOffers: vi.fn(async () => current),
       menuState: vi.fn(async () => ({
         ...state([BREAKFAST, LUNCH], "desayunos"),
@@ -442,7 +442,7 @@ describe("device and zone period memory", () => {
   it.each([false, true])(
     "keeps an existing basket's zone across operators even when its new scope refuses offers: %s",
     async (refused) => {
-      const { el } = await mountApp(catalogueApi());
+      const { el } = await mountApp(menuApi());
       await signIn(el);
       await selectZone(el, "zone-terraza");
       add(el, DINNER);
@@ -484,7 +484,7 @@ describe("device and zone period memory", () => {
   it("keeps the visible grid and menu list through a boundary until the basket is held", async () => {
     let current = running(BAR_OFFERS);
     const { el } = await mountApp({
-      ...catalogueApi(),
+      ...menuApi(),
       listZoneOffers: vi.fn(async () => current),
       menuState: vi.fn(async () => ({
         ...state(current.menus.map((menu) => ({ id: menu.id, name: menu.name, product: "" }))),
@@ -522,7 +522,7 @@ describe("device and zone period memory", () => {
     const pay = vi.fn<TillApi["pay"]>(() => payment);
     const cancelCardPayment = vi.fn();
     const { el } = await mountApp({
-      ...catalogueApi(),
+      ...menuApi(),
       pay,
       cancelCardPayment,
       listZoneOffers: vi.fn(async () => current),
@@ -568,7 +568,7 @@ describe("device and zone period memory", () => {
     let current = running(BAR_OFFERS);
     let unavailable: string[] = [];
     const { el } = await mountApp({
-      ...catalogueApi(),
+      ...menuApi(),
       listZoneOffers: vi.fn(async () => current),
       menuState: vi.fn(async () => ({
         service: current.service,
@@ -614,7 +614,7 @@ describe("device and zone period memory", () => {
   it("recovers a deferred boundary offers read after its first safe-order read fails", async () => {
     let current = running(BAR_OFFERS);
     const { el } = await mountApp({
-      ...catalogueApi(),
+      ...menuApi(),
       listZoneOffers: vi.fn(async () => current),
       menuState: vi.fn(async () => ({
         ...state(current.menus.map((menu) => ({ id: menu.id, name: menu.name, product: "" }))),
@@ -639,9 +639,9 @@ describe("device and zone period memory", () => {
   });
 
   it("respects an explicit null default after memory expires instead of selecting the first menu", async () => {
-    let current: ZoneOfferCatalogue = running(BAR_OFFERS);
+    let current: ZoneOffers = running(BAR_OFFERS);
     const { el } = await mountApp({
-      ...catalogueApi(),
+      ...menuApi(),
       listZoneOffers: vi.fn(async () => current),
       menuState: vi.fn(async () => ({
         ...state([BREAKFAST, LUNCH]),
@@ -860,7 +860,7 @@ describe("period service at the counter", () => {
     };
     const endedAs = (name: string | null) => (menuId: string) =>
       menuId === "desayunos" ? name : null;
-    const catalogue = (ended: (menuId: string) => string | null) => ({
+    const menu = (ended: (menuId: string) => string | null) => ({
       ...BAR_OFFERS,
       service,
       defaultMenuId: null,
@@ -881,8 +881,8 @@ describe("period service at the counter", () => {
       })),
     });
     const { el } = await mountApp({
-      listDefaultZoneOffers: vi.fn(async () => catalogue(endedAs("Breakfast"))),
-      listZoneOffers: vi.fn(async () => catalogue(endedAs("Breakfast"))),
+      listDefaultZoneOffers: vi.fn(async () => menu(endedAs("Breakfast"))),
+      listZoneOffers: vi.fn(async () => menu(endedAs("Breakfast"))),
       menuState: vi.fn(async () => polled(endedAs("Breakfast"))),
     });
     await signIn(el);
@@ -892,7 +892,7 @@ describe("period service at the counter", () => {
     const before = reads();
     await poll(el);
     expect(reads()).toBe(before);
-    api.listZoneOffers.mockResolvedValue(catalogue(endedAs(null)));
+    api.listZoneOffers.mockResolvedValue(menu(endedAs(null)));
     api.menuState.mockResolvedValue(polled(endedAs(null)));
     await poll(el);
     expect(reads()).toBe(before + 1);
@@ -1107,10 +1107,10 @@ describe("the remembered default", () => {
 
 describe("the remembered default and the session", () => {
   it("is not applied by an offers reload that finishes after the sign-out", async () => {
-    let reload!: (value: ZoneOfferCatalogue) => void;
+    let reload!: (value: ZoneOffers) => void;
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn(async () => offers("zone-barra", [BREAKFAST], "desayunos")),
-      listZoneOffers: vi.fn(() => new Promise<ZoneOfferCatalogue>((resolve) => (reload = resolve))),
+      listZoneOffers: vi.fn(() => new Promise<ZoneOffers>((resolve) => (reload = resolve))),
     });
     await signIn(el);
     api.menuState.mockResolvedValue(state([BREAKFAST, LUNCH], "almuerzo"));
@@ -1130,12 +1130,12 @@ describe("the remembered default and the session", () => {
   });
 
   it("does not let a previous session's pending offers block a new session's refresh", async () => {
-    let answer!: (value: ZoneOfferCatalogue) => void;
+    let answer!: (value: ZoneOffers) => void;
     const listZoneOffers = vi
       .fn()
       .mockImplementationOnce(
         () =>
-          new Promise<ZoneOfferCatalogue>((resolve) => {
+          new Promise<ZoneOffers>((resolve) => {
             answer = resolve;
           }),
       )
@@ -1247,7 +1247,7 @@ describe("an open table's order", () => {
       "till-table-order-screen",
     )!;
 
-  async function openRememberedTable(current: () => ZoneOfferCatalogue) {
+  async function openRememberedTable(current: () => ZoneOffers) {
     const { el } = await mountApp({
       listZoneOffers: vi.fn(async (id: string) => (id === "zone-comedor" ? current() : BAR_OFFERS)),
       getTablesState: vi.fn(async () => [table]),
@@ -1284,7 +1284,7 @@ describe("an open table's order", () => {
     await flush(el);
     return el;
   }
-  const runningTable = (occurrence = "table-lunch-1"): ZoneOfferCatalogue => ({
+  const runningTable = (occurrence = "table-lunch-1"): ZoneOffers => ({
     ...DINING_ROOM_OFFERS,
     service: {
       ...DINING_ROOM_OFFERS.service,
@@ -1657,7 +1657,7 @@ describe("an open table's order", () => {
         isDefault: false,
       })),
     };
-    let current: ZoneOfferCatalogue = breakfast;
+    let current: ZoneOffers = breakfast;
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
       listZoneOffers: vi.fn(async (zoneId: string) =>
@@ -1787,11 +1787,11 @@ describe("a dish whose period ended earlier today", () => {
   };
   /** Breakfast running (Desayunos orderable alone), or Lunch running with Breakfast ended earlier
    * today; `endedName` null leaves Desayunos neither orderable nor ended. */
-  function catalogue(
-    base: ZoneOfferCatalogue,
+  function menu(
+    base: ZoneOffers,
     phase: "breakfast" | "lunch",
     endedName: string | null = "Breakfast",
-  ): ZoneOfferCatalogue {
+  ): ZoneOffers {
     return {
       ...base,
       service: phase === "breakfast" ? breakfastRunning : lunchRunning,
@@ -1804,7 +1804,7 @@ describe("a dish whose period ended earlier today", () => {
       })),
     };
   }
-  const polled = (current: ZoneOfferCatalogue) => ({
+  const polled = (current: ZoneOffers) => ({
     ...state([BREAKFAST, LUNCH], current.defaultMenuId ?? undefined),
     service: current.service,
     menus: current.menus.map((menu) => ({
@@ -1815,7 +1815,7 @@ describe("a dish whose period ended earlier today", () => {
     })),
   });
   /** Lunch also sells Desayunos' dish, as a running menu sells the caña. */
-  const sharedDish = (base: ZoneOfferCatalogue): ZoneOfferCatalogue => ({
+  const sharedDish = (base: ZoneOffers): ZoneOffers => ({
     ...base,
     offers: [
       ...base.offers,
@@ -1823,8 +1823,8 @@ describe("a dish whose period ended earlier today", () => {
     ],
   });
 
-  async function counterAt(base: ZoneOfferCatalogue, endedName: string | null = "Breakfast") {
-    let current = catalogue(base, "breakfast");
+  async function counterAt(base: ZoneOffers, endedName: string | null = "Breakfast") {
+    let current = menu(base, "breakfast");
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn(async () => current),
       listZoneOffers: vi.fn(async () => current),
@@ -1833,7 +1833,7 @@ describe("a dish whose period ended earlier today", () => {
     await signIn(el);
     add(el, BREAKFAST);
     await flush(el);
-    current = catalogue(base, "lunch", endedName);
+    current = menu(base, "lunch", endedName);
     await poll(el);
     return el;
   }
@@ -1916,7 +1916,7 @@ describe("a dish whose period ended earlier today", () => {
     /** Opens the table during Breakfast; `lunch` polls into Lunch with `endedName` as
      * Desayunos' ended period. */
     async function openTable() {
-      let current = catalogue(DINING_ROOM_OFFERS, "breakfast");
+      let current = menu(DINING_ROOM_OFFERS, "breakfast");
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
         listZoneOffers: vi.fn(async (zoneId: string) =>
@@ -1954,7 +1954,7 @@ describe("a dish whose period ended earlier today", () => {
         HTMLElement & { store: import("./state/working-order.js").WorkingOrderStore }
       >("till-menu-browser")!;
       const lunch = async (endedName: string | null = "Breakfast") => {
-        current = catalogue(DINING_ROOM_OFFERS, "lunch", endedName);
+        current = menu(DINING_ROOM_OFFERS, "lunch", endedName);
         await poll(el);
       };
       const marks = () =>

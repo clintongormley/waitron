@@ -52,7 +52,7 @@ function stubApi(me: Record<string, unknown> = {}): DashboardApi {
       permissions: [
         "booking.manage",
         "venue.view",
-        "catalogue.manage",
+        "menu.manage",
         "hardware.manage",
         "system.manage",
       ],

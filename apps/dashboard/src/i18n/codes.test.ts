@@ -208,9 +208,9 @@ it("has a sentence for each purchase-invoice code (Compras screen)", () => {
 it("has a sentence for a missing catalogue", () => {
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   const GENERIC_EN = "Something went wrong, try again";
-  expect(codeMessage("catalogue.not_found", "es")).not.toBe("catalogue.not_found");
-  expect(codeMessage("catalogue.not_found", "es")).not.toBe(GENERIC_ES);
-  expect(codeMessage("catalogue.not_found", "en")).not.toBe(GENERIC_EN);
+  expect(codeMessage("menu.not_found", "es")).not.toBe("menu.not_found");
+  expect(codeMessage("menu.not_found", "es")).not.toBe(GENERIC_ES);
+  expect(codeMessage("menu.not_found", "en")).not.toBe(GENERIC_EN);
 });
 
 it("has a sentence for the allergen declaration codes", () => {

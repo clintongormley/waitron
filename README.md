@@ -68,7 +68,7 @@ pnpm dev:setup
 
 This creates a throwaway venue directory (two SQLite files under the box's state root, or wherever
 `WAITRON_VENUE_DIR` points), migrates it, provisions one venue (taxpayer, fiscal
-series), seeds a small catalogue and a cashier, enrols a till, a handheld and two kitchen displays,
+series), seeds a small menu and a cashier, enrols a till, a handheld and two kitchen displays,
 and writes the ids to a gitignored
 `apps/server/.env`. It is idempotent: run it again and it reuses the same venue rather than minting a
 new fiscal chain.

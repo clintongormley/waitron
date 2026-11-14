@@ -14,7 +14,7 @@ import {
   publishMenu,
   queueMenuPublication,
   updateProduct,
-  setVenueDefaultCatalogue,
+  setVenueDefaultMenu,
   writeContentLanguages,
   GUEST_MENU_SETTINGS,
 } from "@waitron/menu";
@@ -66,7 +66,7 @@ it("builds every Cloud page from published content without dropping content-lang
       defaultLanguage: "ca-ES-valencia",
       languages: ["ca-ES-valencia", "en", "fr"],
     });
-    await setVenueDefaultCatalogue(tx, f.lunch);
+    await setVenueDefaultMenu(tx, f.lunch);
     await saveSettings(tx, GUEST_MENU_SETTINGS, {
       doc: { enabled: true },
       expectedRevision: 0,
@@ -91,7 +91,7 @@ it("renders the publication, keeping later draft names and prices out", async ()
     updateProduct(tx, f.soup, { customerName: { en: "Unpublished soup" }, unitPrice: "92.34" }),
   );
   const answer = await f.app.request(
-    `/management-api/catalogues/${f.lunch}/guest-preview?language=en`,
+    `/management-api/menus/${f.lunch}/guest-preview?language=en`,
     { headers: { cookie: f.cookies.manager } },
   );
   expect(answer.status).toBe(200);
@@ -102,19 +102,19 @@ it("renders the publication, keeping later draft names and prices out", async ()
   expect(body.html).not.toContain("€92.34");
   expect(body.html).not.toContain(f.soup);
   expect(body).toMatchObject({ language: "en", languages: ["en"] });
-  const unpublished = await f.app.request(`/management-api/catalogues/${f.dinner}/guest-preview`, {
+  const unpublished = await f.app.request(`/management-api/menus/${f.dinner}/guest-preview`, {
     headers: { cookie: f.cookies.manager },
   });
   expect(unpublished.status).toBe(200);
   expect(await unpublished.json()).toBeNull();
 });
-it("requires a signed-in manager with catalogue permission", async () => {
+it("requires a signed-in manager with menu permission", async () => {
   const f = await fixture();
   for (const [cookie, status, code] of [
     ["", 401, "management_session.required"],
     [f.cookies.staff, 403, "authorization.not_permitted"],
   ] as const) {
-    const res = await f.app.request(`/management-api/catalogues/${f.lunch}/guest-preview`, {
+    const res = await f.app.request(`/management-api/menus/${f.lunch}/guest-preview`, {
       headers: { cookie },
     });
     expect(res.status).toBe(status);
@@ -139,7 +139,7 @@ it("starts public sharing Off and limits its status to managers", async () => {
 
 it("lets a manager change sharing with its current revision and keeps refusals from changing it", async () => {
   const f = await fixture();
-  await withTransaction(suite.db, (tx) => setVenueDefaultCatalogue(tx, f.lunch));
+  await withTransaction(suite.db, (tx) => setVenueDefaultMenu(tx, f.lunch));
   const save = (body: object, cookie = f.cookies.manager) =>
     f.app.request("/management-api/guest-menu", {
       method: "PUT",
@@ -177,7 +177,7 @@ it("serves only the opted-in publication without sign-in and closes it when serv
   const read = (method = "GET", path = "/public/menu") => f.app.request(path, { method });
   expect((await read()).status).toBe(404);
   await withTransaction(suite.db, async (tx) => {
-    await setVenueDefaultCatalogue(tx, f.lunch);
+    await setVenueDefaultMenu(tx, f.lunch);
   });
   await f.app.request("/management-api/guest-menu", {
     method: "PUT",
@@ -201,7 +201,7 @@ it("serves only the opted-in publication without sign-in and closes it when serv
   expect(refusedWrite.status).toBe(405);
   expect(refusedWrite.headers.get("allow")).toBe("GET, HEAD");
   expect((await read("GET", `/public/menu/${f.dinner}`)).status).toBe(404);
-  await withTransaction(suite.db, (tx) => setVenueDefaultCatalogue(tx, f.dinner));
+  await withTransaction(suite.db, (tx) => setVenueDefaultMenu(tx, f.dinner));
   const missing = await read();
   expect(missing.status).toBe(404);
   expect(await missing.text()).toContain("Menu unavailable");
@@ -209,7 +209,7 @@ it("serves only the opted-in publication without sign-in and closes it when serv
     headers: { cookie: f.cookies.manager },
   });
   expect(await status.json()).toEqual({ enabled: true, revision: 1, available: false });
-  await withTransaction(suite.db, (tx) => setVenueDefaultCatalogue(tx, f.lunch));
+  await withTransaction(suite.db, (tx) => setVenueDefaultMenu(tx, f.lunch));
   f.serve(false);
   expect((await read()).status).toBe(503);
   const stopped = await f.app.request("/management-api/guest-menu", {
@@ -223,7 +223,7 @@ it("serves only the opted-in publication without sign-in and closes it when serv
 it("answers public reads from committed rows while a write is open", async () => {
   const f = await fixture();
   await withTransaction(suite.db, async (tx) => {
-    await setVenueDefaultCatalogue(tx, f.lunch);
+    await setVenueDefaultMenu(tx, f.lunch);
     await saveSettings(tx, GUEST_MENU_SETTINGS, {
       doc: { enabled: true },
       expectedRevision: 0,
@@ -262,7 +262,7 @@ it("gives guests a page rather than an internal settings failure", async () => {
       personId: null,
     }),
   );
-  suite.db.execute(sql`update settings set version = 2 where module = 'catalogue'`);
+  suite.db.execute(sql`update settings set version = 2 where module = 'menu'`);
   const failure = await f.app.request("/public/menu");
   expect(failure.status).toBe(500);
   expect(failure.headers.get("content-type")).toContain("text/html");
@@ -300,7 +300,7 @@ it("saves paper appearance without sharing and preserves it when sharing changes
 
 it("renders the captured publication for paper, with only the selected library logo", async () => {
   const f = await fixture();
-  const preview = await f.app.request(`/management-api/catalogues/${f.lunch}/guest-preview`, {
+  const preview = await f.app.request(`/management-api/menus/${f.lunch}/guest-preview`, {
     headers: { cookie: f.cookies.manager },
   });
   const captured = await preview.json();
@@ -337,7 +337,7 @@ it("renders the captured publication for paper, with only the selected library l
     logo: logo.filename,
   };
   const request = (value: unknown, cookie = f.cookies.manager) =>
-    f.app.request(`/management-api/catalogues/${f.lunch}/guest-paper`, {
+    f.app.request(`/management-api/menus/${f.lunch}/guest-paper`, {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify(value),
@@ -353,7 +353,7 @@ it("renders the captured publication for paper, with only the selected library l
   expect((await plain.json()).html).not.toContain('src="data:');
   const missing = await request({ ...body, logo: "a".repeat(64) + ".webp" });
   expect((await missing.json()).html).not.toContain('src="data:');
-  const wrongMenu = await f.app.request(`/management-api/catalogues/${f.dinner}/guest-paper`, {
+  const wrongMenu = await f.app.request(`/management-api/menus/${f.dinner}/guest-paper`, {
     method: "POST",
     headers: { cookie: f.cookies.manager, "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -408,7 +408,7 @@ it("reads a due edition without a save and follows the new default on the next r
   const f = await fixture();
   await withTransaction(suite.db, async (tx) => {
     await seedBusinessDay(tx, { timeZone: "Asia/Tokyo" });
-    await setVenueDefaultCatalogue(tx, f.lunch);
+    await setVenueDefaultMenu(tx, f.lunch);
     await saveSettings(tx, GUEST_MENU_SETTINGS, {
       doc: { enabled: true },
       expectedRevision: 0,
@@ -435,7 +435,7 @@ it("reads a due edition without a save and follows the new default on the next r
   await withTransaction(suite.db, async (tx) => {
     const preview = await previewMenu(tx, f.dinner);
     await publishMenu(tx, f.dinner, preview.hash, f.cookies.managerId);
-    await setVenueDefaultCatalogue(tx, f.dinner);
+    await setVenueDefaultMenu(tx, f.dinner);
   });
   const dinner = (await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en;
   expect(dinner).toContain("Burger for guests");
@@ -446,7 +446,7 @@ it("renders Cloud pages in UTC while the saved venue zone needs repair", async (
   const f = await fixture();
   await withTransaction(suite.db, async (tx) => {
     await seedBusinessDay(tx, { timeZone: "Invalid/Zone" });
-    await setVenueDefaultCatalogue(tx, f.lunch);
+    await setVenueDefaultMenu(tx, f.lunch);
     await saveSettings(tx, GUEST_MENU_SETTINGS, {
       doc: { enabled: true },
       expectedRevision: 0,

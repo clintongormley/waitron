@@ -146,17 +146,17 @@ const periodChange = (
   ],
   occurrence: { period: bar, startsAt: "09:00" },
 });
-const catalogue = (name: string) => `@catalogues:${JSON.stringify([name])}`;
+const menu = (name: string) => `@catalogues:${JSON.stringify([name])}`;
 const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
   en: periodChange("Restaurant and bar", "Open", ["Bar", "Lunch", "Dinner"], {
-    drinks: catalogue("Drinks"),
-    casa: catalogue("Casa Delgado"),
-    lunch: catalogue("Set lunch"),
+    drinks: menu("Drinks"),
+    casa: menu("Casa Delgado"),
+    lunch: menu("Set lunch"),
   }),
   es: periodChange("Restaurante y bar", "Abierto", ["Bar", "Comida", "Cena"], {
-    drinks: catalogue("Bebidas"),
-    casa: catalogue("Casa Delgado"),
-    lunch: catalogue("Menú del Día"),
+    drinks: menu("Bebidas"),
+    casa: menu("Casa Delgado"),
+    lunch: menu("Menú del Día"),
   }),
 };
 
@@ -634,7 +634,7 @@ for (const locale of ["en", "es"] as const) {
           "sale.refund",
           "sale.rectify",
           "person.manage",
-          "catalogue.manage",
+          "menu.manage",
           "person.admin",
           "venue.configure",
           "venue.view",

@@ -1995,7 +1995,7 @@ The A850 interface checks a private restored copy without running ordinary resto
 acquiring fiscal authority. The server builds `dist/backup-verification.js`; the production
 image copies it and its dependency notices. Its local authority tests use an encrypted archive
 with actual sale history and every generated owner. These checks do not qualify Cloud's
-container or catalogue admission.
+container or menu admission.
 
 Keep Cloud snapshots unavailable until its integration uses the implementing pinned release,
 validates the complete private result, confirms its own child and scratch cleanup, and admits

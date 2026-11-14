@@ -13,7 +13,7 @@ import {
   type LeaveReason,
 } from "@waitron/ui";
 import { foldName } from "@waitron/menu/src/name-uniqueness.js";
-import type { CatalogueSummary, DashboardApi } from "../api/client.js";
+import type { MenuSummary, DashboardApi } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -33,9 +33,9 @@ export class MenuCopyDialog extends LitElement {
     `,
   ];
   @property({ type: Boolean }) open = false;
-  @property({ attribute: false }) menu: Pick<CatalogueSummary, "id" | "name"> | null = null;
-  @property({ attribute: false }) menus: readonly CatalogueSummary[] = [];
-  @property({ attribute: false }) api!: Pick<DashboardApi, "duplicateCatalogue">;
+  @property({ attribute: false }) menu: Pick<MenuSummary, "id" | "name"> | null = null;
+  @property({ attribute: false }) menus: readonly MenuSummary[] = [];
+  @property({ attribute: false }) api!: Pick<DashboardApi, "duplicateMenu">;
   @state() private name = "";
   @state() private busy = false;
   private readonly feedback = new FormFeedback(this);
@@ -124,7 +124,7 @@ export class MenuCopyDialog extends LitElement {
     const name = this.name.trim();
     this.busy = true;
     try {
-      await this.api.duplicateCatalogue(this.menu.id, name);
+      await this.api.duplicateMenu(this.menu.id, name);
     } catch (error) {
       if (generation !== this.generation) return;
       const code = codeOf(error);

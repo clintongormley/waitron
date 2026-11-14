@@ -50,7 +50,7 @@ import type {
   TillProduct,
   TableParty,
   TillSaleResult,
-  ZoneOfferCatalogue,
+  ZoneOffers,
 } from "./api/client.js";
 
 const coffee: TillProduct = {
@@ -61,8 +61,8 @@ const coffee: TillProduct = {
   vatClass: "general",
   category: null,
   allergens: null,
-  catalogueId: "cat-default",
-  catalogueName: "Carta",
+  menuId: "cat-default",
+  menuName: "Carta",
 };
 
 const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
@@ -110,12 +110,12 @@ const till = {
 };
 
 function zoneOffers(
-  catalogue: { menus: TillMenu[]; products: TillProduct[] },
+  menu: { menus: TillMenu[]; products: TillProduct[] },
   zoneId: string,
   serviceMode: ServiceZoneSummary["serviceMode"] = "prepay",
-  defaultMenuId: string | null = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null,
-): ZoneOfferCatalogue {
-  const body: ZoneOfferCatalogue = {
+  defaultMenuId: string | null = menu.menus.find((menu) => menu.isDefault)?.id ?? null,
+): ZoneOffers {
+  const body: ZoneOffers = {
     service: {
       open: true,
       zoneOpen: true,
@@ -134,16 +134,16 @@ function zoneOffers(
     // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
     // suites pin are the ones a till sends against the live version.
     menus: [],
-    offers: catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
+    offers: menu.products.map((product, index): ZoneOffers["offers"][number] => ({
       id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
-      menuId: product.catalogueId ?? "menu-fixture",
+      menuId: product.menuId ?? "menu-fixture",
       productId: product.productId ?? product.id,
       grossPrice: product.unitPrice,
       unitPrice: product.unitPrice,
       available: true,
       image: null,
       description: null,
-      menuName: product.catalogueName ?? "Menu",
+      menuName: product.menuName ?? "Menu",
       placements: [[]],
       name: product.name,
       customerName: null,
@@ -160,7 +160,7 @@ function zoneOffers(
       courseId: null,
     })),
   };
-  body.menus = servedMenus(catalogue.menus, body.offers) as ZoneOfferCatalogue["menus"];
+  body.menus = servedMenus(menu.menus, body.offers) as ZoneOffers["menus"];
   return body;
 }
 
@@ -1714,15 +1714,15 @@ describe("till-app receipt issuance", () => {
   });
 
   it("takes pay timing from the zone context when no zone chooser is supplied", async () => {
-    const catalogue = zoneOffers(
+    const menu = zoneOffers(
       { menus: [defaultMenu], products: [coffee] },
       "zone-counter",
       "ticket_then_pay",
     );
-    delete catalogue.zones;
+    delete menu.zones;
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
     });
     const c = await toCounter(el);
 
@@ -1731,10 +1731,10 @@ describe("till-app receipt issuance", () => {
 
   it("keeps the original receipt on offer and says why when printing it fails", async () => {
     const printReceipt = vi.fn().mockRejectedValue({ code: "printing.no_printer" });
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
       printReceipt,
     });
     const c = await toCounter(el);
@@ -1810,20 +1810,20 @@ describe("till-app counter menus and service zones", () => {
   it("ignores a menu pick naming a menu the counter's zone does not offer", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    expect(privateState<string>(el, "selectedCatalogueId")).toBe("cat-default");
+    expect(privateState<string>(el, "selectedMenuId")).toBe("cat-default");
     sessionStorage.removeItem("waitron.lastMenu");
 
     emit(c, "menu-selected", { id: "menu-elsewhere" });
     await flush(el);
 
-    expect(privateState<string>(el, "selectedCatalogueId")).toBe("cat-default");
+    expect(privateState<string>(el, "selectedMenuId")).toBe("cat-default");
     expect(sessionStorage.getItem("waitron.lastMenu")).toBeNull();
   });
 
   it("ignores a zone change naming a zone the counter was not offered", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
-    const { el } = await mountApp({ listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue) });
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    menu.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
+    const { el } = await mountApp({ listDefaultZoneOffers: vi.fn().mockResolvedValue(menu) });
     const c = await toCounter(el);
 
     emit(c, "counter-zone-selected", { zoneId: "zone-unknown" });
@@ -1834,18 +1834,18 @@ describe("till-app counter menus and service zones", () => {
   });
 
   it("keeps the current counter and pay timing when a forged counter pick names a table zone", async () => {
-    const catalogue = zoneOffers(
+    const menu = zoneOffers(
       { menus: [defaultMenu], products: [coffee] },
       "zone-counter",
       "ticket_then_pay",
     );
-    catalogue.zones = [zone("zone-counter", "ticket_then_pay"), zone("zone-terrace", "table_tab")];
+    menu.zones = [zone("zone-counter", "ticket_then_pay"), zone("zone-terrace", "table_tab")];
     const terrace = zoneOffers(
       {
         menus: twoMenus,
         products: [
-          { ...coffee, id: "tostada", catalogueId: "menu-food" },
-          { ...coffee, id: "cana", catalogueId: "menu-drinks" },
+          { ...coffee, id: "tostada", menuId: "menu-food" },
+          { ...coffee, id: "cana", menuId: "menu-drinks" },
         ],
       },
       "zone-terrace",
@@ -1853,8 +1853,8 @@ describe("till-app counter menus and service zones", () => {
       null,
     );
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
       listZoneOffers: vi.fn().mockResolvedValue(terrace),
     });
     const c = await toCounter(el);
@@ -1870,8 +1870,8 @@ describe("till-app counter menus and service zones", () => {
   });
 
   it("shows service_zone.load_error when the new zone's menus cannot load, but not for a superseded request", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    catalogue.zones = [
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    menu.zones = [
       zone("zone-counter", "prepay"),
       zone("zone-a", "prepay"),
       zone("zone-b", "prepay"),
@@ -1880,14 +1880,14 @@ describe("till-app counter menus and service zones", () => {
     let rejectB!: (reason: unknown) => void;
     const listZoneOffers = vi.fn(
       (zoneId: string) =>
-        new Promise<ZoneOfferCatalogue>((_resolve, reject) => {
+        new Promise<ZoneOffers>((_resolve, reject) => {
           if (zoneId === "zone-a") rejectA = reject;
           else rejectB = reject;
         }),
     );
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
       listZoneOffers,
     });
     const c = await toCounter(el);
@@ -1905,11 +1905,11 @@ describe("till-app counter menus and service zones", () => {
   });
 
   it("says in its own words that the profile no longer works in the zone chosen", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-a", "prepay")];
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    menu.zones = [zone("zone-counter", "prepay"), zone("zone-a", "prepay")];
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
       listZoneOffers: vi
         .fn()
         .mockRejectedValue({ code: "service_zone.not_allowed", status: 403, zoneId: "zone-a" }),
@@ -1926,14 +1926,14 @@ describe("till-app counter menus and service zones", () => {
 
   it("searches the menus of the zone the counter switches to", async () => {
     const lunch = { id: "menu-lunch", name: "Lunch", isDefault: true };
-    const toast = { ...coffee, id: "tostada", name: "Tostada", catalogueId: "menu-lunch" };
+    const toast = { ...coffee, id: "tostada", name: "Tostada", menuId: "menu-lunch" };
     const lunchOffers = { menus: [lunch], products: [toast] };
     const zoneA = zoneOffers(
       {
         menus: [...lunchOffers.menus, { id: "menu-drinks", name: "Drinks", isDefault: false }],
         products: [
           ...lunchOffers.products,
-          { ...coffee, id: "tinto", name: "Tinto", catalogueId: "menu-drinks" },
+          { ...coffee, id: "tinto", name: "Tinto", menuId: "menu-drinks" },
         ],
       },
       "zone-a",
@@ -1944,7 +1944,7 @@ describe("till-app counter menus and service zones", () => {
         menus: [...lunchOffers.menus, { id: "menu-brunch", name: "Brunch", isDefault: false }],
         products: [
           ...lunchOffers.products,
-          { ...coffee, id: "tortilla", name: "Tortilla", catalogueId: "menu-brunch" },
+          { ...coffee, id: "tortilla", name: "Tortilla", menuId: "menu-brunch" },
         ],
       },
       "zone-b",
@@ -2448,7 +2448,7 @@ describe("till-app integrated card collection", () => {
 
 describe("till-app retrieving a held order", () => {
   it("resolves a line's selling id to the FIRST live offer carrying it", async () => {
-    const catalogue = zoneOffers(
+    const menu = zoneOffers(
       {
         menus: [defaultMenu],
         products: [
@@ -2459,8 +2459,8 @@ describe("till-app retrieving a held order", () => {
       "zone-counter",
     );
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
@@ -3150,13 +3150,13 @@ describe("till-app logout while a request is waiting for the server", () => {
   });
 
   it("does not reload stations for a zone choice answered after sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
-    let answer!: (catalogue: ZoneOfferCatalogue) => void;
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    menu.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
+    let answer!: (menu: ZoneOffers) => void;
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
-      listZoneOffers: vi.fn(() => new Promise<ZoneOfferCatalogue>((resolve) => (answer = resolve))),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
+      listZoneOffers: vi.fn(() => new Promise<ZoneOffers>((resolve) => (answer = resolve))),
     });
     const c = await toCounter(el);
     emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
@@ -3173,16 +3173,16 @@ describe("till-app logout while a request is waiting for the server", () => {
   });
 
   it("does not choose a menu after a zone's station read outlives sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    menu.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
     const deli = zoneOffers(
       { menus: [{ id: "cat-deli", name: "Deli", isDefault: true }], products: [coffee] },
       "zone-deli",
     );
     let answerStations!: (rows: []) => void;
     const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
       listZoneOffers: vi.fn().mockResolvedValue(deli),
     });
     const c = await toCounter(el);
@@ -3195,11 +3195,11 @@ describe("till-app logout while a request is waiting for the server", () => {
 
     emit(shell(el)!, "logout");
     await flush(el);
-    const selected = privateState<string>(el, "selectedCatalogueId");
+    const selected = privateState<string>(el, "selectedMenuId");
     answerStations([]);
     await flush(el);
 
-    expect(privateState<string>(el, "selectedCatalogueId")).toBe(selected);
+    expect(privateState<string>(el, "selectedMenuId")).toBe(selected);
   });
 
   it("does not reload held orders for a retrieve refused after sign-out", async () => {
@@ -3338,8 +3338,8 @@ describe("till-app logout while a request is waiting for the server", () => {
   });
 
   it("does not retry a cash sale after its version refresh outlives sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    let answerOffers!: (offers: ZoneOfferCatalogue) => void;
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    let answerOffers!: (offers: ZoneOffers) => void;
     const recordSale = vi
       .fn()
       .mockRejectedValueOnce({ code: "menu.version_changed" })
@@ -3356,15 +3356,15 @@ describe("till-app logout while a request is waiting for the server", () => {
 
     emit(shell(el)!, "logout");
     await flush(el);
-    answerOffers(catalogue);
+    answerOffers(menu);
     await flush(el);
 
     expect(recordSale).toHaveBeenCalledOnce();
   });
 
   it("does not retry a card sale after its version refresh outlives sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    let answerOffers!: (offers: ZoneOfferCatalogue) => void;
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    let answerOffers!: (offers: ZoneOffers) => void;
     const pay = vi
       .fn()
       .mockRejectedValueOnce({ code: "menu.version_changed" })
@@ -3381,15 +3381,15 @@ describe("till-app logout while a request is waiting for the server", () => {
 
     emit(shell(el)!, "logout");
     await flush(el);
-    answerOffers(catalogue);
+    answerOffers(menu);
     await flush(el);
 
     expect(pay).toHaveBeenCalledOnce();
   });
 
   it("does not retry a place after its version refresh outlives sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    let answerOffers!: (offers: ZoneOfferCatalogue) => void;
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    let answerOffers!: (offers: ZoneOffers) => void;
     const placeOrder = vi
       .fn()
       .mockRejectedValueOnce({ code: "menu.version_changed" })
@@ -3407,15 +3407,15 @@ describe("till-app logout while a request is waiting for the server", () => {
 
     emit(shell(el)!, "logout");
     await flush(el);
-    answerOffers(catalogue);
+    answerOffers(menu);
     await flush(el);
 
     expect(placeOrder).toHaveBeenCalledOnce();
   });
 
   it("does not retry a park after its version refresh outlives sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    let answerOffers!: (offers: ZoneOfferCatalogue) => void;
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    let answerOffers!: (offers: ZoneOffers) => void;
     const parkOrder = vi
       .fn()
       .mockRejectedValueOnce({ code: "menu.version_changed" })
@@ -3432,7 +3432,7 @@ describe("till-app logout while a request is waiting for the server", () => {
 
     emit(shell(el)!, "logout");
     await flush(el);
-    answerOffers(catalogue);
+    answerOffers(menu);
     await flush(el);
 
     expect(parkOrder).toHaveBeenCalledOnce();
@@ -4035,15 +4035,15 @@ describe("department transfers across operator lifetimes", () => {
     expect(pendingCount(el)?.textContent).toContain("0");
   });
 
-  it("accepts from the actual shell with a catalogue zone and reloads its durable pending count", async () => {
+  it("accepts from the actual shell with a menu zone and reloads its durable pending count", async () => {
     const desk = transfers();
     let accepted = false;
-    const catalogue = zoneOffers(
+    const menu = zoneOffers(
       { menus: [defaultMenu], products: [coffee] },
       "terrace",
       "table_tab",
     );
-    catalogue.zones = [
+    menu.zones = [
       {
         id: "terrace",
         name: "Terrace",
@@ -4058,8 +4058,8 @@ describe("department transfers across operator lifetimes", () => {
     });
     const { el } = await mountApp({
       ...desk.calls,
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
       listIncomingDepartmentTransfers: vi.fn(async () => ({
         receiving: true,
         count: accepted ? 0 : 1,
@@ -6755,7 +6755,7 @@ describe("A738 counter order views", () => {
 
 describe("A1208 a retrieved counter order's portions", () => {
   const toast: TillProduct = { ...coffee, id: "tostada", name: "Tostada", unitPrice: "2.50" };
-  const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee, toast] }, "zone-counter");
+  const menu = zoneOffers({ menus: [defaultMenu], products: [coffee, toast] }, "zone-counter");
   const coffeeOffer = "menu-item-cafe-0";
   const ids = ["l1", "l2", "l3"];
   const held = (revision = 4) => ({
@@ -6815,8 +6815,8 @@ describe("A1208 a retrieved counter order's portions", () => {
       revision: request.revision + 1,
     }));
     const mounted = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
       retrieveWorkingOrder: vi.fn().mockResolvedValue(held()),
       retrievePlacedOrder: vi.fn().mockResolvedValue(held()),
       getTabLines: vi
