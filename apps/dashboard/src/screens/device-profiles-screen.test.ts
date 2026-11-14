@@ -297,11 +297,11 @@ describe("device-profiles-screen list mode", () => {
     expect(scope).not.toContain("Restaurant");
     expect(scope).not.toContain("Dining room");
     expect(scope).toBe(t("device_profiles.scope_unavailable"));
-    expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+    expect(inScreenOrRow(el, '[role="alert"]')).not.toBeNull();
     await profileAction(el, "edit-p1");
     await flush(el);
     expect(el.shadowRoot!.querySelector('[data-test="editor-form"]')).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(inScreenOrRow(el, '[role="alert"]')).toBeNull();
     let finishNames!: (value: ProfileScopeChoices) => void;
     names.mockImplementation(
       () =>
@@ -313,7 +313,7 @@ describe("device-profiles-screen list mode", () => {
     el.remove();
     host.append(el);
     await flush(el);
-    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(inScreenOrRow(el, '[role="alert"]')).toBeNull();
     expect(profileListRoot(el).querySelector('[data-test="profile-scope-p1"]')!.textContent).toBe(
       t("device_profiles.scope_loading"),
     );
