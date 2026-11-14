@@ -128,7 +128,7 @@ const WAIT_POLL_MS = 250;
 export const SPARE_JOIN_SCENARIO_MS =
   9 * BOOT_MS +
   4 * HEALTH_MS +
-  3 * SETTINGS_WAIT_MS +
+  4 * SETTINGS_WAIT_MS +
   POINTER_WAIT_MS +
   LINK_WAIT_MS +
   COPY_WAIT_MS +
@@ -868,7 +868,12 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     clock.begin("backup-settings");
     await spareHolds(await rotate(), "after a rotation");
     await boxS.stopForRestart();
+    const logAtStop = logSoFar().length;
     const digestWhileStopped = await rotate();
+    // M must fail a send while S is down, or S's start could come before M's next check.
+    await wait("M to fail to send while S is stopped", SETTINGS_WAIT_MS, async () =>
+      linesSince(logAtStop).find((line) => line.event === "spare-settings.send_failed"),
+    );
     await boundedStart(boxS.start(), "S's start after it was stopped");
     await spareHolds(digestWhileStopped, "after a rotation while S was stopped");
     const keyLines = log.filter((line) => keys.some((key) => line.includes(key)));

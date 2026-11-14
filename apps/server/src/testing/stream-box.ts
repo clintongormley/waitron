@@ -77,9 +77,8 @@ export interface StreamBox {
 
 /**
  * Secrets and TLS in the state folder, a migrated and provisioned venue, a node key and a term-0
- * membership document naming `advertisedOrigin`, and streaming to `bucket` switched on with
- * `recoveryKey`; `modulesJson` is written as `modules.json`, and must agree with `venue`'s modules.
- * Without `streaming` the box has neither a bucket copy nor `backup.env`.
+ * membership document naming `advertisedOrigin`; `modulesJson` is written as `modules.json`, and
+ * must agree with `venue`'s modules. With `streaming`, `switchOnStreaming` too.
  */
 export async function provisionStreamBox(options: {
   dirs: BoxDirs;
