@@ -278,7 +278,7 @@ describe("accountant workbook", () => {
   });
 
   it.each([
-    ["en", "Replacement — do not add (repeats the original)"],
+    ["en", "Replacement corrective — do not add (repeats the original)"],
     ["es", ACCOUNTANT_EXPORT_WORDS.es.replacement],
   ] as const)(
     "types a replaced invoice as its ordinary type and tells the reader not to add its replacement, in %s",

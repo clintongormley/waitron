@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   billOptions,
   billRow,
@@ -752,6 +752,32 @@ it("filters actual completed refund rows without changing their identity, sign o
     "F/0012",
   );
   expect(grid.shadowRoot!.textContent).toContain("-€13.75");
+});
+
+it.each([
+  ["en-GB", "Replacement corrective"],
+  ["es-ES", t("find_page.replacement", "es-ES")],
+] as const)("in %s, offers a replacement corrective as %s", async (language, words) => {
+  const { el } = await mount(
+    findBillApi(async (url) =>
+      json(
+        url.pathname.endsWith("options")
+          ? billOptions
+          : url.pathname === "/api/bills"
+            ? listPage()
+            : { ...listPage([transactionRow()]), dates: resolvedDates },
+      ),
+    ),
+  );
+  await ready(el);
+  await switchTab(el, "transactions");
+  setLocale(language);
+  const grid = await ready(el, "transactions");
+  await el.updateComplete;
+  expect(grid.columns.find((c) => c.key === "type")!.filter!.options).toContainEqual({
+    value: "replacement",
+    label: words,
+  });
 });
 
 const openCorrection = (patch: Record<string, unknown> = {}) => ({

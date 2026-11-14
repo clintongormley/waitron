@@ -28,7 +28,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     invoiceSheet: "Issued invoices",
     purchaseSheet: "Recorded purchases",
     corrective: "Corrective",
-    replacement: "Replacement — do not add (repeats the original)",
+    replacement: "Replacement corrective — do not add (repeats the original)",
     regimes: { general: "General regime", equivalence_surcharge: "Equivalence surcharge" },
     vatKinds: { ordinary: "Ordinary goods", capital: "Capital goods" },
     identifierTypes: {
