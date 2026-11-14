@@ -876,6 +876,27 @@ describe("retiring a spare that finished joining", () => {
 
     expect(await waiting).toBe(before + 1);
   });
+
+  it("holds node.db's lock from the chart commit to the link delete: a node.db read started at the commit sees no link", async () => {
+    const p = await primary();
+    const joinedId = await seedNode(p.db);
+    await holdChart(p, [self(p), standby(joinedId)]);
+    await linkTo(p, joinedId);
+    const outside = AsyncLocalStorage.snapshot();
+    let seen: ReturnType<typeof readPairLink> | undefined;
+    const push = p.lines.push.bind(p.lines);
+    vi.spyOn(p.lines, "push").mockImplementation((...lines) => {
+      if (lines.some((l) => l.event === "membership.node_removed")) {
+        seen = outside(() => withNodeTransaction(suite.node, (tx) => readPairLink(tx, p.nodeId)));
+      }
+      return push(...lines);
+    });
+
+    expect((await remove(p, joinedId, p.adminCookie, DECLARED)).status).toBe(200);
+
+    expect(seen).toBeDefined();
+    expect(await seen).toBeNull();
+  });
 });
 
 describe("the stream reload after Remove and Clear", () => {
