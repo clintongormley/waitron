@@ -50,6 +50,14 @@ the last checked address it needs is kept across restarts since A947 3b-5a ([#28
 The read-only interval list shows both current box names, the copy’s latest sale/order time or Unknown, labelled
 venue-zone declaration and activation times, and the entered reason. **12a follow-up PR 1** adds a [warning beside sales/cash-up/category reports and VAT](../superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md), linking report viewers to the handover dates. It does not identify affected report periods. The interval read remains passive. The [durable receiver completion work](../superpowers/plans/2026-11-12-a1018-return-completion.md) records accounted batch digests against the matched emergency takeover in venue.db; a complete advertised inventory confirms receipt across restart and later venue copies. Report warnings remain general date reminders; receipt does not reconstruct cash-ups or confirm missing activity and amounts. Already stopped senders need a restricted restart to resend; no backfill is performed. Acknowledgement, assignment and resolution remain outside this cut. A1342’s marker is now stored and returned invoices are listed. Reports show a general notice, without identifying affected invoices or periods; duplicates are not identified.
 
+**R40 remains open inside local A1018: emergency reuse of a formerly serving box.** After a
+controlled handover its old registration is still active, so emergency allocation answers
+`sif.allocation_invalid` with `standby_already_active`. The uncontrolled reverse-direction test
+checks this refusal without fiscal changes at the module boundary; the complete emergency server
+path remains unqualified. The watcher’s 2026-11-14 01:29 decision keeps this as the next local
+A1018 step, with a separate bounded plan before build. Controlled hand-back’s two module gates
+are covered by the [R40 plan](../superpowers/plans/2026-11-14-a1018-r40-hand-back.md).
+
 Left for the slices that add the callers:
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
 - `currentBinding` (no taxpayer row) and `waitHandover` (unknown operation) treat a missing row as a
@@ -731,15 +739,10 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 
 ## Bundle: Series and module-preparation gaps at handover
 
-3 entries, size M.
+2 entries, size M.
 
 - **A second live standard series made a sale answer `server.internal` in a test fixture;
   the production cause is untraced.** Left open by A1018 Slice 5 (Ruling R39).
-- **Emergency takeover onto a formerly serving box remains refused.** After a controlled
-  handover its old registration is still active, so the emergency allocation gate answers
-  `sif.allocation_invalid` with `standby_already_active`. R40 fixes controlled hand-back only.
-  Its uncontrolled reverse-direction test checks this refusal without fiscal changes at the
-  module boundary; the complete emergency server path remains unqualified. The remedy is unplanned.
 - **The module preparation file grows with every write, and a handover cannot promise room in it.**
   Every revision repeats all earlier entries under a 1 MiB cap. The handover's size check keeps room
   for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5

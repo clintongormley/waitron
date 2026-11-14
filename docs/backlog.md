@@ -1760,10 +1760,11 @@ Not in any track until the standalone primary is done.
 
 - **Address search provider, province names, guide lines** (bundle of 2, size M, waits for another entry). Holds A1171, A1171. [Detail](backlog/replication-cloud.md#bundle-address-search-provider-province-names-guide-lines)
 
-- **A1018. Finish reuse of a formerly serving box and qualify handover on real boxes.** The owner’s
+- **A1018. Simple controlled and emergency handover, with Cloud only a placement.** The owner’s
   [physical-qualification task](superpowers/plans/2026-11-02-a1018-handover-build.md#owner-task-physical-qualification-on-real-boxes)
-  remains open, including the complete runtime hand-back. Emergency reuse of a formerly serving
-  box still needs a separately bounded change in the series/preparation bundle. R40’s controlled gates
+  remains open, including the complete runtime hand-back. R40 stays open inside local A1018:
+  emergency takeover onto a formerly serving box still refuses and needs its own bounded plan.
+  R40’s controlled gates
   are checked separately by the [hand-back plan](superpowers/plans/2026-11-14-a1018-r40-hand-back.md).
   Cloud work continues under A1188, including selected-backup placement as part 0.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
@@ -1808,7 +1809,7 @@ Not in any track until the standalone primary is done.
   third-box cases from A1342 need their own approved scope; the owner accepted the two-box bucket
   stop as clearing A947 3b-6 on 2026-11-09. [Detail](backlog/replication-cloud.md#a-box-the-chart-no-longer-names-main-keeps-filing-its-earlier-records)
 
-- **Series and module-preparation gaps at handover** (bundle of 3, 2 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
+- **Series and module-preparation gaps at handover** (bundle of 2, 1 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 
 - **Decide what the old promote route still does** (bundle of 3, 2 important, size S). Holds A1279. [Detail](backlog/replication-cloud.md#bundle-decide-what-the-old-promote-route-still-does)
 
