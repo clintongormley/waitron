@@ -1,5 +1,4 @@
-import { scrypt } from "node:crypto";
-import { randomUUID } from "node:crypto";
+import { randomUUID, scrypt } from "node:crypto";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";

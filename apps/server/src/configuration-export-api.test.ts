@@ -24,11 +24,19 @@ const encoding = vi.hoisted(() => ({
   order: [] as string[],
   before: undefined as undefined | (() => Promise<void>),
   after: undefined as undefined | (() => void),
+  built: undefined as undefined | (() => void),
 }));
 vi.mock("./configuration-transfer.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./configuration-transfer.js")>();
   return {
     ...actual,
+    buildConfigurationBundle: async (
+      ...args: Parameters<typeof actual.buildConfigurationBundle>
+    ) => {
+      const bundle = await actual.buildConfigurationBundle(...args);
+      encoding.built?.();
+      return bundle;
+    },
     encodeConfigurationBundleAsync: async (
       ...args: Parameters<typeof actual.encodeConfigurationBundleAsync>
     ) => {
@@ -194,56 +202,66 @@ describe("configuration export API", () => {
     }
   });
 
-  it.each([false, true])(
-    "serializes export derivations even if the first fails: %s",
-    async (failFirst) => {
-      let release!: () => void;
-      const held = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      let started!: () => void;
-      const firstStarted = new Promise<void>((resolve) => {
-        started = resolve;
-      });
-      const order: string[] = [];
-      encoding.before = async () => {
-        const first = order.length === 0;
-        order.push("start");
-        if (first) {
-          started();
-          await held;
-          if (failFirst) {
-            order.push("end");
-            throw new Error("derivation failed");
-          }
+  it.each([
+    { failFirst: false, label: "successful" },
+    { failFirst: true, label: "failed" },
+  ])("serializes derivations after a $label export", async ({ failFirst }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let prepared!: () => void;
+    const secondPrepared = new Promise<void>((resolve) => {
+      prepared = resolve;
+    });
+    let preparations = 0;
+    encoding.built = () => {
+      if (++preparations === 2) prepared();
+    };
+    const order: string[] = [];
+    encoding.before = async () => {
+      const first = order.length === 0;
+      order.push("start");
+      if (first) {
+        started();
+        await held;
+        if (failFirst) {
+          order.push("end");
+          throw new Error("derivation failed");
         }
-      };
-      encoding.after = () => {
-        order.push("end");
-      };
-      const server = app();
-      const send = () =>
-        server.request("/management-api/configuration-export", {
-          method: "POST",
-          headers: { "content-type": "application/json", cookie },
-          body: JSON.stringify({ passphrase: "a strong passphrase" }),
-        });
-      try {
-        const first = send();
-        await firstStarted;
-        const second = send();
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        release();
-        expect((await first).status).toBe(failFirst ? 500 : 200);
-        expect((await second).status).toBe(200);
-        expect(order).toEqual(["start", "end", "start", "end"]);
-      } finally {
-        release();
-        encoding.before = undefined;
-        encoding.after = undefined;
       }
-    },
-  );
+    };
+    encoding.after = () => {
+      order.push("end");
+    };
+    const server = app();
+    const send = () =>
+      server.request("/management-api/configuration-export", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ passphrase: "a strong passphrase" }),
+      });
+    try {
+      const first = send();
+      await firstStarted;
+      const second = send();
+      await secondPrepared;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      release();
+      expect((await first).status).toBe(failFirst ? 500 : 200);
+      expect((await second).status).toBe(200);
+      expect(order).toEqual(["start", "end", "start", "end"]);
+    } finally {
+      release();
+      encoding.before = undefined;
+      encoding.after = undefined;
+      encoding.built = undefined;
+    }
+  });
 
   it("returns an encrypted configuration-only artifact", async () => {
     const response = await app().request("/management-api/configuration-export", {

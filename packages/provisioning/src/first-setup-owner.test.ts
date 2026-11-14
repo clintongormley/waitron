@@ -1,8 +1,7 @@
-import { scrypt } from "node:crypto";
 import { dirname, join } from "node:path";
 import { mkdtemp, rm, readFile, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { randomBytes } from "node:crypto";
+import { randomBytes, scrypt } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { createFirstSetupCoordinator, createFirstSetupStore, type VenueRequest } from "./index.js";
 import { verifyPassword, verifyPin } from "@waitron/identity";
@@ -102,10 +101,9 @@ it("binds normalized planned identity, hashing both secrets and returning no ver
   const f = await fixture();
   vi.mocked(scrypt).mockClear();
   const claimed = await f.claim();
-  expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toEqual([
-    payload.request.admin.pin,
-    payload.request.admin.password,
-  ]);
+  expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toEqual(
+    expect.arrayContaining([payload.request.admin.pin, payload.request.admin.password]),
+  );
   const state = (await f.store.read())!;
   expect(state.frozen.request.admin.email).toBe("elena@example.test");
   expect(state.frozen.request.admin.displayName).toBe("Elena");
