@@ -365,7 +365,7 @@ import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
-import { mountSetup } from "./setup-api.js";
+import { mountSetup, MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
 import { createSetupClockSet, raiseSetupClockSteps } from "./setup-clock-set.js";
 import { readSetupOpeningHours } from "./setup-opening-hours.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
@@ -1264,7 +1264,12 @@ async function bootServer(
   // removes it (pinned in `boot.place-copy.test.ts`). A box with no identity has no node id to read
   // an operation by, and nothing is placed.
   if (config.node !== undefined)
-    await placeFirstCopy({ stateDir: config.stateDir, venueDir: config.venueDir, log });
+    await placeFirstCopy({
+      stateDir: config.stateDir,
+      venueDir: config.venueDir,
+      nodeId: config.node.nodeId,
+      log,
+    });
   const placement =
     config.node === undefined
       ? null
@@ -4108,6 +4113,13 @@ async function bootServer(
       origin: config.managementOrigin,
       credentialKeyRing: totpKeyRing,
       passwordThrottle: handoverPasswordThrottle,
+      backup: {
+        readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv(base, config.stateDir)),
+        environment: config.environment,
+        migrationsRoot: config.migrationsRoot,
+        uploadLimit: MAX_RESTORE_UPLOAD_BYTES,
+        restart,
+      },
     },
     log,
   );
@@ -4128,6 +4140,7 @@ async function bootServer(
     {
       node: store.node,
       nodeId: tradingContext.nodeId,
+      stateDir: config.stateDir,
       appDb: db,
       nodePreparation,
       passwordThrottle: handoverPasswordThrottle,

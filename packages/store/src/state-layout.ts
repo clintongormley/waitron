@@ -212,7 +212,7 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     name: PAIR_COPY_DIR,
     kind: "folder",
     reset: "deleted",
-    why: "A spare's first copy, before it is put in place.",
+    why: "A spare's first copy or a mirror's selected handover backup, held across its placing restart; selected source provenance stays until activation.",
   },
   {
     name: TLS_DIR,

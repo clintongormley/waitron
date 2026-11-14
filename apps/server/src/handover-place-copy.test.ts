@@ -320,6 +320,25 @@ describe("placeAcceptedCopyAtStart", () => {
   }
 
   describe("placing", () => {
+    it("clears selected-backup provenance before placing a controlled handover", async () => {
+      const b = await box();
+      mkdirSync(join(b.stateDir, "pair-copy"));
+      const marker = join(b.stateDir, "pair-copy", "ready.json");
+      writeFileSync(
+        marker,
+        JSON.stringify({ source: "selected-backup", sourceId: "a".repeat(64) }),
+      );
+      const first = await placeAcceptedCopyAtStart({
+        ...b.args,
+        fs: {
+          copyFile: async (from, to) => {
+            expect(existsSync(marker)).toBe(false);
+            await copyFile(from, to);
+          },
+        },
+      });
+      expect(first.kind).toBe("copy_placed_owed");
+    });
     it("places once: the live file becomes the accepted bytes, and a start with no open in between does not place again", async () => {
       const b = await box();
       const old = sha(b.live);

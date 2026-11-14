@@ -1,6 +1,6 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
@@ -185,6 +185,7 @@ function spareOn(
   mountHandoverPreparationApi(app, { ...common, requestFromBox: () => false });
   mountHandoverActivationApi(app, {
     ...common,
+    stateDir: dirs().spareState,
     run,
     ...(emergency === undefined ? {} : { emergency }),
   });
@@ -391,6 +392,18 @@ afterEach(async () => {
 });
 
 describe("activating on a real placed copy", () => {
+  it("clears selected-copy provenance after the activation commits", async () => {
+    const store = await placedSpare();
+    const { app } = spareOn(store);
+    const marker = join(dirs().spareState, "pair-copy", "placed.json");
+    await mkdir(join(dirs().spareState, "pair-copy"));
+    await writeFile(
+      marker,
+      JSON.stringify({ source: "selected-backup", sourceId: "a".repeat(64) }),
+    );
+    expect((await activate(app, (await selectName(app)).input)).body.activated).toBe(true);
+    await expect(stat(marker)).rejects.toMatchObject({ code: "ENOENT" });
+  }, 60_000);
   it("activates under a new SIF and series, with M1's SIF and series untouched", async () => {
     const store = await placedSpare();
     const { app } = spareOn(store);

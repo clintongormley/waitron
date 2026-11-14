@@ -3380,8 +3380,9 @@ dies leaves its file behind; the next holder overwrites it.
 that lock fails for another reason.** `freeSpaceAtStart` in the box's entry and `emptyScratch` in
 `bootServer` delete every entry in `<state>/scratch/`, keeping the root. Backup staging is
 `scratch/backup`; restore staging is `scratch/restore`. Stream restores, staged-restore entries,
-setup holdings copies and node copies also live below scratch, except a spare's first copy, which
-waits in `<state>/pair-copy/` across the restart that places it (`spare-copy.ts`). The root is never followed when
+setup holdings copies and node copies also live below scratch, except a spare's first copy and an
+admitted mirror's selected handover backup, which wait in `<state>/pair-copy/` across the restart
+that places them (`spare-copy.ts`, `handover-copy-from-backup.ts`). The root is never followed when
 it is a symbolic link. Both sweeps run before this process starts its backup supervisor.
 The staged-recovery
 folder is where the setup wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
@@ -3671,7 +3672,10 @@ client certificate under the venue authority naming the paired main box (`startS
 data in `<state>/pair-store/` (`apps/server/src/spare-store.ts:74`). The spare's first copy is
 restored from that store into `<state>/pair-copy/`, outside `scratch/` because it must survive the
 restart that puts it in place of `venue.db` (`apps/server/src/spare-copy.ts`,
-`spare-copy-placement.ts`). Both folders are named in `packages/store/src/state-layout.ts` and
+`spare-copy-placement.ts`). An admitted mirror's selected handover backup also waits there across
+its placing restart; `ready.json` names only staged input and `placed.json` keeps the archive's source id until activation, while preview and
+declaration check the live copy after migration. That placement keeps the mirror's own `node.db`
+and secrets (`handover-copy-from-backup.ts`, `handover-copy-selection.ts`). Both folders are named in `packages/store/src/state-layout.ts` and
 deleted by a plain reset.
 
 **Guards.** `apps/server/src/stream-api.route.test.ts` (`backup.spare_stream_active`),

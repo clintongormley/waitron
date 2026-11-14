@@ -4,6 +4,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CORE_MIGRATIONS, withNodeTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { NODE_MIGRATIONS, setNodeModeTx } from "@waitron/node-db";
 import {
   BACKUP_ROOM_NOTE_FILE,
   NODE_FILE,
@@ -35,6 +38,8 @@ let root: string;
 let stateDir: string;
 let venueDir: string;
 const log = vi.fn();
+const nodeId = "selected-copy-mirror";
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "spare-copy-placement-"));
@@ -54,7 +59,7 @@ afterEach(async () => {
 const live = () => join(venueDir, VENUE_FILE);
 const copyFolder = () => join(stateDir, PAIR_COPY_DIR);
 const note = () => join(stateDir, BACKUP_ROOM_NOTE_FILE);
-const place = () => placeFirstCopy({ stateDir, venueDir, log });
+const place = () => placeFirstCopy({ stateDir, venueDir, nodeId, log });
 
 /** A spare as its latch start leaves it once the copy is ready, with the leftovers a restore leaves. */
 function spareWithReadyCopy(): void {
@@ -80,6 +85,59 @@ function spareWithReadyCopy(): void {
 }
 
 describe("placeFirstCopy", () => {
+  it.each(["primary", "mirror"] as const)(
+    "a selected backup replaces only a mirror, with mode %s",
+    async (mode) => {
+      spareWithReadyCopy();
+      await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, mode));
+      await rm(join(venueDir, NODE_FILE));
+      await suite.node.archiveTo(join(venueDir, NODE_FILE));
+      const selection = { source: "selected-backup", sourceId: "a".repeat(64) };
+      writeFileSync(join(copyFolder(), PAIR_COPY_READY_FILE), JSON.stringify(selection));
+      const nodeBefore = readFileSync(join(venueDir, NODE_FILE));
+
+      expect(await place()).toBe(mode === "mirror");
+
+      expect(readFileSync(live(), "utf8")).toBe(
+        mode === "mirror" ? "the main box's venue" : "the spare's own empty venue",
+      );
+      expect(readFileSync(join(venueDir, NODE_FILE))).toEqual(nodeBefore);
+      expect(existsSync(join(copyFolder(), VENUE_FILE))).toBe(false);
+      if (mode === "mirror") {
+        expect(JSON.parse(readFileSync(join(copyFolder(), "placed.json"), "utf8"))).toEqual(
+          selection,
+        );
+        expect(await place()).toBe(false);
+        expect(readFileSync(live(), "utf8")).toBe("the main box's venue");
+        await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "primary"));
+        await rm(join(venueDir, NODE_FILE));
+        await suite.node.archiveTo(join(venueDir, NODE_FILE));
+        expect(await place()).toBe(false);
+        expect(existsSync(copyFolder())).toBe(false);
+        expect(readFileSync(live(), "utf8")).toBe("the main box's venue");
+      } else expect(existsSync(copyFolder())).toBe(false);
+    },
+  );
+
+  it("finishes selected provenance after a crash just after the live rename", async () => {
+    spareWithReadyCopy();
+    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "mirror"));
+    await rm(join(venueDir, NODE_FILE));
+    await suite.node.archiveTo(join(venueDir, NODE_FILE));
+    const selection = { source: "selected-backup", sourceId: "a".repeat(64) };
+    writeFileSync(join(copyFolder(), PAIR_COPY_READY_FILE), JSON.stringify(selection));
+    renames.after = (to) => {
+      if (to === live()) throw new Error("stopped after live rename");
+    };
+    await expect(place()).rejects.toThrow("stopped after live rename");
+    renames.after = undefined;
+    writeFileSync(`${live()}-wal`, "the next ahead check's wal");
+    expect(await place()).toBe(true);
+    expect(readFileSync(`${live()}-wal`, "utf8")).toBe("the next ahead check's wal");
+    expect(JSON.parse(readFileSync(join(copyFolder(), "placed.json"), "utf8"))).toEqual(selection);
+    expect(existsSync(join(copyFolder(), PAIR_COPY_READY_FILE))).toBe(false);
+  });
+
   it("puts the copy in place before the store opens, keeping node.db, secrets.env and tls/", async () => {
     spareWithReadyCopy();
 

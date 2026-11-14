@@ -50,6 +50,30 @@ async function oldIntact(venueDir: string) {
 }
 
 describe("restoreDatabase consumes a database file", () => {
+  it("clears selected handover provenance before replacing the live database", async () => {
+    const f = await fixture();
+    await mkdir(join(f.stateDir, "pair-copy"));
+    const marker = join(f.stateDir, "pair-copy", "ready.json");
+    await writeFile(
+      marker,
+      JSON.stringify({ source: "selected-backup", sourceId: "a".repeat(64) }),
+    );
+    await restoreDatabase({
+      databasePath: f.source,
+      venueDir: f.venueDir,
+      stateDir: f.stateDir,
+      log: vi.fn(),
+      fs: {
+        rename: async (from, to) => {
+          await expect(stat(marker)).rejects.toMatchObject({ code: "ENOENT" });
+          await rename(from, to);
+        },
+        rm,
+        rmdir,
+      },
+    });
+    expect(await readFile(f.target, "utf8")).toBe("NEW-DATABASE");
+  });
   it("places a sparse file over 2 GiB without buffering it, preserves its edges and restricts its mode", async () => {
     const { source, target, venueDir, stateDir } = await fixture();
     const size = 2 ** 31 + 4096;

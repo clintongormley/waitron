@@ -1,5 +1,7 @@
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
+import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
@@ -8,6 +10,7 @@ import {
   withTransaction,
   type Database,
   type NodeDatabase,
+  type DeploymentEnvironment,
 } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import {
@@ -37,6 +40,7 @@ import {
 import { inTurn } from "@waitron/provisioning";
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
+import { SCRATCH_DIR } from "@waitron/store";
 import {
   askPeerStatus,
   isRecord,
@@ -54,6 +58,9 @@ import type { Logger } from "./logger.js";
 import { assertHeldDocumentReadable } from "./membership-trust.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
+import { stageBackupAsCopy } from "./handover-copy-from-backup.js";
+import { readUpload } from "./setup-recovery-preparation-api.js";
+import { MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
 
 export interface Declaration {
   binding: HandoverBinding;
@@ -80,6 +87,13 @@ interface Deps {
   credentialKeyRing: TotpKeyRing;
   passwordThrottle?: PasswordThrottle;
   fetch?: AskPeerStatusDeps["fetch"];
+  backup?: {
+    readRecoveryKey(): Promise<string | undefined>;
+    environment: DeploymentEnvironment;
+    migrationsRoot: string | null;
+    restart(): void;
+    uploadLimit?: number;
+  };
 }
 
 export interface EmergencyHandover {
@@ -101,6 +115,16 @@ const STATUS = {
   "handover.source_not_established": 409,
   "handover.step_out_of_order": 409,
   "node.read_only": 409,
+  "setup.request_invalid": 400,
+  "handover.copy_predates_destination": 409,
+  "handover.backup_key_missing": 409,
+  "backup.recovery_key_too_short": 400,
+  "recovery.passphrase_invalid": 422,
+  "backup.artifact_invalid": 422,
+  "backup.archive_invalid": 422,
+  "restore.environment_mismatch": 409,
+  "restore.schema_too_new": 409,
+  "provisioning.database_ahead": 409,
 } as const;
 
 function parse(raw: unknown) {
@@ -125,6 +149,10 @@ function parse(raw: unknown) {
     )
   )
     refuseRequest("expectedCopy");
+  if (expectedCopy.source !== "mirror-copy" && expectedCopy.source !== "selected-backup")
+    refuseRequest("expectedCopy.source");
+  if (expectedCopy.source === "selected-backup" && !isSha256Hex(expectedCopy.sourceId))
+    refuseRequest("expectedCopy.sourceId");
   return {
     operationId,
     statements: {
@@ -136,7 +164,9 @@ function parse(raw: unknown) {
     locale: locale as "en" | "es",
     signIn: raw.signIn,
     expectedCopy: {
-      source: "mirror-copy" as const,
+      ...(expectedCopy.source === "selected-backup"
+        ? { source: "selected-backup" as const, sourceId: expectedCopy.sourceId as string }
+        : { source: "mirror-copy" as const }),
       identifier: expectedCopy.identifier,
       lastChangeAtMs: expectedCopy.lastChangeAtMs,
     },
@@ -294,6 +324,48 @@ export function mountHandoverEmergencyApi(
       requireNodeOperationHttps(c);
       const body = await readJsonBody<unknown>(c);
       return c.json(await inTurn(deps.node, "handover-emergency", () => preview(body)));
+    }),
+  );
+  app.post("/api/node/handover/emergency/backup", (c) =>
+    boundary(c, log, async () => {
+      c.header("Cache-Control", "no-store");
+      requireNodeOperationHttps(c);
+      const { payload, artifact } = await readUpload(
+        c,
+        deps.backup?.uploadLimit ?? MAX_RESTORE_UPLOAD_BYTES,
+      );
+      if (!isRecord(payload) || artifact === undefined) refuseRequest("artifact");
+      if (payload.recoveryKey !== undefined && typeof payload.recoveryKey !== "string")
+        refuseRequest("recoveryKey");
+      return inTurn(deps.node, "handover-emergency", async () => {
+        await authenticate(payload.signIn);
+        const { sourceNodeId } = await mirrorSource();
+        const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
+        if (open !== null)
+          throw new AppError("handover.controlled_unresolved", { operationId: open.operationId });
+        await sourceSilent(sourceNodeId, false);
+        if (deps.backup === undefined) throw new AppError("handover.backup_key_missing", {});
+        const parent = join(deps.stateDir, SCRATCH_DIR);
+        await mkdir(parent, { recursive: true, mode: 0o700 });
+        const folder = await mkdtemp(join(parent, "handover-upload-"));
+        try {
+          const artifactPath = join(folder, "archive.enc");
+          await writeFile(artifactPath, artifact, { mode: 0o600 });
+          await stageBackupAsCopy({
+            ...deps,
+            ...deps.backup,
+            artifactPath,
+            ...(payload.recoveryKey === undefined
+              ? {}
+              : { recoveryKey: payload.recoveryKey as string }),
+          });
+        } finally {
+          await rm(folder, { recursive: true, force: true });
+        }
+        const response = c.json({ restarting: true });
+        setTimeout(deps.backup.restart, 0);
+        return response;
+      });
     }),
   );
   async function declare(raw: unknown) {

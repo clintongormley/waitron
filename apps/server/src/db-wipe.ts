@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { DATABASE_FILES, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
+import { clearSelectedCopy } from "./handover-copy-selection.js";
 
 /**
  * Discard this node's whole local database. The caller holds the venue lock.
@@ -19,6 +20,7 @@ import { deleteBackupRoomNote } from "./backup-room-note.js";
  */
 export async function wipeVenueDatabases(venueDir: string, stateDir: string): Promise<void> {
   await deleteBackupRoomNote(stateDir);
+  await clearSelectedCopy(stateDir);
   for (const file of DATABASE_FILES) {
     for (const suffix of ["", ...SIDE_FILE_SUFFIXES]) {
       await rm(join(venueDir, `${file}${suffix}`), { force: true });

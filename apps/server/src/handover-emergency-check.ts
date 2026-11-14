@@ -6,18 +6,22 @@ import { checkHandoverCopy, collectHandoverSummaries, type WaitronModule } from 
 import { AppError } from "@waitron/shared";
 import { openBackupQuery, VENUE_FILE } from "@waitron/store";
 import { isCopyIntact } from "./handover-integrity.js";
+import { readSelectedCopy, readStagedCopy, type SelectedCopy } from "./handover-copy-selection.js";
 
-export interface EmergencyCopy {
-  source: "mirror-copy";
+export type EmergencyCopy = ({ source: "mirror-copy" } | SelectedCopy) & {
   identifier: string;
   lastChangeAtMs: number | null;
-}
+};
 
 /** Reads the live copy, including its WAL, without taking either database's write lock. */
 export async function checkEmergencyCopy(deps: {
   venueDir: string;
+  stateDir?: string;
   modules: readonly WaitronModule[];
 }): Promise<EmergencyCopy> {
+  const selection = deps.stateDir === undefined ? null : await readSelectedCopy(deps.stateDir);
+  if (deps.stateDir !== undefined && (await readStagedCopy(deps.stateDir)) !== null)
+    throw new AppError("handover.copy_mismatch", {});
   const path = join(deps.venueDir, VENUE_FILE);
   if (!(await isCopyIntact(path))) throw new AppError("handover.copy_damaged", {});
   const copy = await openBackupQuery(path);
@@ -41,7 +45,11 @@ export async function checkEmergencyCopy(deps: {
         throw new AppError("handover.copy_check_failed", { module: "core" });
       lastChangeAtMs = Math.max(lastChangeAtMs ?? instant, instant);
     }
-    return { source: "mirror-copy", identifier: sha256Hex(canonicalize(summary)), lastChangeAtMs };
+    return {
+      ...(selection ?? { source: "mirror-copy" as const }),
+      identifier: sha256Hex(canonicalize(summary)),
+      lastChangeAtMs,
+    };
   } finally {
     await copy.close();
   }

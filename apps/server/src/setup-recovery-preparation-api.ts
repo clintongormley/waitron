@@ -114,7 +114,7 @@ function assertOwnerTransport(c: Context): void {
   if (!(socket instanceof TLSSocket) || !socket.encrypted || !sentFromThisOrigin(c))
     throw new AppError("setup.owner_required", {});
 }
-async function readUpload(
+export async function readUpload(
   c: Context,
   uploadLimit: number,
 ): Promise<{ payload: unknown; artifact: Uint8Array | undefined }> {

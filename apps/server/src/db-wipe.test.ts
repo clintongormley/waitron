@@ -54,6 +54,16 @@ async function venueWithBothFilesWritten(): Promise<VenueDatabase> {
 }
 
 describe("wipeVenueDatabases", () => {
+  it("removes a selected handover copy before wiping the live database", async () => {
+    await mkdir(join(stateDir, "pair-copy"));
+    await writeFile(
+      join(stateDir, "pair-copy", "ready.json"),
+      JSON.stringify({ source: "selected-backup", sourceId: "a".repeat(64) }),
+    );
+    await writeFile(join(stateDir, "pair-copy", "venue.db"), "selected");
+    await wipeVenueDatabases(venueDir, stateDir);
+    await expect(stat(join(stateDir, "pair-copy"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
   it("removes BOTH database files and both write-ahead sidecars of each", async () => {
     open = await venueWithBothFilesWritten();
     // Without this the assertions after the wipe would pass over a directory that never held a sidecar.

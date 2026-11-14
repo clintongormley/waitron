@@ -21,6 +21,7 @@ import {
   type ObjectStore,
 } from "@waitron/stream";
 import { readHeldKey } from "./backup-config.js";
+import { COPY_READY_FILE } from "./handover-copy-selection.js";
 import type { Logger } from "./logger.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { checkIntegrity } from "./restore-stream.js";
@@ -29,7 +30,7 @@ import { deriveStreamKey } from "./stream-key.js";
 import { reachDisk } from "./sync-path.js";
 
 const INTERVAL_MS = 5_000;
-export const PAIR_COPY_READY_FILE = "ready.json";
+export const PAIR_COPY_READY_FILE = COPY_READY_FILE;
 
 export type FirstCopyStatus =
   { copy: "waiting" } | { copy: "restoring" } | { copy: "ready"; bytes: number; ms: number };
@@ -172,7 +173,7 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
  * Opened read-only, so the checks cannot change the copy. Refuses a schema ahead of this software;
  * true only when the copy's `nodes` row for this box holds this box's own key.
  */
-async function checkCopy(
+export async function checkCopy(
   path: string,
   nodeId: string,
   ownPublicKey: string,

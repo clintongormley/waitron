@@ -40,8 +40,10 @@ import type { createNodeOperationPreparation } from "./node-operation-preparatio
 import type { FenceAttestation, PromotionOperationRunner } from "./promote.js";
 import type { PromoteRunResult } from "./promote-api.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
+import { clearSelectedCopy } from "./handover-copy-selection.js";
 
 export interface HandoverActivationDeps {
+  stateDir?: string;
   node: NodeDatabase;
   nodeId: string;
   appDb: Database;
@@ -95,7 +97,10 @@ async function activate(
   body: { moduleOperation?: unknown; signIn?: unknown },
   throttle: PasswordThrottle,
 ): Promise<{ activated: true; restarting: boolean }> {
-  if (await alreadyActivated(deps, operationId)) return ALREADY_ANSWER;
+  if (await alreadyActivated(deps, operationId)) {
+    if (deps.stateDir !== undefined) await clearSelectedCopy(deps.stateDir);
+    return ALREADY_ANSWER;
+  }
   const operation = await readOperationReadyToPromote(deps, operationId);
   const moduleOperation = parseStandbyOperationInput(body.moduleOperation);
   if (moduleOperation === null)
@@ -142,7 +147,10 @@ async function activate(
             }),
           // Venue first, node after: a repeat finishes this record from the committed row, and no record
           // can claim a promotion that did not commit.
-          () => advanceHandover(deps, operationId, "activated", {}),
+          async () => {
+            await advanceHandover(deps, operationId, "activated", {});
+            if (deps.stateDir !== undefined) await clearSelectedCopy(deps.stateDir);
+          },
         );
       },
       // The password check takes long enough for the operation to move on.
@@ -158,6 +166,7 @@ async function activate(
       to: "activated",
     });
   await advanceHandover(deps, operationId, "activated", {});
+  if (deps.stateDir !== undefined) await clearSelectedCopy(deps.stateDir);
   return ALREADY_ANSWER;
 }
 
