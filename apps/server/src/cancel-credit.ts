@@ -4,7 +4,7 @@ import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { eq } from "drizzle-orm";
 import { readLiveSeriesIdTx, saleLines, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { recordCorrection, settleSale } from "@waitron/core";
+import { correctionTargetFor, recordCorrection, settleSale } from "@waitron/core";
 import type { RecordSaleLine } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { AuthzInput } from "@waitron/identity";
@@ -54,12 +54,10 @@ export async function creditWholeInvoice(
   const clock = await prepareIssueClock(tx, cfg, deps.clock);
   const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "rectificative"));
   const total = centsToDecimal(-invoice.total);
+  // A replaced invoice is credited through its replacement, whose lines repeat the invoice's.
+  const target = await correctionTargetFor(tx, invoice.id);
   const lines = reversedLines(
-    await tx
-      .select()
-      .from(saleLines)
-      .where(eq(saleLines.saleId, invoice.id))
-      .orderBy(saleLines.lineNo),
+    await tx.select().from(saleLines).where(eq(saleLines.saleId, target)).orderBy(saleLines.lineNo),
   );
   const operationDescription = await readSaleOperationDescription(tx, cfg, {
     kind: "sale",
@@ -70,7 +68,7 @@ export async function creditWholeInvoice(
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId,
-    correctsSaleId: invoice.id,
+    correctsSaleId: target,
     total,
     lines,
     wholeInvoice: true,

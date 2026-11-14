@@ -7,6 +7,7 @@ import {
   floorZones,
   invoiceCorrections,
   products,
+  readLiveSeriesIdTx,
   sales,
   withTransaction,
 } from "@waitron/db";
@@ -15,8 +16,9 @@ import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { listAdjustmentReasons, type AdjustmentReason } from "@waitron/adjustments";
 import { loginWithPin } from "@waitron/identity";
+import { recordReplacement } from "@waitron/core";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { saleId as brandSaleId } from "@waitron/shared";
+import { saleId as brandSaleId, seriesId as brandSeriesId, type SaleId } from "@waitron/shared";
 import {
   createDepartment,
   createServiceZone,
@@ -28,6 +30,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { readBillEditState } from "./bill-editing.js";
+import { creditWholeInvoice } from "./cancel-credit.js";
 import { listOpenInvoiceCorrections } from "./invoice-corrections.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { parkOrder, readInvoiceNumber } from "./working-order.js";
@@ -173,6 +176,34 @@ async function opened(saleId: string): Promise<string> {
   expect(answer.status, JSON.stringify(answer.json)).toBe(200);
   return (answer.json as { correction: { id: string } }).correction.id;
 }
+
+/** Replaces the invoice `saleId` through the core writer, as the replacement remedy will. */
+function replace(saleId: SaleId): Promise<SaleId> {
+  return inTx(venue, async (tx) => {
+    const session = await loginWithPin(tx, {
+      deviceId: venue.deviceId,
+      personId: venue.adminId,
+      pin: "1234",
+    });
+    const replaced = await recordReplacement(tx, venue.backend, {
+      origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
+      seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "rectificative")),
+      correctsSaleId: saleId,
+      authz: { sessionId: session.id },
+      clock: venue.clock,
+    });
+    return replaced.saleId;
+  });
+}
+
+const correctedBy = async (creditId: string) =>
+  (
+    await venue.db
+      .select({ correctsSaleId: sales.correctsSaleId })
+      .from(sales)
+      .where(eq(sales.id, creditId))
+  )[0]!.correctsSaleId;
 
 const ZONE_REFUSED = () => ({
   status: 403,
@@ -655,6 +686,56 @@ describe("GET /api/invoice-corrections", () => {
     expect(
       ids.map((id) => listed.find((correction) => correction.id === id)?.invoiceNumber),
     ).toEqual(numbers);
+  });
+});
+
+// Skipped until Task 3d: the Veri*Factu backend refuses to file the replacement itself.
+describe.skip("a replaced bill is corrected through its replacement", () => {
+  it("files the credit note of a correction opened on the bill against the replacement", async () => {
+    const saleId = await sold(["10.00"]);
+    const replacementId = await replace(saleId);
+
+    const filed = await giveCash(await opened(saleId), cashBody());
+
+    expect(filed).toMatchObject({ status: 200, json: { correction: { state: "filed" } } });
+    const { correctiveSaleId } = (filed.json as { correction: { correctiveSaleId: string } })
+      .correction;
+    expect(await correctedBy(correctiveSaleId)).toBe(replacementId);
+  });
+
+  it("cancels and credits the bill by crediting the replacement whole", async () => {
+    const saleId = await sold(["10.00"]);
+    const replacementId = await replace(saleId);
+
+    await inTx(venue, async (tx) => {
+      const session = await loginWithPin(tx, {
+        deviceId: venue.deviceId,
+        personId: venue.adminId,
+        pin: "1234",
+      });
+      const [bill] = await tx
+        .select({ total: sales.total })
+        .from(sales)
+        .where(eq(sales.id, saleId));
+      await creditWholeInvoice(
+        tx,
+        {
+          backend: venue.backend,
+          clock: venue.clock,
+          admission: testTradingAdmission(),
+        },
+        venue.cfg,
+        { id: saleId, total: bill!.total },
+        { sessionId: session.id },
+      );
+    });
+
+    expect(
+      await venue.db
+        .select({ total: sales.total })
+        .from(sales)
+        .where(eq(sales.correctsSaleId, replacementId)),
+    ).toEqual([{ total: -1000 }]);
   });
 });
 
