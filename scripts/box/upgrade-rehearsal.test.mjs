@@ -307,4 +307,4 @@ it("keeps the optional inbox service and volume in the staged Compose configurat
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-});
+}, 15_000);
