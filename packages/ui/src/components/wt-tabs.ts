@@ -169,8 +169,8 @@ export class WtTabs extends LitElement {
 
   // Scrolls the strip, sets its fade width and overflow mark, and places the help badges, none of
   // which changes the size of the strip or the selected tab, so it needs no frame delay. A selected
-  // tab that changes size is brought back into view only while the strip is where it last showed
-  // that tab, so a strip the reader scrolled stays put.
+  // tab that changes size is brought back into view only while `#leftWhereShown` counts the strip
+  // as unscrolled, so a strip the reader scrolled stays put.
   readonly #sizeObserver = new ResizeObserver((entries) => {
     let stripResized = false;
     let tabResized = false;
@@ -195,14 +195,15 @@ export class WtTabs extends LitElement {
   #shownScroll: number | null = null;
   #overflowFrame: number | null = null;
 
-  // Tabs that shrink under where the strip was left pull it back to its new end; that move is the
-  // browser's, not the reader's.
+  // A strip within a pixel of its end, and nearer its start than where it was left, counts as
+  // unscrolled: tabs that shrink under a strip pull it back to its new end, replacing whatever
+  // position it held.
   #leftWhereShown(bar: Element): boolean {
     if (bar.scrollLeft === this.#shownScroll) return true;
     const end = bar.scrollWidth - bar.clientWidth;
     return (
       this.#shownScroll !== null &&
-      Math.abs(this.#shownScroll) > end &&
+      Math.abs(this.#shownScroll) > Math.abs(bar.scrollLeft) &&
       Math.abs(bar.scrollLeft) >= end - 1
     );
   }

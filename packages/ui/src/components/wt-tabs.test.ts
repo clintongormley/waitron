@@ -1197,6 +1197,31 @@ test.each(["ltr", "rtl"] as const)(
   },
 );
 
+// Chromium rounds scrollWidth to the nearest pixel but cuts a right-to-left strip's far-end scroll
+// position toward zero, so a strip pulled back to an end of 70.69 px reports 70 against an end of
+// 71, the position it was left at.
+test("rtl, a selected tab that shrinks, pulling the strip back a pixel to an end it rounds up to where it was, and then grows is scrolled back so all of it is in view", async () => {
+  const el = await setup();
+  host.dir = "rtl";
+  host.style.width = "300px";
+  el.value = "routes";
+  await el.updateComplete;
+  const [first, second, selected] = buttons(el);
+  first!.style.width = "100px";
+  second!.style.width = "100px";
+  selected!.style.width = "150.7px";
+  await frames();
+  const shown = Math.abs(tablist(el).scrollLeft);
+  selected!.style.width = "146.7px";
+  await frames();
+  expect(Math.abs(tablist(el).scrollLeft)).toBe(shown - 1);
+  expect(maxScroll(el)).toBe(shown);
+  await expectGrowthScrolledIn(el, async () => {
+    selected!.style.width = "180px";
+    await frames();
+  });
+});
+
 test("a selected tab that shrinks leaves a strip the reader scrolled to its start where it is", async () => {
   const { el } = await selectedWithLittleRoom();
   const shown = tablist(el).scrollLeft;
