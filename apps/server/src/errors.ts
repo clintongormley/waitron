@@ -1381,8 +1381,8 @@ declare module "@waitron/shared" {
     /** The machine asked to be removed is a former primary (`sell-only`), so it has served. */
     "membership.node_has_served": Record<string, never>;
     /**
-     * The standby asked to be removed has a `nodes` row in this database: its store answered
-     * (`spare-join.ts`).
+     * The standby asked to be removed has a `nodes` row in this database (its store answered,
+     * `spare-join.ts`) and the request did not carry both retirement declarations as exact `true`.
      */
     "membership.standby_joined": Record<string, never>;
     /**
@@ -1401,7 +1401,10 @@ declare module "@waitron/shared" {
      * removed machine frees a place.
      */
     "mirror.membership_full": { limit: number };
-    /** A spare asked to join while this box's pair link already streams to a joined spare. */
+    /**
+     * A spare asked to join while this box's pair link streams to a spare the held chart does not
+     * list as evicted or cleared.
+     */
     "mirror.spare_already_joined": Record<string, never>;
     /** A spare asked to join while this venue streams to a bucket; a venue streams to one place. */
     "mirror.bucket_stream_active": Record<string, never>;

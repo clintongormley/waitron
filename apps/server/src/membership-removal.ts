@@ -238,7 +238,7 @@ async function writeChartInRounds<T>(
  * transaction, then deletes this box's pair link if it names the standby. node.db's lock is held
  * from before the chart is read, through the handover check and the chart commit, to the link
  * delete; venue.db commits first, so a run stopped between the two deletes the link when it is run
- * again. Every refusal throws before anything commits.
+ * again.
  */
 export async function removeStandby(
   deps: RemovalDeps,

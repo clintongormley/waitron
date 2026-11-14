@@ -8,7 +8,8 @@ and data. The spare’s page shows its status; it takes no sales and offers no d
 ## Add a spare box {#adding-a-spare}
 
 While a joined spare is switched off, the main box waits at each start until an administrator
-[lets it carry on without the spare](servers.md#carry-on).
+[lets it carry on without the spare](servers.md#carry-on) or
+[removes it](servers.md#remove-a-spare).
 
 Before you start, check two things on the main box:
 
@@ -36,7 +37,7 @@ venue's network and restarts by itself as the spare.
 
 On the main box, open **Settings → Servers**, open the spare's row menu and choose **Remove**. For a
 spare that has finished joining, first switch it off and make sure no other recovery is in
-progress, then tick both statements. Once it is removed, the main box stops waiting for it at
+progress, then turn on both statements. Once it is removed, the main box stops waiting for it at
 each start, and you can save your bucket or add another spare. To use that machine again, reset
 it and add it as a new spare.
 

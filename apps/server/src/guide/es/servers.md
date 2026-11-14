@@ -9,7 +9,8 @@ ofrece acceso al panel de gestión.
 ## Añadir un servidor de reserva {#adding-a-spare}
 
 Mientras un servidor de reserva que ha terminado de unirse está apagado, el servidor principal espera
-en cada inicio hasta que un administrador [deje que siga sin él](servers.md#carry-on).
+en cada inicio hasta que un administrador [deje que siga sin él](servers.md#carry-on) o
+[lo retire](servers.md#remove-a-spare).
 
 Antes de empezar, comprueba dos cosas en el servidor principal:
 
@@ -40,7 +41,7 @@ reserva.
 
 En el servidor principal, abre **Ajustes → Servidores**, abre el menú de la fila del servidor de
 reserva y elige **Retirar**. Si ha terminado de unirse, apágalo primero y asegúrate de que no hay
-otra recuperación en curso; después marca las dos casillas. Una vez retirado, el servidor principal
+otra recuperación en curso; después activa las dos declaraciones. Una vez retirado, el servidor principal
 deja de esperarlo en cada inicio, y puedes guardar tu bucket o añadir otro servidor de reserva. Para
 volver a usar esa máquina, restablécela y añádela como un nuevo servidor de reserva.
 

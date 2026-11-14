@@ -464,6 +464,7 @@ it("has a sentence in both languages for each refusal of a server's removal", ()
     "membership.node_has_served",
     "membership.standby_joined",
     "membership.write_contended",
+    "handover.operation_in_progress",
   ]) {
     expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);

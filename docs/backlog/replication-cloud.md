@@ -424,11 +424,7 @@ that slice 3 has to restore:
   wipe-and-re-adopt mints a fresh nodeId, and `MAX_NODES = 8` (`packages/membership/src/verify.ts`)
   caps it. A full chart is refused at the mint (`membership.chart_too_large`) and at the join
   (`mirror.membership_full`), and an admin can clear a REMOVED (`evicted`) machine to free its place,
-  from the Servers screen (A63). What stays open: only an `evicted` entry can be cleared, and A61's
-  Remove refuses a standby only when the primary's own database holds a `nodes` row for it
-  (`judgeRemoval`, `apps/server/src/membership-removal.ts`). Since 3b-6a the main box writes a
-  spare's `nodes` row once the spare's store answers (`apps/server/src/spare-join.ts`), so Remove
-  refuses every spare whose store answered, and nothing frees its entry. A `sell-only` former primary keeps
+  from the Servers screen (A63). What stays open: only an `evicted` entry can be cleared. A `sell-only` former primary keeps
   its place until that box retires itself (`apps/server/src/retire.ts` marks it `evicted`).
   Re-admission must retire, not add.
 - **Chart hygiene:** a post-setup change to `WAITRON_MANAGEMENT_ORIGIN` is never re-published, and a

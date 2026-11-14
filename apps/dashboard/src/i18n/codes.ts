@@ -1456,7 +1456,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "En esta versión, un servidor en espera no se puede activar desde otro dispositivo. No se ha cambiado nada.",
   },
   "handover.operation_in_progress": {
-    en: "A handover is already in progress. Keep both servers connected, and wait for it to finish before starting another handover or removing a server.",
+    en: "A handover is already in progress. Keep both boxes connected, and wait for it to finish before starting another handover or removing a server.",
     es: "Ya hay un traspaso en curso. Mantén los dos servidores conectados y espera a que termine antes de iniciar otro traspaso o retirar un servidor.",
   },
   // A fault in Waitron: a box records one restriction, a repeat carries the same values, and nothing

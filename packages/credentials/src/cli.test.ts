@@ -392,7 +392,7 @@ describe("waitron-credentials rotate", () => {
         "This box has a standby server, which holds this key ring too. Rotating here would leave " +
           "the standby unable to open the venue's keys. Nothing was changed. Remove the standby in " +
           "the dashboard (Servers, then Remove on its row; a standby that finished joining asks " +
-          "you to confirm it is switched off) and rotate again.",
+          "you to confirm it is switched off and no other recovery is in progress) and rotate again.",
       ]);
       expect(keyVersions()).toEqual([{ key_version: 1 }, { key_version: 1 }, { key_version: 1 }]);
     });
