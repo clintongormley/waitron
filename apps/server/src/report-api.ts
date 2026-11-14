@@ -179,8 +179,6 @@ async function countOpenTables(tx: Transaction): Promise<{ open: number; total: 
  * Mount reporting routes through the shared authorization gate. report.view
  * permits operational reports; report.export permits the modelo 303 export and the
  * deferred-payments file.
- * The overview aggregates all taxpayer nodes; per-node reports read cfg.nodeId and the boxes it took
- * over from.
  * The modelo 303 file remains a candidate requiring uploader validation and asesor
  * confirmation for prorrata handling.
  */

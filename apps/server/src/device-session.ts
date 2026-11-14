@@ -28,7 +28,7 @@ export const DEVICE_CLOCK_HEADER = "x-waitron-device-clock";
 const DEVICE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
 /**
- * The `Domain` a device cookie is scoped to: the taxpayer domain when the request host is it or a
+ * The `Domain` a device cookie is scoped to: the venue domain when the request host is it or a
  * subdomain of it, and host-only otherwise. The leading-dot check is what stops
  * `notdeli.waitron.app` from matching `deli.waitron.app`.
  */

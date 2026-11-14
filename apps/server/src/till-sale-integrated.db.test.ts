@@ -156,7 +156,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// `tenants_country_tax_id_key` is unique, so each venue gets its own NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;

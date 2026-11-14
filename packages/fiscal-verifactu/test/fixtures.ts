@@ -1,7 +1,14 @@
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedFixtureSif as registerSif } from "./sif-fixture.js";
 import { sql } from "drizzle-orm";
-import { invoiceSeries, nodes, sales, taxpayer, type Database, type Transaction } from "@waitron/db";
+import {
+  invoiceSeries,
+  nodes,
+  sales,
+  taxpayer,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -280,8 +287,6 @@ export async function seedTenantWithSif(
 ): Promise<SeededNodeWithSif> {
   const nif = options.nif ?? freshNif();
   const seeded = await db.transaction(async (tx) => {
-    // The target is named rather than left bare so a `tenants_country_tax_id_key` collision — a
-    // DIFFERENT cause — still raises.
     await tx
       .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: nif, legalName: "Waitron SL" })

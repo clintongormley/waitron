@@ -143,7 +143,6 @@ const spare = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// `taxpayer_country_tax_id_uq` is unique, so each provisioned venue needs its own NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;

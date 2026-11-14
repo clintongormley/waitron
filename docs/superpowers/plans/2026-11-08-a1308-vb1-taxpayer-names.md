@@ -38,6 +38,13 @@ rename. The PR's first line after the reset line names those two places.
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2).
 
+**Qualification, 2026-11-14 (watcher clearance, 19:42):** For vb1, the pull request's first line is:
+"Every venue is reset: core; database backups from before this cannot be restored".
+A real format-30 configuration export from the base imported during review, preserving a
+non-default menu; the same export with core version 2 was refused. Configuration format 30 and
+the import path stay unchanged. This qualification supersedes the blanket exports claim above
+for this slice.
+
 ## What it builds
 
 1. `tenants` → `taxpayer`; its CHECK `tenants_singleton_ck` → `taxpayer_singleton_ck`; the unique

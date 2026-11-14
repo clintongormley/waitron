@@ -520,7 +520,7 @@ describe("POST /api/device/join", () => {
     expect(rows[0]!.n).toBe(0);
   });
 
-  it("scopes the cookie Domain to the taxpayer host, host-only otherwise", async () => {
+  it("scopes the cookie Domain to the venue host, host-only otherwise", async () => {
     const venue = await setupVenue(suite.db);
     const app = new Hono();
     const mode = createPairingMode();

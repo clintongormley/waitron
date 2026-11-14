@@ -66,8 +66,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   now the `installAppendOnlyTriggers` call at line 74; and `.github/workflows/ci.yml:401` says
   esbuild collapses "all five" migration descriptors, while
   `grep -rhoE "export const [A-Z_]+_MIGRATIONS\b" packages --include='*.ts' | sort -u` lists 15
-  names on `ca01a7fbd`. `sumupClientForTenant` (`packages/payments-sumup/src/card-provider.ts:50`)
-  still carries "tenant" in its name. The fake SumUp client leaves its one-shot switches for a
+  names on `ca01a7fbd`. The fake SumUp client leaves its one-shot switches for a
   lookup or a refund armed when a checkout before them is refused; no test combines the two.
 
 ## "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too wide

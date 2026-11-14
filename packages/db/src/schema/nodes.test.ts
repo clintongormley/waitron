@@ -83,7 +83,7 @@ describe("nodes schema", () => {
   });
 
   describe("taxpayer fiscal identity is country + tax_id", () => {
-    it("has country and tax_id, not nif, without a redundant identity index", async () => {
+    it("has country and tax_id, not nif, and neither retired identity index name", async () => {
       const cols = await db.execute<{ name: string }>(
         sql`select name from pragma_table_info('taxpayer') order by name`,
       );

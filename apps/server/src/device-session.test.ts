@@ -303,7 +303,7 @@ describe("device cookie helpers", () => {
     expect(cookie).not.toMatch(/Secure/i);
   });
 
-  it("setDeviceCookie writes Domain only when the host is under the taxpayer domain", async () => {
+  it("setDeviceCookie writes Domain only when the host is under the venue domain", async () => {
     const app = new Hono();
     app.get("/set", (c) => {
       setDeviceCookie(c, COOKIE_VALUE, true, "deli.waitron.app");
@@ -348,7 +348,7 @@ describe("device cookie helpers", () => {
   // The clearing Set-Cookie must carry the SAME `Domain` the set one did — resolved from the same
   // `venueDomain` + host inputs — or the browser keeps the domain-scoped cookie alongside the
   // host-only expiry (the `Path` reasoning, applied to `Domain`).
-  it("clearDeviceCookie writes Domain only when the host is under the taxpayer domain", async () => {
+  it("clearDeviceCookie writes Domain only when the host is under the venue domain", async () => {
     const app = new Hono();
     app.get("/clear", (c) => {
       clearDeviceCookie(c, "deli.waitron.app");
@@ -363,14 +363,14 @@ describe("device cookie helpers", () => {
   });
 
   describe("cookieDomainFor", () => {
-    it("scopes to the taxpayer domain for a host under it (port stripped, case-insensitive)", () => {
+    it("scopes to the venue domain for a host under it (port stripped, case-insensitive)", () => {
       expect(cookieDomainFor("box.deli.waitron.app", "deli.waitron.app")).toBe("deli.waitron.app");
       expect(cookieDomainFor("Box.Deli.Waitron.App:8443", "deli.waitron.app")).toBe(
         "deli.waitron.app",
       );
       expect(cookieDomainFor("deli.waitron.app", "deli.waitron.app")).toBe("deli.waitron.app");
     });
-    it("stays host-only for waitron.local, loopback, a look-alike, or no taxpayer domain", () => {
+    it("stays host-only for waitron.local, loopback, a look-alike, or no venue domain", () => {
       expect(cookieDomainFor("waitron.local", "deli.waitron.app")).toBeUndefined();
       expect(cookieDomainFor("localhost:8080", "deli.waitron.app")).toBeUndefined();
       expect(cookieDomainFor("notdeli.waitron.app", "deli.waitron.app")).toBeUndefined();

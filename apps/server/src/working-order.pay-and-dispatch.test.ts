@@ -143,8 +143,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// `tenants_country_tax_id_key` is unique (`packages/db/drizzle/0000_baseline.sql`), so each
-// provisioned venue takes its own NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -2441,9 +2439,10 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
     const readyAt = await readyAtOf(id);
     expect(readyAt).toEqual(expect.any(String));
 
-    await expect(asVenue((tx) => advanceTicketItem(tx, item!, "preparing"))).rejects.toMatchObject(
-      { code: "ticket.invalid_transition", params: { ticketItemId: item } },
-    );
+    await expect(asVenue((tx) => advanceTicketItem(tx, item!, "preparing"))).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: item },
+    });
     expect(await ticketStateOf(id)).toBe("ready");
     expect(await readyAtOf(id)).toBe(readyAt);
   });

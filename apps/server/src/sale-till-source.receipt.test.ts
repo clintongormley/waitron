@@ -76,9 +76,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// A fresh NIF per provisioned venue. `tenants_country_tax_id_key` is unique, and a case that
-// provisions twice inside one test keeps its own rows distinct — the per-test reset empties the
-// data between tests, so the counter is what keeps a repeated call inside one test apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
