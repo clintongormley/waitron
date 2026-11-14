@@ -549,7 +549,7 @@ export class TillFloorScreen extends LitElement {
       /* A responsive grid: cards flow to fill the width, wrapping onto new rows on a narrow till. */
       .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(var(--wt-till-table-card-min-width), 1fr));
         gap: var(--wt-space-3);
       }
 

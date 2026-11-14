@@ -83,7 +83,7 @@ export class UnitsScreen extends LitElement {
       }
       .in-use-toolbar .in-use-search {
         flex: 1;
-        min-width: 12rem;
+        min-width: var(--wt-row-field-min-width);
       }
       .reassign {
         display: flex;

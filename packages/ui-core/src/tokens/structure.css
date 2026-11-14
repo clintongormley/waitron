@@ -99,6 +99,35 @@
      placeholder" cases in apps/dashboard/src/widgets/menu-prices-table.test.ts measure it. */
   --wt-price-range-field-width: 168px;
 
+  /* Paper and ink keep their physical colours in both themes, so they sit here rather than in
+     colors.css's per-theme blocks. */
+  --wt-color-paper: #fff;
+  --wt-color-ink: #000;
+
+  --wt-letter-spacing-caps: 0.04em;
+  --wt-letter-spacing-wide: 0.1em;
+  --wt-row-field-min-width: 12rem;
+
+  /* Dashboard views. The menu list's two are the room its name column leaves for the other
+     columns in the middle and wide layouts. */
+  --wt-approvals-queue-basis: 20rem;
+  --wt-overview-card-min-width: 14rem;
+  --wt-menu-list-middle-room: 8.5rem;
+  --wt-menu-list-wide-room: 30rem;
+  --wt-authenticator-qr-size: 15rem;
+  --wt-image-preview-max-height: 16rem;
+
+  /* Till views. */
+  --wt-till-form-column-width: 24rem;
+  --wt-till-chooser-width: 32rem;
+  --wt-till-chooser-dialog-width: 40rem;
+  --wt-till-enrol-number-size: 4rem;
+  --wt-till-table-card-min-width: 9rem;
+  --wt-till-roster-card-min-width: 10rem;
+  --wt-till-ticket-column-width: 22rem;
+  --wt-till-receipt-qr-size: 10rem;
+  --wt-station-ticket-min-width: 12rem;
+
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
   --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);
 

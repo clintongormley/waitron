@@ -74,7 +74,7 @@ export class ImageUpload extends LitElement {
         display: block;
         margin-top: var(--wt-space-3);
         max-width: 100%;
-        max-height: 16rem;
+        max-height: var(--wt-image-preview-max-height);
         border-radius: var(--wt-radius-md);
       }
       :host([thumbnail]) {

@@ -32,7 +32,7 @@ export class ApprovalsScreen extends LitElement {
         gap: var(--wt-space-5);
       }
       .queue {
-        flex: 1 1 20rem;
+        flex: 1 1 var(--wt-approvals-queue-basis);
       }
       ul {
         list-style: none;

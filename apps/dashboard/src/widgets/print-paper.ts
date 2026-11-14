@@ -144,8 +144,8 @@ function renderPiece(piece: Piece, widthDots: number) {
 
 /** Paper and ink keep their physical colours in both application themes. */
 export const paperGround = css`
-  color: #000;
-  background: #fff;
+  color: var(--wt-color-ink);
+  background: var(--wt-color-paper);
 `;
 
 /** The paper a print job's preview is drawn on; the host adds it to its own styles. */
@@ -191,7 +191,7 @@ export const paperStyles = css`
   }
   .cut {
     border: 0;
-    border-top: 1px dashed #000;
+    border-top: 1px dashed var(--wt-color-ink);
     margin: 0 -4mm;
   }
   .mark[data-active] {

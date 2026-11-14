@@ -399,7 +399,7 @@ export class TillTicketView extends LitElement {
       }
 
       .ticket {
-        max-width: 22rem;
+        max-width: var(--wt-till-ticket-column-width);
         margin: 0 auto var(--wt-space-4);
         padding: var(--wt-space-4);
         background: var(--wt-color-surface);
@@ -564,20 +564,20 @@ export class TillTicketView extends LitElement {
       }
 
       .qr svg {
-        width: 10rem;
-        height: 10rem;
+        width: var(--wt-till-receipt-qr-size);
+        height: var(--wt-till-receipt-qr-size);
       }
 
       .legend {
         margin: 0;
         text-align: center;
         font-weight: var(--wt-font-weight-bold);
-        letter-spacing: 0.1em;
+        letter-spacing: var(--wt-letter-spacing-wide);
       }
 
       .new-sale {
         display: block;
-        max-width: 22rem;
+        max-width: var(--wt-till-ticket-column-width);
         margin: 0 auto;
       }
 
@@ -586,7 +586,7 @@ export class TillTicketView extends LitElement {
       .receipt-actions {
         display: flex;
         gap: var(--wt-space-3);
-        max-width: 22rem;
+        max-width: var(--wt-till-ticket-column-width);
         margin: 0 auto var(--wt-space-3);
       }
 

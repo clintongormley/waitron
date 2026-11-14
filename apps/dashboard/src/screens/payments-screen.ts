@@ -256,7 +256,7 @@ export class PaymentsScreen extends LitElement {
       }
       .discovery-reader {
         flex: 1;
-        min-width: 12rem;
+        min-width: var(--wt-row-field-min-width);
       }
       .added {
         color: var(--wt-color-text-muted);

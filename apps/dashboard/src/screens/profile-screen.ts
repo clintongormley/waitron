@@ -206,7 +206,7 @@ export class ProfileScreen extends LitElement {
       }
       .authenticator-qr {
         display: block;
-        width: min(15rem, 100%);
+        width: min(var(--wt-authenticator-qr-size), 100%);
         height: auto;
         margin: var(--wt-space-4) auto;
       }

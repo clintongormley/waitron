@@ -44,7 +44,7 @@ export class TillEnrolScreen extends LitElement {
       /* A narrow reading column so the field + button stack rather than span a device edge-to-edge. */
       .screen {
         display: flex;
-        max-width: var(--till-enrol-max-width, 24rem);
+        max-width: var(--till-enrol-max-width, var(--wt-till-form-column-width));
         margin-inline: auto;
         flex-direction: column;
         gap: var(--wt-space-3);
@@ -65,9 +65,9 @@ export class TillEnrolScreen extends LitElement {
          twin in the dashboard, often at arm's length. */
       .number {
         margin: 0;
-        font-size: 4rem;
+        font-size: var(--wt-till-enrol-number-size);
         font-weight: var(--wt-font-weight-bold);
-        letter-spacing: 0.1em;
+        letter-spacing: var(--wt-letter-spacing-wide);
         text-align: center;
       }
     `,

@@ -67,7 +67,7 @@ export class TillLockScreen extends LitElement {
 
       /* Cap the login form and centre it — a wide till never stretches the roster or pad edge to edge. */
       .screen {
-        max-width: 24rem;
+        max-width: var(--wt-till-form-column-width);
         margin-inline: auto;
       }
 
@@ -107,7 +107,7 @@ export class TillLockScreen extends LitElement {
 
       .roster {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(var(--wt-till-roster-card-min-width), 1fr));
         gap: var(--wt-space-2);
       }
 

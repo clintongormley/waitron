@@ -315,7 +315,7 @@ export class TillBasket extends LitElement {
         gap: var(--wt-space-1) var(--wt-space-2);
         padding: var(--wt-space-1) 0 var(--wt-space-2);
         padding-left: var(--wt-space-4);
-        font-size: var(--wt-font-size-sm, 0.85em);
+        font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
       }
 
@@ -419,7 +419,7 @@ export class TillBasket extends LitElement {
         gap: var(--wt-space-1) var(--wt-space-2);
         padding: 0 0 var(--wt-space-1);
         padding-left: var(--wt-space-4);
-        font-size: var(--wt-font-size-sm, 0.85em);
+        font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
       }
 
