@@ -687,7 +687,7 @@ separately priced sizes/extras and declarations. Local opt-in sharing exposes on
 
 Remaining work follows the watcher-cleared [build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md):
 public mobile-data qualification of Cloud’s hosted copy. The box delivers publications and
-reports pending/current/off/blocked confirmation under lane G’s A670-CLOUD contract. Public
+reports delivery confirmation under lane G’s A670-CLOUD contract. Public
 readiness remains unverified; ordering is separate. Choosing a guest menu independently of the default menu is a later feature.
 
 The owner’s 13 November 22:31 answers, relayed by the watcher in Lane D `questions.md`, choose
@@ -1068,7 +1068,7 @@ tests. Media still validates required image names and translates its refusal to
 
 ## A1517. Allergen points to revisit before go-live
 
-The remaining guest-menu work is delivery to Cloud and a guest link over mobile data, tracked
+The remaining guest-menu work is qualification of the guest link over mobile data, tracked
 under [A670](#a670--guest-menu-sharing-and-fixed-a4-presets).
 
 The [11 November proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
