@@ -383,7 +383,7 @@ it("answers busy before scanning while a join is pending", async () => {
   expect(run).not.toHaveBeenCalled();
 });
 
-it("keeps the canonical read path and rejects a not-yet-implemented forget", async () => {
+it("keeps the canonical read path and refuses forget on an unverified host", async () => {
   const { handleNetworkRequest } = await import("./network-host.mjs");
   expect(JSON.parse(await handleNetworkRequest(line, { run: host() })).wired).toEqual({
     connected: true,
@@ -395,7 +395,7 @@ it("keeps the canonical read path and rejects a not-yet-implemented forget", asy
         'network.forget {"ssidHex":"41","actor":{"source":"person","person":"owner"}}',
       ),
     ),
-  ).toEqual({ ok: false, reason: "unknown_request" });
+  ).toEqual({ ok: false, reason: "host_failed" });
 });
 
 it("refuses a fresh scan that never completes instead of returning cached access points", async () => {
@@ -529,4 +529,24 @@ it("distinguishes no eligible saved profile from ambiguous saved profiles withou
   await expect(networkProfile(networkBus(host()), null)).rejects.toThrow(
     "ambiguous saved profiles",
   );
+});
+
+it("reads the eligible disconnected profile while ignoring retained disabled profiles", async () => {
+  const { handleNetworkRead } = await import("./network-host.mjs");
+  const reply = JSON.parse(
+    await handleNetworkRead(line, {
+      run: host({ active: false, disabledProfiles: ["other"] }),
+    }),
+  );
+  expect(reply.wifi).toEqual({ connectedSsidHex: null, savedSsidHex: "00ffc3285c" });
+});
+
+it.each([
+  'network.forget {"ssidHex":"41","actor":{"source":"server"}}',
+  'network.forget {"ssidHex":"41","uuid":"injected","actor":{"source":"person","person":"waiter-1"}}',
+])("refuses malformed or server-actor forget before touching host state (%s)", async (request) => {
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  const run = vi.fn();
+  expect(JSON.parse(await handleNetworkRequest(request, { run })).ok).toBe(false);
+  expect(run).not.toHaveBeenCalled();
 });

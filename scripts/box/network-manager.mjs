@@ -41,10 +41,10 @@ export function networkBus(run) {
   };
 }
 
-export async function networkRadio(bus) {
-  const radios = [];
+export async function networkDevices(bus) {
+  const devices = [];
   for (const path of await bus.call(ROOT, NM, "GetDevices")) {
-    const [type, state, name, , , connection] = await bus.get(
+    const [type, state, name, ip4, ip6, connection] = await bus.get(
       path,
       `${NM}.Device`,
       "DeviceType",
@@ -54,10 +54,23 @@ export async function networkRadio(bus) {
       "Ip6Config",
       "ActiveConnection",
     );
-    if (type !== 2) continue;
-    const [mode] = await bus.get(path, `${NM}.Device.Wireless`, "Mode", "ActiveAccessPoint");
+    devices.push({ path, type, state, name, ip4, ip6, connection });
+  }
+  return devices;
+}
+
+export async function networkRadio(bus, devices) {
+  const radios = [];
+  for (const device of devices ?? (await networkDevices(bus))) {
+    if (device.type !== 2) continue;
+    const [mode, accessPoint] = await bus.get(
+      device.path,
+      `${NM}.Device.Wireless`,
+      "Mode",
+      "ActiveAccessPoint",
+    );
     if (mode === 3) continue;
-    radios.push({ path, name, connection, active: state === 100 && mode === 2 });
+    radios.push({ ...device, accessPoint, active: device.state === 100 && mode === 2 });
   }
   const active = radios.filter((radio) => radio.active);
   const choices = active.length ? active : radios;

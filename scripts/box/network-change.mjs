@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectEncryptedHostState } from "./disk-start.mjs";
-import { networkBus, networkCommand, networkRadio } from "./network-manager.mjs";
+import { networkBus, networkCommand, networkProfile, networkRadio } from "./network-manager.mjs";
 import { formatHostReply } from "./host-protocol.mjs";
 import { createWifiBootCopyPublisher } from "./wifi-boot-copy.mjs";
 import { decideWifiBootCopy } from "./wifi-record.mjs";
@@ -91,8 +91,10 @@ export function createNetworkChange({
         throw Error("unsafe network state");
       const value = JSON.parse(await handle.readFile("utf8"));
       if (
-        !uuidPattern.test(value.uuid) ||
-        (value.previous !== null && !uuidPattern.test(value.previous)) ||
+        (value.change === null
+          ? value.uuid !== null || value.previous !== null || value.phase !== "finished"
+          : !uuidPattern.test(value.uuid) ||
+            (value.previous !== null && !uuidPattern.test(value.previous))) ||
         !["preparing", "queued", "activating", "finished"].includes(value.phase) ||
         typeof value.ifname !== "string" ||
         typeof value.boot !== "string"
@@ -120,7 +122,8 @@ export function createNetworkChange({
     await writeFileDurable(path, value);
   }
   async function save(state) {
-    await durable(statePath, state);
+    const existing = await load();
+    if (JSON.stringify(existing) !== JSON.stringify(state)) await durable(statePath, state);
   }
   async function removeCandidate(state) {
     const paths = await bus.call(
@@ -165,25 +168,12 @@ export function createNetworkChange({
   async function publish(state) {
     let bootCopy;
     try {
-      const wanted = state.change.state === "applied" ? state.uuid : state.previous;
-      if (wanted === null) {
-        state.bootCopy = pendingCopy();
+      const selected = await networkProfile(bus, await networkRadio(bus));
+      if (!selected) {
+        state.bootCopy = await publisher.publish(decideWifiBootCopy({ kind: "cable-only" }));
         await save(state);
         return;
       }
-      let selected;
-      for (const path of await bus.call(
-        "/org/freedesktop/NetworkManager/Settings",
-        `${NM}.Settings`,
-        "ListConnections",
-      )) {
-        const settings = await bus.call(path, `${NM}.Settings.Connection`, "GetSettings");
-        if (settings.connection?.uuid?.data === wanted) {
-          selected = { path, settings };
-          break;
-        }
-      }
-      if (!selected) throw Error("saved profile unavailable");
       const { path, settings } = selected;
       const wireless = settings["802-11-wireless"];
       const security = settings["802-11-wireless-security"];
@@ -211,7 +201,7 @@ export function createNetworkChange({
     await save(state);
   }
   async function finish(state) {
-    if (state.change.state === "applied" && state.previous)
+    if (state.change?.kind === "join" && state.change.state === "applied" && state.previous) {
       try {
         await run("nmcli", [
           "connection",
@@ -224,6 +214,9 @@ export function createNetworkChange({
       } catch {
         /* The old profile may have been removed; publication remains independent. */
       }
+      state.previous = null;
+      await save(state);
+    }
     await publish(state);
   }
   return {
@@ -243,36 +236,9 @@ export function createNetworkChange({
         if (existing && existing.phase !== "finished") return { ok: false, reason: "busy" };
         const radio = await networkRadio(bus);
         if (!radio) return { ok: false, reason: "no_wifi" };
-        let previous = null;
-        if (radio.active && radio.connection !== "/") {
-          const [path] = await bus.get(radio.connection, `${NM}.Connection.Active`, "Connection");
-          previous = (await bus.call(path, `${NM}.Settings.Connection`, "GetSettings")).connection
-            .uuid.data;
-          if (!uuidPattern.test(previous)) throw Error("invalid previous uuid");
-        } else {
-          const choices = [];
-          for (const path of await bus.call(
-            "/org/freedesktop/NetworkManager/Settings",
-            `${NM}.Settings`,
-            "ListConnections",
-          )) {
-            const settings = await bus.call(path, `${NM}.Settings.Connection`, "GetSettings");
-            const connection = settings.connection;
-            if (
-              connection?.type?.data !== "802-11-wireless" ||
-              connection.autoconnect?.data === false ||
-              (settings["802-11-wireless"]?.mode?.data ?? "infrastructure") !== "infrastructure" ||
-              (connection["interface-name"]?.data &&
-                connection["interface-name"].data !== radio.name)
-            )
-              continue;
-            choices.push(connection.uuid.data);
-          }
-          if (choices.length > 1) throw Error("ambiguous saved profiles");
-          previous = choices[0] ?? null;
-          if (previous !== null && !uuidPattern.test(previous))
-            throw Error("invalid previous uuid");
-        }
+        const selected = await networkProfile(bus, radio);
+        const previous = selected?.settings.connection.uuid.data ?? null;
+        if (previous !== null && !uuidPattern.test(previous)) throw Error("invalid previous uuid");
         await safe(profilesRoot, true);
         state = {
           phase: "preparing",
@@ -309,12 +275,84 @@ export function createNetworkChange({
         return { ok: false, reason: "host_failed" };
       }
     },
+    async forget(fields, actor) {
+      let state;
+      try {
+        await log({ verb: "network.forget", actor, permission: "system.manage" });
+        const existing = await load();
+        if (existing && existing.phase !== "finished") return { ok: false, reason: "busy" };
+        const radio = await networkRadio(bus);
+        const selected = await networkProfile(bus, radio);
+        if (
+          !selected ||
+          Buffer.from(selected.settings["802-11-wireless"].ssid.data).toString("hex") !==
+            fields.ssidHex
+        )
+          return { ok: false, reason: "not_saved" };
+        const uuid = selected.settings.connection.uuid.data;
+        if (!uuidPattern.test(uuid)) throw Error("invalid saved uuid");
+        state = {
+          phase: "queued",
+          uuid,
+          previous: null,
+          ifname: radio?.name ?? "",
+          boot: await readBootId(),
+          change: { kind: "forget", ssidHex: fields.ssidHex, state: "running", reason: null },
+          bootCopy: pendingCopy(),
+        };
+        await save(state);
+        await run("systemctl", ["start", "--no-block", "waitron-network-change.service"]);
+        return { ok: true };
+      } catch {
+        if (state) {
+          state.phase = "finished";
+          state.change.state = "refused";
+          state.change.reason = "failed";
+          await save(state);
+        }
+        return { ok: false, reason: "host_failed" };
+      }
+    },
     async work() {
-      const state = await load();
-      if (!state) return;
+      const state = (await load()) ?? {
+        phase: "finished",
+        uuid: null,
+        previous: null,
+        ifname: "",
+        boot: "",
+        change: null,
+        bootCopy: pendingCopy(),
+      };
       if (state.phase === "finished") {
-        if (state.change.state === "applied" || state.bootCopy.state === "pending")
-          await finish(state);
+        await finish(state);
+        return;
+      }
+      if (state.change.kind === "forget") {
+        try {
+          for (const path of await bus.call(
+            "/org/freedesktop/NetworkManager/Settings",
+            `${NM}.Settings`,
+            "ListConnections",
+          )) {
+            const settings = await bus.call(path, `${NM}.Settings.Connection`, "GetSettings");
+            if (settings.connection?.uuid?.data !== state.uuid) continue;
+            if (
+              settings.connection.type?.data !== "802-11-wireless" ||
+              Buffer.from(settings["802-11-wireless"]?.ssid?.data ?? []).toString("hex") !==
+                state.change.ssidHex
+            )
+              throw Error("forget target changed");
+            await run("nmcli", ["--wait", "10", "connection", "delete", "uuid", state.uuid]);
+            break;
+          }
+          state.change.state = "applied";
+        } catch {
+          state.change.state = "refused";
+          state.change.reason = "failed";
+        }
+        state.phase = "finished";
+        await save(state);
+        await publish(state);
         return;
       }
       try {
@@ -363,6 +401,14 @@ export async function acceptNetworkJoin(request, deps = {}) {
     run: deps.run ?? networkCommand({ budget: 12000 }),
   }).accept(request.fields, request.actor);
   return formatHostReply("network.join", result);
+}
+
+export async function acceptNetworkForget(request, deps = {}) {
+  const result = await createNetworkChange({
+    ...deps,
+    run: deps.run ?? networkCommand({ budget: 12000 }),
+  }).forget(request.fields, request.actor);
+  return formatHostReply("network.forget", result);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -183,7 +183,7 @@ main() {
     if reply="$(printf '%s' "$line" | node "$TAG_HOST")"; then answer "$reply"; else refuse host_failed; fi
     exit 0
   fi
-  if [[ "$line" = "network.read "* || "$line" = "network.scan "* || "$line" = "network.join "* ]] && [ -f "$NETWORK_HOST" ]; then
+  if [[ "$line" = "network.read "* || "$line" = "network.scan "* || "$line" = "network.join "* || "$line" = "network.forget "* ]] && [ -f "$NETWORK_HOST" ]; then
     if [[ "$line" != "network.read "* ]]; then
       umask 077
       mkdir -p -m 0700 "$STATE_DIR"

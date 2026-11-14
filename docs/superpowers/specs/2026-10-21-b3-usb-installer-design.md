@@ -1772,3 +1772,5 @@ These quotes describe interfaces and trust steps, not a qualified Waitron recove
 | # | Receipt's own words | Current scope and consequence | Source |
 | --- | --- | --- | --- |
 | P63 | “a cert for a name OUTSIDE the root's permitted subtree”; “a clean padlock (HTTPS 200)” | One actual Android phone accepted the CA-signed outside-subtree control on 2026-09-08; versions were not captured. Historical negative evidence, not a hostname-mismatch result or current-device pass. §7.5 requires actual-device controls and holds the affected trust design/release. | Literal commit `75f17f9e36125af3a620266a584507420e7197de`, message and doc diff; current pointer `apps/server/src/self-signed-cert.ts:29-33`. No live link to the removed spike document. |
+
+**14 November 2026, Wi-Fi host slice 2a:** [The cleared cut](../plans/2026-11-14-b3-wifi-host-reconcile.md) adds host forget and startup/after-operation boot-copy reconciliation. Live outside-change monitoring, dashboard controls and physical qualification remain open; parent B3 remains 0/6.

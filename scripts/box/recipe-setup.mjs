@@ -68,13 +68,19 @@ export function installedFailures(expected, installedUuid, first, again) {
     )
       failures.push("host-network");
     if (
-      ["scan", "join"].some(
-        (verb) =>
+      Object.entries({ scan: "no_wifi", join: "no_wifi", forget: "not_saved" }).some(
+        ([verb, reason]) =>
           boot.networkOperations?.[verb]?.ok !== false ||
-          boot.networkOperations[verb].reason !== "no_wifi",
+          boot.networkOperations[verb].reason !== reason,
       )
     )
       failures.push("host-network-operations");
+    if (
+      ["savedCopy", "forgotten", "measuredUnchanged", "startupCopy"].some(
+        (key) => boot.networkReconcile?.[key] !== true,
+      )
+    )
+      failures.push("host-network-reconcile");
     if (!installedUuid || installedUuid === expected.uuid || boot.uuid !== installedUuid)
       failures.push("root-uuid");
     if (!boot.luksUuid || boot.luksUuid === boot.uuid || boot.luksUuid !== first.luksUuid)

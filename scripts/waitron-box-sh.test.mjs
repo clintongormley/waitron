@@ -576,7 +576,7 @@ it("forwards a network read without a write lock, retaining unknown_request when
   expect(answer(sb, line)).toEqual({ ok: false, reason: "unknown_request" });
 });
 
-it.each(["scan", "join"])(
+it.each(["scan", "join", "forget"])(
   "forwards network.%s under the shared network lock without needing tag support",
   (verb) => {
     const sb = sandbox();
@@ -588,7 +588,7 @@ it.each(["scan", "join"])(
     const request =
       verb === "scan"
         ? 'network.scan {"actor":{"source":"person","person":"owner"}}'
-        : `network.join ${" ".repeat(900)}`;
+        : `network.${verb} ${" ".repeat(900)}`;
     expect(answer(sb, request)).toEqual({ ok: true });
     expect(readFileSync(received, "utf8")).toBe(request);
     expect(sb.calls()).toContainEqual(["flock", "-n", "9"]);
