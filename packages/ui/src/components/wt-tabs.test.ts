@@ -1181,6 +1181,50 @@ test("a selected tab whose label grows, with the same list of tabs, is scrolled 
   await expectGrowthScrolledIn(el, () => relabelSelected(el, own, "Preparation routes too"));
 });
 
+test.each(["ltr", "rtl"] as const)(
+  "%s, a selected tab that shrinks, pulling the strip back to its new end, and then grows is scrolled back so all of it is in view",
+  async (dir) => {
+    const own = items.map((item) => ({ ...item }));
+    const { el } = await selectedWithLittleRoom(own);
+    host.dir = dir;
+    el.requestUpdate("value");
+    await el.updateComplete;
+    await frames();
+    const shown = Math.abs(tablist(el).scrollLeft);
+    await relabelSelected(el, own, "Prep");
+    expect(Math.abs(tablist(el).scrollLeft)).toBeLessThan(shown);
+    await expectGrowthScrolledIn(el, () => relabelSelected(el, own, "Preparation routes too"));
+  },
+);
+
+test("a selected tab that shrinks leaves a strip the reader scrolled to its start where it is", async () => {
+  const { el } = await selectedWithLittleRoom();
+  const shown = tablist(el).scrollLeft;
+  await scrollStrip(el, 0);
+  buttons(el)[2]!.style.fontSize = "13px";
+  await frames();
+  expect(maxScroll(el)).toBeLessThan(shown);
+  expect(maxScroll(el)).toBeGreaterThan(1);
+  expect(tablist(el).scrollLeft).toBe(0);
+});
+
+test("a selected tab that shrinks leaves a strip the reader scrolled to its far end at that end", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  el.value = "menus";
+  await el.updateComplete;
+  await frames();
+  const shown = tablist(el).scrollLeft;
+  await scrollStrip(el, maxScroll(el));
+  const end = maxScroll(el);
+  expect(end).toBeGreaterThan(shown + 5);
+  buttons(el)[1]!.style.fontSize = "13px";
+  await frames();
+  expect(maxScroll(el)).toBeLessThan(end);
+  expect(maxScroll(el)).toBeGreaterThan(shown);
+  expect(tablist(el).scrollLeft).toBe(maxScroll(el));
+});
+
 test("stops watching a tab once another is selected, and watches the new one", async () => {
   const { el } = await selectedWithLittleRoom();
   const old = buttons(el)[2]!;

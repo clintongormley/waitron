@@ -181,7 +181,7 @@ export class WtTabs extends LitElement {
         stripResized = true;
       }
     }
-    const unscrolled = this.#observedStrip?.scrollLeft === this.#shownScroll;
+    const unscrolled = this.#observedStrip !== null && this.#leftWhereShown(this.#observedStrip);
     if (stripResized || (tabResized && unscrolled)) this.#showSelected();
     if (stripResized || tabResized) {
       this.#sizeFade();
@@ -195,6 +195,18 @@ export class WtTabs extends LitElement {
   #shownScroll: number | null = null;
   #overflowFrame: number | null = null;
 
+  // Tabs that shrink under where the strip was left pull it back to its new end; that move is the
+  // browser's, not the reader's.
+  #leftWhereShown(bar: Element): boolean {
+    if (bar.scrollLeft === this.#shownScroll) return true;
+    const end = bar.scrollWidth - bar.clientWidth;
+    return (
+      this.#shownScroll !== null &&
+      Math.abs(this.#shownScroll) > end &&
+      Math.abs(bar.scrollLeft) >= end - 1
+    );
+  }
+
   #observeSizes(): void {
     if (!this.isConnected) return;
     const bar = this.renderRoot.querySelector('[role="tablist"]');
@@ -203,6 +215,7 @@ export class WtTabs extends LitElement {
       if (bar) this.#sizeObserver.observe(bar);
       this.#observedStrip = bar;
       this.#observedWidth = null;
+      this.#shownScroll = null;
     }
     const { tabs, index } = this.#selectedTab();
     const tab = tabs[index] ?? null;
