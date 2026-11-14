@@ -128,6 +128,8 @@ it.each([
   ["getOverdueOrders", [], "dining_tables.today"],
   ["getSalesOverview", [], "dining_tables.today"],
   ["getOverdueOrders", [], "table_merges"],
+  ["getDailyClose", ["2026-09-11"], "payments"],
+  ["getDailyClose", ["2026-09-11"], "payment_refunds"],
   ["getDailyClose", ["2026-09-11"], "sale_substitutions"],
   ["getDailyClose", ["2026-09-11"], "sale_lines"],
   ["getDailyClose", ["2026-09-11"], "tender_refunds"],
