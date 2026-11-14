@@ -45,14 +45,15 @@ export function otherBoxPhrase(names: readonly (string | null)[], locale: Suppor
 /** Marks an answer to `GET /` as the waiting page; its absence tells an open page the wait ended. */
 const WAITING_HEADER = "X-Waitron-Waiting";
 
-// A failed fetch is the gap between the waiting start's listener closing and the next start's
-// opening, so it is tried again. `replace` rather than `reload`, because the carry-on form's
+// A failed fetch or a refusal is the gap between the waiting start's listener closing and the
+// next start's opening (or a stepdown's restart), so it is tried again. `replace` rather than `reload`, because the carry-on form's
 // answers are drawn from a POST that a reload would send again.
 const LEAVE_WHEN_DONE = `<script>
 setInterval(async () => {
   try {
     const response = await fetch("/", { cache: "no-store" });
-    if (response.headers.get("${WAITING_HEADER.toLowerCase()}") === null) location.replace("/");
+    if (response.ok && response.headers.get("${WAITING_HEADER.toLowerCase()}") === null)
+      location.replace("/");
   } catch {}
 }, 5000);
 </script>

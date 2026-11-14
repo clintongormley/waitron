@@ -110,7 +110,8 @@ describe("the waiting page", () => {
     const html = renderWaitingPage("Spare", "en-GB");
     expect(html).toContain("<script>");
     expect(html).toContain('fetch("/", { cache: "no-store" })');
-    expect(html).toContain('response.headers.get("x-waitron-waiting") === null');
+    // A refusal (the closed gate's 503 while the box steps down) is not the next start's page.
+    expect(html).toContain('response.ok && response.headers.get("x-waitron-waiting") === null');
     expect(html).toContain('location.replace("/")');
     expect(html).toContain("5000");
   });
