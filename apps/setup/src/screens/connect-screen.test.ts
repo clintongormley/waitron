@@ -124,7 +124,7 @@ describe("setup-connect-screen", () => {
       "es-ES",
       {
         primaryUrl: "Dirección HTTPS completa del servidor principal",
-        email: "Correo de acceso de un administrador del principal",
+        email: "Correo de acceso de un administrador del servidor principal",
         password: "La contraseña del panel de ese administrador",
         totp: "El código que muestra ahora el autenticador",
       },

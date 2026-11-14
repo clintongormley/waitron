@@ -244,9 +244,7 @@ password, ≥8 characters), both required.
 
 Dashboard management login is **email + password**: `loginManager` resolves the person by email. Both
 the setup UI and the bare `venue` CLI require the first admin's email and thread it into `seed-admin`,
-so the provisioned admin can sign in immediately. The provisioned password is also what the C2b
-mirror-bundle adoption route authenticates **by id** via `loginManagerById`, because that
-server-to-server flow carries the admin's id rather than the dashboard form.
+so the provisioned admin can sign in immediately.
 
 Every option is prompted for when omitted, so a bare `venue` is a complete interactive session; the
 exceptions are `--admin-first-names` and `--admin-last-names`, which are read from a flag but never

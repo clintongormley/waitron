@@ -158,7 +158,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.primary_url.hint": "Dirección HTTPS completa del servidor principal",
   "connect.email.label": "Correo del administrador",
   "connect.email.error": "Revisa el correo del administrador.",
-  "connect.email.hint": "Correo de acceso de un administrador del principal",
+  "connect.email.hint": "Correo de acceso de un administrador del servidor principal",
   "connect.password.label": "Contraseña del administrador",
   "connect.password.error": "Revisa la contraseña del administrador.",
   "connect.password.hint": "La contraseña del panel de ese administrador",
