@@ -2094,6 +2094,28 @@ describe("setup-app", () => {
       }
     });
 
+    it.each([
+      ["en-GB", { retryAfterSeconds: 30 }, "Too many attempts. Wait 30 seconds, then try again."],
+      ["en-GB", { retryAfterSeconds: 1 }, "Too many attempts. Wait 1 second, then try again."],
+      ["en-GB", {}, "Too many attempts. Wait a few minutes, then try again."],
+      [
+        "es-ES",
+        { retryAfterSeconds: 30 },
+        "Demasiados intentos. Espera 30 segundos y vuelve a intentarlo.",
+      ],
+    ] as const)(
+      "asks the person to wait when the primary refuses too many sign-in attempts (%s, %o)",
+      async (locale, params, sentence) => {
+        try {
+          const { connect, control } = await refusedJoin("password.throttled", locale, params);
+          expect(await bottomOf(connect)).toBe(sentence);
+          expect(control("connect")!.disabled).toBe(false);
+        } finally {
+          setLocale("en-GB");
+        }
+      },
+    );
+
     it("shows the generic join failure for a refused module operation, whichever module it names", async () => {
       const { connect } = await refusedJoin("module.operation_invalid", "en-GB", {
         module: "fiscal-verifactu",

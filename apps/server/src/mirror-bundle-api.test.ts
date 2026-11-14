@@ -887,6 +887,127 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(await allocationSnapshot()).toEqual(counterBefore);
   });
 
+  describe("repeated wrong passwords", () => {
+    const wrongAttempt = (email: string) => ({ email, password: "wrong", ...validStandby() });
+    const rightAttempt = (email = ADMIN_EMAIL) => ({
+      email,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+    const throttled = {
+      status: 429,
+      body: {
+        error: { code: "password.throttled", params: { retryAfterSeconds: expect.any(Number) } },
+      },
+    };
+    const answer = async (res: Response) => ({ status: res.status, body: await res.json() });
+
+    it("refuses a fifth quick attempt for one email with 429 password.throttled, even with the right password", async () => {
+      const { designated } = await setupVenue();
+      const app = mountApp(designated);
+      const before = await allocationSnapshot();
+
+      for (let attempt = 0; attempt < 4; attempt += 1)
+        expect((await post(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
+
+      expect(await answer(await post(app, rightAttempt()))).toEqual(throttled);
+      expect(await allocationSnapshot()).toEqual(before);
+    });
+
+    it("counts the plain path's wrong passwords against the same limit as the module-operation path", async () => {
+      const { designated } = await setupVenue();
+      const app = mountApp(designated);
+
+      for (let attempt = 0; attempt < 4; attempt += 1)
+        expect((await rawPost(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
+
+      expect(await answer(await rawPost(app, rightAttempt()))).toEqual(throttled);
+      expect(await answer(await post(app, rightAttempt()))).toEqual(throttled);
+    });
+
+    it("counts two spellings of one address against one limit", async () => {
+      const { designated } = await setupVenue();
+      const app = mountApp(designated);
+
+      for (const email of [
+        ADMIN_EMAIL,
+        "  Owner@Example.TEST ",
+        "OWNER@EXAMPLE.TEST",
+        "owner@example.test  ",
+      ])
+        expect((await post(app, wrongAttempt(email))).status).toBe(401);
+
+      expect(await answer(await post(app, rightAttempt(" Owner@example.test")))).toEqual(throttled);
+    });
+
+    it("answers an unknown email's attempts exactly as a known one's, its two spellings sharing one limit", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        const { designated } = await setupVenue();
+        const answers = async (emails: string[]) => {
+          const app = mountApp(designated);
+          const seen = [];
+          for (const email of emails) seen.push(await answer(await post(app, wrongAttempt(email))));
+          return seen;
+        };
+
+        const known = await answers(Array.from({ length: 5 }, () => ADMIN_EMAIL));
+        expect(known.map(({ status }) => status)).toEqual([401, 401, 401, 401, 429]);
+        expect(known[4]).toEqual(throttled);
+        const unknown = await answers([
+          "nobody@example.test",
+          " NOBODY@example.test",
+          "nobody@example.test",
+          "Nobody@Example.Test ",
+          "nobody@example.test",
+        ]);
+        expect(unknown).toEqual(known);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("lets a correct sign-in through before the limit, and starts the count again after it", async () => {
+      const { designated } = await setupVenue();
+      const app = mountApp(designated);
+
+      for (let attempt = 0; attempt < 3; attempt += 1)
+        expect((await post(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
+      const signedIn = await post(app, rightAttempt());
+      expect(signedIn.status, JSON.stringify(await signedIn.clone().json())).toBe(200);
+
+      const after: number[] = [];
+      for (let attempt = 0; attempt < 5; attempt += 1)
+        after.push((await post(app, wrongAttempt(ADMIN_EMAIL))).status);
+      expect(after).toEqual([401, 401, 401, 401, 429]);
+    });
+
+    it("does not count a refusal that checks no password, nor a join refused after a correct sign-in", async () => {
+      const { designated } = await setupVenue();
+      const app = mountApp(designated);
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const gated = await post(app, rightAttempt(), { veriFactu: true });
+        expect((await gated.json()).error.code).toBe("mirror.standby_series_unsupported");
+        const malformed = await post(app, { ...wrongAttempt(ADMIN_EMAIL), totp: 123 });
+        expect(await answer(malformed)).toEqual({
+          status: 401,
+          body: { error: { code: "password.invalid", params: {} } },
+        });
+        const badContact = await post(app, {
+          ...wrongAttempt(ADMIN_EMAIL),
+          standbyContactUrl: "https://cloud.deli.test/path",
+        });
+        expect((await badContact.json()).error.code).toBe("mirror.standby_invalid");
+      }
+
+      const statuses: number[] = [];
+      for (let attempt = 0; attempt < 5; attempt += 1)
+        statuses.push((await post(app, wrongAttempt(ADMIN_EMAIL))).status);
+      expect(statuses).toEqual([401, 401, 401, 401, 429]);
+    });
+  });
+
   describe("the pair's store and its key", () => {
     it("hands out a bundle with no relay, carrying the main box's address and the pair's key", async () => {
       const { designated } = await setupVenue();

@@ -356,6 +356,29 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     }
   });
 
+  it("passes on password.throttled with its whole-second wait only, and not with a wait that is not one", async () => {
+    const relayed = await refusalFor({
+      error: {
+        code: "password.throttled",
+        params: { retryAfterSeconds: 2, detail: "https://primary.internal" },
+      },
+    });
+    expect(isAppError(relayed) && relayed.code).toBe("password.throttled");
+    expect(isAppError(relayed) && relayed.params).toEqual({ retryAfterSeconds: 2 });
+
+    for (const params of [
+      { retryAfterSeconds: "2" },
+      { retryAfterSeconds: 0 },
+      { retryAfterSeconds: -1 },
+      { retryAfterSeconds: 1.5 },
+      {},
+    ]) {
+      const error = await refusalFor({ error: { code: "password.throttled", params } });
+      expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
+      expect(isAppError(error) && error.params).toEqual({});
+    }
+  });
+
   it("maps a 200 with an unparseable body to mirror.bundle_fetch_failed", async () => {
     const app = new Hono();
     app.post("/management-api/mirror-bundle", (c: Context) =>

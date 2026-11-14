@@ -2524,6 +2524,54 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     }
   });
 
+  it("relays a primary's refusal of too many sign-in attempts as 429 password.throttled with its wait only", async () => {
+    const primary = new Hono();
+    primary.post("/management-api/mirror-bundle", (c) =>
+      c.json(
+        {
+          error: {
+            code: "password.throttled",
+            params: { retryAfterSeconds: 2, detail: "https://primary.internal" },
+          },
+        },
+        429,
+      ),
+    );
+    const server = await new Promise<ServerType>((resolve) => {
+      const started = serve({ fetch: primary.fetch, port: 0, hostname: "127.0.0.1" }, () =>
+        resolve(started),
+      );
+    });
+    try {
+      const { port } = server.address() as AddressInfo;
+      const app = new Hono();
+      const adopt = vi.fn((req: AdoptRequest) =>
+        fetchMirrorBundle(req.primaryUrl, req.credential, {
+          nodeId: "55555555-5555-5555-5555-555555555555",
+          publicKey: "STANDBY_PUB",
+          contactUrl: "",
+          storeUrl: "",
+          at: Date.now(),
+        }).then(() => ({ breakGlassSecret: BREAK_GLASS_SECRET })),
+      );
+      const { deps, requestRestart } = makeAdoptDeps({ adopt });
+      mountSetup(app, deps, noopLog);
+
+      const res = await postAdopt(app, {
+        primaryUrl: `http://127.0.0.1:${port}`,
+        credential: ADOPT_CREDENTIAL,
+      });
+      expect(res.status).toBe(429);
+      expect(await res.json()).toEqual({
+        error: { code: "password.throttled", params: { retryAfterSeconds: 2 } },
+      });
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
   it("latches out a second concurrent adopt with 409 while the first is in flight", async () => {
     const app = new Hono();
     let release!: (v: { breakGlassSecret: string }) => void;

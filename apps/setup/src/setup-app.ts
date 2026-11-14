@@ -342,6 +342,7 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
 function adoptErrorWords(code: string, params: Record<string, unknown> | undefined): Message {
   const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
   if (finishKey !== undefined) return say(finishKey);
+  if (code === "password.throttled") return describeThrottle(params);
   const { primaryAt, standbyAt } = params ?? {};
   if (
     code === "mirror.clocks_apart" &&

@@ -19,6 +19,7 @@ import "./errors.js";
 // The registries of the codes this file relays from the primary.
 import "@waitron/identity";
 import "@waitron/module";
+import "@waitron/provisioning";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -106,11 +107,12 @@ function isIsoTime(value: unknown): value is string {
 }
 
 /**
- * A refusal from the main box is passed on only when it is `password.invalid` or one of
- * `JOIN_REFUSALS`, and each is rebuilt here so nothing the main box wrote travels on: with no
- * parameters, except `mirror.standby_series_unsupported` with `{ module }` only when it names a
- * module in `ALL_MODULES`, and `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both
- * are ISO times. Every other code, and any of these whose parameters fail their check, is
+ * A refusal from the main box is passed on only when it is `password.invalid`, `password.throttled`
+ * or one of `JOIN_REFUSALS`, and each is rebuilt here so nothing the main box wrote travels on: with
+ * no parameters, except `mirror.standby_series_unsupported` with `{ module }` only when it names a
+ * module in `ALL_MODULES`, `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both are
+ * ISO times, and `password.throttled` with `{ retryAfterSeconds }` only when it is a whole number of
+ * seconds above zero. Every other code, and any of these whose parameters fail their check, is
  * `mirror.bundle_fetch_failed`.
  */
 async function refusalFrom(response: Response): Promise<AppError> {
@@ -134,6 +136,15 @@ async function refusalFrom(response: Response): Promise<AppError> {
     isIsoTime(params.standbyAt)
   ) {
     return new AppError(code, { primaryAt: params.primaryAt, standbyAt: params.standbyAt });
+  }
+  const { retryAfterSeconds } = params;
+  if (
+    code === "password.throttled" &&
+    typeof retryAfterSeconds === "number" &&
+    Number.isSafeInteger(retryAfterSeconds) &&
+    retryAfterSeconds > 0
+  ) {
+    return new AppError(code, { retryAfterSeconds });
   }
   return new AppError("mirror.bundle_fetch_failed", {});
 }
