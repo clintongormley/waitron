@@ -14,7 +14,7 @@ would carry it once and afterwards only refer to it.
 I measured both aims before designing for them. My recommendation is **not to build the archive
 of fiscal records now**, and to do three smaller things instead:
 
-1. **Land A1533, the compressed backups** (open as PR #3245). On the 30-day sample it turns a
+1. **A1533, the compressed backups**, landed as #3245 (a4a4a425b3) while this design was reviewed. On the 30-day sample it turns a
    676.8 MB backup into 144.2 MB.
 2. **Open one new item to trim finished working rows**, the way A1532 trimmed print payloads. After
    A1532, the tables that are neither append-only (append-only means the database refuses any change
@@ -161,7 +161,7 @@ volume are the bench profile's, not a real restaurant's.
 (`size-before.json`, `size-after.json` in the A1532 receipts), and it stops print payloads growing
 with time.
 
-**A1533** is open as PR #3245. On the retained 30-day sample it measured encrypted backups falling
+**A1533** landed as #3245 (a4a4a425b3). On the retained 30-day sample it measured encrypted backups falling
 "from **676,798,984 to 144,176,735 bytes** (about 79% smaller). Capture took 13.77 → 18.27 seconds;
 data-only restore took 4.98 → 6.83 seconds" (the PR's description, read with `gh pr view 3245`). It
 chose gzip over zstd (`docs/superpowers/plans/2026-11-14-a1533-compressed-backups.md`, step 1). At
