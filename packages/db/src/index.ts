@@ -385,7 +385,6 @@ export {
 export { liveDisplayNameKey, loginEmailKey, pendingEmailKey } from "./schema/identity/persons.js";
 export { challengePurpose } from "./schema/identity/webauthn.js";
 export {
-  catalogueSettings,
   categoryDetails,
   contentSuggestionJobs,
   contentSuggestions,
@@ -405,7 +404,6 @@ export {
   sectionMembers,
   sections,
   units,
-  unitSeedStates,
 } from "./schema/index.js";
 export {
   SUGGESTION_FAILURES,

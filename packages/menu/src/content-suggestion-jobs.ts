@@ -200,7 +200,7 @@ export async function readSuggestionRun(tx: Transaction): Promise<SuggestionRunV
   const failed = run.reduce((sum, job) => sum + job.failed, 0);
   return {
     state,
-    total: first.runTotal,
+    total: first.runTotal!,
     progress: done + failed,
     done,
     failed,

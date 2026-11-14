@@ -27,16 +27,6 @@ export const units = table(
   ],
 );
 
-/** A durable marker: once present, intentionally deleted seed units are never recreated. At most one
- * row, `id` pinned to 1. */
-export const unitSeedStates = table(
-  "unit_seed_states",
-  {
-    id: count("id").primaryKey().notNull().default(1),
-  },
-  (t) => [check("unit_seed_states_singleton_ck", sql`${t.id} = 1`)],
-);
-
 export const productUnits = table(
   "product_units",
   {

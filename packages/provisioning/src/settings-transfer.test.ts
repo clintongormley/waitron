@@ -1,7 +1,7 @@
 import { configurationBundle } from "../test/configuration-bundle.js";
 import { validateConfigurationBundle } from "./configuration-transfer.js";
 import { expect, it } from "vitest";
-import { GUEST_MENU_SETTINGS } from "@waitron/menu";
+import { GUEST_MENU_SETTINGS, MENU_SETTINGS } from "@waitron/menu";
 import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, readSettings, saveSettings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -142,3 +142,76 @@ it.each([false, true])(
     ).toThrow(expect.objectContaining({ code: "setup.request_invalid" }));
   },
 );
+
+it("round-trips the saved menu document with its starter-unit history", async () => {
+  const doc = {
+    defaultProductVatClass: "zero" as const,
+    defaultColor: "#b12525",
+    starterUnitsCreated: true,
+  };
+  await withTransaction(suite.db, (tx) =>
+    saveSettings(tx, MENU_SETTINGS, { doc, expectedRevision: 0, personId: null }),
+  );
+  const exported = await exportSettingsDocuments(suite.db, ALL_MODULES);
+  expect(exported).toEqual({ menu: { version: 1, doc } });
+  await withTransaction(suite.db, (tx) => importSettingsDocuments(tx, exported, ALL_MODULES));
+  expect(await readSettings(suite.db, MENU_SETTINGS)).toEqual({ doc, revision: 1 });
+});
+it.each(["general", "reduced", "super_reduced", "zero"])(
+  "imports the %s menu VAT default",
+  (value) => {
+    const doc = { defaultProductVatClass: value, defaultColor: null, starterUnitsCreated: true };
+    expect(checkImportedSettings({ menu: { version: 1, doc } }, ALL_MODULES).get("menu")).toEqual(
+      doc,
+    );
+  },
+);
+it.each([null, undefined, "", "unknown", 10, ["reduced"]])(
+  "refuses %j as an imported menu VAT default",
+  (value) => {
+    expect(() =>
+      checkImportedSettings(
+        {
+          menu: {
+            version: 1,
+            doc: { defaultProductVatClass: value, defaultColor: null, starterUnitsCreated: true },
+          },
+        },
+        ALL_MODULES,
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "settings.menu.defaultProductVatClass" },
+      }),
+    );
+  },
+);
+it.each(["#b12525", null])("imports the menu default colour %s", (defaultColor) => {
+  const doc = { defaultProductVatClass: "general", defaultColor, starterUnitsCreated: true };
+  expect(checkImportedSettings({ menu: { version: 1, doc } }, ALL_MODULES).get("menu")).toEqual(
+    doc,
+  );
+});
+it("refuses a menu colour no save would store", () => {
+  expect(() =>
+    checkImportedSettings(
+      {
+        menu: {
+          version: 1,
+          doc: {
+            defaultProductVatClass: "general",
+            defaultColor: "#ABCDEF",
+            starterUnitsCreated: true,
+          },
+        },
+      },
+      ALL_MODULES,
+    ),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "settings.menu.defaultColor" },
+    }),
+  );
+});

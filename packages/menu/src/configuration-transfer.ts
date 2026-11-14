@@ -1,6 +1,4 @@
 import {
-  VAT_CLASSES,
-  type VatClass,
   AppError,
   type ContentLanguages,
   colorOrNull,
@@ -154,14 +152,6 @@ export function validateCatalogueConfiguration(
       throw new AppError("setup.request_invalid", { field: "units.precision" });
     }
   }
-  for (const row of tables.catalogue_settings ?? []) {
-    const value = row.default_product_vat_class;
-    if (typeof value !== "string" || !VAT_CLASSES.includes(value as VatClass))
-      throw new AppError("setup.request_invalid", {
-        field: "catalogue_settings.default_product_vat_class",
-      });
-  }
-  checkColors(tables.catalogue_settings, "catalogue_settings", "default_color");
   checkHomeDisplays(tables.menu_details);
   checkColors(tables.products, "products");
   checkColors(tables.category_details, "category_details");
@@ -213,8 +203,6 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
     { name: "category_details" },
-    { name: "catalogue_settings" },
-    { name: "unit_seed_states" },
     { name: "units" },
     { name: "product_units" },
     { name: "menu_items" },

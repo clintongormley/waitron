@@ -56,14 +56,14 @@ async function upsertSettings(
   values: Partial<CatalogueSettings>,
 ): Promise<CatalogueSettings> {
   const { doc, revision } = await readSettings(tx, MENU_SETTINGS);
-  await saveSettings(tx, MENU_SETTINGS, {
+  const saved = await saveSettings(tx, MENU_SETTINGS, {
     doc: { ...doc, ...values },
     expectedRevision: revision,
     personId: null,
   });
   return {
-    defaultProductVatClass: values.defaultProductVatClass ?? doc.defaultProductVatClass,
-    defaultColor: Object.hasOwn(values, "defaultColor") ? values.defaultColor! : doc.defaultColor,
+    defaultProductVatClass: saved.doc.defaultProductVatClass,
+    defaultColor: saved.doc.defaultColor,
   };
 }
 

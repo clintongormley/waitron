@@ -1925,11 +1925,6 @@ CREATE TABLE `product_units` (
 );
 --> statement-breakpoint
 CREATE INDEX `product_units_unit_idx` ON `product_units` (`unit_id`);--> statement-breakpoint
-CREATE TABLE `unit_seed_states` (
-	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
-	CONSTRAINT "unit_seed_states_singleton_ck" CHECK("unit_seed_states"."id" = 1)
-);
---> statement-breakpoint
 CREATE TABLE `units` (
 	`id` text PRIMARY KEY NOT NULL,
 	`seed_key` text,
@@ -2106,14 +2101,6 @@ CREATE TABLE `menu_versions` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `menu_versions_menu_number_uq` ON `menu_versions` (`menu_id`,`number`);--> statement-breakpoint
 CREATE UNIQUE INDEX `menu_versions_id_menu_key` ON `menu_versions` (`id`,`menu_id`);--> statement-breakpoint
-CREATE TABLE `catalogue_settings` (
-	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
-	`default_product_vat_class` text DEFAULT 'general' NOT NULL,
-	`default_color` text,
-	CONSTRAINT "catalogue_settings_singleton_ck" CHECK("catalogue_settings"."id" = 1),
-	CONSTRAINT "catalogue_settings_vat_class_ck" CHECK("catalogue_settings"."default_product_vat_class" in ('general', 'reduced', 'super_reduced', 'zero'))
-);
---> statement-breakpoint
 CREATE TABLE `content_suggestion_jobs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`run_id` text NOT NULL,
@@ -2125,7 +2112,7 @@ CREATE TABLE `content_suggestion_jobs` (
 	`cloud_job_id` text,
 	`body` text,
 	`sent` text NOT NULL,
-	`run_total` integer NOT NULL,
+	`run_total` integer,
 	`total` integer DEFAULT 0 NOT NULL,
 	`done` integer DEFAULT 0 NOT NULL,
 	`failed` integer DEFAULT 0 NOT NULL,
@@ -2137,6 +2124,7 @@ CREATE TABLE `content_suggestion_jobs` (
 	`opened_at` text,
 	`collect_cursor` integer,
 	`collected_refs` text DEFAULT '[]' NOT NULL,
+	CONSTRAINT "content_suggestion_jobs_run_total_ck" CHECK(("content_suggestion_jobs"."position" = 1) = ("content_suggestion_jobs"."run_total" is not null)),
 	CONSTRAINT "content_suggestion_jobs_state_ck" CHECK("content_suggestion_jobs"."state" in ('submitting', 'running', 'done', 'partly_done', 'failed', 'expired', 'refused')),
 	CONSTRAINT "content_suggestion_jobs_refusal_ck" CHECK("content_suggestion_jobs"."refusal" in ('consent', 'limit', 'job_running')),
 	CONSTRAINT "content_suggestion_jobs_failure_ck" CHECK("content_suggestion_jobs"."failure" in ('provider', 'not_connected', 'rejected', 'consent', 'limit'))

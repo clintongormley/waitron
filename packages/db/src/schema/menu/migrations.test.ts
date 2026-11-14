@@ -6,6 +6,7 @@ import {
   categoryDetails,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
+  contentSuggestionJobs,
   extraListItems,
   extraLists,
   FOREIGN_KEY_VIOLATION,
@@ -16,7 +17,6 @@ import {
   optionLabels,
   productUnits,
   sections,
-  unitSeedStates,
   units,
   categories as coreCategories,
   products,
@@ -39,12 +39,10 @@ beforeAll(() => {
 });
 
 const TABLES = [
-  "catalogue_settings",
   "menu_details",
   "menu_items",
   "category_details",
   "units",
-  "unit_seed_states",
   "product_units",
   "menu_item_variant_overrides",
   "option_lists",
@@ -176,12 +174,10 @@ describe("the catalogue tables carry no tenant column", () => {
     }
 
     expect(primaryKeys).toEqual({
-      catalogue_settings: "id",
       menu_details: "menu_id",
       menu_items: "id",
       category_details: "category_id",
       units: "id",
-      unit_seed_states: "id",
       product_units: "product_id",
       menu_item_variant_overrides: "menu_item_id, variant_id",
       option_lists: "id",
@@ -231,12 +227,9 @@ describe("the catalogue tables carry no tenant column", () => {
     });
 
     expect(checks).toEqual({
-      catalogue_settings_singleton_ck: `"catalogue_settings"."id" = 1`,
-      catalogue_settings_vat_class_ck: `"catalogue_settings"."default_product_vat_class" in ('general', 'reduced', 'super_reduced', 'zero')`,
       menu_items_gross_price_ck: `"menu_items"."gross_price" >= 0`,
       units_precision_ck: `"units"."precision" between 0 and 3`,
       units_hardware_unit_ck: `"units"."hardware_unit" in ('kg', 'g', 'mg')`,
-      unit_seed_states_singleton_ck: `"unit_seed_states"."id" = 1`,
       menu_item_variant_overrides_price_ck: `"menu_item_variant_overrides"."price" >= 0`,
       menu_item_variant_overrides_overrides_ck: `"menu_item_variant_overrides"."price" is not null`,
       extra_lists_picks_ck: `"extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or "extra_lists"."max_picks" >= "extra_lists"."min_picks")`,
@@ -353,17 +346,6 @@ describe("core's set keeps no variant table of its own", () => {
       )
     ).rows.map((row) => row.name);
     expect(left).toEqual([]);
-  });
-});
-
-describe("the one-row catalogue tables hold at most one row", () => {
-  it("refuses a second unit-seed marker", async () => {
-    await db.insert(unitSeedStates).values({ id: 1 });
-    const second = await captureError(() => db.insert(unitSeedStates).values({ id: 2 }));
-    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(second)).toContain("unit_seed_states_singleton_ck");
-    const duplicate = await captureError(() => db.insert(unitSeedStates).values({ id: 1 }));
-    expect(isRefusal(duplicate, UNIQUE_VIOLATION)).toBe(true);
   });
 });
 
@@ -662,4 +644,29 @@ it("has no offered column on either table, and no retired item active column", a
     "price",
   ]);
   expect(items).not.toContain("active");
+});
+
+describe("a suggestion run total belongs only to its first batch", () => {
+  it.each([
+    [1, null],
+    [2, 5],
+  ])("refuses position %s with total %s", async (position, runTotal) => {
+    const error = await captureError(() =>
+      db
+        .insert(contentSuggestionJobs)
+        .values({ runId: crypto.randomUUID(), position, runTotal, state: "submitting", sent: {} }),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("content_suggestion_jobs_run_total_ck");
+  });
+  it.each([
+    [1, 5],
+    [2, null],
+  ])("accepts position %s with total %s", async (position, runTotal) => {
+    const [row] = await db
+      .insert(contentSuggestionJobs)
+      .values({ runId: crypto.randomUUID(), position, runTotal, state: "submitting", sent: {} })
+      .returning();
+    expect(row).toMatchObject({ position, runTotal });
+  });
 });

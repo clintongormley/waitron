@@ -145,3 +145,36 @@ export function madridWithDocument(
   );
   return result;
 }
+
+export function madridWithMenuSettings(
+  original: CanonicalMadridSemantics,
+  updatedAt: string,
+): CanonicalMadridSemantics {
+  const defaults = original.tables.catalogue_settings;
+  const marker = original.tables.unit_seed_states;
+  if (defaults === undefined || marker === undefined)
+    throw new Error("Madrid menu settings source is missing");
+  const markers = Object.values(marker.rows);
+  if (markers.length !== Object.keys(defaults.rows).length || markers.length > 1)
+    throw new Error("Madrid menu settings source rows differ");
+  const result = madridWithDocument(
+    original,
+    "catalogue_settings",
+    {
+      default_product_vat_class: "defaultProductVatClass",
+      default_color: "defaultColor",
+    },
+    {
+      module: "menu",
+      version: 1,
+      revision: 1,
+      updatedAt,
+      updatedBy: null,
+      mode: "row",
+      defaults: { starterUnitsCreated: markers.length === 1 },
+    },
+  );
+  delete result.tables.catalogue_settings;
+  delete result.tables.unit_seed_states;
+  return result;
+}

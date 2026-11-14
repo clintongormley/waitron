@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  catalogueSettings,
   catalogues,
+  units,
   contentSuggestionJobs,
   mediaImages,
   menuPublications,
@@ -166,8 +166,22 @@ describe("catalogue backup evidence", () => {
     expect((await run()).status).toBe("invalid");
   });
   it("compares current configuration too", async () => {
-    await original.db.insert(catalogueSettings).values({ id: 1, defaultColor: "warm" });
-    await restored.db.insert(catalogueSettings).values({ id: 1, defaultColor: "cool" });
+    await original.db.insert(units).values({
+      id: person,
+      staffName: "Before",
+      staffAbbreviation: "g",
+      name: {},
+      abbreviation: {},
+      precision: 0,
+    });
+    await restored.db.insert(units).values({
+      id: person,
+      staffName: "After",
+      staffAbbreviation: "g",
+      name: {},
+      abbreviation: {},
+      precision: 0,
+    });
     expect((await run()).status).toBe("invalid");
   });
   it.each([
@@ -239,7 +253,13 @@ describe("catalogue backup evidence", () => {
     await corrupt(restored, "delete from menu_version_images");
     await corrupt(restored, "delete from menu_versions");
     expect(await run(true)).toEqual(passed);
-    await restored.db.insert(catalogueSettings).values({ id: 1 });
+    await restored.db.insert(units).values({
+      staffName: "Invented",
+      staffAbbreviation: "g",
+      name: {},
+      abbreviation: {},
+      precision: 0,
+    });
     expect((await run(true)).status).toBe("invalid");
   });
   it("declares all tables without secrets entries or effects", () => {

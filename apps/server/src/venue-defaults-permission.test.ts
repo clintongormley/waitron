@@ -61,7 +61,7 @@ const suite = useVenueDb({
 
 beforeEach(async () => {
   gate.withheld = null;
-  await suite.db.execute(sql`delete from catalogue_settings`);
+  await suite.db.execute(sql`delete from settings where module = 'menu'`);
 });
 
 function app() {
@@ -85,7 +85,7 @@ const write = (cookie: string) =>
   });
 async function storedVatClass(): Promise<string | null> {
   const { rows } = await suite.db.execute<{ default_product_vat_class: string }>(
-    sql`select default_product_vat_class from catalogue_settings where id = 1`,
+    sql`select json_extract(doc, '$.defaultProductVatClass') as default_product_vat_class from settings where module = 'menu'`,
   );
   return rows[0]?.default_product_vat_class ?? null;
 }

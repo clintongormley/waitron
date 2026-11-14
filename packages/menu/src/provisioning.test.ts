@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   catalogues,
   CORE_MIGRATIONS,
+  readSettings,
   menuDetails,
   sections,
   tenants,
@@ -16,7 +17,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
 import { CATALOGUE_PROVISIONING, FIRST_MENU_NAME } from "./provisioning.js";
-import { readCatalogueSettings, saveCatalogueDefaultColor } from "./settings.js";
+import {
+  MENU_SETTINGS,
+  readCatalogueSettings,
+  saveCatalogueSettings,
+  saveCatalogueDefaultColor,
+} from "./settings.js";
+import { racePair } from "../test/fixtures.js";
 import { getSeededUnit } from "./units.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
 import { readDefaultCatalogueId } from "./operations.js";
@@ -83,28 +90,18 @@ describe("catalogue provisioning", () => {
   ])("seeds the new-product VAT default for %s as %s", async (country, expected) => {
     const node = await venue(country, "Madrid", "es-ES");
     await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
-    const names = await suite.db.execute<{ name: string }>(sql`
-      select name from sqlite_master where type = 'table' and name = 'catalogue_settings'`);
-    expect(names.rows).toEqual([{ name: "catalogue_settings" }]);
-    const stored = await suite.db.execute<{ default_product_vat_class: string }>(sql`
-      select default_product_vat_class from catalogue_settings where id = 1`);
-    expect(stored.rows).toEqual([{ default_product_vat_class: expected }]);
+    expect((await readSettings(suite.db, MENU_SETTINGS)).doc.defaultProductVatClass).toBe(expected);
   });
 
   it("preserves an authored VAT default when another node is seeded", async () => {
     const node = await venue("ES", "Madrid", "es-ES");
     const run = () => withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
     await run();
-    const names = await suite.db.execute<{ name: string }>(sql`
-      select name from sqlite_master where type = 'table' and name = 'catalogue_settings'`);
-    expect(names.rows).toEqual([{ name: "catalogue_settings" }]);
-    await suite.db.execute(
-      sql`update catalogue_settings set default_product_vat_class = 'zero' where id = 1`,
+    await withTransaction(suite.db, (tx) =>
+      saveCatalogueSettings(tx, { defaultProductVatClass: "zero" }),
     );
     await run();
-    const stored = await suite.db.execute<{ default_product_vat_class: string }>(sql`
-      select default_product_vat_class from catalogue_settings where id = 1`);
-    expect(stored.rows).toEqual([{ default_product_vat_class: "zero" }]);
+    expect((await readSettings(suite.db, MENU_SETTINGS)).doc.defaultProductVatClass).toBe("zero");
   });
 
   it("seeds the All products default colour as pale blue", async () => {
@@ -386,3 +383,28 @@ it.each(STARTER_VENUES)(
     ]);
   },
 );
+
+it("saves the pack defaults and starter-unit history only once", async () => {
+  const node = await venue("ES", "Madrid", "es-ES");
+  const run = () => withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+  await run();
+  expect(await readSettings(suite.db, MENU_SETTINGS)).toEqual({
+    revision: 1,
+    doc: {
+      defaultProductVatClass: "reduced",
+      defaultColor: "#abcced",
+      starterUnitsCreated: true,
+    },
+  });
+  await run();
+  expect((await readSettings(suite.db, MENU_SETTINGS)).revision).toBe(1);
+});
+it("creates the starter units once, even when two seeds race", async () => {
+  const node = await venue("ES", "Madrid", "es-ES");
+  const seed = (tx: import("@waitron/db").Transaction) =>
+    CATALOGUE_PROVISIONING.seed!.run(tx, node);
+  const results = await racePair(suite.db, seed, seed);
+  expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+  expect(await storedUnits()).toHaveLength(5);
+  expect((await readSettings(suite.db, MENU_SETTINGS)).revision).toBe(1);
+});

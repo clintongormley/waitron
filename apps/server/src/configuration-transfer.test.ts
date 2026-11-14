@@ -1,7 +1,7 @@
 import type { TradingContext } from "./trading-context.js";
 import { dirname, join } from "node:path";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { roles, personRoles } from "@waitron/db";
+import { roles, personRoles, readSettings } from "@waitron/db";
 import { listAdminHolders, readPersonAuthority } from "@waitron/identity";
 import { STARTER_PROFILE_NAMES } from "@waitron/provisioning";
 import { personStaffRoles, staffRoles } from "@waitron/db";
@@ -123,7 +123,13 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
-import { categoryDetails, units, unitSeedStates } from "@waitron/menu";
+import {
+  categoryDetails,
+  units,
+  MENU_SETTINGS,
+  saveCatalogueSettings,
+  saveCatalogueDefaultColor,
+} from "@waitron/menu";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
 import { convenioConfig, resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { bookings } from "@waitron/bookings";
@@ -403,7 +409,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 30,
+  version: 31,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -1195,8 +1201,8 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await suite.db.execute(
-      sql`update catalogue_settings set default_product_vat_class = 'zero' where id = 1`,
+    await withTransaction(suite.db, (tx) =>
+      saveCatalogueSettings(tx, { defaultProductVatClass: "zero" }),
     );
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
@@ -1209,17 +1215,20 @@ describe("configuration transfer database path", () => {
       new Date("2026-10-05T12:00:00Z"),
       versions,
     );
-    expect(transferred.tables.catalogue_settings).toEqual([
-      { id: 1, default_product_vat_class: "zero", default_color: "#abcced" },
-    ]);
+    expect(transferred.settings.menu).toEqual({
+      version: 1,
+      doc: { defaultProductVatClass: "zero", defaultColor: "#abcced", starterUnitsCreated: true },
+    });
     await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
-    expect((await targetSuite.db.execute(sql`select * from catalogue_settings`)).rows).toEqual([
-      { id: 1, default_product_vat_class: "zero", default_color: "#abcced" },
-    ]);
+    expect((await readSettings(targetSuite.db, MENU_SETTINGS)).doc).toEqual({
+      defaultProductVatClass: "zero",
+      defaultColor: "#abcced",
+      starterUnitsCreated: true,
+    });
   });
 
   it("carries the venue's default colour through export and import", async () => {
@@ -1227,9 +1236,7 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await suite.db.execute(
-      sql`update catalogue_settings set default_color = '#b12525' where id = 1`,
-    );
+    await withTransaction(suite.db, (tx) => saveCatalogueDefaultColor(tx, "#b12525"));
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -1246,9 +1253,7 @@ describe("configuration transfer database path", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
-    expect(
-      (await targetSuite.db.execute(sql`select default_color from catalogue_settings`)).rows,
-    ).toEqual([{ default_color: "#b12525" }]);
+    expect((await readSettings(targetSuite.db, MENU_SETTINGS)).doc.defaultColor).toBe("#b12525");
   });
 
   it("carries a category's colour and a product's own colour", async () => {
@@ -5470,7 +5475,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(30);
+  expect(exported.version).toBe(31);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -7951,7 +7956,7 @@ it("round-trips explicit unit staff identity, empty and disabled translations an
     .set({ staffName: "Mass", staffAbbreviation: "M", name: { de: "Gewicht" }, abbreviation: {} })
     .where(eq(units.seedKey, "kg"));
   const original = await suite.db.select().from(units).orderBy(units.seedKey);
-  const marker = await suite.db.select().from(unitSeedStates);
+  const marker = (await readSettings(suite.db, MENU_SETTINGS)).doc.starterUnitsCreated;
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const bundle = await buildConfigurationBundle(
     suite.db,
@@ -7983,7 +7988,9 @@ it("round-trips explicit unit staff identity, empty and disabled translations an
   expect(imported.every((row) => !original.some((sourceRow) => sourceRow.id === row.id))).toBe(
     true,
   );
-  expect(await targetSuite.db.select().from(unitSeedStates)).toEqual(marker);
+  expect((await readSettings(targetSuite.db, MENU_SETTINGS)).doc.starterUnitsCreated).toEqual(
+    marker,
+  );
 });
 
 describe("A773 pass display policy", () => {

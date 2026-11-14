@@ -1,3 +1,4 @@
+import * as documents from "./madrid-documents.js";
 import { expect, it } from "vitest";
 import { madridWithDocument } from "./madrid-documents.js";
 import { stable, type CanonicalMadridSemantics } from "./madrid-semantics.js";
@@ -225,5 +226,49 @@ it("moves the captured default menu reference to a flag, keeping all menu rows a
   });
   expect(result.tables.locations).toEqual(original.tables.locations);
   expect(result.tables.settings).toBeUndefined();
+  expect(captured).toEqual(before);
+});
+
+it("moves both captured menu settings rows and keeps the capture", () => {
+  const captured: CanonicalMadridSemantics = {
+    tables: {
+      catalogue_settings: {
+        columns: [],
+        foreignKeys: [],
+        rows: { one: { id: 1, default_product_vat_class: "reduced", default_color: "#abcced" } },
+      },
+      unit_seed_states: { columns: [], foreignKeys: [], rows: { one: { id: 1 } } },
+    },
+  };
+  const before = structuredClone(captured);
+  expect(
+    documents.madridWithMenuSettings(captured, metadata.updatedAt).tables.settings?.rows,
+  ).toEqual({
+    [stable({
+      module: "menu",
+      version: 1,
+      revision: 1,
+      doc: {
+        defaultProductVatClass: "reduced",
+        defaultColor: "#abcced",
+        starterUnitsCreated: true,
+      },
+      updated_at: metadata.updatedAt,
+      updated_by: null,
+    })]: {
+      module: "menu",
+      version: 1,
+      revision: 1,
+      doc: {
+        defaultProductVatClass: "reduced",
+        defaultColor: "#abcced",
+        starterUnitsCreated: true,
+      },
+      updated_at: metadata.updatedAt,
+      updated_by: null,
+    },
+  });
+  const result = documents.madridWithMenuSettings(captured, metadata.updatedAt);
+  expect(Object.keys(result.tables)).toEqual(["settings"]);
   expect(captured).toEqual(before);
 });

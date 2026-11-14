@@ -170,7 +170,7 @@ it.each([
   [{ ...menuDoc, starterUnitsCreated: 1 }, "starterUnitsCreated"],
   [{ ...menuDoc, x: true }, "x"],
 ])("names the bad menu document field in %j", (doc, field) => {
-  expect(catalogue.MENU_SETTINGS?.parse(doc)).toEqual({ ok: false, field });
+  expect(catalogue.MENU_SETTINGS.parse(doc)).toEqual({ ok: false, field });
 });
 it("accepts a complete menu document", () => {
   const doc = {
@@ -178,5 +178,5 @@ it("accepts a complete menu document", () => {
     defaultColor: "#abcdef",
     starterUnitsCreated: true,
   };
-  expect(catalogue.MENU_SETTINGS?.parse(doc)).toEqual({ ok: true, doc });
+  expect(catalogue.MENU_SETTINGS.parse(doc)).toEqual({ ok: true, doc });
 });

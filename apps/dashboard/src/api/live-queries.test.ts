@@ -233,7 +233,7 @@ it.each([
   ["listServers", [], "nodes"],
   ["getReceiptLanguage", [], "settings.business_day"],
   ["getVenueDefaults", [], "settings.business_day"],
-  ["getVenueDefaults", [], "catalogue_settings"],
+  ["getVenueDefaults", [], "settings.menu"],
   ["getVenuePrivacy", [], "tenants"],
   ["getGoogleConfig", [], "tenants"],
   ["getFloorPlan", ["s1", "z1"], "floor_plans"],
@@ -619,7 +619,7 @@ it.each(["getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
     try {
       await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
       const before = fetchImpl.mock.calls.length;
-      api.liveData.invalidate([{ type: "catalogue_settings", id: "1" }]);
+      api.liveData.invalidate([{ type: "settings.menu", id: "1" }]);
       await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(before + 1));
     } finally {
       observed.unsubscribe();
@@ -793,7 +793,7 @@ it("subscribes catalogue defaults to their stored settings", async () => {
     async () => new Response('{"defaultProductVatClass":"reduced"}'),
   );
   const query = dashboardQuery(api, "getCatalogueSettings", []);
-  expect(query.dependencies).toEqual([{ type: "catalogue_settings" }]);
+  expect(query.dependencies).toEqual([{ type: "settings.menu" }]);
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced" });
 });
 
@@ -802,7 +802,7 @@ it("subscribes the venue defaults to the clock document, venue document and cata
   expect(dashboardQuery(api, "getVenueDefaults", []).dependencies).toEqual([
     { type: "settings.business_day" },
     { type: "settings.venue" },
-    { type: "catalogue_settings" },
+    { type: "settings.menu" },
   ]);
 });
 

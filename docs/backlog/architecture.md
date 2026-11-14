@@ -961,8 +961,9 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   S23 builds no `venue_settings`, because the venue's settings become documents in the shared
   `settings` table. It also renames every leftover "tenant" name: the `tenants` table becomes
   `taxpayer`, and names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
-  Menu code uses `@waitron/menu` and menu/product file paths; its tables, identifiers, routes
-  and visible wording still await the menu slices that follow the path rename.
+  Menu code uses `@waitron/menu` and menu/product file paths. Product defaults and starter-unit
+  history share `settings.menu`; translation runs store their total on the first batch only.
+  The remaining menu tables, identifiers, routes and visible wording await the following slices.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 

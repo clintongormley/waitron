@@ -263,7 +263,6 @@ export async function storeSuggestionPage(
       state: "submitting",
       body: next.body,
       sent: next.sent,
-      runTotal,
       createdAt: now.toISOString(),
     });
   await tx
