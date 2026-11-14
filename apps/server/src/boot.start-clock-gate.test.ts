@@ -1,5 +1,6 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -126,10 +127,7 @@ async function tradingEnv(): Promise<Record<string, string>> {
   scratches.push(scratch);
   const migrationsRoot = join(scratch, "migrations");
   await copyMigrationsRoot(migrationsRoot);
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const [port] = await freePorts(1);
   return {

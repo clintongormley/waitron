@@ -393,37 +393,12 @@ describe("strict backup compatibility", () => {
       await expect(run()).resolves.toBe("unsupported");
     },
   );
-  it("checks positive-schema inactive owners", async () => {
-    setEntry("secrets/modules.json", JSON.stringify({ modules: { extra: false } }));
+  it("checks positive-schema owners", async () => {
     await expect(run()).resolves.toBe("passed");
     execute("update __drizzle_migrations_extra set hash='bad'");
     await expect(run()).resolves.toBe("unsupported");
   });
-  it.each([
-    "unknown",
-    "target only",
-    "wrong type",
-    "mandatory",
-    "malformed",
-    "extra key",
-    "missing map",
-  ])("reconciles modules.json: %s", async (mode) => {
-    const values: Record<string, unknown> = {
-      unknown: { modules: { ghost: false } },
-      "target only": { modules: { future: false } },
-      "wrong type": { modules: { extra: 0 } },
-      mandatory: { modules: { core: false } },
-      malformed: null,
-      "extra key": { modules: {}, extra: true },
-      "missing map": {},
-    };
-    if (mode === "target only") {
-      modules.push(module("future", ["future_data"]));
-      bindTarget();
-    }
-    setEntry("secrets/modules.json", mode === "malformed" ? "{" : JSON.stringify(values[mode]));
-    await expect(run()).resolves.toBe("unsupported");
-  });
+
   it("accepts zero only with absent owner tables and material; shared host keys are not owner evidence", async () => {
     modules.push(module("future", ["future_data"]));
     modules[2] = {
@@ -644,20 +619,7 @@ describe("strict backup compatibility", () => {
     };
     await expect(run()).resolves.toBe(mode === "version" ? "unsupported" : "invalid");
   });
-  it.each([
-    "null",
-    "[]",
-    "true",
-    '{"other":{}}',
-    '{"modules":null}',
-    '{"modules":[]}',
-    '{"modules":true}',
-    '{"modules":{"extra":false,"extra":true}}',
-    '{"modules":{},"modules":{}}',
-  ])("refuses ambiguous module configuration %s", async (raw) => {
-    setEntry("secrets/modules.json", raw);
-    await expect(run()).resolves.toBe("unsupported");
-  });
+
   it("accepts optional host configuration and scoped optional owner evidence", async () => {
     const name = "secrets/module-evidence/extra/history.json";
     modules[1] = {
@@ -668,7 +630,7 @@ describe("strict backup compatibility", () => {
       },
     };
     bindTarget();
-    setEntry("secrets/modules.json", '{"modules":{"extra":true}}');
+
     setEntry("secrets/backup.env", "");
     await expect(run()).resolves.toBe("passed");
     entries.push(entry(name, "{}"));
@@ -801,26 +763,10 @@ describe("a module whose tables live in another module's set", () => {
     await expect(run()).resolves.toBe("unsupported");
   });
 
-  it.each([true, false])("accepts a modules.json that sets it to %s", async (enabled) => {
+  it("requires every declared hosted table", async () => {
     addHostedModule();
     bindTarget();
-    execute("create table shifts (id text)");
-    setEntry("secrets/modules.json", JSON.stringify({ modules: { hosted: enabled } }));
-    await expect(run()).resolves.toBe("passed");
-  });
 
-  it("still covers its tables when modules.json switches it off", async () => {
-    addHostedModule();
-    bindTarget();
-    setEntry("secrets/modules.json", JSON.stringify({ modules: { hosted: false } }));
     await expect(run()).resolves.toBe("invalid");
-  });
-
-  it("still refuses an override naming a module nobody supplied", async () => {
-    addHostedModule();
-    bindTarget();
-    execute("create table shifts (id text)");
-    setEntry("secrets/modules.json", JSON.stringify({ modules: { ghost: true } }));
-    await expect(run()).resolves.toBe("unsupported");
   });
 });

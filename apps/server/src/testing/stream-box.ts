@@ -1,3 +1,6 @@
+import { parseModuleConfig } from "@waitron/module";
+import { ALL_MODULES } from "../modules.js";
+import { writeModuleConfig } from "../module-config.js";
 // A box provisioned the way a setup boot leaves one, for the in-process scenarios that start a real
 // server on it: the stream loop (`stream-loop-scenario.ts`) and the spare join
 // (`spare-join-scenario.ts`).
@@ -77,7 +80,7 @@ export interface StreamBox {
 
 /**
  * Secrets and TLS in the state folder, a migrated and provisioned venue, a node key and a term-0
- * membership document naming `advertisedOrigin`; `modulesJson` is written as `modules.json`, and
+ * membership document naming `advertisedOrigin`; `modulesJson` supplies its database selection and
  * must agree with `venue`'s modules. With `streaming`, `switchOnStreaming` too.
  */
 export async function provisionStreamBox(options: {
@@ -128,6 +131,11 @@ export async function provisionStreamBox(options: {
       publicKey: row!.publicKey!,
       nodeSecret,
     };
+    await writeModuleConfig(
+      seeding.venue,
+      parseModuleConfig(options.modulesJson, ALL_MODULES),
+      null,
+    );
   } finally {
     await seeding.close();
   }
@@ -138,7 +146,6 @@ export async function provisionStreamBox(options: {
       WAITRON_ENV: "preproduction",
     }),
   );
-  await writeFile(join(dirs.state, "modules.json"), JSON.stringify(options.modulesJson));
   if (options.streaming !== undefined)
     await switchOnStreaming(dirs, box.locationId, options.streaming);
   return box;

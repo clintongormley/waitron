@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readVenue } from "@waitron/db";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -193,10 +194,7 @@ async function bootServer(
       recursive: true,
     });
   }
-  await writeFile(
-    join(booted.scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const env = {
     WAITRON_HTTP_LANDING_PORT: "0",

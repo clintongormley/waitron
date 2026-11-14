@@ -37,7 +37,11 @@ it("a trading boot without a fiscal description field accepts a department's emp
   try {
     const state = join(scratch, "state");
     await mkdir(state);
-    await writeModuleConfig(state, venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat"));
+    await writeModuleConfig(
+      suite.db,
+      venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat"),
+      null,
+    );
     const sets = manifestSets();
     const options = migrationOptionsFor(sets, null);
     for (const [index, set] of sets.entries())

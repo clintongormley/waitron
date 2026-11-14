@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -144,10 +145,7 @@ async function startEnv(scratch: string) {
       recursive: true,
     });
   }
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const venueDir = dirname(database);
   const env = {

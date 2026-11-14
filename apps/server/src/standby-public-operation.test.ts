@@ -37,7 +37,10 @@ import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { TOTP_KEY_RING, enrolAuthenticator, wrongTotpCode } from "./testing/authenticator.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
-vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
+vi.mock("./modules.js", async () => {
+  const { modulesSettings } = await import("@waitron/module");
+  return { ALL_MODULES: modules, MODULES_SETTINGS: modulesSettings(modules) };
+});
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });

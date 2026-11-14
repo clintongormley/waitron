@@ -1,7 +1,6 @@
 import { getCountryPack } from "@waitron/country-packs";
 import { enabledModules, parseModuleConfig, type WaitronModule } from "@waitron/module";
 import { expectedSchemaVersion } from "@waitron/migrations";
-import type { ArchiveEntry } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 
 export interface RecoveryFiscalSelection {
@@ -14,7 +13,7 @@ export interface RecoveryFiscalSelection {
 export function recoveryFiscalSelection(
   venue: Omit<RecoveryFiscalSelection, "module">,
   manifest: BackupManifest,
-  entries: readonly ArchiveEntry[],
+  savedConfig: unknown,
   modules: readonly WaitronModule[],
   migrationsRoot: string | null,
   recordedVersions: Readonly<Record<string, number>>,
@@ -29,14 +28,11 @@ export function recoveryFiscalSelection(
     jurisdiction.modules === undefined
   )
     return;
-  const saved = entries.find((entry) => entry.name === "secrets/modules.json");
-  if (saved === undefined) return;
   let selected: WaitronModule[];
   try {
-    selected = enabledModules(
-      modules,
-      parseModuleConfig(JSON.parse(Buffer.from(saved.bytes).toString("utf8")), modules),
-    ).filter((module) => module.fiscal !== undefined);
+    selected = enabledModules(modules, parseModuleConfig(savedConfig, modules)).filter(
+      (module) => module.fiscal !== undefined,
+    );
   } catch {
     return;
   }

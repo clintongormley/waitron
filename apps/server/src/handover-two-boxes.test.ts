@@ -85,8 +85,8 @@ afterEach(async () => {
  * the taxpayer and the chart its first copy will bring (A947 3b's Task 6.3).
  */
 async function joined() {
-  await writeModuleConfig(mainState, { overrides: new Map([["fiscal-verifactu", false]]) });
-  const moduleConfig = await readModuleConfig(mainState);
+  await writeModuleConfig(mainBox.db, { overrides: new Map([["fiscal-verifactu", false]]) }, null);
+  const moduleConfig = await readModuleConfig(mainBox.db);
   const modules = enabledModules(ALL_MODULES, moduleConfig);
   const venue = await applyAllocatedTestVenue(
     planVenue(
@@ -197,7 +197,7 @@ async function joined() {
       },
       persistBackupSettings: (settings) => replaceBackupSettings(spareState, settings),
       persistModuleConfig: async (config) => {
-        await writeModuleConfig(spareState, config);
+        await writeModuleConfig(spareBox.db, config, null);
       },
       stateDir: spareState,
       database: "spare",
@@ -333,7 +333,7 @@ async function joined() {
         ring: RING,
         nodeId: spareId,
         stateDir: spareState,
-        modules: enabledModules(ALL_MODULES, await readModuleConfig(spareState)),
+        modules: enabledModules(ALL_MODULES, await readModuleConfig(spareBox.db)),
         migrationsRoot: null,
       },
       (await readHandoverOperation(spareBox.node, spareId, OP))!,

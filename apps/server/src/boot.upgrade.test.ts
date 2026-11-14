@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Socket } from "node:net";
@@ -95,10 +96,7 @@ describe("contained upgrade data checks", () => {
     await mkdir(venueDir);
     await source.db.archiveTo(join(venueDir, "venue.db"));
     await source.node.archiveTo(join(venueDir, "node.db"));
-    await writeFile(
-      join(root, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(venueDir, { "fiscal-none": false });
     const env = {
       ...TEST_PRODUCER,
       WAITRON_STATE_DIR: root,

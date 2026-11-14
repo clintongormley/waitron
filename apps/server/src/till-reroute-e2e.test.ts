@@ -1,7 +1,8 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { eq } from "drizzle-orm";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -125,14 +126,11 @@ const FIXTURE = JSON.parse(
   readFileSync(new URL("../../till/src/api/__fixtures__/node-probe.json", import.meta.url), "utf8"),
 ) as { aPrimary: NodeProbeBody; bStandby: NodeProbeBody; bPrimary: NodeProbeBody };
 
-// The credentials key + media/state dirs a trading boot requires, and a `modules.json` resolving the
+// The credentials key + media/state dirs a trading boot requires, and a the module settings row resolving the
 // two-member fiscal slot to Veri*Factu (else the default-on both-enabled set refuses
 // `module.fiscal_slot_ambiguous`), under this suite's own temp root.
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-reroute-e2e-state-"));
-writeFileSync(
-  join(STATE_ROOT, "modules.json"),
-  JSON.stringify({ modules: { "fiscal-none": false } }),
-);
+
 const KEY_ENV = {
   // Keep the plain-HTTP landing listener (default port 80) OUT of every boot test — 80 is
   // privileged, and a root CI container would otherwise stand up a live service on it.
@@ -159,6 +157,7 @@ let migrationsRoot: string;
  * `hashDeviceToken(DEVICE_TOKEN)`, so the `waitron_device=<id>.<token>` cookie built above authenticates
  * against this row on whichever node holds it. */
 async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
+  await seedModuleSettings(db, { "fiscal-none": false });
   beforeServerStarts();
   // Every conflict target is the primary key: each row here is keyed by the id it supplies, and an
   // untargeted form absorbs EVERY unique conflict rather than the one the caller means.

@@ -47,7 +47,11 @@ it.each(["ES-common", "GB-vat"])(
     try {
       const state = join(scratch, "state");
       await mkdir(state);
-      await writeModuleConfig(state, venueModuleConfig(parseModuleConfig({}, ALL_MODULES), pack));
+      await writeModuleConfig(
+        suite.db,
+        venueModuleConfig(parseModuleConfig({}, ALL_MODULES), pack),
+        null,
+      );
       const sets = manifestSets();
       const options = migrationOptionsFor(sets, null);
       for (const [index, set] of sets.entries())

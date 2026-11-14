@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 // Needs a filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_ROOT/from-spare names, or on
 // macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). CI's mount and the
 // macOS image are 48 MiB, so the venue, the 6 MiB spare and the 21.5 MiB of free room two cases
@@ -96,13 +97,10 @@ async function placeBox(small: SmallDisk, name: string): Promise<Box> {
   const venueDir = join(stateDir, "venue");
   mkdirSync(venueDir);
   mkdirSync(join(stateDir, "logs"));
-  writeFileSync(
-    join(stateDir, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
   await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(venueDir);
   const venue = await setupVenue(store.venue);
+  await seedModuleSettings(store.venue, { "fiscal-none": false });
   await store.close();
   await writeRecoveryState(stateDir, FRESH);
   const [port] = await freePorts(1);

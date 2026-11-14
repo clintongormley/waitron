@@ -2237,10 +2237,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `apps/server/src/payments-api.ts`), and an adoption running at the same time is not told.
   Believed to predate A435 step 3 (#1520); not reproduced.
 
-- **`modules.json` has no flow-down channel** from a primary to its standby (matters under
-  _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
-  load-bearing (identity, payments) fails boot loudly if disabled until the wiring inversion.
-  [Detail](backlog/architecture.md#modulesjson-has-no-flow-down-channel-from-a-primary-to-its-standby)
 
 - **Country-pack follow-ons:** the authenticated address relay and its first provider adapter; phone
   normalisation in bookings; a supplier country/identifier scheme before validating purchasing tax

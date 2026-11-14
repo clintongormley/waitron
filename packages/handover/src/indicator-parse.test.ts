@@ -33,8 +33,8 @@ function valid(): FinalStateIndicator {
       { item: "node_mode", where: "node.db", class: "destination-owned", treatment: "own" },
       { item: "backup.env", where: "state", class: "transferred", treatment: "x", sha256: null },
       {
-        item: "modules.json",
-        where: "state",
+        item: "settings:modules",
+        where: "venue.db",
         class: "transferred",
         treatment: "x",
         sha256: "d".repeat(64),
@@ -197,8 +197,8 @@ const CASES: readonly [string, string, (body: Mutable) => void][] = [
   ],
   [
     "a settings digest that is a number",
-    "nodeLocal.modules.json.sha256",
-    (b) => (rowNamed(b, "modules.json").sha256 = 1),
+    "nodeLocal.settings:modules.sha256",
+    (b) => (rowNamed(b, "settings:modules").sha256 = 1),
   ],
   [
     "a ring listing that is no list",
@@ -232,9 +232,9 @@ const CASES: readonly [string, string, (body: Mutable) => void][] = [
     (b) => delete rowNamed(b, "backup.env").sha256,
   ],
   [
-    "no digest key for modules.json",
-    "nodeLocal.modules.json.sha256",
-    (b) => delete rowNamed(b, "modules.json").sha256,
+    "no digest key for settings:modules",
+    "nodeLocal.settings:modules.sha256",
+    (b) => delete rowNamed(b, "settings:modules").sha256,
   ],
   [
     "no ring listing",
@@ -310,7 +310,7 @@ describe("parseIndicator", () => {
       b.snapshot.schema = [{ ...b.snapshot.schema[0], version: 0 }];
       b.snapshot.modules = [];
       b.modulesSummary = {};
-      rowNamed(b, "modules.json").sha256 = null;
+      rowNamed(b, "settings:modules").sha256 = null;
       rowNamed(b, "module-preparation-state.json").revisions = [];
     }) as FinalStateIndicator;
     const signed = JSON.parse(JSON.stringify(signIndicator(body, m1))) as { body: unknown };

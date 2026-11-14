@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { appendFile, cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -945,12 +946,8 @@ describe("a venue with workforce-es on and off", () => {
   ] as const)(
     "the full verifier accepts the backup with workforce-es %s",
     async (_, venue, config) => {
+      if (config !== undefined) await seedModuleSettings(venue.db, config.modules);
       const f = await fixture({ db: venue.db, node: venue.node, modules: withStaffing });
-      if (config !== undefined)
-        f.entries.push({
-          name: "secrets/modules.json",
-          bytes: Buffer.from(JSON.stringify(config)),
-        });
       await seal(f);
       const result = await verify(f);
       expect(result.status).toBe("passed");

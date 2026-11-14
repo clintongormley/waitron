@@ -1,7 +1,8 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { Socket } from "node:net";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { TLSSocket } from "node:tls";
@@ -1000,10 +1001,7 @@ describe("the handover's preparation route", () => {
       });
     const stateDir = join(root, "state");
     await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { [MODULE]: true, "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { [MODULE]: true, "fiscal-none": false });
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     const [port] = await freePorts(1);
     let server: StartedServer | undefined;

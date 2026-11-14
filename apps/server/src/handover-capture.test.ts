@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -480,15 +481,15 @@ describe("capturing a stepped-down box's final copy", () => {
   it("carries the own-state manifest read from this box's state folder", async () => {
     const self = await steppedDown();
     const off = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
-    await writeFile(join(stateDir, "modules.json"), JSON.stringify({ modules: { [off]: false } }));
+    await seedModuleSettings(suite.db, { [off]: false });
     const envelope = await captureFinalCopy(deps(self), OP);
     expect(envelope.body.nodeLocal).toEqual(
-      [...(await buildNodeLocalManifest(stateDir, RING))].sort((a, b) =>
+      [...(await buildNodeLocalManifest(stateDir, RING, suite.db))].sort((a, b) =>
         `${a.where}/${a.item}` < `${b.where}/${b.item}` ? -1 : 1,
       ),
     );
     const modulesFile = envelope.body.nodeLocal.find(
-      (row) => row.where === "state" && row.item === "modules.json",
+      (row) => row.where === "venue.db" && row.item === "settings:modules",
     );
     expect(modulesFile?.sha256).toBe(sha256Hex(canonicalize({ [off]: false })));
   });

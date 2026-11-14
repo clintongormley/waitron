@@ -150,7 +150,6 @@ async function halfAdoptedBox(joined = false): Promise<{
   }
   await mkdir(join(venueDir, ".venue.db-litestream"));
   await writeFile(join(venueDir, ".venue.db-litestream", "generation"), "g");
-  await writeFile(join(stateDir, "modules.json"), "{}");
   await writeFile(join(stateDir, PENDING_ADOPTION_FILE), "{}");
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "ca");
@@ -180,7 +179,6 @@ async function snapshot(stateDir: string): Promise<string[]> {
   const paths = [
     "venue/venue.db",
     "venue/.venue.db-litestream/generation",
-    "modules.json",
     PENDING_ADOPTION_FILE,
     "flows/setup/operation.json",
     "trading.env",
@@ -255,7 +253,6 @@ describe("runStagedReset", () => {
       "venue/venue.db-shm",
       "venue/node.db",
       "venue/.venue.db-litestream",
-      "modules.json",
       PENDING_ADOPTION_FILE,
       "flows/setup/operation.json",
       "reset-request.json",
@@ -420,7 +417,7 @@ describe("runStagedReset", () => {
               await writeTradingEnv(stateDir, cfg);
             },
             persistModuleConfig: async (config) => {
-              await writeModuleConfig(stateDir, config);
+              await writeModuleConfig(store.venue, config, null);
             },
             persistCredentialsRing: (ring) => writeCredentialsRing(stateDir, ring),
             persistBackupSettings: (settings) => replaceBackupSettings(stateDir, settings),
@@ -630,16 +627,15 @@ describe("runStagedReset", () => {
   it("removes the marker last, so a start cut short part-way runs the reset again", async () => {
     const { stateDir, venueDir, operationId } = await halfAdoptedBox();
     await stageResetRequest(stateDir, operationId);
-    // A folder where `modules.json` should be makes its removal fail after the databases went.
-    await rm(join(stateDir, "modules.json"));
-    await mkdir(join(stateDir, "modules.json"));
+    await rm(join(stateDir, PENDING_ADOPTION_FILE));
+    await mkdir(join(stateDir, PENDING_ADOPTION_FILE));
 
     await expect(runStagedReset({ stateDir, venueDir, log: () => {} })).rejects.toThrow();
     expect(existsSync(join(venueDir, "venue.db"))).toBe(false);
     expect(existsSync(join(stateDir, "reset-request.json"))).toBe(true);
     expect(existsSync(join(stateDir, "flows/setup/operation.json"))).toBe(true);
 
-    await rm(join(stateDir, "modules.json"), { recursive: true });
+    await rm(join(stateDir, PENDING_ADOPTION_FILE), { recursive: true });
     expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
     expect(existsSync(join(stateDir, "flows/setup/operation.json"))).toBe(false);
     expect(existsSync(join(stateDir, "reset-request.json"))).toBe(false);

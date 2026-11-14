@@ -20,16 +20,16 @@ and key). Only `venue.db`
 streams to a bucket; a backup file carries both.
 There is no database server in the app's path, no connection string and no database password.
 
-| volume           | mounted at                                                              | holds                                                                                                                                                                                       |
-| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state`          | `/var/lib/waitron/state`                                                | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `modules.json`, `stream/` (Litestream's configuration and process-id file), the CA and leaf PEMs |
-| `logs`           | `/var/lib/waitron/logs`                                                 | the rotating log file, and `crash-reports/`: one JSON file per process the venue watchdog killed                                                                                            |
-| `backups`        | `/var/lib/waitron/backups`                                              | local encrypted backup archives, when they are switched on                                                                                                                                  |
-| `mailpit`        | `/data`                                                                 | the Demo/development test inbox; ordinary Prepare and Live require SMTP                                                                                                                     |
-| `print_agent`    | `/var/lib/waitron-print-agent`                                          | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                                                                                         |
-| `tunnel_control` | `/var/lib/waitron/tunnel` in the app, `/control` in the optional tunnel | the peer public key and the non-secret connection configuration                                                                                                                             |
-| `tunnel_keys`    | `/keys` in the optional tunnel only                                     | the box's private WireGuard key                                                                                                                                                             |
-| `box_socket`     | `/run/waitron-box`                                                      | nothing: an empty stand-in until `waitron.sh install` names the host's socket folder in `.env`                                                                                              |
+| volume           | mounted at                                                              | holds                                                                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`          | `/var/lib/waitron/state`                                                | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `stream/` (Litestream's configuration and process-id file), the CA and leaf PEMs |
+| `logs`           | `/var/lib/waitron/logs`                                                 | the rotating log file, and `crash-reports/`: one JSON file per process the venue watchdog killed                                                                            |
+| `backups`        | `/var/lib/waitron/backups`                                              | local encrypted backup archives, when they are switched on                                                                                                                  |
+| `mailpit`        | `/data`                                                                 | the Demo/development test inbox; ordinary Prepare and Live require SMTP                                                                                                     |
+| `print_agent`    | `/var/lib/waitron-print-agent`                                          | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                                                                         |
+| `tunnel_control` | `/var/lib/waitron/tunnel` in the app, `/control` in the optional tunnel | the peer public key and the non-secret connection configuration                                                                                                             |
+| `tunnel_keys`    | `/keys` in the optional tunnel only                                     | the box's private WireGuard key                                                                                                                                             |
+| `box_socket`     | `/run/waitron-box`                                                      | nothing: an empty stand-in until `waitron.sh install` names the host's socket folder in `.env`                                                                              |
 
 A box installed before the box ran its own database server was retired also carries a `waitron_db`
 volume holding that old database. Nothing reads it and nothing on the box removes it, including
@@ -547,7 +547,7 @@ The command was designed and built in #314.
 A box whose join to another server stopped partway can also be reset from the setup wizard, without
 a terminal, given the admin login the join used; the server refuses it in any other state. The box
 restarts and, before the server opens the database, removes the venue's databases (`venue.db`,
-`node.db` and their side files, and Litestream's folder beside them), `modules.json`,
+`node.db` and their side files, and Litestream's folder beside them),
 `pending-adoption.json`, the record of the stopped join and, last, its own request file,
 `reset-request.json`. If the join got far enough to write `tls/joined.json`, the box may already
 hold the other server's certificate authority and key ring, so it also removes everything in `tls/`

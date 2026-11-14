@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../../test/module-settings.js";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -149,6 +150,7 @@ export async function stagedHourRestore(
     follow();
     const encryptionKey = "synthetic archive encryption key";
     const databasePath = join(root, "backup.db");
+    await seedModuleSettings(db, { "fiscal-none": false });
     const manifest = await buildManifest({
       db,
       node: nodeDb,
@@ -168,12 +170,6 @@ export async function stagedHourRestore(
       {
         name: "secrets/credentials.key",
         bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")),
-      },
-      {
-        name: "secrets/modules.json",
-        bytes: Buffer.from(
-          JSON.stringify({ modules: { "fiscal-verifactu": true, "fiscal-none": false } }),
-        ),
       },
     ];
     await db.archiveTo(databasePath);

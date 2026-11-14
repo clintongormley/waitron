@@ -108,6 +108,7 @@ export {
   disabledProvisionOnly,
   enabledModules,
   isEnabled,
+  modulesSettings,
   parseModuleConfig,
   parseModuleOverrides,
   serializeModuleConfig,

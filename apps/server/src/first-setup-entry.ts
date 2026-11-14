@@ -1,6 +1,5 @@
 import { mountSetupSpa } from "./setup-spa.js";
 import { isUnset } from "./env-value.js";
-import { readModuleConfig } from "./module-config.js";
 import { Hono } from "hono";
 import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
@@ -236,12 +235,10 @@ async function resolutionApp(
   log: Logger = () => {},
   spare?: SpareOption,
 ) {
-  const moduleConfig = await readModuleConfig(roots.stateDir).catch(() => undefined);
   const host = createFirstSetupModuleHost({
     ...roots,
     environment,
     modules: ALL_MODULES,
-    moduleConfig,
   });
   const app = new Hono();
   app.get("/setup-api/status", async (c) => {

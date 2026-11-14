@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-import { MODULES_FILE } from "@waitron/store";
 import { once } from "node:events";
-import { writeFileDurable } from "./fs-atomic.js";
-import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { ALL_MODULES } from "@waitron/composition";
@@ -12,9 +9,12 @@ import {
   readDeploymentEnvironment,
   setVenueHolderIdentity,
   stampDeployment,
+  readSettings,
+  saveSettings,
+  withTransaction,
   type Database,
 } from "@waitron/db";
-import { serializeModuleConfig, type ModuleConfig } from "@waitron/module";
+import { modulesSettings, serializeModuleConfig, type ModuleConfig } from "@waitron/module";
 import { AppError, isAppError } from "@waitron/shared";
 import { createFirstSetupCommandDeployment } from "./first-setup-command-deployment.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
@@ -68,8 +68,7 @@ async function main(): Promise<number> {
           database: () => database,
         });
       },
-      // The same variable `apps/server` reads; unset, no `modules.json` is written.
-      writeModuleConfig: writeModuleConfigTo(process.env.WAITRON_STATE_DIR),
+      writeModuleConfig: writeModuleConfigTo(() => database),
       readEnvironment: readDeploymentEnvironment,
       readDeploymentTable: deploymentTableExists,
       stampEnvironment: stampDeployment,
@@ -88,13 +87,19 @@ async function main(): Promise<number> {
   }
 }
 
-function writeModuleConfigTo(
-  stateDir: string | undefined,
-): ((config: ModuleConfig) => Promise<void>) | undefined {
-  if (stateDir === undefined || stateDir === "") return undefined;
+function writeModuleConfigTo(database: () => Database | undefined) {
+  const definition = modulesSettings(ALL_MODULES);
   return async (config: ModuleConfig) => {
-    const body = JSON.stringify({ modules: serializeModuleConfig(config) }, null, 2) + "\n";
-    await writeFileDurable(join(stateDir, MODULES_FILE), body, 0o600);
+    const db = database();
+    if (db === undefined) throw new AppError("setup.not_ready", {});
+    await withTransaction(db, async (tx) => {
+      const saved = await readSettings(tx, definition);
+      await saveSettings(tx, definition, {
+        doc: { modules: serializeModuleConfig(config) },
+        expectedRevision: saved.revision,
+        personId: null,
+      });
+    });
   };
 }
 
@@ -143,7 +148,5 @@ function isAbort(error: unknown): boolean {
   );
 }
 
-// No state-directory default here, as for `modules.json` above: without one, the log directory is
-// `WAITRON_LOG_DIR` alone.
 setVenueHolderIdentity("provisioning", process.env, process.env.WAITRON_STATE_DIR || undefined);
 process.exitCode = await main();

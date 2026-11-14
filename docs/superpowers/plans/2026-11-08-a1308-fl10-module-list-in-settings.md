@@ -234,3 +234,44 @@ environment plans need not land first.
 ## After the tasks
 
 `/finish-branch` with this plan as its note; the lane marks the PR "owner lands" and does not merge.
+
+## Implementation decisions, 2026-11-14
+
+The watcher cleared the catalogue-aware `modulesSettings(modules)` factory at 03:37,
+instantiated beside server composition as `MODULES_SETTINGS`. The document shape and
+mandatory-module check stay as planned. At 04:14 the watcher replaced Task 1's
+workforce-off example with toggleable bookings: workforce became mandatory in A1002.
+The mandatory-workforce refusal and default-ambiguous assertions stay. These are
+watcher clearances, not a separate owner approval of the design.
+
+At 05:08 the watcher cleared the additional `upgrade-checks.ts` reader, using its
+already-open environment-checked probe, and retirement of module-config's malformed
+JSON, EISDIR and mode-0600 file checks. Default, enabled, unknown-module and round-trip
+assertions remain on the row. The fixture helper also accepts an already-open venue
+handle; directory fixtures migrate core only when `settings` is absent, so seeding
+cannot restore a deliberately dropped trigger before the boot under test.
+
+At 05:30 the watcher cleared one coherent PR up to 2,600 counted lines because the
+caller and fixture ports cannot land independently. At 05:43 the watcher cleared
+Start again removing a setup database holding only its module selection, with no
+committed venue or fiscal rows. The three corresponding refusal cases now check
+deletion; trading-configuration and retained-ledger refusals remain. The owner
+lands this slice. These are watcher clearances, not a separate owner design approval.
+
+At 06:09 the watcher cleared reuse of the failed-start fixture's migrated
+template row, saving selection again only for an explicit override. The timing
+comparison uses five runs on each side and the same 10% median stop.
+
+
+At 06:32 the watcher cleared the gathered review corrections and up to 2,700
+counted lines. Provisioning saves the module row in applyVenue's existing
+beforeCommit transaction, using its supplied catalogue and keeping the caller's
+hook. The unused repair-page reader in What it builds 5 is removed: that
+resolution app mounts inspection, summary and Start again, with no row-dependent
+methods. Its existing unreadable-database cases remain. The no-row restore case
+reads the restored venue instead of the suite's database. The held-setup row
+count changes from 122 to 125: the measured differences are settings 2→3 and
+activity_log 5→7, with kept/record/byte assertions retained. The handover digest
+stays as Global Constraints requires; the watcher settled reviewer B's question
+about its value. These corrections are watcher clearances, not separate owner
+approval of the design.

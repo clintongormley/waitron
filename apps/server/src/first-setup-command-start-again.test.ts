@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -328,12 +329,13 @@ it.each(["activation-started", "uncertain"] as const)(
 );
 
 it.each(["activation-started", "uncertain"] as const)(
-  "a command cut off at %s with an empty database and the module selection publication writes: Start again refuses and deletes nothing",
+  "a command cut off at %s with an empty database and the module selection row: Start again deletes the database",
   async (cutOff) => {
     const f = await cutOffSetup(cutOff);
-    // What `publishSelection` writes first once activation has committed.
-    await writeFile(join(f.folders.stateDir, "modules.json"), '{"modules":{}}\n', { mode: 0o600 });
-    await expectBothRefused(f, { code: "setup.not_ready", params: {} }, undefined);
+    await seedModuleSettings(f.folders.venueDir, {});
+    await f.actions().startAgainFirstSetup(await f.ids());
+    await expectStartAgainDeleted(f.folders);
+    expect(await f.host.store.read()).toBeNull();
   },
 );
 
@@ -351,6 +353,12 @@ it.each(["activation-started", "uncertain"] as const)(
     await expectStartAgainDeleted(f.folders);
   },
 );
+
+it("a command's published trading configuration still refuses Start again on an empty database", async () => {
+  const f = await cutOffSetup("uncertain");
+  await writeFile(join(f.folders.stateDir, "trading.env"), "WAITRON_NODE_ID=published\n");
+  await expectBothRefused(f, { code: "setup.not_ready", params: {} }, undefined);
+});
 
 it("a command cut off before its stamp, beside an earlier attempt that had begun activation: Start again refuses and deletes nothing", async () => {
   const f = await cutOffSetup("uncertain");

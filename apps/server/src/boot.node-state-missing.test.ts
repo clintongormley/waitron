@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { once } from "node:events";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { get as httpGet } from "node:http";
@@ -100,7 +101,7 @@ async function startEnv(db: VenueDb, nodeId: string): Promise<Record<string, str
       recursive: true,
     });
   }
-  await writeFile(join(dir, "modules.json"), JSON.stringify({ modules: { "fiscal-none": false } }));
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   const database = db.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   return {
     ...KEY_ENV,

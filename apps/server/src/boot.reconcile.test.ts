@@ -1,9 +1,10 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { createServer as createHttpServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { mkdir, cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -56,10 +57,7 @@ const PEER_NODE = "66666666-6666-4666-8666-666666666666";
 const PEER_KEY = generateNodeKeyPair();
 
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-reconcile-state-"));
-writeFileSync(
-  join(STATE_ROOT, "modules.json"),
-  JSON.stringify({ modules: { "fiscal-none": false } }),
-);
+
 const KEY_ENV = {
   // Keeps the plain-HTTP landing listener off privileged port 80.
   WAITRON_HTTP_LANDING_PORT: "0",
@@ -87,6 +85,7 @@ const openStores: VenueDatabase[] = [];
 const venueDirs: string[] = [];
 
 async function seed(db: Database): Promise<void> {
+  await seedModuleSettings(db, { "fiscal-none": false });
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
     .insert(tenants)
@@ -277,10 +276,7 @@ describe("returned-box membership reconciliation at boot", () => {
       originNodeId: PEER_NODE,
     });
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-reconcile-restored-"));
-    writeFileSync(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+
     await ensureBoxSecrets({
       stateDir,
       hostnames: ["waitron.local", "localhost"],

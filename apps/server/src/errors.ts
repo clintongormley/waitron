@@ -248,7 +248,7 @@ declare module "@waitron/shared" {
     /** A handover's two boxes hold different values in `backup.env`. */
     "handover.backup_settings_differ": Record<string, never>;
     /**
-     * A handover's two boxes switch off different modules in `modules.json`, or run images shipping
+     * A handover's two boxes switch off different modules in their settings, or run images shipping
      * different migrations, or the copy's journal stands behind the receiving box's image.
      */
     "handover.modules_differ": Record<string, never>;

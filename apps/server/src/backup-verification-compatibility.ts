@@ -5,11 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import { backupVerificationInventory } from "@waitron/composition";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { deploymentEnvironmentFor } from "@waitron/db";
-import {
-  BackupVerificationUnsupported,
-  parseModuleConfig,
-  type WaitronModule,
-} from "@waitron/module";
+import { BackupVerificationUnsupported, type WaitronModule } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
 import { openBackupQuery, type BackupQuery, type BackupRow, NODE_FILE } from "@waitron/store";
 import type { ArchiveEntry } from "./backup-archive.js";
@@ -76,44 +72,6 @@ async function rows(query: BackupQuery, statement: string): Promise<BackupRow[]>
   return result;
 }
 const HOST_ENTRIES = [...RECOVERY_FILES, ...OPTIONAL_BACKUP_STATE].map((name) => "secrets/" + name);
-function moduleConfig(
-  raw: Uint8Array,
-  modules: readonly WaitronModule[],
-  source: Record<string, number>,
-): void {
-  let config: unknown;
-  const text = Buffer.from(raw).toString("utf8");
-  try {
-    config = JSON.parse(text) as unknown;
-  } catch (error) {
-    if (error instanceof SyntaxError) refuse("unsupported");
-    throw error;
-  }
-  if (
-    config === null ||
-    typeof config !== "object" ||
-    Array.isArray(config) ||
-    Object.keys(config).length !== 1 ||
-    !Object.hasOwn(config, "modules")
-  )
-    refuse("unsupported");
-  const overrides = (config as { modules: unknown }).modules;
-  if (overrides === null || typeof overrides !== "object" || Array.isArray(overrides))
-    refuse("unsupported");
-  // Only the envelope and a flat boolean map are admitted; duplicate raw keys must not disappear.
-  const keyCount = [...text.matchAll(/"(?:[^"\\]|\\.)*"\s*:/g)].length;
-  if (
-    keyCount !== Object.keys(overrides).length + 1 ||
-    Object.keys(overrides).some(
-      (name) =>
-        !Object.hasOwn(source, name) &&
-        !modules.some((module) => module.name === name && module.migrations === undefined),
-    )
-  )
-    refuse("unsupported");
-  parseModuleConfig(config, modules);
-}
-
 export async function checkBackupVerificationCompatibility(input: {
   manifest: BackupManifest;
   target: BackupVerificationTarget;
@@ -223,8 +181,6 @@ async function reconcile(
     entries.set(name, { name, bytes: entry.bytes });
   }
   for (const file of RECOVERY_FILES) if (!entries.has("secrets/" + file)) refuse("invalid");
-  const config = entries.get("secrets/modules.json");
-  if (config) moduleConfig(config.bytes, modules, source);
   const tables = await schemaOf(before, venueOwned, venueJournals);
   const nodeDump = entries.get("node.dump");
   if (nodeDump === undefined)

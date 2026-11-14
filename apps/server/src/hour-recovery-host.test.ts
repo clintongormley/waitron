@@ -13,6 +13,7 @@ import {
   agreeInternet,
   realSecretChecks,
 } from "../test/hour-recovery-host.js";
+import { seedModuleSettings } from "../test/module-settings.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -391,6 +392,7 @@ it("refuses a selected backup whose named key no longer matches the database", a
 it("admits recovery from the real validated archive preview with its public spent names", async () => {
   const f = await host();
   agreeInternet();
+  await seedModuleSettings(suite.db, { "fiscal-verifactu": true, "fiscal-none": false });
   const manifest = await buildManifest({
     db: suite.db,
     node: suite.node,
@@ -415,12 +417,7 @@ it("admits recovery from the real validated archive preview with its public spen
         name: "secrets/credentials.key",
         bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")),
       },
-      {
-        name: "secrets/modules.json",
-        bytes: Buffer.from(
-          JSON.stringify({ modules: { "fiscal-verifactu": true, "fiscal-none": false } }),
-        ),
-      },
+
       {
         name: "secrets/module-evidence/fiscal-verifactu/hour-history.json",
         bytes: Buffer.from(

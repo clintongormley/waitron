@@ -144,10 +144,6 @@ describe("startServer, against a migrated venue directory", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-sealed-"));
     const key = "boot-recovery-key-0123";
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
     await ensureBoxSecrets({
       stateDir,
       hostnames: ["waitron.local", "localhost"],
@@ -180,7 +176,6 @@ describe("startServer, against a migrated venue directory", () => {
         "manifest.json",
         "node.dump",
         ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
-        "secrets/modules.json",
       ]);
     } finally {
       await server.close();
@@ -206,10 +201,6 @@ describe("startServer, against a migrated venue directory", () => {
     );
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-sealed-failed-"));
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
     await ensureBoxSecrets({
       stateDir,
       hostnames: ["waitron.local", "localhost"],
@@ -265,10 +256,6 @@ describe("startServer, against a migrated venue directory", () => {
     );
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-"));
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
     await ensureBoxSecrets({
       stateDir,
       hostnames: ["waitron.local", "localhost"],
@@ -347,10 +334,6 @@ describe("startServer, against a migrated venue directory", () => {
       const tampered = await readNodeMembership(db);
       const port = await freePort();
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-refused-"));
-      await writeFile(
-        join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { "fiscal-none": false } }),
-      );
       await ensureBoxSecrets({
         stateDir,
         hostnames: ["waitron.local", "localhost"],
@@ -464,10 +447,6 @@ describe("startServer, against a migrated venue directory", () => {
         });
       }
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-damaged-"));
-      await writeFile(
-        join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { "fiscal-none": false } }),
-      );
       await ensureBoxSecrets({
         stateDir,
         hostnames: ["waitron.local", "localhost"],
@@ -528,10 +507,6 @@ describe("startServer, against a migrated venue directory", () => {
     );
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-failed-"));
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
     await ensureBoxSecrets({
       stateDir,
       hostnames: ["waitron.local", "localhost"],
@@ -674,10 +649,6 @@ describe("startServer, against a migrated venue directory", () => {
               raw.close();
             }
           }
-          await writeFile(
-            join(stateDir, "modules.json"),
-            JSON.stringify({ modules: { "fiscal-none": false } }),
-          );
           await ensureBoxSecrets({
             stateDir,
             hostnames: ["waitron.local", "localhost"],
@@ -739,10 +710,6 @@ describe("startServer — the append-only watch in trading mode", () => {
     try {
       await seedTradingVenue(venue.store.venue);
       await venue.store.close();
-      await writeFile(
-        join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { "fiscal-none": false } }),
-      );
       const port = await freePort();
       server = await startServer(
         {

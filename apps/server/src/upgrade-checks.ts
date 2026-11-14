@@ -5,7 +5,7 @@ import { catalogues, lockVenueDatabase, openVenueDatabase, withTransaction } fro
 import { readMenuStructure } from "@waitron/catalogue";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertAppendOnlyIntact } from "./append-only-watch.js";
-import { enabledModules, orderedMigrationSets } from "@waitron/module";
+import { enabledModules, orderedMigrationSets, type ModuleConfig } from "@waitron/module";
 import { assertNoStartAgainDeletion } from "@waitron/provisioning";
 import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { ALL_MODULES } from "./modules.js";
@@ -34,21 +34,19 @@ export async function openUpgradeListener(config: ServerConfig, log: Logger) {
 
 export async function checkUpgradeData(config: ServerConfig, env: NodeJS.ProcessEnv) {
   await assertNoStartAgainDeletion(config.venueDir);
-  const moduleConfig = await readModuleConfig(config.stateDir);
+  let moduleConfig: ModuleConfig = { overrides: new Map() };
   const firstSetupHost = createFirstSetupModuleHost({
     environment: env,
     stateDir: config.stateDir,
     venueDir: config.venueDir,
     modules: ALL_MODULES,
-    moduleConfig,
+    moduleConfig: () => moduleConfig,
   });
   await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
   const node = config.node;
   if (node === undefined)
     throw new Error("Upgrade checks require completed first setup and a configured node");
   const available = firstSetupHost.modules;
-  const modules = enabledModules(available, moduleConfig);
-  const options = migrationOptionsFor(orderedMigrationSets(modules), config.migrationsRoot);
   const hold = await lockVenueDatabase(config.venueDir);
   try {
     await assertNotAhead(config.venueDir, config.migrationsRoot);
@@ -59,9 +57,12 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
         config.environment,
         available.flatMap((module) => (module.fiscal === undefined ? [] : [module.fiscal])),
       );
+      moduleConfig = await readModuleConfig(probe.venue);
     } finally {
       await probe.close();
     }
+    const modules = enabledModules(available, moduleConfig);
+    const options = migrationOptionsFor(orderedMigrationSets(modules), config.migrationsRoot);
     await applyMigrations(config.venueDir, options);
     const store = await openVenueDatabase(config.venueDir);
     try {

@@ -115,7 +115,7 @@ export interface AssembleDeps {
   accountKey: string;
   wireguardPublicKey?: string;
   moduleOperations?: ModuleOperations;
-  /** `modules.json` as the caller read it for this request; read here when absent. */
+  /** module settings as the caller read it for this request; read here when absent. */
   moduleConfig?: ModuleConfig;
   /** The designated node's private key, when the caller has already unsealed it. */
   primaryPrivateKey?: string;
@@ -172,9 +172,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const environment = await readDeploymentEnvironment(deps.appDb);
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
 
-  // Read fresh, not from boot: the operator may have edited modules.json since, and a malformed file
-  // must fail before collecting or writing any reservation.
-  const moduleConfig = deps.moduleConfig ?? (await readModuleConfig(deps.stateDir));
+  const moduleConfig = deps.moduleConfig ?? (await readModuleConfig(deps.appDb));
   const modules = enabledModules(ALL_MODULES, moduleConfig);
   const backupSettings = await readBackupSettings(deps.stateDir);
 

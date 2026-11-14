@@ -2,7 +2,6 @@ import { createPrivateKey, X509Certificate } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { posix } from "node:path";
 import { loadKeyRing, resolveBackupKeyInputs } from "@waitron/credentials";
-import { parseModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
 import { resolveAccountKey } from "./account-key.js";
 import { decryptArtifact } from "./artifact-cipher.js";
@@ -11,7 +10,6 @@ import { loadRecoveryKey } from "./backup-config.js";
 import type { BackupVerificationReason } from "./backup-verification-protocol.js";
 import { loadBoxEnv } from "./box-env.js";
 import { errnoOf } from "./errno.js";
-import { ALL_MODULES } from "./modules.js";
 import { readArtifactIdentity } from "./restore.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 
@@ -89,20 +87,6 @@ export async function verifyBackupStateSecrets(
   }
   try {
     loadRecoveryKey(env);
-    const config = byName.get("secrets/modules.json");
-    if (config !== undefined) {
-      const text = Buffer.from(config.bytes).toString("utf8");
-      const raw: unknown = JSON.parse(text);
-      if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return UNSUPPORTED;
-      const record = raw as Record<string, unknown>;
-      if (Object.keys(record).length !== 1 || !Object.hasOwn(record, "modules")) return UNSUPPORTED;
-      const overrides = record.modules;
-      if (overrides === null || typeof overrides !== "object" || Array.isArray(overrides))
-        return UNSUPPORTED;
-      const keyCount = [...text.matchAll(/"(?:[^"\\]|\\.)*"\s*:/g)].length;
-      if (keyCount !== Object.keys(overrides).length + 1) return UNSUPPORTED;
-      parseModuleConfig(raw, ALL_MODULES);
-    }
   } catch (error) {
     if (!isAppError(error) && !(error instanceof SyntaxError)) throw error;
     return UNSUPPORTED;

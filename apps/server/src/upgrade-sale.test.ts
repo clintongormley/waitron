@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,10 +44,7 @@ async function fixture(synchronised = true) {
   await source.db.archiveTo(join(state, "venue", "venue.db"));
   await source.node.archiveTo(join(state, "venue", "node.db"));
   await copyMigrationsRoot(join(state, "migrations"));
-  await writeFile(
-    join(state, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(join(state, "venue"), { "fiscal-none": false });
   const tls = mintMtlsMaterial();
   await writeFile(join(state, "cert.pem"), tls.serverCertPem);
   await writeFile(join(state, "key.pem"), tls.serverKeyPem);

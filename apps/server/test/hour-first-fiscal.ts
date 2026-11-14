@@ -33,6 +33,7 @@ export async function hourFirstFiscalFixture(options: {
       ALL_MODULES.filter((module) => ["core", MODULE, "fiscal-none"].includes(module.name));
     const host = createFirstSetupModuleHost({
       ...options,
+      moduleConfig: options.moduleConfig === undefined ? undefined : () => options.moduleConfig!,
       stateDir,
       venueDir,
       modules,
@@ -69,7 +70,7 @@ export async function hourFirstFiscalFixture(options: {
       stateDir,
       venueDir,
       modules,
-      ...(options.moduleConfig === undefined ? {} : { moduleConfig: options.moduleConfig }),
+      ...(options.moduleConfig === undefined ? {} : { moduleConfig: () => options.moduleConfig! }),
       host,
       clock,
       store: host.store,

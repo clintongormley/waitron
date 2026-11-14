@@ -123,7 +123,7 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
           },
           persistBackupSettings: async () => {},
           persistModuleConfig: async (config) => {
-            await writeModuleConfig(stateDir, config);
+            await writeModuleConfig(store.venue, config, null);
           },
           persistCredentialsRing: (ring) => writeCredentialsRing(stateDir, ring),
           stateDir,

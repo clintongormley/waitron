@@ -1,5 +1,6 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -105,10 +106,7 @@ describe("A669 atomic fresh server processes", () => {
         await suite.db.run(sql`vacuum into ${join(venueDir, "venue.db")}`);
         const migrationsRoot = join(scratch, "migrations");
         await copyMigrationsRoot(migrationsRoot);
-        await writeFile(
-          join(scratch, "modules.json"),
-          JSON.stringify({ modules: { "fiscal-none": false } }),
-        );
+        await seedModuleSettings(venueDir, { "fiscal-none": false });
         const env: NodeJS.ProcessEnv = {
           ...Object.fromEntries(
             Object.entries(process.env).filter(([key]) => !key.startsWith("WAITRON_")),

@@ -261,10 +261,7 @@ describe("startServer — background listeners and sinks that fail or close", ()
   it("serves the plain-HTTP landing page beside a trading boot that holds a minted leaf, and closes it with the server", async () => {
     const [port, landingPort] = await freePorts(2);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-landing-"));
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+
     await ensureBoxSecrets({
       stateDir,
       hostnames: ["waitron.local", "localhost"],
@@ -2245,49 +2242,45 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         await server.close();
         server = undefined;
 
-        await withSetupBoot(
-          target.directory,
-          { WAITRON_ENV: "dev" },
-          async ({ post, stateDir, kills }) => {
-            const staged = await post("/setup-api/configuration", {
-              headers: {
-                "content-type": "application/octet-stream",
-                "x-waitron-export-passphrase": PASSPHRASE,
-              },
-              body: artifact,
+        await withSetupBoot(target.directory, { WAITRON_ENV: "dev" }, async ({ post, kills }) => {
+          const staged = await post("/setup-api/configuration", {
+            headers: {
+              "content-type": "application/octet-stream",
+              "x-waitron-export-passphrase": PASSPHRASE,
+            },
+            body: artifact,
+          });
+          expect(await staged.json()).toMatchObject(answer);
+          expect(staged.status).toBe(status);
+          if (
+            !enabledModules(ALL_MODULES, sourceModules()).some(
+              (module) => module.name === "staffing",
+            )
+          ) {
+            const provisioned = await post("/setup-api/provision", {
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                mode: "live",
+                configurationImport: true,
+                venue: provisionVenueBody(TAX_ID),
+              }),
             });
-            expect(await staged.json()).toMatchObject(answer);
-            expect(staged.status).toBe(status);
-            if (
-              !enabledModules(ALL_MODULES, sourceModules()).some(
-                (module) => module.name === "staffing",
-              )
-            ) {
-              const provisioned = await post("/setup-api/provision", {
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                  mode: "live",
-                  configurationImport: true,
-                  venue: provisionVenueBody(TAX_ID),
-                }),
-              });
-              expect(await provisioned.json()).toMatchObject({
-                provisioned: true,
-                restarting: true,
-              });
-              expect(provisioned.status).toBe(200);
-              await poll(() => (kills.length > 0 ? kills.length : undefined));
-              expect(
-                enabledModules(ALL_MODULES, await readModuleConfig(stateDir)).map(
-                  (module) => module.name,
-                ),
-              ).toEqual(expect.arrayContaining(["workforce-es", "staffing"]));
-              expect(target.store.venue.all(sql`select * from convenio_config`)).toEqual([]);
-              expect(target.store.venue.all(sql`select * from staff_roles`)).toEqual([]);
-              expect(target.store.venue.all(sql`select * from staffing_days`)).toEqual([]);
-            }
-          },
-        );
+            expect(await provisioned.json()).toMatchObject({
+              provisioned: true,
+              restarting: true,
+            });
+            expect(provisioned.status).toBe(200);
+            await poll(() => (kills.length > 0 ? kills.length : undefined));
+            expect(
+              enabledModules(ALL_MODULES, await readModuleConfig(target.store.venue)).map(
+                (module) => module.name,
+              ),
+            ).toEqual(expect.arrayContaining(["workforce-es", "staffing"]));
+            expect(target.store.venue.all(sql`select * from convenio_config`)).toEqual([]);
+            expect(target.store.venue.all(sql`select * from staff_roles`)).toEqual([]);
+            expect(target.store.venue.all(sql`select * from staffing_days`)).toEqual([]);
+          }
+        });
       } finally {
         await server?.close();
         await target.store.close();
@@ -2447,10 +2440,7 @@ describe("startServer — the configuration export route in trading mode", () =>
       try {
         await seedTradingVenue(venue.store.venue);
         await venue.store.close();
-        await writeFile(
-          join(stateDir, "modules.json"),
-          JSON.stringify({ modules: { "fiscal-none": false } }),
-        );
+
         const port = await freePort();
         server = await startServer({
           ...KEY_ENV,

@@ -1,4 +1,4 @@
-import { MODULES_FILE, SETUP_OPERATION_FILE } from "@waitron/store";
+import { SETUP_OPERATION_FILE } from "@waitron/store";
 import { RESET_REQUEST_FILE, TRADING_ENV_FILE } from "@waitron/store";
 import { assertVenueFirstSetupAllowed } from "@waitron/provisioning";
 import { existsSync } from "node:fs";
@@ -153,7 +153,7 @@ export async function runStagedReset(
       }
       await rm(join(deps.stateDir, TLS_JOINED_FILE), { force: true });
     }
-    for (const file of [PENDING_ADOPTION_FILE, MODULES_FILE, SETUP_OPERATION_FILE]) {
+    for (const file of [PENDING_ADOPTION_FILE, SETUP_OPERATION_FILE]) {
       await rm(join(deps.stateDir, file), { force: true });
     }
     // Last, so a start cut short re-runs the reset; once the record is gone a re-run discards.

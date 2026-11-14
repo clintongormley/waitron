@@ -1,9 +1,9 @@
 import { dirname } from "node:path";
-import { openVenueDatabase, readTenant, readVenue } from "@waitron/db";
+import { openVenueDatabase, readTenant, readVenue, readSettings } from "@waitron/db";
 import { readRecoveryKeyName } from "@waitron/node-db";
 import { AppError, isAppError } from "@waitron/shared";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
-import { orderedMigrationSets } from "@waitron/module";
+import { orderedMigrationSets, modulesSettings } from "@waitron/module";
 import {
   openStagedCopy,
   readArtifactNode,
@@ -78,7 +78,10 @@ export async function readRecoveryCopyPreview(
         timeZone: venue.timeZone,
       },
       copy.manifest,
-      copy.secretEntries,
+      await readSettings(store.venue, modulesSettings(deps.modules)).then(
+        (saved) => saved.doc,
+        () => undefined,
+      ),
       deps.modules,
       deps.migrationsRoot,
       recordedVersions,

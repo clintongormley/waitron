@@ -1,6 +1,7 @@
+import { writeModuleConfig } from "../module-config.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp } from "node:fs/promises";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -29,14 +30,7 @@ export const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 export const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
-// Resolves the fiscal slot to Veri*Factu: `ALL_MODULES` holds two fiscal-slot members, so the
-// default-on set would refuse `module.fiscal_slot_ambiguous`. A test needing a different set overrides
-// `WAITRON_STATE_DIR` after the `...KEY_ENV` spread.
 export const TRADING_STATE_DIR = mkdtempSync(join(tmpdir(), "waitron-boot-trading-state-"));
-writeFileSync(
-  join(TRADING_STATE_DIR, "modules.json"),
-  JSON.stringify({ modules: { "fiscal-none": false } }),
-);
 export const KEY_ENV = {
   // Keeps the plain-HTTP landing listener (default port 80, privileged) out of every boot test.
   WAITRON_HTTP_LANDING_PORT: "0",
@@ -51,6 +45,7 @@ export const KEY_ENV = {
 
 /** Seeds the shared venue directory with the tenant, location and node `TILL_ENV` names. */
 export async function seedSharedVenue(db: Database): Promise<void> {
+  await writeModuleConfig(db, { overrides: new Map([["fiscal-none", false]]) }, null);
   // A distinctive NIF (90M base) stays clear of every other seed generator.
   await db
     .insert(tenants)
@@ -331,6 +326,7 @@ export async function startFakeSmtp(onMessage?: () => void): Promise<{
 /** The tenant, location, node and till `KEY_ENV`'s ids name, seeded into `db` the way
  * `seedSharedVenue` seeds the shared directory. */
 export async function seedTradingVenue(db: Database): Promise<void> {
+  await writeModuleConfig(db, { overrides: new Map([["fiscal-none", false]]) }, null);
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90000001R", legalName: "Route Wiring SL" });

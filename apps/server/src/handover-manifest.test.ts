@@ -1,3 +1,6 @@
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { sql } from "drizzle-orm";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +19,23 @@ import {
 } from "./backup-env-writer.js";
 import { buildNodeLocalManifest, readOfferSettings } from "./handover-manifest.js";
 import { ALL_MODULES } from "./modules.js";
+
+const primary = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const secondary = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+let stateDir: string;
+const databaseFor = (folder: string) => (folder === stateDir ? primary.db : secondary.db);
+async function writeModuleDocument(folder: string, text: string) {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    doc = { modules: null };
+  }
+  await databaseFor(folder)
+    .execute(sql`insert into settings (module, version, revision, doc, updated_at)
+    values ('modules', 1, 1, ${JSON.stringify(doc)}, ${new Date().toISOString()})
+    on conflict (module) do update set doc = excluded.doc`);
+}
 
 const CURRENT_KEY = randomBytes(32);
 const PREVIOUS_KEY = randomBytes(32);
@@ -57,11 +77,11 @@ function containsBytes(value: unknown): boolean {
 
 function expectedManifest(
   ringVersions: number[],
-  digests: Record<"backup.env" | "modules.json", string | null>,
+  digests: Record<"backup.env" | "settings:modules", string | null>,
 ): NodeLocalItem[] {
   return NODE_LOCAL_MANIFEST.map((entry) => {
     if (entry.item === "secrets.env") return { ...entry, ringVersions };
-    if (entry.item === "backup.env" || entry.item === "modules.json") {
+    if (entry.item === "backup.env" || entry.item === "settings:modules") {
       return { ...entry, sha256: digests[entry.item] };
     }
     if (entry.item === "module-preparation-state.json") return { ...entry, revisions: [] };
@@ -76,8 +96,6 @@ function stringsIn(value: unknown): string[] {
 }
 
 describe("buildNodeLocalManifest", () => {
-  let stateDir: string;
-
   beforeEach(async () => {
     stateDir = await mkdtemp(join(tmpdir(), "handover-manifest-"));
   });
@@ -93,13 +111,13 @@ describe("buildNodeLocalManifest", () => {
       `WAITRON_CREDENTIALS_KEY=${CURRENT_KEY.toString("base64")}\n`,
     );
     await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_BUCKET=b\n");
-    await writeFile(join(stateDir, "modules.json"), '{"enabled":[]}');
+    await writeModuleDocument(stateDir, '{"enabled":[]}');
 
-    const items = await buildNodeLocalManifest(stateDir, ring);
+    const items = await buildNodeLocalManifest(stateDir, ring, databaseFor(stateDir));
     expect(items).toStrictEqual(
       expectedManifest([2, 3], {
         "backup.env": valuesDigest({ WAITRON_BACKUP_BUCKET: "b" }),
-        "modules.json": null,
+        "settings:modules": null,
       }),
     );
     const texts = [...stringsIn(items), JSON.stringify(items)];
@@ -120,26 +138,23 @@ describe("buildNodeLocalManifest", () => {
       WAITRON_CREDENTIALS_KEY: CURRENT_KEY.toString("base64"),
       WAITRON_CREDENTIALS_KEY_VERSION: "5",
     });
-    const items = await buildNodeLocalManifest(stateDir, ring);
+    const items = await buildNodeLocalManifest(stateDir, ring, databaseFor(stateDir));
     expect(row(items, "secrets.env").ringVersions).toEqual([5]);
   });
 
   it("a missing backup.env reads sha256: null", async () => {
-    const items = await buildNodeLocalManifest(stateDir, ringWithRotation());
+    const items = await buildNodeLocalManifest(stateDir, ringWithRotation(), databaseFor(stateDir));
     expect(row(items, "backup.env").sha256).toBeNull();
-    expect(row(items, "modules.json").sha256).toBeNull();
+    expect(row(items, "settings:modules").sha256).toBeNull();
   });
 
-  it("digests backup.env's values and modules.json's overrides, not their bytes", async () => {
+  it("digests backup.env's values and settings:modules's overrides, not their bytes", async () => {
     await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_BUCKET=venue\n");
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { [MODULE_A]: false } }),
-    );
+    await writeModuleDocument(stateDir, JSON.stringify({ modules: { [MODULE_A]: false } }));
 
-    const items = await buildNodeLocalManifest(stateDir, ringWithRotation());
+    const items = await buildNodeLocalManifest(stateDir, ringWithRotation(), databaseFor(stateDir));
     expect(row(items, "backup.env").sha256).toBe(valuesDigest({ WAITRON_BACKUP_BUCKET: "venue" }));
-    expect(row(items, "modules.json").sha256).toBe(valuesDigest({ [MODULE_A]: false }));
+    expect(row(items, "settings:modules").sha256).toBe(valuesDigest({ [MODULE_A]: false }));
   });
 
   describe("settings two boxes must hold alike", () => {
@@ -152,7 +167,10 @@ describe("buildNodeLocalManifest", () => {
     });
 
     async function digests(folder: string, item: string): Promise<string | null | undefined> {
-      return row(await buildNodeLocalManifest(folder, ringWithRotation()), item).sha256;
+      return row(
+        await buildNodeLocalManifest(folder, ringWithRotation(), databaseFor(folder)),
+        item,
+      ).sha256;
     }
 
     it("the same backup settings in another order, spacing or with comments digest alike", async () => {
@@ -244,58 +262,48 @@ describe("buildNodeLocalManifest", () => {
     });
 
     it("the same module overrides in another order or spacing digest alike", async () => {
-      await writeFile(
-        join(stateDir, "modules.json"),
+      await writeModuleDocument(
+        stateDir,
         JSON.stringify({ modules: { [MODULE_A]: false, [MODULE_B]: false } }),
       );
-      await writeFile(
-        join(other, "modules.json"),
+      await writeModuleDocument(
+        other,
         JSON.stringify({ modules: { [MODULE_B]: false, [MODULE_A]: false } }, null, 2),
       );
-      const digest = await digests(stateDir, "modules.json");
+      const digest = await digests(stateDir, "settings:modules");
       expect(digest).toMatch(/^[0-9a-f]{64}$/);
-      expect(await digests(other, "modules.json")).toBe(digest);
+      expect(await digests(other, "settings:modules")).toBe(digest);
     });
 
     it("control: a different module switched off digests differently", async () => {
-      await writeFile(
-        join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { [MODULE_A]: false } }),
-      );
-      await writeFile(
-        join(other, "modules.json"),
-        JSON.stringify({ modules: { [MODULE_B]: false } }),
-      );
-      expect(await digests(other, "modules.json")).not.toBe(
-        await digests(stateDir, "modules.json"),
+      await writeModuleDocument(stateDir, JSON.stringify({ modules: { [MODULE_A]: false } }));
+      await writeModuleDocument(other, JSON.stringify({ modules: { [MODULE_B]: false } }));
+      expect(await digests(other, "settings:modules")).not.toBe(
+        await digests(stateDir, "settings:modules"),
       );
     });
 
     it.each([['{"modules":{}}'], ["{}"]])(
-      "modules.json holding %s means no overrides, the same as no file",
+      "settings:modules holding %s means no overrides, the same as no file",
       async (text) => {
-        await writeFile(join(stateDir, "modules.json"), text);
-        expect(await digests(stateDir, "modules.json")).toBeNull();
-        expect(await digests(other, "modules.json")).toBeNull();
+        await writeModuleDocument(stateDir, text);
+        expect(await digests(stateDir, "settings:modules")).toBeNull();
+        expect(await digests(other, "settings:modules")).toBeNull();
       },
     );
 
     it("a module named as switched on is the same module set as one not named", async () => {
-      await writeFile(
-        join(stateDir, "modules.json"),
+      await writeModuleDocument(
+        stateDir,
         JSON.stringify({ modules: { [MODULE_A]: true, [MODULE_B]: false } }),
       );
-      await writeFile(
-        join(other, "modules.json"),
-        JSON.stringify({ modules: { [MODULE_B]: false } }),
+      await writeModuleDocument(other, JSON.stringify({ modules: { [MODULE_B]: false } }));
+      expect(await digests(stateDir, "settings:modules")).toBe(
+        await digests(other, "settings:modules"),
       );
-      expect(await digests(stateDir, "modules.json")).toBe(await digests(other, "modules.json"));
 
-      await writeFile(
-        join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { [MODULE_A]: true } }),
-      );
-      expect(await digests(stateDir, "modules.json")).toBeNull();
+      await writeModuleDocument(stateDir, JSON.stringify({ modules: { [MODULE_A]: true } }));
+      expect(await digests(stateDir, "settings:modules")).toBeNull();
     });
 
     it("limit: on settings the environment owns both digests are null and nothing compares them", async () => {
@@ -313,11 +321,13 @@ describe("buildNodeLocalManifest", () => {
     });
   });
 
-  it("a modules.json the box could not start on is refused, not digested", async () => {
-    await writeFile(join(stateDir, "modules.json"), "{ not json");
-    const error = await buildNodeLocalManifest(stateDir, ringWithRotation()).catch(
-      (e: unknown) => e,
-    );
+  it("a settings:modules the box could not start on is refused, not digested", async () => {
+    await writeModuleDocument(stateDir, "{ not json");
+    const error = await buildNodeLocalManifest(
+      stateDir,
+      ringWithRotation(),
+      databaseFor(stateDir),
+    ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("module.config_invalid");
   });
 
@@ -337,41 +347,44 @@ describe("buildNodeLocalManifest", () => {
       join(stateDir, "module-preparation-state.json"),
       JSON.stringify({ version: 1, revisions }),
     );
-    const items = await buildNodeLocalManifest(stateDir, ringWithRotation());
+    const items = await buildNodeLocalManifest(stateDir, ringWithRotation(), databaseFor(stateDir));
     expect(row(items, "module-preparation-state.json").revisions).toEqual(revisions);
   });
 
   it("carries no retained selections for a box without the file, and needs no copy to do so", async () => {
-    const items = await buildNodeLocalManifest(stateDir, ringWithRotation());
+    const items = await buildNodeLocalManifest(stateDir, ringWithRotation(), databaseFor(stateDir));
     expect(row(items, "module-preparation-state.json").revisions).toEqual([]);
   });
 
   it("refuses a retained-selections file it cannot read, rather than signing none", async () => {
     await writeFile(join(stateDir, "module-preparation-state.json"), "{ not json");
-    const error = await buildNodeLocalManifest(stateDir, ringWithRotation()).catch(
-      (e: unknown) => e,
-    );
+    const error = await buildNodeLocalManifest(
+      stateDir,
+      ringWithRotation(),
+      databaseFor(stateDir),
+    ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("setup.attempt_invalid");
   });
 
   it("keeps every manifest row, in order, and adds values only to the four files it reads", async () => {
-    const items = await buildNodeLocalManifest(stateDir, ringWithRotation());
+    const items = await buildNodeLocalManifest(stateDir, ringWithRotation(), databaseFor(stateDir));
     expect(items).toStrictEqual(
-      expectedManifest([2, 3], { "backup.env": null, "modules.json": null }),
+      expectedManifest([2, 3], { "backup.env": null, "settings:modules": null }),
     );
   });
 
   it("refuses a state file it cannot read for a reason other than its absence", async () => {
     await rm(stateDir, { recursive: true, force: true });
     await writeFile(stateDir, "not a folder");
-    await expect(buildNodeLocalManifest(stateDir, ringWithRotation())).rejects.toMatchObject({
+    await expect(
+      buildNodeLocalManifest(stateDir, ringWithRotation(), databaseFor(stateDir)),
+    ).rejects.toMatchObject({
       code: "ENOTDIR",
     });
   });
 });
 
 describe("readOfferSettings", () => {
-  let stateDir: string;
   beforeEach(async () => {
     stateDir = await mkdtemp(join(tmpdir(), "handover-offer-settings-"));
   });
@@ -383,7 +396,9 @@ describe("readOfferSettings", () => {
     "a state folder that is gone refuses %s, rather than reading as a box with no settings",
     async (code) => {
       const gone = join(stateDir, "gone");
-      await expect(readOfferSettings(gone, ringWithRotation(), code)).rejects.toMatchObject({
+      await expect(
+        readOfferSettings(gone, ringWithRotation(), code, databaseFor(gone)),
+      ).rejects.toMatchObject({
         code,
         params: { file: "backup.env" },
         reason: "the state folder cannot be read",
@@ -395,13 +410,23 @@ describe("readOfferSettings", () => {
     const notFolder = join(stateDir, "a-file");
     await writeFile(notFolder, "");
     await expect(
-      readOfferSettings(notFolder, ringWithRotation(), "handover.settings_unreadable"),
+      readOfferSettings(
+        notFolder,
+        ringWithRotation(),
+        "handover.settings_unreadable",
+        databaseFor(notFolder),
+      ),
     ).rejects.toMatchObject({ code: "handover.settings_unreadable" });
   });
 
   it("control: a folder holding none of the files is a box with no settings", async () => {
     expect(
-      await readOfferSettings(stateDir, ringWithRotation(), "handover.settings_unreadable"),
+      await readOfferSettings(
+        stateDir,
+        ringWithRotation(),
+        "handover.settings_unreadable",
+        databaseFor(stateDir),
+      ),
     ).toEqual({ backupSettings: null, moduleSettings: null, ringVersions: [2, 3] });
   });
 });
@@ -432,6 +457,7 @@ describe("readBackupSettings", () => {
       source,
       ringWithRotation(),
       "handover.settings_unreadable",
+      databaseFor(source),
     );
     expect(offered.backupSettings).not.toBeNull();
     expect(backupSettingsDigestOf(settings)).toBe(offered.backupSettings);
@@ -439,8 +465,14 @@ describe("readBackupSettings", () => {
     const copy = await folder();
     await replaceBackupSettings(copy, settings);
     expect(
-      (await readOfferSettings(copy, ringWithRotation(), "handover.settings_unreadable"))
-        .backupSettings,
+      (
+        await readOfferSettings(
+          copy,
+          ringWithRotation(),
+          "handover.settings_unreadable",
+          databaseFor(copy),
+        )
+      ).backupSettings,
     ).toBe(offered.backupSettings);
   });
 

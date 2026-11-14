@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
@@ -147,7 +148,7 @@ async function boot(options: {
       recursive: true,
     });
   }
-  await writeFile(join(scratch, "modules.json"), JSON.stringify({ modules: options.modules }));
+  await seedModuleSettings(suite.db, options.modules);
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const env: Record<string, string> = {
     WAITRON_HTTP_LANDING_PORT: "0",

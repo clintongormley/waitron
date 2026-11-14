@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -126,10 +127,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
   let server: StartedServer | undefined;
   try {
     await copyMigrationsRoot(join(scratch, "migrations"));
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
     await writeRecoveryKey(scratch, {
       recoveryKey: KEY,
       keyRotatedAt: "2026-09-20T08:00:00.000Z",
@@ -243,10 +241,7 @@ it("with the box ticked, the real fiscal module draws a new server key that the 
   let server: StartedServer | undefined;
   try {
     await copyMigrationsRoot(join(scratch, "migrations"));
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
     await writeRecoveryKey(scratch, {
       recoveryKey: KEY,
       keyRotatedAt: "2026-09-20T08:00:00.000Z",

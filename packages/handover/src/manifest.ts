@@ -160,8 +160,8 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     treatment: "compared: the indicator carries a digest of its values",
   },
   {
-    item: "modules.json",
-    where: "state",
+    item: "settings:modules",
+    where: "venue.db",
     class: "transferred",
     treatment: "compared: the indicator carries a digest of the modules it switches off",
   },

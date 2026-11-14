@@ -66,7 +66,7 @@ export function createFirstSetupRuntime(options: {
   stateDir: string;
   venueDir: string;
   modules: readonly WaitronModule[];
-  moduleConfig?: ModuleConfig;
+  moduleConfig?: () => ModuleConfig;
   database?: () => Database | undefined;
   freezeConfiguration?: (
     request: import("./venue-plan.js").VenueRequest,
@@ -152,7 +152,7 @@ export function createFirstSetupRuntime(options: {
       const selection = venueFiscalSelection(
         modules,
         request.fiscalTerritory,
-        options.moduleConfig,
+        options.moduleConfig?.(),
       );
       const selected = enabledModules(modules, selection.config);
       planVenue(request, selected);
@@ -200,8 +200,11 @@ export function createFirstSetupRuntime(options: {
         throw new AppError("setup.attempt_conflict", {});
       const selected = enabledModules(
         modules,
-        venueFiscalSelection(modules, state.frozen.request.fiscalTerritory, options.moduleConfig)
-          .config,
+        venueFiscalSelection(
+          modules,
+          state.frozen.request.fiscalTerritory,
+          options.moduleConfig?.(),
+        ).config,
       );
       if (
         !isDeepStrictEqual(

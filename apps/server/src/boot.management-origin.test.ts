@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdir } from "node:fs/promises";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { randomUUID } from "node:crypto";
@@ -102,10 +103,7 @@ async function withServer(
     scratch = await mkdtemp(join(tmpdir(), "waitron-boot-management-origin-"));
     const migrationsRoot = join(scratch, "migrations");
     await copyMigrationsRoot(migrationsRoot);
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     const full = {
       WAITRON_HTTP_LANDING_PORT: "0",

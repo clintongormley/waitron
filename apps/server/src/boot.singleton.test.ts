@@ -1,8 +1,9 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { writeArchiveSettings } from "./archive-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -64,10 +65,7 @@ const TILL_ENV = {
 
 // Disables `fiscal-none` so a trading boot does not refuse `module.fiscal_slot_ambiguous`.
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-singleton-state-"));
-writeFileSync(
-  join(STATE_ROOT, "modules.json"),
-  JSON.stringify({ modules: { "fiscal-none": false } }),
-);
+
 const KEY_ENV = {
   // Keeps the plain-HTTP landing listener off privileged port 80.
   WAITRON_HTTP_LANDING_PORT: "0",
@@ -84,6 +82,7 @@ let secondaryVenueDir: string;
 let primaryVenueDir: string;
 
 async function seedIdentity(db: Database): Promise<void> {
+  await seedModuleSettings(db, { "fiscal-none": false });
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
     .insert(tenants)

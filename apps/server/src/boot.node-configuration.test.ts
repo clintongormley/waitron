@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { findAdministrativeArea } from "@waitron/country";
 import { getCountryPack } from "@waitron/country-packs";
@@ -102,10 +103,7 @@ async function environment(ownNode: boolean, pending = false) {
   const state = join(root!, `state-${next++}`);
   const venue = join(state, "venue");
   await mkdir(venue, { recursive: true });
-  await writeFile(
-    join(state, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-verifactu": false } }),
-  );
+  await seedModuleSettings(source.db, { "fiscal-verifactu": false });
   const destination = join(venue, "venue.db");
   await source.db.execute(sql`vacuum into ${destination}`);
   await source.node.execute(sql`vacuum into ${join(venue, "node.db")}`);

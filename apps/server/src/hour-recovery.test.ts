@@ -1,3 +1,4 @@
+import { seedModuleDocument } from "../test/module-settings.js";
 import { sql } from "drizzle-orm";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
@@ -62,6 +63,8 @@ afterEach(async () => {
 async function archive(
   config: unknown = { modules: { "fiscal-verifactu": true, "fiscal-none": false } },
 ) {
+  await suite.db.execute(sql`delete from settings where module = 'modules'`);
+  if (config !== null) await seedModuleDocument(suite.db, config as Record<string, unknown>);
   const manifest = await buildManifest({
     db: suite.db,
     node: suite.node,
@@ -79,9 +82,6 @@ async function archive(
     { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
     { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
     { name: "secrets/credentials.key", bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")) },
-    ...(config === null
-      ? []
-      : [{ name: "secrets/modules.json", bytes: Buffer.from(JSON.stringify(config)) }]),
   ];
   const database = join(scratch, "selected.db");
   await suite.db.archiveTo(database);

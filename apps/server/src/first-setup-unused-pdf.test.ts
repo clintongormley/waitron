@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
 import { dirname, join } from "node:path";
 import { mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
@@ -213,7 +214,7 @@ it.each([
     key.stageId = "11111111-1111-4111-8111-111111111111";
     await updateSetupFlowSection(f.stateDir, "nodeKey", () => key);
   }
-  if (why === "modules") await writeFile(join(f.stateDir, "modules.json"), "{}");
+  if (why === "modules") await seedModuleSettings(f.venueDir, {});
   if (why === "missing-db") await rm(join(f.venueDir, "venue.db"));
   if (why === "unknown-input") {
     const path = join(f.stateDir, "flows/setup/record.json");

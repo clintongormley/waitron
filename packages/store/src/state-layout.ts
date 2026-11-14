@@ -48,7 +48,6 @@ export const TRADING_ENV_FILE = "trading.env";
 export const BACKUP_ENV_FILE = "backup.env";
 export const CHECKED_ADDRESSES_FILE = "checked-addresses.json";
 export const RECOVERY_STATE_FILE = "recovery.json";
-export const MODULES_FILE = "modules.json";
 export const MODULE_PREPARATION_STATE_FILE = "module-preparation-state.json";
 export const MODULE_EVIDENCE_DIR = "module-evidence";
 export const FIRST_FISCAL_DOCUMENTS_DIR = "flows/setup/documents";
@@ -183,12 +182,6 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "file",
     reset: "deleted",
     why: "Recovery state outlives replacement of the venue database.",
-  },
-  {
-    name: MODULES_FILE,
-    kind: "file",
-    reset: "deleted",
-    why: "Module selection is read before opening the database.",
   },
   {
     name: MODULE_PREPARATION_STATE_FILE,

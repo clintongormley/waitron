@@ -33,7 +33,6 @@ it("an archive built with the backup room's files in the state folder holds none
     await writeFile(join(stateDir, rel), `${rel}-contents`);
   }
   await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=x\n");
-  await writeFile(join(stateDir, "modules.json"), '{"modules":{}}\n');
   for (const name of [
     BACKUP_ROOM_NOTE_FILE,
     stagedPath(BACKUP_ROOM_NOTE_FILE),
@@ -54,7 +53,6 @@ it("an archive built with the backup room's files in the state folder holds none
     "node.dump",
     ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
     "secrets/backup.env",
-    "secrets/modules.json",
   ]);
 });
 

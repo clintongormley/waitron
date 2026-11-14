@@ -29,6 +29,8 @@ their full text.
   **Owner, 2026-11-06 23:03 (A1384 export answer, copied into Lane K queue):** an export from a box with a module off must load on a new box, and “that module starts on and empty”. Configuration import accepts missing optional sets and wholly absent optional-module tables (including Staffing in Workforce’s set), empties those configuration tables and still refuses partial tables, rows naming an absent set, and missing mandatory or provision-only sets; the boundary tests and `boot.setup-routes.test.ts` cover this.
   **Watcher, 2026-11-07 21:38:** the later 4 November rationalisation wins: applied module state in shared settings. The older design's separate applied-state tables and sealed ID are superseded.
 
+  **2026-11-14, fl10:** module selection now lives in `settings.modules` inside `venue.db` and travels with database copies. The list below records the earlier 14 October read.
+
   **What exists today**, read 2026-10-14, not tried on a box:
   - Google login is part of the identity package, not a module. Its OAuth client ID and secret come
     only from `WAITRON_GOOGLE_CLIENT_ID` and `WAITRON_GOOGLE_CLIENT_SECRET`
@@ -252,15 +254,6 @@ On `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run 
   `packages/db/src/testing/errors.ts` names the old wrapper on purpose and is pinned verbatim by its
   test.
 
-## `modules.json` has no flow-down channel from a primary to its standby
-
-- **`modules.json` has no flow-down channel** from a primary to its standby (matters under
-  _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
-  load-bearing (identity, payments) fails boot loudly if disabled until the wiring inversion.
-
-  Trading startup calls `endMirrorViewer` (`apps/server/src/mirror-session.ts`), which updates
-  identity-owned `management_sessions` to revoke an old viewer token. Probe real startup with identity and its dependants
-  disabled before changing that path; the runtime outcome remains unverified.
 
 ## A394-5, A394-10, A394-16 and A394-20 to A394-22 — refusal statuses by one rule
 

@@ -1,3 +1,4 @@
+import type { Database } from "@waitron/db";
 import { stat } from "node:fs/promises";
 import type { KeyRing } from "@waitron/credentials";
 import {
@@ -13,12 +14,7 @@ import { canonicalize } from "@waitron/membership";
 import { imageMigrationHashes, manifestSets } from "@waitron/migrations";
 import { readModulePreparationRevisions } from "@waitron/provisioning";
 import { AppError, isAppError, type ErrorCode } from "@waitron/shared";
-import {
-  BACKUP_ENV_FILE,
-  MODULE_PREPARATION_STATE_FILE,
-  MODULES_FILE,
-  SECRETS_ENV_FILE,
-} from "@waitron/store";
+import { BACKUP_ENV_FILE, MODULE_PREPARATION_STATE_FILE, SECRETS_ENV_FILE } from "@waitron/store";
 import { backupSettingsDigestOf, readBackupSettings } from "./backup-env-writer.js";
 import { readModuleConfig } from "./module-config.js";
 import "./errors.js";
@@ -31,9 +27,10 @@ import "./errors.js";
 export async function buildNodeLocalManifest(
   stateDir: string,
   ring: KeyRing,
+  db: Database,
 ): Promise<NodeLocalItem[]> {
   const items: NodeLocalItem[] = [];
-  for (const row of NODE_LOCAL_MANIFEST) items.push(await manifestItem(row, stateDir, ring));
+  for (const row of NODE_LOCAL_MANIFEST) items.push(await manifestItem(row, stateDir, ring, db));
   return items;
 }
 
@@ -41,13 +38,13 @@ async function manifestItem(
   row: NodeLocalManifestRow,
   stateDir: string,
   ring: KeyRing,
+  db: Database,
 ): Promise<NodeLocalItem> {
+  if (row.item === "settings:modules") return { ...row, sha256: await moduleSettingsDigest(db) };
   if (row.where !== "state") return { ...row };
   switch (row.item) {
     case BACKUP_ENV_FILE:
       return { ...row, sha256: backupSettingsDigestOf(await readBackupSettings(stateDir)) };
-    case MODULES_FILE:
-      return { ...row, sha256: await moduleSettingsDigest(stateDir) };
     case SECRETS_ENV_FILE:
       return { ...row, ringVersions: ringVersions(ring) };
     case MODULE_PREPARATION_STATE_FILE: {
@@ -75,6 +72,7 @@ export async function readOfferSettings(
   stateDir: string,
   ring: KeyRing,
   unreadable: "handover.settings_unreadable" | "handover.destination_settings_unreadable",
+  db: Database,
 ): Promise<OfferSettings> {
   // A manifest read from a missing folder would say every file is absent, the same as a box with
   // no settings. `file` must name a state row: the first stands for all of them.
@@ -91,7 +89,7 @@ export async function readOfferSettings(
   for (const row of NODE_LOCAL_MANIFEST) {
     let item: NodeLocalItem;
     try {
-      item = await manifestItem(row, stateDir, ring);
+      item = await manifestItem(row, stateDir, ring, db);
     } catch (error) {
       const cause = isAppError(error) ? error.code : (error as NodeJS.ErrnoException).code;
       throw new AppError(
@@ -102,16 +100,18 @@ export async function readOfferSettings(
     }
     if (row.where === "state" && row.item === BACKUP_ENV_FILE) {
       backupSettings = item.sha256 ?? null;
-    } else if (row.where === "state" && row.item === MODULES_FILE) {
+    } else if (row.item === "settings:modules") {
       moduleSettings = item.sha256 ?? null;
     }
   }
   return { backupSettings, moduleSettings, ringVersions: ringVersions(ring) };
 }
 
-/** Whether `file` is one of the box's own files the manifest reads. */
+/** Also accepts the modules settings item: the refusal's `file` field names either source. */
 export function isManifestStateFile(file: unknown): boolean {
-  return NODE_LOCAL_MANIFEST.some((row) => row.where === "state" && row.item === file);
+  return NODE_LOCAL_MANIFEST.some(
+    (row) => (row.where === "state" || row.item === "settings:modules") && row.item === file,
+  );
 }
 
 /**
@@ -179,8 +179,8 @@ function ringVersions(ring: KeyRing): number[] {
  * Only the modules switched off: a module is on unless named `false` (`isEnabled`), and setup names
  * the filing module `true` (`fiscal-slot.ts`), so a `true` entry changes no box's module set.
  */
-async function moduleSettingsDigest(stateDir: string): Promise<string | null> {
-  const { overrides } = await readModuleConfig(stateDir);
+async function moduleSettingsDigest(db: Database): Promise<string | null> {
+  const { overrides } = await readModuleConfig(db);
   const off = [...overrides].filter(([, enabled]) => !enabled);
   return off.length === 0 ? null : sha256Hex(canonicalize(Object.fromEntries(off)));
 }

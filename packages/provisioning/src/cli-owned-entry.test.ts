@@ -1,3 +1,5 @@
+import { ALL_MODULES } from "@waitron/composition";
+import { modulesSettings } from "@waitron/module";
 import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
@@ -6,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { openVenueDatabase, readDeploymentEnvironment } from "@waitron/db";
+import { openVenueDatabase, readDeploymentEnvironment, readSettings } from "@waitron/db";
 import { readTenantIdentities } from "./tenant-guard.js";
 import { childEnvironment } from "../test/child-environment.js";
 
@@ -290,15 +292,15 @@ it("the built preproduction command completes checked publication in one run", a
     await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
   ).attempt;
   expect(state.status).toBe("complete");
-  expect(JSON.parse(await readFile(join(stateDir, "modules.json"), "utf8"))).toEqual({
-    modules: { "fiscal-verifactu": true, "fiscal-none": false },
-  });
   const trading = await readFile(join(stateDir, "trading.env"), "utf8");
   expect(trading).toContain(`WAITRON_NODE_ID=${state.frozen.nodeId}\n`);
   expect(trading).toContain("WAITRON_ENV=preproduction\n");
   expect(trading).toContain("WAITRON_ONBOARDING_INTENT=live\n");
   const stored = await openVenueDatabase(target);
   try {
+    expect((await readSettings(stored.venue, modulesSettings(ALL_MODULES))).doc).toEqual({
+      modules: { "fiscal-verifactu": true, "fiscal-none": false },
+    });
     expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
     const { invoiceSeries } = await import("@waitron/db");
     const series = await stored.venue.select().from(invoiceSeries);

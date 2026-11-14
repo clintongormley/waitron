@@ -115,7 +115,6 @@ it.each(["placing", "first-start", "unreadable"] as const)(
     for (const name of [
       "trading.env.replaced",
       "backup.env",
-      "modules.json",
       "backup-room-note.json",
       "flows/setup/operation.json",
     ]) {
@@ -136,7 +135,6 @@ it.each(["placing", "first-start", "unreadable"] as const)(
       "trading.env.replaced",
       "secrets.env",
       "backup.env",
-      "modules.json",
       "backup-room-note.json",
       "flows/setup/operation.json",
       "flows/restore",

@@ -3,7 +3,6 @@ import {
   FIRST_SETUP_FILE,
   SETUP_FLOW_DIR,
   START_AGAIN_GUESSES_FILE,
-  MODULES_FILE,
   MODULE_PREPARATION_STATE_FILE,
   RESET_REQUEST_FILE,
   RESTORE_FLOW_DIR,
@@ -72,7 +71,6 @@ const REFUSED = {
     SETUP_OPERATION_FILE,
     RESTORE_RECORD,
     RESET_REQUEST_FILE,
-    MODULES_FILE,
     CLOUD_REPLACEMENT_FILE,
   ],
   venue: [VENUE_LITESTREAM_DIR, RECORDS],
@@ -94,7 +92,7 @@ async function refusedNames(root: Root, stateDir: string): Promise<readonly stri
  * without it, no node.db row counts as the attempt's.
  */
 type Options = { held?: true; nodeId?: string };
-const HELD_ONLY = [MODULES_FILE, TRADING_ENV_FILE] as const;
+const HELD_ONLY = [TRADING_ENV_FILE] as const;
 const isHeldOnly = (name: string): name is (typeof HELD_ONLY)[number] =>
   (HELD_ONLY as readonly string[]).includes(name);
 /** A marker that names a `HELD_ONLY` file was taken with `held`. */

@@ -240,8 +240,9 @@ describe("assembleMirrorBundle (primary side)", () => {
   it("carries the primary's on-box module overrides", async () => {
     const toggleable = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
     await writeModuleConfig(
-      stateDir,
+      suite.db,
       parseModuleConfig({ modules: { [toggleable]: false } }, ALL_MODULES),
+      null,
     );
     try {
       const { bundle } = await allocatedBundle({
@@ -250,11 +251,11 @@ describe("assembleMirrorBundle (primary side)", () => {
       });
       expect(bundle.moduleOverrides).toEqual({ [toggleable]: false });
     } finally {
-      await rm(join(stateDir, "modules.json"), { force: true });
+      await writeModuleConfig(suite.db, { overrides: new Map() }, null);
     }
   });
 
-  it("carries {} when the primary has no modules.json", async () => {
+  it("carries {} when the primary has no module overrides", async () => {
     const { bundle } = await allocatedBundle({
       nodeId: crypto.randomUUID(),
       publicKey: STANDBY_PUB,

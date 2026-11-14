@@ -199,7 +199,7 @@ async function describeCopy(
       schema,
       modules: deps.modules.map(({ name, version }) => ({ name, version })),
     },
-    nodeLocal: await buildNodeLocalManifest(deps.stateDir, deps.ring),
+    nodeLocal: await buildNodeLocalManifest(deps.stateDir, deps.ring, deps.venue),
     modulesSummary,
     capturedAtMs: (deps.now ?? Date.now)(),
   };

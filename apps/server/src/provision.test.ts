@@ -127,6 +127,42 @@ function ownerDb(): Database {
 }
 
 describe("provisionVenue", () => {
+  it("rolls back venue creation when saving module selection fails, then retries with its hook", async () => {
+    const db = ownerDb();
+    const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
+    const deps = { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir };
+    await db.execute(sql`create trigger refuse_module_selection before insert on settings
+      when new.module = 'modules' begin select raise(abort, 'probe.modules_refused'); end`);
+
+    try {
+      await expect(provisionVenue(deps, request)).rejects.toThrow("probe.modules_refused");
+      expect(
+        (await db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
+      ).toEqual([{ n: 0 }]);
+      expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
+    } finally {
+      await db.execute(sql`drop trigger refuse_module_selection`);
+    }
+    await provisionVenue(
+      {
+        ...deps,
+        beforeCommit: async (tx) => {
+          await tx.execute(sql`update tenants set legal_name = 'Hook Restaurant'
+            where id = 1`);
+        },
+      },
+      request,
+    );
+    expect((await db.execute(sql`select legal_name from tenants`)).rows).toEqual([
+      { legal_name: "Hook Restaurant" },
+    ]);
+    expect([...(await readModuleConfig(db)).overrides]).toEqual([
+      ["fiscal-verifactu", true],
+      ["fiscal-none", false],
+    ]);
+    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
+  });
+
   it("leaves holiday storage empty, while the stored address reads its shipped holidays at once", async () => {
     const db = ownerDb();
     await provisionVenue(
@@ -224,12 +260,12 @@ describe("provisionVenue", () => {
 
     expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
 
-    const written = await readModuleConfig(stateDir);
+    const written = await readModuleConfig(suite.db);
     expect(written.overrides.get("fiscal-none")).toBe(false);
     expect(written.overrides.get("fiscal-verifactu")).toBe(true);
   });
 
-  it("a GB (no-regime) venue mints no SIF/chain and persists modules.json disabling fiscal-verifactu", async () => {
+  it("a GB (no-regime) venue mints no SIF/chain and persists module settings disabling fiscal-verifactu", async () => {
     const db = ownerDb();
     const config = venueModuleConfig(ALL_ENABLED, "GB-vat");
 
@@ -246,7 +282,7 @@ describe("provisionVenue", () => {
     expect(result.seriesIds).toHaveLength(3);
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 3, nodes: 1, registros: 0 });
 
-    const written = await readModuleConfig(stateDir);
+    const written = await readModuleConfig(suite.db);
     expect(written.overrides.get("fiscal-verifactu")).toBe(false);
     expect(written.overrides.get("fiscal-none")).toBe(true);
   });

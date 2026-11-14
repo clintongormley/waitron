@@ -44,7 +44,10 @@ import { createDeploymentHolders } from "./deployment-holders.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
-vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
+vi.mock("./modules.js", async () => {
+  const { modulesSettings } = await import("@waitron/module");
+  return { ALL_MODULES: modules, MODULES_SETTINGS: modulesSettings(modules) };
+});
 const migrations = migrationOptionsFor(manifestSets(), null);
 const primary = useVenueDb({ migrations });
 const spare = useVenueDb({ migrations });

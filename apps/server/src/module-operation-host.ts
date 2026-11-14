@@ -19,7 +19,7 @@ export function createFirstSetupModuleHost(options: {
   stateDir: string;
   venueDir: string;
   modules: readonly WaitronModule[];
-  moduleConfig?: ModuleConfig;
+  moduleConfig?: () => ModuleConfig;
   database?: () => Database | undefined;
   freezeConfiguration?: (
     request: import("@waitron/provisioning").VenueRequest,
@@ -88,7 +88,7 @@ export function createFirstSetupModuleHost(options: {
     offerings(territory: string) {
       const selected = enabledModules(
         modules,
-        venueFiscalSelection(options.modules, territory, options.moduleConfig).config,
+        venueFiscalSelection(options.modules, territory, options.moduleConfig?.()).config,
       );
       return selected
         .filter((module) => initialSetupFor(selected, module.name) !== undefined)
@@ -100,10 +100,16 @@ export function createFirstSetupModuleHost(options: {
     recoveryDelivery,
     assertFreshAssignment,
     publishSelection(state: import("@waitron/provisioning").FirstSetupState) {
+      const database = options.database?.();
+      if (database === undefined) throw new AppError("setup.not_ready", {});
       return writeModuleConfig(
-        options.stateDir,
-        venueFiscalSelection(modules, state.frozen.request.fiscalTerritory, options.moduleConfig)
-          .config,
+        database,
+        venueFiscalSelection(
+          modules,
+          state.frozen.request.fiscalTerritory,
+          options.moduleConfig?.(),
+        ).config,
+        null,
       );
     },
     assertSelection,

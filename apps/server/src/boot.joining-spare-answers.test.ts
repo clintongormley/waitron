@@ -128,8 +128,8 @@ function fakeVersitygw(): string {
  * the join step will write it (Task 6.2), so the main box counts the spare.
  */
 async function joinedPair() {
-  await writeModuleConfig(mainState, { overrides: new Map([["fiscal-verifactu", false]]) });
-  const modules = enabledModules(ALL_MODULES, await readModuleConfig(mainState));
+  await writeModuleConfig(mainBox.db, { overrides: new Map([["fiscal-verifactu", false]]) }, null);
+  const modules = enabledModules(ALL_MODULES, await readModuleConfig(mainBox.db));
   const venue = await applyAllocatedTestVenue(
     planVenue(
       {
@@ -240,7 +240,7 @@ async function joinedPair() {
       },
       persistBackupSettings: async () => {},
       persistModuleConfig: async (config) => {
-        await writeModuleConfig(spareState, config);
+        await writeModuleConfig(spareBox.db, config, null);
       },
       stateDir: spareState,
       database: "spare",
@@ -270,7 +270,7 @@ async function joinedPair() {
 
   // The join refuses a Veri*Factu venue (`assertAdoptionModules`); the main box starts under the
   // filing module its node was set up with, as `boot.start-check.test.ts`'s main box does.
-  await writeModuleConfig(mainState, { overrides: new Map([["fiscal-none", false]]) });
+  await writeModuleConfig(mainBox.db, { overrides: new Map([["fiscal-none", false]]) }, null);
 
   const venueDirOf = (db: typeof mainBox.db) =>
     dirname(db.all<{ file: string }>(sql`pragma database_list`)[0]!.file);

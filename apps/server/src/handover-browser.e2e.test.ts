@@ -214,11 +214,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
   };
   const fixture = placedSpareFixture({ mainBox, spareBefore, dirs: () => dirs });
   const seeded = await fixture.setupBoxes();
-  for (const stateDir of [dirs.mainState, dirs.spareState])
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+
   const [bootPort] = await freePorts(1);
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   const secret = await enrolAuthenticator(mainBox.db, ADMIN, TOTP_KEY_RING);

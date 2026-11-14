@@ -207,13 +207,9 @@ describe("private host recovery material", () => {
   });
   it("accepts optional backup settings without accessing the old destination", async () => {
     const input = set(
-      set(
-        entries(),
-        "backup.env",
-        "ARCHIVE_FOLDER=/private-old-destination-sentinel\nWAITRON_BACKUP_RECOVERY_KEY=private-backup-key-sentinel\n",
-      ),
-      "modules.json",
-      '{"modules":{"payments":false}}',
+      entries(),
+      "backup.env",
+      "ARCHIVE_FOLDER=/private-old-destination-sentinel\nWAITRON_BACKUP_RECOVERY_KEY=private-backup-key-sentinel\n",
     );
     expect(await verifyBackupStateSecrets(input, source, now)).toEqual(pass);
     const dir = await place(input);
@@ -229,19 +225,7 @@ describe("private host recovery material", () => {
       ).toEqual(unsupported);
     },
   );
-  it.each([
-    "{",
-    "null",
-    '{"modules":{"unknown-module":true}}',
-    '{"modules":{"payments":"off"}}',
-    '{"modules":{"core":false}}',
-    '{"modules":{},"extra":true}',
-    '{"modules":{"payments":true,"payments":false}}',
-  ])("refuses malformed or unknown module configuration %#", async (raw) => {
-    expect(
-      await verifyBackupStateSecrets(set(entries(), "modules.json", raw), source, now),
-    ).toEqual(unsupported);
-  });
+
   it.each(["cloud/connection.json", "cloud/staff.key", "cloud/staff.json", "cloud/staff.session"])(
     "refuses archived Cloud authority %s",
     async (name) => {
@@ -407,14 +391,6 @@ describe("actual private key placement", () => {
   });
 });
 
-it.each(['{"modules":null}', '{"modules":[]}', '{"modules":1}', "[]", "4", "{}"])(
-  "refuses unsupported module envelope %#",
-  async (raw) => {
-    expect(
-      await verifyBackupStateSecrets(set(entries(), "modules.json", raw), source, now),
-    ).toEqual(unsupported);
-  },
-);
 it("does not classify an unreadable sealed frame as a wrong key", async () => {
   expect(
     await verifyBackupStateSecrets(entries(), source, now, {

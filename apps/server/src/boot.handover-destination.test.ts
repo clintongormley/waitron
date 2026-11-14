@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -253,10 +254,7 @@ async function boot(
       recursive: true,
     });
   }
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   const extraEnvironment = await inStateFolder(scratch);
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const env: Record<string, string> = {
@@ -442,6 +440,7 @@ describe("the spare's handover duty in a full start", () => {
               scratch!,
               loadKeyRing(KEY_ENV),
               "handover.settings_unreadable",
+              suite.db,
             )) as unknown as CanonicalValue,
             imageMigrations: imageMigrationsDigest(null),
           },

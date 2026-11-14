@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -104,10 +105,7 @@ async function startBox(scratch: string, verifier: string) {
       recursive: true,
     });
   }
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   await writeRecoveryKey(scratch, {
     recoveryKey: KEY,
     keyRotatedAt: "2026-10-31T08:00:00.000Z",

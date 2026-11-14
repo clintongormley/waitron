@@ -136,7 +136,6 @@ async function fixture() {
           : `private-${name}`,
       ),
     })),
-    { name: "secrets/modules.json", bytes: Buffer.from('{"disabled":[]}') },
     { name: "secrets/module-evidence/catalogue/probe.json", bytes: Buffer.from('{"kept":true}') },
     {
       name: "secrets/backup.env",

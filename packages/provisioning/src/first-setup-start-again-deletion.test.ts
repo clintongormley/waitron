@@ -209,29 +209,8 @@ it("reports a first-setup record folder it cannot read as a failed check, naming
   }
 });
 
-const MODULES = "state/modules.json";
-async function heldBox() {
-  const roots = await box();
-  await writeFile(join(roots.stateDir, "modules.json"), '{"modules":{}}\n');
-  return roots;
-}
 const marked = (marker: Awaited<ReturnType<typeof startAgainMarkerFor>>) =>
   marker.files.map((file) => `${file.root}/${file.name}`).sort();
-
-it("with held, the disk check accepts the setup's modules.json; without it, refuses", async () => {
-  const roots = await heldBox();
-  await mkdir(join(roots.stateDir, "flows/restore"), { recursive: true });
-  await writeFile(
-    join(roots.stateDir, "flows/restore/record.json"),
-    JSON.stringify({ version: 1, phase: "first-start", firstStart: { source: "archive" } }),
-  );
-  await assertStartAgainAllowedOnDisk(roots, { held: true });
-  expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
-    code: "setup.not_ready",
-    params: { cause: "unexpected" },
-    reason: "refused artifact: state/modules.json",
-  });
-});
 
 it.each([
   ["a node.db-wal holding pages", "node.db-wal holds pages", "unexpected"],
@@ -257,58 +236,39 @@ it("the disk check refuses an unexpected folder in the venue's documents as an u
   });
 });
 
-it("the marker names modules.json only with held", async () => {
-  const roots = await heldBox();
-  expect(marked(await startAgainMarkerFor(roots, attempt))).not.toContain(MODULES);
-});
-
-it("a marker naming modules.json is read back, finished, and deletes it", async () => {
-  const roots = await heldBox();
-  await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt, { held: true }));
-  const collected = await collectStartAgainFindings(roots);
-  expect(collected).toMatchObject({ findings: [], blocker: null });
-  expect(marked(collected!.marker)).toContain(MODULES);
-  await finishStartAgainDeletion(roots);
-  expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
-  expect(await exists(join(roots.stateDir, "modules.json"))).toBe(false);
-  expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(false);
-});
-
-it("a marker not naming modules.json still finds it a refused artifact, and the finisher deletes nothing", async () => {
+it("a marker not naming trading.env still finds it a refused artifact, and the finisher deletes nothing", async () => {
   const roots = await box();
   await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt));
-  await writeFile(join(roots.stateDir, "modules.json"), '{"modules":{}}\n');
+  await writeFile(join(roots.stateDir, "trading.env"), '{"modules":{}}\n');
   expect((await collectStartAgainFindings(roots))?.findings).toEqual([
-    { kind: "refused-artifact", root: "state", name: "modules.json" },
+    { kind: "refused-artifact", root: "state", name: "trading.env" },
   ]);
   expect(await refusal(finishStartAgainDeletion(roots))).toEqual({
     code: "setup.start_again_incomplete",
-    reason: "refused artifact present: state/modules.json",
+    reason: "refused artifact present: state/trading.env",
   });
-  expect(await exists(join(roots.stateDir, "modules.json"))).toBe(true);
+  expect(await exists(join(roots.stateDir, "trading.env"))).toBe(true);
   expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(true);
 });
 
-it("a modules.json changed after the marker named it is a changed finding, and the finisher deletes nothing", async () => {
-  const roots = await heldBox();
+it("a trading.env changed after the marker named it is a changed finding, and the finisher deletes nothing", async () => {
+  const roots = await tradingBox(["trading.env"]);
   await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt, { held: true }));
-  await writeFile(join(roots.stateDir, "modules.json"), '{"modules":{"other":{}}}\n');
+  await writeFile(join(roots.stateDir, "trading.env"), '{"modules":{"other":{}}}\n');
   expect((await collectStartAgainFindings(roots))?.findings).toEqual([
-    { kind: "changed", root: "state", name: "modules.json" },
+    { kind: "changed", root: "state", name: "trading.env" },
   ]);
   expect(await refusal(finishStartAgainDeletion(roots))).toEqual({
     code: "setup.start_again_incomplete",
-    reason: "size or hash differs: state/modules.json",
+    reason: "size or hash differs: state/trading.env",
   });
-  expect(await exists(join(roots.stateDir, "modules.json"))).toBe(true);
+  expect(await exists(join(roots.stateDir, "trading.env"))).toBe(true);
   expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(true);
 });
 
 const TRADING = "state/trading.env";
 async function tradingBox(names: readonly string[]) {
   const roots = await box();
-  if (names.includes("modules.json"))
-    await writeFile(join(roots.stateDir, "modules.json"), '{"modules":{}}\n');
   if (names.includes("trading.env")) await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
   return roots;
 }
@@ -324,7 +284,7 @@ it("with held, the disk check accepts the setup's trading.env; without it, refus
 });
 
 it("the marker names and fingerprints trading.env only with held", async () => {
-  const roots = await tradingBox(["modules.json", "trading.env"]);
+  const roots = await tradingBox(["trading.env"]);
   const marker = await startAgainMarkerFor(roots, attempt, { held: true });
   expect(marker.files.find((file) => file.name === "trading.env")).toMatchObject({
     size: 4,
@@ -333,7 +293,7 @@ it("the marker names and fingerprints trading.env only with held", async () => {
   expect(marked(await startAgainMarkerFor(roots, attempt))).not.toContain(TRADING);
 });
 
-it.each([[["trading.env"]], [["modules.json"]], [["modules.json", "trading.env"]]] as const)(
+it.each([[["trading.env"]]] as const)(
   "a marker naming %o is read as held, finished, and deletes them",
   async (names) => {
     const roots = await tradingBox(names);

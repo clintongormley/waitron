@@ -1,3 +1,4 @@
+import { seedModuleDocument } from "../test/module-settings.js";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -56,6 +57,17 @@ const IMAGE = imageMigrationsDigest(null);
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
+
+async function writeSettingsSource(file: string, text: string) {
+  if (file !== "settings:modules") return writeFile(join(stateDir, file), text);
+  let doc: Record<string, unknown>;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    doc = { modules: null };
+  }
+  await seedModuleDocument(suite.db, doc);
+}
 
 let self: string;
 let app: Hono;
@@ -731,23 +743,23 @@ describe("POST /api/node/handover/offer", () => {
       const first = await post(envelopeOf());
       await writeFile(join(stateDir, "backup.env"), "ARCHIVE_RETAIN=5\n");
       expect(await post(envelopeOf())).toEqual(first);
-      await writeFile(join(stateDir, "modules.json"), "not json");
+      await seedModuleDocument(suite.db, { modules: null });
       expect(await post(envelopeOf())).toEqual(first);
       expect(events()).toHaveLength(1);
     });
 
     describe("this box's own bad file", () => {
       const unreadableFile = refusal(409, "handover.destination_settings_unreadable", {
-        file: "modules.json",
+        file: "settings:modules",
       });
 
       it.each([
-        ["modules.json", "not json"],
-        ["modules.json", JSON.stringify({ modules: "every one" })],
+        ["settings:modules", "not json"],
+        ["settings:modules", JSON.stringify({ modules: "every one" })],
         ["module-preparation-state.json", "not json"],
         ["module-preparation-state.json", JSON.stringify({ version: 2, revisions: [] })],
       ])("a damaged %s refuses and records nothing: %s", async (file, text) => {
-        await writeFile(join(stateDir, file), text);
+        await writeSettingsSource(file, text);
         expect(await post(envelopeOf())).toEqual({
           ...unreadableFile,
           body: { error: { ...unreadableFile.body.error, params: { file } } },
@@ -764,7 +776,7 @@ describe("POST /api/node/handover/offer", () => {
         await expectNothingRecorded();
       });
 
-      it.each(["backup.env", "modules.json", "module-preparation-state.json"])(
+      it.each(["backup.env", "module-preparation-state.json"])(
         "%s being a folder rather than a file refuses and records nothing",
         async (file) => {
           await mkdir(join(stateDir, file));
@@ -775,9 +787,7 @@ describe("POST /api/node/handover/offer", () => {
         },
       );
 
-      it
-        .skipIf(process.getuid?.() === 0)
-        .each(["backup.env", "modules.json", "module-preparation-state.json"])(
+      it.skipIf(process.getuid?.() === 0).each(["backup.env", "module-preparation-state.json"])(
         "%s with no read permission refuses and records nothing",
         async (file) => {
           await writeFile(join(stateDir, file), "{}");

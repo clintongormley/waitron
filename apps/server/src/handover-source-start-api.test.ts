@@ -1,3 +1,4 @@
+import { seedModuleDocument } from "../test/module-settings.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -1304,7 +1305,16 @@ describe("two requests at once", () => {
 
 describe("the settings the offer carries", () => {
   const BACKUP = "ARCHIVE_RETAIN=5\nWAITRON_BACKUP_SCHEDULE=hourly\n";
-  const write = (state: string, file: string, text: string) => writeFile(join(state, file), text);
+  const write = async (state: string, file: string, text: string) => {
+    if (file !== "settings:modules") return writeFile(join(state, file), text);
+    let doc: Record<string, unknown>;
+    try {
+      doc = JSON.parse(text);
+    } catch {
+      doc = { modules: null };
+    }
+    await seedModuleDocument(state === mainState ? mainBox.db : spareBox.db, doc);
+  };
   const switchedOff = (...names: string[]) =>
     JSON.stringify({ modules: Object.fromEntries(names.map((name) => [name, false])) });
 
@@ -1353,7 +1363,7 @@ describe("the settings the offer carries", () => {
     });
 
     it("An offer whose module settings differ is refused the same way", async () => {
-      await write(mainState, "modules.json", switchedOff("bookings"));
+      await write(mainState, "settings:modules", switchedOff("bookings"));
       await expectRefusedByTheSpare("handover.modules_differ");
     });
 
@@ -1389,8 +1399,8 @@ describe("the settings the offer carries", () => {
     it("the same settings in another key order pass", async () => {
       await write(mainState, "backup.env", BACKUP);
       await write(spareState, "backup.env", "WAITRON_BACKUP_SCHEDULE=hourly\nARCHIVE_RETAIN=5\n");
-      await write(mainState, "modules.json", switchedOff("bookings", "workforce-es"));
-      await write(spareState, "modules.json", switchedOff("workforce-es", "bookings"));
+      await write(mainState, "settings:modules", switchedOff("bookings", "workforce-es"));
+      await write(spareState, "settings:modules", switchedOff("workforce-es", "bookings"));
 
       expect((await start()).status).toBe(200);
 
@@ -1411,8 +1421,8 @@ describe("the settings the offer carries", () => {
     it("the signed offer carries digests and versions, and none of the settings' values", async () => {
       await write(mainState, "backup.env", BACKUP);
       await write(spareState, "backup.env", BACKUP);
-      await write(mainState, "modules.json", switchedOff("bookings"));
-      await write(spareState, "modules.json", switchedOff("bookings"));
+      await write(mainState, "settings:modules", switchedOff("bookings"));
+      await write(spareState, "settings:modules", switchedOff("bookings"));
 
       await start();
 
@@ -1430,8 +1440,8 @@ describe("the settings the offer carries", () => {
   });
 
   const DAMAGED = [
-    ["modules.json", "text that is not JSON", "not json"],
-    ["modules.json", "a value of the wrong kind", JSON.stringify({ modules: "every one" })],
+    ["settings:modules", "text that is not JSON", "not json"],
+    ["settings:modules", "a value of the wrong kind", JSON.stringify({ modules: "every one" })],
     ["module-preparation-state.json", "text that is not JSON", "not json"],
     [
       "module-preparation-state.json",
@@ -1439,7 +1449,7 @@ describe("the settings the offer carries", () => {
       JSON.stringify({ version: 2, revisions: [] }),
     ],
   ] as const;
-  const FILES = ["backup.env", "modules.json", "module-preparation-state.json"] as const;
+  const FILES = ["backup.env", "module-preparation-state.json"] as const;
 
   const unreadableByPermission = async (state: string, file: string) => {
     await write(state, file, "{}");
@@ -1509,16 +1519,16 @@ describe("the settings the offer carries", () => {
     );
 
     it("control: with the file put right, the same real stepdown goes ahead", async () => {
-      await write(mainState, "modules.json", "{}");
+      await write(mainState, "settings:modules", "{}");
       const on = realBox();
       expect((await start({}, on)).status).toBe(200);
       expect(gate.isClosed()).toBe(true);
     });
 
     it("leaves no record, so the same id goes ahead once the file is put right", async () => {
-      await write(mainState, "modules.json", "not json");
+      await write(mainState, "settings:modules", "not json");
       await start();
-      await rm(join(mainState, "modules.json"));
+      await write(mainState, "settings:modules", "{}");
       expect((await start()).status).toBe(200);
       expect(operations().map((row) => row.state)).toEqual(["prepared"]);
     });
@@ -1594,7 +1604,7 @@ describe("the settings the offer carries", () => {
 
     it("module settings changed since are abandoned, sending nothing", async () => {
       await startedThenForgotten();
-      await write(mainState, "modules.json", switchedOff("bookings"));
+      await write(mainState, "settings:modules", switchedOff("bookings"));
       await expectRefusedUnsent("handover.settings_changed");
     });
 

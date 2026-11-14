@@ -2,7 +2,6 @@ import {
   CLOUD_REPLACEMENT_FILE,
   TRADING_ENV_FILE,
   FIRST_SETUP_FILE,
-  MODULES_FILE,
   RESET_REQUEST_FILE,
   RESTORE_FLOW_DIR,
   SETUP_OPERATION_FILE,
@@ -287,7 +286,6 @@ export function createFirstSetupResolutionInspection(
         SETUP_OPERATION_FILE,
         join(RESTORE_FLOW_DIR, "record.json"),
         RESET_REQUEST_FILE,
-        MODULES_FILE,
         CLOUD_REPLACEMENT_FILE,
       ])
         artifacts.push(await artifact(options.stateDir, name));

@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -246,10 +247,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
         recursive: true,
       });
     }
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
     const env: Record<string, string> = {
       ...KEY_ENV,
       WAITRON_BACKUP_RECOVERY_KEY: "backup-key-for-test-0123456789",

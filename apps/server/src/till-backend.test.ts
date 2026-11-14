@@ -9,7 +9,7 @@ import { makeFiscalBackend, systemClock } from "./till-backend.js";
 const STUB_DB = {} as Database;
 
 // `ALL_MODULES` carries two fiscal-slot members; a boot feeds `makeFiscalBackend` the enabled set,
-// with exactly one selected by `modules.json`.
+// with exactly one selected by the module settings row.
 /** A Spanish box's enabled set: `fiscal-none` disabled, Veri*Factu fills the slot. */
 const VERIFACTU_ENABLED: readonly WaitronModule[] = ALL_MODULES.filter(
   (m) => m.name !== "fiscal-none",
@@ -58,7 +58,7 @@ describe("makeFiscalBackend", () => {
   });
 
   it("refuses when BOTH fiscal-slot members are enabled (the default-on set, never persisted)", () => {
-    // Provisioning's `modules.json` write exists to prevent this.
+    // Provisioning's the module settings row write exists to prevent this.
     expect(() => makeFiscalBackend(ALL_MODULES, null, STUB_DB, {})).toThrow(
       expect.objectContaining({
         code: "module.fiscal_slot_ambiguous",

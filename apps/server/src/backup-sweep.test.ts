@@ -244,16 +244,12 @@ describe("runOnce (fan-out)", () => {
     expect(JSON.parse(entries.get("manifest.json")!.toString())).toEqual(FIXED_MANIFEST);
   });
 
-  it("captures backup.env + modules.json as secrets/<name> when present, skips them when absent", async () => {
+  it("captures backup.env when present and skips it when absent", async () => {
     await writeFile(join(stateDir, "backup.env"), "ARCHIVE_FOLDER=/mnt/usb\n");
-    await writeFile(join(stateDir, "modules.json"), '{"modules":{"fiscal-none":false}}\n');
     const a = new FakeBackend("a");
     await runOnce(deps([a]));
     const entries = entriesOf(a);
     expect(entries.get("secrets/backup.env")!.toString()).toBe("ARCHIVE_FOLDER=/mnt/usb\n");
-    expect(entries.get("secrets/modules.json")!.toString()).toBe(
-      '{"modules":{"fiscal-none":false}}\n',
-    );
 
     // Absent, they are skipped and the tick still succeeds.
     const bare = await makeStateDir();
@@ -262,7 +258,6 @@ describe("runOnce (fan-out)", () => {
       await runOnce({ ...deps([b]), stateDir: bare });
       const bareEntries = entriesOf(b);
       expect(bareEntries.has("secrets/backup.env")).toBe(false);
-      expect(bareEntries.has("secrets/modules.json")).toBe(false);
       expect(bareEntries.has("secrets/secrets.env")).toBe(true);
     } finally {
       await rm(bare, { recursive: true, force: true });
@@ -271,7 +266,6 @@ describe("runOnce (fan-out)", () => {
 
   it("packs the archive in a fixed entry order: manifest, database, node copy, required state, optional state", async () => {
     await writeFile(join(stateDir, "backup.env"), "ARCHIVE_FOLDER=/mnt/usb\n");
-    await writeFile(join(stateDir, "modules.json"), '{"modules":{}}\n');
     const a = new FakeBackend("a");
     await runOnce(deps([a]));
     const order = unpackArchive(decryptArtifact(a.objects.get(keyIn(a))!, "recovery-key-1")).map(
@@ -283,7 +277,6 @@ describe("runOnce (fan-out)", () => {
       "node.dump",
       ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
       "secrets/backup.env",
-      "secrets/modules.json",
     ]);
   });
 

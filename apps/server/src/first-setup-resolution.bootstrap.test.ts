@@ -1,5 +1,5 @@
 import { dirname, join } from "node:path";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { ALL_MODULES } from "@waitron/composition";
 import { afterEach, beforeAll, expect, it } from "vitest";
@@ -124,23 +124,6 @@ it("the repair shell preserves API refusals and missing assets while serving its
       404,
     );
 });
-
-it.each(["not JSON", "null"])(
-  "damaged module configuration %s leaves repair available without the ordinary setup route",
-  async (configuration) => {
-    const f = await fixture(null);
-    await writeFile(join(f.stateDir, "modules.json"), configuration);
-    const admitted = await resolveFirstSetupEntry(f, { WAITRON_ENV: "production" });
-    expect(admitted.kind).toBe("resolution");
-    if (admitted.kind !== "resolution") throw new Error("expected repair");
-    expect((await admitted.app.request("/setup-api/first-setup/resolution")).status).toBe(200);
-    expect((await admitted.app.request("/setup-api/provision", { method: "POST" })).status).toBe(
-      404,
-    );
-    expect(await readFile(join(f.stateDir, "modules.json"), "utf8")).toBe(configuration);
-    await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
-  },
-);
 
 it("does not advertise a malformed retained CA on resolution discovery", async () => {
   const f = await fixture(null);

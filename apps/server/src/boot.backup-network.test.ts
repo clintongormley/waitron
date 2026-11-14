@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -166,10 +167,7 @@ async function tradingEnv(): Promise<{ env: Record<string, string>; scratch: str
   scratches.push(scratch);
   const migrationsRoot = join(scratch, "migrations");
   await copyMigrationsRoot(migrationsRoot);
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   // The shape a box has after its setup boot: a tick refuses a state folder missing any recovery
   // file before it reaches a destination, and the leaf makes the trading listener HTTPS.
   await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });

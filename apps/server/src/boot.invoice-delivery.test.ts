@@ -6,7 +6,7 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   invoiceDeliveries,
   invoiceSeries,
@@ -89,8 +89,8 @@ beforeAll(async () => {
     await cp(options[index]!.migrationsFolder, join(migrationsRoot, set.name), { recursive: true });
   }
   stateDir = await mkdtemp(join(tmpdir(), "waitron-invoice-boot-state-"));
-  await writeModuleConfig(stateDir, modules);
 });
+beforeEach(() => writeModuleConfig(suite.db, modules, null));
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });

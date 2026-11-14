@@ -1,6 +1,7 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -150,10 +151,7 @@ it.each(["account", "key"])(
         await cp(migrations[index]!.migrationsFolder, join(scratch, "migrations", set.name), {
           recursive: true,
         });
-      await writeFile(
-        join(scratch, "modules.json"),
-        JSON.stringify({ modules: { "fiscal-verifactu": false } }),
-      );
+      await seedModuleSettings(suite.db, { "fiscal-verifactu": false });
       const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
       const [port] = await freePorts(1);
       server = await startServer({

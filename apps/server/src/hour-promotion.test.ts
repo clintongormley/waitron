@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -842,10 +843,7 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
       recursive: true,
     });
   await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
-  await writeFile(
-    join(stateDir, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-verifactu": true, "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-verifactu": true, "fiscal-none": false });
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const [port] = await freePorts(1);
   let server: StartedServer | undefined;
@@ -942,10 +940,7 @@ it.each(["key", "manager"])(
       });
     const stateDir = join(root, "state");
     await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-verifactu": true, "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-verifactu": true, "fiscal-none": false });
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     const [port] = await freePorts(1);
     const env = {
