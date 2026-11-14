@@ -3,29 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
-## Three adjustment-portion refusal checks also pass with shortened ID lists
-
-A974's 5 November 2026 naming review observed that three cases in
-`apps/server/src/order-portions.adjustments.test.ts` still pass after their request is shortened:
-
-- The two "two croquetas from two rounds" cases (one kitchen note, one course) still pass when
-  `lineIds` contains only the first croquette ID.
-- The "a cancel naming portions of two different rows" case still passes when its list contains
-  only the burger ID.
-
-The driver repeated those three mutations together in the disposable review checkout:
-`pnpm --filter @waitron/server exec vitest run src/order-portions.adjustments.test.ts -t 'two croquetas from two rounds|a cancel naming portions of two different rows'`
-reported three passes. Source was restored exactly. This does not establish why the shortened
-requests are refused. Removing `lineIds` failed the reviewer's checks; replacing the cancel's
-croquette ID with the second burger ID also failed. Keep the existing refusal and unchanged-row
-assertions, and add accepting controls that distinguish the intended note/course/mixed-row
-condition from another invalid-request condition before changing these cases. No production
-fault was established by these probes.
-
-Current command after A976’s staff-sample rename (2026-11-09):
-`pnpm --filter @waitron/server exec vitest run src/order-portions.adjustments.test.ts -t 'two croquettes from two rounds|a cancel naming portions of two different rows'`
-The dated experiment above retains its original titles and command.
-
 ## Retain failure screenshots for long browser test names
 
 A failed waiting-list refresh case
@@ -123,21 +100,6 @@ An older, separate wording mismatch remains in `apps/dashboard/src/i18n/codes.ts
 Align the inline instruction with the available action when reworking this refusal; preserve its
 cause and the distinction between a failed write and a successful write whose reload failed.
 
-## Spanish separately installed certificate test checks mapping only
-
-A1251's review of the #2055 test repair found another mapping-only assertion in
-`apps/server/src/connection-bootstrap-page.test.ts`, in the separately supplied certificate case.
-Restoring the Spanish `operator` installer's referral left all 24 page cases passing, both in the
-reviewer's checkout and the driver's independent control on the repaired test. Restoring the
-current wording also passes all 24. Run
-`pnpm --filter @waitron/server exec vitest run src/connection-bootstrap-page.test.ts`.
-
-The old wording came from #1929 and was replaced by #2064; #2055 changed only `failed`. Keep this
-follow-up separate from the #2055 repair. Add independent Spanish checks for the HTTPS address
-choice, stopping on a certificate warning, the page's replacement limit and absence of a referral.
-Retain the existing locale-mapping, local Stop and no-write assertions. This is a test gap; the
-control does not establish a defect in the current certificate workflow.
-
 ## A1251: qualify artifact-upload retries after a step timeout
 
 Before treating artifact-upload retries as qualified for stalled connections, run a bounded
@@ -219,15 +181,6 @@ subject has gone from the lines beneath it. It is not usable as it stands: 13 of
 were the legitimate shape where a block comment heads a group of members rather than describing
 the one line below it. **Next action:** rewrite it as a real root guard with an allowlist for that
 header-then-member shape, and its own tests, rather than re-running a scratch script.
-
-## `apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control
-
-The case boots a mirror on an empty database and checks it serves a status surface. Its receipt
-used to be a foreign key from `persons` to `tenants` — remove the guard and the boot would die on
-it — and #378 removed every foreign key to that table, so nothing now says what
-would break if the guard went. The test's own comment says this plainly and claims nothing more.
-**Next action:** find a failure the empty database still causes without the guard, and name it;
-if there is none, say so in the comment and stop calling the case a guard test.
 
 ## Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
 
@@ -506,26 +459,6 @@ The remaining work concerns live routing qualification and the action-repository
 - **A trap not yet in `CLAUDE.md`: `pnpm --filter <pkg> test <file> -t "name"` silently drops the
   `-t` and runs the whole file**; only a bare `--` before it passes it through. **Next action:** add
   it to `CLAUDE.md` §2's trap list, through the normal pull request flow.
-
-## Bundle: Add a control to each check that cannot fail
-
-4 entries, size S. The first 3 are unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Three adjustment-portion refusal checks also pass with shortened ID lists.** Qualify the
-  intended mixed-row, note and course refusals with accepting controls, without weakening the
-  existing error-code and unchanged-row assertions.
-  [Detail](ci.md#three-adjustment-portion-refusal-checks-also-pass-with-shortened-id-lists).
-- **Spanish separately installed certificate guidance is checked only against its translation.**
-  Add an independent check for address checking, stopping on a certificate warning and the page's
-  replacement limit. The earlier Spanish installer referral passes the whole current page suite.
-  [Observed control](ci.md#spanish-separately-installed-certificate-test-checks-mapping-only).
-- **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control.**
-  [Detail](ci.md#appsserversrcbootmirrortesttss-adoption-pending-case-no-longer-has-a-negative-control).
-- **`apps/server/src/receipt-ticket.test.ts`'s line-length checks cannot fail** (found in A444's
-  review, 2026-11-12). `drawTextBand` (`packages/printing/src/raster-text.ts`) draws only the
-  characters that fit the paper, and the test reads the text back from the drawing, so
-  `line.length <= columnsFor(...)` holds even when a line was cut off. Assert each row's whole
-  text instead, as the F1 heading-and-date case in that file does.
 
 ## Bundle: apps/server's test speed: restart tests, measured speed-ups, fixed PINs
 

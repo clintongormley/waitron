@@ -386,6 +386,11 @@ it.each(["en", "es"] as const)(
           ? "This server uses a separately installed certificate. Check the HTTPS address below. If it shows a certificate warning, stop; this page cannot replace that certificate."
           : CONNECTION_TEXT.es.operator,
       );
+      if (locale === "es") {
+        expect(await page.locator("#connection-status").textContent()).toBe(
+          "Este servidor usa un certificado instalado por separado. Comprueba la dirección HTTPS de abajo. Si muestra un aviso del certificado, detente: esta página no puede sustituirlo.",
+        );
+      }
       expect(await page.locator("#connection-repair").count()).toBe(0);
       expect(await page.locator("#connection-continue").isVisible()).toBe(true);
       expect(await page.locator("#connection-continue").getAttribute("href")).toBe(base.httpsUrl);
