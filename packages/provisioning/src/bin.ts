@@ -148,7 +148,5 @@ function isAbort(error: unknown): boolean {
   );
 }
 
-// No state-directory default here, as for the setup state directory: without one, the log directory is
-// `WAITRON_LOG_DIR` alone.
 setVenueHolderIdentity("provisioning", process.env, process.env.WAITRON_STATE_DIR || undefined);
 process.exitCode = await main();

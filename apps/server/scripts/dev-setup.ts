@@ -118,8 +118,6 @@ export function renderEnvFile(env: DevEnv): string {
 export interface DevSetupOptions {
   venueDir: string;
   envPath: string;
-  /** Must be the same dir the server resolves at boot, or boot never reads the fiscal-slot
-   * module settings written here. */
   stateDir: string;
   httpPort?: string;
   log?: (line: string) => void;

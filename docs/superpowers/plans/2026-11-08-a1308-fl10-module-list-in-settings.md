@@ -261,3 +261,17 @@ lands this slice. These are watcher clearances, not a separate owner design appr
 At 06:09 the watcher cleared reuse of the failed-start fixture's migrated
 template row, saving selection again only for an explicit override. The timing
 comparison uses five runs on each side and the same 10% median stop.
+
+
+At 06:32 the watcher cleared the gathered review corrections and up to 2,700
+counted lines. Provisioning saves the module row in applyVenue's existing
+beforeCommit transaction, using its supplied catalogue and keeping the caller's
+hook. The unused repair-page reader in What it builds 5 is removed: that
+resolution app mounts inspection, summary and Start again, with no row-dependent
+methods. Its existing unreadable-database cases remain. The no-row restore case
+reads the restored venue instead of the suite's database. The held-setup row
+count changes from 122 to 125: the measured differences are settings 2→3 and
+activity_log 5→7, with kept/record/byte assertions retained. The handover digest
+stays as Global Constraints requires; the watcher settled reviewer B's question
+about its value. These corrections are watcher clearances, not separate owner
+approval of the design.

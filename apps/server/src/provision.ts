@@ -1,5 +1,7 @@
 import {
   stampDeployment,
+  readSettings,
+  saveSettings,
   type Database,
   type DeploymentEnvironment,
   type Transaction,
@@ -23,11 +25,12 @@ import {
   disabledProvisionOnly,
   enabledModules,
   fiscalSlot,
+  modulesSettings,
+  serializeModuleConfig,
   type WaitronModule,
   type ModuleConfig,
 } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
-import { writeModuleConfig } from "./module-config.js";
 import "./errors.js";
 
 /**
@@ -175,9 +178,17 @@ export async function provisionVenue(
     db: deps.ownerDb,
     modules: preparedModules,
     ...throwaway,
-    beforeCommit: deps.beforeCommit,
+    beforeCommit: async (tx, result) => {
+      await deps.beforeCommit?.(tx, result);
+      const definition = modulesSettings(availableModules);
+      const saved = await readSettings(tx, definition);
+      await saveSettings(tx, definition, {
+        doc: { modules: serializeModuleConfig(deps.moduleConfig) },
+        expectedRevision: saved.revision,
+        personId: null,
+      });
+    },
   });
 
-  await writeModuleConfig(deps.ownerDb, deps.moduleConfig, null);
   return result;
 }

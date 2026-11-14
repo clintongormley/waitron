@@ -1794,15 +1794,32 @@ describe("backup settings and the database module list round-trip", () => {
   });
 
   it("a database with no modules row refuses an ambiguous fiscal slot", async () => {
-    await restoreFromArtifact(makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES]) }));
-    const missing = await readModuleConfig(suite.db);
-    let ambiguous: unknown;
+    const source = join(stagingDir, "archive-venue");
+    await applyMigrations(source, migrationOptionsFor(manifestSets(), null));
+    const bytes = await readFile(join(source, "venue.db"));
+    await seedModuleSettings(venueDir, { "fiscal-none": false });
+    await restoreFromArtifact(
+      makeRestoreDeps({
+        skipSecrets: true,
+        artifact: buildArtifact(
+          FULL_ENTRIES.map((entry) => (entry.name === "db.dump" ? { ...entry, bytes } : entry)),
+        ),
+        migrate: applyMigrations,
+      }),
+    );
+    const restored = await openVenueDatabase(venueDir);
     try {
-      fiscalSlot(enabledModules(ALL_MODULES, missing), null);
-    } catch (err) {
-      ambiguous = err;
+      const missing = await readModuleConfig(restored.venue);
+      let ambiguous: unknown;
+      try {
+        fiscalSlot(enabledModules(ALL_MODULES, missing), null);
+      } catch (err) {
+        ambiguous = err;
+      }
+      expect(isAppError(ambiguous) && ambiguous.code).toBe("module.fiscal_slot_ambiguous");
+    } finally {
+      await restored.close();
     }
-    expect(isAppError(ambiguous) && ambiguous.code).toBe("module.fiscal_slot_ambiguous");
   });
 });
 

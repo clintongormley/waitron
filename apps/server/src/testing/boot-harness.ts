@@ -30,9 +30,6 @@ export const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 export const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
-// Resolves the fiscal slot to Veri*Factu: `ALL_MODULES` holds two fiscal-slot members, so the
-// default-on set would refuse `module.fiscal_slot_ambiguous`. A test needing a different set overrides
-// `WAITRON_STATE_DIR` after the `...KEY_ENV` spread.
 export const TRADING_STATE_DIR = mkdtempSync(join(tmpdir(), "waitron-boot-trading-state-"));
 export const KEY_ENV = {
   // Keeps the plain-HTTP landing listener (default port 80, privileged) out of every boot test.
