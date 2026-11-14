@@ -1851,7 +1851,7 @@ Not in any track until the standalone primary is done.
   stepdown to the full start's own handling once that is mounted (`apps/server/src/boot.ts`).
   Left open by WAITING-START-ENDS.
 
-- **Size and attempt limits on box-to-box and handover routes** (bundle of 2, 2 important, size S). [Detail](backlog/replication-cloud.md#bundle-size-and-attempt-limits-on-box-to-box-and-handover-routes)
+- **Size and attempt limits on box-to-box and handover routes** (bundle of 2, 2 important, size S). [Detail](backlog/replication-cloud.md#bundle-size-and-attempt-limits-on-box-to-box-and-handover-routes) [Build plan](superpowers/plans/2026-11-14-peer-route-limits.md), watcher-cleared 14 November.
 
 - **Check everything at the offer, while the old box still sells** (bundle of 2, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-check-everything-at-the-offer-while-the-old-box-still-sells)
 

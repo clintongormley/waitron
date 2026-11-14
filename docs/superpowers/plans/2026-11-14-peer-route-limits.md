@@ -1,6 +1,6 @@
 # Peer-route limits implementation plan
 
-**Outcome and authority.** Bound request buffering before authentication or database work, require a UUID in peer queries, and correct peer-status authentication responses. Request: `~/waitron-campaign-j/queue.md`, PEER-ROUTE-LIMITS; watcher assignment: 2026-11-14 14:22. Driver checks and commits this draft; Claude reviews it, then watcher clearance is required before building. No owner design approval is claimed. Source orientation below is reading, not runtime evidence; base `dc4d41ec89`.
+**Outcome and authority.** Bound request buffering before authentication or database work, require a UUID in peer queries, and correct peer-status authentication responses. Request: `~/waitron-campaign-j/queue.md`, PEER-ROUTE-LIMITS; watcher assignment: 2026-11-14 14:22. Claude reviewed it and one correction read; watcher 2026-11-14 14:41 cleared this corrected scope for publication and TDD build (Lane J questions.md). No owner design approval is claimed. Source orientation below is reading, not runtime evidence; base `dc4d41ec89`.
 
 **Route inventory and budgets.** All sizes count incoming bytes, including signed envelopes. POST unless stated otherwise; abbreviated suffixes inherit the preceding route prefix.
 
