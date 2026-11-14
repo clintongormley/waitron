@@ -93,7 +93,7 @@ About 25–40 production lines and 120–150 test lines.
 
 ### Task 2: one end-to-end test of the whole journey
 
-**Create:** `apps/server/src/fiscal-offline-recovery.e2e.test.ts`. Reuse
+**Create:** `apps/server/src/restore-missing-history.e2e.test.ts`. Reuse
 `apps/server/src/testing/staged-hour-crash.ts` (the backup holds one real invoice under `A-0CNNW`,
 counters at 123); no new harness. For `archive` and `stream`:
 
@@ -117,7 +117,7 @@ counters at 123); no new harness. For `archive` and `stream`:
   `fiscal_allocations` count (no automatic switch); the next sale is `A-0CNQR/2`; `fetch` never
   called.
 - [ ] Deletion control: revert Task 1's rule locally and see the `A-0CNNW/123` assertion fail.
-- [ ] Run: `pnpm --filter @waitron/server exec vitest run src/fiscal-offline-recovery.e2e.test.ts
+- [ ] Run: `pnpm --filter @waitron/server exec vitest run src/restore-missing-history.e2e.test.ts
   src/device-after-offline-restore.test.ts src/restore-emergency-crash.e2e.test.ts`. Add the new
   file to `apps/server/test-durations.json` only if `scripts/test-durations.mjs` asks for it.
 
@@ -171,6 +171,7 @@ Inside the lane's "small" item. Each task fits one implementer well under 100 to
 - **Production TLS** and **live AEAT reconciliation**: need a real box or the owner's certificate
   session; keep as their own qualification entries.
 - **Fencing a returning one-box box**: A1418 part 1's work.
+- **A restore with no internet time** (14 November 2026): A restore through the restore page still needs the box's internet time at the start that places the backup; A1420 PR 3b1 and 3b2 (lane B) remove that, and once they land the end-to-end test drops its internet stand-in.
 - **Importing, matching or reconciling recovered history; any missing-history remedy**: Q41.
 - **`docs/operations/fiscal-recovery.md`, allocation exhaustion, subscription-free allocation, paper
   allocation evidence**: retired concepts or duplicated by the guide.

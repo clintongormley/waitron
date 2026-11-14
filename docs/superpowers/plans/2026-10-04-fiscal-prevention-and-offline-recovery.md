@@ -682,7 +682,8 @@ built, kept or dropped, and why, is in
 [the W41s-11 plan](2026-11-14-w41s-11-offline-exercise.md). The procedure is the in-app guide's
 [After a recovery](../../../apps/server/src/guide/en/backup-recovery.md) section, not
 `docs/operations/fiscal-recovery.md`. The 9 November note under Task 10 overstates fencing: a
-one-box venue is not fenced, because A1418 part 1 is a plan only.
+one-box venue is not fenced, because A1418 part 1 is a plan only. The test below is now
+`apps/server/src/restore-missing-history.e2e.test.ts`.
 
 **Create:** `apps/server/src/fiscal-offline-recovery.e2e.test.ts`;
 `docs/operations/fiscal-recovery.md`. **Modify:** compliance findings with dated receipts,

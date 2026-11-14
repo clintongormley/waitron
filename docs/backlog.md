@@ -294,7 +294,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the adviser's answer to Q41. Signed witnesses and fencing (W41s-10b)
   were retired on 9 November 2026: A1342 (#2654) stops a returning old box on a two-box venue; on a
   one-box venue nothing stops it until A1418 part 1, still a plan, is built. Qualify live AEAT
-  reconciliation, production TLS and a till payment through a booted restored server. Of Task 8's
+  reconciliation, production TLS and a till payment through a booted restored server.
+  A restore through the restore page still needs the box's internet time at the start that places the backup; A1420 PR 3b1 and 3b2 (lane B) remove that, and once they land the end-to-end test drops its internet stand-in. Of Task 8's
   disputed production remedies, the corrective invoice (the replacement) waits on Q37-FIX Task 3,
   which waits on the owner's answers to questions A–E (lane L, 2026-11-14); the others stay disabled
   pending Q35/Q38/Q40 or a case-specific owner decision. Once its original's

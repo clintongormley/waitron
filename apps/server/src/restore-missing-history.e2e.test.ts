@@ -39,8 +39,8 @@ import { stagedHourCrash } from "./testing/staged-hour-crash.js";
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
-// A staged restore's start compares the box's clock with the internet's again (`resume` in
-// hosted-hour-recovery.ts); that reading is the one outside answer this journey stands in for.
+// Stands in for the start's internet time check (`resume` in hosted-hour-recovery.ts); the rest
+// of the journey runs with no network.
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => ({
     source: "internet",
@@ -67,7 +67,7 @@ const offline = async () => {
 };
 
 it.each(["archive", "stream"] as const)(
-  "an offline %s restore sells on a new series and later lists the old box's invoices AEAT holds",
+  "a %s restore, with its start's internet time check stood in for, sells on a new series and later lists the old box's invoices AEAT holds",
   async (kind) => {
     const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
     const f = (fixture = await stagedHourCrash(suite, kind, `offline-recovery-${kind}`));
