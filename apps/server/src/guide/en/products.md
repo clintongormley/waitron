@@ -483,7 +483,6 @@ Only an active, published default menu is shown. Choose **Turn sharing off** to 
 The choice stays on this box when you import a configuration; a new box starts with sharing Off.
 A guest link over mobile data and Cloud delivery are not available yet.
 
-
 ## Print a published menu {#guest-paper}
 
 In **Guest menu preview**, choose the guest language, then use **A4 printed menu** to choose

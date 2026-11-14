@@ -510,7 +510,6 @@ Solo se muestra una carta predeterminada activa y publicada. Elige **Dejar de co
 La elección se conserva en esta caja al importar una configuración; una caja nueva empieza sin compartir.
 El enlace para clientes con datos móviles y el envío a Cloud aún no están disponibles.
 
-
 ## Imprime una carta publicada {#guest-paper}
 
 En **Vista previa para clientes**, elige el idioma del cliente y usa **Carta impresa A4**.
