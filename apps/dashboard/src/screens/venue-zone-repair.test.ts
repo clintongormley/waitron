@@ -367,7 +367,7 @@ it("keeps a zone refusal beside its field through an unrelated confirmation edit
   await change(el, "timeZone", "Atlantic/Canary");
   expect(q<WtCombobox>(el, "[name=timeZone]").error).toBe("");
 });
-it("retains a request refusal together with new validation messages until the next submission", async () => {
+it("puts the correction before a retained request refusal", async () => {
   const { el } = await mount({
     confirmVenueZone: vi
       .fn()
@@ -380,8 +380,20 @@ it("retains a request refusal together with new validation messages until the ne
     .toBe(t("zone_repair.conversion_failed"));
   await change(el, "confirmed", false);
   const message = q(el, "wt-form-actions").getAttribute("error")!;
-  expect(message).toContain(t("form.fix_fields"));
-  expect(message).toContain(t("zone_repair.conversion_failed"));
+  expect(message).toBe(`${t("form.fix_fields")} ${t("zone_repair.conversion_failed")}`);
+});
+it("starts a new session without carrying over the previous attempt's errors", async () => {
+  const { el } = await mount();
+  await change(el, "timeZone", "Invalid/Zone");
+  q(el, "form").dispatchEvent(new Event("submit", { cancelable: true }));
+  await el.updateComplete;
+  expect(q<WtCombobox>(el, "[name=timeZone]").error).not.toBe("");
+  el.sessionKey = "another";
+  await el.updateComplete;
+  await expect.poll(() => q(el, "[name=timeZone]")).not.toBeNull();
+  expect(q<WtCombobox>(el, "[name=timeZone]").error).toBe("");
+  expect(q(el, "[data-test=confirmation-error]")).toBeNull();
+  expect(q(el, "wt-form-actions").getAttribute("error")).toBe("");
 });
 it("resolves a lost confirmation after normal boot removes the repair-only route", async () => {
   const read = vi

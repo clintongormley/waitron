@@ -2,8 +2,10 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  bottomMessage,
   pageTitleStyles,
   draftScopeFor,
+  FormFeedback,
   saveActionState,
   type DraftScope,
 } from "@waitron/ui";
@@ -67,7 +69,7 @@ export class VenueZoneRepair extends LitElement {
   @state() private busy = false;
   @state() private loading = false;
   @state() private previewLoading = false;
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   @state() private complete = false;
   @state() private ready = false;
   @state() private uncertain = false;
@@ -100,7 +102,7 @@ export class VenueZoneRepair extends LitElement {
       this.view = undefined;
       this.preview = undefined;
       this.draft = { timeZone: "", confirmed: false };
-      this.attempted = false;
+      this.feedback.reset();
       this.busy = false;
       this.uncertain = false;
       this.actionError = "";
@@ -141,7 +143,7 @@ export class VenueZoneRepair extends LitElement {
       equal: (a, b) => a.timeZone === b.timeZone && a.confirmed === b.confirmed,
       restore: (value) => {
         this.draft = value;
-        this.attempted = false;
+        this.feedback.reset();
         this.fieldError = "";
         this.actionError = "";
         void this.#previewChoice();
@@ -267,7 +269,7 @@ export class VenueZoneRepair extends LitElement {
       saveActionState(this.#scope).unchanged
     )
       return;
-    this.attempted = true;
+    this.feedback.press();
     const problems = this.#problems();
     if (problems.zone || problems.confirmation) {
       await this.updateComplete;
@@ -322,9 +324,10 @@ export class VenueZoneRepair extends LitElement {
   }
   override render() {
     const problems = this.#problems();
-    const zoneError = this.attempted && problems.zone ? t("zone_repair.choose") : this.fieldError;
+    const zoneError =
+      this.feedback.attempted && problems.zone ? t("zone_repair.choose") : this.fieldError;
     const confirmationError =
-      this.attempted && problems.confirmation ? t("zone_repair.confirm_required") : "";
+      this.feedback.attempted && problems.confirmation ? t("zone_repair.confirm_required") : "";
     const action = saveActionState(this.#scope);
     const blocked =
       this.busy ||
@@ -332,7 +335,7 @@ export class VenueZoneRepair extends LitElement {
       this.uncertain ||
       this.previewLoading ||
       !!this.previewError ||
-      (this.attempted && (problems.zone || problems.confirmation));
+      (this.feedback.attempted && (problems.zone || problems.confirmation));
     const preview = this.preview;
     return html`<h1>${t("zone_repair.heading")}</h1>
       ${!this.complete && this.admission.state !== "unchecked" ? html`<p>${t("zone_repair.explanation")}</p>` : nothing}
@@ -417,7 +420,7 @@ export class VenueZoneRepair extends LitElement {
               ></wt-switch>
               ${confirmationError ? html`<p class="error" role="alert" data-test="confirmation-error">${confirmationError}</p>` : nothing}
               <wt-form-actions
-                error=${[zoneError || confirmationError ? t("form.fix_fields") : "", this.actionError].filter(Boolean).join(" ")}
+                error=${bottomMessage(zoneError || confirmationError ? t("form.fix_fields") : "", this.actionError)}
               >
                 <wt-button
                   data-test="save"
