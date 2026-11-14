@@ -270,12 +270,6 @@ minting the break-glass secret or first-setup key, stops the event loop; device 
 [The box](box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives). Left by #912's review: `verifySecretAsync` could be
 renamed `verifySecret` (optional).
 
-## App views are not scanned by the no-hardcoded-chrome guards
-
-The design rule binds every component and view. The guards in `packages/ui` and `packages/ui-core`
-scan their components' static styles; they do not scan app views. The docs now distinguish the rule
-from that coverage. The remaining work is to enforce the rule in views too.
-
 ## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
 
 Safari was not tried, so what it draws with no colour chosen, and whether the ring and the
@@ -446,14 +440,6 @@ Shared form plumbing, an untraced dialog focus line and retiring the summary onc
 
 - **Loose ends left by C47 (#838/#839/#840/#841).**
   [Detail](dashboard.md#loose-ends-left-by-c47-838839840841)
-
-## Bundle: Design system doc truth
-
-1 entry, size S.
-
-- **The no-hardcoded-chrome guards do not scan app views.** The shared design rule already binds every component
-  and view; extend enforcement without claiming that component-only checks cover those views.
-  [Detail](dashboard.md#app-views-are-not-scanned-by-the-no-hardcoded-chrome-guards)
 
 ## Bundle: Other browser check
 

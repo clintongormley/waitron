@@ -27,8 +27,15 @@ in any component or view. Every such value reads a token instead. `transparent`,
 and `inherit` are legitimate escape hatches, not chrome.
 `packages/ui/src/no-hardcoded-chrome.test.ts` discovers primitives via
 `import.meta.glob("./components/*.ts", ...)` (excluding `*.test.ts`), scans each one's `static
-styles`, and fails on violations. It covers a new primitive automatically; it does not scan
-app views. The rule above still applies to those views.
+styles`, and fails on violations. It covers a new primitive automatically.
+`scripts/no-hardcoded-chrome-views.test.ts` reads the text of every Lit `css` tagged template in
+a tracked, non-test `.ts` under `apps/dashboard/src` and `apps/till/src`, and refuses hex, the
+colour functions, the same short list of named colours, and `rem`/`em` (a `var()` fallback
+included). It does not see `px` sizes; styles outside a `css` tag (inline `style=` attributes,
+`unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`, `index.html`);
+the condition of a `@media` or `@container` rule, which cannot read a custom property, so app
+breakpoints stay literal; a value interpolated with `${…}`; or `apps/setup`, `apps/server` and any
+other app. The rule above still applies to everything the guards do not see.
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
 `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 

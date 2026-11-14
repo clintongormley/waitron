@@ -341,7 +341,9 @@ called weaker than its name, the topic file lists what it does not see.
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a
   CSS class.** Receipt: [design-system.md](docs/developers/design-system.md#primitives).
 - **Every colour, spacing, radius and font reads a declared `--wt-*` token; no hex, named colours,
-  `rem` or `em`.** Guards: `packages/ui/src/no-hardcoded-chrome.test.ts` (UI package only) and
+  `rem` or `em`.** Guards: `packages/ui/src/no-hardcoded-chrome.test.ts` (UI package only),
+  `scripts/no-hardcoded-chrome-views.test.ts`, weaker than its name: the dashboard's and till's `css`
+  tags only, no `px` ([limits](docs/developers/conventions-ui.md#no-hardcoded-chrome)), and
   `scripts/style-token-names.test.ts`, weaker than its name: text match against declarations anywhere.
 - **Text in the brand colour reads `--wt-color-primary-text`; `--wt-color-primary` paints fills,
   lines and icons.** Guard: `scripts/primary-coloured-text.test.ts`, weaker than its name — it reads
