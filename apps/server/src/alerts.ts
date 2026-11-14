@@ -202,7 +202,6 @@ export async function readHandledAlerts(
   return visible.map(({ incident, claim }) => ({
     ...eventAlert(incident, claim),
     handledAt: incident.acknowledgedAt!.toISOString(),
-    handledBy:
-      incident.acknowledgedBy === null ? null : (names.get(incident.acknowledgedBy) ?? null),
+    handledBy: incident.acknowledgedBy === null ? null : names.get(incident.acknowledgedBy)!,
   }));
 }
