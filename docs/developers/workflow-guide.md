@@ -260,50 +260,29 @@ returned only the box. `apps/server/src/mdns.test.ts` covers the advertisement g
 logging `mdns.responding`. The guard landed in #380.
 
 **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
-`wa-wt onboarding <worktree-name>`** (`~/workspace/tools`),
-never with a bare `pnpm dev*`. The first port slot uses
-`$HOME/workspace/.waitron-dev/box`, including its venue across worktrees that take that slot. The
-venue directory is derived from that state directory by
-`defaultDevVenueDir` (`apps/server/scripts/dev-setup.ts`). The gitignored `apps/server/.env`
-describes that venue (venue ids, credentials key), so `wa-wt` copies its newest copy into another
-worktree that takes the first slot. There are eight slots: slot _k_ serves the till, dashboard,
-setup, server and print agent on 5190, 5191, 5192, 8080 and 9110 plus 100 × _k_, so the second slot
-is 5290, 5291, 5292, 8180 and 9210. A start keeps its saved slot unless another running instance
-holds it or a process `wa-wt` does not recognise as a Waitron app listens on one of its ports.
-Otherwise it takes the first slot nothing listens on, or failing that the first whose only listeners
-are Waitron app processes run under pnpm from one of the checkouts. Whichever slot it takes, it
-first stops those processes, even ones `wa-wt` did not start. A listener on one slot never blocks a
-start on another. A worktree on any slot but the first has its own
-`$HOME/workspace/.waitron-dev/instances/<name>/box/venue` and `.env`, provisioned separately, and
-its `WAITRON_MANAGEMENT_ORIGIN` points at its own dashboard port, so passkeys and account links stay
-with that venue. Provisioning writes its shifted server port to that checkout's `.env`. Every venue
-is a directory of SQLite files on the host, not a container.
-
-For side-by-side visual checks, start one worktree, then start another without taking the first
-down. `wa-wt ls` shows which name owns each URL. While more than one runs, name the instance in
-`wa-wt logs <name>`, `wa-wt down <name>`, and `wa-wt reset demo <name>`; a bare command refuses to
-guess. Stopping one leaves the others' listeners and venues open. When all eight slots are held, a
-start refuses and lists what holds each.
+`wa-wt onboarding <worktree-name>`** (`~/workspace/tools`), never with a bare `pnpm dev*`. Every
+venue is a directory of SQLite files on the host, not a container. There are eight port slots:
+slot _k_ serves the till, dashboard, setup, server and print agent on 5190, 5191, 5192, 8080 and
+9110 plus 100 × _k_, so the second slot is 5290, 5291, 5292, 8180 and 9210.
 
 **Compose holds nothing but the practice email inbox.** `docker-compose.yml` declares one service,
 `mailpit`, and no container holds any part of a venue, so there is no volume a reset could clear.
 It is started because `pnpm dev:setup` and `pnpm dev:reset` each begin
 `docker compose up -d --wait mailpit`. Compose names its project after the directory, so an
 unqualified `docker compose up` from a worktree starts a SECOND mailpit fighting for the fixed 1025
-and 8025 ports, which is the reason the rule at the top of this paragraph exists — `wa-wt` brings
-the shared one up under `COMPOSE_PROJECT_NAME=waitron`. It copies `.env` between worktrees sharing
-the first slot, and a checkout on any other slot keeps its own `.env` with its own venue.
+and 8025 ports, which is the reason the rule in the paragraph above exists — `wa-wt` brings
+the shared one up under `COMPOSE_PROJECT_NAME=waitron`.
 
 Changing target REMOVES THAT INSTANCE'S VENUE DIRECTORY, keeping its development CA. Two steps do
 it: `wa-wt`'s `reset_target` clears that instance's box state except `tls`, and the `dev:reset` it
 then runs calls `resetVenueDir` (`apps/server/scripts/dev-setup.ts`), an `rm -rf` of the venue
 directory whole. That comment says why the whole directory rather than
 `venue.db`: the engine keeps write-ahead sidecars beside each file, and a venue file removed while
-its `-wal` stays behind reopens on the OLD tail and answers wrongly without erroring.
-`wa-wt reset demo [name]` and `wa-wt reset onboarding [name]` rebuild the selected target. The first
-slot copies its new `.env` to other first-slot checkouts; a checkout on any other slot keeps its
-own. Cost: a round trip each on 2026-09-05 and 2026-09-06 while the original copy and reset rules
-were manual. Detail: `docs/ui-review.md` → _Running the stack from a worktree_.
+its `-wal` stays behind reopens on the OLD tail and answers wrongly without erroring. An
+own-venue checkout is never reset this way; it has its own rebuild. A rebuild of the shared venue
+copies its new `.env` to the other shared checkouts and `box/server.env`. Cost: a round trip each
+on 2026-09-05 and 2026-09-06 while the original copy and reset rules were manual. Detail:
+`docs/ui-review.md` → _Running the stack from a worktree_.
 
 Writing to that database from outside the server — a seeding script, or any other process that
 opens the venue directory — no longer puts your change on an open dashboard at the moment you write
@@ -332,10 +311,10 @@ the login screen without a banner. The failure only becomes words at sign-in, wh
 back and the dashboard falls back to `server.internal` — "Something went wrong, try again"
 (`apps/dashboard/src/screens/login-screen.ts`, `apps/dashboard/src/i18n/codes.ts`; the fallback is
 carried both by the request primitive and by `codeOf`). `wa-wt reset demo <name>` rebuilds the
-database.
+owner's shared database; Claude rebuilds its own with `wa-wt reset own demo <name>`.
 
 Boot now says so rather than leaving a driver stack trace to read: `apps/server/src/dev-migration-hint.ts`
-logs `migrations.dev_constraint_violation` with the engine's result code and that command, then
+logs `migrations.dev_constraint_violation` with the engine's result code and those commands, then
 re-throws the original error untouched — including when the log sink itself throws. It fires only when
 `WAITRON_ENV=dev` (`isDevMode`, `apps/server/src/config.ts`), which both `dev-setup` and
 `dev-onboard` write, though a `.env` copied from `.env.example` does not; and only for a pinned list
@@ -367,6 +346,51 @@ resets clear it. Wait for the server listener before choosing HTTP or HTTPS: onb
 the leaf during boot. Read the local public CA for dev trust; the unprivileged landing listener
 can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 `apps/print-agent/src/dev.test.ts`.
+
+### The owner's dev stack and Claude's
+
+Since 2026-11-14 `wa-wt` keeps the owner's stack and Claude's apart (owner's request, after a
+Claude reset on slot 2 rewrote the main checkout's `.env` with port 8280 and the owner's next start
+on slot 0 got a dashboard that could not reach its server). Design:
+`~/workspace/tools/docs/superpowers/specs/2026-11-14-wa-wt-owner-and-claude-stacks-design.md`.
+
+- **Who is starting.** A run is Claude's when `WA_WT_STARTER=agent` or when `CLAUDECODE`, `AI_AGENT`, `CODEX_SANDBOX` or `CODEX_THREAD_ID` is set; otherwise
+  the owner's. `WA_WT_STARTER=owner` forces the owner's side.
+- **The owner's stacks** run on slot 0 only, one at a time: a start stops the owner's previous
+  stack and starts the one asked for, after checking Docker, slot 0's ports and the checkout's
+  `apps/server/.env`; a refusal at those checks leaves the previous stack running; a failure after them, such as a
+  failed rebuild, leaves nothing running. Most checkouts
+  share the venue in `$HOME/workspace/.waitron-dev/box` (its directory is derived by
+  `defaultDevVenueDir`, `apps/server/scripts/dev-setup.ts`), and their `apps/server/.env`
+  describes it (venue ids, credentials key); `wa-wt` keeps a copy in `box/server.env` and repairs
+  a checkout's `.env` from it when it names another port or venue. A checkout marked
+  `.waitron-dev/<name>.own-venue` (the owner's Santet data) keeps its own venue in
+  `.waitron-dev/instances/<name>` and its own `.env`, still on slot 0's ports.
+- **Claude's stacks** take slots 1–7 and never stop an owner stack. Each keeps its venue and
+  settings in `.waitron-dev/claude/<name>`; `wa-wt` passes the settings file to the dev scripts as
+  `WAITRON_DEV_ENV_FILE` (read by `dev-setup.ts`, `dev-onboard.ts` and `dev-server.mjs`), so the
+  checkout's `.env` is never written. A checkout whose branch predates `WAITRON_DEV_ENV_FILE`
+  ignores it: a Claude start that has to build its settings writes Claude's port and venue into
+  the checkout's own `apps/server/.env`, then stops because the settings file never appeared, and
+  one whose settings file already exists starts on the checkout's `.env`. Rebase such a checkout
+  onto main before starting it. Its `WAITRON_MANAGEMENT_ORIGIN` points at its own dashboard
+  port, so passkeys and account links stay with that venue. `wa-wt reset own demo <name>` rebuilds
+  Claude's copy.
+- **Rebuilding the owner's demo venue.** The owner runs `wa-wt reset demo [<name>]`. Claude may run
+  it too, from the main checkout only (`wa-wt reset demo waitron`): it stops the owner's
+  shared-demo stack, rebuilds, restarts it and waits for its server to answer, or checks the
+  rebuilt venue on one of its own slots when nothing of the owner's was running. A lock
+  (`.waitron-dev/box.lock`) keeps these from overlapping.
+
+For side-by-side visual checks, Claude starts more worktrees beside the owner's; `wa-wt ls` shows
+which name owns each URL and who started it. Bare `wa-wt down` and `wa-wt logs` act on the
+caller's own side; name the instance when more than one of that side runs. When every slot a start
+may use is held, it refuses and lists what holds each.
+
+`wa-wt.test.sh` in `~/workspace/tools` runs `wa-wt` against stand-in `pnpm` and `docker` in a
+throwaway checkout, and only by hand: that repository has no CI. It never runs Waitron's own dev
+scripts; `apps/server/scripts/dev-setup.test.ts`, `dev-onboard.test.ts` and `dev-server.test.ts` check that
+they honour `WAITRON_DEV_ENV_FILE`.
 
 ### Disposable preproduction setup and owned Live setup
 
@@ -637,7 +661,8 @@ Screens remain English or Spanish.
 
 Changing `WAITRON_DEMO_REGION` keeps an existing venue's stored geography and data.
 To replace a throwaway venue you own, run
-`WAITRON_DEMO_REGION=catalonia wa-wt reset demo <worktree-name>`.
+`WAITRON_DEMO_REGION=catalonia wa-wt reset demo <worktree-name>` (the owner's shared demo venue), or,
+from Claude, `WAITRON_DEMO_REGION=catalonia wa-wt reset own demo <worktree-name>` (Claude's own copy).
 
 ## Root receipts moved on 2026-11-02
 

@@ -17,14 +17,17 @@ dashboard **owner@demo.waitron.local / dashPass123**.
 
 **Running the stack from a worktree.** Start it with `wa-wt demo <worktree-name>` or
 `wa-wt onboarding <worktree-name>`
-(`~/workspace/tools/wa-wt`, since 2026-09-06), never with a bare `pnpm dev*`. The first port slot
-uses `$HOME/workspace/.waitron-dev/box`. Start another worktree with the same command while
-the first runs; `wa-wt` gives it one of eight port slots, each 100 above the last, and a venue under
-its own state directory. The venue is a directory of SQLite files on the host. `wa-wt ls` names
-every running instance and its URLs. Use `wa-wt logs <name>`, `wa-wt reset demo <name>`, and
-`wa-wt down <name>` to act on one while more than one runs. The first slot's `apps/server/.env` is
-shared with other first-slot checkouts; a checkout on any other slot keeps its own venue ids and
-credentials in its own `.env`.
+(`~/workspace/tools/wa-wt`, since 2026-09-06), never with a bare `pnpm dev*`. The owner's stack
+always uses the first port slot (till 5190, dashboard 5191, server 8080) and, unless the checkout
+keeps its own venue, the shared one in `$HOME/workspace/.waitron-dev/box`, one at a time: starting another of the owner's checkouts stops
+the previous one. Claude's stacks take the other seven slots, each 100 above the last, with a venue
+and settings of their own under `$HOME/workspace/.waitron-dev/claude/<name>`, and never stop the
+owner's. The venue is a directory of SQLite files on the host. `wa-wt ls` names every running
+instance, who started it, and its URLs. Use `wa-wt logs <name>` and `wa-wt down <name>` to act on
+one while more than one runs. The owner rebuilds the shared demo venue with `wa-wt reset demo
+<name>`; Claude rebuilds it only from the main checkout (`wa-wt reset demo waitron`) and rebuilds its own copy
+with `wa-wt reset own demo <name>`. Rules and limits:
+`docs/developers/workflow-guide.md` → _The owner's dev stack and Claude's_.
 
 `docker-compose.yml` declares one service, `mailpit` — the practice email inbox. No container holds
 any part of the dev venue, so Compose has nothing a reset could clear. The reason to keep using
@@ -37,8 +40,9 @@ volume behind. `wa-wt` brings it up under the fixed project `waitron`.
 Changing between demo and onboarding REMOVES the chosen instance's venue directory, preserves its
 development CA (`wa-wt` clears that instance's box state except `tls`, then `dev:reset`
 `rm -rf`s the venue directory — `resetVenueDir` in `apps/server/scripts/dev-setup.ts`), and rebuilds
-the selected target. Use `wa-wt reset demo [name]` or `wa-wt reset onboarding [name]` to rebuild
-without changing target. In demo mode the till re-enrols itself on first load after that — no code,
+the selected target. The owner uses `wa-wt reset demo [name]` or `wa-wt reset onboarding [name]` to rebuild
+without changing target; Claude uses `wa-wt reset own demo <name>` or `wa-wt reset own onboarding <name>`,
+or `wa-wt reset demo waitron` for the shared venue. In demo mode the till re-enrols itself on first load after that — no code,
 no approval step.
 
 The print agent starts with the stack and connects to that stack's server port. It waits for

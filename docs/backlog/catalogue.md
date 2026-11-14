@@ -238,7 +238,7 @@ stays immediate, including any routing rules attached to them; a confirmation is
 selected folders contain products or subfolders. **Reversed 2026-10-06 (owner, A279):** a folder
 holding only routing rules gets the confirmation, saying how many rules go with it; a folder with
 nothing at all is still deleted at once. Each dev venue needs `wa-wt reset demo
-<worktree-name>` after slices 1 and 2, and after slice 2 the owner's box needs a reset too: library
+<worktree-name>` (Claude's own copy: `wa-wt reset own demo <worktree-name>`) after slices 1 and 2, and after slice 2 the owner's box needs a reset too: library
 sections and their placements disappear and per-menu extras are retired. Reload tills running the
 older build before using the new published document. Status and remaining work:
 

@@ -42,7 +42,11 @@ const rejects = (error: unknown) => () => Promise.reject(error);
 const hint = (errcode: number): Line => ({
   level: "error",
   event: "migrations.dev_constraint_violation",
-  fields: { errcode, remedyIfStaleDatabase: "wa-wt reset demo <worktree-name>" },
+  fields: {
+    errcode,
+    remedyIfStaleDatabase:
+      "wa-wt reset demo <worktree-name> (owner) or wa-wt reset own demo <worktree-name> (Claude)",
+  },
 });
 
 describe("MIGRATION_CONSTRAINT_RESULT_CODES", () => {

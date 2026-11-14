@@ -145,7 +145,8 @@ Card slips use the saved sale's receipt language for words, dates and money.
 You do not supply a venue setting: the box serves the one venue in its database. An adopted spare serves its pending status before looking for its own node row.
 
 After this identity-setting rename, reset your existing throwaway demo or test venue with
-`wa-wt reset demo <worktree-name>` before starting it. Provisioning writes the new settings;
+`wa-wt reset demo <worktree-name>` before starting it (Claude, for its own copy:
+`wa-wt reset own demo <worktree-name>`). Provisioning writes the new settings;
 there is no fallback to the old names.
 
 The server reads box identity through `tryLoadNodeIdentity` (`apps/server/src/node-config.ts`)

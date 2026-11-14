@@ -247,14 +247,6 @@ config, so no ui test reaches it. Excluding it also needs a change to the exclus
   subfolder today). `journal-monotonic` parses `_journal.json` itself rather than sharing
   `headSnapshot`'s reader.
 
-## The dev launcher looks for `trading.env` only in the state folder `apps/server/.env` names
-
-Seen during #1320's look (2026-10-07, not checked against `main`): after the onboarding wizard
-provisions, the stack started by `wa-wt onboarding <worktree>` restarted into setup mode, because
-the dev launcher (`apps/server/scripts/dev-server.mjs`) looked for `trading.env` only in the state
-folder `apps/server/.env` names, not the one `wa-wt` passes; the look worked round it with links. #1322's
-look (2026-10-07, a Barcelona demo) met the same restart.
-
 ## Cross-app links in the split Vite dev stack
 
 The deployed server serves both

@@ -14,7 +14,9 @@ import {
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { mkdtemp, rm } from "node:fs/promises";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -430,6 +432,80 @@ describe("devSetup against a real venue directory", () => {
     );
     expect(await devicesCount()).toBe(5);
   });
+
+  it("names the settings file it read in that refusal", async () => {
+    await expect(devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} })).rejects.toThrow(
+      envPath,
+    );
+  });
+
+  it("names both wa-wt resets in that refusal", async () => {
+    const refusal = devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} });
+    await expect(refusal).rejects.toThrow("`wa-wt reset demo <worktree-name>`");
+    await expect(refusal).rejects.toThrow("`wa-wt reset own demo <worktree-name>`");
+  });
+});
+
+describe("dev-setup run as a command", () => {
+  let workDir: string;
+
+  beforeAll(async () => {
+    workDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-main-"));
+  });
+
+  afterAll(async () => {
+    if (workDir !== undefined) await rm(workDir, { recursive: true, force: true });
+  });
+
+  it("writes the settings file WAITRON_DEV_ENV_FILE names, making its folder, and leaves apps/server/.env alone", () => {
+    // A regression would overwrite a developer's real settings with this throwaway venue's, so its
+    // contents are put back before the case judges it.
+    const checkoutEnv = fileURLToPath(new URL("../.env", import.meta.url));
+    const snapshot = () =>
+      existsSync(checkoutEnv)
+        ? { bytes: readFileSync(checkoutEnv), mtimeMs: statSync(checkoutEnv).mtimeMs }
+        : null;
+    const before = snapshot();
+    const settingsFile = join(workDir, "not-yet", "server.env");
+    let after: ReturnType<typeof snapshot>;
+    let result: SpawnSyncReturns<string>;
+    try {
+      result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", fileURLToPath(new URL("./dev-setup.ts", import.meta.url))],
+        {
+          cwd: fileURLToPath(new URL("..", import.meta.url)),
+          encoding: "utf8",
+          timeout: 150_000,
+          env: {
+            ...process.env,
+            WAITRON_ENV: "dev",
+            WAITRON_SEED_SALES_DAYS: "0",
+            WAITRON_STATE_DIR: join(workDir, "state"),
+            WAITRON_VENUE_DIR: join(workDir, "venue"),
+            WAITRON_DEV_ENV_FILE: settingsFile,
+          },
+        },
+      );
+    } finally {
+      after = snapshot();
+      if (before === null) rmSync(checkoutEnv, { force: true });
+      else if (after === null || !after.bytes.equals(before.bytes)) {
+        writeFileSync(checkoutEnv, before.bytes);
+      }
+    }
+    // Compared as flags, so a failure never prints the developer's settings (a credentials key).
+    expect({
+      exists: after !== null,
+      sameBytes: before === null || after === null || after.bytes.equals(before.bytes),
+      sameTime: before?.mtimeMs === after?.mtimeMs,
+    }).toEqual({ exists: before !== null, sameBytes: true, sameTime: true });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(`dev-setup: wrote ${settingsFile}`);
+    expect(parseEnvFile(readFileSync(settingsFile, "utf8")).WAITRON_VENUE_DIR).toBe(
+      join(workDir, "venue"),
+    );
+  }, 180_000);
 });
 
 describe("devSetup under WAITRON_ENV=production", () => {
