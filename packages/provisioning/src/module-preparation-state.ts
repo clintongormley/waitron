@@ -151,7 +151,14 @@ export async function modulePreparationMergeFits(
   // Computed because each revision repeats all earlier entries, so the need grows with the file.
   const room =
     3 * (largestRevisionBytes(incoming) + largestRevisionBytes(own.revisions)) + MERGE_ROOM_FLOOR;
-  return preparedBytes(mergedFile(own, incoming).revisions) <= LIMIT - room;
+  const merged = mergedFile(own, incoming).revisions;
+  if (preparedBytes(merged) > LIMIT - room) return false;
+  for (const module of new Set(incoming.map((row) => row.binding.module))) {
+    const current = await readModuleRecord(options.stateDir, module);
+    const prepared = merged.filter((row) => row.binding.module === module);
+    if (Buffer.byteLength(JSON.stringify({ ...current, prepared })) > LIMIT) return false;
+  }
+  return true;
 }
 /**
  * Writes nothing when this box lacks none of `incoming`. The caller must hold the venue lock: this

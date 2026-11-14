@@ -169,7 +169,7 @@ function parseChoice(value: unknown): StartAgainChoiceRecord {
   };
 }
 
-/** A choice's name, its record's file name without `.json`; the set-aside folders are named by it too. */
+/** A choice's name, its record's file name without `.json`; its Move's set-aside folder is named by it too. */
 export const startAgainChoiceStem = (record: Pick<StartAgainChoiceRecord, "at" | "attemptId">) =>
   `${Date.parse(record.at)}-${record.attemptId.toLowerCase()}`;
 

@@ -381,6 +381,21 @@ it("refuses to read revisions from a file that is not the file's format", async 
   ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
 });
 
+it("refuses a revision bound to another module than its filename", async () => {
+  const f = await fixture();
+  await fs.writeFile(
+    f.path,
+    JSON.stringify({
+      version: 1,
+      retained: {},
+      prepared: [{ binding: { ...binding, module: "payments" }, value: 1 }],
+    }),
+  );
+  await expect(readModulePreparationRevisions(f.options)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+});
+
 describe("a damaged file names itself in the log", () => {
   const FILE = "module-records/fiscal-verifactu.json";
 
@@ -455,6 +470,24 @@ const textToLimit = (incoming: unknown[], own: unknown[], revisionOf: (text: str
   "x".repeat(LIMIT - bytesNeeded([...incoming, revisionOf("")], own));
 
 describe("modulePreparationMergeFits", () => {
+  it.each([
+    [950_000, false],
+    [10, true],
+  ])("counts %i retained bytes when judging a merge", async (size, fits) => {
+    const f = await fixture();
+    const retained = { archive: "r".repeat(size) };
+    await fs.writeFile(f.path, JSON.stringify({ version: 1, prepared: [], retained }));
+    const incoming = [{ binding, value: "p".repeat(150_000) }];
+    expect(await modulePreparationMergeFits(f.options, incoming)).toBe(fits);
+    if (fits) {
+      await mergeModulePreparationRevisions(f.options, incoming);
+      expect(JSON.parse(await fs.readFile(f.path, "utf8"))).toEqual({
+        version: 1,
+        prepared: incoming,
+        retained,
+      });
+    }
+  });
   // Small enough that one list's revision and its room fit, and two lists' do not.
   const SIZEABLE = 140 * 1024;
   const stored = (over: Partial<OperationBinding>, text: string) => ({

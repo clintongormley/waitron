@@ -106,3 +106,14 @@ it("Start again clears malformed prepared data while keeping a readable retained
     retained: { archive: { names: ["AAAAA"] } },
   });
 });
+
+it("an oversized restored record names its file only in the log reason", async () => {
+  const root = await fixture();
+  await expect(
+    moduleRecordBytes(root, "fiscal-verifactu", { archive: "x".repeat(1024 * 1024) }),
+  ).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+    params: {},
+    reason: "module-records/fiscal-verifactu.json exceeds its size limit",
+  });
+});

@@ -104,6 +104,13 @@ export async function moduleRecordBytes(
       retained: { ...own.retained, ...retained },
     }),
   );
-  if (bytes.byteLength > LIMIT) throw invalid();
+  if (bytes.byteLength > LIMIT)
+    throw new AppError(
+      "setup.attempt_invalid",
+      {},
+      {
+        reason: `${MODULE_RECORDS_DIR}/${module}.json exceeds its size limit`,
+      },
+    );
   return bytes;
 }

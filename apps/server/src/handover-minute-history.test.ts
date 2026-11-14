@@ -340,6 +340,7 @@ it("control: one minute after both of M1's names the spare selects a fresh name"
   expect([await firstName(), encodeMinuteIdentity(later)]).not.toContain(selected.identity);
 });
 
+// Pins today's behaviour, not a wanted one.
 it("a name M1 selected and never activated is not in the copy, and the spare without M1's file reuses it", async () => {
   const s = spareService();
   await admit(s);
@@ -643,6 +644,7 @@ describe("a merged file close to its limit", () => {
   });
 });
 
+// Pins today's behaviour, not a wanted one.
 it("M1's history placed as the restore path places it (the retained section) is not read by the promotion: the name is reused", async () => {
   const s = spareService();
   await admit(s);

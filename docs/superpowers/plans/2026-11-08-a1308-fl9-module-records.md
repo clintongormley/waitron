@@ -234,3 +234,8 @@ lines for the fixture ports and that move. At 02:33 it cleared measuring the exi
 control against the encoded aggregate prepared list, keeping its exact size and real-select refusal.
 These are watcher clearances, not a separate owner approval. Task 3's resume-hook removals already
 landed in #2638. The dashboard's handover refusals already use generic wording, so no UI text changes.
+
+Watcher, 2026-11-14 03:07 (Lane H questions): continue the requested merge with
+1 MiB per record and the existing aggregate prepared cap; correct the retained-byte
+fit check, test the filename binding guard, restore the two characterization hedges,
+and correct set-aside wording and the size-refusal log reason. Size cleared to 1,500.
