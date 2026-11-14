@@ -25,3 +25,10 @@ raw/compressed encrypted captures are 676,798,984 / 144,176,735 bytes; data-only
 the exact dump hash. This measurement excludes migrations and identity activation, which the
 real SQLite roundtrip suite exercises separately. HTTP transport and uncompressed capture
 reservations stay unchanged.
+
+**CI correction, 2026-11-14.** The unchanged caller-buffer mutation case in
+`hour-recovery.test.ts` exposed the missing synchronous encrypted-input snapshot. Restoring it
+passes that case and the restore suites. The repeated same-image synthetic probe, now including
+the snapshot, measures 743 MiB raw / 743 MiB gzip. These replace the earlier 488/486 MiB figures,
+whose file-path probe omitted that copy; the former raw/rejected gzip-buffer peaks remain
+1,128/1,884 MiB. HTTP transport and file-backed decoding are unchanged.

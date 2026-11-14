@@ -5147,7 +5147,8 @@ plaintext must never reach placement. Gzip is detected only after authentication
 accepted for the separate Cloud writer. Compressed output is limited to half the free scratch
 bytes above the 256 MiB start reserve, so unpacking can hold both the decoded archive and
 its extracted database. Unknown free space refuses validation of compressed input. Compressed plaintext is removed
-before unpacking. Uploaded ciphertext is staged separately and removed as validation returns
+before unpacking. Uploaded ciphertext is snapshotted before the first asynchronous wait, so a caller's
+later buffer changes cannot alter the checked bytes or source id. It is staged separately and removed as validation returns
 or throws; the returned database copy keeps its own cleanup. Capacity refusals use
 `restore.archive_resource_limit`, distinct from malformed-archive refusals. Metadata reads share limits of 4096 entries, 4096 UTF-8 name
 bytes and 16 MiB total; database chunks are 64 KiB and `db.dump` has no metadata size cap.

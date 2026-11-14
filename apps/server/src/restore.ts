@@ -272,12 +272,13 @@ export async function copyStagedCopy(
 export async function validateArtifact(
   deps: ValidationDeps,
 ): Promise<ValidatedArtifact & { readonly sourceId: string }> {
+  const artifact = Uint8Array.from(deps.artifact);
   let encryptedDir: string | undefined;
   try {
     await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
     encryptedDir = await mkdtemp(join(deps.stagingDir, ARCHIVE_INPUT_PREFIX));
     const artifactPath = join(encryptedDir, "artifact");
-    await writeFile(artifactPath, deps.artifact, { mode: VENUE_FILE_MODE, flag: "wx" });
+    await writeFile(artifactPath, artifact, { mode: VENUE_FILE_MODE, flag: "wx" });
     return await validateArtifactFile({ ...deps, artifactPath });
   } catch (error) {
     if (["ENOSPC", "EDQUOT"].includes(errnoOf(error) ?? ""))

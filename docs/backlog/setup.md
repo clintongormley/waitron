@@ -441,7 +441,9 @@ image, not a year-sized measurement or a full fiscal recovery rehearsal.
 
 A synthetic near-256 MiB artifact probe measured 1,128 MiB peak resident memory on the former
 raw buffer path and 1,884 MiB with the rejected 512 MiB decoded gzip buffer. File-backed
-validation measured 488 MiB raw and 486 MiB gzip with the same input shapes on the same image.
+validation with its synchronous encrypted-input snapshot measured 743 MiB raw and 743 MiB gzip
+with the same input shapes on the same image. The earlier 488/486 MiB file-path probe omitted
+that snapshot and does not describe the final validator's memory use.
 HTTP upload transport still buffers the encrypted input. Raw uploads now inherit the file
 reader's 4096-entry, 4096-byte-name and 16 MiB metadata limits and briefly need disk space for
 encrypted input, decrypted archive and extracted database.
