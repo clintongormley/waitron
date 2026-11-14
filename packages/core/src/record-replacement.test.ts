@@ -450,6 +450,20 @@ describe("recordReplacement — refusals use no number", () => {
       1,
     );
   });
+
+  it("refuses a sale that is itself a corrective, such as a replacement", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sell(backend);
+    const replacement = await replace(backend, saleId);
+
+    await expect(replace(backend, replacement.saleId)).rejects.toMatchObject({
+      code: "sale.correction_not_admitted",
+      params: { reason: "not_simplified" },
+    });
+    expect(await rectSeriesNext()).toBe(2);
+    expect(await countCorrectives(replacement.saleId)).toBe(0);
+    expect(await countCorrectives(saleId)).toBe(1);
+  });
 });
 
 describe("recordReplacement — sign-in and warnings", () => {

@@ -55,6 +55,7 @@ export async function recordReplacement(
       total: sales.total,
       counterpartyTaxId: sales.counterpartyTaxId,
       vatBreakdown: sales.vatBreakdown,
+      correctsSaleId: sales.correctsSaleId,
       correctionCount: sql<number>`(select count(*) from sales c where c.corrects_sale_id = ${sales}.id)`,
     })
     .from(sales)
@@ -78,6 +79,10 @@ export async function recordReplacement(
     .where(eq(saleSubstitutions.substitutedSaleId, input.correctsSaleId));
   if (substituted !== undefined) {
     throw new AppError("sale.correction_not_admitted", { reason: "replaced" });
+  }
+
+  if (original.correctsSaleId !== null) {
+    throw new AppError("sale.correction_not_admitted", { reason: "not_simplified" });
   }
 
   const series = await requireCorrectiveSeries(tx, input.seriesId, input.nodeId);
