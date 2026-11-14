@@ -1,6 +1,8 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,9 +13,11 @@ import { invoiceSeries, nodes, taxpayer, withTransaction, openVenueDatabase } fr
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { buildManifest } from "./backup-manifest.js";
-import { encryptArtifact } from "./artifact-cipher.js";
+import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { validateArtifactFile, restoreFromArtifactFile, type RestoreFileDeps } from "./restore.js";
+import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
+import { validateArtifact } from "./restore.js";
 import { runOnce } from "./backup-sweep.js";
 import { parseBackupArchiveKey } from "./backup-keys.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
@@ -132,6 +136,23 @@ it("validates one protected database, owns cleanup and retains the encrypted sou
   expect(await readdir(f.stagingDir)).toEqual([]);
   guard.forbidden.clear();
   expect(await readFile(f.artifactPath)).toEqual(input);
+});
+it("validates a gzip archive with exact extracted bytes and the ciphertext source id", async () => {
+  const f = await fixture();
+  const raw = decryptArtifact(await artifact(f), f.recoveryKey);
+  const { unpackArchive } = await import("./backup-archive.js");
+  const expectedDatabase = unpackArchive(raw).find((entry) => entry.name === "db.dump")!.bytes;
+  const compressed = encryptArtifact(gzipSync(raw), f.recoveryKey);
+  await writeFile(f.artifactPath, compressed);
+  const validated = await validateArtifactFile(f);
+  try {
+    expect(await readFile(validated.databasePath)).toEqual(expectedDatabase);
+    expect(validated.sourceId).toBe(createHash("sha256").update(compressed).digest("hex"));
+    expect(await readdir(join(validated.databasePath, ".."))).toEqual(["node.db", "venue.db"]);
+  } finally {
+    await validated.discard();
+  }
+  expect(await readdir(f.stagingDir)).toEqual([]);
 });
 it("authenticates before parsing and leaves no plaintext on tag refusal", async () => {
   const f = await fixture();
@@ -296,4 +317,36 @@ it("default staged archive keeps its payload on a real busy lock, then restores 
   expect(await readFile(join(f.stateDir, "secrets.env"), "utf8")).toContain(
     "WAITRON_CREDENTIALS_KEY=",
   );
+});
+
+it("accepts the unchanged Cloud writer's raw artifact through staged upload validation", async () => {
+  const f = await fixture();
+  for (const rel of RECOVERY_FILES) {
+    await mkdir(join(f.stateDir, rel, ".."), { recursive: true });
+    await writeFile(join(f.stateDir, rel), `${rel}-content`);
+  }
+  await writeFile(join(f.stateDir, "trading.env"), `WAITRON_NODE_ID=${ids.node}\n`);
+  const captured = await createCloudSnapshotArchive(
+    {
+      ...f,
+      db: suite.db,
+      node: suite.node,
+    },
+    f.recoveryKey,
+    new Date("2026-11-14T00:00:00Z"),
+    new AbortController().signal,
+  );
+  const raw = decryptArtifact(captured.bytes, f.recoveryKey);
+  expect(Buffer.from(raw.subarray(0, 4)).toString()).toBe("WBA1");
+  const { unpackArchive } = await import("./backup-archive.js");
+  const copy = await validateArtifact({ ...f, artifact: captured.bytes });
+  try {
+    expect(await readFile(copy.databasePath)).toEqual(
+      unpackArchive(raw).find((e) => e.name === "db.dump")!.bytes,
+    );
+    expect(copy.sourceId).toBe(createHash("sha256").update(captured.bytes).digest("hex"));
+  } finally {
+    await copy.discard();
+  }
+  expect(await readdir(f.stagingDir)).toEqual([]);
 });

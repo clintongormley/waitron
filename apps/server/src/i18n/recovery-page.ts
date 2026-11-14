@@ -210,6 +210,18 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, reinicia el equipo: eso puede arreglar un disco o un volumen que no se activó. Si sigue fallando, es un fallo de Waitron o del disco de este equipo: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
     },
   },
+  "restore.archive_resource_limit": {
+    "en-GB": {
+      title: "The box could not make enough temporary space to open this backup.",
+      action:
+        "It ran out of temporary disk space, or could not measure the space available. Free disk space on this box, then press “Retry a normal boot”.",
+    },
+    "es-ES": {
+      title: "El equipo no ha podido reservar suficiente espacio temporal para abrir esta copia.",
+      action:
+        "Se ha agotado el espacio temporal del disco, o no se ha podido medir el espacio disponible. Libera espacio en el disco de este equipo y pulsa «Reintentar un arranque normal».",
+    },
+  },
   "storage.disk_full": {
     "en-GB": {
       title: "The box's disk is full, so Waitron cannot save anything.",

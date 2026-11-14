@@ -14,7 +14,7 @@ import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { formatEnvFile } from "./env-file.js";
 import { ALL_MODULES } from "./modules.js";
-import { restoreFromArtifact } from "./restore.js";
+import { restoreFromArtifact, validateArtifact } from "./restore.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 
 const KIB = 1024;
@@ -188,3 +188,25 @@ it("a disk with room for the secrets but not the database puts the identity back
   });
   await expectOldBox(box);
 }, 120_000);
+
+it("refuses a full upload staging disk as capacity, cleans scratch and keeps the old box", async (ctx) => {
+  const small = needDisk(ctx);
+  const box = await oldBox(small, "upload-staging");
+  await rm(stagingDir!, { recursive: true, force: true });
+  stagingDir = small.folder("upload-scratch");
+  const bytes = artifact(2 * MIB);
+  small.fill(512 * KIB);
+  await expect(
+    validateArtifact({
+      ...box,
+      stagingDir,
+      artifact: bytes,
+      recoveryKey: KEY,
+      migrationsRoot: null,
+      modules: ALL_MODULES,
+      environment: "preproduction",
+    }),
+  ).rejects.toMatchObject({ code: "restore.archive_resource_limit" });
+  expect(await readdir(stagingDir)).toEqual([]);
+  await expectOldBox(box);
+});

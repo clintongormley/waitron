@@ -16,3 +16,12 @@
 **Limits, size and status.** Bucket stream/Litestream, Cloud capture, sealed-state, configuration-transfer, A664, schema and streamed uploads stay out. Capture reservations remain uncompressed (watcher 20:29); near-full boxes may refuse/prune accordingly. Estimate production +160–260/−25–45; tests +220–320/−0–20. Completed backup/restore qualification and the new upload peak remain outstanding.
 
 **Provenance.** [Node zlib docs](https://nodejs.org/api/zlib.html#class-zstdoptions), read 2026-11-14 (v26.13.1): zstd is “Experimental”; [gzip options](https://nodejs.org/api/zlib.html#class-options) document `rejectGarbageAfterEnd`. Codec probes cover image behavior.
+
+**Build clearance and qualification, 2026-11-14.** The watcher cleared the corrected words,
+raw-upload limits and transient disk cost at 21:39, explicitly requiring a real small-filesystem
+staging-capacity test. The build uses that clearance. Same-image synthetic upload peaks are
+488 MiB raw / 486 MiB gzip (former paths 1,128 / 1,884 MiB). On the retained sample, controlled
+raw/compressed encrypted captures are 676,798,984 / 144,176,735 bytes; data-only restore preserves
+the exact dump hash. This measurement excludes migrations and identity activation, which the
+real SQLite roundtrip suite exercises separately. HTTP transport and uncompressed capture
+reservations stay unchanged.

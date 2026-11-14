@@ -1,4 +1,5 @@
 import { nodeDumpEntry } from "./testing/node-copy.js";
+import { gzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -110,6 +111,25 @@ describe("authenticated verification archive", () => {
     await validated.discard();
     expect(await readdir(f.stagingDir)).toEqual([]);
     expect(await readFile(f.artifactPath)).toEqual(encrypted);
+  });
+  it("decodes gzip before verification, preserves database bytes and refuses decoded archive tails", async () => {
+    const f = await fixture();
+    const packed = packArchive(f.entries);
+    await seal(f, gzipSync(packed));
+    const copy = await validate(f);
+    expect(await readFile(copy.databasePath)).toEqual(f.entries[1].bytes);
+    await copy.discard();
+    await seal(f, gzipSync(Buffer.concat([packed, Buffer.from("hidden tail")])));
+    await expect(validate(f)).rejects.toMatchObject({
+      code: "backup.archive_invalid",
+      params: { reason: "trailing_data" },
+    });
+    expect(await readdir(f.stagingDir)).toEqual([]);
+    const bad = await seal(f, gzipSync(packed));
+    bad[bad.length - 1] ^= 1;
+    await writeFile(f.artifactPath, bad);
+    await expect(validate(f)).rejects.toMatchObject({ code: "recovery.passphrase_invalid" });
+    expect(await readdir(f.stagingDir)).toEqual([]);
   });
   it.each([
     "duplicate top",

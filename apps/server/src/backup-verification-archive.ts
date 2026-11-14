@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
 import { decryptArtifactFile } from "./artifact-cipher-file.js";
+import { decodeArchiveFile } from "./backup-compression.js";
 import { unpackArchiveFile } from "./backup-archive-file.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import {
@@ -181,8 +182,9 @@ export async function validateBackupArtifactFile(
   const plaintext = join(scratch, "plaintext");
   try {
     await decryptArtifactFile(input.artifactPath, plaintext, input.recoveryKey);
-    const unpacked = await unpackArchiveFile(plaintext, scratch, { requireExactEnd: true });
-    await rm(plaintext);
+    const archive = await decodeArchiveFile(plaintext, join(scratch, "decoded"));
+    const unpacked = await unpackArchiveFile(archive, scratch, { requireExactEnd: true });
+    await rm(archive);
     const entries = unpacked.flatMap((entry) => (entry.kind === "bytes" ? [entry.entry] : []));
     const raw = entries.find((entry) => entry.name === "manifest.json");
     if (raw === undefined)

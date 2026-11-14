@@ -1,6 +1,8 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
+import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import nativeFs from "node:fs/promises";
@@ -20,7 +22,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -403,6 +405,24 @@ setInterval(() => db, 1000);`;
     }
   }, 20_000);
 
+  it("stages compressed uploads and removes encrypted input independently of the validated copy", async () => {
+    const bytes = encryptArtifact(
+      gzipSync(
+        packArchive([
+          { name: "manifest.json", bytes: Buffer.from(JSON.stringify(MANIFEST)) },
+          ...FULL_ENTRIES,
+        ]),
+      ),
+      KEY,
+    );
+    const copy = await validateArtifact(deps({ artifact: bytes }));
+    expect(copy.sourceId).toBe(createHash("sha256").update(bytes).digest("hex"));
+    expect(await readFile(copy.databasePath)).toEqual(VENUE_BYTES);
+    expect(await readdir(stagingDir)).toEqual([basename(dirname(copy.databasePath))]);
+    expect(await readdir(join(copy.databasePath, ".."))).toEqual(["node.db", "venue.db"]);
+    await copy.discard();
+    expect(await readdir(stagingDir)).toEqual([]);
+  });
   it("places the archive's database at venue.db and writes the secrets", async () => {
     await restoreFromArtifact(deps());
 

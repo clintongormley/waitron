@@ -425,6 +425,28 @@ describe("waitron-restore restore", () => {
     expect(out).toEqual([COLD_RESTORE_NOTICE, "restore failed"]);
   });
 
+  it("explains insufficient archive scratch space with a next step", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-capacity-"));
+    try {
+      const artifactPath = await makeArtifact(dir);
+      const out: string[] = [];
+      expect(
+        await runRestore({
+          argv: ["restore", artifactPath],
+          env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+          lockVenue: unlockedVenue,
+          out: (line) => out.push(line),
+          restore: async () => {
+            throw new AppError("restore.archive_resource_limit", {});
+          },
+        }),
+      ).toBe(1);
+      expect(out.at(-1)).toMatch(/space.*[Ff]ree.*try again/);
+      expect(out.at(-1)).not.toContain("corrupt");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
   it("reports restore.hook_failed with the module and the inner code, never a message", async () => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-hook-"));
     const artifactPath = await makeArtifact(dir);

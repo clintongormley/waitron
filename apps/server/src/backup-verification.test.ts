@@ -1,3 +1,4 @@
+import { AppError } from "@waitron/shared";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash, generateKeyPairSync } from "node:crypto";
@@ -460,6 +461,18 @@ describe("complete backup verification", () => {
     expect(await verify(f)).toMatchObject({
       status: "invalid",
       reason: "archive_invalid",
+      modules: [],
+    });
+  });
+  it("reports the decoder capacity refusal as unavailable rather than corrupt", async () => {
+    const f = await fixture();
+    await seal(f);
+    vi.spyOn(archiveReaders, "validateBackupArtifactFile").mockRejectedValue(
+      new AppError("restore.archive_resource_limit", {}),
+    );
+    expect(await verify(f)).toMatchObject({
+      status: "unavailable",
+      reason: "resource_limit",
       modules: [],
     });
   });
