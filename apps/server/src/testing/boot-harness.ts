@@ -280,7 +280,7 @@ export async function waitForEvent(lines: readonly string[], event: string): Pro
  * A minimal SMTP receiver on loopback: enough of the dialogue for one message per connection, and
  * every message's raw text kept in arrival order.
  */
-export async function startFakeSmtp(): Promise<{
+export async function startFakeSmtp(onMessage?: () => void): Promise<{
   port: number;
   messages: string[];
   close: () => Promise<void>;
@@ -299,6 +299,7 @@ export async function startFakeSmtp(): Promise<{
         if (data !== undefined) {
           if (line === ".") {
             messages.push(data);
+            onMessage?.();
             data = undefined;
             socket.write("250 queued\r\n");
           } else {

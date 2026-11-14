@@ -36,7 +36,7 @@ import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { Agent } from "undici";
 import {
   captureError,
@@ -3554,7 +3554,12 @@ describe("startServer — what a trading boot wires behind its management routes
       uncertain: false,
     });
 
-    const smtp = await startFakeSmtp();
+    let markDelivered!: () => void;
+    const delivered = new Promise<void>((resolve) => (markDelivered = resolve));
+    const smtp = await startFakeSmtp(() => {
+      if (smtp.messages.length === 2) markDelivered();
+    });
+    onTestFinished(smtp.close);
     try {
       await liveFixture(httpPort(), (tx) =>
         putCredential(tx, loadKeyRing(KEY_ENV), {
@@ -3578,7 +3583,9 @@ describe("startServer — what a trading boot wires behind its management routes
         emailVerificationSent: true,
         delivery: "queued",
       });
-      await expect.poll(() => smtp.messages.length).toBe(2);
+      await delivered;
+      await smtp.close();
+      expect(smtp.messages.length).toBe(2);
       expect(smtp.messages[0]).toMatch(/^To: second-invitee@example\.test$/m);
       expect(smtp.messages[1]).toMatch(/^To: second-change@example\.test$/m);
     } finally {
