@@ -798,7 +798,6 @@ describe("computeTopSellers", () => {
       replacesOriginal: true,
       lines: [coffee(replacementLine, "")],
     });
-    // Inserted directly: a refund of a replacement is not recordable through core until Task 3f.
     await seedSale(suite.db, venue, {
       invoiceNumber: 3,
       issuedAt: new Date("2026-08-06T10:00:00Z").toISOString(),

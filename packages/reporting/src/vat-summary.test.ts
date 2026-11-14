@@ -139,7 +139,6 @@ describe("computeVatSummary", () => {
       replacesOriginal: true,
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
-    // Inserted directly: a refund of a replacement is not recordable through core until Task 3f.
     await seedSale(suite.db, venue, {
       invoiceNumber: 3,
       issuedAt: new Date("2026-08-06T10:00:00Z").toISOString(),

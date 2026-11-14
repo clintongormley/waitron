@@ -730,7 +730,6 @@ describe("computeCategorySales at time of sale", () => {
       original,
       true,
     );
-    // Inserted directly: a refund of a replacement is not recordable through core until Task 3f.
     await sellLines(
       suite.db,
       venue,

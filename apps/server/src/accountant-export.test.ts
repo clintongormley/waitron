@@ -580,7 +580,6 @@ describe("accountant period selection", () => {
         lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
       },
     );
-    // Inserted directly: a refund of a replacement is not recordable through core until Task 3f.
     const refund = await seedSale(
       suite.db,
       { ...venue, seriesId: series!.id as SeededVenue["seriesId"] },
