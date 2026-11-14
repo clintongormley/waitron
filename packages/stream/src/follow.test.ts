@@ -115,12 +115,15 @@ describe("followGeneration", () => {
   });
   it("never reports an exited child or malformed sidecar as current and waits for stop", async () => {
     const f = await fixture();
+    f.fake.replicateOutput = "AccessDenied private-provider-output";
     const follower = await followGeneration(f.args);
     await writeFile(`${f.args.outPath}-txid`, "broken");
     expect(await follower.read()).toMatchObject({ state: "unknown", lagMs: null });
     f.fake.children[0]!.exit(1);
     await Promise.resolve();
     expect(await follower.read()).toMatchObject({ state: "unknown", lagMs: null });
+    expect(follower).toHaveProperty("exit", expect.any(Function));
+    expect(follower.exit()).toEqual({ exitCode: 1, category: "bucket_refused" });
     await follower.stop();
     expect(await follower.read()).toMatchObject({ state: "unknown", lagMs: null });
   });
@@ -158,5 +161,26 @@ describe("followGeneration", () => {
     });
     await expect(followGeneration({ ...f.args, signal: controller.signal })).rejects.toThrow();
     expect(f.fake.children).toHaveLength(0);
+  });
+  it("ages only still-unapplied positions during steady progress and a real stall", async () => {
+    const f = await fixture(),
+      follower = await followGeneration(f.args);
+    const txid = (n: number) => n.toString(16).padStart(16, "0");
+    try {
+      for (let n = 1; n <= 15; n++) {
+        f.tick(n * 5000);
+        f.now(-n * 1000);
+        await f.store.put(
+          `${generation}/0000/${txid(n + 1)}-${txid(n + 1)}.ltx`,
+          new Uint8Array([1]),
+        );
+        await writeFile(`${f.args.outPath}-txid`, txid(n));
+        expect((await follower.read()).lagMs).toBe(0);
+      }
+      f.tick(145000);
+      expect((await follower.read()).lagMs).toBe(70000);
+    } finally {
+      await follower.stop();
+    }
   });
 });

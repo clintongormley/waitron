@@ -161,6 +161,8 @@ function factLine(id: PartId, health: BoxHealth, notices: readonly Notice[]): st
       const spare = health.spare!;
       if (spare.state === "rebuilding") return t("box_status.spare.rebuilding");
       if (spare.state !== "following" || spare.lagMs === null) return t("box_status.spare.unknown");
+      if (spare.lagMs === 0 && spare.appliedTXID !== spare.uploadedTXID)
+        return t("box_status.spare.pending");
       return spare.lagMs === 0 && spare.appliedTXID === spare.uploadedTXID
         ? t("box_status.bucket.ok")
         : fill("box_status.spare.behind", { seconds: String(Math.ceil(spare.lagMs / 1000)) });

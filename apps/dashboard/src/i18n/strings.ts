@@ -4020,6 +4020,7 @@ export const en = {
   "box_status.spare.rebuilding": "Rebuilding the copy",
   "box_status.spare.unknown": "Freshness unknown",
   "box_status.spare.behind": "{seconds} s behind",
+  "box_status.spare.pending": "Update pending",
   "box_status.spare.last": "Last copy received {time}",
   "box_status.spare.switch_copy": "Switching still uses the copy taken when this spare joined.",
   "box_status.part.printers": "Printers",
@@ -8239,6 +8240,7 @@ export const es: Record<StringKey, string> = {
   "box_status.spare.rebuilding": "Reconstruyendo la copia",
   "box_status.spare.unknown": "Actualización desconocida",
   "box_status.spare.behind": "{seconds} s de retraso",
+  "box_status.spare.pending": "Actualización pendiente",
   "box_status.spare.last": "Última copia recibida {time}",
   "box_status.spare.switch_copy":
     "El cambio sigue usando la copia tomada cuando se incorporó este equipo de reserva.",

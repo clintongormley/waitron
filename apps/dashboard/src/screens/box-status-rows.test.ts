@@ -672,4 +672,11 @@ describe("spare copy row", () => {
       row(boxStatusRows(quietHealth({ spare: { ...spare, lagMs } }), []).rows, "spare").state,
     ).toBe(state);
   });
+  it("shows a newly observed pending copy without claiming zero seconds behind", () => {
+    const copy = row(
+      boxStatusRows(quietHealth({ spare: { ...spare, appliedTXID: "0000000000000001" } }), []).rows,
+      "spare",
+    );
+    expect(copy.line).toBe("Update pending");
+  });
 });

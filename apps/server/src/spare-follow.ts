@@ -158,7 +158,11 @@ export function startSpareFollow(deps: SpareFollowDeps) {
       if (!stopped) {
         local = await follower!.read();
         localAt = performance.now();
-        if (local.state === "unknown") await clear();
+        const exited = follower!.exit();
+        if (exited !== null) {
+          deps.log("warn", "spare.follow_exited", exited);
+          await clear();
+        }
       }
     } else {
       if (

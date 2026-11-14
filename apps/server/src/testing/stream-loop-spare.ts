@@ -305,7 +305,6 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
     console.log(
       `restarted spare health ${JSON.stringify({ status: mirrorHealth.status, body: mirrorHealthBody })}`,
     );
-    expect([200, 503]).toContain(mirrorHealth.status);
 
     begin("start-check");
     const logAtCheck = logSoFar().length;

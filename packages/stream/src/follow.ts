@@ -5,6 +5,7 @@ import { generationPrefix } from "./generations.js";
 import { litestreamConfig, litestreamEnv, replicaUrl } from "./litestream.js";
 import { spawnLitestream, type SpawnFn } from "./litestream-process.js";
 import { createS3ObjectStore, type BucketConfig } from "./s3-store.js";
+import { exitCategory } from "./supervisor.js";
 import { verifyStreamKey } from "./sse-c.js";
 import type { ObjectStore } from "./object-store.js";
 
@@ -20,6 +21,7 @@ export interface FollowProgress {
 export interface Follower {
   read(): Promise<FollowProgress>;
   stop(): Promise<void>;
+  exit(): { exitCode: number | null; category: string } | null;
 }
 export interface FollowArgs {
   litestreamBin: string;
@@ -60,14 +62,14 @@ export async function followGeneration(args: FollowArgs): Promise<Follower> {
   );
   const store = args.store ?? createS3ObjectStore(args.bucket);
   const monotonic = args.monotonic ?? (() => performance.now());
-  let pendingSince: number | null = null;
+  const pending = new Map<string, number>();
   let uploaded: string | null = null;
-  let ended = false;
+  let ended: { exitCode: number | null; category: string } | null = null;
   let stopping = false;
   let applied: string | null = null;
   let lastAppliedAt: string | null = null;
-  void child.exited.then(() => {
-    ended = true;
+  void child.exited.then((exitCode) => {
+    ended = { exitCode, category: exitCategory(exitCode, child.output()) };
   });
   const unknown = (state: FollowProgress["state"] = "unknown"): FollowProgress => ({
     generation: args.generation,
@@ -78,6 +80,7 @@ export async function followGeneration(args: FollowArgs): Promise<Follower> {
     lastAppliedAt,
   });
   return {
+    exit: () => ended,
     async read() {
       if (ended || stopping) return unknown();
       try {
@@ -88,7 +91,7 @@ export async function followGeneration(args: FollowArgs): Promise<Follower> {
           const match = /^[0-9a-f]{4}\/([0-9a-f]{16})-([0-9a-f]{16})\.ltx$/.exec(
             object.key.slice(prefix.length),
           );
-          return match === null ? [] : [{ txid: match[2]!, at: object.lastModified.getTime() }];
+          return match === null ? [] : [{ txid: match[2]! }];
         });
         if (ended || stopping || files.length === 0) return unknown();
         if (txid !== applied) {
@@ -98,8 +101,12 @@ export async function followGeneration(args: FollowArgs): Promise<Follower> {
         const newest = files.reduce((a, b) => (a.txid > b.txid ? a : b)).txid;
         if (txid > newest) return unknown();
         uploaded = newest;
-        pendingSince = txid === newest ? null : (pendingSince ?? monotonic());
-        const lagMs = pendingSince === null ? 0 : Math.max(0, monotonic() - pendingSince);
+        for (const position of pending.keys()) if (position <= txid) pending.delete(position);
+        const observedAt = monotonic();
+        for (const file of files)
+          if (file.txid > txid && !pending.has(file.txid)) pending.set(file.txid, observedAt);
+        const oldest = pending.values().next().value;
+        const lagMs = oldest === undefined ? 0 : Math.max(0, observedAt - oldest);
         return {
           generation: args.generation,
           state: "following",

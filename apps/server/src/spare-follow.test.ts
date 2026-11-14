@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { SPARE_FOLLOW_DIR, VENUE_FILE } from "@waitron/store";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   deletePairLinkTx,
   loadKeyRing,
@@ -104,10 +104,19 @@ describe("spare following", () => {
     const deps = await setup("serves");
     const store = createMemoryObjectStore();
     const events: string[] = [];
+    let observation: FollowProgress["state"] = "following";
+    let exited: { exitCode: number | null; category: string } | null = null;
     const follow = vi.fn(async (args: FollowArgs) => {
       events.push(`start ${args.generation}`);
+      exited = null;
       return {
-        read: async () => ({ ...progress, generation: args.generation }),
+        exit: () => exited,
+        read: async () => ({
+          ...progress,
+          generation: args.generation,
+          state: observation,
+          lagMs: observation === "unknown" ? null : 0,
+        }),
         stop: async () => {
           events.push(`stop ${args.generation}`);
         },
@@ -145,6 +154,11 @@ describe("spare following", () => {
     await pointer(generation);
     await vi.waitFor(() => expect(running!.progress()).toEqual(progress));
     expect(follow.mock.calls[0]![0].outPath).toBe(join(dir, SPARE_FOLLOW_DIR, VENUE_FILE));
+    observation = "unknown";
+    await vi.waitFor(() => expect(running!.progress()?.state).toBe("unknown"));
+    expect(events).toEqual([`start ${generation}`]);
+    observation = "following";
+    await vi.waitFor(() => expect(running!.progress()?.state).toBe("following"));
     const next = generationName(1, main.nodeId, new Date("2026-11-14T12:00:10Z"));
     await pointer(next);
     await vi.waitFor(() => expect(running!.progress()?.generation).toBe(next));
@@ -153,12 +167,22 @@ describe("spare following", () => {
       `stop ${generation}`,
       `start ${next}`,
     ]);
+    exited = { exitCode: 1, category: "bucket_refused" };
+    await vi.waitFor(() =>
+      expect(deps.log).toHaveBeenCalledWith("warn", "spare.follow_exited", {
+        exitCode: 1,
+        category: "bucket_refused",
+      }),
+    );
+    await vi.waitFor(() => expect(follow).toHaveBeenCalledTimes(3));
     await pointer(next, spare.privateKey);
     await vi.waitFor(() => expect(running!.progress()).toBeNull());
     expect(events.at(-1)).toBe(`stop ${next}`);
   });
   it("keeps cached reads off the network and invalidates generation/chart changes or malformed progress", async () => {
     const deps = await setup("streams");
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    onTestFinished(() => clock.mockRestore());
     let stream = { state: "streaming" as const, generation, lagMs: 3200 };
     let answer: unknown = progress;
     const ask = vi.fn(async () => ({ follow: answer }));
@@ -172,12 +196,15 @@ describe("spare following", () => {
     expect(ask).toHaveBeenCalledTimes(calls);
     stream = {
       ...stream,
-      generation: generationName(2, main.nodeId, new Date("2026-11-14T12:00:10Z")),
+      generation: generationName(1, main.nodeId, new Date("2026-11-14T12:00:10Z")),
     };
+    expect(await running.status()).toMatchObject({ state: "unknown", lagMs: null });
+    await vi.waitFor(() => expect(ask.mock.calls.length).toBeGreaterThan(calls));
     expect(await running.status()).toMatchObject({ state: "unknown", lagMs: null });
     stream = { ...stream, generation };
     answer = { ...progress, lagMs: -1 };
-    await vi.waitFor(() => expect(ask.mock.calls.length).toBeGreaterThan(calls));
+    const beforeMalformed = ask.mock.calls.length;
+    await vi.waitFor(() => expect(ask.mock.calls.length).toBeGreaterThan(beforeMalformed));
     expect(await running.status()).toMatchObject({ state: "unknown" });
     answer = progress;
     await vi.waitFor(async () =>
@@ -193,5 +220,33 @@ describe("spare following", () => {
     expect(await running.status()).toMatchObject({ state: "unknown" });
     await withNodeTransaction(suite.node, (tx) => deletePairLinkTx(tx, main.nodeId));
     expect(await running.status()).toBeNull();
+  });
+  it("expires cached freshness while one signed ask remains pending", async () => {
+    const deps = await setup("streams");
+    let now = 0,
+      release!: (value: null) => void;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+    const pending = new Promise<null>((resolve) => {
+      release = resolve;
+    });
+    const ask = vi.fn().mockResolvedValueOnce({ follow: progress }).mockReturnValue(pending);
+    try {
+      running = startSpareFollow({
+        ...deps,
+        mirror: false,
+        readStream: () => ({ state: "streaming", generation, lagMs: 0 }),
+        ask,
+      });
+      await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
+      now = 10;
+      expect(await running.status()).toMatchObject({ state: "following" });
+      now = 11;
+      expect(await running.status()).toMatchObject({ state: "unknown", lagMs: null });
+      expect(ask).toHaveBeenCalledTimes(2);
+    } finally {
+      release(null);
+      await running?.stop();
+      clock.mockRestore();
+    }
   });
 });
