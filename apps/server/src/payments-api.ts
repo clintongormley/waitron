@@ -57,6 +57,7 @@ import {
   SimulatorPaymentProvider,
   deviceProfileCardReaders,
   findPaymentByBillPayment,
+  listAbandonedRefundOutcomes,
   IN_PROGRESS_PAYMENT_STATES,
   paymentHoldOutcome,
   paymentHoldOutcomes,
@@ -1779,6 +1780,14 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         };
       });
       return c.json(answer);
+    }),
+  );
+
+  app.get("/management-api/payments/abandoned-refunds", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, (tx) => listAbandonedRefundOutcomes(tx, "sumup"));
+      return c.json(rows);
     }),
   );
 
