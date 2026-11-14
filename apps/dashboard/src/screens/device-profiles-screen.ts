@@ -2569,7 +2569,7 @@ export class DeviceProfilesScreen extends LitElement {
   #renderEditor(): TemplateResult {
     const errors = this.#errors();
     const ordering = this.#ordering();
-    const marked = FIELDS.some((field) => errors[field]);
+    const marked = this.#shownFields().some((field) => errors[field]);
     const ownMarked = Object.keys(this.#ownErrors()).length > 0;
     const save = this.#saveState();
     const message = bottomMessage(

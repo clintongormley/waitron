@@ -287,6 +287,30 @@ describe("device profile editor tabs", () => {
     },
   );
 
+  it("drops the marked-field message when switching to a kind without that field", async () => {
+    const el = await mount(
+      stubApi({
+        updateDeviceProfile: vi.fn().mockRejectedValue({
+          code: "device_profile.access_invalid",
+          params: { field: "departmentId", reason: "not_found" },
+        }),
+      }),
+    );
+    await profileAction(el, "edit-p1");
+    await flush(el);
+    rename(el);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    await vi.waitFor(() => expect(tabs.value).toBe("where"));
+    expect(tabs.items.some((item) => item.marked)).toBe(true);
+    await selectProfileTab(el, "general");
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=profile-form-factor]")!, "kds");
+    await flush(el);
+    expect(tabs.items.some((item) => item.marked)).toBe(false);
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+  });
+
   it.each([
     ["departmentId", "profile-department", "where"],
     ["admittedStaffRoleIds", "profile-roles", "who"],
