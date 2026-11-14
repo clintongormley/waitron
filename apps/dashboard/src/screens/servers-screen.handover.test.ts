@@ -18,6 +18,7 @@ const listing: ServerListing = {
       isSelf: true,
       removable: false,
       canClear: false,
+      requiresRetirementConfirmation: false,
     },
     {
       nodeId: "new",
@@ -26,6 +27,7 @@ const listing: ServerListing = {
       isSelf: false,
       removable: true,
       canClear: false,
+      requiresRetirementConfirmation: false,
     },
   ],
 };

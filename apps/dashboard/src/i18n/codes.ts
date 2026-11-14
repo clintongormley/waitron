@@ -1174,8 +1174,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Se ha visto a otro servidor escribiendo la copia de este local en el mismo bucket, así que este servidor no copiará encima. Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
   },
   "backup.spare_stream_active": {
-    en: "This venue has a standby server, listed under Servers, which is set up to receive the venue's copy, or is about to be, and a venue copies its data to one place at a time. Nothing was saved. If the standby is not yet set up to receive the venue's data, choose Remove on its row under Servers; the bucket can then be saved here. A standby that is set up to receive the venue's data cannot be removed in this version, so the copy stays with it until an update lets the standby pass it on to a bucket.",
-    es: "Este local tiene un servidor en espera, en la lista de Servidores, que está preparado para recibir la copia del local, o lo estará pronto, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Si el servidor en espera aún no está preparado para recibir los datos del local, elige Retirar en su fila de Servidores; después se puede guardar aquí el bucket. Un servidor en espera preparado para recibir los datos del local no se puede retirar en esta versión, así que la copia sigue yendo a él hasta que una actualización le permita pasarla a un bucket.",
+    en: "This venue has a standby server, listed under Servers, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove on its row under Servers, then save again.",
+    es: "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o la recibirá pronto, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Para guardar aquí el bucket, elige Retirar en su fila de Servidores y vuelve a guardar.",
   },
   "backup.stream_config_unsafe": {
     en: "The bucket copy cannot use one of these settings as written.",
@@ -1412,8 +1412,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este servidor ya ha funcionado como principal, así que no se puede retirar.",
   },
   "membership.standby_joined": {
-    en: "This standby is already set up to receive the venue's data, so it cannot be removed.",
-    es: "Este servidor en espera ya está preparado para recibir los datos del local, así que no se puede retirar.",
+    en: "Confirm that this spare is switched off and no other recovery is in progress.",
+    es: "Confirma que este servidor en espera está apagado y no hay otra recuperación en curso.",
   },
   "membership.node_not_removed": {
     en: "This server has not been removed, so it cannot be cleared from the list.",
@@ -1456,8 +1456,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "En esta versión, un servidor en espera no se puede activar desde otro dispositivo. No se ha cambiado nada.",
   },
   "handover.operation_in_progress": {
-    en: "Another handover is already in progress. Keep both boxes connected. Do not start another handover until it finishes.",
-    es: "Ya hay otro traspaso en curso. Mantén los dos servidores conectados. No inicies otro traspaso hasta que termine.",
+    en: "A handover is already in progress. Keep both servers connected, and wait for it to finish before starting another handover or removing a server.",
+    es: "Ya hay un traspaso en curso. Mantén los dos servidores conectados y espera a que termine antes de iniciar otro traspaso o retirar un servidor.",
   },
   // A fault in Waitron: a box records one restriction, a repeat carries the same values, and nothing
   // rewrites one.

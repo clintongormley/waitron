@@ -1365,14 +1365,17 @@ describe("DashboardApi routes", () => {
           standing: "serving-secondary",
           isSelf: false,
           removable: true,
+          requiresRetirementConfirmation: true,
         },
       ],
     };
+    const declarations = { spareSwitchedOff: true, noParallelRecovery: true } as const;
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(listing))
       .mockResolvedValueOnce(jsonResponse({ removed: true, term: 3 }))
-      .mockResolvedValueOnce(refusal("membership.standby_joined", 409));
+      .mockResolvedValueOnce(refusal("membership.standby_joined", 409))
+      .mockResolvedValueOnce(jsonResponse({ removed: true, term: 4 }));
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.listServers()).resolves.toEqual(listing);
@@ -1384,12 +1387,16 @@ describe("DashboardApi routes", () => {
       code: "membership.standby_joined",
       status: 409,
     });
+    await expect(
+      api.removeServer("22222222-2222-4222-8222-222222222222", declarations),
+    ).resolves.toEqual({ removed: true, term: 4 });
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/servers", "GET", undefined],
       ["/management-api/servers/22222222-2222-4222-8222-222222222222/remove", "POST", undefined],
       // An id is a path segment, so a slash in one cannot reach a different route.
       ["/management-api/servers/a%2Fb/remove", "POST", undefined],
+      ["/management-api/servers/22222222-2222-4222-8222-222222222222/remove", "POST", declarations],
     ]);
   });
 

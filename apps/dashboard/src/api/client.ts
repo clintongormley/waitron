@@ -1800,6 +1800,8 @@ export interface ServerRow {
   isSelf: boolean;
   removable: boolean;
   canClear: boolean;
+  /** A spare that finished joining: Remove must send both declarations. */
+  requiresRetirementConfirmation: boolean;
 }
 
 /** `term` is null, and `nodes` empty, when this server holds no chart. */
@@ -4869,8 +4871,15 @@ export class DashboardApi {
   }
 
   /** `removed` is false when the machine was already removed and nothing was written. */
-  removeServer(nodeId: string): Promise<{ removed: boolean; term: number }> {
-    return this.#request(`/management-api/servers/${encodeURIComponent(nodeId)}/remove`, "POST");
+  removeServer(
+    nodeId: string,
+    declarations?: { spareSwitchedOff: true; noParallelRecovery: true },
+  ): Promise<{ removed: boolean; term: number }> {
+    return this.#request(
+      `/management-api/servers/${encodeURIComponent(nodeId)}/remove`,
+      "POST",
+      declarations,
+    );
   }
 
   /** `cleared` is false when the machine was already cleared and nothing was written. */

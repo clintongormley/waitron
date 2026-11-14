@@ -21,6 +21,7 @@ const listing: ServerListing = {
       isSelf: true,
       removable: false,
       canClear: false,
+      requiresRetirementConfirmation: false,
     },
     {
       nodeId: STANDBY,
@@ -29,6 +30,7 @@ const listing: ServerListing = {
       isSelf: false,
       removable: true,
       canClear: false,
+      requiresRetirementConfirmation: false,
     },
     {
       nodeId: "33333333-3333-4333-8333-333333333333",
@@ -37,6 +39,7 @@ const listing: ServerListing = {
       isSelf: false,
       removable: false,
       canClear: false,
+      requiresRetirementConfirmation: false,
     },
     {
       nodeId: "44444444-4444-4444-8444-444444444444",
@@ -45,6 +48,7 @@ const listing: ServerListing = {
       isSelf: false,
       removable: false,
       canClear: true,
+      requiresRetirementConfirmation: false,
     },
   ],
 };
@@ -136,6 +140,27 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  it("renders a joined spare's confirmation, with its declarations, accessibly", async () => {
+    const joined: ServerListing = {
+      ...listing,
+      nodes: listing.nodes.map((n) => ({
+        ...n,
+        requiresRetirementConfirmation: n.nodeId === STANDBY,
+      })),
+    };
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      { api: stubApi({ listServers: vi.fn().mockResolvedValue(joined) }) },
+      theme,
+    );
+    await flush(el);
+    await openRemove(el);
+    expect(
+      el.shadowRoot!.querySelectorAll("wt-dialog[data-test=remove-dialog] wt-switch"),
+    ).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders a refused removal inside the confirmation accessibly", async () => {
     const { el, host } = await mountWidget<ServersScreen>(
       "dashboard-servers-screen",
@@ -168,6 +193,7 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
           isSelf: false,
           removable: true,
           canClear: false,
+          requiresRetirementConfirmation: false,
         },
       ],
     };

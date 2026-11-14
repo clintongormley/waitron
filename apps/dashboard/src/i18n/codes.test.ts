@@ -471,6 +471,21 @@ it("has a sentence in both languages for each refusal of a server's removal", ()
   }
 });
 
+it.each([
+  ["membership.standby_joined", "switched off", "apagado"],
+  ["backup.spare_stream_active", "then save again", "vuelve a guardar"],
+  [
+    "handover.operation_in_progress",
+    "before starting another handover or removing a server",
+    "antes de iniciar otro traspaso o retirar un servidor",
+  ],
+])("words %s as the next step a person can take", (code, enStep, esStep) => {
+  expect(codeMessage(code, "en")).toContain(enStep);
+  expect(codeMessage(code, "es")).toContain(esStep);
+  for (const language of ["en", "es"] as const)
+    expect(codeMessage(code, language)).not.toMatch(/cannot be removed|no se puede retirar/);
+});
+
 it("has a sentence in both languages for each refusal of clearing a server", () => {
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");

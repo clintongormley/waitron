@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -127,6 +128,12 @@ export class ServersScreen extends LitElement {
         margin: 0;
         color: var(--wt-color-text);
       }
+      .declarations {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin-top: var(--wt-space-3);
+      }
     `,
   ];
 
@@ -147,6 +154,10 @@ export class ServersScreen extends LitElement {
   @state() private target: { action: Action; row: ServerRow } | null = null;
   @state() private actionErrorKey: string | null = null;
   @state() private busy = false;
+  @state() private declared = { switchedOff: false, noRecovery: false };
+  /** Set when a Remove without the declarations was refused because the spare finished joining
+   * after the list was read. */
+  @state() private askDeclarations = false;
   /** A menu item's popover closes on the click, so the dialog has nothing visible to hand focus
    * back to; the row menu's trigger takes it instead, or the heading after a Remove or Clear. */
   #focusTarget: HTMLElement | null = null;
@@ -349,13 +360,28 @@ export class ServersScreen extends LitElement {
     const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions");
     this.#focusTarget = menu?.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? null;
     this.actionErrorKey = null;
+    this.#forgetDeclarations();
     this.target = { action, row };
+  }
+
+  #forgetDeclarations(): void {
+    this.declared = { switchedOff: false, noRecovery: false };
+    this.askDeclarations = false;
+  }
+
+  #declaring(action: Action, row: ServerRow): boolean {
+    return action === "remove" && (row.requiresRetirementConfirmation || this.askDeclarations);
+  }
+
+  #undeclared(action: Action, row: ServerRow): boolean {
+    return this.#declaring(action, row) && !(this.declared.switchedOff && this.declared.noRecovery);
   }
 
   #close(): void {
     if (this.busy) return;
     this.target = null;
     this.actionErrorKey = null;
+    this.#forgetDeclarations();
     requestAnimationFrame(() => {
       if (this.#focusTarget?.isConnected) this.#focusTarget.focus();
       else this.renderRoot.querySelector<HTMLElement>("h1")?.focus();
@@ -364,14 +390,20 @@ export class ServersScreen extends LitElement {
 
   async #confirm(): Promise<void> {
     const target = this.target;
-    if (target === null || this.busy) return;
+    if (target === null || this.busy || this.#undeclared(target.action, target.row)) return;
     this.busy = true;
     this.actionErrorKey = null;
     try {
-      if (target.action === "remove") await this.api.removeServer(target.row.nodeId);
-      else await this.api.clearServer(target.row.nodeId);
+      if (target.action === "clear") await this.api.clearServer(target.row.nodeId);
+      else if (this.#declaring(target.action, target.row))
+        await this.api.removeServer(target.row.nodeId, {
+          spareSwitchedOff: true,
+          noParallelRecovery: true,
+        });
+      else await this.api.removeServer(target.row.nodeId);
     } catch (error) {
       this.actionErrorKey = codeOf(error);
+      if (this.actionErrorKey === "membership.standby_joined") this.askDeclarations = true;
       return;
     } finally {
       this.busy = false;
@@ -473,6 +505,7 @@ export class ServersScreen extends LitElement {
   #renderDialog(action: Action): TemplateResult {
     const target = this.target?.action === action ? this.target.row : null;
     const keys = ACTION_KEYS[action];
+    const undeclared = target !== null && this.#undeclared(action, target);
     return html`<wt-dialog
       data-test=${`${action}-dialog`}
       heading=${t(keys.title)}
@@ -490,7 +523,8 @@ export class ServersScreen extends LitElement {
               <p class="machine" data-test=${`${action}-machine`}>
                 ${t("servers.machine")} <span class="machine-id">${this.#shortId(target)}</span>
               </p>
-              <p class="explanation">${t(keys.explanation)}</p>`
+              <p class="explanation">${t(keys.explanation)}</p>
+              ${this.#declaring(action, target) ? this.#renderDeclarations(target) : nothing}`
       }
       <wt-form-actions
         slot="footer"
@@ -507,14 +541,42 @@ export class ServersScreen extends LitElement {
           >${t("action.cancel")}</wt-button
         >
         <wt-button
-          variant="danger"
+          variant=${undeclared ? "secondary" : "danger"}
           data-test=${`confirm-${action}`}
+          .disabled=${undeclared}
           .loading=${this.busy && target !== null}
           @click=${() => void this.#confirm()}
           >${t(keys.verb)}</wt-button
         >
       </wt-form-actions>
     </wt-dialog>`;
+  }
+
+  /** The listing's flag explains the declarations here; after a stale listing's refusal, the
+   * refusal's own sentence, which says the same, explains them. */
+  #renderDeclarations(row: ServerRow): TemplateResult {
+    const declaration = (key: "switchedOff" | "noRecovery", test: string, label: StringKey) =>
+      html`<wt-switch
+        data-test=${test}
+        name=${key}
+        label=${`${t(label)} *`}
+        .checked=${this.declared[key]}
+        ?disabled=${this.busy}
+        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+          this.declared = { ...this.declared, [key]: event.detail.checked };
+        }}
+      ></wt-switch>`;
+    return html`<div class="declarations">
+      ${
+        row.requiresRetirementConfirmation
+          ? html`<p class="explanation" data-test="declare-explanation">
+              ${t("servers.declare_explanation")}
+            </p>`
+          : nothing
+      }
+      ${declaration("switchedOff", "declare-switched-off", "servers.declare_switched_off")}
+      ${declaration("noRecovery", "declare-no-recovery", "servers.declare_no_recovery")}
+    </div>`;
   }
 
   override render(): TemplateResult {

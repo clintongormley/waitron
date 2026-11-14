@@ -2077,7 +2077,7 @@ export const en = {
     "The request has been sent. Closing this window does not cancel it. Check progress before starting another handover.",
   "servers.fingerprint": "This server's public certificate fingerprint",
   "servers.intro":
-    "Every machine on this venue's list of servers. A standby that is not yet set up to receive the venue's data can be removed, so tills stop trying to reach it. To use that machine again, it has to join from scratch. A removed machine can be cleared from the list to free its place.",
+    "Every machine on this venue's list of servers. A standby can be removed, so tills stop trying to reach it. To use that machine again, reset it and add it as a new spare. A removed machine can be cleared from the list to free its place.",
   "servers.server": "Server",
   "servers.actions": "Actions",
   "servers.loading": "Loading servers…",
@@ -2094,11 +2094,15 @@ export const en = {
   "servers.remove": "Remove",
   "servers.remove_title": "Remove this standby?",
   "servers.remove_explanation":
-    "It will be marked removed on the list of servers, so tills stop trying to reach it. This cannot be undone: to use that machine again, it has to join from scratch.",
+    "It will be marked removed on the list of servers, so tills stop trying to reach it. This cannot be undone. To use that machine again, reset it and add it as a new spare.",
+  "servers.declare_explanation":
+    "Confirm that this spare is switched off and no other recovery is in progress.",
+  "servers.declare_switched_off": "This spare is switched off",
+  "servers.declare_no_recovery": "No other recovery is in progress",
   "servers.clear": "Clear from list",
   "servers.clear_title": "Clear this removed machine from the list?",
   "servers.clear_explanation":
-    "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
+    "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it. To use that machine again, reset it and add it as a new spare. This cannot be undone.",
   "backup.title": "Backups",
   "node_pack.create": "Create pack",
   "node_pack.key_error": "The server key is not valid.",
@@ -6302,7 +6306,7 @@ export const es: Record<StringKey, string> = {
     "La solicitud se ha enviado. Cerrar esta ventana no la cancela. Consulta el progreso antes de iniciar otro traspaso.",
   "servers.fingerprint": "Huella del certificado público de este servidor",
   "servers.intro":
-    "Todas las máquinas de la lista de servidores del local. Un servidor en espera que aún no está preparado para recibir los datos del local se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, tiene que unirse de nuevo desde el principio. Una máquina retirada se puede quitar de la lista para liberar su sitio.",
+    "Todas las máquinas de la lista de servidores del local. Un servidor en espera se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera. Una máquina retirada se puede quitar de la lista para liberar su sitio.",
   "servers.server": "Servidor",
   "servers.actions": "Acciones",
   "servers.loading": "Cargando servidores…",
@@ -6319,11 +6323,15 @@ export const es: Record<StringKey, string> = {
   "servers.remove": "Retirar",
   "servers.remove_title": "¿Retirar este servidor en espera?",
   "servers.remove_explanation":
-    "Se marcará como retirado en la lista de servidores, para que las cajas dejen de intentar conectar con él. No se puede deshacer: para volver a usar esa máquina, tiene que unirse de nuevo desde el principio.",
+    "Se marcará como retirado en la lista de servidores, para que las cajas dejen de intentar conectar con él. No se puede deshacer. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera.",
+  "servers.declare_explanation":
+    "Confirma que este servidor en espera está apagado y no hay otra recuperación en curso.",
+  "servers.declare_switched_off": "Este servidor en espera está apagado",
+  "servers.declare_no_recovery": "No hay otra recuperación en curso",
   "servers.clear": "Quitar de la lista",
   "servers.clear_title": "¿Quitar esta máquina retirada de la lista?",
   "servers.clear_explanation":
-    "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
+    "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
   "node_pack.create": "Crear kit",
   "node_pack.key_error": "La clave del servidor no es válida.",
