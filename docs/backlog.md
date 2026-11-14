@@ -1232,7 +1232,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   held alert comes back at midnight UTC, and smaller choices from the plan, the browser look and the review. Each stays open until the owner
   answers it. [Detail](backlog/payments.md#a846s-points-for-the-owner-at-land-held-card-payments)
 
-- **The reconciler's card reversal records only after the provider call, with a fresh key each time.**
+- **Stripe's reconciler reversal records only after the provider call, with a fresh key each time.**
   Next: give the reconciler's reversal the same durable-attempt rule.
   [Detail](backlog/payments.md#the-reconcilers-card-reversal-records-only-after-the-provider-call-with-a-fresh-key-each-time)
 
