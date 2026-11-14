@@ -1,9 +1,9 @@
 // The stream loop, end to end, against whichever bucket its fixture names: box A streams its
 // venue, dies, box B is rebuilt with its kit, saved node key and signed allocation, sells under a fresh
 // installation number and chain, streams into a generation of its own and moves the pointer, and a
-// restore of B's generation holds exactly what B's database holds. `stream-loop.e2e.test.ts` runs it
-// against versitygw; `aws-stream-loop.aws-rehearsal.test.ts` against Amazon S3, by opt-in only.
-import { randomBytes, randomUUID, X509Certificate } from "node:crypto";
+// restore of B's generation holds exactly what B's database holds; given versitygw, B then adds a
+// spare (`stream-loop-spare.ts`). `stream-loop.e2e.test.ts` runs it against versitygw; `aws-stream-loop.aws-rehearsal.test.ts` against Amazon S3, by opt-in only.
+import { randomBytes, X509Certificate } from "node:crypto";
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -23,16 +23,8 @@ import { verifySecretAsync } from "@waitron/identity";
 import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { nodeId } from "@waitron/shared";
-import {
-  applyVenue as applyMinuteVenue,
-  mergeModulePreparationRevisions,
-  quoteIdent,
-  type VenueRequest,
-} from "@waitron/provisioning";
-import { withOperationAuthority } from "@waitron/module";
-import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
-import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
-import { createHourTestClock, selectPastWaits } from "./hour-test-clock.js";
+import { quoteIdent, type VenueRequest } from "@waitron/provisioning";
+import { applyWithFirstSetup } from "./minute-first-setup.js";
 import {
   createRecoveryRestoreRunner,
   readRecoveryOperationFile,
@@ -57,13 +49,16 @@ import { loadBoxEnv } from "../box-env.js";
 import { parseEnvFile } from "../env-file.js";
 import { ALL_MODULES } from "../modules.js";
 import { runRestore } from "../restore-command.js";
+import { SPARE_STORE_BUCKET } from "../spare-store.js";
 import { unsealNodeState } from "../sealed-state.js";
 import type { StreamHostDeps } from "../stream-host.js";
+import { exemptBucket } from "./aws-send-gate.js";
 import { httpsVia } from "./boot-harness.js";
 import { freePort } from "./free-ports.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 import { bootEnv, boxDirs, copyMigrations, provisionStreamBox } from "./stream-box.js";
+import { STREAM_LOOP_SPARE_PHASES, runLoopSpare } from "./stream-loop-spare.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";
@@ -100,6 +95,8 @@ const VENUE: VenueRequest = {
 // includes UNTIMED_MS for migrations, provisioning and closes, because Vitest's timer fails a healthy
 // run that outlasts it (CLAUDE.md §4). An upload wait restores the generation once per poll, so it
 // also gets one restore's worth on top.
+// The sum leaves out the spare phases, which run only with `versitygwBin`; a caller that passes it
+// adds STREAM_LOOP_SPARE_MS.
 const POINTER_WAIT_MS = 30_000;
 const UPLOAD_WAIT_MS = 30_000;
 /** Sales timed with the transport up, and again with it frozen (stage 8b). */
@@ -129,6 +126,7 @@ export const STREAM_LOOP_PHASES = [
   "sale-b",
   "frozen-transport",
   "restore-compare",
+  ...STREAM_LOOP_SPARE_PHASES,
 ] as const;
 export type StreamLoopPhase = (typeof STREAM_LOOP_PHASES)[number];
 
@@ -155,8 +153,10 @@ export interface StreamLoopFixture {
   /** Hangs every bucket call until `resume`; without it stage 8b's sales run unbounded. */
   freeze?: { pause(): Promise<void>; resume(): void };
   record?(event: StreamLoopEvent): void;
-  /** Handed to both servers' stream, so a caller can learn of each Litestream they start. */
+  /** Handed to every server's stream, so a caller can learn of each Litestream they start. */
   serverSeams?: Pick<StreamHostDeps, "spawn">;
+  /** The versitygw a spare runs its store on; without it the spare's phases are skipped. */
+  versitygwBin?: string;
 }
 
 /** Keys in the bucket containing `fragment`, whether the store returns them with its prefix or without. */
@@ -221,80 +221,6 @@ function differingTables(a: Map<string, string[]>, b: Map<string, string[]>): st
   return [...names]
     .filter((name) => JSON.stringify(a.get(name)) !== JSON.stringify(b.get(name)))
     .sort();
-}
-
-function applyWithFirstSetup(stateDir: string): typeof applyMinuteVenue {
-  return async (actions, deps) => {
-    // Leave room for selection's minute wait before the real-time sales.
-    const clock = createHourTestClock(Date.now() - 10 * 60_000);
-    const taxpayer = actions.find((action) => action.kind === "ensure-tenant")!;
-    const initialNodeId = randomUUID();
-    const initialAdministratorId = randomUUID();
-    const binding = {
-      module: "fiscal-verifactu",
-      action: "setup",
-      eventId: randomUUID(),
-      sourceId: randomUUID(),
-      targetNodeId: initialNodeId,
-    } as const;
-    let kept: unknown = null;
-    const preparation = createHourPreparation({
-      monotonicNow: () => clock.monotonic(),
-      withState: async (_binding, run) =>
-        run({
-          get value() {
-            return structuredClone(kept);
-          },
-          history: [],
-          async replace(next) {
-            kept = structuredClone(next);
-          },
-        }),
-      read: async () => ({
-        scope: { taxpayerNif: taxpayer.taxId, environment: "preproduction" },
-        bases: actions
-          .filter((action) => action.kind === "create-series")
-          .map(({ code, purpose }) => ({ code, purpose })),
-        contextKey: "first",
-        history: [{ reference: "empty", complete: true, records: [] }],
-        clock: compareHourClocks(
-          ["box", "browser"].map((source) => ({
-            source: source as "box" | "browser",
-            result: "usable",
-            instantMs: clock.wall(),
-            uncertaintyMs: 0,
-            wallStartedMs: clock.wall(),
-            wallFinishedMs: clock.wall(),
-            monotonicStartedMs: clock.monotonic(),
-            monotonicFinishedMs: clock.monotonic(),
-          })),
-          Date.parse("2026-10-15T00:00:00Z"),
-        ),
-      }),
-    });
-    const held = await selectPastWaits(clock, () =>
-      withOperationAuthority(binding, initialAdministratorId, (authority) =>
-        preparation.select({ binding, authority, comparisonId: "comparison" }),
-      ),
-    );
-    if (held.status !== "selected") throw new Error(`first setup answered ${held.status}`);
-    const result = await applyMinuteVenue(actions, {
-      ...deps,
-      initialNodeId,
-      initialAdministratorId,
-      moduleInputs: new Map([
-        [
-          "fiscal-verifactu",
-          { eventId: binding.eventId, sourceId: binding.sourceId, input: held.input },
-        ],
-      ]),
-      modules: deps.modules.map((module) =>
-        module.name === "fiscal-verifactu" ? { ...module, operations: preparation } : module,
-      ),
-    });
-    await mergeModulePreparationRevisions({ stateDir }, [{ binding, value: kept }]);
-    return result;
-  };
 }
 
 export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise<void> {
@@ -823,6 +749,32 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       );
     } finally {
       await readB.close();
+    }
+
+    // 11. B adds a spare (`stream-loop-spare.ts`).
+    const { versitygwBin } = fixture;
+    if (versitygwBin === undefined) {
+      for (const phase of STREAM_LOOP_SPARE_PHASES) {
+        clock.begin(phase);
+        clock.end("skipped");
+      }
+    } else {
+      // B's pair stream writes to C's own store, a bucket no rehearsal plan names.
+      await exemptBucket(SPARE_STORE_BUCKET, () =>
+        runLoopSpare({
+          scratch,
+          migrationsRoot,
+          litestreamBin,
+          versitygwBin,
+          dirsB,
+          portB,
+          nodeIdB: a.nodeId,
+          saleIds: [saleA.saleId, saleB.saleId, lastSaleId],
+          ...(fixture.serverSeams === undefined ? {} : { serverSeams: fixture.serverSeams }),
+          ...(signal === undefined ? {} : { signal }),
+          begin: (phase) => clock.begin(phase),
+        }),
+      );
     }
     clock.end("ok");
   } catch (error) {

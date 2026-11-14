@@ -1982,7 +1982,6 @@ async function bootServer(
       ring,
       nodeId: ownNodeId,
       stateDir: config.stateDir,
-      modules: setsToMigrate,
       restart,
       log,
     });

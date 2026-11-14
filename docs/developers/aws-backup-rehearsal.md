@@ -151,9 +151,11 @@ duration, and where relevant an API name, HTTP status and AWS error name), the t
 their outcomes, and what is left. For a bucket the run owned, a receipt missing any of the teardown
 steps above, `remove-scratch` included, is refused, and the run fails saying the receipt was not written. It never holds a key, a URL, an object's contents or a raw error
 message. For the loop scenario, the recorded steps are `probe`, `pointer-a`, `sale-a`, `rebuild`,
-`pointer-b`, `sale-b`, `frozen-transport` and `restore-compare`. The rehearsal passes the loop no way
+`pointer-b`, `sale-b`, `frozen-transport`, `restore-compare`, `spare-refused`, `bucket-stopped`,
+`spare-join`, `spare-copy` and `start-check`. The rehearsal passes the loop no way
 to freeze the transport, so `frozen-transport` always reads `skipped` here: the stage's sales
-still run, but their timing is not checked.
+still run, but their timing is not checked. The last five steps always read `skipped` too, because
+the rehearsal runs no versitygw for the spare's own store.
 
 An upload the runner could not cancel, whose id the receipt cannot carry, is left out of what is left
 and recorded as a `record-refused` row, and the run fails; the cleanup command still finds that

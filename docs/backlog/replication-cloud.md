@@ -279,17 +279,18 @@ initial copy ([design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-
 question**: `tenant_credentials` is `local` and a blob sealed under one node's ring cannot be opened
 under another's. Since A947 slice 3a a spare receives the main box's ring when it joins
 (`credentialsRing` in `apps/server/src/mirror-bundle.ts`, written by `apps/server/src/adopt.ts`), so
-rows a copy of `venue.db` brings open there. Since 3b-6a a spare of a venue that does not file with
-Veri*Factu receives that copy; nothing yet delivers a ring the main box changes after the join
-(A1273).
+rows a copy of `venue.db` brings open there. Since 3b-6a a spare receives that copy, and since 3b-F
+a spare of a venue that files with Veri*Factu does too; nothing yet delivers a ring the main box
+changes after the join (A1273).
 
 ## Adding a mirror while the internet is down
 
 Owner, 2026-10-02. A second machine can rebuild from the owner's bucket
 (`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
-For a venue that does not file with Veri*Factu, a joining spare now receives a copy from the
-primary over the venue's network, puts it in place at its next start and finishes joining as a
-standby (it cannot take over yet); a Veri*Factu venue is still refused until 3b-F. Wanted: adding
+A joining spare now receives a copy from the primary over the venue's network, puts it in place at
+its next start and finishes joining as a standby; since 3b-F that includes a venue that files
+with Veri*Factu, and a joined spare takes over by handover or by emergency switch in
+`apps/server/src/handover-two-boxes.test.ts` (separate databases, no restarts). Wanted: adding
 a mirror works with the internet down, which is the very case an on-prem mirror exists for. Left: the owner measures it on two boxes with the internet unplugged (3b plan Task 6.11). A cloud mirror needs the internet anyway and is outside this item.
 
 ## A stop made while `cloud/replacement.json` is unreadable is not recorded in it
@@ -368,8 +369,7 @@ canonicalisation, verification, trust), node enrolment and its rate limiting
 (`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
 `ledger` / `state` / `local` classification — which no longer chooses a database file: every table
 was put in `venue.db` (#548), and since A947 slice 3a only a box's own tables are in `node.db`. Read the residuals below as requirements for what failover is
-rebuilt INTO, not as descriptions of code that exists today. A standby holds its full dormant
-identity from JOIN and promotion never mints a chain.
+rebuilt INTO, not as descriptions of code that exists today.
 
 The streaming and stored-primary-key decisions are under
 [Decisions and deliberate limits](#decisions-and-deliberate-limits). Before enabling a second venue
@@ -391,12 +391,13 @@ that slice 3 has to restore:
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
   wizard still offers the option. For a venue that does not file with Veri*Factu, the primary accepts
   the join without a relay, and the joining server takes a copy of the restaurant's data, puts it in
-  place at its next start and finishes joining there. A venue that files with Veri*Factu is refused
-  before anything is reserved (`mirror.standby_series_unsupported`) until 3b-F. The wizard's role and connect
-  wording says a mirror keeps a copy of the restaurant's data but cannot take over yet, and points
-  to restore to recover a restaurant; each refusal's wording says what
+  place at its next start and finishes joining there. Since 3b-F a venue that files with Veri*Factu
+  joins the same way, with nothing fiscal written at the join. The wizard's role and connect
+  wording says a mirror keeps a copy of the restaurant's data and, once joined, can take over by a
+  handover or an emergency switch, and points to restore to recover a restaurant whose server is
+  gone; each refusal's wording says what
   happened and either what to fix before pressing Connect again or to choose Back.
-  Removing or disabling the option while a mirror cannot take over is a product call, not a wording one. Whoever takes it should decide for
+  Removing or disabling the option is a product call, not a wording one. Whoever takes it should decide for
   `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` row together.
 
 - **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
@@ -676,15 +677,6 @@ source in the emergency declaration. Fiscal joining still waits for A947 3b-F. C
 the emergency services card and the hosted start still wait for A947's strip and Cloud's half:
 [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
 
-## A947 3b must make the held chart vouch for a joined box's key, or the main box can never check its answer and waits at every start.
-
-The start check verifies a peer's signed status with
-`peerKeyOf` (`apps/server/src/handover-signing.ts`): this box's own key, the main-box key a spare
-pins at adoption, and keys the held chart's endorsements vouch for. A main box holds none of
-these for its spare, so once 3b makes a spare finish joining, the spare's answers count as
-silent. No box has a joined peer before 3b. Left open by A1018 Slice 3 (Ruling R13).
-
-
 ## The membership route ignores a different chart at the term this box holds.
 
 The start check
@@ -732,14 +724,10 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 
 ## Bundle: Series and module-preparation gaps at handover
 
-3 entries, size M.
+2 entries, size M.
 
 - **A second live standard series made a sale answer `server.internal` in a test fixture;
   the production cause is untraced.** Left open by A1018 Slice 5 (Ruling R39).
-- **The first hand-back is refused after the giving box has stopped filing; settle before Slice 13
-  or 3b-F.** M2 to M1 answers `sif.allocation_invalid` `standby_already_active` at the first request,
-  because M1's registration stays active (run on a promoted database standing in for the copy).
-  Left open by A1018 Slice 5 (Ruling R40).
 - **The module preparation file grows with every write, and a handover cannot promise room in it.**
   Every revision repeats all earlier entries under a 1 MiB cap. The handover's size check keeps room
   for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5
@@ -937,6 +925,10 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 
 ## Decisions and deliberate limits
 
+**A1018 R40, 2026-11-14:** A box goes back to being main only by being reset, rejoining as a spare
+and taking the normal controlled handover; a hand-back to a former main that kept its files is
+not built (owner, closing #3126, 09:44), so every new main starts with a clean fiscal slate.
+
 **A1018 R39, 2026-11-14:** The dormant-series prerequisite is dropped: the bounded source check
 found no production route or duty that changes a filing box's live series outside an allocation.
 The fixture-only mismatch does not authorise a build.
@@ -1100,8 +1092,8 @@ the box's role is saved a moment after the switch's fiscal save, and a spare che
 certificate fingerprint before it receives the venue's keys. Slice 3b's build
 [plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) was written on 2026-11-04:
 eight pull requests, split on 2026-11-10 into eleven, two of them fiscal and landed by the owner (3b-G, the start steps that decide
-whether a box files; 3b-F, letting a Veri*Factu venue add a spare, which waits on the owner's
-question Q1). 3b-1 landed as [#2721](https://github.com/clintongormley/waitron/pull/2721); 3b-2 (each
+whether a box files; 3b-F, letting a Veri*Factu venue add a spare, under option (c) of question Q1, which the campaign
+watcher relayed as the owner's answer on 2026-11-04: its dormant tax-filing setup is written when the spare is switched on). 3b-1 landed as [#2721](https://github.com/clintongormley/waitron/pull/2721); 3b-2 (each
 box's own name) as [#2742](https://github.com/clintongormley/waitron/pull/2742); 3b-3 (a joining spare
 takes the venue's certificate authority as its own) as
 [#2761](https://github.com/clintongormley/waitron/pull/2761); 3b-4 (box-to-box calls find a `.local` box by
@@ -1109,7 +1101,7 @@ asking the network, a spare listens on the venue's network, and what it serves t
 test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (the pair link: a spare joins with no Cloud relay,
 the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898); 3b-5b (a spare runs its store behind a listener
 that admits only its main box's client certificate, a venue with a standby refuses bucket-copy settings, and key ring
-rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining), 3b-6b (a test runs a main box and a spare together over the venue's network, and the Servers guide explains adding a spare) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email) and 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off). The slices after 3b-6c to 3b-F and slices 3c onwards are still open;
+rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining), 3b-6b (a test runs a main box and a spare together over the venue's network, and the Servers guide explains adding a spare) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email) and 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off), and 3b-F (a Veri*Factu venue's spare joins with nothing fiscal written) landed too. Slices 3c onwards are still open; for 4b, the activation writes the spare's dormant setup first (A947 3b-F, 2026-11-14);
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).

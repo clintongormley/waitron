@@ -34,11 +34,7 @@ import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ALL_MODULES } from "./modules.js";
-import {
-  standbyContract,
-  allocatedStandbyModules,
-  withoutActivationMark,
-} from "./testing/allocated-contract.js";
+import { standbyContract, allocatedStandbyModules } from "./testing/allocated-contract.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { signEnvelope } from "@waitron/handover";
 import {
@@ -271,7 +267,7 @@ async function boot(
     (ALL_MODULES as WaitronModule[]).splice(
       0,
       ALL_MODULES.length,
-      ...withoutActivationMark(allocatedStandbyModules(original, fixture)),
+      ...allocatedStandbyModules(original, fixture),
     );
     try {
       const response = await app.request("/management-api/mirror-bundle", {

@@ -51,10 +51,8 @@ import { readNodeIdentityKey } from "./node-identity.js";
 import { withAuthenticatedOperation } from "./operation-authentication.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
 import { createPasswordThrottle } from "./password-throttle.js";
-import { enabledModules, type ModuleOperations } from "@waitron/module";
-import { assertAdoptionModules } from "./finish-adoption.js";
+import type { ModuleOperations } from "@waitron/module";
 import { readModuleConfig } from "./module-config.js";
-import { ALL_MODULES } from "./modules.js";
 import { isBareOrigin } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -96,7 +94,6 @@ export const JOIN_REFUSALS = [
   "mirror.bucket_stream_active",
   "mirror.standby_name_taken",
   "mirror.clocks_apart",
-  "mirror.standby_series_unsupported",
   "backup.recovery_key_missing",
 ] as const satisfies readonly ErrorCode[];
 
@@ -184,7 +181,6 @@ export function mountMirrorBundleApi(
         await assertHeldDocumentTrusted(trustDeps(deps, signingKey), held);
         await refuseBeforeReserving(deps, held, standby.nodeId, standbyAt);
         const moduleConfig = await readModuleConfig(deps.appDb);
-        assertAdoptionModules(enabledModules(ALL_MODULES, moduleConfig));
 
         const store = mintPairStoreKey();
         // node.db's lock is taken before venue.db's and held to the link write, so no other link

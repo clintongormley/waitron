@@ -26,6 +26,7 @@ import {
   allocatedStandbyModules,
   prepareStandbyDatabase,
   takenOverSeries,
+  withoutActivationMark,
 } from "./testing/allocated-contract.js";
 import { nodeId } from "@waitron/shared";
 import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
@@ -338,6 +339,13 @@ describe("assembleMirrorBundle (primary side)", () => {
     }
   });
 
+  it("reserves nothing for a module whose series open on activation, even with its reserve operation", async () => {
+    const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
+    const { bundle } = await allocatedBundle(standby, {}, { marked: true });
+    expect(bundle.reservedIdentity.modules).toEqual({});
+    expect(bundle.reservedIdentity.series).toEqual([]);
+  });
+
   it("endorses the standby with the primary key the caller supplies", async () => {
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
     const supplied = generateNodeKeyPair();
@@ -361,9 +369,11 @@ describe("assembleMirrorBundle (primary side)", () => {
 function primaryNode() {
   return { nodeId: nodeId(designated.nodeId) };
 }
+// The fiscal module reserves as an unmarked stand-in unless `marked` is set.
 async function allocatedBundle(
   standby: { nodeId: string; publicKey: string },
   extra: Partial<Parameters<typeof assembleMirrorBundle>[0]> = {},
+  { marked = false }: { marked?: boolean } = {},
 ) {
   const fixture = await standbyContract(db, primaryNode(), standby.nodeId, [
     { code: "FA", purpose: "standard" },
@@ -374,7 +384,9 @@ async function allocatedBundle(
   (ALL_MODULES as WaitronModule[]).splice(
     0,
     ALL_MODULES.length,
-    ...allocatedStandbyModules(ALL_MODULES, fixture),
+    ...(marked
+      ? allocatedStandbyModules(ALL_MODULES, fixture)
+      : withoutActivationMark(allocatedStandbyModules(ALL_MODULES, fixture))),
   );
   try {
     const bundle = await fixture.authorised("reserve", (operation) =>

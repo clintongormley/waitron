@@ -31,7 +31,7 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { nodeId } from "@waitron/shared";
+import { AppError, nodeId } from "@waitron/shared";
 import { assembleMirrorBundle, type ReservedIdentity } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { adoptFromPrimary } from "./adopt.js";
@@ -43,6 +43,7 @@ import { createDeploymentHolders } from "./deployment-holders.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
+import { withoutActivationMark } from "./testing/allocated-contract.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", async () => {
@@ -195,24 +196,36 @@ function joinRequest(targetNodeId: string, action: string) {
   };
   return { binding, operatorId, input: evidence, confirmation };
 }
+/** A join reserves for the fiscal module only as an unmarked stand-in. */
+async function asJoinReserver<T>(run: () => Promise<T>): Promise<T> {
+  const marked = [...modules];
+  modules.splice(0, modules.length, ...withoutActivationMark(marked));
+  try {
+    return await run();
+  } finally {
+    modules.splice(0, modules.length, ...marked);
+  }
+}
 async function reserve(standby = generateStandbyIdentity()) {
   const held = joinRequest(standby.nodeId, "reserve");
   await writeFile(configuration().confirmationPath, JSON.stringify(held.confirmation));
   const bundle = await withOperationAuthority(held.binding, held.operatorId, (authority) =>
-    assembleMirrorBundle({
-      appDb: primary.db,
-      node: primary.node,
-      ring: RING,
-      stateDir: stateDir!,
-      ...PAIR_BUNDLE_FIELDS,
-      boxHostname: "waitron.local",
-      accountKey: "test-account-key",
-      designated: { nodeId: PRIMARY },
-      standby,
-      moduleOperations: new Map([
-        [held.binding.module, { binding: held.binding, authority, input: held.input }],
-      ]),
-    }),
+    asJoinReserver(() =>
+      assembleMirrorBundle({
+        appDb: primary.db,
+        node: primary.node,
+        ring: RING,
+        stateDir: stateDir!,
+        ...PAIR_BUNDLE_FIELDS,
+        boxHostname: "waitron.local",
+        accountKey: "test-account-key",
+        designated: { nodeId: PRIMARY },
+        standby,
+        moduleOperations: new Map([
+          [held.binding.module, { binding: held.binding, authority, input: held.input }],
+        ]),
+      }),
+    ),
   );
   return { standby, reserved: bundle.reservedIdentity };
 }
@@ -443,32 +456,33 @@ it("a refused public adoption retains its independently signed reservation witho
   let target = "";
   let originalConfirmation = "";
   let originalReservation = "";
+  let fetched: ReservedIdentity | undefined;
   const adoptionDir = join(stateDir!, "empty-adoption");
   await mkdir(adoptionDir);
-  await expect(
-    adoptFromPrimary(
-      {
-        ownerDb: unadopted.db,
-        ownerNode: unadopted.node,
-        ring: RING,
-        advertisedOrigin: "https://spare.test",
-        spareStorePort: 7443,
-        environment: "preproduction",
-        database: "synthetic-empty-spare",
-        listIpv4: () => [],
-        now: () => new Date(),
-        stateDir: adoptionDir,
-        persistTrading: async () => {},
-        persistBackupSettings: async () => {},
-        persistModuleConfig: async () => {},
-        persistCredentialsRing: async () => {},
-        fetchBundle: async (_url, _credential, standby) => {
-          target = standby.nodeId;
-          const held = joinRequest(target, "reserve");
-          originalConfirmation = JSON.stringify(held.confirmation);
-          originalReservation = JSON.stringify(held.input);
-          await writeFile(configuration().confirmationPath, originalConfirmation);
-          return withOperationAuthority(held.binding, held.operatorId, (authority) =>
+  const refusal = await adoptFromPrimary(
+    {
+      ownerDb: unadopted.db,
+      ownerNode: unadopted.node,
+      ring: RING,
+      advertisedOrigin: "https://spare.test",
+      spareStorePort: 7443,
+      environment: "production",
+      database: "synthetic-empty-spare",
+      listIpv4: () => [],
+      now: () => new Date(),
+      stateDir: adoptionDir,
+      persistTrading: async () => {},
+      persistBackupSettings: async () => {},
+      persistModuleConfig: async () => {},
+      persistCredentialsRing: async () => {},
+      fetchBundle: async (_url, _credential, standby) => {
+        target = standby.nodeId;
+        const held = joinRequest(target, "reserve");
+        originalConfirmation = JSON.stringify(held.confirmation);
+        originalReservation = JSON.stringify(held.input);
+        await writeFile(configuration().confirmationPath, originalConfirmation);
+        const bundle = await withOperationAuthority(held.binding, held.operatorId, (authority) =>
+          asJoinReserver(() =>
             assembleMirrorBundle({
               appDb: primary.db,
               node: primary.node,
@@ -483,23 +497,32 @@ it("a refused public adoption retains its independently signed reservation witho
                 [held.binding.module, { binding: held.binding, authority, input: held.input }],
               ]),
             }),
-          );
-        },
+          ),
+        );
+        fetched = bundle.reservedIdentity;
+        return bundle;
       },
-      {
-        primaryUrl: "https://primary.test",
-        credential: {
-          email: "owner@example.test",
-          password: "synthetic-unused-credential",
-        },
+    },
+    {
+      primaryUrl: "https://primary.test",
+      credential: {
+        email: "owner@example.test",
+        password: "synthetic-unused-credential",
       },
-      { beforeFirstWrite: async () => {} },
-    ),
-  ).rejects.toMatchObject({
-    code: "mirror.standby_series_unsupported",
-    params: { module: "fiscal-verifactu" },
+    },
+    { beforeFirstWrite: async () => {} },
+  ).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  expect(refusal).toBeInstanceOf(AppError);
+  const { code, params } = refusal as AppError;
+  expect({ code, params }).toEqual({
+    code: "mirror.environment_mismatch",
+    params: { expected: "production", actual: "preproduction" },
   });
   expect(target).not.toBe("");
+  expect(fetched?.modules["fiscal-verifactu"]).toBeDefined();
   expect(await readFile(configuration().confirmationPath, "utf8")).toBe(originalConfirmation);
   expect(JSON.stringify(joinRequest(target, "reserve").input)).toBe(originalReservation);
   expect(await unadopted.db.select().from(deployment)).toEqual([]);

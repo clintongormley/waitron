@@ -334,7 +334,6 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "mirror.bucket_stream_active": "shell.adopt.bucket_stream_active",
   "mirror.standby_name_taken": "shell.adopt.standby_name_taken",
   "mirror.spare_already_joined": "shell.adopt.spare_already_joined",
-  "mirror.standby_series_unsupported": "shell.adopt.standby_series_unsupported",
   "backup.recovery_key_missing": "shell.adopt.recovery_key_missing",
 };
 

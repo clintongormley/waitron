@@ -434,9 +434,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   open by A1131bc slice 3.
   [Detail](backlog/setup.md#the-saved-setup-cannot-be-read-contact-support)
 
-- **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** But
-  the option is still there and the flow still runs, so an operator can still spend a box on it.
-  Removing or disabling it until slice 3 lands the replacement is a product call, not a wording one.
+- **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?**
+  Since 3b-F a test on two separate databases joins a spare that then takes over, by a handover and
+  by an emergency switch; no joined spare's takeover has run on two started servers, so an operator
+  who adds one still spends a box on a standby no real box has tried. Removing or disabling the
+  option is a product call, not a wording one.
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 - **The configuration preview names what it will copy by database table** — left open by C42
@@ -1747,10 +1749,7 @@ Not in any track until the standalone primary is done.
   Slice 9's S2 re-run from its new Parts F and G, and S2 reads PASS; the watcher (`questions.md`, 2026-11-12 10:10) said “Do not rebuild Slices 10/11”; Task 10.6 stays with A1342.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
-- **A947 3b must make the held chart vouch for a joined box's key, or the main box can never check
-  its answer and waits at every start.** Left open by A1018 Slice 3 (Ruling R13).
-  [Detail](backlog/replication-cloud.md#a947-3b-must-make-the-held-chart-vouch-for-a-joined-boxs-key-or-the-main-box-can-never-check-its-answer-and-waits-at-every-start)
-  A947 also owns the spare's authenticated switch screen (watcher, 2026-11-08); the spare's
+- **A947 owns the spare's authenticated switch screen** (watcher, 2026-11-08); the spare's
   dashboard is retired. [Decision](backlog/replication-cloud.md#decisions-and-deliberate-limits).
 
 - **A captured signed peer query can be replayed later to read a box's status, or a stepped-down box's indicator and final copy.** The peer-status
@@ -1783,7 +1782,7 @@ Not in any track until the standalone primary is done.
   third-box cases from A1342 need their own approved scope; the owner accepted the two-box bucket
   stop as clearing A947 3b-6 on 2026-11-09. [Detail](backlog/replication-cloud.md#a-box-the-chart-no-longer-names-main-keeps-filing-its-earlier-records)
 
-- **Series and module-preparation gaps at handover** (bundle of 3, 2 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
+- **Series and module-preparation gaps at handover** (bundle of 2, at least 1 go-live, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 
 - **Decide what the old promote route still does** (bundle of 3, 2 important, size S). Holds A1279. [Detail](backlog/replication-cloud.md#bundle-decide-what-the-old-promote-route-still-does)
 
@@ -1849,14 +1848,16 @@ outstanding on code that exists.
   [Detail](backlog/replication-cloud.md#a1321-retire-a-dead-or-reset-spare-from-servers)
 
 - **A947. Go-live on two local boxes.** The owner approved the revised design. Slice 3b's build
-  plan is written (eleven pull requests; Q1 is the owner's); 3b-1, 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)),
+  plan is written (eleven pull requests, all landed); 3b-1, 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)),
   3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)), 3b-4 ([#2779](https://github.com/clintongormley/waitron/pull/2779))
   3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898); the pair link, and a spare joins with no Cloud relay)
-  and 3b-5b (a spare runs its store, which admits only its main box) landed, and so did 3b-G (a box trusts only the venue's authority when it asks another box at start and sets aside a spare still joining ([3b plan](superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's decision, which the owner may overrule); its chart check at start reaches a real box under the venue's authority, which still refuses it for want of a credential; and a box that lost its own record does not start selling or filing), and so did 3b-6a (the first copy and finishing joining), 3b-6b (a two-box test of joining, and the guide's Add a spare box) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email), and so did 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off); later slices are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
+  and 3b-5b (a spare runs its store, which admits only its main box) landed, and so did 3b-G (a box trusts only the venue's authority when it asks another box at start and sets aside a spare still joining ([3b plan](superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's decision, which the owner may overrule); its chart check at start reaches a real box under the venue's authority, which still refuses it for want of a credential; and a box that lost its own record does not start selling or filing), and so did 3b-6a (the first copy and finishing joining), 3b-6b (a two-box test of joining, and the guide's Add a spare box) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email), and so did 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off), and 3b-F completes them; slices 3c onwards are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
   venue's network), one step **Hand over the venue** needs on real boxes. It is not live yet: a spare
   of a venue that does not file with Veri*Factu now receives a copy over the venue's network, puts
-  it in place at its next start and finishes joining as a standby, but it cannot take over yet, and
-  a Veri*Factu venue is still refused until 3b-F. A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+  it in place at its next start and finishes joining as a standby. With
+  3b-F a Veri*Factu venue's spare joins too, with nothing fiscal written at the join; the activation
+  writes the spare's dormant setup first, and a two-box test on separate databases runs a handover
+  to the joined spare and the old box's return by emergency switch after a reset (A947 3b-F, 2026-11-14). A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. Since 3b-5b, `waitron-credentials rotate` refuses while a pair link
@@ -1890,9 +1891,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **The mirror as a backup destination**, and the mirror's print agent (gated on B6's cross-box
   TLS).
 
-- **Adding a mirror while the internet is down** (owner, 2026-10-02). Since 3b-6a a spare of a venue that does
-  not file with Veri*Factu takes its first copy over the venue's network; left: the owner's
-  measurement with the internet unplugged (3b plan Task 6.11), and a Veri*Factu venue (3b-F).
+- **Adding a mirror while the internet is down** (owner, 2026-10-02). Since 3b-6a a spare takes its
+  first copy over the venue's network, and since 3b-F so does a Veri*Factu venue's; left: the
+  owner's measurement with the internet unplugged (3b plan Task 6.11).
   [Detail](backlog/replication-cloud.md#adding-a-mirror-while-the-internet-is-down)
 
 **Cloud integration and SQLite work.**

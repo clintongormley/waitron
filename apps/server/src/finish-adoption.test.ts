@@ -72,7 +72,6 @@ describe("runFinishAdoption", () => {
       ring: RING,
       nodeId: STANDBY_NODE_ID,
       stateDir: dir,
-      modules: [],
       restart: () => (restarts += 1),
       log: ((_l: string, event: string) => events.push(event)) as never,
     });
@@ -129,7 +128,6 @@ describe("runFinishAdoption — on a migrated venue", () => {
       ring: RING,
       nodeId: STANDBY_NODE_ID,
       stateDir: dir,
-      modules: [],
       restart,
       log: ((level: string, event: string, fields: unknown) =>
         logged.push({ level, event, fields })) as never,

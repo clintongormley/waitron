@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  invoiceSeries,
   nodes,
   readMembershipTrustSet,
   readNodeMembership,
@@ -279,6 +280,7 @@ async function allocationSnapshot() {
     allocations: await db.select().from(fiscalAllocations),
     reservations: await db.select().from(fiscalReservations),
     identities: await db.select().from(registroSif),
+    series: await db.select().from(invoiceSeries),
     outsideReservations: structuredClone(outsideReservations),
   };
 }
@@ -318,8 +320,8 @@ async function rawPost(app: Hono, body: unknown): Promise<Response> {
     headers: { "content-type": "application/json" },
   });
 }
-// Unless `veriFactu` is set, the fiscal module reserves without its `on-activation` mark, so the
-// join is not refused as a Veri*Factu venue's (D12) and the reservation path stays reachable.
+// The fiscal module joins as an unmarked stand-in unless `veriFactu` is set, so the join's
+// reservation path, which a module whose series open on activation never takes, stays reachable.
 async function post(
   app: Hono,
   body: unknown,
@@ -796,16 +798,52 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       password: ADMIN_PASSWORD,
       ...validStandby(),
     });
-    // Past the sign-in, the plain path meets the fiscal module's need for an operation.
-    expect({ status: signedIn.status, body: await signedIn.json() }).toEqual({
-      status: 409,
-      body: {
-        error: {
-          code: "mirror.standby_series_unsupported",
-          params: { module: "fiscal-verifactu" },
-        },
-      },
+    expect(signedIn.status, JSON.stringify(await signedIn.clone().json())).toBe(200);
+  });
+
+  it("accepts a Veri*Factu venue's join with no module operation, reserving nothing fiscal", async () => {
+    const { designated } = await setupVenue();
+    const warnings: { event: string; fields: Record<string, unknown> | undefined }[] = [];
+    const log: Logger = (level, event, fields) => {
+      if (level === "warn") warnings.push({ event, fields });
+    };
+    const app = mountApp(designated, log);
+    const before = await allocationSnapshot();
+    const standby = validStandby();
+
+    const res = await rawPost(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    const reserved = (await res.json()).reservedIdentity;
+    expect({ modules: reserved.modules, series: reserved.series }).toEqual({
+      modules: {},
+      series: [],
     });
+    expect(warnings).toEqual([]);
+    expect(await allocationSnapshot()).toEqual(before);
+    expect((await readNodeMembership(db))?.body.nodes.map((node) => node.nodeId)).toContain(
+      standby.standbyNodeId,
+    );
+  });
+
+  it("reserves nothing fiscal at a Veri*Factu venue's join that carries a reserve operation", async () => {
+    const { designated } = await setupVenue();
+    const app = mountApp(designated);
+    const before = await allocationSnapshot();
+
+    const res = await post(
+      app,
+      { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...validStandby() },
+      { veriFactu: true },
+    );
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    const reserved = (await res.json()).reservedIdentity;
+    expect({ modules: reserved.modules, series: reserved.series }).toEqual({
+      modules: {},
+      series: [],
+    });
+    expect(await allocationSnapshot()).toEqual(before);
   });
 
   it("refuses a present non-string totp with 401 (screened before loginManager)", async () => {
@@ -988,9 +1026,10 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       for (let attempt = 0; attempt < 3; attempt += 1)
         expect((await post(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
 
+      const ownName = `${designated.nodeId.slice(0, 4)}${crypto.randomUUID().slice(4)}`;
       for (let attempt = 0; attempt < 5; attempt += 1) {
-        const gated = await post(app, rightAttempt(), { veriFactu: true });
-        expect((await gated.json()).error.code).toBe("mirror.standby_series_unsupported");
+        const gated = await post(app, { ...rightAttempt(), standbyNodeId: ownName });
+        expect((await gated.json()).error.code).toBe("mirror.standby_name_taken");
         const badOperation = await rawPost(app, {
           ...wrongAttempt(ADMIN_EMAIL),
           moduleOperation: { nonsense: true },
@@ -1799,42 +1838,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(await res.json()).toEqual({
         error: { code: "mirror.bucket_stream_active", params: {} },
       });
-      expect(await reservedAndListed()).toEqual(before);
-    });
-
-    it("refuses a Veri*Factu venue's join before reserving", async () => {
-      const { designated } = await setupVenue();
-      const warnings: { event: string; fields: Record<string, unknown> | undefined }[] = [];
-      const log: Logger = (level, event, fields) => {
-        if (level === "warn") warnings.push({ event, fields });
-      };
-      const app = new Hono();
-      app.use("*", async (c, next) => {
-        c.set("requestId", "req-veri-factu");
-        await next();
-      });
-      app.route("/", mountApp(designated, log));
-      const before = await reservedAndListed();
-
-      const res = await post(
-        app,
-        { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...validStandby() },
-        { veriFactu: true },
-      );
-
-      expect(res.status).toBe(409);
-      expect(await res.json()).toEqual({
-        error: {
-          code: "mirror.standby_series_unsupported",
-          params: { module: "fiscal-verifactu" },
-        },
-      });
-      expect(warnings).toEqual([
-        {
-          event: "mirror.standby_series_unsupported",
-          fields: { module: "fiscal-verifactu", requestId: "req-veri-factu" },
-        },
-      ]);
       expect(await reservedAndListed()).toEqual(before);
     });
 

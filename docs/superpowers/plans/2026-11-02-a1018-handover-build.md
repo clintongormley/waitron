@@ -2491,6 +2491,9 @@ own page to compare clocks and press Activate (Task 5.8) → M2 activates under 
 takes over M1's payment collection (Task 5.9), restarts as the main box and hands its chart to M1
 (Task 5.10); the tills follow the chart.
 
+> **2026-11-14 (A947 3b-F):** a Veri*Factu venue's spare now joins with nothing fiscal written;
+> the activation writes the spare's dormant setup first.
+
 #### Task 5.1: The `handover` module and its venue record of activations
 
 **Files:** `packages/handover/src/schema/*.ts`, `src/classification.ts`, `src/migrations.ts`,
@@ -3217,6 +3220,9 @@ Notes from Slice 5's build:
 > **2026-11-11:** the [connected Slice 7 plan](2026-11-11-a1018-7-emergency-server.md)
 > supersedes Tasks 7.1–7.4’s gap-table and preview boundary. The watcher deferred both tables
 > to Slice 12a; committed signed activation evidence records the interval until then.
+
+> **2026-11-14 (A947 3b-F):** a Veri*Factu venue's spare now joins with nothing fiscal written;
+> the activation writes the spare's dormant setup first.
 
 #### Task 7.1: The gap tables
 

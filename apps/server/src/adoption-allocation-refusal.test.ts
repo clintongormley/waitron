@@ -7,13 +7,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { serve, type ServerType } from "@hono/node-server";
 import { Hono } from "hono";
-import { deployment, locations, nodes, tenants } from "@waitron/db";
+import { deployment, locations, nodes, tenants, withNodeTransaction } from "@waitron/db";
+import { readPairLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ALLOCATED_FISCAL_STANDBY, FISCAL_OPERATIONS } from "@waitron/fiscal-verifactu";
 import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { loadKeyRing } from "@waitron/credentials";
+import { loadKeyRing, sealNodeSigningKeyTx, writePairLinkTx } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
@@ -37,6 +38,10 @@ const LOCATION = "a7000000-0000-4000-8000-000000000001";
 const PRIMARY = "a7000000-0000-4000-8000-000000000002";
 const STANDBY = "a7000000-0000-4000-8000-000000000003";
 const PRIMARY_KEYS = generateNodeKeyPair();
+const RING = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
 const credential = {
   email: "owner@example.test",
   password: "synthetic-login",
@@ -67,7 +72,7 @@ function bundle(): MirrorBundle {
     ...PAIR_BUNDLE_FIELDS,
     accountKey: Buffer.alloc(32, 3).toString("base64"),
     reservedIdentity: {
-      modules: { "fiscal-verifactu": { version: 1, evidence: {} } },
+      modules: {},
       series: [],
       endorsement: endorseKey(STANDBY, "synthetic-standby-key", PRIMARY, PRIMARY_KEYS.privateKey),
     },
@@ -148,24 +153,30 @@ async function state(db: Pick<typeof suite.db, "execute"> = suite.db) {
   }
   return snapshot;
 }
-it("refuses allocation-dependent adoption before its first local write or handover", async () => {
-  const before = await state();
-  let reachedFirstWrite = false;
+const FISCAL_TABLES = [
+  "registro_sif",
+  "invoice_series",
+  "fiscal_reservations",
+  "fiscal_allocations",
+  "registros_facturacion",
+];
+async function fiscalState() {
+  const all = await state();
+  return Object.fromEntries(FISCAL_TABLES.map((table) => [table, all[table]]));
+}
+it("adopts with the allocation-dependent module enabled, writing no fiscal row", async () => {
+  const before = await fiscalState();
+  expect(Object.values(before).every((rows) => Array.isArray(rows))).toBe(true);
   await expect(
-    adoptFromPrimary(deps(), request, {
-      beforeFirstWrite: async () => {
-        reachedFirstWrite = true;
-      },
-    }),
-  ).rejects.toMatchObject({
-    code: "mirror.standby_series_unsupported",
-    params: { module: "fiscal-verifactu" },
+    adoptFromPrimary(deps(), request, { beforeFirstWrite: async () => {} }),
+  ).resolves.toMatchObject({ breakGlassKeyName: expect.any(String) });
+  expect(await fiscalState()).toEqual(before);
+  expect(await readPendingAdoption(stateDir)).toMatchObject({
+    originNodeId: PRIMARY,
+    reserved: { modules: {}, series: [] },
   });
-  expect(reachedFirstWrite).toBe(false);
-  expect(await state()).toEqual(before);
-  expect(await readPendingAdoption(stateDir)).toBeNull();
 });
-it("still adopts when the allocation-dependent module is disabled", async () => {
+it("adopts when the allocation-dependent module is disabled", async () => {
   const value = bundle();
   value.moduleOverrides = { "fiscal-verifactu": false };
   const adopted = adoptFromPrimary(deps(value), request, { beforeFirstWrite: async () => {} });
@@ -180,34 +191,7 @@ it("still adopts when the allocation-dependent module is disabled", async () => 
     originNodeId: PRIMARY,
   });
 });
-it("the setup route returns an allocation refusal and does not restart", async () => {
-  let restarts = 0;
-  const app = new Hono();
-  mountSetup(
-    app,
-    {
-      environment: "preproduction",
-      adopt: (req, hooks) => adoptFromPrimary(deps(), req, hooks),
-      requestRestart: () => {
-        restarts += 1;
-      },
-    },
-    () => {},
-  );
-  const response = await app.request("/setup-api/adopt", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
-  expect(response.status).toBe(409);
-  expect(await response.json()).toEqual({
-    error: { code: "mirror.standby_series_unsupported", params: { module: "fiscal-verifactu" } },
-  });
-  expect(restarts).toBe(0);
-  expect(await suite.db.select().from(deployment)).toEqual([]);
-  expect(await readPendingAdoption(stateDir)).toBeNull();
-});
-it("a pending allocated adoption refuses without creating a selling identity and retains its exact latch", async () => {
+it("a pending adoption with the allocation-dependent module enabled finishes without writing to venue.db", async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Synthetic SL" });
@@ -218,10 +202,27 @@ it("a pending allocated adoption refuses without creating a selling identity and
     operationDescription: "Venta",
   });
   await seedBusinessDay(suite.db, {});
-  await suite.db.insert(nodes).values({ id: PRIMARY, name: "Primary" });
+  const own = generateNodeKeyPair();
+  await suite.db.insert(nodes).values([
+    { id: PRIMARY, name: "Primary" },
+    { id: STANDBY, name: "Spare", publicKey: own.publicKey },
+  ]);
+  await withNodeTransaction(suite.node, async (tx) => {
+    await sealNodeSigningKeyTx(tx, RING, STANDBY, own.privateKey);
+    await writePairLinkTx(tx, RING, STANDBY, {
+      role: "serves",
+      state: "awaiting_copy",
+      peerNodeId: PRIMARY,
+      peerPublicKey: PRIMARY_KEYS.publicKey,
+      storeUrl: "https://main:7443",
+      venueId: "venue-1",
+      accessKeyId: "waitron0123456789abcdef",
+      secretAccessKey: "ab".repeat(32),
+    });
+  });
   const pending: PendingAdoption = {
     originNodeId: PRIMARY,
-    standby: { nodeId: STANDBY, publicKey: "synthetic-public" },
+    standby: { nodeId: STANDBY, publicKey: own.publicKey },
     nodeName: "Spare",
     filingModule: "fiscal-verifactu",
     taxModule: null,
@@ -230,39 +231,27 @@ it("a pending allocated adoption refuses without creating a selling identity and
   await writePendingAdoption(stateDir, pending);
   const before = await state();
   const events: unknown[] = [];
-  for (let retry = 0; retry < 2; retry += 1) {
-    await runFinishAdoption({
-      ownerDb: suite.db,
-      node: suite.node,
-      ring: loadKeyRing({
-        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-        WAITRON_CREDENTIALS_KEY_VERSION: "1",
-      }),
-      nodeId: STANDBY,
-      stateDir,
-      modules,
-      restart: () => {
-        throw new Error("a refused latch asks for no restart");
-      },
-      log: (level, event, fields) => {
-        events.push({ level, event, fields });
-      },
-    });
-    expect(await readPendingAdoption(stateDir)).toEqual(pending);
-    expect(await state()).toEqual(before);
-  }
+  let restarts = 0;
+  await runFinishAdoption({
+    ownerDb: suite.db,
+    node: suite.node,
+    ring: RING,
+    nodeId: STANDBY,
+    stateDir,
+    restart: () => {
+      restarts += 1;
+    },
+    log: (level, event, fields) => {
+      events.push({ level, event, fields });
+    },
+  });
   expect(events).toEqual([
-    {
-      level: "error",
-      event: "adoption.establish_failed",
-      fields: { code: "mirror.standby_series_unsupported" },
-    },
-    {
-      level: "error",
-      event: "adoption.establish_failed",
-      fields: { code: "mirror.standby_series_unsupported" },
-    },
+    { level: "info", event: "adoption.established", fields: { nodeId: STANDBY } },
   ]);
+  expect(restarts).toBe(1);
+  expect(await readPendingAdoption(stateDir)).toBeNull();
+  expect((await readPairLink(suite.node, STANDBY))?.state).toBe("copied");
+  expect(await state()).toEqual(before);
 });
 
 // The main box's answer to the join, as `mirror-bundle-api.ts` sends each refusal; typed by
@@ -272,7 +261,6 @@ const JOIN_REFUSAL_CASES: Record<(typeof JOIN_REFUSALS)[number], Record<string, 
   "mirror.standby_name_taken": {},
   "mirror.spare_already_joined": {},
   "backup.recovery_key_missing": {},
-  "mirror.standby_series_unsupported": { module: "fiscal-verifactu" },
   "mirror.clocks_apart": {
     primaryAt: "2026-11-10T12:00:00.000Z",
     standbyAt: "2026-11-10T12:05:00.000Z",

@@ -651,7 +651,8 @@ backup before the restore authentication callback. The runbooks warn you to keep
 keys until no backup from before their replacement remains. No outside current-key record is planned.
 
 **2026-10-12, standby decision:** the owner selected dormant reservation at join and activation at
-takeover. Historical signature verification
+takeover. _2026-11-14 (A947 3b-F):_ for a Veri*Factu spare, nothing fiscal is reserved at the join and the
+activation writes its dormant setup first (option (c) of the [3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)'s question Q1; the owner's choice is recorded only as the campaign watcher's relay of 2026-11-04). Historical signature verification
 is separate from current outside consumption; it does not authenticate the caller or prove the
 current register state. Takeover must
 authenticate the administrator, isolate the old box, rule out parallel recovery and check
@@ -1326,6 +1327,8 @@ fresh establishment authority and the primary's venue copy together. This is the
 refusal allowed by spec §9.4, not a completed join journey. The open backlog entry carries the
 remaining copy and authentication work. A primary reservation remains consumed/reserved even if
 its empty spare cannot finish adoption.
+_2026-11-14 (A947 3b-F):_ the adoption refusal above is gone; a join writes nothing fiscal, and the
+activation writes the spare's dormant setup first.
 
 - **`packages/fiscal-verifactu` restates rules the validator owns** — Exporting the patterns from the library instead was DEFERRED on purpose (owner, 2026-09-12).
   Revisit when something else needs those patterns.
