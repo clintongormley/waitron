@@ -861,37 +861,20 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 ### The till, devices and table service
 
 - **A1526. A table's whole meal in one list: service steps and course firing together (owner,
-  2026-11-14).** Needs a design the owner approves before anything is built: the owner wants "to see
-  the overall plan before i agree". The owner chose mock-up A at the desk (kept beside the desk's
-  task file, never committed): the department window gets a **Tables** tab holding one list in the
-  order a meal happens. Fixed moments are drawn grey (party seated; bill requested; party leaves,
-  with the Needs clearing switch). The venue's service steps are drawn blue (the waiter). The
-  venue's courses, in course order, are drawn amber (the kitchen). The Service tab keeps orders,
-  payment and the collection ticket. Decided by the owner:
-  - **Fire now / Hold for later moves from the Courses page to each department** ("makes sense"):
-    the restaurant holds its mains while the deli fires everything at once. The Courses page keeps
-    the names and their order (A1524).
-  - **The fire reminder joins the list.** Each held course carries its own "remind to fire N min
-    after <the course before> is served", in place of the department's single "Remind to fire the
-    next course after" on today's Service tab. The owner merged them because the reminder and the
-    steps "are covering the same territory".
-  - **New default steps:** Set up (when seated, at once), Take order (2 min after Set up), Dessert?
-    (5 min after Mains are served), Coffee or bill? (5 min after Desserts are served). "Anything
-    else?" stops being a default ("replace it"). A new venue has no courses (A757 design §8), so the
-    design says what a new department gets until Mains and Desserts exist.
-
-  For the design to put to the owner:
-  - Whether the list orders itself from each step's start, with "after the step before" becoming
-    "after <a named step>" (the desk's recommendation, so a step can never sit where it does not
-    fire), or keeps an order the venue drags.
-  - A step left undone for some minutes takes Waiting's amber outline, one rule for every step (the
-    desk's proposal; the owner: "probably makes sense").
-  - Colours stay fixed for each kind of state and are not set per venue or step (the desk's
-    recommendation; the owner asked the question and has not answered it).
-
-  Builds on A757 ([design](superpowers/specs/2026-10-17-a757-table-states-design.md) §8, slices 7
-  and 8). Changes the course hold setting's home and the reminder's shape, so the schema changes:
-  before go-live that is a starting-migration rebuild.
+  2026-11-14).** The owner approved the [design](superpowers/specs/2026-11-14-a1526-meal-flow.md)
+  at 21:09 on 14 November: “Approve, all three as written (Recommended)” (watcher window picker,
+  recorded in Lane D's questions.md). Implementation and its separately reviewed plan are still open.
+  - The department's **Tables** tab combines fixed meal moments, waiter steps and courses in one
+    list. **Service** keeps orders, payment and the collection ticket. Courses keep their names
+    and order; each department owns Fire now / Hold for later and each held course's reminder.
+  - The new defaults are Set up, Take order, Dessert? after Mains and Coffee or bill? after
+    Desserts. The approved design links them to preset course ids, with two initial steps when
+    those links do not exist. “Anything else?” stops being a default.
+  - Steps follow named starts without dragging. An undone step gets an amber outline five minutes
+    after it is due. Colours are fixed by kind and state, with no per-venue picker.
+  - Builds on A757 §8, slices 7 and 8. The course hold setting and reminder change shape; before
+    go-live, rebuild the affected starting migration and reset practice venues. No implementation
+    has landed from this design.
 
 - **Service steps after a bill moves or tables combine** (bundle of 4, 2 important, size S). Holds A1330, A1331, A1333, A1005. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves-or-tables-combine)
 
