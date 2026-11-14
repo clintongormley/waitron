@@ -20,7 +20,7 @@ en tu descripción.
 
 En un móvil, usa el botón con un bocadillo de diálogo y una exclamación.
 
-Abre **Ajustes → Estado del servidor**, justo encima de **Diagnóstico**. Solo la ven las personas
+Abre **Sistema → Estado del servidor**, justo encima de **Diagnóstico**. Solo la ven las personas
 que pueden gestionar el sistema.
 
 La página vuelve a leer el servidor más o menos cada 15 segundos, así que puedes dejarla abierta.

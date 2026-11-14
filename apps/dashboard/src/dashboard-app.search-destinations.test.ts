@@ -282,3 +282,16 @@ it.each(["light", "dark"] as const)("inner search results are accessible in %s",
   expect(destination(el, "library:stock")!.checkVisibility()).toBe(true);
   await expectNoA11yViolations(el.shadowRoot!.querySelector("nav")!);
 });
+
+it("finds the four hardware pages under Hardware", async () => {
+  const el = await mount({ permissions: ["hardware.manage"], modules: [] });
+  await search(el, "Hardware");
+  expect(
+    results(el)
+      .filter((item) => item.matches(".nav-item"))
+      .map((item) => item.dataset.test),
+  ).toEqual(["nav-device-profiles", "nav-devices", "nav-printers", "nav-payments"]);
+  expect(el.shadowRoot!.querySelector("[data-test=nav-group-hardware]")!.textContent!.trim()).toBe(
+    "Hardware",
+  );
+});

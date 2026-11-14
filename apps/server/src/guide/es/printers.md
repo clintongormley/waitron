@@ -1,5 +1,7 @@
 # Impresoras
 
+Abre **Hardware** en el panel para ver **Perfiles de dispositivo**, **Dispositivos**, **Impresoras** y **Pagos con tarjeta**.
+
 ## Añadir una impresora {#add-printer}
 
 En **Impresoras**, abre la pestaña **Impresoras** y elige **Añadir impresora**. Waitron busca

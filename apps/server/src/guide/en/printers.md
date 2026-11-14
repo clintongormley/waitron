@@ -1,5 +1,7 @@
 # Printers
 
+Open **Hardware** in the dashboard for **Device profiles**, **Devices**, **Printers** and **Card payments**.
+
 ## Add a printer {#add-printer}
 
 In **Printers**, open the **Printers** tab and choose **Add a printer**. Waitron searches for

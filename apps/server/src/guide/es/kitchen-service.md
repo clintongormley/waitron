@@ -464,7 +464,7 @@ elimina** cuando aparezcan esas secciones, y decide si quieres eliminar la estac
 ## Elige el idioma del papel de cocina {#paper-language}
 
 Para cambiar las palabras fijas de los tickets de cocina y los comprobantes del número de recogida,
-cambia el idioma predeterminado en **Ajustes**, **Idiomas del contenido**. Con español como
+cambia el idioma predeterminado en **Sistema**, **Idiomas del contenido**. Con español como
 predeterminado, las cabeceras salen en español; con otros idiomas, salen en inglés hasta que esté
 disponible su traducción de cocina. Sin un idioma del contenido guardado, el papel sale en inglés.
 El panel y los recibos tienen sus propias opciones de idioma.

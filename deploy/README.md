@@ -495,7 +495,7 @@ the two modes forever, so do not "simplify" it.
 
 ## Switching Bookings
 
-On **Modules**, an administrator can turn Bookings on or off, then open **Box status** in Settings
+On **Modules**, an administrator can turn Bookings on or off, then open **Box status** in System
 and choose **Restart the box** separately when service can pause. **Waiting for restart** means the saved change
 has not taken effect yet. Tills reconnect; check and resend any kitchen send interrupted by the restart.
 Bookings stay saved while the module is off. The other optional module switches remain unavailable.
@@ -574,7 +574,7 @@ box then has no backup settings until someone sets them. Otherwise the box's own
 `secrets.env` and `backup.env` are kept. It does nothing if the box has meanwhile got a `trading.env` or
 holds a venue. It does not remove this box from the other server's list of machines, nor release
 the installation number reserved for it there. To take the box off that list, open the other
-server's dashboard, then Settings, then Servers, and in the box's row menu choose Remove and then
+server's dashboard, then System, then Servers, and in the box's row menu choose Remove and then
 Clear from list (only Clear from list if the row already says Removed), before joining the box
 again.
 

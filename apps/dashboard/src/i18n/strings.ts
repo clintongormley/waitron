@@ -50,7 +50,7 @@ export const en = {
   "permission.purchase.manage.help":
     "Record and review supplier invoices on Purchases. Remove an invoice there if it was entered by mistake.",
   "permission.adjustment.manage.help":
-    "Configure the reasons and limits for comps, discounts and voids in Adjustments. Applying or approving a comp uses separate permissions.",
+    "Configure the reasons and limits for comps, discounts and voids in Voids and comps. Applying or approving a comp uses separate permissions.",
   "permission.booking.manage.help":
     "Create and change reservations on Bookings. Seat guests, cancel a reservation or mark it as completed or a no-show.",
   "permission.system.manage.help":
@@ -591,8 +591,8 @@ export const en = {
 
   "cloud.remote": "Remote access",
   "cloud.remote_local": "Remote access on this box",
-  "cloud.remote_on": "On in Settings · connection not checked here",
-  "cloud.remote_off": "Off in Settings · disconnection not checked here",
+  "cloud.remote_on": "On in Cloud services · connection not checked here",
+  "cloud.remote_off": "Off in Cloud services · disconnection not checked here",
   "cloud.remote_help":
     "Turning this off disconnects remote staff, including you if you use the staff address. Keep the local address available to turn it on again. Local use and your other Cloud services continue.",
   "cloud.remote_stop": "Stop",
@@ -1258,7 +1258,8 @@ export const en = {
   "nav.group.operations": "Venue operations",
   "nav.group.team": "Team",
   "nav.group.purchasing": "Purchasing",
-  "nav.group.configuration": "Settings",
+  "nav.group.hardware": "Hardware",
+  "nav.group.configuration": "System",
   "nav.overview": "Overview",
   "nav.sales": "Sales & takings",
   "nav.vat_return": "VAT return (modelo 303)",
@@ -4242,7 +4243,7 @@ export const es: Record<StringKey, string> = {
   "permission.purchase.manage.help":
     "Registra y consulta facturas de proveedores en Compras. Elimina allí una factura si se introdujo por error.",
   "permission.adjustment.manage.help":
-    "Configura los motivos y límites de invitaciones, descuentos y anulaciones en Ajustes. Aplicar o aprobar una invitación utiliza permisos aparte.",
+    "Configura los motivos y límites de invitaciones, descuentos y anulaciones en Cancelaciones y descuentos. Aplicar o aprobar una invitación utiliza permisos aparte.",
   "permission.booking.manage.help":
     "Crea y cambia reservas en Reservas. Sienta a los clientes, cancela una reserva o márcala como finalizada o no presentada.",
   "permission.system.manage.help":
@@ -4792,8 +4793,8 @@ export const es: Record<StringKey, string> = {
 
   "cloud.remote": "Acceso remoto",
   "cloud.remote_local": "Acceso remoto en este servidor",
-  "cloud.remote_on": "Activado en Ajustes · conexión sin comprobar aquí",
-  "cloud.remote_off": "Desactivado en Ajustes · desconexión sin comprobar aquí",
+  "cloud.remote_on": "Activado en Servicios Cloud · conexión sin comprobar aquí",
+  "cloud.remote_off": "Desactivado en Servicios Cloud · desconexión sin comprobar aquí",
   "cloud.remote_help":
     "Desactivarlo desconecta al personal remoto, incluido tú si usas la dirección del personal. Ten a mano la dirección local para volver a activarlo. El uso local y los demás servicios de Cloud continúan.",
   "cloud.remote_stop": "Detener",
@@ -5469,7 +5470,8 @@ export const es: Record<StringKey, string> = {
   "nav.group.operations": "Operaciones del local",
   "nav.group.team": "Equipo",
   "nav.group.purchasing": "Compras",
-  "nav.group.configuration": "Ajustes",
+  "nav.group.hardware": "Hardware",
+  "nav.group.configuration": "Sistema",
   "nav.overview": "Resumen",
   "nav.sales": "Ventas y recaudación",
   "nav.vat_return": "Modelo 303 (IVA)",

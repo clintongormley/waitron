@@ -1423,16 +1423,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [All-window design](superpowers/specs/2026-11-14-a1527-setting-search-design.md), Claude-read and
   watcher-cleared; [department plan](superpowers/plans/2026-11-14-a1527-search-settings-core.md).
 
-- **A1529. A Hardware section in the menu, and its screens brought into line (owner, 2026-11-14).**
-  The owner reviewed mock-ups of the first three points and approved them. No migration. Not
-  started.
-  - **The menu.** A new **Hardware** section holds, in this order, Device profiles, Devices,
-    Printers and Card payments. **Settings is renamed System** and keeps the rest (Appearance,
-    Content languages, Modules, Box status, Diagnostics, Backups, Servers, Cloud services).
-    Every "Settings → …" pointer is reworded in English and Spanish: the till's
-    `apps/till/src/i18n/strings.ts` names Settings → Servers, Box status, Email and Devices, and
-    the guides and help bubbles need the same search. A1527's page search must find the moved
-    pages.
+- **A1529. Hardware screens brought into line (owner, 2026-11-14).**
+  The owner reviewed mock-ups of the menu and profile screens and approved them. No migration.
+  Remaining work:
   - **The device profiles list becomes the shared table** (`wt-data-table`), like the other
     list screens, instead of one card per profile with its own Edit, Duplicate and Delete
     buttons. A row opens the profile; Edit, Duplicate and Delete go in the row menu, keyed

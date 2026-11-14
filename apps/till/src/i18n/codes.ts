@@ -274,8 +274,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El perfil de este dispositivo no trabaja en esa zona. Elige una de sus zonas",
   },
   "device_profile.no_service_zone": {
-    en: "This device's profile has no area it can take orders in. It can be changed in the dashboard, under Settings › Device profiles",
-    es: "El perfil de este dispositivo no tiene ninguna zona en la que tomar pedidos. Se puede cambiar en el panel, en Ajustes › Perfiles de dispositivo",
+    en: "This device's profile has no area it can take orders in. It can be changed in the dashboard, under Hardware › Device profiles",
+    es: "El perfil de este dispositivo no tiene ninguna zona en la que tomar pedidos. Se puede cambiar en el panel, en Hardware › Perfiles de dispositivo",
   },
   "service_zone.mode_incompatible": {
     en: "That table is in an area that does not seat guests. Choose another table",

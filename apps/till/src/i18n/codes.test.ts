@@ -550,10 +550,10 @@ it("says a zone the device's profile does not work in, and a profile left with n
     "El perfil de este dispositivo no trabaja en esa zona. Elige una de sus zonas",
   );
   expect(codeMessage("device_profile.no_service_zone", "en")).toBe(
-    "This device's profile has no area it can take orders in. It can be changed in the dashboard, under Settings › Device profiles",
+    "This device's profile has no area it can take orders in. It can be changed in the dashboard, under Hardware › Device profiles",
   );
   expect(codeMessage("device_profile.no_service_zone", "es")).toBe(
-    "El perfil de este dispositivo no tiene ninguna zona en la que tomar pedidos. Se puede cambiar en el panel, en Ajustes › Perfiles de dispositivo",
+    "El perfil de este dispositivo no tiene ninguna zona en la que tomar pedidos. Se puede cambiar en el panel, en Hardware › Perfiles de dispositivo",
   );
 });
 

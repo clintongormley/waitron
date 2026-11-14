@@ -170,7 +170,7 @@ function venueViewer(permissions: string[], role = "manager") {
 }
 
 it.each(["prepare", "live", "demo", undefined] as const)(
-  "lists Email under Settings only for eligible roles in %s",
+  "lists Email under System only for eligible roles in %s",
   async (intent) => {
     for (const role of ["admin", "manager", "supervisor", "staff"] as const) {
       history.replaceState(null, "", "/manage/email");
@@ -463,6 +463,7 @@ const NAV_GROUP_KEYS = [
   "nav.group.operations",
   "nav.group.team",
   "nav.group.purchasing",
+  "nav.group.hardware",
   "nav.group.configuration",
 ] as const;
 const shellChooser = (el: DashboardApp) =>
@@ -2798,7 +2799,7 @@ describe("dashboard-app", () => {
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
-    expect(navItem(el, "email"), "Prepare email settings are also in Settings").not.toBeNull();
+    expect(navItem(el, "email"), "Prepare email settings are also in System").not.toBeNull();
     expect(navItem(el, "sections")).toBeNull();
     expect(navItem(el, "recipe")).toBeNull();
     expect(navItem(el, "catalogue")!.textContent).toContain(t("nav.catalogue"));
@@ -3695,7 +3696,7 @@ describe("dashboard-app", () => {
     expect(navItem(mgr, "diagnostics")).toBeTruthy();
   });
 
-  it("shows Box status in Settings, directly before Diagnostics, only to a session that manages the system", async () => {
+  it("shows Box status in System, directly before Diagnostics, only to a session that manages the system", async () => {
     const { el: mgr } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi
@@ -3830,7 +3831,7 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("offers Content languages first in Settings to a session holding catalogue.manage and not venue.view, and opens its page", async () => {
+  it("offers Content languages first in System to a session holding catalogue.manage and not venue.view, and opens its page", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["catalogue.manage"] }),
       listStaff: vi.fn().mockResolvedValue([]),
@@ -3898,7 +3899,7 @@ describe("dashboard-app", () => {
 
   const themesStub = () => vi.fn().mockResolvedValue({ themes: [], inUse: null });
 
-  it("offers Appearance first in Settings to a session holding venue.view, and opens its page", async () => {
+  it("offers Appearance first in System to a session holding venue.view, and opens its page", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.view"] }),
       listStaff: vi.fn().mockResolvedValue([]),
@@ -4077,7 +4078,7 @@ describe("dashboard-app", () => {
     ["admin", "dashboard-email-screen", "/manage/email"],
     ["supervisor", "dashboard-overview-screen", "/manage/overview"],
   ])(
-    "opens /manage/email from Settings signed in as %s, only for a manager or an admin",
+    "opens /manage/email from System signed in as %s, only for a manager or an admin",
     async (role, tag, path) => {
       history.replaceState(null, "", "/manage/email");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -4160,7 +4161,7 @@ describe("dashboard-app", () => {
     expect(getComputedStyle(navItem(el, "catalogue")!).color).toBe("rgb(1, 2, 3)");
   });
 
-  it("shows the gear icon on the Settings group header and the team icon on the Team header", async () => {
+  it("shows the gear icon on the System group header and the team icon on the Team header", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -7884,6 +7885,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       "nav-group-operations",
       "nav-group-team",
       "nav-group-purchasing",
+      "nav-group-hardware",
       "nav-group-configuration",
     ]);
     expect(items("service")).toEqual(["nav-bookings"]);
@@ -8071,7 +8073,7 @@ describe("the nav search", () => {
     const el = await mountSession(sessionIn("en-GB"));
     await search(el, "PRINT");
     expect(shownItems(el)).toEqual(["nav-printers"]);
-    expect(shownHeaders(el)).toEqual(["nav-group-configuration"]);
+    expect(shownHeaders(el)).toEqual(["nav-group-hardware"]);
 
     await search(el, "book");
     expect(shownItems(el)).toEqual(["nav-bookings"]);
@@ -8158,10 +8160,10 @@ describe("the nav search", () => {
     expect(expandedHeaders(el)).toEqual([]);
 
     await search(el, "print");
-    expect(shownHeaders(el)).toEqual(["nav-group-configuration"]);
-    expect(
-      el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-configuration")!.hidden,
-    ).toBe(false);
+    expect(shownHeaders(el)).toEqual(["nav-group-hardware"]);
+    expect(el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-hardware")!.hidden).toBe(
+      false,
+    );
 
     await search(el, "");
     expect(expandedHeaders(el)).toEqual([]);
@@ -8172,6 +8174,7 @@ describe("the nav search", () => {
       "nav-group-operations",
       "nav-group-team",
       "nav-group-purchasing",
+      "nav-group-hardware",
       "nav-group-configuration",
     ]);
     expect(shownItems(el)).toEqual(["nav-overview"]);
@@ -8220,7 +8223,7 @@ describe("the nav search", () => {
     expect(navPrinters(el)!.getAttribute("aria-current")).toBe("page");
     expect(layout(el).classList.contains("drawer-open")).toBe(false);
     expect(searchBox(el).value).toBe("");
-    expect(expandedHeaders(el)).toEqual(["nav-group-configuration"]);
+    expect(expandedHeaders(el)).toEqual(["nav-group-hardware"]);
     expect(shownHeaders(el)).toHaveLength(NAV_GROUP_KEYS.length);
   });
 
@@ -8344,7 +8347,7 @@ describe("the nav search", () => {
   it("keeps the folds a header click made before a search, when a header is clicked during it", async () => {
     const el = await mountSession(sessionIn("en-GB"));
     const settings = () =>
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-configuration]")!;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-hardware]")!;
     settings().click();
     await flush(el);
     expect(settings().getAttribute("aria-expanded")).toBe("true");
@@ -8355,19 +8358,17 @@ describe("the nav search", () => {
     await search(el, "");
 
     expect(settings().getAttribute("aria-expanded")).toBe("true");
-    expect(
-      el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-configuration")!.hidden,
-    ).toBe(false);
+    expect(el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-hardware")!.hidden).toBe(
+      false,
+    );
   });
 
   it("shows a group header as a label, not a collapse control, while a term is typed", async () => {
     const el = await mountSession(sessionIn("en-GB"));
     await search(el, "print");
-    const header = el.shadowRoot!.querySelector<HTMLElement>(
-      "[data-test=nav-group-configuration]",
-    )!;
+    const header = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-hardware]")!;
     expect(header.checkVisibility()).toBe(true);
-    expect(header.textContent!.trim()).toBe("Settings");
+    expect(header.textContent!.trim()).toBe("Hardware");
     expect(header.tagName).not.toBe("BUTTON");
     expect(header.hasAttribute("aria-expanded")).toBe(false);
     expect(header.hasAttribute("aria-controls")).toBe(false);
@@ -10360,3 +10361,28 @@ it.each([false, true])(
     expect(Boolean(el.shadowRoot!.querySelector('[data-test="nav-access-roles"]'))).toBe(allowed);
   },
 );
+
+it.each([
+  ["en-GB", "Hardware", "System"],
+  ["es-ES", "Hardware", "Sistema"],
+])("groups hardware before the system pages in %s", async (locale, hardware, system) => {
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+    api: stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, locale }) }),
+    request: stubRequest,
+  });
+  await flush(el);
+  const headers = [...el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")];
+  expect(headers.slice(-2).map((header) => header.textContent!.trim())).toEqual([hardware, system]);
+  const pages = (group: string) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>(`#nav-group-panel-${group} .nav-item`)].map(
+      (item) => item.dataset.test,
+    );
+  expect(pages("hardware")).toEqual([
+    "nav-device-profiles",
+    "nav-devices",
+    "nav-printers",
+    "nav-payments",
+  ]);
+  expect(pages("configuration")).toContain("nav-email");
+  expect(pages("configuration")).not.toContain("nav-devices");
+});

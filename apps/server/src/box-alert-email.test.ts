@@ -65,8 +65,8 @@ describe("the full-disk email", () => {
     const { en, es } = BOX_EMAIL_WORDS["storage.disk_full"];
     expect(en.text).not.toMatch(/install|support/i);
     expect(es.text).not.toMatch(/instal|soporte/i);
-    expect(en.text).toContain("Settings → Box status");
-    expect(es.text).toContain("Ajustes → Estado del servidor");
+    expect(en.text).toContain("System → Box status");
+    expect(es.text).toContain("Sistema → Estado del servidor");
   });
 });
 
@@ -79,8 +79,8 @@ describe("the clock stop emails", () => {
       expect(es.text).not.toMatch(/instal|soporte|encargad|gerente/i);
       expect(en.text).toContain("an administrator can usually set it");
       expect(es.text).toContain("un administrador normalmente puede ponerla en hora");
-      expect(en.text).toContain("Settings → Box status");
-      expect(es.text).toContain("Ajustes → Estado del servidor");
+      expect(en.text).toContain("System → Box status");
+      expect(es.text).toContain("Sistema → Estado del servidor");
       expect(en.text).toContain("“Check the time”");
       expect(es.text).toContain("«Comprobar la hora»");
     },
@@ -237,7 +237,7 @@ describe("boxEmailMessage for the box setting its clock", () => {
     };
     expect(message("en", params)).toEqual({
       subject: "Corner Bistro: the box could not confirm it set its clock",
-      text: "The box tried to set its clock but could not confirm the change took. Its clock read 14/03/2025 09:12 before and 18/10/2026 23:40 after (moved forward 2 days and 3 hours). Check the box's clock on the Box status page (in the dashboard, Settings → Box status).",
+      text: "The box tried to set its clock but could not confirm the change took. Its clock read 14/03/2025 09:12 before and 18/10/2026 23:40 after (moved forward 2 days and 3 hours). Check the box's clock on the Box status page (in the dashboard, System → Box status).",
     });
     expect(message("es", params)).toEqual({
       subject: ES.unverifiedSubject.replaceAll("{venue}", "Corner Bistro"),

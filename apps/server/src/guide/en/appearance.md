@@ -1,12 +1,12 @@
 # Appearance
 
 Your dashboard and tills can carry your venue's own colours instead of Waitron's blue. The
-**Appearance** page under **Settings** shows the look in use, and lets a manager change it and
+**Appearance** page under **System** shows the look in use, and lets a manager change it and
 see the result before anyone else does.
 
 ## See the look in use {#look}
 
-Open **Settings**, then **Appearance**. The **Look** card shows the **Theme in use** and the
+Open **System**, then **Appearance**. The **Look** card shows the **Theme in use** and the
 choices it is made of:
 
 - **Logo**: **None**, or the theme's logo followed by how dark screens show it: "Dark screens: own
