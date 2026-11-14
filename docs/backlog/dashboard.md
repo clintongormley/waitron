@@ -44,18 +44,6 @@ change what deleting a person does.
 Review #559 also recorded no test reaching `management_session.required` in
 `packages/identity/src/profile.ts`'s `ownSession`; that coverage note has not been rechecked.
 
-## Roles the admin can edit (A7)
-
-**A1002 redesigned and approved 2026-11-11.** The [redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md)
-replaces the [7 November design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) where
-they differ (its §9 lists what was dropped and kept) and supersedes the unmerged cut 2 scope
-forecast. `fiscal.remedy` is Admin by default and assignable (owner 2026-11-09). Cut 1 (#2578) has
-landed. The [build plan](../superpowers/plans/2026-11-11-a1002-roles-redesign.md) starts with
-test-fixture preparation, now ready: ordinary server, package and device-profile fixtures use
-the shared helpers. Role storage now uses access-role memberships, with authority and Admin-holder reads inside identity. Permission declarations list their default
-holders; Managers can restart the box. Clock and mail-server changes use Box administration
-(Admin by default). Comp reasons and the bill limit now use Apply comps and Approve comps, without role lists; zero limits require approval. Job roles and their holders now live in core under identity; staffing and workforce are permanent. Used job roles can be hidden without losing shift names, memberships are logged, and each person’s editor saves job-role tags separately. Setup administrators now hold Team, imports give them the source administrator’s job roles or all visible imported roles, with Team when neither exists, and demo and shared fixture staff hold job roles. Device profiles now select visible job roles, with an empty selection admitting nobody; setup, demo, bench and imports retain sign-in. Job membership changes now refresh the till sign-in list, and deleting a job names profiles left with nobody. Permission checks and Admin-holder reads now go through identity. Dashboard pages follow permissions and signed-in state follows the person id; the staff editor now saves multiple access-role tags separately from details. Managers can manage sign-in and grant roles they cover, while changing another person’s email still needs its own permission. Custom-role creation, copying, renaming, permission editing and deletion now have server commands and HTTP routes with role-by-role grant checks; the Access roles page now provides these actions with grouped permission labels and holder counts. Role changes preserve invitation and reset links. Other people’s sign-in changes now require every permission they hold; changing an existing email also needs Change other people’s email addresses (Admin by default). Changes now retain an active Admin with a dashboard sign-in, and changing someone else’s email records the editor and notifies the old address. Identity now has a separate access-role membership command with role-by-role permission checks, changed-while-editing refusal, activity entries and email notices in the recipient’s language; the staff editor uses it, retains refused drafts and shows every held role. Permission help and links between the access-role and job-role pages remain open.
-
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
@@ -186,61 +174,6 @@ Not observed in a real password manager — the tests replace the browser's meth
 A403 removes the typed passkey name. Under the A1308 schema hold, the stored name column remains;
 new registrations fill it with the detected password manager's name, or null for an unknown manager.
 After A760, decide whether to remove the redundant column and read the provider directly.
-
-## Review every permission: fewer, coarser, and consistently named
-
-**2026-11-08:** A1002's [approved inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
-is the target. The [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) incorporates
-WATCHER 2026-11-08 03:57: same-default renames form cut 1, with new authority/storage in cut 2.
-The same-default names use `payment.take`, `hardware.manage`, `venue.configure`,
-`schedule.manage`, `system.manage` and `catalogue.manage`. Changes to authority and role storage
-remain in cut 2; its shared-service gates are recorded at [A7](#roles-the-admin-can-edit-a7). The dated discussion below is historical;
-its pending-approval wording is superseded by the 2026-11-07 full approval recorded in design §11.
-
-- **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
-  A494 (2026-10-11), `catalogue.manage` (manager and above, the roles that hold `person.manage`)
-  gates the catalogue, units and content languages; the "VAT class for new products" default is set
-  under `venue.configure` (owner, 2026-10-16, A755). Input
-  since C128 (#1031): every till payment route checks the permission held by every role, staff
-  included. A1002 cut 1 names it `payment.take` and keeps those holders. The list in
-  `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
-  too fine-grained. The machine permissions now share `node.manage`: adding a machine, promoting
-  a standby and, since #708, removing a standby that never finished joining. Machine permissions are named
-  `node.*`, not `mirror.*` — the owner's preference. The review should propose the whole list: which
-  permissions to merge, the names, and which role holds each, and then rename the call sites in one
-  change. **Renaming is allowed now:** A1002 cut 1 removes the obsolete permanent-name header.
-  A search (2026-09-26, reading, not running) found them stored nowhere — the database
-  stores a person's ROLE (`packages/db/src/schema/identity/persons.ts`), and the names appear only in
-  code the box itself serves — and the pre-production rule (CLAUDE.md §3, no
-  backwards-compatibility code until a venue is live) covers the rest. The review should confirm that
-  by running it, then drop or narrow that header sentence. **Do it before the editable-roles item
-  below** (owner, 2026-09-26): once an admin can make roles and give them permissions, the stored
-  roles would name their permissions, so a rename after that has to rewrite those rows as well.
-  The roles design was not written when this review was requested; the approved A1002 design
-  linked above proposes those rows in the still-unbuilt roles cut.
-  **2026-11-08 pointer:** that approval status is historical; design §11 records full approval,
-  and the [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) records corrections
-  and the remaining build blockers. Implementation is still open.
-  **Restated by the owner 2026-10-02: "review all permissions and the roles they're assigned to"** —
-  the review covers BOTH halves: every permission, and which of the built-in roles holds each. Two
-  role questions from that morning's dashboard Orders screen answers (B27s, lane C questions.md
-  2026-10-02 ~09:40 and ~09:50) belong in it: the staff role holds no `report.view`, so the Orders
-  screen gave staff a narrower view of their own (unfinished bills plus today's finished ones) rather
-  than the permission deciding. Dashboard resends now use `hardware.manage`, held only by managers
-  and admins; the copy follows the till copy's permission. The approved permission merges are
-  implemented in cut 1; role storage and changed authority stay in cut 2.
-
-## Roles are something an admin can add and edit; the four built-ins are only defaults
-
-The owner decided editable roles on 2026-09-12 and restated it on 2026-09-28.
-**2026-10-28 qualification:** all four built-ins can never be renamed or deleted; Staff, Supervisor
-and Manager retain editable privileges. Admin retains every current/future grant and its protected
-usable active human anchor. The 2026-10-22 ~12:05 protection answer originally allowed Admin rename;
-the new names answer supersedes that allowance only.
-
-**2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
-and [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
-See [A7](#roles-the-admin-can-edit-a7) for the two implementation cuts and their remaining gates.
 
 ## Shared database-backed table paging, search and sorting
 
@@ -749,6 +682,36 @@ The owner reversed the disabled-zone ruling on 2026-10-08.
   Existing invalid stored-scope validation still applies; this earlier A396 receipt remains historical.
 
 The per-form classifications remain in the [A331 plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md).
+
+### Roles the admin can edit (A7)
+
+The [11 November redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md)
+supersedes the earlier build split. `fiscal.remedy` is Admin by default and assignable
+(owner, 2026-11-09). Access roles hold permissions; job roles grant none.
+
+### Review every permission: fewer, coarser, and consistently named
+
+The owner asked for fewer, coarser and consistently named permissions on 2026-09-26,
+and restated on 2026-10-02: "review all permissions and the roles they're assigned to".
+The review covers both permissions and their default holders. Machine permissions use `node.*`,
+not `mirror.*` (owner preference).
+
+The [earlier review](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
+records the inventory and discussion. **2026-11-14:** the
+[11 November redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md)
+supersedes its build split; that permission and role build is no longer open.
+
+### Roles are something an admin can add and edit; the four built-ins are only defaults
+
+The owner decided editable roles on 2026-09-12 and restated it on 2026-09-28.
+**2026-10-28 qualification:** all four built-ins can never be renamed or deleted; Staff, Supervisor
+and Manager retain editable privileges. Admin retains every current/future grant and its protected
+usable active human anchor. The 2026-10-22 ~12:05 protection answer originally allowed Admin rename;
+the new names answer supersedes that allowance only.
+
+**2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
+and [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
+**2026-11-14:** the [roles redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md) supersedes that build split; its access roles grant permissions, while job roles grant none.
 
 ## A refused early dashboard payment authorization may become allowed before the PIN transaction — UNVERIFIED (A530 review)
 

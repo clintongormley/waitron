@@ -17,6 +17,8 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
+import { guideHref } from "../help-guide.js";
 import type { AccessRole, DashboardApi } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -51,6 +53,9 @@ export class AccessRolesScreen extends LitElement {
         justify-content: start;
         margin-block: var(--wt-space-4);
       }
+      a {
+        color: var(--wt-color-primary-text);
+      }
       h1 {
         margin: var(--wt-space-4) 0;
         overflow-wrap: anywhere;
@@ -69,9 +74,14 @@ export class AccessRolesScreen extends LitElement {
         padding: var(--wt-space-4);
         margin-block: var(--wt-space-4);
       }
+      .permission {
+        position: relative;
+        width: fit-content;
+        max-width: 100%;
+        margin-block: var(--wt-space-2);
+      }
       wt-switch {
         display: block;
-        margin-block: var(--wt-space-2);
         overflow-wrap: anywhere;
       }
       .error {
@@ -427,14 +437,27 @@ export class AccessRolesScreen extends LitElement {
                 .filter((p) => (PERMISSION_TEXT[p]?.area ?? "venue") === area)
                 .map(
                   (p) =>
-                    html` <wt-switch
-                      data-test=${`permission-${p}`}
-                      name=${p}
-                      label=${PERMISSION_TEXT[p] ? t(PERMISSION_TEXT[p].label) : p}
-                      .checked=${this.permissions.includes(p)}
-                      ?disabled=${admin || this.busy || !canChange || !this.viewerPermissions.includes(p)}
-                      @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#toggle(p, e.detail.checked)}
-                    ></wt-switch>`,
+                    html`<div class="permission">
+                      <wt-switch
+                        data-test=${`permission-${p}`}
+                        name=${p}
+                        label=${PERMISSION_TEXT[p] ? t(PERMISSION_TEXT[p].label) : p}
+                        .checked=${this.permissions.includes(p)}
+                        ?disabled=${admin || this.busy || !canChange || !this.viewerPermissions.includes(p)}
+                        @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#toggle(p, e.detail.checked)}
+                      ></wt-switch
+                      >${
+                        PERMISSION_TEXT[p]?.help
+                          ? html`<wt-help-tooltip
+                              mode="help-mode"
+                              aria-label=${t(PERMISSION_TEXT[p].label)}
+                              guide-href=${guideHref("staff.access-roles")}
+                              guide-label=${t("access_roles.title")}
+                              >${t(PERMISSION_TEXT[p].help!)}</wt-help-tooltip
+                            >`
+                          : nothing
+                      }
+                    </div>`,
                 )}
             </section>`,
         )}
@@ -543,6 +566,7 @@ export class AccessRolesScreen extends LitElement {
                 >
               </div>
             </div>
+            ${this.viewerPermissions.some((p) => p === "venue.view" || p === "schedule.manage") ? html`<p><a href="/manage/staff-roles">${t("access_roles.job_roles")}</a></p>` : nothing}
             <wt-data-table
               viewKey="waitron.access-roles.table"
               customiseColumnsLabel=${t("table.customise_columns")}

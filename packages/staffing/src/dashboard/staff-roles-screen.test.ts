@@ -15,6 +15,24 @@ import { STAFFING_STRINGS } from "./strings.js";
 import "./staff-roles-screen.js";
 
 const BASE = "/management-api/staffing/staff-roles";
+it("does not offer Access roles without permission to open it", async () => {
+  await mount(fakeRequest(() => [waiter]));
+  expect(el.shadowRoot!.querySelector('a[href="/manage/access-roles"]')).toBeNull();
+});
+
+it.each(["en", "es"])("links job roles to access roles (%s)", async (locale) => {
+  setLocale(locale);
+  await mount(
+    fakeRequest(() => [waiter]),
+    { canOpenAccessRoles: true },
+  );
+  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/manage/access-roles"]');
+  expect(link?.textContent?.trim()).toBe(
+    locale === "es"
+      ? STAFFING_STRINGS.es["staffing.role.access_roles"]
+      : "Access roles decide what people may do.",
+  );
+});
 
 /** Counts describe the existing shifts and paint in each deletion fixture. */
 type Role = StaffRole & { blockCount: number; shiftCount: number };
@@ -110,7 +128,7 @@ async function settle() {
 
 async function mount(
   request: ReturnType<typeof fakeRequest>,
-  options: { liveData?: LiveData; readOnly?: boolean } = {},
+  options: { liveData?: LiveData; readOnly?: boolean; canOpenAccessRoles?: boolean } = {},
 ) {
   host = document.createElement("div");
   applyTokens(host);
@@ -118,6 +136,7 @@ async function mount(
   el = document.createElement("dashboard-staff-roles-screen");
   el.api = new StaffingApi(request as unknown as DashboardRequest, options.liveData);
   el.readOnly = options.readOnly ?? false;
+  el.canOpenAccessRoles = options.canOpenAccessRoles ?? false;
   host.append(el);
   await settle();
   return request;

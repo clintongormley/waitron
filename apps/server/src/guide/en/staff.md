@@ -47,12 +47,27 @@ confirmation covers these actions in this browser for 15 minutes, or until your 
 Choose **Cancel** to leave the action undone. If the disk is full, open **Box status** and use
 **Free** to make room before confirming. See [Free space on the box](box-status.md#free-space).
 
+## Access roles {#access-roles}
+
+Choose access roles for what each person needs to do, rather than for their job title. Their
+permissions combine: someone with both Waiter and Accountant access roles can do what either
+role allows. Job roles are separate; they put people on the rota and device sign-in screens
+and grant no permissions.
+
 Open **Access roles** under **Team** to create a role for a job such as Accountant. Choose
 **Add access role**, enter a name, tick its permissions and press **Save**. Open an existing role
 to change its ticks. Use **Copy role** to start from its permissions with a new name. To remove
 a custom role, choose **Delete role** and check how many people will lose it before confirming.
-You can change or copy only roles whose permissions you hold. Admin always has every permission;
-its ticks are locked. Assign the role to people separately in **Users**.
+You can change or copy only roles whose permissions you hold.
+
+Turn on **Help** in the dashboard banner, then open a permission’s bubble to check what it
+allows before ticking it. Staff, Supervisor and Manager are built-in starting points whose
+permissions you can change. Admin always has everything, including permissions added later; its ticks are locked.
+Built-in roles cannot be renamed or deleted.
+
+Give people their roles in **Users**, under **Access roles — what they may do**, and save
+there. Creating a role does not assign it to anyone. Keep at least one active Admin who can
+sign in to the dashboard.
 
 ## Your own account {#own-account}
 

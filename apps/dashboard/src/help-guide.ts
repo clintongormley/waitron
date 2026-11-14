@@ -1,6 +1,7 @@
 import { currentLocale } from "./i18n/t.js";
 
 export const GUIDE_LINKS = {
+  "staff.access-roles": { page: "staff", section: "access-roles" },
   "servers.reconciliation": { page: "servers", section: "reconciliation" },
   "modules.set-up": { page: "modules", section: "set-up" },
   "servers.handover": { page: "servers", section: "hand-over" },

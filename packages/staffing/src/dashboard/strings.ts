@@ -10,6 +10,7 @@ import type { CalendarColour } from "../staffing-types.js";
 // Registers its catalogue and code messages at load, so importing `t` is enough to resolve them.
 
 const en = {
+  "staffing.role.access_roles": "Access roles decide what people may do.",
   "staffing.rota.everyone": "Everyone",
   "staffing.rota.everyone_search": "Everyone's rota",
   "staffing.shift.edit": "Edit shift",
@@ -232,6 +233,7 @@ const en = {
 };
 
 const es: Record<keyof typeof en, string> = {
+  "staffing.role.access_roles": "Los roles de acceso deciden lo que puede hacer cada persona.",
   "staffing.rota.everyone": "Todo el equipo",
   "staffing.rota.everyone_search": "Turnos de todo el equipo",
   "staffing.shift.edit": "Editar turno",
