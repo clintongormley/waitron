@@ -12,8 +12,9 @@ export function madridWithRenamedTables(
   for (const [old, next] of Object.entries(renames)) {
     if (!Object.hasOwn(result.tables, old) || Object.hasOwn(result.tables, next))
       throw new Error(`unused or invalid Madrid table rename: ${old} -> ${next}`);
-    result.tables[next] = result.tables[old]!;
-    delete result.tables[old];
+    result.tables = Object.fromEntries(
+      Object.entries(result.tables).map(([name, table]) => [name === old ? next : name, table]),
+    );
     for (const table of Object.values(result.tables))
       for (const key of table.foreignKeys) if (key.table === old) key.table = next;
   }
