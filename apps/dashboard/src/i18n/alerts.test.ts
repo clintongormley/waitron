@@ -824,13 +824,13 @@ describe("the box waiting for its start's time", () => {
 
   it("says the clock jumped in Spanish", () => {
     const JUMPED_ES =
-      "El reloj del equipo ha saltado y no puede comprobar la hora por internet, así que no acepta cobros. Está esperando a que se conecten terminales y coincidan con su hora (0 de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del equipo; el personal puede usar «Comprobar la hora» en un terminal.";
+      "El reloj del servidor ha saltado y no puede comprobar la hora por internet, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora (0 de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.";
     const params = { agreed: 0, cause: "clock_jumped" };
     expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: false }, "es")).toBe(
       JUMPED_ES,
     );
     expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: true }, "es")).toBe(
-      `${JUMPED_ES} No puede ver su hora de internet porque la parte del equipo que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.`,
+      `${JUMPED_ES} No puede ver su hora de internet porque la parte del servidor que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.`,
     );
   });
 });

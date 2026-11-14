@@ -712,24 +712,24 @@ export const ALERT_WORDS: Readonly<
     words: {
       clock_jumped: {
         en: "The box's clock jumped and it cannot check the time over the internet",
-        es: "El reloj del equipo ha saltado y no puede comprobar la hora por internet",
+        es: "El reloj del servidor ha saltado y no puede comprobar la hora por internet",
       },
     },
     otherwise: {
       en: "The box has not confirmed its time since it started",
-      es: "El equipo no ha confirmado su hora desde que arrancó",
+      es: "El servidor no ha confirmado su hora desde que arrancó",
     },
   },
   clock_unconfirmed_host_silent: {
     words: {
       clock_jumped: {
         en: "It cannot see its internet time, because the part of the box that reads it is not answering, and its clock cannot be corrected from Waitron until that part answers.",
-        es: "No puede ver su hora de internet porque la parte del equipo que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
+        es: "No puede ver su hora de internet porque la parte del servidor que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
       },
     },
     otherwise: {
       en: "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start, and its clock cannot be corrected from Waitron until that part answers.",
-      es: "No puede ver su hora de internet porque la parte del equipo que la lee no responde, así que espera así en cada arranque, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
+      es: "No puede ver su hora de internet porque la parte del servidor que la lee no responde, así que espera así en cada arranque, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
     },
   },
   clock_step_direction: {

@@ -291,7 +291,12 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
         clock: {
           ...health().clock,
           sync: { synced: false, source: "timedatectl", warn: true },
-          waiting: { boxAt: "2026-10-22T18:10:00.000Z", agreed: 1, hostAnswers: true },
+          waiting: {
+            boxAt: "2026-10-22T18:10:00.000Z",
+            agreed: 1,
+            hostAnswers: true,
+            cause: "start",
+          },
         },
       });
       const clockConfirm = vi.fn().mockResolvedValue({
