@@ -94,7 +94,7 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
         {
           lineNo: 1,
           name: "Menu",
-          descriptions: { "es-ES": "Menú", "ca-ES": "Menú" },
+          descriptions: { "es-ES": "Menu", "ca-ES": "Menu" },
           quantity: "2",
           unitPrice: "6.05",
           vatRate: "21.00",
@@ -196,7 +196,7 @@ describe("recordReplacement — the replacement sale", () => {
         {
           lineNo: 1,
           name: "Burger",
-          descriptions: { "es-ES": "Hamburguesa" },
+          descriptions: { "es-ES": "Burger" },
           quantity: "1",
           unitPrice: "9.00",
           vatRate: "21.00",
@@ -206,7 +206,7 @@ describe("recordReplacement — the replacement sale", () => {
           lineNo: 2,
           parentLineNo: 1,
           name: "Cheese",
-          descriptions: { "es-ES": "Queso" },
+          descriptions: { "es-ES": "Cheese" },
           quantity: "1",
           unitPrice: "1.00",
           vatRate: "21.00",
@@ -360,12 +360,12 @@ describe("recordReplacement — refusals use no number", () => {
       .values({ nodeId, code: "F", purpose: "full" })
       .returning({ id: invoiceSeries.id });
     suite.db.run(
-      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+      sql`update tenants set taxpayer_domicile = '8 Tax Street, 28001 Madrid' where id = 1`,
     );
     const { saleId } = await sell(backend, {
       seriesId: brandSeriesId(fullSeries!.id),
-      counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
-      recipientAddress: "Calle Mayor 2, 28013 Madrid, España",
+      counterparty: { taxId: "12345678Z", legalName: "Ann Smith", countryCode: "ES" },
+      recipientAddress: "2 Main Street, 28013 Madrid, Spain",
     });
     await expectRefused(
       backend,
@@ -389,7 +389,7 @@ describe("recordReplacement — refusals use no number", () => {
           {
             lineNo: 1,
             name: "Menu",
-            descriptions: { "es-ES": "Menú" },
+            descriptions: { "es-ES": "Menu" },
             quantity: "-1",
             unitPrice: "6.05",
             vatRate: "21.00",
