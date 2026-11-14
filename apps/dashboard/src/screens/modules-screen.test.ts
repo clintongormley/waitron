@@ -355,3 +355,20 @@ it("narrows the modules to those whose shown name or configuration matches the s
   expect(el.shadowRoot!.querySelector("[name=category]")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("[name=state]")).not.toBeNull();
 });
+it("keeps the Category and State choices on screen when no module matches them", async () => {
+  const el = await mount();
+  change(el, "category", "card-providers");
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-module]")!.click();
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+  expect(rows(el)).toEqual([]);
+  for (const name of ["category", "state"]) {
+    const choice = el.shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`);
+    expect(choice).not.toBeNull();
+    expect(choice!.checkVisibility()).toBe(true);
+    const box = choice!.getBoundingClientRect();
+    expect(box.width).toBeGreaterThan(0);
+    expect(box.height).toBeGreaterThan(0);
+  }
+});

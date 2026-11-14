@@ -13895,10 +13895,88 @@ describe("searching and filtering the printer tables", () => {
 
   it("narrows the printers to the agent chosen", async () => {
     const el = await mountTables();
-    await chooseOptions(filterOf(el, "printers-table", "agent"), ["Terrace agent"]);
+    await chooseOptions(filterOf(el, "printers-table", "agent"), ["a3"]);
     await flush(el);
     expect(rowKeys(el, "printers-table")).toEqual(["a4:pp1"]);
   });
+
+  it("offers two agents that share a name as two choices, each narrowing to its own printers", async () => {
+    const twin: PagePrinterRow = {
+      ...officePrinter,
+      id: "pp2",
+      name: "Upstairs office",
+      host: "10.0.0.57",
+      agentId: "a4",
+    };
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({
+        listAgents: vi.fn().mockResolvedValue(activeAgents),
+        listPagePrinters: vi.fn().mockResolvedValue([officePrinter, twin]),
+      }),
+    });
+    await flush(el);
+    const filter = filterOf(el, "printers-table", "agent") as HTMLElement & {
+      options: { value: string; label: string }[];
+    };
+    expect(filter.options.filter((o) => o.label === "Terrace agent").map((o) => o.value)).toEqual([
+      "a3",
+      "a4",
+    ]);
+    await chooseOptions(filter, ["a4"]);
+    await flush(el);
+    expect(rowKeys(el, "printers-table")).toEqual(["a4:pp2"]);
+  });
+
+  it("keeps the agent chosen for printers no agent has seen when the language changes", async () => {
+    const before = currentLocale();
+    try {
+      const el = await mountTables();
+      const filter = filterOf(el, "printers-table", "agent") as HTMLElement & {
+        options: { value: string; label: string }[];
+      };
+      expect(filter.options.find((o) => o.value === "unknown")?.label).toBe(
+        t("printers.agent_unknown"),
+      );
+      await chooseOptions(filter, ["unknown"]);
+      await flush(el);
+      expect(rowKeys(el, "printers-table").sort()).toEqual(["receipt:p1", "receipt:p3"]);
+      setLocale("en");
+      el.requestUpdate();
+      await flush(el);
+      const table = tableOf(el, "printers-table") as HTMLElement & {
+        filterValues(key: string): string[];
+      };
+      expect(table.filterValues("agent")).toEqual(["unknown"]);
+      expect(rowKeys(el, "printers-table").sort()).toEqual(["receipt:p1", "receipt:p3"]);
+      expect(
+        (
+          filterOf(el, "printers-table", "agent") as HTMLElement & {
+            options: { value: string; label: string }[];
+          }
+        ).options.find((o) => o.value === "unknown")?.label,
+      ).toBe(t("printers.agent_unknown"));
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it.each(["en", "es-ES"])(
+    "narrows the print queue to the jobs whose shown status matches the search (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const el = await mountTables();
+        await selectTab(el, "queue");
+        await searchTable(el, "jobs-table", jobStatusName("failed"));
+        expect(rowKeys(el, "jobs-table")).toEqual(["j1"]);
+        await searchTable(el, "jobs-table", jobStatusName("queued"));
+        expect(rowKeys(el, "jobs-table")).toEqual(["j3"]);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
 
   it("narrows the print queue to the jobs whose printer matches the search", async () => {
     const el = await mountTables();

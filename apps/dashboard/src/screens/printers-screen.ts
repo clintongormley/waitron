@@ -2903,10 +2903,13 @@ export class PrintersScreen extends LitElement {
     >`;
   }
 
-  #printerObservation(p: Printer): Pick<DiscoveredPrinter, "agentName" | "lastSeenAt"> | undefined {
-    let latest: Pick<DiscoveredPrinter, "agentName" | "lastSeenAt"> | undefined;
+  #printerObservation(
+    p: Printer,
+  ): Pick<DiscoveredPrinter, "agentId" | "agentName" | "lastSeenAt"> | undefined {
+    let latest: Pick<DiscoveredPrinter, "agentId" | "agentName" | "lastSeenAt"> | undefined;
     const agent = this.agents.find(({ id }) => id === p.lastPrintAgentId);
-    if (agent && p.lastPrintAt) latest = { agentName: agent.name, lastSeenAt: p.lastPrintAt };
+    if (agent && p.lastPrintAt)
+      latest = { agentId: agent.id, agentName: agent.name, lastSeenAt: p.lastPrintAt };
     for (const device of this.discovered) {
       if (device.printerId === p.id && (!latest || device.lastSeenAt > latest.lastSeenAt))
         latest = device;
@@ -3598,13 +3601,26 @@ export class PrintersScreen extends LitElement {
     const nameOf = (r: PrinterTableRow) => (r.kind === "receipt" ? r.printer.name : r.row.name);
     const paperOf = (r: PrinterTableRow) =>
       r.kind === "receipt" ? r.printer.paperWidth : r.row.media;
-    const agentOf = (r: PrinterTableRow) =>
-      r.kind === "a4"
-        ? (r.row.agentName ?? t("printers.invoice_printer_agent_gone"))
-        : r.printer.transport === "cloud_poll"
-          ? "—"
-          : (seen.get(r.printer.id)?.agentName ?? t("printers.agent_unknown"));
-    const agentNames = [...new Set(rows.map(agentOf))];
+    // The agent filter chooses by agent id, or by one of these codes where no agent is named, so a
+    // saved choice survives a language change and two agents sharing a name stay two choices.
+    const agentOf = (r: PrinterTableRow): { id: string; name: string } => {
+      if (r.kind === "a4")
+        return r.row.agentId !== null && r.row.agentName !== null
+          ? { id: r.row.agentId, name: r.row.agentName }
+          : { id: "gone", name: t("printers.invoice_printer_agent_gone") };
+      if (r.printer.transport === "cloud_poll") return { id: "cloud", name: "—" };
+      const observed = seen.get(r.printer.id);
+      return observed !== undefined && observed.agentName !== null
+        ? { id: observed.agentId, name: observed.agentName }
+        : { id: "unknown", name: t("printers.agent_unknown") };
+    };
+    const agentNameOf = (r: PrinterTableRow) => agentOf(r).name;
+    const agentChoices = new Map<string, string>();
+    for (const row of rows) {
+      const agent = agentOf(row);
+      if (!agentChoices.has(agent.id)) agentChoices.set(agent.id, agent.name);
+    }
+    const agentFallbacks = ["gone", "unknown", "cloud"];
     const columns: DataTableColumn<PrinterTableRow>[] = [
       {
         key: "name",
@@ -3657,21 +3673,30 @@ export class PrintersScreen extends LitElement {
         key: "agent",
         choosable: "shown",
         label: t("printers.last_seen_by"),
-        searchValue: agentOf,
+        searchValue: agentNameOf,
         filter: {
           label: t("printers.last_seen_by"),
           allLabel: t("printers.filter_agent_all"),
           multiple: {
             countLabel: (count) => fill("printers.filter_agent_count", { count: String(count) }),
           },
-          value: agentOf,
-          options: agentNames.map((name) => ({ value: name, label: name })),
+          value: (r) => agentOf(r).id,
+          options: [
+            ...[...agentChoices]
+              .filter(([id]) => !agentFallbacks.includes(id))
+              .map(([value, label]) => ({ value, label })),
+            ...agentFallbacks
+              .filter((id) => agentChoices.has(id))
+              .map((value) => ({ value, fixed: true, label: agentChoices.get(value)! })),
+          ],
         },
         cell: (r) => {
           if (r.kind === "a4")
-            return html`<span data-test=${`page-printer-agent-${r.row.id}`}>${agentOf(r)}</span>`;
+            return html`<span data-test=${`page-printer-agent-${r.row.id}`}
+              >${agentNameOf(r)}</span
+            >`;
           const p = r.printer;
-          return html`<span data-test=${`printer-agent-${p.id}`}> ${agentOf(r)} </span
+          return html`<span data-test=${`printer-agent-${p.id}`}> ${agentNameOf(r)} </span
             >${this.#seenStatus(p.id, seen.get(p.id))}`;
         },
       },
@@ -3918,6 +3943,7 @@ export class PrintersScreen extends LitElement {
           value: (j) => j.status,
           options: JOB_STATUSES.map((status) => ({ value: status, label: jobStatusName(status) })),
         },
+        searchValue: (j) => jobStatusName(j.status),
         cell: (j) =>
           html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
               >${jobStatusName(j.status)}</span

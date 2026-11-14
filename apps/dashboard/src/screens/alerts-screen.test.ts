@@ -560,8 +560,7 @@ describe("the open alerts at phone width", () => {
     params: { count: 1, payments: [] },
     screen: "payments",
   };
-  // This table's actions column holds a plain button rather than a row menu, so each row's
-  // button is checked the way expectRowMenusOnScreen checks a menu's.
+  // This table's actions column holds a plain button rather than a row menu.
   it.each(["en-GB", "es-ES"])(
     "keeps every open alert's action button on screen and uncovered while the other columns scroll sideways (390 px, %s)",
     async (locale) => {

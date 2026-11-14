@@ -2476,6 +2476,27 @@ describe("searching and filtering the card readers", () => {
     expect(rowKeys(el)).toEqual(["r-1"]);
   });
 
+  it.each(["en", "es-ES"])(
+    "narrows the readers to those whose shown status or provider matches the search (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const el = await mountReaders();
+        await searchReaders(el, t("payments.reader_status_offline"));
+        expect(rowKeys(el)).toEqual(["r-2"]);
+        await searchReaders(el, t("payments.reader_status_online"));
+        expect(rowKeys(el)).toEqual(["r-1"]);
+        await searchReaders(el, t("payments.reader_unpaired"));
+        expect(rowKeys(el)).toEqual(["r-3"]);
+        await searchReaders(el, "zeta pay");
+        expect(rowKeys(el)).toEqual(["r-2"]);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
   it("narrows the readers to the provider chosen", async () => {
     const el = await mountReaders();
     const filter = filterOf(el, "provider") as HTMLElement & { options: { label: string }[] };

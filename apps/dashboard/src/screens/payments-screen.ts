@@ -2359,6 +2359,7 @@ export class PaymentsScreen extends LitElement {
           ),
         },
         cell: (reader) => this.#providerName(reader.provider),
+        searchValue: (reader) => this.#providerName(reader.provider),
         sortValue: (reader) => this.#providerName(reader.provider),
       },
       {
@@ -2378,6 +2379,7 @@ export class PaymentsScreen extends LitElement {
             label: readerStatusLabel(key),
           })),
         },
+        searchValue: (reader) => this.#statusText(reader),
         cell: (reader) =>
           html`<span data-test="reader-status-${reader.id}">${this.#statusText(reader)}</span>`,
       },
