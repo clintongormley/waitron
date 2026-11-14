@@ -10300,3 +10300,20 @@ describe("dashboard-app: About Waitron", () => {
     expect(foot(el)!.textContent!.trim()).toBe(fill("about.foot", { version: "1.2.3" }));
   });
 });
+
+it.each([false, true])(
+  "opens Access roles only for holders of staff permission management (%s)",
+  async (allowed) => {
+    history.replaceState(null, "", "/manage/access-roles");
+    const permissions = allowed ? ["venue.view", "person.admin"] : ["venue.view"];
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector("dashboard-access-roles-screen");
+    expect(Boolean(screen)).toBe(allowed);
+    if (screen) {
+      expect(screen.viewerPermissions).toEqual(permissions);
+    }
+    expect(Boolean(el.shadowRoot!.querySelector('[data-test="nav-access-roles"]'))).toBe(allowed);
+  },
+);

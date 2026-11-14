@@ -39,7 +39,7 @@ cuenta deshabilitada.
 
 Waitron te pide que vuelvas a identificarte antes de invitar a alguien, reenviar una invitación,
 restablecer su acceso, deshabilitar o volver a habilitar su cuenta, o cambiar un correo, rol o
-estado en **Usuarios**, incluido tu propio correo. Los nombres, el teléfono y el restablecimiento
+estado en **Usuarios**, incluido tu propio correo, o crear, copiar, editar o eliminar un rol de acceso. Los nombres, el teléfono y el restablecimiento
 del PIN no necesitan esta confirmación.
 También confirmas antes de cambiar las copias de seguridad, descargar archivos de recuperación,
 mostrar la clave de recuperación de las copias o exportar la configuración o los datos de otro
@@ -52,6 +52,13 @@ estas acciones en este navegador durante 15 minutos o hasta que termine tu sesi�
 Elige **Cancelar** para dejar la acción sin realizar. Si el disco está lleno, abre **Estado del
 equipo** y usa **Liberar** para dejar espacio antes de confirmar. Consulta
 [Liberar espacio en el equipo](box-status.md#free-space).
+
+Abre **Roles de acceso** en **Equipo** para crear un rol, por ejemplo para contabilidad. Pulsa
+**Añadir rol de acceso**, escribe un nombre, marca sus permisos y pulsa **Guardar**. Abre un rol
+existente para cambiar sus permisos. Usa **Copiar rol** para partir de sus permisos con otro nombre.
+Para quitar un rol personalizado, pulsa **Eliminar rol** y comprueba cuántas personas lo perderán
+antes de confirmar. Solo puedes cambiar o copiar roles si tienes todos sus permisos. Admin siempre
+tiene todos los permisos y sus casillas están bloqueadas. Asigna el rol por separado en **Usuarios**.
 
 ## Tu propia cuenta {#own-account}
 

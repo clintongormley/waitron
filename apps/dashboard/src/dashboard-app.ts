@@ -86,6 +86,7 @@ import "./screens/handover-intervals-screen.js";
 import "./screens/vat-return-screen.js";
 import "./screens/orders-screen.js";
 import "./screens/staff-screen.js";
+import "./screens/access-roles-screen.js";
 import "./screens/catalogue-screen.js";
 import "./screens/modifiers-screen.js";
 import "./screens/menus-screen.js";
@@ -149,6 +150,7 @@ const CORE_SCREENS = [
   "handover-intervals",
   "orders",
   "staff",
+  "access-roles",
   "catalogue",
   "modifiers",
   "menus",
@@ -277,6 +279,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon: "section-team",
     items: [
       { screen: "staff", labelKey: "nav.staff" },
+      { screen: "access-roles", labelKey: "nav.access_roles", requiresPermission: "person.admin" },
       { screen: "approvals", labelKey: "nav.approvals" },
       { screen: "planned-actual", labelKey: "nav.planned_actual" },
     ],
@@ -3034,6 +3037,11 @@ export class DashboardApp extends LitElement {
           .canExportPersonalData=${this.#sessionPermissions.includes("personal_data.export")}
           @admin-sign-in=${() => void this.#onLogout()}
         ></dashboard-orders-screen>`;
+      case "access-roles":
+        return html`<dashboard-access-roles-screen
+          .api=${this.api}
+          .viewerPermissions=${this.#sessionPermissions}
+        ></dashboard-access-roles-screen>`;
       case "staff":
         return html`<dashboard-staff-screen
           .viewerPermissions=${this.#sessionPermissions}

@@ -35,7 +35,8 @@ account exists or can sign in. Resetting a password does not enable a disabled a
 
 Waitron asks you to sign in again before you invite someone, resend an invitation, reset their
 login, disable or re-enable their account, or change an email, role or account status in **Users**.
-This includes changing your own email there. Names, telephone numbers and PIN resets do not need
+This includes changing your own email in **Users**. Creating, copying, editing or deleting an
+access role also needs this confirmation. Names, telephone numbers and PIN resets do not need
 this confirmation. You also confirm before you change backups, download recovery files, show the
 backup recovery key, or export configuration or another staff member's data. The same window
 covers connecting or disconnecting payment providers, changing the mail server or Cloud
@@ -45,6 +46,13 @@ authenticator or recovery code if your account uses one. The
 confirmation covers these actions in this browser for 15 minutes, or until your session ends.
 Choose **Cancel** to leave the action undone. If the disk is full, open **Box status** and use
 **Free** to make room before confirming. See [Free space on the box](box-status.md#free-space).
+
+Open **Access roles** under **Team** to create a role for a job such as Accountant. Choose
+**Add access role**, enter a name, tick its permissions and press **Save**. Open an existing role
+to change its ticks. Use **Copy role** to start from its permissions with a new name. To remove
+a custom role, choose **Delete role** and check how many people will lose it before confirming.
+You can change or copy only roles whose permissions you hold. Admin always has every permission;
+its ticks are locked. Assign the role to people separately in **Users**.
 
 ## Your own account {#own-account}
 
