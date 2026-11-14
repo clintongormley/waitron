@@ -682,7 +682,9 @@ source in the emergency declaration. Since A947 3b-F (#3172) a spare of a venue 
 Veri*Factu can join, with nothing fiscal written at the join. Cloud placement,
 the emergency services card and the hosted start still wait for A947's strip and Cloud's half.
 The [part 1 plan](../superpowers/plans/2026-11-14-a1188-part1-emergency-card.md) proposes two
-card slices and concrete contract values; the watcher cleared it, and building awaits Cloud agreement:
+card slices and pins Cloud’s 14 November 13:33 CET agreement to the contract values.
+The watcher’s 13:48 instruction holds the card build until explicitly resumed, while
+Cloud cannot host the venue; endpoint and authenticated-route qualification remain open:
 [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
 
 ## The membership route ignores a different chart at the term this box holds.
