@@ -322,7 +322,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#asesor-questions-to-send)
 
 - **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows the original invoice total.** **PARKED (owner,
-  2026-09-29)** until the product can issue a corrective invoice; the owner's points for that design are on the corrective-invoice entry (R5, above). Left
+  2026-09-29)** until the product can issue a corrective invoice. Left
   open by the table actions plan.
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
