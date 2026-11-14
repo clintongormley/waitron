@@ -4811,7 +4811,8 @@ Guards: `apps/server/src/start-clock-check.test.ts`, `apps/server/src/start-cloc
 `apps/server/src/clock-watch.start-up.test.ts` and `apps/server/src/till-box-clock-api.test.ts`,
 weaker than the rule: `clock-unconfirmed-gate.test.ts` calls the seat's four writers and sends the
 money routes it lists through a seat wrapped as boot wraps it, and `boot.start-clock-gate.test.ts`
-sends one cash sale through boot itself; a new money route is covered only once that file lists it.
+sends one cash sale and one correction-record request through boot itself; a new money route is
+covered only once that file lists it.
 
 ### The box sets its own clock
 

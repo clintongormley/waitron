@@ -225,7 +225,7 @@ Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a suppo
 
 State: An AEAT response rejects a record and opens a filing case. An external refusal is not proof of a Waitron bug. Receipt: `packages/fiscal-verifactu/src/drain.ts:1445`.
 
-Route: Missing in the searched server routes: a filing-case decision action. The evidence page exists (**Reporting → Fiscal filing**, W41s-9 slice 1, 2026-11-10) and decides nothing; W41s-8's remedies are not enabled, and a library function or a planned screen is not a product recovery path.
+Route: Missing in the searched server routes: a filing-case decision action. The evidence page exists (**Reporting → Fiscal filing**, W41s-9 slice 1, 2026-11-10) and decides nothing; W41s-8's remedies are not enabled, and a library function or a planned screen is not a product recovery path. _2026-11-14 (Q37-FIX): the case dialog now sends a correction record for a code-1100 refusal whose message names the operation description; every other refusal still has no decision route._
 
 ### `fiscal.respuesta_descuadrada`
 

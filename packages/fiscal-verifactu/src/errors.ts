@@ -119,8 +119,9 @@ declare module "@waitron/shared" {
     };
     /** The issuer's name is printed on the invoice, so changing it takes a corrective invoice. */
     "fiscal.remedy_issuer_changed": { registroId: string };
-    /** The invoice type, recipients, correction type and the invoices it corrects or replaces
-     * are printed on the invoice, so changing or removing any of them takes a corrective invoice. */
+    /** A correction record re-sends the same invoice, so it keeps its invoice type, recipients,
+     * correction type and the invoices it corrects or replaces; changing or removing any of them
+     * takes a corrective invoice. */
     "fiscal.remedy_printed_fact_changed": {
       registroId: string;
       field:

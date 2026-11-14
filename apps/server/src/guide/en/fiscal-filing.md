@@ -1,8 +1,8 @@
 # Fiscal filing
 
 **Fiscal filing** shows how this box's invoice records are being sent to AEAT, the tax agency, and
-which records need a decision. It only reads: nothing on this page sends, retries or changes a
-record.
+which records need a decision. It sends nothing by itself; from a case, an administrator can send
+the one correction it offers.
 
 ## Open the page {#open}
 

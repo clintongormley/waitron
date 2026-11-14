@@ -7,7 +7,9 @@
 
 **Status:** revised plan, 2026-11-14, after the owner's and the watcher's answers and a fresh
 review of `66c8455b8e`. Written in worktree `waitron-feat-q37-fix-put-right` (branch
-`feat/q37-fix-put-right`) on `main` at `7fb59b4e84`. No product code was written. **(run)** marks
+`feat/q37-fix-put-right`) on `main` at `7fb59b4e84`. No product code was written when it was
+revised; Tasks 1a–2b were then built on that branch (PR 2), and Task 3 waits on the owner's answers
+A–E. **(run)** marks
 what was run in this plan's sessions (2026-11-13 and 14); **(read)** marks what was only read. A few
 results come from the first draft's session at `71baa3c8d0` and were not re-run; those say so.
 

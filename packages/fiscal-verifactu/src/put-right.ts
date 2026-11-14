@@ -1,4 +1,5 @@
-// Browser-safe: the Fiscal filing screen will reach this file, so it imports types only.
+// Browser-safe: the Fiscal filing screen reaches this file, so it imports types only
+// (scripts/dashboard-browser-purity.test.ts).
 import type { FilingCaseView } from "./filing-overview-types.js";
 
 export type PutRight =

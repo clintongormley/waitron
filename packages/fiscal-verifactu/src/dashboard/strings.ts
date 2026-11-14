@@ -579,7 +579,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.clock_unusable":
     "La hora del servidor es incorrecta, así que no se ha enviado nada. Con internet, el servidor la corrige solo; si no, ponla en hora en Estado del equipo y envía de nuevo.",
   "fiscal_filing.refused.time_zone":
-    "La zona horaria del local no está lista, así que no se ha enviado nada. Revísala en los ajustes del local y envía de nuevo.",
+    "La zona horaria del local no está lista, así que no se ha enviado nada. Revísala en Ajustes del local y envía de nuevo.",
   "fiscal_filing.refused.not_main":
     "Este servidor ya no presenta las facturas del local. Abre esta página en el servidor que las presenta.",
   "fiscal_filing.refused.changed":
