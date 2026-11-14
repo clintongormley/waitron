@@ -281,7 +281,6 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   // name; 409, as menu-api.ts answers it.
   "category.name_taken": 409,
   "product.name_taken": 409,
-  // A configuration export or a restore copy that cannot be opened (the restore tables spread this).
   "recovery.passphrase_invalid": 422,
   "backup.artifact_invalid": 422,
   "backup.archive_invalid": 422,
