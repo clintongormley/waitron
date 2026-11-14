@@ -1655,8 +1655,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   Later work is signed releases,
   automatic windows, status/email and pairs; after the first venue come the Cloud release check,
   password-checked go-back, proof-of-close and backup-stream handoff. Current-build synthetic Linux
-  rehearsal is separate from historical releases, physical-box qualification and the shell's
-  download/build/pull path. The [two-group plan](superpowers/plans/2026-11-09-a950-shorter-upgrades.md)
+  rehearsal does not qualify historical releases, a physical box or the whole shell `install` entry
+  on an existing box (driver/bootstrap, non-recipe service/Docker drop-ins, host refresh and
+  candidate download/build/pull). The [two-group plan](superpowers/plans/2026-11-09-a950-shorter-upgrades.md)
   records the owner's 9 November decision; the [area detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
   retains earlier designs, decisions and library limits.
 
