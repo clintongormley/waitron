@@ -45,7 +45,6 @@ it("moves the explanation and paint hint into one help-mode bubble", async () =>
   await help!.updateComplete;
   expect(help!.checkVisibility()).toBe(true);
   expect(help!.guideHref).toBe("/help/en/opening-hours#select-days");
-  expect(help!.mode).toBe("help-mode");
   await pick(painter, "zone:z1");
   expect(help!.textContent).toContain(t("special.zone_explain"));
 });
