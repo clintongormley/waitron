@@ -678,12 +678,73 @@ describe("backupAlertSource and the copy to the standby server", () => {
     status: BackupStatus = configured,
   ) => (await src(status, none, () => view).read(ctx)).map((a) => [a.code, a.params]);
 
+  it("warns only above sixty seconds of the worse upload/apply delay and recovers", async () => {
+    let upload = 60_000,
+      apply = 59_000;
+    const source = backupAlertSource({
+      listStatus: async () => configured,
+      outcomes: none,
+      now: () => NOW,
+      readStream: () => toSpare({ lagMs: upload }),
+      readSpare: async () => ({ lagMs: apply, phase: "apply" as const }),
+    });
+    expect(await source.read(ctx)).toEqual([]);
+    apply = 60_001;
+    expect((await source.read(ctx)).map((a) => [a.code, a.params])).toEqual([
+      ["backup.stream_behind", { seconds: 61, phase: "apply", toSpare: true }],
+    ]);
+    upload = 90_000;
+    expect((await source.read(ctx))[0]!.params).toEqual({
+      seconds: 90,
+      phase: "upload",
+      toSpare: true,
+    });
+    const withoutArchive = backupAlertSource({
+      listStatus: async () => ({ configured: false }),
+      outcomes: none,
+      now: () => NOW,
+      readStream: () => toSpare({ lagMs: 0 }),
+      readSpare: async () => ({ lagMs: 70000, phase: "apply" as const }),
+    });
+    expect((await withoutArchive.read(ctx)).map((a) => a.code)).toEqual([
+      "backup.stream_behind",
+      "backup.disabled",
+    ]);
+    upload = apply = 0;
+    expect(await source.read(ctx)).toEqual([]);
+  });
+
+  it("waits two continuous minutes through reason changes, then recovers", async () => {
+    let at = NOW,
+      problem: StreamStatus["bucketProblem"] = { reason: "ECONNREFUSED", since: NOW.toISOString() };
+    const source = backupAlertSource({
+      listStatus: async () => configured,
+      outcomes: none,
+      now: () => at,
+      readStream: () => toSpare({ bucketProblem: problem }),
+    });
+    {
+      expect(await source.read(ctx)).toEqual([]);
+      at = new Date(NOW.getTime() + 119999);
+      problem = { reason: "CERT_SIGNATURE_FAILURE", since: NOW.toISOString() };
+      expect(await source.read(ctx)).toEqual([]);
+      at = new Date(NOW.getTime() + 120000);
+      expect((await source.read(ctx)).map((a) => [a.code, a.since])).toEqual([
+        ["backup.stream_bucket_unusable", NOW.toISOString()],
+      ]);
+      problem = null;
+      expect(await source.read(ctx)).toEqual([]);
+      problem = { reason: "ECONNREFUSED", since: at.toISOString() };
+      expect(await source.read(ctx)).toEqual([]);
+    }
+  });
+
   it("marks behind, paused and an unreachable standby as the standby's", async () => {
     const lagMs = 16 * 60_000;
     expect(
       await codesAndParams(toSpare({ state: "paused", reason: "side_file_limit", lagMs })),
     ).toEqual([
-      ["backup.stream_behind", { minutes: 16, toSpare: true }],
+      ["backup.stream_behind", { seconds: 960, phase: "upload", toSpare: true }],
       ["backup.stream_paused", { toSpare: true }],
     ]);
     expect(
@@ -697,7 +758,7 @@ describe("backupAlertSource and the copy to the standby server", () => {
     expect(
       await codesAndParams(toSpare({ lagMs: STREAM_BEHIND_AFTER_MS }), { configured: false }),
     ).toEqual([
-      ["backup.stream_behind", { minutes: 15, toSpare: true }],
+      ["backup.stream_behind", { seconds: 900, phase: "upload", toSpare: true }],
       ["backup.disabled", { toSpare: true }],
     ]);
   });

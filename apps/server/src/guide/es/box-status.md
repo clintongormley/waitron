@@ -61,14 +61,14 @@ Cuando no pasa nada, cada fila dice:
   **Reconstruyendo la copia**.
   **Actualización desconocida** significa que la principal no puede confirmar su progreso.
   Abre **Servidores** para comprobar el par. El cambio sigue usando la copia tomada cuando se
-  incorporó este equipo de reserva.
+  incorporó este equipo de reserva. La campana avisa si hay cambios pendientes durante más de un minuto o no se puede contactar con el equipo de reserva durante dos minutos.
 - **Impresoras**: **Sin problemas**, y los nombres de las impresoras configuradas.
 - **Lectores de tarjetas**: **Sin problemas**, y los nombres de los lectores configurados. Un
   lector que su proveedor de tarjetas da como sin conexión aparece aquí, como **«Barra» está sin
   conexión.** Mientras la campana o esta página están abiertas, el servidor pregunta al proveedor como
   mucho cada cinco minutos, así que puede aparecer con unos minutos de retraso. Esta fila no aparece
   cuando los pagos con tarjeta están desactivados.
-- **Reloj**: **Correcto**, y cuándo comparó el servidor su hora con la de Hacienda por última vez.
+- **Reloj**: si un dispositivo o equipo de reserva discrepa, compara ambos relojes antes de elegir cuál corregir. **Correcto**, y cuándo comparó el servidor su hora con la de Hacienda por última vez.
   Cuando no tiene una comparación válida, por ejemplo justo después de arrancar el servidor, dice
   **Aún no se ha comparado con Hacienda**.
 - **Espacio en disco**: cuánto espacio queda libre del total, y cuánto ocupan la base de datos,

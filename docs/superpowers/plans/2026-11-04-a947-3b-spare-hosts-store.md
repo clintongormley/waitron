@@ -1,4 +1,9 @@
 > **2026-11-10, watcher's clearance:** the campaign watcher cleared this plan with four changes
+
+**14 November 2026, 3c split:** the [cleared 3c plan](2026-11-14-a947-3c-spare-follows.md)
+follows into scratch. The live database and switching copy remain the joining copy until 4b;
+older references below to updating it in 3c describe the earlier split.
+
 > (its words, 2026-11-10 17:16: "a watcher decision, not an owner approval"), folded in here, each
 > changed spot marked "2026-11-10 (watcher):". (1) Every pull request not yet built has a size in
 > lines, code and tests apart, in "Sizes" under "The cut, and why", and two are split before

@@ -13,7 +13,8 @@ import "@waitron/ui/src/components/wt-switch.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { DashboardApi, ServerRow } from "../api/client.js";
+import { spareDetails, spareLine, spareNeedsAttention } from "./box-status-rows.js";
+import type { DashboardApi, ServerRow, SpareFollowView } from "../api/client.js";
 
 const STANDING_KEY: Record<ServerRow["standing"], StringKey> = {
   "serving-primary": "servers.standing.primary",
@@ -76,6 +77,20 @@ export class ServersScreen extends LitElement {
         display: block;
         margin-top: var(--wt-space-1);
         font-size: var(--wt-font-size-sm);
+      }
+      wt-data-table::part(server-progress) {
+        margin-top: var(--wt-space-2);
+      }
+      wt-data-table::part(server-warning) {
+        color: var(--wt-color-warning);
+      }
+      wt-data-table::part(server-current) {
+        color: var(--wt-color-success);
+      }
+      wt-data-table::part(server-copy-detail) {
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+        margin-top: var(--wt-space-1);
       }
       wt-data-table::part(server-no-address) {
         color: var(--wt-color-text-muted);
@@ -148,6 +163,7 @@ export class ServersScreen extends LitElement {
   );
 
   @state() private servers: ServerRow[] = [];
+  @state() private spare: SpareFollowView | null = null;
   @state() private authorityFingerprint: string | null = null;
   @state() private loading = true;
   @state() private loadErrorKey: string | null = null;
@@ -346,6 +362,7 @@ export class ServersScreen extends LitElement {
     try {
       await this.#queries.watch("listServers", [], (listing) => {
         this.servers = listing.nodes;
+        this.spare = listing.spare ?? null;
         this.authorityFingerprint = listing.authorityFingerprint;
         this.loadErrorKey = null;
       });
@@ -467,6 +484,21 @@ export class ServersScreen extends LitElement {
             <span part="server-role" data-test=${`role-${row.nodeId}`}
               >${t(STANDING_KEY[row.standing])}</span
             >
+            ${
+              this.spare?.peerNodeId === row.nodeId
+                ? html`<div
+                    part="server-progress"
+                    data-test=${`follow-${row.nodeId}`}
+                    data-state=${spareNeedsAttention(this.spare) ? "attention" : "ok"}
+                  >
+                    <span
+                      part=${spareNeedsAttention(this.spare) ? "server-warning" : "server-current"}
+                      >${spareLine(this.spare)}</span
+                    >
+                    ${spareDetails(this.spare).map((line) => html`<div part="server-copy-detail">${line}</div>`)}
+                  </div>`
+                : nothing
+            }
           </div>`,
       },
       {

@@ -29,6 +29,11 @@ export interface SpareFollowView extends Omit<FollowProgress, "generation"> {
   peerNodeId: string;
   clockAt: string | null;
 }
+export interface SpareFollowFacts {
+  lagMs: number | null;
+  phase: "upload" | "apply";
+  clock: { boxAt: string; peerAt: string } | null;
+}
 export function readableFollow(value: unknown): value is FollowProgress & { clockAt?: string } {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const v = value as Record<string, unknown>;
@@ -90,7 +95,14 @@ export function startSpareFollow(deps: SpareFollowDeps) {
   let local: FollowProgress | null = null,
     localAt = 0;
   let remote:
-    { binding: string; at: number; progress: FollowProgress; clockAt: string | null } | undefined;
+    | {
+        binding: string;
+        at: number;
+        progress: FollowProgress;
+        clockAt: string | null;
+        observedAt: string;
+      }
+    | undefined;
   const folder = join(deps.stateDir, SPARE_FOLLOW_DIR);
   const clear = async () => {
     local = null;
@@ -204,6 +216,7 @@ export function startSpareFollow(deps: SpareFollowDeps) {
         at: performance.now(),
         progress: follow,
         clockAt: follow.clockAt ?? null,
+        observedAt: deps.now().toISOString(),
       };
     }
   }
@@ -221,15 +234,31 @@ export function startSpareFollow(deps: SpareFollowDeps) {
       await sleep(interval, stopping.signal);
     }
   })();
+  async function reading() {
+    const contextNow = await context();
+    const cached =
+      remote?.binding === contextNow.key && performance.now() - remote.at <= 2 * interval
+        ? remote
+        : undefined;
+    return { ...contextNow, cached };
+  }
   return {
+    async facts(): Promise<SpareFollowFacts | null> {
+      const { link, stream, cached } = await reading();
+      if (link?.role !== "streams") return null;
+      const apply = cached?.progress.lagMs ?? null;
+      const upload = stream?.lagMs ?? 0;
+      return {
+        lagMs: apply === null ? null : Math.max(upload, apply),
+        phase: apply !== null && apply >= upload ? "apply" : "upload",
+        clock:
+          cached?.clockAt == null ? null : { boxAt: cached.observedAt, peerAt: cached.clockAt },
+      };
+    },
     progress: () => (performance.now() - localAt <= 2 * interval ? local : null),
     async status(): Promise<SpareFollowView | null> {
-      const { link, key, stream } = await context();
+      const { link, stream, cached } = await reading();
       if (link?.role !== "streams") return null;
-      const cached =
-        remote?.binding === key && performance.now() - remote.at <= 2 * interval
-          ? remote
-          : undefined;
       if (cached === undefined)
         return {
           peerNodeId: link.peerNodeId,

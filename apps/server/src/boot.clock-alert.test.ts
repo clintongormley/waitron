@@ -11,6 +11,8 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import type { createAuthorityClockStatus } from "./time-health.js";
+import { StreamHost } from "./stream-host.js";
+import { startSpareFollow } from "./spare-follow.js";
 import type { Alert } from "@waitron/module";
 
 vi.mock("@hono/node-server", async () => {
@@ -34,6 +36,11 @@ vi.mock("./time-health.js", async (importOriginal) => {
       return clock.monitor;
     },
   };
+});
+
+vi.mock("./spare-follow.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./spare-follow.js")>();
+  return { ...actual, startSpareFollow: vi.fn(actual.startSpareFollow) };
 });
 
 const migrations = migrationOptionsFor(manifestSets(), null);
@@ -70,14 +77,14 @@ describe("the running server's authority clock alert", () => {
       await vi.waitFor(async () => {
         expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
       });
-      const alerts = async () => {
+      const alerts = async (code = "fiscal.clock_drift") => {
         const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
           headers: { cookie: venue.managerCookie },
         });
         expect(response.status).toBe(200);
         const body = (await response.json()) as { visible: boolean; alerts: Alert[] };
         expect(body.visible).toBe(true);
-        return body.alerts.filter((alert) => alert.code === "fiscal.clock_drift");
+        return body.alerts.filter((alert) => alert.code === code);
       };
       expect(clock.monitor).toBeDefined();
       expect(await alerts()).toEqual([]);
@@ -103,6 +110,38 @@ describe("the running server's authority clock alert", () => {
         receivedAt: new Date("2026-10-05T12:00:02Z"),
       });
       expect(await alerts()).toEqual([]);
+      const followed = vi.mocked(startSpareFollow).mock.results.at(-1)!.value;
+      const facts = vi.spyOn(followed, "facts").mockResolvedValue({
+        lagMs: 70000,
+        phase: "apply",
+        clock: { boxAt: "2026-11-14T12:00:00.000Z", peerAt: "2026-11-14T12:00:20.000Z" },
+      });
+      const stream = vi.spyOn(StreamHost.prototype, "status").mockReturnValue({
+        state: "streaming",
+        reason: null,
+        stateSince: "2026-11-14T12:00:00.000Z",
+        generation: "gen-1-main-20261114T120000Z",
+        bucketProblem: null,
+        lagMs: 0,
+        lastConfirmedUploadAt: null,
+        toSpare: true,
+      });
+      try {
+        expect(await alerts("backup.stream_behind")).toEqual([
+          expect.objectContaining({ params: { seconds: 70, phase: "apply", toSpare: true } }),
+        ]);
+        expect(await alerts("clock.peer_disagrees")).toEqual([
+          expect.objectContaining({
+            params: expect.objectContaining({ differenceMs: 20000, peer: true }),
+          }),
+        ]);
+        facts.mockResolvedValue({ lagMs: 0, phase: "apply", clock: null });
+        expect(await alerts("backup.stream_behind")).toEqual([]);
+        expect(await alerts("clock.peer_disagrees")).toEqual([]);
+      } finally {
+        facts.mockRestore();
+        stream.mockRestore();
+      }
     } finally {
       if (server !== undefined) await server.close();
       clock.monitor = undefined;

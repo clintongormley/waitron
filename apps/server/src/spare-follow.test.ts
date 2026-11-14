@@ -184,12 +184,15 @@ describe("spare following", () => {
     const clock = vi.spyOn(performance, "now").mockReturnValue(0);
     onTestFinished(() => clock.mockRestore());
     let stream = { state: "streaming" as const, generation, lagMs: 3200 };
-    let answer: unknown = progress;
+    let answer: unknown = { ...progress, lagMs: 1000 };
     const ask = vi.fn(async () => ({ follow: answer }));
     running = startSpareFollow({ ...deps, mirror: false, readStream: () => stream, ask });
     await vi.waitFor(async () =>
       expect(await running!.status()).toMatchObject({ state: "following", lagMs: 3200 }),
     );
+    expect(await running.facts()).toMatchObject({ lagMs: 3200, phase: "upload" });
+    stream = { ...stream, lagMs: 0 };
+    expect(await running.facts()).toMatchObject({ lagMs: 1000, phase: "apply" });
     const calls = ask.mock.calls.length;
     await running.status();
     await running.status();
@@ -223,24 +226,35 @@ describe("spare following", () => {
   });
   it("expires cached freshness while one signed ask remains pending", async () => {
     const deps = await setup("streams");
+    let wall = new Date("2026-11-14T12:02:00.000Z");
     let now = 0,
       release!: (value: null) => void;
     const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
     const pending = new Promise<null>((resolve) => {
       release = resolve;
     });
-    const ask = vi.fn().mockResolvedValueOnce({ follow: progress }).mockReturnValue(pending);
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ follow: { ...progress, clockAt: "2026-11-14T12:00:20.000Z" } })
+      .mockReturnValue(pending);
     try {
       running = startSpareFollow({
         ...deps,
+        now: () => wall,
         mirror: false,
         readStream: () => ({ state: "streaming", generation, lagMs: 0 }),
         ask,
       });
       await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
       now = 10;
+      wall = new Date("2026-11-14T12:03:00.000Z");
+      expect((await running.facts())?.clock).toEqual({
+        boxAt: "2026-11-14T12:02:00.000Z",
+        peerAt: "2026-11-14T12:00:20.000Z",
+      });
       expect(await running.status()).toMatchObject({ state: "following" });
       now = 11;
+      expect((await running.facts())?.clock).toBeNull();
       expect(await running.status()).toMatchObject({ state: "unknown", lagMs: null });
       expect(ask).toHaveBeenCalledTimes(2);
     } finally {

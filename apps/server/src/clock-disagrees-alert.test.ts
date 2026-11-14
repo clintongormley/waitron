@@ -50,20 +50,24 @@ describe("clock.disagrees", () => {
     ]);
   });
 
-  it("says nothing with only one device off", async () => {
+  it("keeps the two-device warning absent with only one device off", async () => {
     const store = storeAt(BOX_MS, 0);
     store.noteDevice("till-a", "192.168.10.31", BOX_MS + 2 * HOUR_MS, {
       wallMs: BOX_MS,
       monoMs: 0,
     });
-    expect(await readAlerts(store, new Date(BOX_MS))).toEqual([]);
+    expect(await readAlerts(store, new Date(BOX_MS))).toEqual([
+      expect.objectContaining({ code: "clock.peer_disagrees" }),
+    ]);
   });
 
-  it("says nothing when two devices are within a minute of the box", async () => {
+  it("keeps the two-device warning absent when devices are within a minute", async () => {
     const store = storeAt(BOX_MS, 0);
     store.noteDevice("till-a", "192.168.10.31", BOX_MS + 59_000, { wallMs: BOX_MS, monoMs: 0 });
     store.noteDevice("till-b", "192.168.10.32", BOX_MS - 59_000, { wallMs: BOX_MS, monoMs: 0 });
-    expect(await readAlerts(store, new Date(BOX_MS))).toEqual([]);
+    expect(await readAlerts(store, new Date(BOX_MS))).toEqual([
+      expect.objectContaining({ code: "clock.peer_disagrees" }),
+    ]);
   });
 
   it("says nothing once the two readings are more than five minutes old", async () => {
@@ -79,7 +83,7 @@ describe("clock.disagrees", () => {
     expect(await readAlerts(store, new Date(BOX_MS + 300_001))).toEqual([]);
   });
 
-  it("says nothing when the two devices that are off share one address", async () => {
+  it("keeps the two-device warning absent when devices share one address", async () => {
     const store = storeAt(BOX_MS, 0);
     store.noteDevice("till-a", "192.168.10.31", BOX_MS + 2 * HOUR_MS, {
       wallMs: BOX_MS,
@@ -89,7 +93,9 @@ describe("clock.disagrees", () => {
       wallMs: BOX_MS,
       monoMs: 0,
     });
-    expect(await readAlerts(store, new Date(BOX_MS))).toEqual([]);
+    expect(await readAlerts(store, new Date(BOX_MS))).toEqual([
+      expect.objectContaining({ code: "clock.peer_disagrees" }),
+    ]);
   });
 
   it("counts two devices whose address reads empty as two", async () => {
@@ -99,5 +105,59 @@ describe("clock.disagrees", () => {
     expect(await readAlerts(store, new Date(BOX_MS))).toEqual([
       expect.objectContaining({ params: expect.objectContaining({ count: 2 }) }),
     ]);
+  });
+});
+
+describe("the early clock comparison", () => {
+  it.each([-15001, -15000, 15000, 15001])(
+    "warns only beyond fifteen seconds (%s)",
+    async (delta) => {
+      const store = storeAt(BOX_MS, 0);
+      store.noteDevice("till-a", "192.168.10.31", BOX_MS + delta, { wallMs: BOX_MS, monoMs: 0 });
+      const alerts = await readAlerts(store, new Date(BOX_MS));
+      if (Math.abs(delta) === 15000) expect(alerts).toEqual([]);
+      else
+        expect(alerts).toEqual([
+          expect.objectContaining({
+            code: "clock.peer_disagrees",
+            params: {
+              peer: false,
+              differenceMs: 15001,
+            },
+          }),
+        ]);
+      expect(store.witnesses()).toHaveLength(1);
+    },
+  );
+  it("compares the signed peer at observation and prefers the existing two-device warning", async () => {
+    const store = storeAt(BOX_MS, 0);
+    let peer: { boxAt: string; peerAt: string } | null = {
+      boxAt: new Date(BOX_MS).toISOString(),
+      peerAt: new Date(BOX_MS + 20000).toISOString(),
+    };
+    const source = clockDisagreesAlertSource(store, async () => peer);
+    const context = { tx: {} as never, now: new Date(BOX_MS + 60000) };
+    expect(await source.read(context)).toEqual([
+      expect.objectContaining({
+        code: "clock.peer_disagrees",
+        params: {
+          peer: true,
+          differenceMs: 20000,
+        },
+      }),
+    ]);
+    peer = null;
+    expect(await source.read(context)).toEqual([]);
+    for (const [id, address] of [
+      ["a", "192.168.1.1"],
+      ["b", "192.168.1.2"],
+    ])
+      store.noteDevice(id!, address, BOX_MS + HOUR_MS, { wallMs: BOX_MS, monoMs: 0 });
+    peer = {
+      boxAt: new Date(BOX_MS).toISOString(),
+      peerAt: new Date(BOX_MS + 20000).toISOString(),
+    };
+    expect((await source.read(context)).map((a) => a.code)).toEqual(["clock.disagrees"]);
+    expect(store.witnesses()).toHaveLength(2);
   });
 });

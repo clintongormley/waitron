@@ -15,6 +15,7 @@ import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
 export interface MembershipRemovalApiDeps {
+  readSpare?: () => Promise<import("./spare-follow.js").SpareFollowView | null>;
   db: Database;
   node: NodeDatabase;
   ring: KeyRing;
@@ -67,6 +68,7 @@ export function mountMembershipRemovalApi(
         term: listing.term,
         authorityFingerprint: await deps.authorityFingerprint(),
         nodes: listing.nodes,
+        ...(deps.readSpare === undefined ? {} : { spare: await deps.readSpare() }),
       });
     }),
   );

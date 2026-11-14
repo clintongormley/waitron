@@ -181,7 +181,8 @@ export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
   };
   const refused = (reasons: Set<string>, reason: string) => {
     failedWith(reasons, reason);
-    if (problem?.reason !== reason) problem = { reason, since: new Date().toISOString() };
+    if (problem?.reason !== reason)
+      problem = { reason, since: problem?.since ?? new Date().toISOString() };
   };
   const answered = (reasons: Set<string>) => {
     problem = null;

@@ -355,9 +355,9 @@ describe("the copy when it goes to the standby server, not the owner's bucket", 
   it.each([
     [
       "backup.stream_behind",
-      { minutes: 20 },
-      `The standby server is not receiving the restaurant's data: its copy is 20 minutes behind, so your most recent sales are not on it yet. Sales continue. ${CHECK_EN}`,
-      `El servidor en espera no está recibiendo los datos del restaurante: su copia lleva 20 minutos de retraso, así que tus ventas más recientes aún no están en ella. Las ventas continúan. ${CHECK_ES}`,
+      { seconds: 70, phase: "upload" },
+      `The spare copy is 70 seconds behind while changes wait to be sent to the spare. Sales continue. ${CHECK_EN}`,
+      `La copia de reserva lleva 70 segundos de retraso mientras hay cambios pendientes de enviar al equipo de reserva. Las ventas continúan. ${CHECK_ES}`,
     ],
     [
       "backup.stream_paused",
@@ -1001,4 +1001,32 @@ it("names the payment audit without asserting a bank payout", () => {
   expect(alertMessage("job.failing", { job: "payments.reconcile" }, "es")).toContain(
     "los registros del proveedor de pagos",
   );
+});
+
+it("names the actual pending phase and the two clocks in both languages", () => {
+  for (const locale of ["en", "es"] as const) {
+    const apply = alertMessage(
+      "backup.stream_behind",
+      { seconds: 80, phase: "apply", toSpare: true },
+      locale,
+    );
+    expect(apply).toContain(
+      locale === "en"
+        ? "received changes wait to be applied"
+        : "hay cambios recibidos pendientes de aplicar",
+    );
+    expect(apply).toContain("80");
+    const device = alertMessage(
+      "clock.peer_disagrees",
+      { peer: false, differenceMs: 20000 },
+      locale,
+    );
+    const peer = alertMessage("clock.peer_disagrees", { peer: true, differenceMs: 20000 }, locale);
+    expect(device).toContain(
+      locale === "en" ? "connected device's clock" : "reloj de un dispositivo conectado",
+    );
+    expect(peer).toContain(locale === "en" ? "spare box's clock" : "reloj del equipo de reserva");
+    for (const message of [device, peer])
+      expect(message).toContain(locale === "en" ? "this box's clock" : "reloj de este servidor");
+  }
 });

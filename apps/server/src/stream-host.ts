@@ -339,6 +339,7 @@ export class StreamHost {
       }
       const venueDbPath = join(this.#deps.venueDir, VENUE_FILE);
       const supervisor = new StreamSupervisor({
+        preserveBucketProblemSince: this.#pipe !== undefined,
         litestreamBin: this.#deps.litestreamBin,
         venueDbPath,
         configDir: join(this.#deps.stateDir, STREAM_DIR),

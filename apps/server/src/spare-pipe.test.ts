@@ -378,6 +378,30 @@ describe("startStorePipe", () => {
     expect(problem()?.reason).toBe("mirror.peer_unresolved");
   });
 
+  it("keeps the outage start when a different refusal follows without an answer", async () => {
+    await listen();
+    let reason = "first_refusal";
+    const { loopbackUrl, problem } = await open({
+      lookup: async () => {
+        throw Object.assign(new Error(reason), { code: reason });
+      },
+    });
+    expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
+    const since = problem()!.since;
+    reason = "second_refusal";
+    const original = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(original + 60000);
+      // A transport error is a second reason in the same outage.
+      expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
+      expect(problem()!.reason).toBe("second_refusal");
+      expect(problem()!.since).toBe(since);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("clears the problem once a connection gets through again", async () => {
     await listen();
     let addresses = ["::1"];

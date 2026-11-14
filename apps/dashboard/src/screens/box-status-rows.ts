@@ -1,5 +1,5 @@
 import { formatBytes } from "@waitron/dashboard-kit";
-import type { AlertView, BoxHealth } from "../api/client.js";
+import type { AlertView, BoxHealth, SpareFollowView } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -109,10 +109,7 @@ export function boxStatusRows(
         ? "stopped"
         : notices.length > 0 ||
             rowAlerts.length > 0 ||
-            (id === "spare" &&
-              (health.spare!.state !== "following" ||
-                health.spare!.lagMs === null ||
-                health.spare!.lagMs > 60000)) ||
+            (id === "spare" && spareNeedsAttention(health.spare!)) ||
             clockOff(id, health)
           ? "attention"
           : "ok";
@@ -173,16 +170,8 @@ function factLine(id: PartId, health: BoxHealth, notices: readonly Notice[]): st
   switch (id) {
     case "tax":
       return taxLine(health, notices);
-    case "spare": {
-      const spare = health.spare!;
-      if (spare.state === "rebuilding") return t("box_status.spare.rebuilding");
-      if (spare.state !== "following" || spare.lagMs === null) return t("box_status.spare.unknown");
-      if (spare.lagMs === 0 && spare.appliedTXID !== spare.uploadedTXID)
-        return t("box_status.spare.pending");
-      return spare.lagMs === 0 && spare.appliedTXID === spare.uploadedTXID
-        ? t("box_status.bucket.ok")
-        : fill("box_status.spare.behind", { seconds: String(Math.ceil(spare.lagMs / 1000)) });
-    }
+    case "spare":
+      return spareLine(health.spare!);
     case "bucket":
       return bucketLine(health.stream);
     case "printers":
@@ -270,14 +259,7 @@ function detailsOf(id: PartId, health: BoxHealth): string[] {
             }),
       ];
     case "spare":
-      return [
-        t("box_status.spare.switch_copy"),
-        ...(health.spare!.lastAppliedAt === null
-          ? []
-          : [
-              fill("box_status.spare.last", { time: formatIsoMinute(health.spare!.lastAppliedAt) }),
-            ]),
-      ];
+      return spareDetails(health.spare!);
     case "bucket": {
       const last =
         "lastConfirmedUploadAt" in health.stream ? health.stream.lastConfirmedUploadAt : null;
@@ -337,4 +319,25 @@ function diskDetails(disk: BoxHealth["disk"]): string[] {
   if (parts.length === 0) return [];
   const line = parts.join(" · ");
   return [line.charAt(0).toLocaleUpperCase(locale) + line.slice(1)];
+}
+
+export function spareNeedsAttention(spare: SpareFollowView): boolean {
+  return spare.state !== "following" || spare.lagMs === null || spare.lagMs > 60000;
+}
+export function spareLine(spare: SpareFollowView): string {
+  if (spare.state === "rebuilding") return t("box_status.spare.rebuilding");
+  if (spare.state !== "following" || spare.lagMs === null) return t("box_status.spare.unknown");
+  if (spare.lagMs === 0 && spare.appliedTXID !== spare.uploadedTXID)
+    return t("box_status.spare.pending");
+  return spare.lagMs === 0 && spare.appliedTXID === spare.uploadedTXID
+    ? t("box_status.bucket.ok")
+    : fill("box_status.spare.behind", { seconds: String(Math.ceil(spare.lagMs / 1000)) });
+}
+export function spareDetails(spare: SpareFollowView): string[] {
+  return [
+    t("box_status.spare.switch_copy"),
+    ...(spare.lastAppliedAt === null
+      ? []
+      : [fill("box_status.spare.last", { time: formatIsoMinute(spare.lastAppliedAt) })]),
+  ];
 }

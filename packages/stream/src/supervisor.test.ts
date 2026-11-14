@@ -58,6 +58,7 @@ const markerOf = (generation: string) => markerKey(generation);
 const hex16 = (n: number) => n.toString(16).padStart(16, "0");
 
 interface HarnessOptions {
+  preserveBucketProblemSince?: boolean;
   term?: number;
   streamId?: string;
   bucket?: BucketConfig;
@@ -122,6 +123,7 @@ async function harness(options: HarnessOptions = {}) {
   const logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
   const sentPointers = new SentPointers();
   const deps: SupervisorDeps = {
+    preserveBucketProblemSince: options.preserveBucketProblemSince,
     litestreamBin: options.litestreamBin ?? "litestream",
     venueDbPath,
     configDir: join(directory, "stream"),
@@ -526,6 +528,28 @@ describe("opening a generation", () => {
     await h.clock.until(() => h.litestream.running() !== undefined);
     expect(h.supervisor.status().bucketProblem).toBeNull();
   });
+
+  it.each([false, true])(
+    "keeps continuous refusal time only when requested (%s)",
+    async (preserve) => {
+      const h = await harness({ preserveBucketProblemSince: preserve });
+      h.store.honoursConditions = false;
+      await h.supervisor.start();
+      await vi.waitFor(() =>
+        expect(h.supervisor.status().bucketProblem?.reason).toBe("create_only_ignored"),
+      );
+      const first = h.supervisor.status().bucketProblem!.since;
+      h.store.denied = true;
+      await h.clock.until(() => h.supervisor.status().bucketProblem?.reason === "access_denied");
+      const second = h.supervisor.status().bucketProblem!.since;
+      if (preserve) expect(second).toBe(first);
+      else expect(second).not.toBe(first);
+      h.store.denied = false;
+      h.store.honoursConditions = true;
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      expect(h.supervisor.status().bucketProblem).toBeNull();
+    },
+  );
 
   // Boot calls `start()`. A start that waited for the bucket would hold boot, and so every sale,
   // for as long as the bucket did not answer.

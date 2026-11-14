@@ -87,6 +87,7 @@ type StreamCore = Omit<StreamStatus, "lagMs" | "lastConfirmedUploadAt">;
 /** Everything the supervisor needs; it opens no database and reads no settings itself. */
 export interface SupervisorDeps {
   litestreamBin: string;
+  preserveBucketProblemSince?: boolean;
   onStateChange?: () => void;
   /** Absolute path of `venue.db`. */
   venueDbPath: string;
@@ -1097,7 +1098,12 @@ export class StreamSupervisor {
     this.#deps.log("warn", "stream.bucket_unusable", { reason });
     this.#status = {
       ...this.#status,
-      bucketProblem: { reason, since: this.#deps.now().toISOString() },
+      bucketProblem: {
+        reason,
+        since: this.#deps.preserveBucketProblemSince
+          ? (current?.since ?? this.#deps.now().toISOString())
+          : this.#deps.now().toISOString(),
+      },
     };
   }
 }

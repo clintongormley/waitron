@@ -1537,9 +1537,6 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/alerts.md).
 
-- **Still not built: a standby that has fallen behind** — left open by "Dashboard alerts and the
-  incidents surface" (A5, LANDED #363/#368/#371).
-
 - **A low-battery alert (A272, idea, 2026-10-04) — OPEN.** A268 shows each device's battery on the
   Devices list; nothing alerts when a handheld runs low.
 
@@ -1972,7 +1969,7 @@ outstanding on code that exists.
   plan is written (eleven pull requests, all landed); 3b-1, 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)),
   3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)), 3b-4 ([#2779](https://github.com/clintongormley/waitron/pull/2779))
   3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898); the pair link, and a spare joins with no Cloud relay)
-  and 3b-5b (a spare runs its store, which admits only its main box) landed, and so did 3b-G (a box trusts only the venue's authority when it asks another box at start and sets aside a spare still joining ([3b plan](superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's decision, which the owner may overrule); its chart check at start reaches a real box under the venue's authority, which still refuses it for want of a credential; and a box that lost its own record does not start selling or filing), and so did 3b-6a (the first copy and finishing joining), 3b-6b (a two-box test of joining, and the guide's Add a spare box) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email), and so did 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off), and 3b-F completes them. A joined spare now follows into a separate scratch copy and Box status shows its delay. Still open in 3c: the warning policies and Servers status; switching from the followed copy remains 4b. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
+  and 3b-5b (a spare runs its store, which admits only its main box) landed, and so did 3b-G (a box trusts only the venue's authority when it asks another box at start and sets aside a spare still joining ([3b plan](superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's decision, which the owner may overrule); its chart check at start reaches a real box under the venue's authority, which still refuses it for want of a credential; and a box that lost its own record does not start selling or filing), and so did 3b-6a (the first copy and finishing joining), 3b-6b (a two-box test of joining, and the guide's Add a spare box) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email), and so did 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off), and 3b-F completes them. A joined spare now follows into a separate scratch copy and Box status shows its delay. Box status, Servers and the bell show measured spare progress and warnings. Switching from the followed copy remains 4b. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
   venue's network), one step **Hand over the venue** needs on real boxes. It is not live yet: a spare
   of a venue that does not file with Veri*Factu now receives a copy over the venue's network, puts
   it in place at its next start and finishes joining as a standby. With

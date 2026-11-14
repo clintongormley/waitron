@@ -1028,3 +1028,56 @@ describe("servers screen at phone width", () => {
     },
   );
 });
+
+it("shows cached spare delay, last copy and the switch limit through passive refresh", async () => {
+  const liveData = new LiveData();
+  const spare = {
+    peerNodeId: STANDBY,
+    generation: "gen-1-main-20261114T120000Z",
+    state: "following" as const,
+    appliedTXID: "0000000000000001",
+    uploadedTXID: "0000000000000002",
+    lagMs: 61000,
+    lastAppliedAt: "2026-11-14T12:00:00.000Z",
+    clockAt: null,
+  };
+  const api = Object.assign(
+    stubApi({ listServers: vi.fn().mockResolvedValue({ ...listing, spare }) }),
+    { liveData },
+  );
+  const el = await mount(api);
+  const copy = () => inTable(el, `follow-${STANDBY}`);
+  expect(copy()!.textContent).toContain("61 s behind");
+  expect(copy()!.textContent).toContain("Last copy received");
+  expect(copy()!.textContent).toContain(
+    "Switching still uses the copy taken when this spare joined.",
+  );
+  expect(copy()!.getAttribute("data-state")).toBe("attention");
+  expect(inTable(el, `follow-${SELF}`)).toBeNull();
+  vi.mocked(api.listServers).mockResolvedValue({ ...listing, spare: { ...spare, lagMs: 3000 } });
+  liveData.refresh();
+  await vi.waitFor(async () => {
+    await flush(el);
+    expect(copy()!.textContent).toContain("3 s behind");
+  });
+  expect(copy()!.getAttribute("data-state")).toBe("ok");
+  for (const state of ["rebuilding", "unknown"] as const) {
+    vi.mocked(api.listServers).mockResolvedValue({
+      ...listing,
+      spare: { ...spare, state, lagMs: null },
+    });
+    liveData.refresh();
+    await vi.waitFor(async () => {
+      await flush(el);
+      expect(copy()!.textContent).toContain(
+        state === "rebuilding" ? "Rebuilding the copy" : "Freshness unknown",
+      );
+    });
+  }
+  vi.mocked(api.listServers).mockResolvedValue({ ...listing, spare: null });
+  liveData.refresh();
+  await vi.waitFor(async () => {
+    await flush(el);
+    expect(copy()).toBeNull();
+  });
+});
