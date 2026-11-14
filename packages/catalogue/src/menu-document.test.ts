@@ -2010,9 +2010,13 @@ describe("an include shown as a folder or directly", () => {
     const soup = await app((tx) => offerOf(tx, f.lunch, f.soup));
     for (const showAsFolder of [true, false]) {
       await setFolder(f.lunchRoot, memberId, { showAsFolder });
-      expect((await build(f.lunch)).root.members).toEqual([
+      const document = await build(f.lunch);
+      expect(document.root.members).toEqual([
         { kind: "product", menuItemId: soup, productId: f.soup },
       ]);
+      expect(Object.values(document.offers).some((offer) => offer.productId === f.lager)).toBe(
+        false,
+      );
     }
   });
 

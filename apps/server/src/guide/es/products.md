@@ -285,6 +285,18 @@ entonces el producto ya está guardado, así que un sitio que lo rechaza no desh
 ventana nombra los sitios que fallaron y los deja marcados para que puedas volver a intentarlo. Las
 secciones de una carta se crean en **Productos y cartas → Cartas**.
 
+## Revisa la página de inicio de la carta {#menu-home}
+
+Abre la pestaña **Página de inicio** de una carta para ordenar sus accesos directos y elegir
+cómo se muestran sus botones. Elige **Caja registradora** para consultar la **Vista previa del
+pedido de mesa**: representa una caja tan ancha como el marco y reserva espacio para el pedido.
+Úsala para comprobar cuántas columnas caben junto al pedido. Con menos anchura, la carta ocupa
+todo el marco, como cuando la caja muestra solo Carta.
+
+Si un acceso directo indica que está en una carta incluida deshabilitada, habilita esa carta
+para volver a mostrarlo. Espera a que termine de guardarse un cambio de orden o de presentación
+antes de quitar un acceso directo con su papelera.
+
 ## Copia una carta {#copy-menu}
 
 Si tu próxima carta se parece a una que ya tienes, empieza con una copia. En **Productos y

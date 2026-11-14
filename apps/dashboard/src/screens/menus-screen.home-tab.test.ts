@@ -437,6 +437,48 @@ describe("the Home page tab's shortcuts", () => {
     expect(inPreview(el, "grip-t-burger")).not.toBeNull();
   });
 
+  it.each(["disabled only", "enabled alternate", "inactive product"])(
+    "uses the structure for a hidden product's reason: %s",
+    async (scenario) => {
+      const document = menuDocument([], {});
+      const nodes: MenuStructureNode[] = [
+        {
+          memberId: "m-off",
+          ref: { kind: "section", sectionId: "root-off" },
+          includedMenuId: "menu-off",
+          children: [productNode("m-burger", "p-burger")],
+        },
+      ];
+      if (scenario === "enabled alternate") nodes.push(productNode("m-own-burger", "p-burger"));
+      const client = api({
+        listCatalogues: vi
+          .fn()
+          .mockResolvedValue([
+            ...menus,
+            { id: "menu-off", name: "Drinks", active: false, version: 1 },
+          ]),
+        listLibraryProducts: vi
+          .fn()
+          .mockResolvedValue(
+            products.map((p) => ({ ...p, active: scenario !== "inactive product" })),
+          ),
+        getMenuStructure: vi.fn().mockResolvedValue({ ...structureOf("menu-lunch"), nodes }),
+        getMenuPreview: vi.fn().mockResolvedValue({ ...previewOf("menu-lunch"), document }),
+        getMenuHome: vi.fn().mockResolvedValue(homeWith("t-burger")),
+      });
+      const el = await mountHome(client);
+      const hidden = preview(el)!.shadowRoot!.querySelector('.tile[data-state="hidden"]')!;
+      expect(text(hidden)).toContain(
+        t(
+          scenario === "disabled only"
+            ? "home.not_shown_disabled_menu"
+            : "home.not_shown_not_on_sale",
+        ),
+      );
+      expect(client.listCatalogues).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("follows the menu's home while the Home page tab shows, and stops on another tab", async () => {
     const live = new LiveData();
     const client = api({ liveData: live });
@@ -484,6 +526,7 @@ describe("the Home page tab's shortcuts", () => {
     await el.updateComplete;
     expect(preview(el)!.busy).toBe(false);
     await vi.waitFor(() => expect(client.moveHomeShortcut).toHaveBeenCalled());
+    await vi.waitFor(() => expect(preview(el)!.removeDisabled).toBe(false));
     client.getMenuHome.mockImplementationOnce(() => reread.promise);
     emit(preview(el)!, "wt-shortcut-remove", { memberId: "t-burger" });
     await el.updateComplete;
@@ -496,6 +539,48 @@ describe("the Home page tab's shortcuts", () => {
     reread.resolve(homeWith("t-drinks", "t-chips"));
     await vi.waitFor(() => expect(preview(el)!.busy).toBe(false));
   });
+
+  it.each(["move", "display"] as const)(
+    "holds shortcut removal during a %s save and restores it after success or refusal",
+    async (kind) => {
+      const client = api();
+      const el = await mountHome(client);
+      const button = () => inPreview<HTMLElementTagNameMap["wt-button"]>(el, "remove-t-burger")!;
+      for (const refused of [false, true]) {
+        const save = deferred<unknown>();
+        if (kind === "move") {
+          client.moveHomeShortcut.mockImplementationOnce(() => save.promise);
+          emit(preview(el)!, "wt-shortcut-move", { memberId: "t-drinks", to: 0 });
+        } else {
+          client.setHomeDisplay.mockImplementationOnce(() => save.promise);
+          emit(q(el, 'wt-slider[name="home-columns"]')!, "wt-change", { value: 2 });
+        }
+        await el.updateComplete;
+        await preview(el)!.updateComplete;
+        expect(button().shadowRoot!.querySelector("button")!.disabled).toBe(true);
+        expect(inPreview<HTMLButtonElement>(el, "grip-t-burger")!.disabled).toBe(false);
+        emit(preview(el)!, "wt-shortcut-remove", { memberId: "t-burger" });
+        if (refused) save.reject({ code: "server.internal" });
+        else
+          save.resolve(
+            kind === "move"
+              ? [
+                  sectionMember("t-drinks", 0, "s-drinks"),
+                  productMember("t-burger", 1, "p-burger"),
+                  productMember("t-chips", 2, "p-chips"),
+                ]
+              : undefined,
+          );
+        await vi.waitFor(() => expect(button().disabled).toBe(false));
+        // The completed write queue is the endpoint for the synthetic remove above.
+        expect(client.removeHomeShortcut).not.toHaveBeenCalled();
+      }
+      button().click();
+      await vi.waitFor(() =>
+        expect(client.removeHomeShortcut).toHaveBeenCalledExactlyOnceWith("menu-lunch", "t-burger"),
+      );
+    },
+  );
 
   it("explains a refused shortcut on the Home page tab, and reads the home again after a refused move", async () => {
     const client = api({
@@ -692,7 +777,7 @@ describe("the Home page tab's shortcuts", () => {
 
     const frameOf = (el: MenusScreen) => preview(el)!.shadowRoot!.querySelector(".frame")!;
 
-    it("leaves the till room for all six of its columns 1280 px wide", async () => {
+    it("fits the till's menu beside the reserved order space inside its frame", async () => {
       const { el } = await atWidth(1280);
       q<HTMLInputElement>(el, 'input[name="home-device"][value="till"]')!.click();
       await el.updateComplete;
@@ -700,7 +785,7 @@ describe("the Home page tab's shortcuts", () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       expect(preview(el)!.device).toBe("till");
       for (const grid of frameOf(el).querySelectorAll<HTMLElement>(".grid"))
-        expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(6);
+        expect(getComputedStyle(grid).gridTemplateColumns.split(" ").length).toBeLessThan(6);
     });
 
     it("puts the settings just beside the handheld's frame 1280 px wide", async () => {

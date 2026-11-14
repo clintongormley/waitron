@@ -510,7 +510,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   N4).
   [Detail](backlog/catalogue.md#two-price-rules-disagree-about-a-value-that-is-not-negative)
 
-- **Menu home tab** (bundle of 4, size M). [Detail](backlog/catalogue.md#bundle-menu-home-tab)
+- **Menu home preview rendering** (size M). [Detail](backlog/catalogue.md#menu-home-preview-rendering)
 
 - **Tree drag shared** (bundle of 2, size M). [Detail](backlog/catalogue.md#bundle-tree-drag-shared)
 

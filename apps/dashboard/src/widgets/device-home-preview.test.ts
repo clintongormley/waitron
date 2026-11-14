@@ -326,7 +326,7 @@ describe("dashboard-device-home-preview", () => {
 
     const till = await mount({ document: display("till", { columns: 10 }), device: "till" });
     await widen(till.host, 1280);
-    expect(tracks(structureGrid(till.el))).toBe(10);
+    expect(tracks(structureGrid(till.el))).toBe(6);
     const wide = readingOrder(till.el, "structure");
     await widen(till.host, 390);
     expect(tracks(structureGrid(till.el))).toBeLessThan(10);
@@ -356,6 +356,41 @@ describe("dashboard-device-home-preview", () => {
     await widen(till.host, 390);
     expect(frame(handheld.el).getBoundingClientRect().width).toBe(390);
     expect(frame(till.el).getBoundingClientRect().width).toBe(390);
+  });
+
+  it.each([
+    { width: 1280, columns: 6, split: true },
+    { width: 720, columns: 3, split: true },
+    { width: 719, columns: 6, split: false },
+    { width: 390, columns: 3, split: false },
+  ])("reserves order space at a $width px till width", async ({ width, columns, split }) => {
+    const { el, host } = await mount({
+      device: "till",
+      document: display("till", { columns: 10 }),
+    });
+    await widen(host, width);
+    const menu = root(el).querySelector<HTMLElement>(".preview-menu")!;
+    const order = root(el).querySelector<HTMLElement>(".preview-order")!;
+    expect(order).not.toBeNull();
+    expect(order.getBoundingClientRect().width > 0).toBe(split);
+    if (width === 390)
+      expect(menu.getBoundingClientRect().width).toBe(frame(el).getBoundingClientRect().width - 2);
+    if (split) {
+      const style = getComputedStyle(order);
+      const orderContent =
+        order.getBoundingClientRect().width -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.borderLeftWidth);
+      expect(menu.getBoundingClientRect().width / orderContent).toBeCloseTo(1.5, 1);
+      expect(menu.getBoundingClientRect().right).toBeLessThan(order.getBoundingClientRect().left);
+    }
+    for (const grid of grids(el)) expect(tracks(grid)).toBe(columns);
+    const menuWidth = menu.getBoundingClientRect().width;
+    await search(el, "water");
+    expect(root(el).querySelector('[data-region="results"]')!.getBoundingClientRect().width).toBe(
+      menuWidth,
+    );
+    expect(frame(el).textContent).toContain("Table order preview");
   });
 
   it("shows a product's staff name and its price with its unit, as the till does", async () => {
@@ -1015,6 +1050,32 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe(es);
   });
 
+  it("explains a product behind a disabled include, retaining an enabled alternate placement", async () => {
+    const document = lunch([], [documentProduct("mi-water", "p-water")]);
+    const { el } = await mount({
+      document,
+      shortcuts: [LEMONADE],
+      disabledIncludeProducts: new Set(["p-lemonade"]),
+    });
+    expect(tiles(el, "shortcuts")[0]!.dataset.state).toBe("hidden");
+    expect(tiles(el, "shortcuts")[0]!.textContent).toContain(
+      "Not shown: in a disabled included menu",
+    );
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(tiles(el, "shortcuts")[0]!.textContent).toContain(
+      "No se muestra: en una carta incluida deshabilitada",
+    );
+    el.document = {
+      ...document,
+      root: { ...document.root, members: [documentProduct("included-lemonade", "p-lemonade")] },
+      offers: { ...document.offers, "included-lemonade": lunch().offers["mi-lemonade"]! },
+    };
+    await el.updateComplete;
+    expect(tiles(el, "shortcuts")[0]!.dataset.state).toBeUndefined();
+    expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade"]);
+  });
+
   it("removes a shortcut with a bin button named for it, never a ⋮", async () => {
     const { el, host } = await mount({ shortcuts: LIST });
     const events = heard(host);
@@ -1035,6 +1096,20 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     const button = remove(el, "sc-lemonade");
     expect(button.disabled).toBe(true);
     expect(button.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+  });
+
+  it("holds only removal during a reorder, keeping grips usable", async () => {
+    const { el, host } = await mount({ shortcuts: LIST, removeDisabled: true });
+    const events = heard(host);
+    const button = remove(el, "sc-lemonade");
+    expect(button.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    expect(events).toEqual([]);
+    expect(grip(el, "sc-lemonade").disabled).toBe(false);
+    await press(el, "sc-lemonade", "ArrowRight");
+    expect(events).toEqual([
+      { type: "wt-shortcut-move", detail: { memberId: "sc-lemonade", to: 1 } },
+    ]);
   });
 
   it("sends a remove for the tile's member, a missing one included", async () => {
