@@ -1,6 +1,6 @@
 # Recuperar desde una copia
 
-Conserva el paquete de recuperación anterior cuando cambies la clave de recuperación. Hasta que la nueva copia del bucket esté lista, el paquete anterior sigue correspondiendo a la copia ofrecida para recuperar. Si la página dice que el paquete no corresponde a la copia o que el acceso al bucket no permite leerla, usa el paquete correspondiente, o corrige el acceso al bucket y vuelve a intentarlo.
+Conserva el paquete de recuperación anterior cuando cambies la clave de recuperación. Hasta que la nueva copia en el bucket esté lista, el paquete anterior sigue correspondiendo a la copia ofrecida para recuperar. Si la página dice que el paquete no corresponde a la copia o que el acceso al bucket no permite leerla, usa el paquete correspondiente, o corrige el acceso al bucket y vuelve a intentarlo.
 
 Las copias programadas en un bucket usan la carpeta que elijas, sin añadir una carpeta para el local. Elige carpetas distintas para las copias programadas y la copia en el bucket. Ninguna puede estar dentro de la otra.
 
@@ -161,9 +161,9 @@ Si el equipo indica que la copia en el bucket no está en marcha, abre **Copias 
 **Volver a iniciar la copia**, que la inicia con los ajustes que ya tiene. Si se vuelve a detener,
 elige **Cambiar de bucket** y pulsa **Probar** para comprobar el bucket.
 
-Si la copia en el bucket indica que otro equipo está escribiendo la copia de este local en el mismo
-bucket y ese equipo sustituyó a este, apaga este equipo: nunca deben vender dos equipos para un
-mismo local.
+Si la copia en el bucket indica que otro servidor está escribiendo la copia de este local en el
+mismo bucket y ese servidor sustituyó a este, apaga este servidor: nunca deben vender dos servidores
+para un mismo local.
 
 ## Crea las nuevas series de facturas {#series}
 
@@ -176,7 +176,7 @@ disponible. Las observaciones permanecen en este navegador y no se envían con l
 recuperación. El informe lee el almacenamiento disponible en esta dirección de Waitron; no busca
 observaciones en otros dispositivos.
 
-La restauración sustituye la base de datos que ya está en este equipo.
+La restauración sustituye la base de datos que ya está en este servidor.
 
 Escribe la clave de recuperación del nodo, marca las dos declaraciones y «Estos datos son
 correctos.», y elige **Continuar**. La serie de facturas es el código al principio de cada número de factura; la recuperación crea series
@@ -188,8 +188,8 @@ detiene hasta que vuelvas a elegir **Continuar**. Antes de **Continuar**, **Edit
 vuelve a la elección de la copia.
 
 Marca la confirmación que muestra la página —«Confirmo que ningún otro servidor en funcionamiento
-tiene datos más recientes del restaurante.» para un archivo de copia o una copia del bucket (para
-una copia del bucket, también «Este es mi negocio. Restáuralo en este servidor.»), o «Confirmo que
+tiene datos más recientes del restaurante.» para un archivo de copia o una copia en el bucket (para
+una copia en el bucket, también «Este es mi negocio. Restáuralo en este servidor.»), o «Confirmo que
 el servidor anterior y los demás servidores que queden están detenidos, y acepto perder los cambios
 posteriores a esta instantánea.» para una copia de Waitron Cloud— y elige **Restaurar la copia**,
 **Restaurar desde mi bucket** o **Restaurar esta instantánea**.

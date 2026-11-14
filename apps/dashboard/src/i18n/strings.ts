@@ -5436,7 +5436,8 @@ export const es: Record<StringKey, string> = {
   "email.title": "Correo",
   "email.local_capture":
     "Los mensajes se guardan en este servidor. No se envía ningún correo a Internet.",
-  "email.smtp": "El correo de cuentas llega a buzones reales mediante el servidor configurado.",
+  "email.smtp":
+    "El correo de cuentas llega a buzones reales mediante el servidor de correo configurado.",
   "email.unconfigured":
     "El correo no está configurado. No se pueden enviar invitaciones ni enlaces para restablecer contraseñas.",
   "email.empty": "Aún no hay mensajes guardados.",
@@ -5452,7 +5453,7 @@ export const es: Record<StringKey, string> = {
   "email.settings.prepare_save":
     "Al guardar un servidor, las invitaciones y los enlaces para restablecer contraseñas llegan a buzones reales.",
   "email.settings.remove_capture":
-    "¿Quitar el servidor guardado? El correo volverá a quedarse en el buzón de prueba de esta caja. Parar conserva la configuración.",
+    "¿Quitar el servidor de correo guardado? El correo volverá a quedarse en el buzón de prueba de este servidor. Parar conserva la configuración.",
   "email.settings.remove_live":
     "¿Quitar el servidor guardado? No se enviarán correos de cuentas ni facturas hasta que configures otro servidor. Las ventas continúan. Parar conserva la configuración.",
   "email.settings.change": "Cambiar servidor de correo",
@@ -5463,7 +5464,7 @@ export const es: Record<StringKey, string> = {
     "La dirección del remitente guardada para las facturas no es válida. Cámbiala abajo.",
   "email.settings.captured":
     "El correo de facturas se guarda en este servidor; no se envía fuera de él.",
-  "email.settings.gateway": "El correo de facturas usa este servidor.",
+  "email.settings.gateway": "El correo de facturas usa este servidor de correo.",
   "email.settings.retry": "Volver a cargar la configuración de correo",
   "email.settings.authentication": "Usar autenticación",
   "email.settings.server": "Servidor de correo",
@@ -5767,9 +5768,9 @@ export const es: Record<StringKey, string> = {
   "staff.data_copy_not_permitted":
     "Solo un administrador puede descargar los datos de otra persona, y esta cuenta ya no puede hacerlo. Inicia sesión como administrador para descargar los datos de {name}: antes se cierra tu sesión aquí.",
   "staff.data_copy_not_found":
-    "{name} aparece en esta lista, pero la caja no tiene ningún registro suyo. Es un fallo de Waitron. Se ha vuelto a cargar la lista.",
+    "{name} aparece en esta lista, pero el servidor no tiene ningún registro suyo. Es un fallo de Waitron. Se ha vuelto a cargar la lista.",
   "staff.data_copy_not_found_unreloaded":
-    "{name} aparece en esta lista, pero la caja no tiene ningún registro suyo. Es un fallo de Waitron.",
+    "{name} aparece en esta lista, pero el servidor no tiene ningún registro suyo. Es un fallo de Waitron.",
   "staff.sign_in_as_admin": "Iniciar sesión como administrador",
   "catalogue.title": "Productos",
   "units.title": "Unidades",
@@ -6062,7 +6063,7 @@ export const es: Record<StringKey, string> = {
   "printers.join_choice_label": "Número {number}",
   "printers.join_hint":
     "En el ordenador al que está conectada la impresora (o desde aquí, en http://<ese ordenador>:9110), abre la página de configuración del agente de impresión e introduce esta dirección del servidor:",
-  "printers.provenance_self": "En esta caja",
+  "printers.provenance_self": "En este servidor",
   "printers.list_title": "Impresoras",
   "printers.no_printers": "Todavía no hay impresoras.",
   "printers.name": "Nombre",
@@ -6631,9 +6632,9 @@ export const es: Record<StringKey, string> = {
   "invoice_customer.not_permitted":
     "Solo un administrador puede buscar y descargar los datos de un cliente, y esta cuenta ya no puede hacerlo. Inicia sesión como administrador para hacerlo: antes se cierra tu sesión aquí.",
   "invoice_customer.vanished":
-    "La caja mostró estas facturas hace un momento y ahora no encuentra ninguna. Es un fallo de Waitron.",
+    "El servidor mostró estas facturas hace un momento y ahora no encuentra ninguna. Es un fallo de Waitron.",
   "invoice_customer.read_only":
-    "Esta es una copia de solo lectura de la caja, así que aquí no se puede buscar a un cliente por NIF. Hazlo en la propia caja.",
+    "Esta es una copia de solo lectura del servidor, así que aquí no se puede buscar a un cliente por NIF. Hazlo en el propio servidor.",
   "allergen.add": "Añadir alérgeno",
   "allergen.search": "Buscar alérgenos",
   "allergen.no_matches": "No hay alérgenos coincidentes.",
@@ -7481,21 +7482,21 @@ export const es: Record<StringKey, string> = {
   "menus.guest_sharing_unavailable":
     "La carta está compartida, pero no hay ninguna disponible. Elige una carta predeterminada activa en Cartas y publícala.",
   "menus.guest_cloud_not_connected":
-    "Conecta esta caja a Cloud para enviar la carta para clientes. La última copia enviada puede seguir disponible; deja de compartir desde el portal de Cloud para retirarla.",
+    "Conecta este servidor a Cloud para enviar la carta para clientes. La última copia enviada puede seguir disponible; deja de compartir desde el portal de Cloud para retirarla.",
   "menus.guest_cloud_pending":
     "Actualización de Cloud pendiente. La última carta enviada sigue disponible hasta que llegue la actualización, incluso al dejar de compartir.",
   "menus.guest_cloud_current":
     "Cloud tiene la publicación actual. El acceso público aún se está preparando.",
   "menus.guest_cloud_refused":
-    "Cloud no ha podido aceptar esta publicación. Revisa la carta y sus idiomas de contenido. La caja volverá a intentarlo; para retirar la última copia enviada, deja de compartir desde el portal de Cloud.",
+    "Cloud no ha podido aceptar esta publicación. Revisa la carta y sus idiomas de contenido. El servidor volverá a intentarlo; para retirar la última copia enviada, deja de compartir desde el portal de Cloud.",
   "menus.guest_cloud_off": "Cloud ha confirmado que la carta ya no se comparte.",
   "menus.guest_cloud_blocked":
     "La carta está bloqueada en Cloud. Actívala en el portal de Cloud para reanudar los envíos.",
-  "menus.guest_local_link": "Abrir la carta compartida en esta caja",
+  "menus.guest_local_link": "Abrir la carta compartida en este servidor",
   "menus.guest_sharing_on":
     "La carta predeterminada está compartida. Solo se comparte su versión publicada.",
   "menus.guest_sharing_off":
-    "La carta no está compartida. Al activarlo, se comparte la versión publicada de la carta predeterminada en esta caja, que puede no ser la que ves aquí.",
+    "La carta no está compartida. Al activarlo, se comparte la versión publicada de la carta predeterminada en este servidor, que puede no ser la que ves aquí.",
   "menus.guest_turn_on": "Compartir carta",
   "menus.guest_turn_off": "Dejar de compartir",
   "menus.guest_preview": "Vista previa para clientes",
@@ -7518,7 +7519,7 @@ export const es: Record<StringKey, string> = {
   "menus.paper_order": "Orden de las secciones en papel",
   "menus.paper_up": "Subir",
   "menus.paper_break": "Salto de página antes",
-  "menus.paper_save": "Guardar apariencia en esta caja",
+  "menus.paper_save": "Guardar apariencia en este servidor",
   "menus.paper_preview": "Vista previa A4",
   "menus.paper_print": "Imprimir / Guardar como PDF",
   "menus.guest_language": "Idioma del cliente",

@@ -44,7 +44,7 @@ del PIN no necesitan esta confirmación.
 También confirmas antes de cambiar las copias de seguridad, descargar archivos de recuperación,
 mostrar la clave de recuperación de las copias o exportar la configuración o los datos de otro
 miembro del personal. La misma confirmación cubre conectar o desconectar proveedores de pagos,
-cambiar el servidor de correo o la conexión Cloud, activar el acceso remoto, preparar un equipo
+cambiar el servidor de correo o la conexión Cloud, activar el acceso remoto, preparar un servidor
 sustituto, instalar el certificado fiscal, cambiar la razón social y quitar un servidor.
 Usa tu contraseña o passkey y, si tienes
 verificación en dos pasos, un código del autenticador o de recuperación. La confirmación cubre

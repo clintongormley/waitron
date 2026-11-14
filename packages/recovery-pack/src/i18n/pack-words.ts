@@ -108,7 +108,7 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     sameChecks:
       "La pantalla Copias de seguridad del panel muestra las mismas comprobaciones. Si alguna no coincide, este paquete está desfasado: haz uno nuevo.",
     couldNotBeDrawn: "No se pudo generar",
-    lockedAway: "Guarda este paquete bajo llave, y fuera de la caja.",
+    lockedAway: "Guarda este paquete bajo llave, y fuera del servidor.",
     anyoneHoldingBackups:
       "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de recuperación.",
     anyoneHoldingBackupsAndServerKey:
@@ -126,18 +126,18 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     },
     situation: {
       bucket:
-        "Estás instalando una caja nueva y quieres recuperar el local desde tu copia en el bucket.",
+        "Estás instalando un servidor nuevo y quieres recuperar el local desde tu copia en el bucket.",
       archives: "Necesitas recuperar un archivo antiguo (por ejemplo, una copia de fin de mes).",
       "server-key": "Estás recuperando la clave propia del servidor junto con una copia.",
     },
     notSetUp: {
-      bucket: "Esta caja no tiene copia en el bucket.",
-      archives: "Esta caja no hace archivos.",
-      "server-key": "Esta caja aún no tiene clave del servidor.",
+      bucket: "Este servidor no tiene copia en el bucket.",
+      archives: "Este servidor no hace archivos.",
+      "server-key": "Este servidor aún no tiene clave del servidor.",
     },
     absent: {
-      bucket: "Esta caja no tiene copia en el bucket.",
-      archives: "Esta caja no hace archivos.",
+      bucket: "Este servidor no tiene copia en el bucket.",
+      archives: "Este servidor no hace archivos.",
       "server-key": "Este local no presenta facturas a la Agencia Tributaria.",
     },
     failedTitle: (part) => `${part}: no se pudo generar`,
@@ -146,7 +146,7 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     keyOnPack: (number, day) =>
       `La clave está en el paquete de recuperación ${number}, hecho el ${day}. Guarda ese paquete.`,
     keyOnUnreceivedPack: (number, day) =>
-      `La clave está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete la caja no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
+      `La clave está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete el servidor no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
     keyOnSheet: (keyName, day) =>
       `La clave está en la hoja de recuperación cuyo nombre de clave es ${keyName}, hecha el ${day}. Guarda esa hoja.`,
     spaceMark: "Cada \u02fd es un espacio: escribe un espacio en su lugar.",
@@ -281,11 +281,11 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     bucket: {
       title: "Copia en el bucket",
       intro:
-        "La caja envía una copia continua del local a tu bucket. Una caja nueva reconstruida desde esa copia pide este código de restauración.",
+        "El servidor envía una copia continua del local a tu bucket. Un servidor nuevo reconstruido desde esa copia pide este código de restauración.",
       codeLabel: "Código de restauración de la copia en el bucket",
       bucketRow: "Bucket",
       steps: [
-        "1. Instala Waitron en la caja nueva y abre su página de instalación.",
+        "1. Instala Waitron en el servidor nuevo y abre su página de instalación.",
         "2. Elige Restaurar desde mi bucket.",
         "3. Elige este PDF como archivo del paquete de recuperación. O lee el código con la cámara de un móvil y pégalo.",
       ],
@@ -293,19 +293,19 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     archives: {
       title: "Archivos",
       introBucket:
-        "La caja también guarda archivos fechados en tu bucket. Para recuperar un archivo, la orden de restauración pide este código y el nombre del archivo.",
+        "El servidor también guarda archivos fechados en tu bucket. Para recuperar un archivo, la orden de restauración pide este código y el nombre del archivo.",
       introFolder:
         "El servidor también guarda archivos fechados en una carpeta. Para recuperar un archivo, la instalación pide el archivo y esta clave de recuperación.",
       codeLabel: "Código de restauración de los archivos",
       keyLabel: "Clave de recuperación",
       folderRow: "Carpeta de archivos",
       stepsBucket: [
-        "1. Copia este PDF en la caja nueva.",
+        "1. Copia este PDF en el servidor nuevo.",
         "2. Ejecuta: restore --from-archive con este PDF y --archive-key con el nombre del archivo.",
         "3. La orden completa está en la guía de instalación de Waitron, en «The operator CLIs».",
       ],
       stepsFolder: [
-        "1. Instala Waitron en la caja nueva y abre su página de instalación.",
+        "1. Instala Waitron en el servidor nuevo y abre su página de instalación.",
         "2. Elige Restaurar desde una copia de seguridad.",
         "3. Elige el archivo y escribe esta clave de recuperación tal como está impresa.",
       ],
@@ -322,12 +322,12 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     currentKeyOnPack: (number, day) =>
       `La clave actual, en el paquete de recuperación ${number} hecho el ${day}, sigue sirviendo.`,
     currentKeyOnUnreceivedPack: (number, day) =>
-      `La clave del servidor actual está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete la caja no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
+      `La clave del servidor actual está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete el servidor no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
     currentKeyOnSheet: (keyName, day) =>
       `La clave actual, en la hoja de recuperación cuyo nombre de clave es ${keyName}, hecha el ${day}, sigue sirviendo.`,
     failures: {
       "backup.archive_settings_unreadable": {
-        what: "La caja no pudo leer los ajustes de archivo guardados.",
+        what: "El servidor no pudo leer los ajustes de archivo guardados.",
         todo: "Abre Copias de seguridad, revisa los ajustes de archivo y vuelve a guardarlos; después haz un paquete nuevo.",
       },
       "backup.recovery_key_missing": {
@@ -339,17 +339,17 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         todo: "Usa Copias de seguridad → Cambiar la clave de recuperación: la clave nueva sustituye a la corta. Después haz un paquete nuevo.",
       },
       "backup.stream_signer_missing": {
-        what: "La caja no encontró la clave que firma su copia en el bucket.",
+        what: "El servidor no encontró la clave que firma su copia en el bucket.",
         todo: "Revisa Copias de seguridad y haz un paquete nuevo.",
       },
     },
     historyInvalid: {
-      what: "El registro de la caja de sus series de facturas no coincide con lo que registró la instalación.",
+      what: "El registro del servidor de sus series de facturas no coincide con lo que registró la instalación.",
       todo: "Guarda el paquete o la hoja que tiene la clave del servidor actual; el próximo paquete volverá a intentar esta página.",
     },
     noServerKey: {
-      what: "Esta caja aún no tiene clave del servidor.",
-      todo: "No hay nada que guardar de esta parte hasta que la caja tenga una.",
+      what: "Este servidor aún no tiene clave del servidor.",
+      todo: "No hay nada que guardar de esta parte hasta que el servidor tenga una.",
     },
     moduleFault: {
       what: "Esta página no se pudo hacer. Es un fallo de Waitron.",

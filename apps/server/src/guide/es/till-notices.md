@@ -40,8 +40,8 @@ unos 24 MB.
 La hora del servidor está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que
 se corrija, el servidor también rechaza los cobros y las devoluciones. Un administrador puede poner
 la hora desde su propio móvil u ordenador, en la [página Estado del
-equipo](box-status.md#clock-behind). Justo después de que el servidor arranque, la indicación puede
-decir **Comprobar la hora** en su lugar, como se explica más abajo.
+servidor](box-status.md#clock-behind). Justo después de que el servidor arranque, la indicación
+puede decir **Comprobar la hora** en su lugar, como se explica más abajo.
 
 **No se puede cobrar: la hora del servidor es anterior a la última venta · Avisa al encargado** es
 rojo. El reloj del servidor marca más de un minuto antes que la última venta que registró. Hasta que

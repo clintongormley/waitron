@@ -243,7 +243,7 @@ entrada por cada uso. Cópialas en tu propio registro, sustituye cada parte en c
 haces fuera de Waitron, como las nóminas que lleva tu gestor. Dos hechos se aplican a todas las
 entradas, así que no se repiten en cada una:
 
-- Waitron no cifra la base de datos en el disco del equipo. Para la copia continua del bucket,
+- Waitron no cifra la base de datos en el disco del equipo. Para la copia en el bucket,
   envía al proveedor de almacenamiento una clave de cifrado independiente derivada de tu clave de
   recuperación. Las copias programadas van cifradas con la clave de recuperación. El equipo guarda
   estas claves, así que el acceso al equipo también puede exponer las copias.
@@ -417,10 +417,10 @@ continua en un bucket tuyo, también puede hacer copias programadas, y puede exp
 configuración para poner en marcha otro local.
 
 - Finalidad: recuperar el local tras un fallo, y preparar un local nuevo a partir de este.
-- Interesados: todas las personas de las entradas anteriores, en la copia del bucket y en cada copia
-  programada; el personal, también el que ya no trabaja en el local, en la exportación de la
+- Interesados: todas las personas de las entradas anteriores, en la copia en el bucket y en cada
+  copia programada; el personal, también el que ya no trabaja en el local, en la exportación de la
   configuración.
-- Datos: la copia del bucket y cada copia programada contienen toda la base de datos. La exportación
+- Datos: la copia en el bucket y cada copia programada contienen toda la base de datos. La exportación
   de la configuración contiene a cada persona de la lista del personal con su nombre, correo,
   teléfono, rol y estado, y sus datos de contrato con la tarifa de pago y la disponibilidad. Nunca
   contiene un PIN, una contraseña, una llave de acceso, un secreto de verificación en dos pasos, un
@@ -429,24 +429,24 @@ configuración para poner en marcha otro local.
   otro bucket al que envíes copias programadas; quien reciba de ti un archivo de exportación de la
   configuración. Las copias programadas guardadas en **Una carpeta de este servidor** quedan donde esté
   esa carpeta.
-- Plazo de conservación: la copia del bucket guarda una semana de historial. Cada vez que Waitron
+- Plazo de conservación: la copia en el bucket guarda una semana de historial. Cada vez que Waitron
   guarda una copia programada en un destino, borra de ese destino las copias que pasen de las 7 más
   recientes y las de más de 30 días, salvo que cambies esos ajustes. Antes de una copia, cuando
   al disco del equipo le quedan menos de unos 2 GB libres, o al arrancar con el disco lleno, también puede borrar sus copias más antiguas de las carpetas
   de ese disco, nunca la más reciente de cada una. Durante un tiempo después de que el equipo ponga
   su propio reloj en hora, conserva algunas de las copias fechadas con el reloj equivocado o las borra las
   últimas; el arranque con el disco lleno aún no lo hace (lo explica [Estado del
-  equipo](box-status.md#free-space)). Desactivar la copia del bucket o las copias
+  servidor](box-status.md#free-space)). Desactivar la copia en el bucket o las copias
   programadas deja lo que ya está guardado, así que bórralo en tu proveedor, o de la carpeta, cuando
   ya no lo necesites. Todo lo demás: _fijar con tu asesor_.
-- Seguridad: Waitron pide al proveedor de almacenamiento que cifre la copia del bucket con una
+- Seguridad: Waitron pide al proveedor de almacenamiento que cifre la copia en el bucket con una
   clave derivada de tu clave de recuperación. El proveedor recibe la base de datos y la clave de
   cifrado. Las contraseñas y claves que Waitron guarda para tus proveedores también van cifradas
   dentro de la base de datos. Cada copia programada va cifrada con la clave de recuperación, que guarda el equipo. Mientras la hace, el equipo escribe una copia sin cifrar de la
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
   menos 12 caracteres, así que es tan segura como esa frase. Un paquete de recuperación hecho en
-  **Copias de seguridad** después de configurar la copia del bucket o las copias programadas las
+  **Copias de seguridad** después de configurar la copia en el bucket o las copias programadas las
   abre, así que guarda cada paquete de recuperación bajo llave, fuera del equipo.
 
 ## Si se pierden o se exponen datos personales {#breach}
@@ -575,7 +575,7 @@ autenticación** y lo vuelve a configurar.
 **Un paquete de recuperación perdido.** El paquete hecho durante la primera configuración solo
 contiene la clave del servidor, que una recuperación necesita junto con el acceso a una copia; para
 sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
-configurar la copia del bucket contiene la clave de acceso y el
+configurar la copia en el bucket contiene la clave de acceso y el
 secreto de tu bucket y la clave de recuperación, así que quien lo tenga puede leer toda la copia de la base de datos de tu
 bucket y desbloquear las contraseñas y claves guardadas en ella, incluida la clave que protege los
 secretos de la verificación en dos pasos, así que elige también **Restablecer acceso** para cada

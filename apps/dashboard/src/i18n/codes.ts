@@ -83,7 +83,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "cloud.tunnel_unavailable": {
     en: "The staff tunnel could not be configured on this box. Check its tunnel configuration and refresh status to try again.",
-    es: "No se pudo configurar el túnel del personal en esta caja. Revisa su configuración del túnel y actualiza el estado para volver a intentarlo.",
+    es: "No se pudo configurar el túnel del personal en este servidor. Revisa su configuración del túnel y actualiza el estado para volver a intentarlo.",
   },
   "cloud.tunnel_conflict": {
     en: "This tunnel setup conflicts with a connection already saved in Cloud. Automatic attempts have stopped. You can stop Cloud access here; local trading continues.",
@@ -1241,7 +1241,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "management.origin_refused": {
     en: "The box did not make this change because this page's address is not one it trusts. Open the dashboard at the box's own address and make the change again.",
-    es: "La caja no ha hecho este cambio porque no confía en la dirección de esta página. Abre el panel en la propia dirección de la caja y vuelve a hacer el cambio.",
+    es: "El servidor no ha hecho este cambio porque no confía en la dirección de esta página. Abre el panel en la propia dirección del servidor y vuelve a hacer el cambio.",
   },
   "recovery.pack_origin_refused": {
     en: "Make the pack from the dashboard's own page, not from another site.",

@@ -76,7 +76,7 @@ export const CONFLICT_RECOVERY_STRINGS = {
       "Un segundo reloj no ha confirmado la hora de la caja. Comprueba el reloj de este dispositivo y vuelve a compararlos, o elige Detener.",
     "conflict_recovery.complete": "Identidad cambiada. Nuevas series de facturas:",
     "conflict_recovery.uncertain":
-      "No se ha confirmado el resultado del cambio. Consúltalo con la clave de recuperación actual. Detener no puede deshacer un cambio ya confirmado en la caja.",
+      "No se ha confirmado el resultado del cambio. Consúltalo con la clave de recuperación actual. Detener no puede deshacer un cambio ya confirmado en el servidor.",
     "conflict_recovery.restart":
       "No se puede continuar este intento. Inicia otro con una nueva comparación de relojes, o elige Detener. La facturación sigue detenida hasta que se confirme el cambio de identidad.",
     "conflict_recovery.again": "Iniciar otro intento",
@@ -86,7 +86,7 @@ export const CONFLICT_RECOVERY_STRINGS = {
       "Esperando un minuto disponible: {seconds} segundos. La caja comprueba cada cinco segundos. Vuelve a comparar los relojes cuando termine la espera; el cambio siempre requiere tu elección.",
     "conflict_recovery.leave_title": "¿Salir de la recuperación?",
     "conflict_recovery.leave_message":
-      "Al salir se borran la clave de recuperación y tus confirmaciones. No se puede deshacer un cambio de identidad ya confirmado en la caja. Abre la recuperación otra vez para consultar el resultado.",
+      "Al salir se borran la clave de recuperación y tus confirmaciones. No se puede deshacer un cambio de identidad ya confirmado en el servidor. Abre la recuperación otra vez para consultar el resultado.",
     "conflict_recovery.keep": "Seguir trabajando",
     "conflict_recovery.discard": "Salir y borrar la clave",
   },
