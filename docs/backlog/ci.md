@@ -1006,9 +1006,11 @@ Vitest's reporter. A811 (#1888) found that Vite 8.3.4, when an agent variable su
 `CLAUDECODE` or `CODEX_THREAD_ID` is set, prints a browser test's `console.error`, `console.warn`,
 uncaught errors and unhandled rejections to the terminal, a passing test's included (seen in
 `apps/dashboard`, which now sets `server: { forwardConsole: false }`). The other browser packages
-(`grep -l browser */*/vitest.config.ts`) still forward. Measure one of them with and without an
-agent variable, then add the receipt to the guide, and decide with the owner whether they should
-turn forwarding off as the dashboard did.
+(`grep -l browser */*/vitest.config.ts`) still forward. Measured in `apps/till` on 2026-11-14:
+`pnpm exec vitest run src/till-app.test.ts -t 'does not leave the dialog busy when a step after the
+switch throws'` printed the test's recorded `approvedProfiles` of null rejection with `AI_AGENT` and
+`CLAUDECODE` set, and nothing with both unset; both runs passed. Add that receipt to the guide, and
+decide with the owner whether the other packages should turn forwarding off as the dashboard did.
 
 
 ## A late move or second finger can overtake the gesture hold timer
