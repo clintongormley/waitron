@@ -1,6 +1,14 @@
-import { sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { captureError, stampDeployment, triggerRaised, withTransaction } from "@waitron/db";
+import {
+  captureError,
+  invoiceSeries,
+  stampDeployment,
+  triggerRaised,
+  withTransaction,
+} from "@waitron/db";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroConsultado, VerifactuClient } from "@waitron/verifactu";
@@ -11,7 +19,11 @@ import { createHourPreparation } from "./hour-preparation.js";
 import { compareHourClocks } from "./hour-clock.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { createReconciliationSweep } from "./reconcile-sweep.js";
-import { appendPendingAlta, seedPendingEnvios } from "../test/drain-fixtures.js";
+import { appendPendingAlta, seedPendingEnvios, seedPinnedChain } from "../test/drain-fixtures.js";
+import { seedFixtureSif } from "../test/sif-fixture.js";
+import { readFilingOverview } from "./filing-overview.js";
+import { fiscalAllocations } from "./schema/allocations.js";
+import { registroSif } from "./schema/sif.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { readActiveConflicts, assertNoActiveConflict } from "./conflict-evidence.js";
 import { drain } from "./drain.js";
@@ -411,4 +423,149 @@ it("retains the invoice identity of an unheld active-series number when optional
       }),
     ],
   );
+});
+
+/** Revokes the live identity and retires its series with one timestamp, as an activation does. */
+async function retireAndRevoke(nodeId: string, at: Date) {
+  await suite.db
+    .update(registroSif)
+    .set({ revocadoEn: at })
+    .where(and(eq(registroSif.nodeId, nodeId), isNull(registroSif.revocadoEn)));
+  await suite.db
+    .update(invoiceSeries)
+    .set({ retiredAt: at })
+    .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)));
+}
+
+/** A recovery of the seeded box: a new identity and series set, with its activation row. */
+async function recover(f: Fixture, at: Date, code: string) {
+  await retireAndRevoke(f.seeded.nodeId, at);
+  return withTransaction(suite.db, async (tx) => {
+    const { id: sifId } = await seedFixtureSif(tx, {
+      nodeId: brandNodeId(f.seeded.nodeId),
+      nif: f.seeded.nif,
+      idSistemaInformatico: "WT",
+      numeroInstalacion: code,
+    });
+    const series = { id: randomUUID(), code, purpose: "standard" as const };
+    await tx.insert(invoiceSeries).values({ ...series, nodeId: f.seeded.nodeId });
+    const fields = {
+      eventId: `event-${code}`,
+      operatorId: "administrator",
+      sourceId: "source",
+      targetNodeId: f.seeded.nodeId,
+      noParallelRecovery: true,
+      confirmedAt: at.toISOString(),
+      incidentEvidence: "evidence",
+    };
+    await tx.insert(fiscalAllocations).values({
+      eventKey: `event-${code}`,
+      allocationKey: `allocation-${code}`,
+      nodeId: f.seeded.nodeId,
+      sifId,
+      taxpayerNif: f.seeded.nif,
+      softwareId: "WT",
+      environment: "production",
+      installationIdentity: code,
+      allocation: {
+        version: 1,
+        allocationId: `allocation-${code}`,
+        taxpayerNif: f.seeded.nif,
+        softwareId: "WT",
+        environment: "production",
+        installationIdentity: code,
+        series: [{ code, purpose: "standard" }],
+        source: "hour",
+        reservationEvidence: null,
+        issuedAt: at.toISOString(),
+      },
+      approval: { ...fields, version: 1, oldMachineOffline: true, oldMachineAbsent: false },
+      bases: [],
+      result: { activationEventId: `event-${code}`, sifId, series: [series] },
+      activatedAt: at,
+    });
+    return sifId;
+  });
+}
+
+async function storedConflicts() {
+  return (
+    await suite.db.execute<{ sif_id: string; series_code: string; invoice_identity: string }>(sql`
+      select c.sif_id, i.code as series_code, c.invoice_identity
+      from fiscal_series_conflicts c join invoice_series i on i.id = c.series_id
+      order by c.rowid
+    `)
+  ).rows;
+}
+
+async function expectNoActiveConflict(f: Fixture) {
+  expect(await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId))).toEqual(
+    [],
+  );
+  await withTransaction(suite.db, (tx) => assertNoActiveConflict(tx, f.seeded.nodeId));
+}
+
+it("keeps an invoice AEAT holds under a series of an identity this box retired and revoked, which this box did not issue", async () => {
+  await stampDeployment(suite.db, "production");
+  const f = await fixture();
+  await retireAndRevoke(f.seeded.nodeId, new Date("2026-07-21T00:02:00Z"));
+  await run(f);
+  expect(await storedConflicts()).toEqual([
+    { sif_id: f.seeded.sifId, series_code: "S1", invoice_identity: "S1/99" },
+  ]);
+  const overview = await withTransaction(suite.db, (tx) =>
+    readFilingOverview(tx, { nodeId: f.seeded.nodeId, limit: 200 }),
+  );
+  expect(overview.missingHistory.notIssuedHere).toEqual([
+    expect.objectContaining({ seriesCode: "S1", invoice: f.foreign.IDFactura }),
+  ]);
+  await expectNoActiveConflict(f);
+});
+
+it("pairs each retired series with the identity whose activation retired it, across two recoveries", async () => {
+  await stampDeployment(suite.db, "production");
+  const f = await fixture();
+  const first = await recover(f, new Date("2026-07-21T00:02:00Z"), "AAAAA");
+  await recover(f, new Date("2026-07-21T00:03:00Z"), "BBBBB");
+  const underFirst: RegistroConsultado = {
+    ...f.foreign,
+    IDFactura: { ...f.foreign.IDFactura, NumSerieFactura: "AAAAA/7" },
+  };
+  f.returned.registros.push(underFirst);
+  await run(f);
+  expect(await storedConflicts()).toEqual([
+    { sif_id: f.seeded.sifId, series_code: "S1", invoice_identity: "S1/99" },
+    { sif_id: first, series_code: "AAAAA", invoice_identity: "AAAAA/7" },
+  ]);
+  await expectNoActiveConflict(f);
+});
+
+it("records an unheld number when the series is retired and the identity revoked during the lookup", async () => {
+  const f = await fixture();
+  const client: VerifactuClient = {
+    submit: f.client.submit,
+    consultar: async () => {
+      await retireAndRevoke(f.seeded.nodeId, new Date("2026-07-21T00:02:00Z"));
+      return f.returned;
+    },
+  };
+  await run(f, client);
+  expect(await storedConflicts()).toEqual([
+    { sif_id: f.seeded.sifId, series_code: "S1", invoice_identity: "S1/99" },
+  ]);
+  await expectNoActiveConflict(f);
+});
+
+it("does not record a number under another box's retired series", async () => {
+  const f = await fixture();
+  const { chain: other } = await seedPinnedChain(suite.db, f.seeded, {
+    sifId: randomUUID(),
+    firstSecuencia: 50,
+    rows: [{ nombreRazonEmisor: "Waitron SL", generadoEn: "2026-07-20T19:20:30+01:00" }],
+  });
+  await suite.db.insert(invoiceSeries).values({ nodeId: other.nodeId, code: "S9" });
+  await retireAndRevoke(other.nodeId, new Date("2026-07-21T00:02:00Z"));
+  f.foreign.IDFactura.NumSerieFactura = "S9/5";
+  await run(f);
+  expect(await storedConflicts()).toEqual([]);
 });
