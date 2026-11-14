@@ -3373,7 +3373,7 @@ a modal dialog or open popover the row is not in, is left where it is; the row w
 inside its own parent element. A row with no slotted element and no message to show takes no room,
 so a row kept only for a message covers nothing while the message is empty; a slotted element
 hidden after it arrives still counts. A row in a dialog's footer is left as it was, since the footer
-already stays in view: directly in its `footer` slot in every browser, and inside an element placed
+already stays in view: directly in its `footer` slot, including in browsers without style container queries, and inside an element placed
 there in browsers that support style container queries. So is a row under an element that sets
 `--wt-form-actions-in-place: true` (again only where style container queries are supported):
 the floor plan editor's header and the printers' Check address line set it, so their buttons stay
