@@ -176,10 +176,6 @@ by the answers):
   §2.2), and the S3 search reads only issued sales. The README tells the customer that anything
   else the venue holds, such as an invoice they sent the venue, is not in the copy and to ask the
   venue for it. Next action: decide whether a supplier's request gets a download of its own.
-- **A foreign invoice customer's tax number** (S3 decision 4). Since #2145 a foreign customer who
-  names a document type is stored and filed under `IDOtro`. The search's rule removes only a
-  leading `ES` (`apps/server/src/invoice-customer-tax-id.ts`), so a foreign number is matched with
-  its own country prefix kept. Next action: decide whether the rule should change for them.
 - **Owner questions on S3's defaults**, each built with the default until answered (the S3 plan's
   "Open decisions for the owner"):
   - **The README's language** (decision 10): the venue's, not the language of the customer's newest
