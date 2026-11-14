@@ -232,10 +232,10 @@ export class RecoveryKeyEntry extends LitElement {
         name="recovery-pdf"
         accept="application/pdf,.pdf"
         label=${en ? "Recovery PDF" : "PDF de recuperación"}
-        locale=${this.locale}
+        .locale=${this.locale}
         .copy=${fileInputCopy[this.locale]}
         .files=${this.draft.file ? [this.draft.file] : []}
-        error=${pdfError}
+        .error=${pdfError}
         @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
           event.stopPropagation();
           void this.importFile(event.detail.files[0]);

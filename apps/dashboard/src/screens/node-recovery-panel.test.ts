@@ -1,8 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
-import type { WtButton, WtInput } from "@waitron/ui";
+import type { WtButton, WtFileInput, WtInput } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
 import { chooseFiles, drawnFileName, fileError } from "@waitron/ui/src/test-helpers.js";
-import type { WtFileInput } from "@waitron/ui/src/components/wt-file-input.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { NodeRecoveryPanel } from "./node-recovery-panel.js";

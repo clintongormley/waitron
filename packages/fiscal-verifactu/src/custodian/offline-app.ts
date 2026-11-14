@@ -295,7 +295,7 @@ export class OfflineCustodyApp extends LitElement {
       label=${label}
       required
       accept=".json,application/json"
-      locale=${this.locale}
+      .locale=${this.locale}
       .copy=${fileInputCopy[this.locale]}
       .files=${file ? [file] : []}
       @wt-change=${(event: CustomEvent<{ files: File[] }>) => {

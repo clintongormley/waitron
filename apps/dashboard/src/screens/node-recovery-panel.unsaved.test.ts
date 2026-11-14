@@ -1,9 +1,8 @@
 import { LitElement, html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
-import { LeaveController, type WtInput } from "@waitron/ui";
+import { LeaveController, type WtFileInput, type WtInput } from "@waitron/ui";
 import type { DashboardApi } from "../api/client.js";
 import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
-import type { WtFileInput } from "@waitron/ui/src/components/wt-file-input.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import "./node-recovery-panel.js";

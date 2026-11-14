@@ -1,14 +1,13 @@
 import { PDFDocument } from "pdf-lib";
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { applyTokens, LeaveController } from "@waitron/ui";
+import { applyTokens, LeaveController, type WtFileInput } from "@waitron/ui";
 import {
   chooseFiles,
   drawnFileName,
   fileControl,
   fileError,
 } from "@waitron/ui/src/test-helpers.js";
-import type { WtFileInput } from "@waitron/ui/src/components/wt-file-input.js";
 import { LitElement, html } from "lit";
 import "./first-fiscal-screen.js";
 import { renderRecoveryPdf } from "../recovery-pdf.js";

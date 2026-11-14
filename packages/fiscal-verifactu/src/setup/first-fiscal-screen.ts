@@ -346,7 +346,7 @@ export class FirstFiscalScreen extends LitElement {
       data-test=${test}
       required
       label=${label}
-      locale=${this.locale}
+      .locale=${this.locale}
       .copy=${fileInputCopy[this.locale]}
       .files=${this.draft[field] ? [this.draft[field]] : []}
       ?disabled=${this.busy}

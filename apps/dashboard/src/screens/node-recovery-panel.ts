@@ -188,7 +188,7 @@ export class NodeRecoveryPanel extends LitElement {
         accept="application/json,.json"
         required
         label=${t("node_pack.file")}
-        locale=${currentLocale()}
+        .locale=${currentLocale()}
         .copy=${{
           drop: t("file_input.drop"),
           choose: t("file_input.choose"),
@@ -197,7 +197,7 @@ export class NodeRecoveryPanel extends LitElement {
         }}
         .files=${this.file ? [this.file] : []}
         ?disabled=${this.busy}
-        error=${this.fileError ? t("node_pack.file_error") : ""}
+        .error=${this.fileError ? t("node_pack.file_error") : ""}
         @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
           event.stopPropagation();
           this.file = event.detail.files[0];
