@@ -162,6 +162,22 @@ it("busy Cancel and Escape cannot discard the staged correction", async () => {
   expect(unload()).toBe(true);
 });
 
+it("something inside the window closing itself leaves it open with the draft still unsaved", async () => {
+  const { app, form } = await mount();
+  await type(form, "6.05");
+
+  form
+    .shadowRoot!.querySelector(".body")!
+    .dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  await form.updateComplete;
+
+  expect(unload()).toBe(true);
+  expect(form.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+  expect(app.closes).toBe(0);
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+});
+
 it("disconnect drops a pending question; reconnect keeps the draft unsaved", async () => {
   const { app, form } = await mount();
   await type(form, "6.05");

@@ -4576,7 +4576,7 @@ describe("till-app: service cancellation consent", () => {
       legs: [],
       fileNow: null,
     };
-    async function resumeCorrection(methods: ReturnType<typeof paidMethods>) {
+    async function openCorrection(methods: ReturnType<typeof paidMethods>) {
       const { el } = await mountApp(methods);
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -4588,6 +4588,10 @@ describe("till-app: service cancellation consent", () => {
         correction: { id: "correction-1", saleId: "own-sale" },
       });
       const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
+      return { el, correcting };
+    }
+    async function resumeCorrection(methods: ReturnType<typeof paidMethods>) {
+      const { el, correcting } = await openCorrection(methods);
       await expect
         .poll(() => correcting()?.shadowRoot!.querySelector("[data-choice=card]"))
         .not.toBeNull();
@@ -4728,17 +4732,7 @@ describe("till-app: service cancellation consent", () => {
           .fn()
           .mockResolvedValue({ ...resumedCorrection, state: "filed", left: "0.00" }),
       });
-      const { el } = await mountApp(methods);
-      await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
-      await flush(el);
-      emit(shell(el), "find-bill");
-      const findBill = () => el.shadowRoot!.querySelector("till-find-bill-screen");
-      await expect.poll(findBill).not.toBeNull();
-      emit(findBill()!, "find-correction-open", {
-        correction: { id: "correction-1", saleId: "own-sale" },
-      });
-      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
+      const { el, correcting } = await openCorrection(methods);
       const done = () => correcting()?.shadowRoot!.querySelector<HTMLElement>("[data-done]");
       await expect.poll(done).not.toBeNull();
       const reads = getRefundableTenders.mock.calls.length;

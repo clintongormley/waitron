@@ -14,7 +14,6 @@ import type {
   InvoiceCorrectionView,
 } from "../api/invoice-correction-types.js";
 import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
-import { scopePrefix } from "../state/tender-refund.js";
 import { REASON_MAX } from "../state/bill-payment.js";
 import "./invoice-correction-dialog.js";
 import type {
@@ -363,22 +362,6 @@ it("shows a refusal about the invoice above the buttons, giving way to the field
   confirm(el).click();
   await el.updateComplete;
   expect(actions().error).toBe(t("form.fix_fields"));
-});
-
-it("stays open, keeping the draft, when something inside the window closes itself", async () => {
-  const { el } = await mount();
-  await type(el, "5");
-  const closes = vi.fn();
-  el.addEventListener("invoice-correction-close", closes);
-
-  root(el)
-    .querySelector(".body")!
-    .dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
-  await el.updateComplete;
-
-  expect(root(el).querySelector("wt-dialog")!.open).toBe(true);
-  expect(closes).not.toHaveBeenCalled();
-  expect(grossField(el).value).toBe("5");
 });
 
 it("writes the split's VAT rate with the language's decimal mark", async () => {
@@ -1239,10 +1222,12 @@ describe("the correction window's other paths", () => {
   it("previews again and shows the new split when Open is refused because the split changed", async () => {
     const api = sendingApi();
     const changed = [{ rate: "10.00", base: "5.50", tax: "0.55" }];
+    api.previewInvoiceCorrection
+      .mockResolvedValueOnce(answer("6.05"))
+      .mockResolvedValueOnce({ ...answer("6.05"), vatBreakdown: changed });
     api.openInvoiceCorrection.mockRejectedValueOnce(refused("invoice_correction.split_changed"));
     const { el } = await mountSending(api);
     await confirmCorrection(el);
-    api.previewInvoiceCorrection.mockResolvedValue({ ...answer("6.05"), vatBreakdown: changed });
 
     await vi.waitFor(() =>
       expect(text(root(el).querySelector("[data-split]"))).toBe(
@@ -1254,6 +1239,7 @@ describe("the correction window's other paths", () => {
     );
     expect(actionsError(el)).toBe(codeMessage("invoice_correction.split_changed"));
     expect(api.openInvoiceCorrection).toHaveBeenCalledOnce();
+    expect(api.previewInvoiceCorrection).toHaveBeenCalledTimes(2);
   });
 
   it("shows the Open saved by another window of this till instead of sending a new amount", async () => {
@@ -1284,8 +1270,10 @@ describe("the correction window's other paths", () => {
     } as never);
     const { el } = await mountSending(api, "correction-1");
     api.getRefundableTenders.mockRejectedValue(lost());
+    const reads = api.getRefundableTenders.mock.calls.length;
 
     root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+    await vi.waitFor(() => expect(api.getRefundableTenders).toHaveBeenCalledTimes(reads + 1));
     await vi.waitFor(() =>
       expect(text(root(el).querySelector("[data-cash-given]"))).toBe(
         t("invoice_correction.cash_given").replace("{amount}", "€6.05"),
@@ -1298,15 +1286,24 @@ describe("the correction window's other paths", () => {
   });
 
   it("offers the cash still left when the saved cash request cannot be read", async () => {
-    localStorage.setItem(
-      `${scopePrefix(SCOPE)}${JSON.stringify(["invoice-correction-cash", "correction-1"])}`,
-      "{not json",
+    const other = new InvoiceCorrectionSession(SCOPE, {
+      openInvoiceCorrection: () => Promise.reject(lost()),
+      giveInvoiceCorrectionCash: () => Promise.reject(lost()),
+    });
+    await other.giveCash("correction-1", { amount: "2.00" }).catch(() => {});
+    const cashOffered = (el: TillInvoiceCorrectionDialog) =>
+      text(root(el).querySelector("[data-choice=cash]"));
+    const saved = await mountSending(sendingApi(), "correction-1");
+    expect(cashOffered(saved.el)).toBe(
+      t("invoice_correction.give_cash").replace("{amount}", "€2.00"),
     );
+    saved.el.remove();
+
+    const key = Object.keys(localStorage).find((k) => k.includes("invoice-correction-cash"))!;
+    localStorage.setItem(key, "{not json");
     const { el } = await mountSending(sendingApi(), "correction-1");
 
-    expect(text(root(el).querySelector("[data-choice=cash]"))).toBe(
-      t("invoice_correction.give_cash").replace("{amount}", "€6.05"),
-    );
+    expect(cashOffered(el)).toBe(t("invoice_correction.give_cash").replace("{amount}", "€6.05"));
   });
 
   it("shows why the people who may sign in could not be read, offering no sign-in", async () => {
