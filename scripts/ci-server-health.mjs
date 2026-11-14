@@ -179,7 +179,7 @@ export async function serverRoute(options) {
     const cancelled = await readInventory(async () => {
       const run = await request(`/repos/${repository}/actions/runs/${runId}`);
       assert.ok(run.id === runId && owned(run, repositoryId), "Foreign retry run");
-      const jobs = await serverJobs(recent, run, attempt - 1);
+      const jobs = await serverJobs(options, run, attempt - 1);
       return jobs.filter(
         (job) =>
           job.status === "completed" &&
@@ -234,7 +234,7 @@ export async function serverRoute(options) {
   let running = 0,
     queued = 0;
   for (const run of runs.values()) {
-    for (const job of await runJobs(recent, run)) {
+    for (const job of await runJobs(options, run)) {
       if (!job.labels.length || job.labels.includes("self-hosted")) continue;
       if (job.status === "in_progress") running++;
       if (["queued", "pending", "waiting", "requested"].includes(job.status)) queued++;

@@ -223,8 +223,11 @@ including pagination and incomplete inventories; it does not measure live capaci
 Routing limits its queued-run lists to runs created in the last 24 hours, using
 GitHub's `created` filter before checking list completeness. This omits older runs
 from both queue pressure and the advertised total, including old runs with jobs
-(watcher, 2026-11-14 10:24). A missing recent run still makes the list unreadable.
-Running-run lists, health checks, recovery and cancellation retain their full reads.
+(watcher, 2026-11-14 10:24). This also omits queued retries of runs originally
+created before the cutoff; in-progress retries remain visible. A missing recent
+run still makes the list unreadable.
+Running-run lists and the standalone `check`, `recover`, `recover-planners` and
+`probe` commands retain their full reads.
 The query omits old records without enumerating or logging their individual ids.
 Each list read restarts once from page 1, discarding its earlier rows, after an empty
 page before completion or a changed valid total. Duplicate/excess rows take precedence
