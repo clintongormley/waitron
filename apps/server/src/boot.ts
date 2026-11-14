@@ -3694,7 +3694,9 @@ async function bootServer(
       heads: recordHeads,
     },
     log,
+    monotonic: boxBoot.elapsed,
   });
+  correction.addAnchor(clockWatch);
   jobRunner.add(clockWatchJob(clockWatch, CLOCK_WATCH_MS));
   const paymentsEnabled = enabledAtStart.some((module) => module.name === "payments");
   const serverAlertSources: AlertSource[] = [

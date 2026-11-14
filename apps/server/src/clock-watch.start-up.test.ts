@@ -82,6 +82,11 @@ function harness(
     if (options.bySet === true) steps++;
   }
 
+  /** The steady clock answering NaN from now on, as the boot reader does when a read fails. */
+  function breakSteady() {
+    monoMs = Number.NaN;
+  }
+
   /** A device's equipment read arriving now, its clock `aheadMs` from the box's. */
   function noteDevice(id: string, address: string, aheadMs: number) {
     store.noteDevice(id, address, wallMs + aheadMs, { wallMs, monoMs });
@@ -99,6 +104,7 @@ function harness(
     transaction,
     noteDevice,
     jump,
+    breakSteady,
     wall: () => wallMs,
   };
 }
@@ -285,6 +291,35 @@ describe("the clock watch and a jump of the box's clock", () => {
     h.jump(-70_000);
     await h.tick();
     expect(h.startState).toMatchObject({ status: "waiting", cause: "clock_jumped" });
+    expect(h.host).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not count a move as a jump when the steady clock cannot be read", async () => {
+    const h = harness({ host: async () => NOT_SYNCHRONISED, startState: confirmed("by_devices") });
+    await h.tick();
+    h.breakSteady();
+    h.jump(2 * MINUTE);
+    await h.tick();
+    expect(h.startState.status).toBe("by_devices");
+    expect(jumpLogs(h)).toEqual([]);
+  });
+
+  it("reads the time service afresh at the look after a jump, so a box whose service synchronises just after it is confirmed then", async () => {
+    let answer = NOT_SYNCHRONISED;
+    const h = harness({ host: async () => answer, startState: confirmed("by_internet") });
+    await h.tick();
+    h.jump(2 * MINUTE);
+    await h.tick();
+    expect(h.startState).toMatchObject({ status: "waiting", cause: "clock_jumped" });
+    expect(h.host).toHaveBeenCalledTimes(1);
+    answer = SYNCHRONISED;
+    await h.tick();
+    expect(h.startState.status).toBe("by_internet");
+    expect(h.host).toHaveBeenCalledTimes(2);
+    // After that one fresh read the shared reading's minute applies again.
+    h.startState.backToWaiting("clock_jumped");
+    answer = NOT_SYNCHRONISED;
+    await h.tick();
     expect(h.host).toHaveBeenCalledTimes(2);
   });
 });

@@ -164,6 +164,39 @@ describe("going back to waiting unless the time service is synchronised", () => 
     expect(state.unconfirmed()).toBe(true);
     expect(clockStatus).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    [
+      "throws",
+      async (): Promise<ClockServiceStatus> => {
+        throw new Error("socket gone");
+      },
+    ],
+    [
+      "answers unavailable",
+      async (): Promise<ClockServiceStatus> => ({ available: false, reason: "timeout" }),
+    ],
+  ])(
+    "notes that the host does not answer when it %s, and that it answers again once it does",
+    async (_name, failing) => {
+      const l = look(async () => clockServiceAnswer(true));
+      await startClockCheck(l.deps);
+      expect(l.state).toMatchObject({ status: "by_internet", hostAnswers: true });
+      await expect(
+        backToWaitingUnlessSynchronised({ state: l.state, clockStatus: failing }, "clock_jumped"),
+      ).resolves.toBe(true);
+      expect(l.state).toMatchObject({
+        status: "waiting",
+        cause: "clock_jumped",
+        hostAnswers: false,
+      });
+      await backToWaitingUnlessSynchronised(
+        { state: l.state, clockStatus: async () => clockServiceAnswer(false) },
+        "clock_jumped",
+      );
+      expect(l.state.hostAnswers).toBe(true);
+    },
+  );
 });
 
 it("shows the waiting notice a count of at most 1, so never 2 of 2 while the box still waits", () => {

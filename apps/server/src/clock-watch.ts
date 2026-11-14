@@ -1,8 +1,9 @@
 import type { Transaction } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
+import { bootReader } from "./boot-reader.js";
 import type { ClockServiceStatus } from "./box-host-client.js";
-import type { clockCorrection } from "./clock-correction.js";
+import type { ClockAnchor, clockCorrection } from "./clock-correction.js";
 import type { ClockStartUp } from "./clock-start-up.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
@@ -17,7 +18,7 @@ import {
 export const CLOCK_WATCH_MS = 15_000;
 /** How far the wall clock may move against the steady clock between looks, with no set, before
  * the watch counts it as a jump. */
-export const JUMP_MS = 60_000;
+const JUMP_MS = 60_000;
 
 export function createClockWatch(deps: {
   backend: Pick<FiscalBackend, "assertRecordableAt">;
@@ -25,15 +26,16 @@ export function createClockWatch(deps: {
   clock: Pick<TrustedClock, "now">;
   read: <T>(fn: (tx: Transaction) => Promise<T>) => Promise<T>;
   /** The correction's one-at-a-time turn, taken around the devices' confirmation and the jump
-   * check, whose set count tells a set from a jump; each look also writes the rows of steps whose
-   * rows could not be written when they happened. */
+   * check; each look also writes the rows of steps whose rows could not be written when they
+   * happened. The watch is to be added as its anchor, so a set re-takes the jump check's
+   * baseline; its set count covers a set whose re-anchoring did not run. */
   correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "writePending" | "steps">;
   /** Closed by a look at a reading a record could carry. */
   startUp?: Pick<ClockStartUp, "noStop">;
   /** The start check: until the internet confirms it, each look reads the time service through
    * `clockStatus`, and while it waits, offers it the device readings. After a jump it reads the
    * time service afresh, whatever the status, and sends the box back to waiting unless it is
-   * synchronised. Never asks AEAT. */
+   * synchronised; the look after that reads it afresh once more. Never asks AEAT. */
   start?: {
     state: StartClockState;
     clockStatus: () => Promise<ClockServiceStatus>;
@@ -43,14 +45,20 @@ export function createClockWatch(deps: {
   };
   log: Logger;
   wall?: () => number;
+  /** The steady clock; the boot reader's elapsed time when absent, which counts a suspend, so
+   * waking from one is not a jump. NaN, from a failed read, is never a jump. */
   monotonic?: () => number;
-}): { check(): Promise<void>; halt(): void } {
+}): ClockAnchor & { check(): Promise<void>; halt(): void } {
   let stopped = false;
   const inTurn = deps.correction?.inTurn ?? (<T>(fn: () => Promise<T>) => fn());
   const wall = deps.wall ?? Date.now;
-  const monotonic = deps.monotonic ?? (() => performance.now());
+  const monotonic = deps.monotonic ?? bootReader().elapsed;
   const steps = () => deps.correction?.steps() ?? 0;
-  let baseline = { wallMs: wall(), monoMs: monotonic(), steps: steps() };
+  const reading = () => ({ wallMs: wall(), monoMs: monotonic(), steps: steps() });
+  let baseline = reading();
+  /** The reading a jump took is not served to the next look, so a service that synchronises
+   * just after the jump is seen then rather than a minute later. */
+  let freshAfterJump = false;
 
   function recordable(): boolean {
     try {
@@ -67,6 +75,10 @@ export function createClockWatch(deps: {
     const byInternet = () => start.state.status === "by_internet";
     if (byInternet()) return;
     const heads = () => deps.read(start.heads);
+    if (freshAfterJump) {
+      freshAfterJump = false;
+      start.clearClockStatus?.();
+    }
     await lookAtClockService({ state: start.state, clockStatus: start.clockStatus, heads });
     if (stopped) return;
     if (byInternet()) {
@@ -96,14 +108,15 @@ export function createClockWatch(deps: {
   async function lookForJump(): Promise<void> {
     await inTurn(async () => {
       const before = baseline;
-      baseline = { wallMs: wall(), monoMs: monotonic(), steps: steps() };
+      baseline = reading();
       if (baseline.steps !== before.steps) return;
       const steadyMs = baseline.monoMs - before.monoMs;
-      if (Math.abs(baseline.wallMs - before.wallMs - steadyMs) <= JUMP_MS) return;
+      if (!(Math.abs(baseline.wallMs - before.wallMs - steadyMs) > JUMP_MS)) return;
       const start = deps.start;
       start?.clearClockStatus?.();
       const backToWaiting =
         start === undefined ? null : await backToWaitingUnlessSynchronised(start, "clock_jumped");
+      if (backToWaiting === true) freshAfterJump = true;
       deps.log(backToWaiting === true ? "warn" : "info", "clock_watch.jumped", {
         wallBefore: new Date(before.wallMs).toISOString(),
         wallAfter: new Date(baseline.wallMs).toISOString(),
@@ -136,6 +149,10 @@ export function createClockWatch(deps: {
   }
 
   return {
+    // Runs inside the set's turn, so never between a look's readings and its comparison.
+    reanchor: async () => {
+      baseline = reading();
+    },
     check: async () => {
       try {
         await check();

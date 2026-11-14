@@ -1286,3 +1286,90 @@ describe("the start check's device confirmation and a set", () => {
     expect(await setting).toMatchObject({ set: true });
   });
 });
+
+describe("the clock watch's jump check and a set", () => {
+  /** A watch over the harness's correction and clocks, added as its anchor as boot adds it; the
+   * time service is never synchronised. */
+  function jumpWatch(h: Harness, state: StartClockState) {
+    const log = vi.fn();
+    const watch = createClockWatch({
+      backend: { assertRecordableAt: () => {} },
+      store: createClockWitnessStore({ wall: () => START_MS, monotonic: () => 0 }),
+      clock: {
+        now: () =>
+          ({
+            instant: new Date(h.measured().wallMs),
+            offsetMinutes: 60,
+          }) as unknown as TrustedReading,
+      },
+      read: (fn) => fn(TX),
+      correction: h.correction,
+      start: { state, clockStatus: async () => UNSYNCHRONISED, heads: async () => HEADS_AFTER },
+      wall: () => h.measured().wallMs,
+      monotonic: () => h.measured().monoMs,
+      log,
+    });
+    h.correction.addAnchor(watch);
+    const jumped = () => log.mock.calls.filter((call) => call[1] === "clock_watch.jumped");
+    return { look: () => watch.check(), jumped };
+  }
+
+  const HEADS_AFTER: ChainHeads = { "node-1": 9 };
+
+  it("sees a jump that follows a verified set before the next look", async () => {
+    const state = startClockState();
+    const h = harness({ start: { state, heads: () => HEADS_AFTER } });
+    const w = jumpWatch(h, state);
+    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
+    expect(state.status).toBe("by_person");
+    h.moveWall(2 * 60_000);
+    await w.look();
+    expect(state).toMatchObject({ status: "waiting", cause: "clock_jumped" });
+    expect(w.jumped()).toHaveLength(1);
+  });
+
+  it("does not count a verified set alone as a jump", async () => {
+    const state = startClockState();
+    const h = harness({ start: { state, heads: () => HEADS_AFTER } });
+    const w = jumpWatch(h, state);
+    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
+    await w.look();
+    await w.look();
+    expect(state.status).toBe("by_person");
+    expect(w.jumped()).toEqual([]);
+  });
+
+  it("sees a jump that follows a set the host refused before the next look", async () => {
+    const state = startClockState();
+    state.confirm("by_devices", HEADS_AFTER);
+    const h = harness({ start: { state, heads: () => HEADS_AFTER }, host: "refuses" });
+    const w = jumpWatch(h, state);
+    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toEqual({
+      set: false,
+      reason: "refused",
+    });
+    expect(state.status).toBe("by_devices");
+    h.moveWall(2 * 60_000);
+    await w.look();
+    expect(state).toMatchObject({ status: "waiting", cause: "clock_jumped" });
+  });
+
+  it("does not count a set whose re-anchoring did not run as a jump, by its set count", async () => {
+    const state = startClockState();
+    state.confirm("by_devices", HEADS_AFTER);
+    // The boot clock throws after the host has moved the clock, before any anchor is told.
+    const h = harness({ start: { state, heads: () => HEADS_AFTER }, bootThrowsAfterSet: true });
+    const w = jumpWatch(h, state);
+    await expect(h.correction.set(byStaff(h, { reason: "start" }))).rejects.toThrow(
+      "boot clock broke",
+    );
+    expect(h.calls).not.toContain("reanchor");
+    await w.look();
+    expect(state.status).toBe("by_devices");
+    expect(w.jumped()).toEqual([]);
+    // The control: the same move with no set is a jump.
+    h.moveWall(2 * 60_000);
+    await w.look();
+    expect(state).toMatchObject({ status: "waiting", cause: "clock_jumped" });
+  });
+});

@@ -110,6 +110,7 @@ export async function backToWaitingUnlessSynchronised(
   cause: StartClockCause,
 ): Promise<boolean> {
   const answer = await clockServiceAnswerOf(deps.clockStatus);
+  deps.state.noteHost(answer.available);
   if (answer.available && answer.synchronised) return false;
   deps.state.backToWaiting(cause);
   return true;
