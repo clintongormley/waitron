@@ -2030,6 +2030,23 @@ export const en = {
   "printers.bluetooth_forgetting": "Unpairing…",
   "printers.bluetooth_forgotten": "Unpaired",
   "printers.bluetooth_forget_failed": "Could not unpair",
+  "printers.bluetooth_pair_failed_general":
+    "check the printer is on, close by and ready to pair, then try again",
+  "printers.bluetooth_forget_failed_general":
+    "try again. If it keeps failing, switch the printer off and on, then try again",
+  "printers.bluetooth_reason.wrong_pin": "the PIN is not correct",
+  "printers.bluetooth_reason.pin_needed": "this printer needs a PIN. Enter it and try again",
+  "printers.bluetooth_reason.pin_too_slow":
+    "the printer stopped waiting for the PIN. Try again and enter it sooner",
+  "printers.bluetooth_reason.unsupported_method":
+    "this printer asks for a pairing method Waitron does not support",
+  "printers.bluetooth_reason.not_found": "the printer was not found. Scan again, then pair",
+  "printers.bluetooth_reason.out_of_range":
+    "the printer is off or out of range. Switch it on, bring it closer and try again",
+  "printers.bluetooth_reason.timed_out":
+    "the printer did not answer in time. Check it is on and ready to pair, then try again",
+  "printers.bluetooth_reason.bluetooth_unavailable":
+    "the print agent's Bluetooth is not available. Check Bluetooth is on where the print agent runs, then try again",
   "printers.bluetooth_no_answer": "No answer from the print agent — try again",
   "printers.bluetooth_not_seen": "No longer found by the scan",
   "printers.jobs_title": "Print Queue",
@@ -6207,6 +6224,25 @@ export const es: Record<StringKey, string> = {
   "printers.bluetooth_forgetting": "Desvinculando…",
   "printers.bluetooth_forgotten": "Desvinculado",
   "printers.bluetooth_forget_failed": "No se pudo desvincular",
+  "printers.bluetooth_pair_failed_general":
+    "comprueba que la impresora esté encendida, cerca y lista para emparejar, y vuelve a intentarlo",
+  "printers.bluetooth_forget_failed_general":
+    "vuelve a intentarlo. Si sigue fallando, apaga y enciende la impresora y vuelve a intentarlo",
+  "printers.bluetooth_reason.wrong_pin": "el PIN no es correcto",
+  "printers.bluetooth_reason.pin_needed":
+    "esta impresora necesita un PIN. Escríbelo y vuelve a intentarlo",
+  "printers.bluetooth_reason.pin_too_slow":
+    "la impresora dejó de esperar el PIN. Vuelve a intentarlo y escríbelo antes",
+  "printers.bluetooth_reason.unsupported_method":
+    "esta impresora pide un método de emparejamiento que Waitron no admite",
+  "printers.bluetooth_reason.not_found":
+    "no se encontró la impresora. Vuelve a buscar y luego empareja",
+  "printers.bluetooth_reason.out_of_range":
+    "la impresora está apagada o fuera de alcance. Enciéndela, acércala y vuelve a intentarlo",
+  "printers.bluetooth_reason.timed_out":
+    "la impresora no respondió a tiempo. Comprueba que esté encendida y lista para emparejar, y vuelve a intentarlo",
+  "printers.bluetooth_reason.bluetooth_unavailable":
+    "el Bluetooth del agente de impresión no está disponible. Comprueba que el Bluetooth esté activado donde funciona el agente de impresión y vuelve a intentarlo",
   "printers.bluetooth_no_answer": "El agente de impresión no ha respondido; inténtalo de nuevo",
   "printers.bluetooth_not_seen": "La búsqueda ya no lo encuentra",
   "printers.jobs_title": "Cola de impresión",

@@ -7656,7 +7656,7 @@ describe("printers-screen Bluetooth pairing", () => {
   const finishedCommand = (
     kind: "pair" | "forget",
     state: "succeeded" | "failed",
-    extra: { id?: string; error?: string } = {},
+    extra: { id?: string; error?: string; reason?: string } = {},
   ) => ({ id: `${kind}-1`, kind, address: ADDRESS, state, ...extra });
   const sel = (test: string) => `[data-test="${test}"]`;
 
@@ -8092,7 +8092,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
       expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
-        `${t("printers.bluetooth_pair_failed")}: Authentication Failed`,
+        `${t("printers.bluetooth_pair_failed")}: ${t("printers.bluetooth_pair_failed_general")}`,
       );
       expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(false);
       expect(cellButtons(el, `discovered-command-a1:${ADDRESS}`)).toEqual([`pair-a1:${ADDRESS}`]);
@@ -8104,7 +8104,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await vi.advanceTimersByTimeAsync(EXPIRES_MS);
       await flush(el);
       expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
-        `${t("printers.bluetooth_pair_failed")}: Authentication Failed`,
+        `${t("printers.bluetooth_pair_failed")}: ${t("printers.bluetooth_pair_failed_general")}`,
       );
       await submitPair(el);
       expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
@@ -8116,14 +8116,67 @@ describe("printers-screen Bluetooth pairing", () => {
     }
   });
 
+  it.each([
+    ["en-GB", "wrong_pin", "Pairing failed: the PIN is not correct"],
+    ["es-ES", "wrong_pin", "No se pudo emparejar: el PIN no es correcto"],
+    ...(["from_a_newer_agent", undefined] as const).flatMap((reason) => [
+      [
+        "en-GB",
+        reason,
+        "Pairing failed: check the printer is on, close by and ready to pair, then try again",
+      ] as const,
+      [
+        "es-ES",
+        reason,
+        "No se pudo emparejar: comprueba que la impresora esté encendida, cerca y lista para emparejar, y vuelve a intentarlo",
+      ] as const,
+    ]),
+  ] as const)(
+    "words a failed pairing's reason code %s (%s), never the agent's own text",
+    async (locale, reason, expected) => {
+      const before = currentLocale();
+      setLocale(locale);
+      const background = stubApi({
+        listDiscoveredPrinters: vi.fn().mockResolvedValue([
+          {
+            ...barPrinter,
+            bluetoothCommand: finishedCommand("pair", "failed", {
+              error: "Authentication Failed",
+              ...(reason === undefined ? {} : { reason }),
+            }),
+          },
+        ]),
+      });
+      const { el } = await mountPairing([barPrinter], { background });
+      vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+      try {
+        await openDiscovery(el);
+        await submitPair(el);
+        await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+        await flush(el);
+        expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(expected);
+        expect(timesShown(el, "Authentication Failed")).toBe(0);
+      } finally {
+        el.remove();
+        vi.useRealTimers();
+        setLocale(before);
+      }
+    },
+  );
+
   it("wraps a long failure reason beside Pair, keeping it in view on a phone-width list", async () => {
-    // Under MAX_OUTCOME_ERROR_LENGTH (500), so the agent and server pass all of it through.
-    const reason = "org.bluez.Error.AuthenticationFailed ".repeat(13).trim();
+    // The longest reason the screen words.
+    const before = currentLocale();
+    setLocale("es-ES");
+    const reason = t("printers.bluetooth_reason.bluetooth_unavailable");
     const background = stubApi({
       listDiscoveredPrinters: vi.fn().mockResolvedValue([
         {
           ...barPrinter,
-          bluetoothCommand: finishedCommand("pair", "failed", { error: reason }),
+          bluetoothCommand: finishedCommand("pair", "failed", {
+            error: "No default controller available",
+            reason: "bluetooth_unavailable",
+          }),
         },
       ]),
     });
@@ -8148,6 +8201,7 @@ describe("printers-screen Bluetooth pairing", () => {
     } finally {
       el.remove();
       vi.useRealTimers();
+      setLocale(before);
     }
   });
 
@@ -8237,7 +8291,7 @@ describe("printers-screen Bluetooth pairing", () => {
         t("printers.bluetooth_not_seen"),
       );
       expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
-        `${t("printers.bluetooth_pair_failed")}: Busy`,
+        `${t("printers.bluetooth_pair_failed")}: ${t("printers.bluetooth_pair_failed_general")}`,
       );
       expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(false);
     } finally {
@@ -9031,7 +9085,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
       expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
-        `${t("printers.bluetooth_forget_failed")}: Device busy`,
+        `${t("printers.bluetooth_forget_failed")}: ${t("printers.bluetooth_forget_failed_general")}`,
       );
       await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
       await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
@@ -9346,7 +9400,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
       expect(text(el, sel("printer-command-p4"))).toBe(
-        `${t("printers.bluetooth_forget_failed")}: Device busy`,
+        `${t("printers.bluetooth_forget_failed")}: ${t("printers.bluetooth_forget_failed_general")}`,
       );
     });
 
@@ -9537,7 +9591,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       expect(passive).toHaveBeenCalledTimes(5);
       expect(text(el, sel("printer-command-p4"))).toBe(
-        `${t("printers.bluetooth_forget_failed")}: Busy`,
+        `${t("printers.bluetooth_forget_failed")}: ${t("printers.bluetooth_forget_failed_general")}`,
       );
     });
 
@@ -9791,7 +9845,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await forget(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      const reason = `${t("printers.bluetooth_forget_failed")}: Device busy`;
+      const reason = `${t("printers.bluetooth_forget_failed")}: ${t("printers.bluetooth_forget_failed_general")}`;
       expect(text(el, sel("printer-command-p4"))).toBe(reason);
       await openDiscovery(el);
       await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
@@ -10050,7 +10104,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
       expect(text(el, sel("pair-again-command"))).toBe(
-        `${t("printers.bluetooth_pair_failed")}: Authentication Failed`,
+        `${t("printers.bluetooth_pair_failed")}: ${t("printers.bluetooth_pair_failed_general")}`,
       );
       expect(q(el, sel("pair-printer-modal"))).toBeNull();
       q(el, sel("pair-again-look"))!.click();

@@ -1280,6 +1280,8 @@ export interface BluetoothCommandStatus {
   address: string;
   state: "pending" | "succeeded" | "failed";
   error?: string;
+  /** Failed only: the agent's code for why, when it could name one. */
+  reason?: string;
   /** Pending only: how long until the server drops the command unanswered. */
   expiresInMs?: number;
 }

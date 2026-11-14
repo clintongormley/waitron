@@ -227,6 +227,34 @@ const COMMAND_TEXT: Record<BluetoothCommandStatus["kind"], Record<CommandState, 
   },
 };
 
+/** The agent's reason codes (`BLUETOOTH_FAILURE_REASONS`, packages/print-agent/src/client.ts), repeated
+ * here because the dashboard does not depend on that package. */
+const FAILURE_REASON_TEXT: Readonly<Record<string, StringKey>> = {
+  wrong_pin: "printers.bluetooth_reason.wrong_pin",
+  pin_needed: "printers.bluetooth_reason.pin_needed",
+  pin_too_slow: "printers.bluetooth_reason.pin_too_slow",
+  unsupported_method: "printers.bluetooth_reason.unsupported_method",
+  not_found: "printers.bluetooth_reason.not_found",
+  out_of_range: "printers.bluetooth_reason.out_of_range",
+  timed_out: "printers.bluetooth_reason.timed_out",
+  bluetooth_unavailable: "printers.bluetooth_reason.bluetooth_unavailable",
+};
+
+const FAILURE_GENERAL_TEXT: Record<BluetoothCommandStatus["kind"], StringKey> = {
+  pair: "printers.bluetooth_pair_failed_general",
+  forget: "printers.bluetooth_forget_failed_general",
+};
+
+/** The agent's own error text is English for its log, so a failure is worded from its code alone. */
+function commandText({ kind, state, reason }: TrackedCommand): string {
+  const text = t(COMMAND_TEXT[kind][state]);
+  if (state !== "failed") return text;
+  const words = Object.hasOwn(FAILURE_REASON_TEXT, reason ?? "")
+    ? FAILURE_REASON_TEXT[reason!]!
+    : FAILURE_GENERAL_TEXT[kind];
+  return `${text}: ${t(words)}`;
+}
+
 const commandKey = (agentId: string, address: string): string =>
   `${agentId}:${address.toUpperCase()}`;
 
@@ -352,8 +380,8 @@ export class PrintersScreen extends LitElement {
         max-width: 40vw;
       }
 
-      /* wt-data-table is at least max-content wide, so without a cap these would never wrap, and an
-         agent's reason (up to MAX_OUTCOME_ERROR_LENGTH characters) would widen the whole list. */
+      /* wt-data-table is at least max-content wide, so without a cap these would never wrap, and a
+         failure's worded reason would widen the whole list. */
       wt-data-table::part(bluetooth-actions) {
         display: flex;
         flex-wrap: wrap;
@@ -1806,6 +1834,7 @@ export class PrintersScreen extends LitElement {
           state: reported.state,
           learnedAt: this.#readCount,
           ...(reported.error !== undefined && { error: reported.error }),
+          ...(reported.reason !== undefined && { reason: reported.reason }),
         };
         changed = true;
         if (tracked.kind === "pair" && reported.state === "succeeded") paired.push([key, tracked]);
@@ -2195,7 +2224,7 @@ export class PrintersScreen extends LitElement {
         data-test=${test}
         .duration=${command.state === "succeeded" ? NOTICE_MS : 0}
         @wt-notice-gone=${() => this.#noticeGone(key, command.id)}
-        >${t(COMMAND_TEXT[command.kind][command.state])}${command.error === undefined ? "" : `: ${command.error}`}</wt-notice
+        >${commandText(command)}</wt-notice
       ></span
     >`;
   }
