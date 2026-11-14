@@ -164,6 +164,9 @@ describe("dashboard-sales-screen", () => {
         expect(text.replaceAll(",", ".")).toContain(value);
       }
       expect(text).toContain("13:00");
+      expect(details!.querySelector("thead th:last-child")!.textContent).toBe(
+        locale === "en-GB" ? "Successful refunds" : "Reembolsos completados",
+      );
       expect(details!.querySelector("th[scope=row]")!.getAttribute("title")).toBe("bill-1");
       expect(text).toContain(
         locale === "en-GB" ? "Paid outside Waitron" : "Cobrado fuera de Waitron",

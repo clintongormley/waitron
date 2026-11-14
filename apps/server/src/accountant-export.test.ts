@@ -73,9 +73,14 @@ const purchase = {
 };
 
 describe("accountant workbook", () => {
-  it.each(["en", "es"] as const)(
-    "exports outside payments as literal detail cells (%s)",
-    async (language) => {
+  it.each([
+    ["en", "other", "Paid outside Waitron"],
+    ["es", "other", "Cobrado fuera de Waitron"],
+    ["en", "connected_account", "This SumUp account"],
+    ["es", "connected_account", "Esta cuenta de SumUp"],
+  ] as const)(
+    "exports outside payments as literal detail cells (%s, %s)",
+    async (language, externalProvider, sourceLabel) => {
       const files = unzipSync(
         await renderAccountantWorkbook(
           {
@@ -92,7 +97,7 @@ describe("accountant workbook", () => {
                 amount: decimal("12.34"),
                 refunded: decimal("3.03"),
                 settledAt: "2026-11-03T12:00:00.000Z",
-                externalProvider: "other",
+                externalProvider,
                 externalMachine: "=Backup & 001",
                 externalRef: "00042",
                 state: "partially_refunded",
@@ -119,7 +124,7 @@ describe("accountant workbook", () => {
         "box-1",
         "2026-11-03T12:00:00.000Z",
         "12.34",
-        language === "en" ? "Paid outside Waitron" : "Cobrado fuera de Waitron",
+        sourceLabel,
         "=Backup &amp; 001",
         "00042",
         language === "en" ? "Partially refunded" : "Reembolsado parcialmente",

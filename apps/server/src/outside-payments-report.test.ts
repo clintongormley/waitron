@@ -42,11 +42,15 @@ beforeEach(async () => {
   );
 });
 
-async function payment(at: string, extra: Partial<typeof payments.$inferInsert> = {}) {
+async function payment(
+  at: string,
+  extra: Partial<typeof payments.$inferInsert> = {},
+  orderNumber = 77,
+) {
   const order = await seedWorkingOrder(suite.db, {
     source: "device",
     deviceId: venue.deviceId,
-    orderNumber: 77,
+    orderNumber,
   });
   const [row] = await suite.db
     .insert(payments)
@@ -97,11 +101,15 @@ it("lists each manual payment once on its box's business day, with current state
     },
     { paymentId: included.id, provider: "manual", paymentRef: "r3", amount: 400, state: "failed" },
   ]);
-  const older = await payment("2026-11-03T04:00:00.000Z", {
-    externalProvider: null,
-    externalMachine: null,
-    externalRef: null,
-  });
+  const older = await payment(
+    "2026-11-03T04:00:00.000Z",
+    {
+      externalProvider: null,
+      externalMachine: null,
+      externalRef: null,
+    },
+    88,
+  );
   await payment("2026-11-03T03:59:59.999Z");
   await payment("2026-11-04T04:00:00.000Z");
   await payment("2026-11-03T12:00:00.000Z", { nodeId: await seedNode(suite.db) });
@@ -116,7 +124,7 @@ it("lists each manual payment once on its box's business day, with current state
     {
       id: older.id,
       workingOrderId: older.workingOrderId,
-      orderNumber: 77,
+      orderNumber: 88,
       saleId: null,
       invoiceNumber: null,
       nodeId: venue.nodeId,
