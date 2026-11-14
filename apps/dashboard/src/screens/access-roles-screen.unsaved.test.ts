@@ -188,3 +188,35 @@ it("keeps a draft when Reload is declined and reloads after explicit Discard", a
   await choose(app, "discard");
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-input")?.value).toBe("Ledger");
 });
+
+it("protects a copy name on Escape and clears that child draft on Cancel", async () => {
+  const { app, screen } = await mount();
+  screen.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
+  screen.shadowRoot!.querySelector("wt-data-table")!.rowClick!({
+    id: "admin",
+    builtInKey: "admin",
+    name: null,
+    permissions: ["report.view"],
+    holderCount: 1,
+  });
+  await screen.updateComplete;
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=copy]")!.click();
+  await screen.updateComplete;
+  const dialog = screen.shadowRoot!.querySelector("wt-dialog")!;
+  const field = screen.shadowRoot!.querySelector<HTMLElement>("[data-test=copy-name]")!;
+  field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Books" } }));
+  await screen.updateComplete;
+  const close = dialog.requestClose("escape");
+  await choose(app, "keep");
+  expect(await close).toBe(false);
+  expect((field as HTMLElementTagNameMap["wt-input"]).value).toBe("Books");
+  const closed = new Promise<void>((resolve) =>
+    dialog.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  await dialog.requestClose("cancel");
+  await closed;
+  const proceed = vi.fn();
+  await app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed });
+  expect(proceed).toHaveBeenCalledOnce();
+});

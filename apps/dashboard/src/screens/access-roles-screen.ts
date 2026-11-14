@@ -99,6 +99,7 @@ export class AccessRolesScreen extends LitElement {
   @state() private copyError = "";
   @state() private copyAttempted = false;
   @state() private copyNameRefusal = "";
+  readonly #copyOwner = {};
   #confirmationFromList = false;
   #scope?: DraftScope<Draft>;
   #copyScope?: DraftScope<Draft>;
@@ -260,7 +261,7 @@ export class AccessRolesScreen extends LitElement {
     this.copyAttempted = false;
     if (kind === "copy") {
       this.#copyScope = draftScopeFor<Draft>(this, {
-        id: "copy",
+        id: this.#copyOwner,
         parent: this,
         current: () => ({ name: this.copyName.trim(), permissions: [] }),
         snapshot: (value) => ({ ...value }),
@@ -273,7 +274,10 @@ export class AccessRolesScreen extends LitElement {
   }
   readonly #beforeConfirmationClose = async (reason: LeaveReason): Promise<boolean> => {
     if (!this.#copyScope || !this.#leave) return true;
-    return (await this.#leave.request({ scopes: ["copy"], reason, proceed() {} })) === "proceeded";
+    return (
+      (await this.#leave.request({ scopes: [this.#copyOwner], reason, proceed() {} })) ===
+      "proceeded"
+    );
   };
   #clearConfirmation(): void {
     if (this.#confirmationFromList) {
