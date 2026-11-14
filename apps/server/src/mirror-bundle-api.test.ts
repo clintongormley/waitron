@@ -1267,6 +1267,104 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         peerNodeId: joined.peerNodeId,
       });
     });
+
+    /** Holds a chart where the streaming link's peer stands as `peer`, and that link. */
+    async function holdRetiredLink(
+      designated: AdoptResult,
+      peer: "evicted" | "revoked" | "serving-secondary" | "unlisted",
+    ) {
+      const joined = joinedLink();
+      const nodes: MembershipNode[] = [
+        {
+          nodeId: designated.nodeId,
+          contactUrl: "https://box.deli.test",
+          standing: "serving-primary",
+        },
+      ];
+      if (peer === "evicted" || peer === "serving-secondary")
+        nodes.push({
+          nodeId: joined.peerNodeId,
+          contactUrl: "https://cloud.deli.test",
+          standing: peer,
+        });
+      await writeNodeMembership(
+        db,
+        signedMembershipDoc(((await readNodeMembership(db))?.body.term ?? -1) + 1, {
+          signerNodeId: designated.nodeId,
+          keyPair: primaryKeyPair,
+          nodes,
+          ...(peer === "revoked" ? { revoked: [joined.peerNodeId] } : {}),
+        }),
+      );
+      await withNodeTransaction(suite.node, async (tx) => {
+        await writePairLinkTx(tx, RING, designated.nodeId, joined);
+        await setPairLinkStateTx(tx, designated.nodeId, "streaming");
+      });
+      return joined;
+    }
+
+    it.each(["evicted", "revoked"] as const)(
+      "admits a replacement over the streaming link of a spare the chart lists %s, writing the new spare's link",
+      async (peer) => {
+        const { designated } = await setupVenue();
+        const app = mountApp(designated);
+        await holdRetiredLink(designated, peer);
+        const standby = validStandby();
+
+        const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+
+        expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+        expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
+          state: "pending",
+          peerNodeId: standby.standbyNodeId,
+        });
+      },
+    );
+
+    it.each(["serving-secondary", "unlisted"] as const)(
+      "refuses 409 mirror.spare_already_joined over the streaming link of a spare the chart lists %s, leaving the link",
+      async (peer) => {
+        const { designated } = await setupVenue();
+        const app = mountApp(designated);
+        const joined = await holdRetiredLink(designated, peer);
+
+        const res = await post(app, {
+          email: ADMIN_EMAIL,
+          password: ADMIN_PASSWORD,
+          ...validStandby(),
+        });
+
+        expect(res.status).toBe(409);
+        expect(await res.json()).toEqual({
+          error: { code: "mirror.spare_already_joined", params: {} },
+        });
+        expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
+          state: "streaming",
+          peerNodeId: joined.peerNodeId,
+        });
+      },
+    );
+
+    it("leaves a retired spare's link as it was when an admission over it fails, and a retry succeeds", async () => {
+      const { designated } = await setupVenue();
+      const app = mountApp(designated);
+      const joined = await holdRetiredLink(designated, "evicted");
+      pause.beforeChartMint = () => Promise.reject(new Error("chart write failed"));
+      const standby = validStandby();
+
+      const failed = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+
+      expect(failed.status).toBe(500);
+      expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
+        state: "streaming",
+        peerNodeId: joined.peerNodeId,
+      });
+      const retry = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+      expect(retry.status, JSON.stringify(await retry.clone().json())).toBe(200);
+      expect((await readPairLink(suite.node, designated.nodeId))?.peerNodeId).toBe(
+        standby.standbyNodeId,
+      );
+    });
   });
 
   it("returns a signed dormant allocation and a valid endorsement, activating every purpose at takeover", async () => {

@@ -12,14 +12,16 @@ import {
   invoiceSeries,
   nodes,
   stampDeployment,
+  withNodeTransaction,
   withTransaction,
+  writeNodeMembership,
 } from "@waitron/db";
-import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
+import { NODE_MIGRATIONS, readNodeMode, readPairLink, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { loadKeyRing } from "@waitron/credentials";
+import { loadKeyRing, setPairLinkStateTx, writePairLinkTx } from "@waitron/credentials";
 import { hashPassword } from "@waitron/identity";
-import { generateNodeKeyPair } from "@waitron/membership";
+import { generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import {
   readOperationAuthority,
@@ -27,7 +29,7 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { establishNodeIdentity } from "./node-identity.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { promoteMirrorToPrimary } from "./promote.js";
@@ -281,6 +283,50 @@ it("reserves an opaque dormant identity through the public bundle route after re
   expect(readOperationAuthority(retained!.authority, retained!.binding)).toBeUndefined();
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
 });
+it.each([
+  ["evicted", 200],
+  ["serving-secondary", 409],
+] as const)(
+  "answers %s with the module operation over the streaming link of a spare the chart lists that way",
+  async (standing, status) => {
+    const app = await bundleApp();
+    const old = "f3000000-0000-4000-8000-000000000005";
+    const body = {
+      term: 1,
+      nodes: [
+        { nodeId: PRIMARY, contactUrl: "https://box.test", standing: "serving-primary" as const },
+        { nodeId: old, contactUrl: "https://old.test", standing },
+      ],
+    };
+    const key = await readNodeIdentityKey(suite.node, RING, PRIMARY);
+    await writeNodeMembership(suite.db, {
+      body,
+      signerNodeId: PRIMARY,
+      signature: signDocumentBody(body, key),
+      endorsements: [],
+    });
+    await withNodeTransaction(suite.node, async (tx) => {
+      await writePairLinkTx(tx, RING, PRIMARY, {
+        role: "streams",
+        state: "pending",
+        peerNodeId: old,
+        peerPublicKey: generateNodeKeyPair().publicKey,
+        storeUrl: "https://old.test:7443",
+        venueId: "venue",
+        accessKeyId: "old-access-key",
+        secretAccessKey: "old-secret-key",
+      });
+      await setPairLinkStateTx(tx, PRIMARY, "streaming");
+    });
+
+    const response = await post(app, "/management-api/mirror-bundle", bundleBody());
+
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(status);
+    expect((await readPairLink(suite.node, PRIMARY))?.peerNodeId).toBe(
+      status === 200 ? TARGET : old,
+    );
+  },
+);
 it("refuses a node key replaced during outside collection without activating or changing role", async () => {
   const app = await promotionApp();
   const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);

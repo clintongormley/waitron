@@ -14,7 +14,13 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { loadKeyRing, tryGetCredential, writePairLinkTx, type KeyRing } from "@waitron/credentials";
+import {
+  loadKeyRing,
+  setPairLinkStateTx,
+  tryGetCredential,
+  writePairLinkTx,
+  type KeyRing,
+} from "@waitron/credentials";
 import { beginHandoverOperationTx, readPairLink } from "@waitron/node-db";
 import { startManagementSession } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -612,6 +618,31 @@ describe("removing the standby this box's pair link names", () => {
       await withTransaction(p.db, (tx) => tryGetCredential(tx, RING, { purpose: "backup.stream" })),
     ).not.toBeNull();
   });
+
+  it.each([
+    ["the cleared spare's", 200],
+    ["an active spare's", 409],
+  ] as const)(
+    "after Clear of a retired joined spare, bucket Save answers %s streaming link with %i",
+    async (whose, status) => {
+      const p = await primary();
+      mountBucketCopy(p);
+      const retired = evicted(await seedNode(p.db));
+      const active = standby();
+      await holdChart(p, [self(p), retired, active]);
+      const linked = whose === "the cleared spare's" ? retired : active;
+      await linkTo(p, linked.nodeId);
+      await withNodeTransaction(suite.node, (tx) => setPairLinkStateTx(tx, p.nodeId, "streaming"));
+      expect((await saveBucket(p)).status).toBe(409);
+
+      expect((await clear(p, retired.nodeId, p.adminCookie)).status).toBe(200);
+
+      const save = await saveBucket(p);
+      expect(save.status).toBe(status);
+      if (status === 409)
+        expect(await errorOf(save)).toMatchObject({ code: "backup.spare_stream_active" });
+    },
+  );
 
   it("a standby with a nodes row is still refused removal, and its pair link stays", async () => {
     const p = await primary();

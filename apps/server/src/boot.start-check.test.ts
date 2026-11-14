@@ -54,6 +54,7 @@ import { mintBoxAuthority, startBoxServer } from "./testing/box-authority.js";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { boxHostnameFor } from "./box-name.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { removeStandby } from "./membership-removal.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -602,6 +603,32 @@ describe("the start check on a real start", () => {
         peers: [{ nodeId: SPARE.nodeId, answer: "S", counted: true, why: "own_address" }],
       },
     ]);
+  }, 60_000);
+
+  it("after Remove retires the silent joined spare, the next start sells without waiting for it", async () => {
+    const booted = await boot(suite, { spareUrl: OWN_URL, joined: true });
+    expect(booted.acceptingSales).toBe(false);
+    await server!.close();
+    server = undefined;
+    const [admin] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    await removeStandby(
+      {
+        db: suite.db,
+        node: suite.node,
+        ring: loadKeyRing(KEY_ENV),
+        nodeId: booted.nodeId,
+        log: () => {},
+      },
+      { targetNodeId: SPARE.nodeId, personId: admin!.id, declared: true },
+    );
+
+    beforeServerStarts();
+    server = await startServer(booted.env, booted.env, { timings: { maxTickMs: 600_000 } });
+    const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+    expect(await node.json()).toMatchObject({ acceptingSales: true });
   }, 60_000);
 
   it("a joined peer that has taken over this box's work: the box records the restriction and starts restricted", async () => {
