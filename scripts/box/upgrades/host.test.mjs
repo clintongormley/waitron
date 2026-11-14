@@ -146,6 +146,11 @@ async function imageFixture({
     if (args[0] === "run" && ["capture", "trial"].some((mode) => args.includes(mode))) {
       expect(options.timeout).toBe(180_000);
       const mode = args.includes("capture") ? "capture" : "trial";
+      if (onlineTrial === "timeout")
+        throw Object.assign(new Error("Command failed"), {
+          killed: true,
+          stderr: "partial diagnostic",
+        });
       if (mode === "trial" && onlineTrial === "failed")
         throw new Error("append_only.triggers_changed");
       return {
@@ -887,6 +892,8 @@ it("runs a networkless read-only online capture and copy-only trial before disab
     `type=bind,src=${t.join(t.root, "state")},dst=/var/lib/waitron/state,readonly`,
   );
   expect(capture).toContain(images.candidate.app);
+  expect(capture).toContain("--init");
+  expect(trial).toContain("--init");
   expect(capture.slice(capture.indexOf("--network"), capture.indexOf("--network") + 2)).toEqual([
     "--network",
     "none",
@@ -916,3 +923,15 @@ it.each(["failed", "malformed"])(
     expect(t.calls.some((args) => args[1] === "rm")).toBe(true);
   },
 );
+
+it("names a timed-out capture rather than presenting its partial log as the failed check", async () => {
+  const t = await imageFixture({ prepare: false, onlineTrial: "timeout" });
+  await expect(t.f.host.prepareImages()).rejects.toThrow(
+    "Online migration capture failed: timed out after 180 seconds; the selling version and its data are unchanged",
+  );
+});
+
+it.each([undefined, null])("accepts an absent Compose environment (%s)", async (environment) => {
+  const { upgradeEnvironment } = await import("./host.mjs");
+  expect(upgradeEnvironment(environment)).toBe("\n");
+});

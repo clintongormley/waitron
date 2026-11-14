@@ -629,7 +629,7 @@ export async function clockStatusRelay({ directory, socketPath = "/run/waitron-b
 
 export function upgradeEnvironment(environment = {}) {
   return (
-    Object.entries(environment)
+    Object.entries(environment ?? {})
       .filter(([, value]) => value !== null)
       .map(([key, value]) => {
         if (String(value).includes("\n"))
@@ -668,6 +668,7 @@ async function runOnlineTrial({ work, state, image, environment, run }) {
         "docker",
         [
           "run",
+          "--init",
           "--rm",
           "--name",
           name,
@@ -713,10 +714,14 @@ async function runOnlineTrial({ work, state, image, environment, run }) {
       failure ??= error;
     }
   }
-  if (failure)
+  if (failure) {
+    const detail = failure.killed
+      ? "timed out after 180 seconds"
+      : failure.stderr?.trim() || failure.message;
     throw new Error(
-      `Online migration ${operation} failed: ${failure.stderr?.trim() || failure.message}; the selling version and its data are unchanged`,
+      `Online migration ${operation} failed: ${detail}; the selling version and its data are unchanged`,
     );
+  }
   process.stderr.write(
     "Online migration trial passed (advisory); final stopped checks and sale still required\n",
   );

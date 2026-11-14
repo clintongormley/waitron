@@ -25,7 +25,7 @@ afterEach(async () => {
   if (root) await rm(root, { recursive: true, force: true });
 });
 
-it("captures committed WAL rows beside the selling writer without taking its venue lock", async () => {
+it("captures committed WAL rows beside an active writer", async () => {
   const { captureUpgradeTrial } = await import("./upgrade-trial.js");
   const venueDir = dirname(source.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file);
   const stateDir = join(root, "source");
@@ -91,6 +91,20 @@ it("keeps the source selling while the candidate checks the captured database", 
   await captureUpgradeTrial(config, copy);
   const migrations = join(root, "migrations");
   await copyMigrationsRoot(migrations);
+  const journalPath = join(migrations, "core/meta/_journal.json");
+  const journal = JSON.parse(await readFile(journalPath, "utf8"));
+  journal.entries.push({
+    idx: journal.entries.length,
+    version: "6",
+    when: Math.max(...journal.entries.map((entry: { when: number }) => entry.when)) + 1,
+    tag: "9999_upgrade_trial_probe",
+    breakpoints: true,
+  });
+  await writeFile(journalPath, JSON.stringify(journal));
+  await writeFile(
+    join(migrations, "core/9999_upgrade_trial_probe.sql"),
+    "create table upgrade_trial_probe(id integer);",
+  );
   let entered!: () => void;
   let release!: () => void;
   const checking = new Promise<void>((done) => {
@@ -135,6 +149,17 @@ it("keeps the source selling while the candidate checks the captured database", 
   }
   try {
     expect(await trial).toEqual({ mode: "trading", menus: 3, orders: 1, fiscalRecords: 1 });
+    const checked = new DatabaseSync(join(copy, "venue/venue.db"), { readOnly: true });
+    try {
+      expect(
+        checked.prepare("select name from sqlite_master where name='upgrade_trial_probe'").all(),
+      ).toEqual([{ name: "upgrade_trial_probe" }]);
+    } finally {
+      checked.close();
+    }
+    expect(
+      source.db.all(sql`select name from sqlite_master where name='upgrade_trial_probe'`),
+    ).toEqual([]);
   } finally {
     reader.mockRestore();
   }

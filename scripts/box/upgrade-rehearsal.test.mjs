@@ -234,3 +234,37 @@ it("makes an unexpectedly successful online failure probe fail the Linux rehears
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it.each([false, true])(
+  "requires the successful Linux attempt to report an online pass (%s)",
+  (pass) => {
+    const root = mkdtempSync(join(tmpdir(), "upgrade-pass-check-"));
+    try {
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      mkdirSync(join(root, "box"));
+      writeFileSync(
+        join(bin, "flock"),
+        "#!/bin/sh\n" + (pass ? 'echo "Online migration trial passed" >&2\n' : "") + "exit 0\n",
+        { mode: 0o700 },
+      );
+      const lines = upgradePayload("manual").split("\n");
+      const start = lines.findIndex((line) => line.includes(">/opt/waitron/success.json"));
+      const commands = lines
+        .slice(
+          start,
+          lines.findIndex((line, index) => index > start && line.startsWith("jq ")),
+        )
+        .join("\n")
+        .replaceAll("/opt/waitron", join(root, "box"));
+      const result = spawnSync("bash", ["-ec", commands], {
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+        encoding: "utf8",
+        timeout: 5000,
+      });
+      expect(result.status, result.stderr).toBe(pass ? 0 : 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
