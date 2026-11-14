@@ -209,6 +209,7 @@ export class StreamHost {
   #supervisor: StreamSupervisor | undefined;
   /** The link to the spare's store, while the running supervisor streams through it. */
   #pipe: StorePipe | undefined;
+  #outageSince: string | undefined;
   /** Set when the settings are stored but no supervisor could start, so the status can say why. */
   #notStarted: StreamNotStarted | undefined;
   /** Whether the last start's target was the spare's store. */
@@ -277,6 +278,7 @@ export class StreamHost {
     if (this.#stopped || this.#supervisor !== undefined) return;
     this.#notStarted = undefined;
     this.#notStartedToSpare = false;
+    this.#outageSince = undefined;
     const { db, ring, log } = this.#deps;
     if (!this.#deps.isPrimary()) {
       log("info", "stream.not_primary", {});
@@ -423,6 +425,7 @@ export class StreamHost {
     const pipe = this.#pipe;
     this.#supervisor = undefined;
     this.#pipe = undefined;
+    this.#outageSince = undefined;
     if (supervisor !== undefined) {
       // Litestream's last writes on stopping travel through the pipe, so it closes after.
       const stopped = supervisor.stop().finally(() => pipe?.close());
@@ -467,18 +470,19 @@ export class StreamHost {
     const pipe = this.#pipe;
     if (pipe === undefined) return view;
     const pipeProblem = pipe.problem();
+    const problem = view.bucketProblem ?? pipeProblem;
+    if (problem === null) this.#outageSince = undefined;
+    else {
+      const since =
+        pipeProblem !== null && Date.parse(pipeProblem.since) < Date.parse(problem.since)
+          ? pipeProblem.since
+          : problem.since;
+      if (this.#outageSince === undefined || Date.parse(since) < Date.parse(this.#outageSince))
+        this.#outageSince = since;
+    }
     return {
       ...view,
-      bucketProblem:
-        view.bucketProblem !== null && pipeProblem !== null
-          ? {
-              ...view.bucketProblem,
-              since:
-                Date.parse(view.bucketProblem.since) <= Date.parse(pipeProblem.since)
-                  ? view.bucketProblem.since
-                  : pipeProblem.since,
-            }
-          : (view.bucketProblem ?? pipeProblem),
+      bucketProblem: problem === null ? null : { ...problem, since: this.#outageSince! },
       toSpare: true,
     };
   }

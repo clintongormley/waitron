@@ -1475,24 +1475,27 @@ describe("the live copy's wiring", () => {
             putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: SETTINGS }),
           );
         const clock = new ManualClock("2026-11-14T12:00:00.000Z");
+        const opened = vi.spyOn(sparePipe, "startStorePipe");
         const Supervisor = stream.StreamSupervisor;
+        let native!: InstanceType<typeof Supervisor>;
         const started = vi.spyOn(stream, "StreamSupervisor").mockImplementation(function (deps) {
-          return new Supervisor({ ...deps, sleep: clock.sleep, monotonic: clock.monotonic });
+          native = new Supervisor({ ...deps, sleep: clock.sleep, monotonic: clock.monotonic });
+          return native;
         });
         const store = new SwitchableStore(clock.now);
         store.honoursConditions = false;
         const rt = runtime({ now: clock.now, store, spawn: new FakeLitestream().spawn });
         try {
           await rt.start();
-          await clock.until(
-            () => (rt.status() as StreamStatus).bucketProblem?.reason === "create_only_ignored",
-          );
-          const first = (rt.status() as StreamStatus).bucketProblem!.since;
+          await clock.until(() => native.status().bucketProblem?.reason === "create_only_ignored");
+          const pipe = paired ? await opened.mock.results.at(-1)!.value : undefined;
+          if (paired) expect(pipe?.problem()).toBeNull();
+          const first = native.status().bucketProblem!.since;
           store.denied = true;
-          await clock.until(
-            () => (rt.status() as StreamStatus).bucketProblem?.reason === "access_denied",
-          );
+          await clock.until(() => native.status().bucketProblem?.reason === "access_denied");
+          if (paired) expect(pipe?.problem()).toBeNull();
           const changed = (rt.status() as StreamStatus).bucketProblem!.since;
+          expect(changed).toBe(native.status().bucketProblem!.since);
           if (paired) expect(changed).toBe(first);
           else expect(changed).not.toBe(first);
           store.denied = false;
@@ -1501,6 +1504,7 @@ describe("the live copy's wiring", () => {
         } finally {
           await rt.stop();
           started.mockRestore();
+          opened.mockRestore();
         }
       },
     );
@@ -1532,16 +1536,15 @@ describe("the live copy's wiring", () => {
           .mockImplementation(() => view);
         restoreNative = () => native.mockRestore();
         restoreTransport = () => transport.mockRestore();
+        let observedAt = new Date("2026-11-14T12:02:00.000Z");
         const source = backupAlertSource({
           listStatus: async () => ({ configured: true, destinations: [] }),
           outcomes: { failed: new Map() },
-          now: () => new Date("2026-11-14T12:02:00.000Z"),
+          now: () => observedAt,
           readStream: () => rt.status(),
         });
         const alertCodes = async () =>
-          (await source.read({ tx: {} as never, now: new Date("2026-11-14T12:02:00.000Z") })).map(
-            (a) => a.code,
-          );
+          (await source.read({ tx: {} as never, now: observedAt })).map((a) => a.code);
         expect(rt.status()).toMatchObject({
           bucketProblem: { reason: "ECONNREFUSED", since: first },
         });
@@ -1549,24 +1552,24 @@ describe("the live copy's wiring", () => {
         view.bucketProblem = { reason: "access_denied", since: later };
         const merged = rt.status(),
           after = await alertCodes();
-        console.log(
-          JSON.stringify({
-            pipe: pipe.problem(),
-            native: view.bucketProblem,
-            merged: (merged as StreamStatus).bucketProblem,
-            after,
-          }),
-        );
         expect((merged as StreamStatus).bucketProblem?.reason).toBe("access_denied");
         expect(after).toEqual(["backup.stream_bucket_unusable"]);
         expect(merged).toMatchObject({ bucketProblem: { reason: "access_denied", since: first } });
         transport.mockReturnValue(null);
+        observedAt = new Date("2026-11-14T12:02:30.000Z");
+        expect(await alertCodes()).toEqual(["backup.stream_bucket_unusable"]);
         expect(rt.status()).toMatchObject({
-          bucketProblem: { reason: "access_denied", since: later },
+          bucketProblem: { reason: "access_denied", since: first },
         });
         view.bucketProblem = null;
         expect(rt.status()).toMatchObject({ bucketProblem: null });
         expect(await alertCodes()).toEqual([]);
+        view.bucketProblem = { reason: "access_denied", since: observedAt.toISOString() };
+        expect(rt.status()).toMatchObject({ bucketProblem: { since: "2026-11-14T12:02:30.000Z" } });
+        expect(await alertCodes()).toEqual([]);
+        view.bucketProblem = { reason: "access_denied", since: "2026-11-14T12:03:00.000Z" };
+        await rt.reload();
+        expect(rt.status()).toMatchObject({ bucketProblem: { since: "2026-11-14T12:03:00.000Z" } });
       } finally {
         restoreNative?.();
         restoreTransport?.();
@@ -1590,13 +1593,13 @@ describe("the live copy's wiring", () => {
         await vi.waitFor(() => expect((rt.status() as StreamStatus).bucketProblem).not.toBeNull(), {
           timeout: 10_000,
         });
-        const nativeSince = (rt.status() as StreamStatus).bucketProblem!.since;
+        const outageSince = (rt.status() as StreamStatus).bucketProblem!.since;
         const pipe = await opened.mock.results[0]!.value;
         expect(await getThrough(pipe.loopbackUrl)).not.toBe("200 stored");
         expect(pipe.problem()).toMatchObject({ reason: "CERT_SIGNATURE_FAILURE" });
 
         expect(rt.status()).toMatchObject({ bucketProblem: { reason: "access_denied" } });
-        expect((rt.status() as StreamStatus).bucketProblem!.since).toBe(nativeSince);
+        expect((rt.status() as StreamStatus).bucketProblem!.since).toBe(outageSince);
       } finally {
         opened.mockRestore();
         await rt.stop();

@@ -50,6 +50,7 @@ import "./errors.js";
 /** The dashboard screen a backup alert links to. */
 export const BACKUP_SCREEN = "backup";
 
+/** Ordinary buckets warn at fifteen minutes; paired spares warn above sixty seconds. */
 export const STREAM_BEHIND_AFTER_MS = 15 * 60_000;
 
 /** A supervisor that is off for one of these stopped by itself, not because it was told to. */

@@ -1623,7 +1623,8 @@ declare module "@waitron/shared" {
     /** The dashboard's stored archive settings could not be read or used, so archives are off.
      * Built as data by the backups alert source, never thrown. */
     "backup.archive_settings_unusable": Record<string, never>;
-    /** Ongoing alert built as data by the backups alert source, never thrown. */
+    /** Ordinary buckets use a fifteen-minute threshold and `minutes`; `toSpare` uses >60 seconds,
+     * `seconds` and `phase`. Ongoing alert built as data by the backups alert source, never thrown. */
     "backup.stream_behind": {
       minutes?: number;
       seconds?: number;
