@@ -159,6 +159,8 @@ export async function seedSale(
       correctsLineId?: string;
     }>;
     correctsSaleId?: SaleId;
+    /** A corrective by replacement: it carries the full amounts and takes `correctsSaleId`'s place. */
+    replacesOriginal?: true;
     counterpartyTaxId?: string;
     /** Overrides the breakdown derived from `lines`, for a test that needs a specific desglose. */
     vatBreakdown?: { rate: string; base: string; tax: string }[];
@@ -191,6 +193,7 @@ export async function seedSale(
       fiscalBackend: "fake",
       fiscalState: "recorded",
       correctsSaleId: opts.correctsSaleId,
+      replacesOriginal: opts.replacesOriginal ?? false,
       workingOrderId: opts.workingOrderId ?? null,
     })
     .returning({ id: sales.id });

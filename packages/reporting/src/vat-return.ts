@@ -13,7 +13,8 @@ import type { VatReturn, VatReturnInput } from "./types.js";
  *
  *   - *IVA devengado* (output): the régimen-general per-rate `Σ` over the filed `sales.vat_breakdown`
  *     (`byRate`/`baseTotal`/`taxTotal`), bucketed by the filed *fecha de expedición*, corrections
- *     netted — the casilla 27 side.
+ *     netted — the casilla 27 side. A replaced sale counts once, in the original's period; its
+ *     replacement is left out (`activeSalesClause`).
  *   - *IVA deducible* (input): `computeInputVat`'s régimen-general per-(rate, kind) aggregate over the
  *     received supplier invoices, bucketed by `received_on` — the casilla 45 side (`deductible`).
  *   - `result`: the régimen-general result `taxTotal − deductible.taxTotal` (casilla 46 = 27 − 45).

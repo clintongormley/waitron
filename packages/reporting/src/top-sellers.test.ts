@@ -772,6 +772,53 @@ describe("computeTopSellers", () => {
     expect(rows).toEqual([{ name: coffeeName, quantity: "2.000", total: "20.00", variants: [] }]);
   });
 
+  it("counts a replaced sale once, on its own day, and a full refund of the replacement returns the dish", async () => {
+    const coffee = (id: string, sign: "" | "-", correctsLineId?: string) => ({
+      id,
+      vatRate: "10.00",
+      lineTotal: `${sign}11.00`,
+      lineGross: `${sign}12.10`,
+      name: coffeeName,
+      descriptions: coffeeText,
+      quantity: `${sign}1.000`,
+      correctsLineId,
+    });
+    const original = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "12.10",
+      lines: [coffee(randomUUID(), "")],
+    });
+    const replacementLine = randomUUID();
+    const replacement = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: new Date("2026-08-05T10:00:00Z").toISOString(),
+      total: "12.10",
+      correctsSaleId: original,
+      replacesOriginal: true,
+      lines: [coffee(replacementLine, "")],
+    });
+    // Inserted directly: a refund of a replacement is not recordable through core until Task 3f.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: new Date("2026-08-06T10:00:00Z").toISOString(),
+      total: "-12.10",
+      correctsSaleId: replacement,
+      lines: [coffee(randomUUID(), "-", replacementLine)],
+    });
+
+    expect(await run()).toEqual([
+      { name: coffeeName, quantity: "1.000", total: "11.00", variants: [] },
+    ]);
+    expect(await run({ fromBusinessDay: "2026-08-05", toBusinessDay: "2026-08-05" })).toEqual([]);
+    expect(await run({ fromBusinessDay: "2026-08-06", toBusinessDay: "2026-08-06" })).toEqual([
+      { name: coffeeName, quantity: "-1.000", total: "-11.00", variants: [] },
+    ]);
+    expect(await run({ toBusinessDay: "2026-08-06" })).toEqual([
+      { name: coffeeName, quantity: "0.000", total: "0.00", variants: [] },
+    ]);
+  });
+
   it("returns a dish only with the correction that completes its line's money", async () => {
     const coffeeLine = randomUUID();
     const invoice = await seedSale(suite.db, venue, {

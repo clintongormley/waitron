@@ -47,12 +47,14 @@ export function sellLines(
   issuedAt: string,
   lines: LineSpec[],
   correctsSaleId?: SaleId,
+  replacesOriginal?: true,
 ): Promise<SaleId> {
   return seedSale(db, venue, {
     invoiceNumber: ++invoiceNumber,
     issuedAt,
     total: "0.00",
     correctsSaleId,
+    replacesOriginal,
     lines: lines.map((l) => ({
       vatRate: "10.00",
       lineTotal: l.net,

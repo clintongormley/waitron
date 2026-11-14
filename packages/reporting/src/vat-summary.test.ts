@@ -124,6 +124,62 @@ describe("computeVatSummary", () => {
     expect(vat.byRate).toEqual([{ rate: "21.00", base: "95.00", tax: "19.95" }]);
   });
 
+  it("counts a replaced sale on its own day, never the replacement, and a refund of the replacement on the refund's", async () => {
+    const original = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    const replacement = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: new Date("2026-08-05T10:00:00Z").toISOString(),
+      total: "121.00",
+      correctsSaleId: original,
+      replacesOriginal: true,
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    // Inserted directly: a refund of a replacement is not recordable through core until Task 3f.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: new Date("2026-08-06T10:00:00Z").toISOString(),
+      total: "-6.05",
+      correctsSaleId: replacement,
+      lines: [{ vatRate: "21.00", lineTotal: "-5.00" }],
+    });
+    expect((await run()).byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
+    expect(await run({ businessDay: "2026-08-05" })).toMatchObject({
+      byRate: [],
+      grossTotal: "0.00",
+    });
+    expect((await run({ businessDay: "2026-08-06" })).byRate).toEqual([
+      { rate: "21.00", base: "-5.00", tax: "-1.05" },
+    ]);
+  });
+
+  it("does not reverse a voided replacement, which was never counted", async () => {
+    const original = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    const replacement = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: noonUtc,
+      total: "121.00",
+      correctsSaleId: original,
+      replacesOriginal: true,
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    await seedVoid(
+      suite.db,
+      { saleId: replacement },
+      new Date("2026-08-05T10:00:00Z").toISOString(),
+    );
+    expect((await run({ businessDay: "2026-08-05" })).byRate).toEqual([]);
+  });
+
   it("excludes a sale voided on its own business day", async () => {
     const s = await seedSale(suite.db, venue, {
       invoiceNumber: 1,

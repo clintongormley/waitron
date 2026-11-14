@@ -719,6 +719,50 @@ describe("computeCategorySales at time of sale", () => {
     ]);
   });
 
+  it("counts a replaced sale once, on its own day, and nets a refund of the replacement in", async () => {
+    const drinks = { net: "10.00", gross: "11.00", cls: classified(chain(DRINKS)) };
+    const original = await sell("2026-08-04", [drinks]);
+    const replacement = await sellLines(
+      suite.db,
+      venue,
+      at("2026-08-05"),
+      [drinks],
+      original,
+      true,
+    );
+    // Inserted directly: a refund of a replacement is not recordable through core until Task 3f.
+    await sellLines(
+      suite.db,
+      venue,
+      at("2026-08-06"),
+      [{ net: "-4.00", gross: "-4.40", quantity: "-1.000", cls: classified(chain(DRINKS)) }],
+      replacement,
+    );
+    const day = (d: string) => run({ fromBusinessDay: d, toBusinessDay: d });
+
+    expect(rows((await day("2026-08-04")).tree)).toEqual([
+      {
+        path: "Drinks",
+        id: "cat-drinks",
+        depth: 0,
+        gross: "11.00",
+        net: "10.00",
+        direct: "11.00/10.00/1",
+      },
+    ]);
+    expect((await day("2026-08-05")).tree).toEqual([]);
+    expect(rows((await day("2026-08-06")).tree)).toEqual([
+      {
+        path: "Drinks",
+        id: "cat-drinks",
+        depth: 0,
+        gross: "-4.40",
+        net: "-4.00",
+        direct: "-4.40/-4.00/1",
+      },
+    ]);
+  });
+
   it("counts only the node asked for, and every node when none is", async () => {
     const other = await seedNodeAndSeries(suite.db);
     await sell("2026-08-04", [{ net: "1.00", gross: "1.10", cls: classified(chain(DRINKS)) }]);

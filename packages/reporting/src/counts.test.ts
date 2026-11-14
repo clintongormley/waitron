@@ -101,6 +101,42 @@ describe("computeCloseCounts", () => {
     });
   });
 
+  it("counts a replaced sale once, on its own day, and a refund of the replacement on the refund's", async () => {
+    const original = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noon,
+      total: "12.10",
+      lines: [line],
+    });
+    const replacement = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: new Date("2026-08-05T10:00:00Z").toISOString(),
+      total: "12.10",
+      correctsSaleId: original,
+      replacesOriginal: true,
+      lines: [line],
+    });
+    // Inserted directly: a refund of a replacement is not recordable through core until Task 3f.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: new Date("2026-08-06T10:00:00Z").toISOString(),
+      total: "-1.21",
+      correctsSaleId: replacement,
+      lines: [{ vatRate: "21.00", lineTotal: "-1.00" }],
+    });
+    expect(await run()).toEqual({ sales: 1, corrections: 0, voids: 0 });
+    expect(await run({ businessDay: "2026-08-05" })).toEqual({
+      sales: 0,
+      corrections: 0,
+      voids: 0,
+    });
+    expect(await run({ businessDay: "2026-08-06" })).toEqual({
+      sales: 0,
+      corrections: 1,
+      voids: 0,
+    });
+  });
+
   it("excludes an F3 substitute from the sales count", async () => {
     const ticket = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
