@@ -1,4 +1,5 @@
-import { readNodeMembershipRow, withTransaction } from "@waitron/db";
+import { MAIL_SETTINGS } from "./mail-settings.js";
+import { readSettings, saveSettings, readNodeMembershipRow, withTransaction } from "@waitron/db";
 import { initialSetupFor } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import {
@@ -247,9 +248,18 @@ export async function publishCheckedFirstFiscal(
           );
         const email = payload.email;
         if (email !== undefined)
-          await withTransaction(deps.db!, (tx) =>
-            putCredential(tx, deps.ring!, { purpose: "email.smtp", value: email }),
-          );
+          await withTransaction(deps.db!, async (tx) => {
+            await putCredential(tx, deps.ring!, {
+              purpose: "email.smtp",
+              value: { url: email.url },
+            });
+            const { revision } = await readSettings(tx, MAIL_SETTINGS);
+            await saveSettings(tx, MAIL_SETTINGS, {
+              doc: { from: email.from },
+              expectedRevision: revision,
+              personId: null,
+            });
+          });
       },
       persistTrading: (result, current) =>
         deps.persistTrading!({

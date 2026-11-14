@@ -8,9 +8,7 @@ import "./errors.js";
  * time.
  */
 export const PURPOSES = {
-  /** Outbound account email. `url` is an SMTP connection URL (and may contain credentials); `from`
-   * is the RFC 5322 sender shown to recipients. */
-  "email.smtp": ["url", "from"],
+  "email.smtp": ["url"],
   "payments.stripe": ["secretKey", "webhookSecret", "successUrl", "cancelUrl"],
   "payments.sumup": ["apiKey", "merchantCode"],
   /**

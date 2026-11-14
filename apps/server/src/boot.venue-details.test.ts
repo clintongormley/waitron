@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { writeArchiveSettings } from "./archive-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -11,7 +12,7 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -139,9 +140,9 @@ async function startEmailBox(path: EmailPath, invitees: number) {
     const box = await prepareBox(scratch, venue, port!);
     cookie = box.cookie;
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, loadKeyRing(box.env), {
-        purpose: "email.smtp",
-        value: { url: `smtp://127.0.0.1:${smtpPort}`, from: "no-reply@example.test" },
+      saveSmtpForTest(tx, loadKeyRing(box.env), {
+        url: `smtp://127.0.0.1:${smtpPort}`,
+        from: "no-reply@example.test",
       }),
     );
     if (path !== "profile") {

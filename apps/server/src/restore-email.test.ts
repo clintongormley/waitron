@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -8,7 +9,7 @@ import { Hono } from "hono";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
+import { loadKeyRing, deleteCredential } from "@waitron/credentials";
 import { invoiceSeries, nodes, openVenueDatabase, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -89,7 +90,7 @@ beforeAll(async () => {
   }
   for (const configured of [false, true]) {
     await withTransaction(suite.db, async (tx) => {
-      if (configured) await putCredential(tx, ring, { purpose: "email.smtp", value: SMTP });
+      if (configured) await saveSmtpForTest(tx, ring, SMTP);
       else await deleteCredential(tx, { purpose: "email.smtp" });
     });
     const status = { failedSince: null, errorCode: null };

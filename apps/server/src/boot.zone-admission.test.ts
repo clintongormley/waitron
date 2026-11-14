@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
@@ -667,9 +668,9 @@ describe("startup zone admission", () => {
     const smtp = await startFakeSmtp();
     try {
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, loadKeyRing(env), {
-          purpose: "email.smtp",
-          value: { url: `smtp://127.0.0.1:${smtp.port}`, from: "synthetic@example.test" },
+        saveSmtpForTest(tx, loadKeyRing(env), {
+          url: `smtp://127.0.0.1:${smtp.port}`,
+          from: "synthetic@example.test",
         }),
       );
       await boot();

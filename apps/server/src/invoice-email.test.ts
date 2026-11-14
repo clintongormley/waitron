@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { createServer, type Socket, type AddressInfo } from "node:net";
 import { once } from "node:events";
 import { createServer as createTlsServer } from "node:tls";
@@ -17,7 +18,7 @@ import type { FiledReceipt, FiscalBackend } from "@waitron/fiscal";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
-import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
+import { loadKeyRing, deleteCredential } from "@waitron/credentials";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
 import { receiptDateTime } from "./receipt-dates.js";
@@ -284,17 +285,12 @@ describe("invoice SMTP transport", () => {
         ring,
         config: { onboardingIntent: "live", devMode: false },
       });
-      await withTransaction(suite.db, (tx) =>
-        putCredential(tx, ring, { purpose: "email.smtp", value: first.config }),
-      );
+      await withTransaction(suite.db, (tx) => saveSmtpForTest(tx, ring, first.config));
       expect(await send({ recipient: "first@example.test", document: fixture })).toEqual({
         status: "sent",
       });
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, ring, {
-          purpose: "email.smtp",
-          value: { ...second.config, from: "new@example.test" },
-        }),
+        saveSmtpForTest(tx, ring, { ...second.config, from: "new@example.test" }),
       );
       expect(
         await send({ recipient: "second@example.test", document: { ...fixture, duplicate: true } }),
@@ -324,12 +320,7 @@ describe("invoice SMTP transport", () => {
     try {
       const message = { recipient: "customer@example.test", document: fixture };
       expect(await createInvoiceEmailSender(rig.config)(message)).toEqual({ status: "sent" });
-      await withTransaction(suite.db, (tx) =>
-        putCredential(tx, ring, {
-          purpose: "email.smtp",
-          value: rig.config,
-        }),
-      );
+      await withTransaction(suite.db, (tx) => saveSmtpForTest(tx, ring, rig.config));
       expect(
         await createRoutedInvoiceEmailSender({
           db: suite.db,

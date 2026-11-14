@@ -21,8 +21,11 @@ describe("PURPOSES", () => {
     ]);
   });
 
-  it("defines an SMTP connection URL and sender address", () => {
-    expect(PURPOSES["email.smtp"]).toEqual(["url", "from"]);
+  it("seals only the SMTP connection URL", () => {
+    expect(PURPOSES["email.smtp"]).toEqual(["url"]);
+    expect(() =>
+      validatePayload("email.smtp", { url: "smtp://x", from: "a@example.test" }),
+    ).toThrow(/credentials.invalid_payload/);
   });
 
   it("names every field the Stripe hosted client is constructed from", () => {

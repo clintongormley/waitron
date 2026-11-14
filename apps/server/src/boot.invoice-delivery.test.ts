@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { once } from "node:events";
 import { createServer as createNetServer, type AddressInfo, type Socket } from "node:net";
@@ -29,7 +30,7 @@ import {
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import {
   hashPin,
   hashPassword,
@@ -416,9 +417,7 @@ async function queuedEmail(
       duplicate ? { status: "sent" } : { status: "failed", failureCode: "transport_failed" },
     ),
   );
-  await withTransaction(suite.db, (tx) =>
-    putCredential(tx, loadKeyRing(ctx.env), { purpose: "email.smtp", value: smtp }),
-  );
+  await withTransaction(suite.db, (tx) => saveSmtpForTest(tx, loadKeyRing(ctx.env), smtp));
   ctx.env.WAITRON_ONBOARDING_INTENT = "prepare";
   return withTransaction(suite.db, (tx) =>
     reserveInvoiceDelivery(tx, ctx.paper.saleId, {
@@ -501,7 +500,7 @@ describe("invoice email worker at trading boot", () => {
           ],
           settlement: { kind: "deferred" },
         });
-        await putCredential(tx, loadKeyRing(ctx.env), { purpose: "email.smtp", value: smtp.smtp });
+        await saveSmtpForTest(tx, loadKeyRing(ctx.env), smtp.smtp);
         return reserveInvoiceDelivery(tx, sale.saleId, {
           medium: "email",
           requestKey: randomUUID(),
@@ -799,9 +798,9 @@ describe("invoice-choice email context at trading boot", () => {
         .values({ departmentId: department!.id, receipt: { email: "dining@example.test" } });
       if (configured)
         await withTransaction(suite.db, (tx) =>
-          putCredential(tx, loadKeyRing(env), {
-            purpose: "email.smtp",
-            value: { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" },
+          saveSmtpForTest(tx, loadKeyRing(env), {
+            url: "smtp://smtp.example.test:2525",
+            from: "Venue <venue@example.test>",
           }),
         );
       let server: StartedServer | undefined;
@@ -882,9 +881,7 @@ describe("queued account mail primary admission at real boot", () => {
       );
       if (role === "primary")
         await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
-      await withTransaction(suite.db, (tx) =>
-        putCredential(tx, loadKeyRing(ctx.env), { purpose: "email.smtp", value: smtp.smtp }),
-      );
+      await withTransaction(suite.db, (tx) => saveSmtpForTest(tx, loadKeyRing(ctx.env), smtp.smtp));
       await setSingletonRole({ venue: suite.db, node: suite.node }, ctx.node, role);
       let server: StartedServer | undefined;
       try {
@@ -978,7 +975,7 @@ describe("queued account mail at a fresh server start", () => {
     ]);
     const now = new Date();
     await withTransaction(suite.db, async (tx) => {
-      await putCredential(tx, loadKeyRing(ctx.env), { purpose: "email.smtp", value: smtp.smtp });
+      await saveSmtpForTest(tx, loadKeyRing(ctx.env), smtp.smtp);
       await queueAccountMail(tx, {
         personId: admin!.id,
         purpose: "password_reset",

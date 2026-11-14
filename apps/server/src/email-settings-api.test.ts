@@ -1,8 +1,9 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { settings as documents, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -18,7 +19,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
+import { readSavedSmtp, resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
@@ -164,6 +165,18 @@ describe("SMTP settings", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ saved: true });
     expect(
+      await withTransaction(suite.db, (tx) =>
+        tryGetCredential(tx, ring, { purpose: "email.smtp" }),
+      ),
+    ).toEqual({ url: "smtp://smtp-user:p%40ss%3Aword@smtp.example.test:587?requireTLS=true" });
+    const [owner] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    expect(
+      (await suite.db.select().from(documents)).find((row) => row.module === "mail"),
+    ).toMatchObject({ doc: { from: "venue@example.test" }, updatedBy: owner!.id });
+    expect(
       await resolveInvoiceEmailDelivery(suite.db, ring, {
         onboardingIntent: "live",
         devMode: false,
@@ -266,9 +279,9 @@ describe("SMTP settings", () => {
     async (intent) => {
       const venue = await setupVenue();
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, ring, {
-          purpose: "email.smtp",
-          value: { url: "smtps://old:old-secret@old.example.test:465", from: "old@example.test" },
+        saveSmtpForTest(tx, ring, {
+          url: "smtps://old:old-secret@old.example.test:465",
+          from: "old@example.test",
         }),
       );
       const app = mount(intent);
@@ -277,11 +290,10 @@ describe("SMTP settings", () => {
       expect(await response.json()).toEqual({
         error: { code: "email.settings_not_allowed", params: {} },
       });
-      expect(
-        await withTransaction(suite.db, (tx) =>
-          tryGetCredential(tx, ring, { purpose: "email.smtp" }),
-        ),
-      ).toEqual({ url: "smtps://old:old-secret@old.example.test:465", from: "old@example.test" });
+      expect(await withTransaction(suite.db, (tx) => readSavedSmtp(tx, ring))).toEqual({
+        url: "smtps://old:old-secret@old.example.test:465",
+        from: "old@example.test",
+      });
       const read = await request(app, venue.admin);
       expect(await read.json()).toEqual({
         mode: "local_capture",
@@ -440,10 +452,7 @@ describe("SMTP settings boundary cases", () => {
     async (url, port, encryption) => {
       const venue = await setupVenue();
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, ring, {
-          purpose: "email.smtp",
-          value: { url, from: "venue@example.test" },
-        }),
+        saveSmtpForTest(tx, ring, { url, from: "venue@example.test" }),
       );
       expect(await (await request(mount(), venue.admin)).json()).toEqual({
         mode: "smtp",
@@ -464,10 +473,7 @@ describe("SMTP settings boundary cases", () => {
       const venue = await setupVenue();
       const logs: unknown[] = [];
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, ring, {
-          purpose: "email.smtp",
-          value: { url, from: "venue@example.test" },
-        }),
+        saveSmtpForTest(tx, ring, { url, from: "venue@example.test" }),
       );
       const response = await request(
         mount("live", (...args) => {
@@ -805,6 +811,9 @@ describe("removing saved SMTP settings", () => {
     const response = await remove(app, venue.admin);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ removed: true });
+    expect(
+      (await suite.db.select().from(documents)).find((row) => row.module === "mail")?.doc,
+    ).toEqual({ from: null });
     expect(await suite.db.select().from(venueCredentials)).toEqual([archive]);
     expect(await (await request(app, venue.admin)).json()).toEqual({
       mode: "unconfigured",
@@ -893,10 +902,7 @@ it.each([
 ] as const)("keeps saved From %s editable with delivery mode %s", async (from, mode) => {
   const venue = await setupVenue();
   await withTransaction(suite.db, (tx) =>
-    putCredential(tx, ring, {
-      purpose: "email.smtp",
-      value: { url: "smtps://smtp.example.test:465", from },
-    }),
+    saveSmtpForTest(tx, ring, { url: "smtps://smtp.example.test:465", from }),
   );
   const response = await request(mount(), venue.admin);
   expect(response.status).toBe(200);

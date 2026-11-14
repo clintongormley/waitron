@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { taxpayer, withTransaction } from "@waitron/db";
+import { settings as documents, taxpayer, withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { loadKeyRing, venueCredentials } from "@waitron/credentials";
+import { loadKeyRing, tryGetCredential, venueCredentials } from "@waitron/credentials";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { resolveEmailDelivery } from "./email-delivery.js";
 import { createSetupOperationStore } from "./setup-operation.js";
@@ -151,6 +151,16 @@ describe("setup provision email credential", () => {
       const response = await post(made.app, { ...body(mode), email });
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          tryGetCredential(tx, ring, { purpose: "email.smtp" }),
+        ),
+      ).toEqual({
+        url: "smtp://venue-user:smtp-secret-231q@smtp.example.test:587?requireTLS=true",
+      });
+      expect(
+        (await suite.db.select().from(documents)).find((row) => row.module === "mail"),
+      ).toMatchObject({ doc: { from: "venue@example.test" }, updatedBy: null });
       expect(JSON.stringify(made.logs)).not.toContain(email.password);
       const stored = await suite.db.select().from(venueCredentials);
       expect(stored.map((row) => row.purpose).sort()).toEqual(

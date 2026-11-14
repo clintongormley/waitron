@@ -1,3 +1,5 @@
+import { readSettings, saveSettings } from "@waitron/db";
+import { MAIL_SETTINGS } from "./mail-settings.js";
 import {
   mountRecoveryPreparationApi,
   type PrepareRecovery,
@@ -962,9 +964,15 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (expected) await secret!.seal({ db, ring, nodeId: result.nodeId }, rawSecret);
         // The fiscal seat owns its transaction; resume repeats idempotent seals until both finish.
         if (email !== undefined) {
-          await withTransaction(db, (tx) =>
-            putCredential(tx, ring, { purpose: "email.smtp", value: email }),
-          );
+          await withTransaction(db, async (tx) => {
+            await putCredential(tx, ring, { purpose: "email.smtp", value: { url: email.url } });
+            const { revision } = await readSettings(tx, MAIL_SETTINGS);
+            await saveSettings(tx, MAIL_SETTINGS, {
+              doc: { from: email.from },
+              expectedRevision: revision,
+              personId: null,
+            });
+          });
         }
         await operation?.advance("secret_sealed");
       }

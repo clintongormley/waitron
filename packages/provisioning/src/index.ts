@@ -262,3 +262,5 @@ export {
   clearModulePrepared,
   moduleRecordBytes,
 } from "./module-records.js";
+
+export { MAIL_SETTINGS, type MailDocument } from "./mail-settings.js";

@@ -438,6 +438,10 @@ it.each([
       server = undefined;
       const db = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
       try {
+        const mail = db
+          .prepare("select doc, updated_by as actor from settings where module = 'mail'")
+          .get();
+        expect(mail).toEqual({ doc: JSON.stringify({ from: "owner@example.test" }), actor: null });
         expect(db.prepare("select name from products").all()).toEqual([
           { name: "Prepared gazpacho" },
         ]);

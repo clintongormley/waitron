@@ -114,6 +114,7 @@ it("reads a card reader's delete impact passively after the first read, and send
 const translationQuery: TranslationQuery = { languages: ["en"], missing: { mode: "any" } };
 
 it.each([
+  ["getEmailSettings", [], "settings.mail"],
   ["listMyShifts", ["2026-05-04", "2026-05-11"], "roster_versions"],
   ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "working_orders"],
   ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "bill_payments"],

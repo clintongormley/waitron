@@ -1,3 +1,4 @@
+import { MAIL_SETTINGS } from "./mail-settings.js";
 import { SECRETS_ENV_FILE, TRADING_ENV_FILE } from "@waitron/store";
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -226,9 +227,18 @@ export function createFirstSetupCommandDeployment(options: {
             if (settings.required)
               await settings.secret!.seal({ db, ring, nodeId: result.nodeId }, settings.aeatCert);
             if (settings.email !== undefined)
-              await withTransaction(db, (tx) =>
-                putCredential(tx, ring, { purpose: "email.smtp", value: settings.email! }),
-              );
+              await withTransaction(db, async (tx) => {
+                await putCredential(tx, ring, {
+                  purpose: "email.smtp",
+                  value: { url: settings.email!.url },
+                });
+                const { revision } = await readSettings(tx, MAIL_SETTINGS);
+                await saveSettings(tx, MAIL_SETTINGS, {
+                  doc: { from: settings.email!.from },
+                  expectedRevision: revision,
+                  personId: null,
+                });
+              });
           },
           persistTrading: async (result, current) => {
             const accountKey = createHmac("sha256", ring.current.key)

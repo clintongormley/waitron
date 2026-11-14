@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readVenue } from "@waitron/db";
@@ -35,7 +36,7 @@ import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { useTestProducer } from "./testing/test-producer.js";
 import { readVenueLocale } from "./venue-locale.js";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 
 useTestProducer();
 
@@ -256,16 +257,13 @@ describe("the running server's managers' email check", () => {
       const booted: Booted = {};
       if (configured) {
         await withTransaction(suite.db, (tx) =>
-          putCredential(
+          saveSmtpForTest(
             tx,
             loadKeyRing({
               WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
               WAITRON_CREDENTIALS_KEY_VERSION: "1",
             }),
-            {
-              purpose: "email.smtp",
-              value: { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
-            },
+            { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
           ),
         );
       }
@@ -349,16 +347,13 @@ describe("the running server's managers' email check", () => {
   it("Prepare sends through the saved relay at both account boundaries", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, (tx) =>
-      putCredential(
+      saveSmtpForTest(
         tx,
         loadKeyRing({
           WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
           WAITRON_CREDENTIALS_KEY_VERSION: "1",
         }),
-        {
-          purpose: "email.smtp",
-          value: { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
-        },
+        { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
       ),
     );
     const booted: Booted = {};
@@ -391,13 +386,13 @@ describe("the running server's managers' email check", () => {
     async (intent, development, repair, from, outcome) => {
       const venue = await setupVenue(suite.db);
       await withTransaction(suite.db, (tx) =>
-        putCredential(
+        saveSmtpForTest(
           tx,
           loadKeyRing({
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
             WAITRON_CREDENTIALS_KEY_VERSION: "1",
           }),
-          { purpose: "email.smtp", value: { url: "smtp://smtp.example.test:2525", from } },
+          { url: "smtp://smtp.example.test:2525", from },
         ),
       );
       if (repair)
@@ -664,16 +659,13 @@ describe("the running server's managers' email check", () => {
     ];
     try {
       await withTransaction(suite.db, (tx) =>
-        putCredential(
+        saveSmtpForTest(
           tx,
           loadKeyRing({
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
             WAITRON_CREDENTIALS_KEY_VERSION: "1",
           }),
-          {
-            purpose: "email.smtp",
-            value: { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
-          },
+          { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
         ),
       );
       await bootServer(booted, venue, undefined, steps);
@@ -725,16 +717,13 @@ describe("the running server's managers' email check", () => {
         .where(eq(incidents.code, "backup.archives_deleted"));
 
       await withTransaction(suite.db, (tx) =>
-        putCredential(
+        saveSmtpForTest(
           tx,
           loadKeyRing({
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
             WAITRON_CREDENTIALS_KEY_VERSION: "1",
           }),
-          {
-            purpose: "email.smtp",
-            value: { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
-          },
+          { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
         ),
       );
       await bootServer(booted, venue);

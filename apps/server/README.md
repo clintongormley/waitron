@@ -401,8 +401,9 @@ The read omits authentication secrets and shows saved settings even when develop
 is captured locally. Demo refuses settings changes, including removal.
 The Prepare and Live setup test endpoint is `POST /setup-api/email-test`. Outside development, Prepare and Live provisioning require an `email` object with
 `server`, numeric `port`, `encryption` (`starttls` or `tls`), `from`, and optional `user` and
-`password`. Use the same values you tested. The server seals them under `email.smtp` before
-publishing the trading configuration. Missing settings answer `setup.email_required`, naming
+`password`. Use the same values you tested. Before publishing the trading configuration, the
+server seals the connection URL under `email.smtp` and saves the sender address in the `mail`
+settings document in the same transaction. Missing settings answer `setup.email_required`, naming
 `email`; malformed settings name the offending field. Demo refuses supplied settings,
 and development provisioning may omit them. You can enter these settings in the Prepare or Live wizard
 or, as an admin, on the dashboard's **System → Email** page (`/manage/email`). Managers can view
@@ -512,20 +513,20 @@ copy: `wa-wt reset own demo <worktree-name>`).
 
 For a new Prepare or Live venue outside development, the setup wizard asks for the mail server settings and sends a
 test message to your administrator address. Continue becomes available when the server accepts a
-test of the current settings. Final setup seals them in the credential vault.
+test of the current settings. Final setup seals the connection URL in the credential vault and
+saves the sender address in the mail settings document.
 
 Ordinary outgoing SMTP mail and the Settings test use the venue name as the sender display name,
 keeping the configured mailbox. Settings shows the saved From value so you can repair it when
 it cannot be used for delivery. Setup tests and local capture keep their own sender.
 
-The wizard and the Account email page seal these settings in the encrypted credential vault for you. From a
-terminal you can also put a production or on-prem venue's SMTP relay there yourself. Write the
-payload to a permission-restricted file rather than putting its password in a shell argument:
+Set your sender address through the setup wizard or the dashboard's mail settings. To replace the
+connection URL for an already configured sender from a terminal, write the URL to a
+permission-restricted file rather than putting its password in a shell argument:
 
 ```json
 {
-  "url": "smtps://user:password@smtp.example.com:465",
-  "from": "no-reply@example.com"
+  "url": "smtps://user:password@smtp.example.com:465"
 }
 ```
 

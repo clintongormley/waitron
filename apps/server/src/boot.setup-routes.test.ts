@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -337,12 +338,9 @@ describe("startServer — background listeners and sinks that fail or close", ()
         role: "staff",
       });
       await withTransaction(db, (tx) =>
-        putCredential(tx, loadKeyRing(KEY_ENV), {
-          purpose: "email.smtp",
-          value: {
-            url: `smtp://127.0.0.1:${smtp.port}`,
-            from: "Waitron <no-reply@example.test>",
-          },
+        saveSmtpForTest(tx, loadKeyRing(KEY_ENV), {
+          url: `smtp://127.0.0.1:${smtp.port}`,
+          from: "Waitron <no-reply@example.test>",
         }),
       );
       const port = await freePort();
