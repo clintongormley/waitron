@@ -2149,7 +2149,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - id: checkout
         name: Check out the code
@@ -2238,7 +2238,7 @@ jobs:
           pnpm --filter "@waitron/dashboard" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:shard
           node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/dashboard" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
-            --shard=${{ matrix.shard }}/4 \
+            --shard=${{ matrix.shard }}/6 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
@@ -2330,7 +2330,7 @@ jobs:
 
       - id: download
         name: Download the dashboard coverage blobs
-        run: node scripts/download-coverage-blobs.mjs 'dashboard-blob-*' 'apps/dashboard/.vitest-reports' 4
+        run: node scripts/download-coverage-blobs.mjs 'dashboard-blob-*' 'apps/dashboard/.vitest-reports' 6
         timeout-minutes: 1
         continue-on-error: true
         env:
@@ -2343,7 +2343,7 @@ jobs:
 
       - name: Download the dashboard coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        run: node scripts/download-coverage-blobs.mjs 'dashboard-blob-*' 'apps/dashboard/.vitest-reports' 4
+        run: node scripts/download-coverage-blobs.mjs 'dashboard-blob-*' 'apps/dashboard/.vitest-reports' 6
         timeout-minutes: 1
         env:
           GH_TOKEN: ${{ github.token }}
@@ -3986,7 +3986,7 @@ jobs:
             {"id":"test-fiscal-verifactu","count":4,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true')) }}},
             {"id":"test-ui","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && (needs.changes.outputs.ui == 'true' || needs.changes.outputs.ui_core == 'true'))) }}},
             {"id":"test-till","count":7,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true')) }}},
-            {"id":"test-dashboard","count":4,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true')) }}},
+            {"id":"test-dashboard","count":6,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true')) }}},
             {"id":"test-setup","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true')) }}},
             {"id":"test-venue-service","count":4,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true')) }}},
             {"id":"test-adjustments","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true')) }}},

@@ -4052,7 +4052,7 @@ describe("the sharded jobs", () => {
       shardedJobs.map(({ pkg, body }) => [pkg, shardDenominator(body)]),
     );
     expect(counts).toEqual({
-      "@waitron/dashboard": 4,
+      "@waitron/dashboard": 6,
       "@waitron/db": 3,
       "@waitron/fiscal-verifactu": 4,
       "@waitron/provisioning": 6,
