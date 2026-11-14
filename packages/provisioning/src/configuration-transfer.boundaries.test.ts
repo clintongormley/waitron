@@ -727,9 +727,7 @@ it("exports the venue's own fields and the default flag in its menu rows", async
     ].sort(),
   );
   expect(bundle).not.toHaveProperty("defaultMenuId");
-  expect(bundle.tables.menus!.find((row) => row.id === defaultMenuId)?.is_default).toBe(
-    1,
-  );
+  expect(bundle.tables.menus!.find((row) => row.id === defaultMenuId)?.is_default).toBe(1);
 });
 
 it("lists only the exported modules' versions, so setup accepts a box's export that names its switched-off modules", async () => {

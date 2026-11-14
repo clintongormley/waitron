@@ -18,10 +18,7 @@ export async function offerMenuThroughZone(
   menuId: string,
   options: { displayOrder?: number; makeDefault?: boolean } = {},
 ): Promise<void> {
-  const [menu] = await tx
-    .select({ id: menus.id })
-    .from(menus)
-    .where(eq(menus.id, menuId));
+  const [menu] = await tx.select({ id: menus.id }).from(menus).where(eq(menus.id, menuId));
   if (menu === undefined) throw new AppError("menu.not_found", { menuId: menuId });
   const [policy] = await tx
     .select({ departmentId: floorZones.departmentId })

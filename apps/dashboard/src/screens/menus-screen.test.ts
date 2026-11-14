@@ -2230,9 +2230,7 @@ describe("unique menu names on Create and Rename", () => {
 
   it("allows presentation edits when the menu name already has a duplicate", async () => {
     const client = api({
-      listMenus: vi
-        .fn()
-        .mockResolvedValue(menus.map((menu) => ({ ...menu, name: "Lunch Menu" }))),
+      listMenus: vi.fn().mockResolvedValue(menus.map((menu) => ({ ...menu, name: "Lunch Menu" }))),
     });
     const el = await mount(client);
     await inTable(el, "rename-menu-lunch");
@@ -2388,10 +2386,7 @@ describe("copying a menu from the list", () => {
     await vi.waitFor(() =>
       expect(table(el).shadowRoot.querySelector('tr[data-row-key="menu-copy"]')).not.toBeNull(),
     );
-    expect(client.duplicateMenu).toHaveBeenCalledExactlyOnceWith(
-      "menu-lunch",
-      "Weekday lunch",
-    );
+    expect(client.duplicateMenu).toHaveBeenCalledExactlyOnceWith("menu-lunch", "Weekday lunch");
     expect(form(el).open).toBe(false);
     expect(location.pathname).toBe("/manage/menus");
     expect(q(el, '[data-test="member-error"]')).toBeNull();
@@ -2528,10 +2523,7 @@ describe("copying a menu from the list", () => {
       expect(action(el).textContent!.trim()).toBe(t("menus.copy_action"));
       action(el).click();
       await expect.poll(() => form(el).open).toBe(false);
-      expect(client.duplicateMenu).toHaveBeenCalledExactlyOnceWith(
-        "menu-lunch",
-        "Weekend lunch",
-      );
+      expect(client.duplicateMenu).toHaveBeenCalledExactlyOnceWith("menu-lunch", "Weekend lunch");
     });
   });
   it("reports a failed reload after a copy as a load failure and closes the dialog", async () => {

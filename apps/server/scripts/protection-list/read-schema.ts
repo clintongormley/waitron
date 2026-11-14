@@ -303,11 +303,7 @@ function readIndexes(
   });
 }
 
-function menuRow(
-  menu: ReadonlyMap<string, MenuRow>,
-  type: string,
-  name: string,
-): MenuRow {
+function menuRow(menu: ReadonlyMap<string, MenuRow>, type: string, name: string): MenuRow {
   const row = menu.get(`${type}:${name}`);
   if (row === undefined) throw new Error(`${type} ${name} is not in sqlite_schema`);
   return row;

@@ -206,9 +206,7 @@ describe("price clashes, with no menu on/off setting", () => {
   });
 
   it("reports the price clash once for every variant", () => {
-    const offer = combineOffer(
-      input({}, { product: withVariants, included: both(withVariants) }),
-    );
+    const offer = combineOffer(input({}, { product: withVariants, included: both(withVariants) }));
     expect(clashesOf(offer).map((c) => [c.field, c.variantId])).toEqual([
       ["price", "pint"],
       ["price", "half"],
@@ -216,9 +214,7 @@ describe("price clashes, with no menu on/off setting", () => {
   });
 
   it("carries no on/off setting for the offer or any variant", () => {
-    const offer = combineOffer(
-      input({}, { product: withVariants, included: both(withVariants) }),
-    );
+    const offer = combineOffer(input({}, { product: withVariants, included: both(withVariants) }));
     expect(offer).not.toHaveProperty("offered");
     for (const variant of offer.variants) expect(variant).not.toHaveProperty("offered");
   });

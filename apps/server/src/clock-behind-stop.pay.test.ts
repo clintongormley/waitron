@@ -3,12 +3,7 @@ import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";

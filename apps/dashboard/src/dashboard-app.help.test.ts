@@ -31,13 +31,7 @@ const meResponse = {
   sessionDefault: "es-ES",
   venueName: "Deli Test SL",
   onboardingIntent: "prepare",
-  permissions: [
-    "booking.manage",
-    "venue.view",
-    "menu.manage",
-    "hardware.manage",
-    "system.manage",
-  ],
+  permissions: ["booking.manage", "venue.view", "menu.manage", "hardware.manage", "system.manage"],
   modules: ["bookings"],
 };
 

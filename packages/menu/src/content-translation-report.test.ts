@@ -22,12 +22,7 @@ import {
   writeContentLanguages,
 } from "./content-languages.js";
 import { listTranslationGapReport } from "./content-translation-report.js";
-import {
-  createMenu,
-  createProduct,
-  deactivateMenu,
-  deactivateProduct,
-} from "./operations.js";
+import { createMenu, createProduct, deactivateMenu, deactivateProduct } from "./operations.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember, createSectionIn } from "./sections.js";
 import { setProductVariants } from "./variants.js";

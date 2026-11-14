@@ -106,9 +106,7 @@ describe("the read-only exemption list", () => {
       expect(isReadOnlyExempt({ method: "POST", path: "/api/node/peer-status/x" }, box)).toBe(
         false,
       );
-      expect(isReadOnlyExempt({ method: "POST", path: "/management-api/menus" }, box)).toBe(
-        false,
-      );
+      expect(isReadOnlyExempt({ method: "POST", path: "/management-api/menus" }, box)).toBe(false);
     }
     expect(
       isReadOnlyExempt(

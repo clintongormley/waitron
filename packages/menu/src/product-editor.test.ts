@@ -280,9 +280,9 @@ it("saves a product with exactly one variant, or none", async () => {
     saveProductEditor(tx, null, menuId, { ...input, variants: [input.variants[0]!] }, "en"),
   );
   expect(one.variants).toEqual([{ ...input.variants[0]!, id: expect.any(String), active: true }]);
-  expect(
-    (await withTransaction(fx.db, (tx) => listProducts(tx, menuId))).map((p) => p.id),
-  ).toEqual([one.id]);
+  expect((await withTransaction(fx.db, (tx) => listProducts(tx, menuId))).map((p) => p.id)).toEqual(
+    [one.id],
+  );
   const none = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, null, menuId, { ...input, name: "Tea", variants: [] }, "en"),
   );
@@ -518,13 +518,7 @@ it.each([
 ] as const)("rejects malformed %s before writing", async (field, value) => {
   await expect(
     withTransaction(fx.db, (tx) =>
-      saveProductEditor(
-        tx,
-        null,
-        menuId,
-        { ...input, [field]: value } as ProductEditorInput,
-        "en",
-      ),
+      saveProductEditor(tx, null, menuId, { ...input, [field]: value } as ProductEditorInput, "en"),
     ),
   ).rejects.toMatchObject({ code: "product.invalid", params: { field } });
   expect(await withTransaction(fx.db, (tx) => listProducts(tx, menuId))).toEqual([]);

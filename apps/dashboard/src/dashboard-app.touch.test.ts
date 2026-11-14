@@ -183,9 +183,7 @@ it.each<[number, number, "capped" | "page", number]>([
         permissions: ["menu.manage", "menu.view"],
         modules: ["menu"],
       }),
-      listMenus: async () => [
-        { id: "menu-lunch", name: "Lunch Menu", active: true, version: 1 },
-      ],
+      listMenus: async () => [{ id: "menu-lunch", name: "Lunch Menu", active: true, version: 1 }],
       listLibraryProducts: async () => products,
       listCategories: async () => [],
       getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),

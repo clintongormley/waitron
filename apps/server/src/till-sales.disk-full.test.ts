@@ -7,12 +7,7 @@ import type { Hono } from "hono";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { invoiceSeries, withTransaction } from "@waitron/db";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { recordCorrection } from "@waitron/core";
 import { loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";

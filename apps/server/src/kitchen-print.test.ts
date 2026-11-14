@@ -2210,16 +2210,9 @@ describe("dish extras on kitchen tickets", () => {
       const coffeeProduct = await makeProduct(tx, menuId, "Filter coffee", {
         stationId: barStation.id,
       });
-      const { productIds } = await addExtras(
-        tx,
-        cfg,
-        menuId,
-        coffeeProduct,
-        [{ name: "Cream" }],
-        {
-          staffNameOnly: true,
-        },
-      );
+      const { productIds } = await addExtras(tx, cfg, menuId, coffeeProduct, [{ name: "Cream" }], {
+        staffNameOnly: true,
+      });
 
       const orderId = await fireContextlessDish(tx, cfg, coffeeProduct, [productIds[0]!]);
       const ticketItemRows = await tx

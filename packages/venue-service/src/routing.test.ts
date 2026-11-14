@@ -1722,18 +1722,10 @@ describe("changeReach", () => {
     expect(menu.filter((p) => p1InZ1.covers(p)).map((p) => p.productId)).toEqual(["p1", "v1"]);
     expect(columns.filter((zoneId) => p1InZ1.reachesZone(zoneId))).toEqual(["z1"]);
     const a1 = changeReach(tree, { row: category("a1"), zoneId: null });
-    expect(menu.filter((p) => a1.covers(p)).map((p) => p.productId)).toEqual([
-      "p1",
-      "p2",
-      "v1",
-    ]);
+    expect(menu.filter((p) => a1.covers(p)).map((p) => p.productId)).toEqual(["p1", "p2", "v1"]);
     expect(columns.filter((zoneId) => a1.reachesZone(zoneId))).toEqual(columns);
     const loose = changeReach(tree, { row: { kind: "no_category" }, zoneId: "z2" });
-    expect(menu.filter((p) => loose.covers(p)).map((p) => p.productId)).toEqual([
-      "p6",
-      "p7",
-      "v6",
-    ]);
+    expect(menu.filter((p) => loose.covers(p)).map((p) => p.productId)).toEqual(["p6", "p7", "v6"]);
     const everything = changeReach(tree, { row: all, zoneId: "z3" });
     expect(menu.every((p) => everything.covers(p))).toBe(true);
     expect(columns.filter((zoneId) => everything.reachesZone(zoneId))).toEqual(["z3"]);

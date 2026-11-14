@@ -17,10 +17,7 @@ async function configuredTaxpayer() {
   await withTransaction(suite.db, (tx) =>
     writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }),
   );
-  const [menu] = await suite.db
-    .insert(menus)
-    .values({ name: "Lunch" })
-    .returning({ id: menus.id });
+  const [menu] = await suite.db.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id });
   return { menuId: menu!.id };
 }
 

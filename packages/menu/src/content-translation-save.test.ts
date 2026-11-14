@@ -677,10 +677,7 @@ describe("translation cell batch boundaries", () => {
         .set({ childSectionId: ids.menu })
         .where(eq(sectionMembers.id, ids.included_menu));
     if (change === "child activity")
-      await suite.db
-        .update(menus)
-        .set({ active: false })
-        .where(eq(menus.id, ids.childMenuId));
+      await suite.db.update(menus).set({ active: false }).where(eq(menus.id, ids.childMenuId));
     if (change === "variant activity")
       await suite.db.update(products).set({ active: false }).where(eq(products.id, ids.variant));
     const before = await snapshot();

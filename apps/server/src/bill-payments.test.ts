@@ -36,12 +36,7 @@ import {
   settings,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { ensureFixtureJobRole, seedNode } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";

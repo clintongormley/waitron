@@ -43,10 +43,7 @@ beforeEach(async () => {
 
 /** A menu to hang fixture products off. */
 async function seedMenu(tx: Transaction): Promise<string> {
-  const [menu] = await tx
-    .insert(menus)
-    .values({ name: "Menu" })
-    .returning({ id: menus.id });
+  const [menu] = await tx.insert(menus).values({ name: "Menu" }).returning({ id: menus.id });
   return menu!.id;
 }
 

@@ -129,10 +129,7 @@ describe("working_orders state machine (enforce_transition)", () => {
       operationDescription: "Hostelería",
     });
     await seedBusinessDay(db, {});
-    const [menu] = await db
-      .insert(menus)
-      .values({ name: "Deli" })
-      .returning({ id: menus.id });
+    const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const [product] = await db
       .insert(products)
       .values({

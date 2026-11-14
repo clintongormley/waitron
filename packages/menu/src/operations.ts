@@ -836,10 +836,7 @@ async function readOfferVariants(
 }
 
 export async function menuExists(tx: Transaction, menuId: string): Promise<boolean> {
-  const [row] = await tx
-    .select({ id: menus.id })
-    .from(menus)
-    .where(eq(menus.id, menuId));
+  const [row] = await tx.select({ id: menus.id }).from(menus).where(eq(menus.id, menuId));
   return row !== undefined;
 }
 
@@ -1007,12 +1004,7 @@ export async function listProducts(tx: Transaction, menuId?: string): Promise<Pr
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
-    .where(
-      and(
-        isTopLevelProduct,
-        menuId === undefined ? undefined : eq(products.menuId, menuId),
-      ),
-    )
+    .where(and(isTopLevelProduct, menuId === undefined ? undefined : eq(products.menuId, menuId)))
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
   const modifiers = await readProductModifiers(
@@ -1212,10 +1204,7 @@ export async function deactivateProduct(tx: Transaction, id: string): Promise<vo
 }
 
 export async function readDefaultMenuId(tx: Transaction): Promise<string | null> {
-  const [row] = await tx
-    .select({ id: menus.id })
-    .from(menus)
-    .where(eq(menus.isDefault, true));
+  const [row] = await tx.select({ id: menus.id }).from(menus).where(eq(menus.isDefault, true));
   return row?.id ?? null;
 }
 
@@ -1224,17 +1213,13 @@ export async function assignMenuToVenue(tx: Transaction, menuId: string): Promis
   await tx.update(menus).set({ isDefault: true }).where(eq(menus.id, menuId));
 }
 
-export async function setVenueDefaultMenu(
-  tx: Transaction,
-  menuId: string,
-): Promise<void> {
+export async function setVenueDefaultMenu(tx: Transaction, menuId: string): Promise<void> {
   await assertMenuExists(tx, menuId);
   await assignMenuToVenue(tx, menuId);
 }
 
 async function assertMenuExists(tx: Transaction, menuId: string): Promise<void> {
-  if (!(await menuExists(tx, menuId)))
-    throw new AppError("menu.not_found", { menuId });
+  if (!(await menuExists(tx, menuId))) throw new AppError("menu.not_found", { menuId });
 }
 
 export async function readInvoiceLocales(tx: Transaction): Promise<string[]> {

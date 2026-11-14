@@ -631,7 +631,8 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
     const v = { cfg, restaurant, deli, barra, sala, terraza, mostrador, menus: menuRows };
     if (options.timetable === false) return { ...v, periods: null };
     const period = async (departmentId: string, name: string, menu: MenuName) =>
-      (await saveMenuPeriod(tx, departmentId, { name, menuId: menuRows[menu], staffMenuIds: [] })).id;
+      (await saveMenuPeriod(tx, departmentId, { name, menuId: menuRows[menu], staffMenuIds: [] }))
+        .id;
     const periods = {
       mananas: await period(restaurant, "Mañanas", "Desayunos"),
       mediodia: await period(restaurant, "Mediodía", "Almuerzo"),
@@ -1186,7 +1187,9 @@ describe("the timetable's writers", () => {
   it("deleting a painted period removes its staff menus", async () => {
     const v = await timed();
     const { menus: menuRows, periods } = v;
-    await scoped((tx) => updateMenuPeriod(tx, periods.noches, { staffMenuIds: [menuRows.Cócteles] }));
+    await scoped((tx) =>
+      updateMenuPeriod(tx, periods.noches, { staffMenuIds: [menuRows.Cócteles] }),
+    );
     expect(
       await db
         .select({ menuId: menuPeriodStaffMenus.menuId })
@@ -1780,9 +1783,7 @@ describe("the editor's model", () => {
 
   it("names every menu with whether it is active, for a venue viewer who cannot read the menus", async () => {
     const v = await venue({ timetable: false });
-    await scoped((tx) =>
-      tx.update(menus).set({ active: false }).where(eq(menus.id, v.menus.Cena)),
-    );
+    await scoped((tx) => tx.update(menus).set({ active: false }).where(eq(menus.id, v.menus.Cena)));
     const model = await scoped((tx) => readOpeningHoursModel(tx, AT));
     expect(model.menus.map((menu) => menu.name).sort()).toEqual(Object.keys(v.menus).sort());
     expect(model.menus.find((menu) => menu.id === v.menus.Cena)).toEqual({

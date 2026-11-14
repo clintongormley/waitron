@@ -9616,16 +9616,12 @@ describe("till-app", () => {
         };
         const offersA = fixtureOffers({
           menus: [{ id: "menu-a", name: "Menu A", isDefault: true }],
-          products: [
-            { ...coffee, id: "product-a", menuId: "menu-a", menuName: "Menu A" },
-          ],
+          products: [{ ...coffee, id: "product-a", menuId: "menu-a", menuName: "Menu A" }],
         });
         offersA.context.zoneId = "zone-a";
         const offersB = fixtureOffers({
           menus: [{ id: "menu-b", name: "Menu B", isDefault: true }],
-          products: [
-            { ...coffee, id: "product-b", menuId: "menu-b", menuName: "Menu B" },
-          ],
+          products: [{ ...coffee, id: "product-b", menuId: "menu-b", menuName: "Menu B" }],
         });
         offersB.context.zoneId = "zone-b";
         let resolveA!: (value: ZoneOffers) => void;
@@ -15259,8 +15255,7 @@ describe("till-app", () => {
     });
 
     /** The app-owned active menu id (the private `@state` the switcher and grid filter read). */
-    const selected = (el: TillApp) =>
-      (el as unknown as { selectedMenuId: string }).selectedMenuId;
+    const selected = (el: TillApp) => (el as unknown as { selectedMenuId: string }).selectedMenuId;
 
     it("keeps the last menu through payment and the next order without adding history", async () => {
       const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });

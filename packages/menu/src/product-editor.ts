@@ -163,10 +163,7 @@ export async function saveProductEditor(
       Record<string, string> | null | undefined,
   }));
   if (productId === null) {
-    const [menu] = await tx
-      .select({ id: menus.id })
-      .from(menus)
-      .where(eq(menus.id, menuId));
+    const [menu] = await tx.select({ id: menus.id }).from(menus).where(eq(menus.id, menuId));
     if (!menu) throw new AppError("menu.not_found", { menuId });
   }
   // A variant's own save changes one row, which `updateProduct` checks. A product's save is checked

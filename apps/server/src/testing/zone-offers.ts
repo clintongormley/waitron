@@ -157,10 +157,7 @@ async function placeOnTopLevel(
 }
 
 async function ownMenu(tx: Transaction): Promise<string> {
-  const [existing] = await tx
-    .select({ id: menus.id })
-    .from(menus)
-    .where(eq(menus.name, MENU_NAME));
+  const [existing] = await tx.select({ id: menus.id }).from(menus).where(eq(menus.name, MENU_NAME));
   return existing?.id ?? (await createMenu(tx, { name: MENU_NAME })).id;
 }
 
@@ -168,10 +165,7 @@ async function topLevelProducts(tx: Transaction): Promise<string[]> {
   const rows = await tx
     .select({ id: products.id })
     .from(products)
-    .innerJoin(
-      menus,
-      and(eq(menus.id, products.menuId), eq(menus.active, true)),
-    )
+    .innerJoin(menus, and(eq(menus.id, products.menuId), eq(menus.active, true)))
     .where(isNull(products.parentId))
     .orderBy(products.id);
   return rows.map((row) => row.id);

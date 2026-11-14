@@ -33,10 +33,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       operationDescription: "Hostelería",
     });
     nodeA = await seedNode(db);
-    const [catA] = await db
-      .insert(menus)
-      .values({ name: "Deli A" })
-      .returning({ id: menus.id });
+    const [catA] = await db.insert(menus).values({ name: "Deli A" }).returning({ id: menus.id });
     const [prodA] = await db
       .insert(products)
       .values({

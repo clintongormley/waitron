@@ -104,14 +104,11 @@ describe("seedVenue", () => {
   });
 
   it("seedVenue writes defaultMenuId as the venue's menu", async () => {
-    const [menu] = await db
-      .insert(menus)
-      .values({ name: "Menu" })
-      .returning({ id: menus.id });
+    const [menu] = await db.insert(menus).values({ name: "Menu" }).returning({ id: menus.id });
     await seedVenue(db, { defaultMenuId: menu!.id });
-    expect(
-      await db.select({ id: menus.id }).from(menus).where(eq(menus.isDefault, true)),
-    ).toEqual([{ id: menu!.id }]);
+    expect(await db.select({ id: menus.id }).from(menus).where(eq(menus.isDefault, true))).toEqual([
+      { id: menu!.id },
+    ]);
   });
 
   it("seedVenue refuses a second venue", async () => {

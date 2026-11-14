@@ -36,10 +36,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
       invoiceLocales: [...LOCALES],
       operationDescription: "Hostelería",
     });
-    const [cat] = await db
-      .insert(menus)
-      .values({ name: "Deli" })
-      .returning({ id: menus.id });
+    const [cat] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const [prod] = await db
       .insert(products)
       .values({

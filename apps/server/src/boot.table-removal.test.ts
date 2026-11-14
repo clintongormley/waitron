@@ -224,10 +224,9 @@ for (const [mode, status] of [
                 cookie: `${MANAGEMENT_COOKIE}=${fixture.managementToken}`,
                 "Content-Type": "application/json",
               };
-              const menu = await fetch(
-                `http://127.0.0.1:${httpPort()}/management-api/modules`,
-                { headers },
-              );
+              const menu = await fetch(`http://127.0.0.1:${httpPort()}/management-api/modules`, {
+                headers,
+              });
               expect(menu.status).toBe(200);
               const row = ((await menu.json()) as { id: string; revision: number }[]).find(
                 (row) => row.id === "bookings",

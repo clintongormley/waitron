@@ -23,12 +23,7 @@ import {
   writeNodeMembership,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { listAvailableProducts } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend } from "@waitron/fiscal";

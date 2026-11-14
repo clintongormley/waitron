@@ -20,12 +20,7 @@ import { DatabaseSync } from "node:sqlite";
 import { eq } from "drizzle-orm";
 import { Agent } from "undici";
 import { expect } from "vitest";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
   deviceProfiles,

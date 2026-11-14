@@ -274,11 +274,7 @@ describe("provisionVenue", () => {
       { environment: "preproduction", venue: gbVenueRequest(nextNif()) },
     );
 
-    expect(result.seeded.map((s) => s.module)).toEqual([
-      "menu",
-      "venue-service",
-      "adjustments",
-    ]);
+    expect(result.seeded.map((s) => s.module)).toEqual(["menu", "venue-service", "adjustments"]);
     expect(result.seriesIds).toHaveLength(3);
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 3, nodes: 1, registros: 0 });
 

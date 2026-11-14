@@ -115,8 +115,7 @@ describe("menu provisioning", () => {
     "keeps an authored All products default colour of %s when another node is seeded",
     async (authored) => {
       const node = await venue("ES", "Madrid", "es-ES");
-      const run = () =>
-        withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
+      const run = () => withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
       await run();
       await withTransaction(suite.db, (tx) => saveMenuDefaultColor(tx, authored));
       await run();
@@ -401,8 +400,7 @@ it("saves the pack defaults and starter-unit history only once", async () => {
 });
 it("creates the starter units once, even when two seeds race", async () => {
   const node = await venue("ES", "Madrid", "es-ES");
-  const seed = (tx: import("@waitron/db").Transaction) =>
-    MENU_PROVISIONING.seed!.run(tx, node);
+  const seed = (tx: import("@waitron/db").Transaction) => MENU_PROVISIONING.seed!.run(tx, node);
   const results = await racePair(suite.db, seed, seed);
   expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
   expect(await storedUnits()).toHaveLength(5);
@@ -411,9 +409,7 @@ it("creates the starter units once, even when two seeds race", async () => {
 
 it("keeps defaults saved before the first seed and creates its units only once", async () => {
   const node = await venue("ES", "Madrid", "es-ES");
-  await withTransaction(suite.db, (tx) =>
-    saveMenuSettings(tx, { defaultProductVatClass: "zero" }),
-  );
+  await withTransaction(suite.db, (tx) => saveMenuSettings(tx, { defaultProductVatClass: "zero" }));
   const run = () => withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
   await run();
   expect(await readSettings(suite.db, MENU_SETTINGS)).toEqual({

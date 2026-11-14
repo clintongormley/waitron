@@ -473,12 +473,7 @@ describe("sections and the reporting and routing they do not touch", () => {
 
     const root = (
       (await (
-        await send(
-          app,
-          "GET",
-          `/management-api/menus/${menuId}/structure`,
-          v.managerCookie,
-        )
+        await send(app, "GET", `/management-api/menus/${menuId}/structure`, v.managerCookie)
       ).json()) as { rootSectionId: string }
     ).rootSectionId;
     const created = await send(

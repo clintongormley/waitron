@@ -783,12 +783,9 @@ it("protects the photo an include's folder names, even switched off, and counts 
     const [lunch] = await tx.insert(menus).values({ name: "Lunch Menu" }).returning({
       id: menus.id,
     });
-    const [drinksMenu] = await tx
-      .insert(menus)
-      .values({ name: "Drinks menu" })
-      .returning({
-        id: menus.id,
-      });
+    const [drinksMenu] = await tx.insert(menus).values({ name: "Drinks menu" }).returning({
+      id: menus.id,
+    });
     const [lunchRoot] = await tx
       .insert(sections)
       .values({ internalName: "Lunch root", role: "menu_root", ownerMenuId: lunch!.id })

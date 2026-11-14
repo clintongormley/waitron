@@ -4038,11 +4038,7 @@ describe("department transfers across operator lifetimes", () => {
   it("accepts from the actual shell with a menu zone and reloads its durable pending count", async () => {
     const desk = transfers();
     let accepted = false;
-    const menu = zoneOffers(
-      { menus: [defaultMenu], products: [coffee] },
-      "terrace",
-      "table_tab",
-    );
+    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "terrace", "table_tab");
     menu.zones = [
       {
         id: "terrace",

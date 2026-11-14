@@ -581,11 +581,7 @@ export class ProductList extends LitElement {
           ? row.parentKey
           : (this.#rowByKey.get(row.parentKey)?.parentKey ?? ROOT_KEY);
     if (
-      !acceptsMenuDrop(
-        this.#dragged,
-        target === ROOT_KEY ? null : target.slice(7),
-        this.categories,
-      )
+      !acceptsMenuDrop(this.#dragged, target === ROOT_KEY ? null : target.slice(7), this.categories)
     )
       return undefined;
     return this.#dragged.some((dragged) => this.#rowByKey.get(dragged)?.parentKey !== target)

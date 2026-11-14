@@ -4,12 +4,7 @@ import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import {

@@ -205,7 +205,7 @@ it("has a sentence for each purchase-invoice code (Compras screen)", () => {
   }
 });
 
-it("has a sentence for a missing catalogue", () => {
+it("has a sentence for a missing menu", () => {
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   const GENERIC_EN = "Something went wrong, try again";
   expect(codeMessage("menu.not_found", "es")).not.toBe("menu.not_found");

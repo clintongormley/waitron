@@ -692,10 +692,7 @@ async function productCourse(productId: string): Promise<string | null> {
   return rows[0]!.course_id;
 }
 async function seedProduct(): Promise<string> {
-  const [cat] = await db
-    .insert(menus)
-    .values({ name: "Menu" })
-    .returning({ id: menus.id });
+  const [cat] = await db.insert(menus).values({ name: "Menu" }).returning({ id: menus.id });
   // `unit_price` counts whole cents: 1.00 EUR.
   const [row] = await db
     .insert(products)

@@ -20,12 +20,7 @@ import {
 } from "@waitron/menu";
 import type { DemoPlainText } from "@waitron/country";
 import type { SeedLocale } from "./locale.js";
-import {
-  demoPlainText,
-  demoLanguagesFor,
-  type DemoDataSet,
-  type SeedMenu,
-} from "./data-set.js";
+import { demoPlainText, demoLanguagesFor, type DemoDataSet, type SeedMenu } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 
 export interface SeedMenusInput {

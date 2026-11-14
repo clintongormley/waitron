@@ -69,7 +69,6 @@ interface Fixture {
   parentId: string;
   wine125: string;
   wine175: string;
-  menuId: string;
 }
 let f: Fixture;
 
@@ -184,7 +183,6 @@ beforeEach(async () => {
       parentId: parent.id,
       wine125: wine125!.id,
       wine175: wine175!.id,
-      menuId: menu.id,
     };
   });
 });
@@ -648,9 +646,7 @@ describe("what the products table refuses", () => {
   // The accepting control for the case above: the same insert in the parent's menu.
   it("accepts a variant in its parent's menu", async () => {
     await expect(
-      fx.db
-        .insert(products)
-        .values({ menuId: f.menuId, parentId: f.parentId, name: "250 ml" }),
+      fx.db.insert(products).values({ menuId: f.menuId, parentId: f.parentId, name: "250 ml" }),
     ).resolves.toBeDefined();
   });
 

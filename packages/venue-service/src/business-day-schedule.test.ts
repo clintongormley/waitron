@@ -667,9 +667,7 @@ describe("a waiting change checks the hours written while it waits", () => {
     const v = await fixture([]);
     await waiting(v);
     const menuId = randomUUID();
-    await withTransaction(suite.db, (tx) =>
-      tx.insert(menus).values({ id: menuId, name: "Late" }),
-    );
+    await withTransaction(suite.db, (tx) => tx.insert(menus).values({ id: menuId, name: "Late" }));
     await expect(
       withTransaction(suite.db, (tx) =>
         saveMenuPeriod(tx, v.departmentId, {

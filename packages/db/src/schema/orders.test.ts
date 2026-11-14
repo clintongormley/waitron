@@ -76,10 +76,7 @@ async function seed(db: Database): Promise<void> {
     operationDescription: "Hostelería",
   });
   DASHBOARD_ORDER = { source: "dashboard", deviceId: null };
-  const [catA] = await db
-    .insert(menus)
-    .values({ name: "Deli A" })
-    .returning({ id: menus.id });
+  const [catA] = await db.insert(menus).values({ name: "Deli A" }).returning({ id: menus.id });
   const [prodA] = await db
     .insert(products)
     .values({

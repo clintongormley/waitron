@@ -712,8 +712,7 @@ async function pointTo(
 }
 
 async function requireMenu(tx: Transaction, menuId: string): Promise<void> {
-  if (!(await menuExists(tx, menuId)))
-    throw new AppError("menu.not_found", { menuId: menuId });
+  if (!(await menuExists(tx, menuId))) throw new AppError("menu.not_found", { menuId: menuId });
 }
 
 /** The menu's version live at `at` and its document, or `null` when it has none. */

@@ -40,7 +40,7 @@ export const en = {
   "permission.workforce.self_approve.help":
     "Approve your own working-time corrections without another person’s approval. You also need Correct working time.",
   "permission.menu.manage.help":
-    "Edit products, menus, modifiers and catalogue images. Configure and publish guest menus where the venue uses them.",
+    "Edit products, menus, modifiers and product images. Configure and publish guest menus where the venue uses them.",
   "permission.venue.view.help":
     "View venue settings, courses, appearance, job roles and staffing calendars. Changing those settings needs their editing permission.",
   "permission.venue.configure.help":
@@ -104,7 +104,7 @@ export const en = {
   "permission.schedule.manage": "Manage the rota",
   "permission.workforce.correct": "Correct working time",
   "permission.workforce.self_approve": "Approve your own working time",
-  "permission.menu.manage": "Manage the catalogue",
+  "permission.menu.manage": "Manage menus",
   "permission.venue.view": "View venue settings",
   "permission.venue.configure": "Change venue settings",
   "permission.hardware.manage": "Manage devices and printers",
@@ -4237,7 +4237,7 @@ export const es: Record<StringKey, string> = {
   "permission.workforce.self_approve.help":
     "Aprueba las correcciones de tu propio registro horario sin la aprobación de otra persona. También necesitas Corregir horas trabajadas.",
   "permission.menu.manage.help":
-    "Edita productos, cartas, modificadores e imágenes del catálogo. Configura y publica las cartas para clientes cuando el local las utiliza.",
+    "Edita productos, cartas, modificadores e imágenes de productos. Configura y publica las cartas para clientes cuando el local las utiliza.",
   "permission.venue.view.help":
     "Consulta la configuración del local, pases, apariencia, puestos y calendarios de personal. Para cambiarlos necesitas el permiso de edición correspondiente.",
   "permission.venue.configure.help":
@@ -4300,7 +4300,7 @@ export const es: Record<StringKey, string> = {
   "permission.schedule.manage": "Gestionar turnos",
   "permission.workforce.correct": "Corregir horas trabajadas",
   "permission.workforce.self_approve": "Aprobar tus propias horas",
-  "permission.menu.manage": "Gestionar el catálogo",
+  "permission.menu.manage": "Gestionar las cartas",
   "permission.venue.view": "Ver ajustes del local",
   "permission.venue.configure": "Cambiar ajustes del local",
   "permission.hardware.manage": "Gestionar dispositivos e impresoras",

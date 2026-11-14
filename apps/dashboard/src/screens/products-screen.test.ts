@@ -1476,11 +1476,7 @@ describe("menu-screen", () => {
     await el.updateComplete;
     return el;
   }
-  async function submitNested(
-    el: ProductsScreen,
-    form: LitElement,
-    value: unknown,
-  ): Promise<void> {
+  async function submitNested(el: ProductsScreen, form: LitElement, value: unknown): Promise<void> {
     emit(form, "wt-submit", { value });
     await flush(el);
     await form.updateComplete;
@@ -2704,11 +2700,7 @@ describe("menu-screen", () => {
   });
 
   it("ignores an unknown product id", async () => {
-    history.replaceState(
-      null,
-      "",
-      "/manage/products/product/00000000-0000-4000-8000-000000000000",
-    );
+    history.replaceState(null, "", "/manage/products/product/00000000-0000-4000-8000-000000000000");
     const api = stubApi();
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
@@ -3495,10 +3487,7 @@ describe("menu-screen sticky headings", () => {
   }
 
   it("keeps the no-menu prompt its own height", async () => {
-    const { el } = await mountBounded(
-      {},
-      stubApi({ listMenus: vi.fn().mockResolvedValue([]) }),
-    );
+    const { el } = await mountBounded({}, stubApi({ listMenus: vi.fn().mockResolvedValue([]) }));
     const prompt = el.shadowRoot!.querySelector<HTMLElement>("[data-test=no-menu]")!;
     expect(prompt.getBoundingClientRect().height).toBeLessThan(100);
   });

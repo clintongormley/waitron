@@ -34,10 +34,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     });
     await seedBusinessDay(db, {});
     courseA = await seedCourse("Starters");
-    const [cat] = await db
-      .insert(menus)
-      .values({ name: "Deli A" })
-      .returning({ id: menus.id });
+    const [cat] = await db.insert(menus).values({ name: "Deli A" }).returning({ id: menus.id });
     const [prod] = await db
       .insert(products)
       .values({

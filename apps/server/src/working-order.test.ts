@@ -1618,8 +1618,7 @@ describe("getHeldOrder", () => {
   });
 
   it("keeps an over-precise published extra portion exact after the unit precision falls", async () => {
-    const { cfg, menuId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } =
-      await setupVenue();
+    const { cfg, menuId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
       const product = await createProduct(tx, {
         menuId,
@@ -1672,8 +1671,7 @@ describe("getHeldOrder", () => {
   });
 
   it("reads a portion-sized extra back as its per-dish picks, and saves it unchanged", async () => {
-    const { cfg, menuId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } =
-      await setupVenue();
+    const { cfg, menuId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
       const product = await createProduct(tx, {
         menuId,
@@ -1747,8 +1745,7 @@ describe("getHeldOrder", () => {
   });
 
   it("parks weighted extras with physical quantity and the frozen per-pick basis", async () => {
-    const { cfg, menuId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } =
-      await setupVenue();
+    const { cfg, menuId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
       const product = await createProduct(tx, {
         menuId,
@@ -3956,8 +3953,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("resolves every fired product's venue-service route in ONE batched call", async () => {
     // Two lines of coffee and one of water: one call carrying each distinct product once, never a call
     // per line or per product on the shared transaction.
-    const { cfg, zoneId, menuId, premiumCoffeeOfferId, coffeeId, waterId } =
-      await setupVenue();
+    const { cfg, zoneId, menuId, premiumCoffeeOfferId, coffeeId, waterId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments )`);
@@ -10527,9 +10523,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
   // is what can tell one read from one per line.
   it("asks which products have Active variants once for the whole basket, extras picks included", async () => {
     const { cfg, coffeeId, waterId, menuId } = await setupVenue();
-    const bacon = await withTransaction(db, (tx) =>
-      addExtraList(tx, menuId, coffeeId, "Bacon"),
-    );
+    const bacon = await withTransaction(db, (tx) => addExtraList(tx, menuId, coffeeId, "Bacon"));
     const spy = vi.spyOn(menu, "parentsWithActiveVariants");
 
     await parkProducts(cfg, {
@@ -10606,9 +10600,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
   });
   it("refuses raising a held line whose extra has gained an Active variant, and keeps an unchanged one", async () => {
     const { cfg, menuId, coffeeId } = await setupVenue();
-    const bacon = await withTransaction(db, (tx) =>
-      addExtraList(tx, menuId, coffeeId, "Bacon"),
-    );
+    const bacon = await withTransaction(db, (tx) => addExtraList(tx, menuId, coffeeId, "Bacon"));
     const extras = [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }];
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [{ productId: coffeeId, quantity: "1", extras }] });

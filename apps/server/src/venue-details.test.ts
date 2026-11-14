@@ -1753,8 +1753,7 @@ it("refuses a changed cutover beside a placed period and rolls back other detail
       name: "Clock department",
       orderStart: "counter",
     });
-    const menu = (await tx.execute<{ id: string }>(sql`select id from menus limit 1`)).rows[0]!
-      .id;
+    const menu = (await tx.execute<{ id: string }>(sql`select id from menus limit 1`)).rows[0]!.id;
     const period = await saveMenuPeriod(tx, department.id, {
       name: "Lunch",
       menuId: menu,

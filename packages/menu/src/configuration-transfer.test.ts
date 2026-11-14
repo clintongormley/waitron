@@ -156,9 +156,7 @@ describe("validateMenuConfiguration: product names", () => {
 
   it.each([7, null, undefined])("refuses a category or product whose name is %j", (name) => {
     const row = name === undefined ? {} : { name };
-    expect(() =>
-      validateMenuConfiguration({ categories: [{ id: "c1", ...row }] }),
-    ).toThrowError(
+    expect(() => validateMenuConfiguration({ categories: [{ id: "c1", ...row }] })).toThrowError(
       expect.objectContaining({
         code: "setup.request_invalid",
         params: { field: "categories.name" },
@@ -316,10 +314,7 @@ describe("validateMenuConfiguration: include folders", () => {
       { show_as_folder: true },
       {},
     ])
-      expect(
-        () => validateMenuConfiguration(bundle(member)),
-        JSON.stringify(member),
-      ).not.toThrow();
+      expect(() => validateMenuConfiguration(bundle(member)), JSON.stringify(member)).not.toThrow();
   });
 
   it.each(["yes", 2, null, "1"])("refuses a show_as_folder of %j", (show_as_folder) => {
@@ -347,9 +342,7 @@ describe("validateMenuConfiguration: include folders", () => {
           JSON.stringify({ ...placement, ...folder }),
         ).toThrowError(refusedAs(`section_members.${field}`));
       for (const folder of [{}, { show_as_folder: 1, folder_overrides: "{}" }])
-        expect(() =>
-          validateMenuConfiguration(bundle({ ...placement, ...folder })),
-        ).not.toThrow();
+        expect(() => validateMenuConfiguration(bundle({ ...placement, ...folder }))).not.toThrow();
     }
   });
 });

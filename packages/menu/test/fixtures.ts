@@ -16,12 +16,7 @@ import { seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SeriesId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "../src/operations.js";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "../src/operations.js";
 import { nameColumns } from "../src/product-names.js";
 import { createUnit } from "../src/units.js";
 

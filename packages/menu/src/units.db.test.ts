@@ -37,10 +37,7 @@ const app = <T>(action: (tx: Parameters<typeof getUnit>[0]) => Promise<T>) =>
  * `id` is supplied only where a test needs the rows' key order to be predictable.
  */
 async function product(id: string | null = null): Promise<string> {
-  const [menu] = await suite.db
-    .insert(menus)
-    .values({ name: "Menu" })
-    .returning({ id: menus.id });
+  const [menu] = await suite.db.insert(menus).values({ name: "Menu" }).returning({ id: menus.id });
   const [row] = await suite.db
     .insert(products)
     .values({

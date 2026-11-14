@@ -17,12 +17,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { billPayments, sales, tenders, withTransaction, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";

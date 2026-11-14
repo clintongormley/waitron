@@ -41,10 +41,7 @@ async function seedFiredOrder(
 ): Promise<string> {
   // Through the table definitions: every id is a `$defaultFn` generator, and `descriptions` is
   // encoded by the column's own write mapping.
-  const [menu] = await db
-    .insert(menus)
-    .values({ name: "Test menu" })
-    .returning({ id: menus.id });
+  const [menu] = await db.insert(menus).values({ name: "Test menu" }).returning({ id: menus.id });
   const [product] = await db
     .insert(products)
     .values({

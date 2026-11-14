@@ -1886,9 +1886,7 @@ it("shows that the uses are being looked up until the answer arrives", async () 
   );
   expect(modal.querySelector("[data-test=no-uses]")).toBeNull();
   lookup.resolve({ image, uses: everyKindOfUse.slice(0, 1) });
-  await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/manage/menu/product/toast"]]),
-  );
+  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/manage/menu/product/toast"]]));
   expect(modal.querySelector(".uses [role=status]")).toBeNull();
 });
 
@@ -1907,9 +1905,7 @@ it("reports a failed lookup in the preview and shows the uses after Try again", 
   );
   expect(usesShown()).toEqual([]);
   modal.querySelector<HTMLElement>("[data-test=retry-uses]")!.click();
-  await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/manage/menu/product/toast"]]),
-  );
+  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/manage/menu/product/toast"]]));
   expect(client.getImage).toHaveBeenCalledTimes(2);
   expect(client.getImage).toHaveBeenLastCalledWith("one");
   expect(modal.querySelector(".uses [role=alert]")).toBeNull();
@@ -1960,9 +1956,7 @@ it("shows the uses of the image opened last when an earlier image's lookup answe
   await previewClosed();
   thumbnail("two").click();
   await openedViewer();
-  await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/manage/menu/product/toast"]]),
-  );
+  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/manage/menu/product/toast"]]));
   first.resolve({ image, uses: everyKindOfUse.slice(3, 4) });
   await new Promise((resolve) => setTimeout(resolve, 20));
   await el.updateComplete;

@@ -138,13 +138,7 @@ describe("Active and Available", () => {
 
   it("a product created Unavailable is created Active", async () => {
     const created = await run((tx) =>
-      saveProductEditor(
-        tx,
-        null,
-        menuId,
-        { ...body, name: "Croquette", available: false },
-        "en",
-      ),
+      saveProductEditor(tx, null, menuId, { ...body, name: "Croquette", available: false }, "en"),
     );
 
     expect({ active: created.active, available: created.available }).toEqual({

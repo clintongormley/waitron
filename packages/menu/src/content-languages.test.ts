@@ -497,10 +497,7 @@ describe("site content languages", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const [menu] = await tx
-        .insert(menus)
-        .values({ name: "Lunch" })
-        .returning({ id: menus.id });
+      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id });
       await tx.insert(products).values({
         menuId: menu!.id,
         name: "Bread",
@@ -554,10 +551,7 @@ describe("site content languages", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const [menu] = await tx
-        .insert(menus)
-        .values({ name: "Lunch" })
-        .returning({ id: menus.id });
+      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id });
       await tx.insert(products).values({
         menuId: menu!.id,
         name: "Bread",

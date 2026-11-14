@@ -826,9 +826,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       if (body.color !== null && typeof body.color !== "string")
         throw new AppError("management.request_invalid", { field: "color" });
       return c.json(
-        await gated(c, sessionId, (tx, personId) =>
-          saveMenuDefaultColor(tx, body.color, personId),
-        ),
+        await gated(c, sessionId, (tx, personId) => saveMenuDefaultColor(tx, body.color, personId)),
       );
     }),
   );
@@ -1045,8 +1043,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
             if (part === "home") return c.json(await readMenuHome(tx, menuId));
             if (part === "preview") return c.json(await previewMenu(tx, menuId));
             const status = (await menuStatus(tx, [menuId])).get(menuId);
-            if (status === undefined)
-              throw new AppError("menu.not_found", { menuId: menuId });
+            if (status === undefined) throw new AppError("menu.not_found", { menuId: menuId });
             return c.json(status);
           });
           responses[part] = { status: response.status, body: await response.json() };

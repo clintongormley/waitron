@@ -61,10 +61,7 @@ describe("park & retrieve schema", () => {
       .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
     seriesA = series.id;
-    const [menu] = await admin
-      .insert(menus)
-      .values({ name: "Deli" })
-      .returning({ id: menus.id });
+    const [menu] = await admin.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const [product] = await admin
       .insert(products)
       .values({

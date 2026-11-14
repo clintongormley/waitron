@@ -462,9 +462,7 @@ describe("till-app table ordering: the table's menus", () => {
     await flush(el);
 
     expect(tableOrder(el)!.selectedMenuId).toBe("menu-lunch");
-    expect((el as unknown as { selectedMenuId: string }).selectedMenuId).toBe(
-      counterMenu,
-    );
+    expect((el as unknown as { selectedMenuId: string }).selectedMenuId).toBe(counterMenu);
     expect(sessionStorage.getItem("waitron.lastMenu")).toBe(storedPreference);
   });
 

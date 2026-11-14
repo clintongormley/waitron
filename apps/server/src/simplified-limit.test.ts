@@ -13,12 +13,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedZone } from "@waitron/db/testing/seed.js";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { writePartyAllergy } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { createTable } from "./testing/live-table.js";

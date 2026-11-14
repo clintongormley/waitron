@@ -64,10 +64,7 @@ export function offer(id: string, name: string, courseId: string | null = null):
   } satisfies TillMenuOffer;
 }
 
-export function menu(
-  version: string,
-  prices: Record<string, string> = {},
-): ZoneOffers {
+export function menu(version: string, prices: Record<string, string> = {}): ZoneOffers {
   const offers = [
     offer("offer-beer", "Beer", "drinks"),
     offer("offer-steak", "Steak", "mains"),

@@ -3082,11 +3082,9 @@ export class DashboardApi {
   }
 
   saveMenuDefaultColor(color: string | null): Promise<MenuDefaults> {
-    return this.#request<MenuDefaults>(
-      "/management-api/menu-settings/default-color",
-      "PUT",
-      { color },
-    );
+    return this.#request<MenuDefaults>("/management-api/menu-settings/default-color", "PUT", {
+      color,
+    });
   }
 
   getContentLanguages(): Promise<ContentLanguages> {
@@ -3194,10 +3192,7 @@ export class DashboardApi {
     return this.#request<void>("/management-api/content-languages", "PUT", config);
   }
 
-  createMenu(
-    name: string,
-    details: Omit<SectionInput, "internalName"> = {},
-  ): Promise<MenuSummary> {
+  createMenu(name: string, details: Omit<SectionInput, "internalName"> = {}): Promise<MenuSummary> {
     return this.#request<MenuSummary>("/management-api/menus", "POST", {
       name,
       ...details,
@@ -3361,11 +3356,7 @@ export class DashboardApi {
     menuId: string,
     body: { baseVersionId: string; changes: MenuPatchChange[] },
   ): Promise<MenuPatchResult> {
-    return this.#request<MenuPatchResult>(
-      `/management-api/menus/${menuId}/patch`,
-      "POST",
-      body,
-    );
+    return this.#request<MenuPatchResult>(`/management-api/menus/${menuId}/patch`, "POST", body);
   }
 
   getMenuPublications(menuId: string): Promise<MenuPublicationsAnswer> {
@@ -3536,10 +3527,7 @@ export class DashboardApi {
     return this.#request<ExtraOfferUsage[]>(`/management-api/products/${id}/extra-usage`, "GET");
   }
 
-  createProductEditor(
-    menuId: string,
-    input: ProductEditorSaveBody,
-  ): Promise<ProductEditorValue> {
+  createProductEditor(menuId: string, input: ProductEditorSaveBody): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>(
       `/management-api/menus/${menuId}/product-editor`,
       "POST",

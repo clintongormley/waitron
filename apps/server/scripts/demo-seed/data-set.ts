@@ -49,10 +49,9 @@ export type SeedCategory<L extends string = string> = Omit<
   readonly station: "kitchen" | "bar" | "deli" | null;
   readonly products: readonly SeedProduct<L>[];
 };
-export type SeedMenu<L extends string = string> = Omit<
-  CountryDemoMenu<L>,
-  "categories"
-> & { readonly categories: readonly SeedCategory<L>[] };
+export type SeedMenu<L extends string = string> = Omit<CountryDemoMenu<L>, "categories"> & {
+  readonly categories: readonly SeedCategory<L>[];
+};
 export type SeedProductOptionLists<L extends string = string> = CountryDemoProductOptionLists<L>;
 export type SeedProductExtraLists<L extends string = string> = CountryDemoProductExtraLists<L>;
 export type SeedPerson = Omit<CountryDemoPerson, "role"> & { readonly role: BuiltInRoleKey };

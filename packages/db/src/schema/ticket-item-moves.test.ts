@@ -38,10 +38,7 @@ describe("ticket_item_moves schema", () => {
     grill = station!.id;
     fryer = other!.id;
     const nodeId = await seedNode(db);
-    const [menu] = await db
-      .insert(menus)
-      .values({ name: "Menu" })
-      .returning({ id: menus.id });
+    const [menu] = await db.insert(menus).values({ name: "Menu" }).returning({ id: menus.id });
     const [product] = await db
       .insert(products)
       .values({

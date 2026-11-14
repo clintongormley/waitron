@@ -549,10 +549,7 @@ describe("a basket that spans a publish", () => {
       listZoneOffers: vi
         .fn()
         .mockResolvedValue(
-          menu("v2", [
-            offer("offer-lemonade", "Lemonade", "3.00", { unit: kg }),
-            burgerOffer(),
-          ]),
+          menu("v2", [offer("offer-lemonade", "Lemonade", "3.00", { unit: kg }), burgerOffer()]),
         ),
     });
     await toCounter(el);
@@ -667,9 +664,7 @@ describe("a basket that spans a publish", () => {
     const { el } = await mountApp({
       listZoneOffers: vi
         .fn()
-        .mockResolvedValue(
-          menu("v2", [offer("offer-lemonade", "Lemonade", "3.00"), measured]),
-        ),
+        .mockResolvedValue(menu("v2", [offer("offer-lemonade", "Lemonade", "3.00"), measured])),
     });
     await toCounter(el);
     add(el, "Burger", {
@@ -1072,10 +1067,7 @@ const tabLemonade = {
 };
 
 /** Table-service stubs; `diningOffers` answers every read of the table's zone after the first. */
-function tableStubs(
-  diningOffers: ZoneOffers = DINING,
-  overrides: Record<string, unknown> = {},
-) {
+function tableStubs(diningOffers: ZoneOffers = DINING, overrides: Record<string, unknown> = {}) {
   return {
     getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
     listZoneOffers: vi.fn((zoneId: string) =>

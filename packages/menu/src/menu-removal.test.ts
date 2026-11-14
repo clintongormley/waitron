@@ -230,11 +230,7 @@ describe("a product made Inactive comes off every menu", () => {
   it("for every product one Disable of a product selection names", async () => {
     const r = await removalFixture();
     await app((tx) =>
-      deleteProductItems(
-        tx,
-        { productIds: [r.omelette, r.croquette], categoryIds: [] },
-        "delete",
-      ),
+      deleteProductItems(tx, { productIds: [r.omelette, r.croquette], categoryIds: [] }, "delete"),
     );
     await expectOffEveryMenu(r, r.omelette);
     await expectOffEveryMenu(r, r.croquette);
@@ -244,11 +240,7 @@ describe("a product made Inactive comes off every menu", () => {
   it("for a product disabled beside a folder deleted with its contents moved up", async () => {
     const r = await removalFixture();
     await app((tx) =>
-      deleteProductItems(
-        tx,
-        { productIds: [r.omelette], categoryIds: [r.tapasFolder] },
-        "move_up",
-      ),
+      deleteProductItems(tx, { productIds: [r.omelette], categoryIds: [r.tapasFolder] }, "move_up"),
     );
     await expectOffEveryMenu(r, r.omelette);
     await expectStillOnEveryMenu(r, r.croquette);

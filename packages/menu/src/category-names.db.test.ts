@@ -115,9 +115,7 @@ describe("bulk move", () => {
     const left = await app((tx) => createCategory(tx, { name: "Wine", parentId: drinks }));
     const right = await app((tx) => createCategory(tx, { name: "wine", parentId: food }));
     await expect(
-      app((tx) =>
-        moveProductItems(tx, { productIds: [], categoryIds: [left.id, right.id] }, null),
-      ),
+      app((tx) => moveProductItems(tx, { productIds: [], categoryIds: [left.id, right.id] }, null)),
     ).rejects.toMatchObject(taken("wine"));
   });
   it("moves a category whose name the target does not hold", async () => {

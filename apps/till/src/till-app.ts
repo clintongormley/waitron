@@ -1844,10 +1844,7 @@ class ZoneOfferIndex {
   loaded = false;
   liveFields: string | undefined;
 
-  load(
-    zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "liveFields">,
-    loaded = true,
-  ): void {
+  load(zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "liveFields">, loaded = true): void {
     this.selectable = new Set(
       zoneOffers.menus.filter((menu) => menu.orderable).map((menu) => menu.id),
     );
@@ -6477,8 +6474,7 @@ export class TillApp extends LitElement {
   async #markUnsellable(round: WorkingOrderStore): Promise<void> {
     const zoneId = this.#tableZoneId;
     if (zoneId === undefined) return;
-    round.canSelectProduct = (product) =>
-      this.#tableOffers.selectable.has(product.menuId ?? "");
+    round.canSelectProduct = (product) => this.#tableOffers.selectable.has(product.menuId ?? "");
     this.#markedRounds.add(round);
     await this.#reloadTableOffers(zoneId);
   }
@@ -6923,8 +6919,7 @@ export class TillApp extends LitElement {
     if (zoneId === undefined || !(await this.#reloadTableOffers(zoneId))) return "failed";
     if (round === this.#draftSync?.store) this.#draftRefreshDue = false;
     const outcome = this.#reconcileBasket(round, this.#tableOffers);
-    round.canSelectProduct = (product) =>
-      this.#tableOffers.selectable.has(product.menuId ?? "");
+    round.canSelectProduct = (product) => this.#tableOffers.selectable.has(product.menuId ?? "");
     this.#markedRounds.add(round);
     this.#markRounds(true);
     return outcome;
@@ -12393,8 +12388,7 @@ export class TillApp extends LitElement {
       const session = this.#operatorSession;
       const table = this.#openingFloor(fromBar).find((candidate) => candidate.id === tableId);
       const heldZone = this.#menuPoll.running ? (table?.zoneId ?? undefined) : undefined;
-      const held =
-        heldZone === undefined ? undefined : this.#zoneOffers.get(heldZone)?.zoneOffers;
+      const held = heldZone === undefined ? undefined : this.#zoneOffers.get(heldZone)?.zoneOffers;
       if (heldZone !== undefined && held !== undefined) {
         // Shown at once; the check's answer reaches #onMenuState, which reads again if it moved.
         this.#loadTableOffers(heldZone, held);

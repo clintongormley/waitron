@@ -1138,11 +1138,7 @@ describe("dashboard-app", () => {
       ],
     ],
     ["nothing", [], ["my-schedule", "orders"]],
-    [
-      "menu.manage",
-      ["menu.manage"],
-      ["menus", "modifiers", "content-languages", "orders"],
-    ],
+    ["menu.manage", ["menu.manage"], ["menus", "modifiers", "content-languages", "orders"]],
   ])(
     "a person holding only %s signs in and sees permitted pages",
     async (_name, permissions, screens) => {
@@ -1678,8 +1674,7 @@ describe("dashboard-app", () => {
 
   it("closing Your profile keeps a new product's editor, with its unsaved price", async () => {
     history.replaceState(null, "", "/manage/products");
-    const { el, editor, price, fromBrowser, reprice, passThroughYourProfile } =
-      await mountOnMenu();
+    const { el, editor, price, fromBrowser, reprice, passThroughYourProfile } = await mountOnMenu();
     await expect
       .poll(() => menu(el)?.shadowRoot!.querySelector("dashboard-product-browser"))
       .not.toBeNull();
@@ -3913,12 +3908,7 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    [
-      "manager",
-      ["menu.manage"],
-      "dashboard-content-languages-screen",
-      "/manage/content-languages",
-    ],
+    ["manager", ["menu.manage"], "dashboard-content-languages-screen", "/manage/content-languages"],
     ["manager", ["person.manage"], "dashboard-overview-screen", "/manage/overview"],
     ["supervisor", [], "dashboard-overview-screen", "/manage/overview"],
   ])(

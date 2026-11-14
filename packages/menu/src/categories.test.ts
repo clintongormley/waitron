@@ -191,9 +191,7 @@ describe("category authoring", () => {
     const child = await app((tx) =>
       createCategory(tx, { name: "Starters", parentId: food.id, color: "#b12525" }),
     );
-    await app((tx) =>
-      moveProductItems(tx, { productIds: [], categoryIds: [child.id] }, drinks.id),
-    );
+    await app((tx) => moveProductItems(tx, { productIds: [], categoryIds: [child.id] }, drinks.id));
     expect(await app((tx) => readCategory(tx, child.id))).toEqual({
       id: child.id,
       name: "Starters",

@@ -228,9 +228,7 @@ describe("demo seed end-to-end", () => {
         const [item] = await tx
           .select({ id: menuItems.id })
           .from(menuItems)
-          .where(
-            and(eq(menuItems.menuId, product.menuId), eq(menuItems.productId, product.id)),
-          );
+          .where(and(eq(menuItems.menuId, product.menuId), eq(menuItems.productId, product.id)));
         return item!.id;
       };
       return {

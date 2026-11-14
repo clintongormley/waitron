@@ -22,12 +22,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { AppError, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 

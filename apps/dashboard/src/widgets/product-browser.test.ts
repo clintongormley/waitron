@@ -1678,9 +1678,7 @@ it.each(["en-GB", "es-ES"])(
       await el.updateComplete;
       const table = await tableOf(el);
       await vi.waitFor(() => expect(table.hasAttribute("stacked-search")).toBe(true));
-      const search = el
-        .shadowRoot!.querySelector('[name="menu-search"]')!
-        .getBoundingClientRect();
+      const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
       const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
       const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
       expect(search.left).toBeCloseTo(toolbar.left, 0);
@@ -3688,8 +3686,7 @@ it.each([
   "says category, never folder, in every Products-screen string (%s)",
   (_name, strings) => {
     const screen = Object.entries(strings).filter(
-      ([key]) =>
-        /^(folders|menu|categories)\./.test(key) || key === "product.filter_ordering_all",
+      ([key]) => /^(folders|menu|categories)\./.test(key) || key === "product.filter_ordering_all",
     );
     expect(screen.length).toBeGreaterThan(40);
     expect(screen.filter(([, text]) => /folder|carpeta/i.test(text))).toEqual([]);
@@ -3841,8 +3838,7 @@ it("Add category clears a typed search, so its name box shows", async () => {
   await menuAction(el, "add-category-d");
   await nameBox(el);
   expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="menu-search"]')!
-      .value,
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="menu-search"]')!.value,
   ).toBe("");
 });
 
@@ -3966,8 +3962,7 @@ it("opens the Products table's Filters from the toolbar's start", async () => {
     const trigger = table.shadowRoot!.querySelector(".filters-trigger")!;
     expect(table.shadowRoot!.querySelector(".table-toolbar")!.firstElementChild).toBe(trigger);
     expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
-      el.shadowRoot!.querySelector('wt-input[name="menu-search"]')!.getBoundingClientRect()
-        .left,
+      el.shadowRoot!.querySelector('wt-input[name="menu-search"]')!.getBoundingClientRect().left,
     );
   } finally {
     await page.viewport(width, height);
@@ -4062,9 +4057,7 @@ it("at phone width puts Filters and Select above search and Customise", async ()
       expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
       expect(line[index]!.top, `item ${index}`).toBeLessThan(line[0]!.bottom);
     }
-    const search = el
-      .shadowRoot!.querySelector('[name="menu-search"]')!
-      .getBoundingClientRect();
+    const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
     expect(search.top).toBeGreaterThanOrEqual(Math.max(...line.map((box) => box.bottom)));
     const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
     const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
@@ -4109,9 +4102,7 @@ it.each([
         expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
         expect(line[index]!.top, `item ${index}`).toBeLessThan(line[0]!.bottom);
       }
-      const search = el
-        .shadowRoot!.querySelector('[name="menu-search"]')!
-        .getBoundingClientRect();
+      const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
       expect(search.top).toBeGreaterThanOrEqual(Math.max(...line.map((box) => box.bottom)));
       const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
       const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
@@ -4174,9 +4165,7 @@ it("at phone width fits Select controls beneath the final search and Customise l
       expect(box.right).toBeLessThanOrEqual(table.getBoundingClientRect().right);
     }
     const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
-    const search = el
-      .shadowRoot!.querySelector('[name="menu-search"]')!
-      .getBoundingClientRect();
+    const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
     expect(search.right).toBeLessThan(chooser.left);
     expect(chooser.top).toBeLessThan(search.bottom);
     expect(chooser.right).toBeCloseTo(toolbar.right, 0);
@@ -4426,9 +4415,8 @@ it.each(
   await new Promise<void>((resolve) =>
     requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
   );
-  const search = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    '[name="menu-search"]',
-  )!;
+  const search =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="menu-search"]')!;
   await search.updateComplete;
   const controls = [
     table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!,

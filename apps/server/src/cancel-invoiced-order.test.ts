@@ -93,9 +93,7 @@ useVenueDb({
           hardwareUnit: "kg",
         })
         .returning({ id: units.id });
-      const [menu] = db.all<{ id: string }>(
-        sql`select id from menus where name = 'Carta'`,
-      );
+      const [menu] = db.all<{ id: string }>(sql`select id from menus where name = 'Carta'`);
       const [category] = db.all<{ id: string }>(
         sql`select id from categories where name = 'Platos'`,
       );

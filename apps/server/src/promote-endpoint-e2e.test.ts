@@ -44,12 +44,7 @@ import {
   managementSessions,
   persons,
 } from "@waitron/identity";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import {
   canonicalize,
   generateNodeKeyPair,

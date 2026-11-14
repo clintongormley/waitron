@@ -27,12 +27,7 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import {
-  assignMenuToVenue,
-  createMenu,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { mountTillApi } from "./till-api.js";

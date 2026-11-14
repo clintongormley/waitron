@@ -449,7 +449,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   variant renaming, batch boundaries and clash checks stay.
   Menu pricing samples use English dish and modifier text; pricing checks retain
   their existing amounts, quantities, dates and language keys.
-  Menu menu-removal and availability suites use English dish samples; removal,
+  The menu-removal and availability suites use English dish samples; removal,
   sibling-price, archived-product and availability checks remain.
   Dashboard hardware save-state, equipment-label and page-printer panel suites use English
   sample names; IDs, permissions, saved choices and save-state checks stay in place.
@@ -725,7 +725,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   variant renaming, batch boundaries and clash checks stay.
   Menu pricing samples use English dish and modifier text; pricing checks retain
   their existing amounts, quantities, dates and language keys.
-  Menu menu-removal and availability suites use English dish samples; removal,
+  The menu-removal and availability suites use English dish samples; removal,
   sibling-price, archived-product and availability checks remain.
   Dashboard hardware save-state, equipment-label and page-printer panel suites use English
   sample names; IDs, permissions, saved choices and save-state checks stay in place.
@@ -960,7 +960,8 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   `taxpayer`, and names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
   Menu code uses `@waitron/menu` and menu/product file paths. Product defaults and starter-unit
   history share `settings.menu`; translation runs store their total on the first batch only.
-  The remaining menu tables, identifiers, routes and visible wording await the following slices.
+  The menu table, identifiers, routes and wording now use menu names; the Products screen uses
+  products names. The remaining menu table folds await the following slices.
   Membership reads its term from the signed document, and an alert's handler references a person.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables

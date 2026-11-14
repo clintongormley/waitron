@@ -128,10 +128,7 @@ export async function seedVenue(
   if (defaultMenuId !== undefined) {
     await db.update(menus).set({ isDefault: false }).where(eq(menus.isDefault, true));
     if (defaultMenuId !== null)
-      await db
-        .update(menus)
-        .set({ isDefault: true })
-        .where(eq(menus.id, defaultMenuId));
+      await db.update(menus).set({ isDefault: true }).where(eq(menus.id, defaultMenuId));
   }
   const doc: Partial<VenueSettings> = {};
   for (const [key, value] of Object.entries({

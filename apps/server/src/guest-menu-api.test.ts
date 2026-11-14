@@ -90,10 +90,9 @@ it("renders the publication, keeping later draft names and prices out", async ()
   await withTransaction(suite.db, (tx) =>
     updateProduct(tx, f.soup, { customerName: { en: "Unpublished soup" }, unitPrice: "92.34" }),
   );
-  const answer = await f.app.request(
-    `/management-api/menus/${f.lunch}/guest-preview?language=en`,
-    { headers: { cookie: f.cookies.manager } },
-  );
+  const answer = await f.app.request(`/management-api/menus/${f.lunch}/guest-preview?language=en`, {
+    headers: { cookie: f.cookies.manager },
+  });
   expect(answer.status).toBe(200);
   const body = await answer.json();
   expect(body.html).toContain("Soup for guests");

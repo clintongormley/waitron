@@ -18,12 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { createCategory } from "./categories.js";
-import {
-  createMenu,
-  createProduct,
-  deactivateMenu,
-  deactivateProduct,
-} from "./operations.js";
+import { createMenu, createProduct, deactivateMenu, deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import {
   listAbsentTranslationRefs,

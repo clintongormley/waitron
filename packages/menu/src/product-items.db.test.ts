@@ -242,9 +242,7 @@ describe("deleteProductItems", () => {
       ).rejects.toMatchObject({ code: "product.not_found", params: { productId: bad } });
     }
     await expect(
-      app((tx) =>
-        deleteProductItems(tx, { productIds: [cola], categoryIds: [missing] }, "delete"),
-      ),
+      app((tx) => deleteProductItems(tx, { productIds: [cola], categoryIds: [missing] }, "delete")),
     ).rejects.toMatchObject({ code: "category.not_found", params: { categoryId: missing } });
     expect(await product(cola)).toMatchObject({ active: true, categoryId: d });
     expect(await app(listCategories)).toHaveLength(3);
@@ -343,9 +341,7 @@ describe("deleteProductItems with the counts the client read before deleting", (
     const shown = await shownFor([f, b]);
     await app((tx) => addProduct(tx, b));
     await expect(
-      app((tx) =>
-        deleteProductItems(tx, { productIds: [], categoryIds: [f, b] }, "delete", shown),
-      ),
+      app((tx) => deleteProductItems(tx, { productIds: [], categoryIds: [f, b] }, "delete", shown)),
     ).rejects.toMatchObject({ code: "category.contents_changed", params: { categoryId: b } });
     expect(await app(listCategories)).toHaveLength(3);
   });
@@ -377,9 +373,7 @@ describe("deleteProductItems with the counts the client read before deleting", (
   it("refuses a shown list that leaves out a selected category, and deletes nothing", async () => {
     const shown = await shownFor([d]);
     await expect(
-      app((tx) =>
-        deleteProductItems(tx, { productIds: [], categoryIds: [d, f] }, "delete", shown),
-      ),
+      app((tx) => deleteProductItems(tx, { productIds: [], categoryIds: [d, f] }, "delete", shown)),
     ).rejects.toMatchObject({ code: "category.contents_changed", params: { categoryId: f } });
     expect(await app(listCategories)).toHaveLength(3);
     for (const id of [cola, lager, burger]) expect((await product(id)).active).toBe(true);

@@ -426,10 +426,7 @@ describe("atomic content translations", () => {
             .where(eq(sectionMembers.id, ids.included_menu));
           break;
         case "child activity":
-          await tx
-            .update(menus)
-            .set({ active: false })
-            .where(eq(menus.id, ids.childMenuId));
+          await tx.update(menus).set({ active: false }).where(eq(menus.id, ids.childMenuId));
           break;
         case "root ownership":
           await tx

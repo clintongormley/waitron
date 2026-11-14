@@ -386,10 +386,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
   });
 
   it("seeds the venue's Open period and preserves authored name, colour and staff order on a re-run", async () => {
-    const [menu] = await db
-      .insert(menus)
-      .values({ name: "Carta" })
-      .returning({ id: menus.id });
+    const [menu] = await db.insert(menus).values({ name: "Carta" }).returning({ id: menus.id });
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["en-GB"],
@@ -414,10 +411,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await db.execute(
       sql`update menu_periods set name = 'Authored hours', colour = 'blue' where id = ${periodId}`,
     );
-    const [staff] = await db
-      .insert(menus)
-      .values({ name: "Staff" })
-      .returning({ id: menus.id });
+    const [staff] = await db.insert(menus).values({ name: "Staff" }).returning({ id: menus.id });
     await db.execute(sql`insert into menu_period_staff_menus (period_id, department_id, menu_id, display_order)
       select id, department_id, ${staff!.id}, 5 from menu_periods where id = ${periodId}`);
     await runSeed();

@@ -463,9 +463,7 @@ describe("duplicateMenu", () => {
   it("compares an inactive menu's composed name without removing accents", async () => {
     const f = await fixture();
     const held = await app((tx) => createMenu(tx, { name: "Caf\u00e9" }));
-    await app((tx) =>
-      tx.update(menus).set({ active: false }).where(eq(menus.id, held.id)),
-    );
+    await app((tx) => tx.update(menus).set({ active: false }).where(eq(menus.id, held.id)));
     const before = await fx.db.select().from(menus);
     await expect(app((tx) => duplicateMenu(tx, f.lunch, "  CAFE\u0301  "))).rejects.toMatchObject({
       code: "menu.name_taken",

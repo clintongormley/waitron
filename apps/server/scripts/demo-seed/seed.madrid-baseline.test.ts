@@ -415,6 +415,10 @@ for (const locale of ["en", "es"] as const) {
       provisioned: await canonicalMadridSemantics(provisioned),
       seeded: await canonicalMadridSemantics(seeded),
     };
+    const historicalSeeded = madridWithRenamedColumns(
+      madridWithRenamedTables(canonical.seeded, { menus: "catalogues" }),
+      { products: { menu_id: "catalogue_id" } },
+    );
     const root = DEMO_BASELINE_FIXTURE_ROOTS[CASA_DELGADO_ES.id];
     expect(root).toBeInstanceOf(URL);
     const fixtureName = `madrid-before-move.${locale}.json`;
@@ -1414,12 +1418,21 @@ for (const locale of ["en", "es"] as const) {
         for (const [name, count] of Object.entries(periods.added)) phases.seeded![name]! += count;
         const { semantics, added } = madridWithAddedRows(
           expected.seeded,
-          canonical.seeded,
+          historicalSeeded,
           ADDED_CATEGORIES[locale],
         );
         expected.seeded = semantics;
         for (const [name, count] of Object.entries(added)) phases.seeded![name]! += count;
       }
+      expected[phase] = madridWithRenamedTables(expected[phase], { catalogues: "menus" });
+      expected[phase] = madridWithRenamedColumns(expected[phase], {
+        products: { catalogue_id: "menu_id" },
+      });
+      phases[phase]!.menus = phases[phase]!.catalogues!;
+      delete phases[phase]!.catalogues;
+      phases[phase] = Object.fromEntries(
+        Object.entries(phases[phase]!).sort(([a], [b]) => a.localeCompare(b)),
+      );
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
       for (const [name, actual] of Object.entries(canonical[phase].tables)) {

@@ -138,9 +138,7 @@ export type CountryDemoCategory<L extends string = string> = ReadonlyDemo<
   CountryDemoCategoryFields<L>
 >;
 
-export type CountryDemoMenu<L extends string = string> = ReadonlyDemo<
-  CountryDemoMenuFields<L>
->;
+export type CountryDemoMenu<L extends string = string> = ReadonlyDemo<CountryDemoMenuFields<L>>;
 
 export type CountryDemoOptionLabel<L extends string = string> = ReadonlyDemo<
   CountryDemoOptionLabelFields<L>

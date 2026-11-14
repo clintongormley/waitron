@@ -167,10 +167,7 @@ async function setSoupPrice(app: Hono, menuId: string, itemId: string, grossPric
 
 async function previewHash(app: Hono, menuId: string): Promise<string> {
   return (
-    await json<MenuPreview>(
-      await send(app, "GET", `/management-api/menus/${menuId}/preview`),
-      200,
-    )
+    await json<MenuPreview>(await send(app, "GET", `/management-api/menus/${menuId}/preview`), 200)
   ).hash;
 }
 

@@ -1140,7 +1140,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   // `shared.invalid_decimal` fires on anything `decimal()` does not accept, not only a comma: a blank,
   // whitespace, letters, `.5` and `01.00` all reach it. The hint names the SHAPE that is accepted, so
-  // it is also true of a catalogue price write, which answers the same code.
+  // it is also true of a product price write, which answers the same code.
   "shared.invalid_decimal": {
     en: "Check the amounts: digits with a dot only (21.00, not 21,00 or 021.00)",
     es: "Revisa los importes: solo cifras con punto decimal (21.00, no 21,00 ni 021.00)",

@@ -68,10 +68,7 @@ describe("menu — menu, taxonomy and priced items", () => {
 
   it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {
     // A real parent row, so the INSERTs below reach the CHECKs rather than the foreign key.
-    const [menu] = await db
-      .insert(menus)
-      .values({ name: "Deli" })
-      .returning({ id: menus.id });
+    const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
 
     // `id` and the timestamps are named because their defaults are `$defaultFn` generators a raw
     // insert never reaches; raw SQL because the TypeScript type rejects the values under test.

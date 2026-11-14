@@ -9,12 +9,7 @@ import type { TillApp } from "./till-app.js";
 import type { TillPassScreen } from "./screens/till-pass-screen.js";
 import type { TillPassBoard } from "./widgets/pass-board.js";
 import type { CapabilityFlag } from "./layout.js";
-import type {
-  DevicePassBoard,
-  KitchenScreenKind,
-  TillApi,
-  ZoneOffers,
-} from "./api/client.js";
+import type { DevicePassBoard, KitchenScreenKind, TillApi, ZoneOffers } from "./api/client.js";
 
 const previousLocale = currentLocale();
 beforeEach(() => setLocale("es-ES"));
