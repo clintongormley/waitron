@@ -747,8 +747,11 @@ describe("dashboard-aeat-certificate-dialog", () => {
 
   it("re-renders its words and the guides on a locale switch", async () => {
     const { dialog } = await open({});
+    await choose(dialog, new File([new Uint8Array(1536)], "bar-lucia-2026.p12"));
     setLocale("es");
     await dialog.updateComplete;
+    await fileField(dialog).updateComplete;
+    expect(fileField(dialog).shadowRoot!.textContent).toContain("1,5 kB");
     expect(q(dialog, "wt-dialog").getAttribute("heading")).toBe(
       "Sustituir el certificado de la AEAT",
     );

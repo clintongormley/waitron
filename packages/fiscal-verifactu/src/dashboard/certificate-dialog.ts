@@ -19,6 +19,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import {
   codeMessage,
   codeOf,
+  currentLocale,
   subscribeLocale,
   type DashboardPermissionContinuation,
 } from "@waitron/dashboard-kit";
@@ -340,6 +341,7 @@ export class AeatCertificateDialog extends LitElement {
         <p data-test="certificate-intro">${t("aeat_certificate.dialog.intro")}</p>
         <wt-file-input
           name="certificate-file"
+          .locale=${currentLocale()}
           accept=".pfx,.p12"
           label=${t("aeat_certificate.dialog.file_label")}
           required
