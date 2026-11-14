@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { leaveCoordinatorFor, type WtInput } from "@waitron/ui";
-import { setLocale } from "@waitron/dashboard-kit";
+import { setLocale, t } from "@waitron/dashboard-kit";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { deep, mountReceiptApp } from "./testing/department-receipt-app-fixture.js";
 import {
@@ -39,33 +39,29 @@ const zones = [
 ];
 const zoneEditor = (app: Parameters<typeof deep>[0]) =>
   deep(app, "zone-edit-dialog") as HTMLElementTagNameMap["zone-edit-dialog"] | null;
-it.each([
-  ["en-GB", "Zone name", "How orders start", "Service", "Edit zone"],
-  ["es-ES", "Nombre de la zona", "Cómo empiezan los pedidos", "Servicio", "Editar zona"],
-])(
-  "%s Zone name opens its editor",
-  async (locale, label, policy, departmentLocation, zoneLocation) => {
-    const { app } = await mountReceiptApp({
-      locale,
-      path: "/manage/venue-operations",
-      zones: zones.slice(0, 1),
-    });
-    await searchSettings(app, policy!);
-    expect(searchResult(app, "venue-service:department:orderStart")?.textContent).toContain(
-      departmentLocation,
-    );
-    expect(searchResult(app, "venue-service:zone:orderStart")?.textContent).toContain(zoneLocation);
-    await searchSettings(app, label!);
-    expect(searchResult(app, "venue-service:zone:name")).toBeTruthy();
-    await userEvent.click(searchResult(app, "venue-service:zone:name")!);
-    await expect.poll(() => zoneEditor(app.shadowRoot!)?.zoneId).toBe("z1");
-    await expect
-      .poll(() => zoneEditor(app.shadowRoot!)?.shadowRoot?.querySelector("[name=name]"))
-      .toBeTruthy();
-    expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/zones/zone/z1");
-    expect(searchBox(app).value).toBe("");
-  },
-);
+it.each(["en-GB", "es-ES"])("%s Zone name opens its editor", async (locale) => {
+  const { app } = await mountReceiptApp({
+    locale,
+    path: "/manage/venue-operations",
+    zones: zones.slice(0, 1),
+  });
+  await searchSettings(app, t("venue.order_start"));
+  expect(searchResult(app, "venue-service:department:orderStart")?.textContent).toContain(
+    t("venue.department_tab.service"),
+  );
+  expect(searchResult(app, "venue-service:zone:orderStart")?.textContent).toContain(
+    t("venue.edit_zone"),
+  );
+  await searchSettings(app, t("venue.zone_name"));
+  expect(searchResult(app, "venue-service:zone:name")).toBeTruthy();
+  await userEvent.click(searchResult(app, "venue-service:zone:name")!);
+  await expect.poll(() => zoneEditor(app.shadowRoot!)?.zoneId).toBe("z1");
+  await expect
+    .poll(() => zoneEditor(app.shadowRoot!)?.shadowRoot?.querySelector("[name=name]"))
+    .toBeTruthy();
+  expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/zones/zone/z1");
+  expect(searchBox(app).value).toBe("");
+});
 it("same-zone search preserves its edited draft", async () => {
   const { app } = await mountReceiptApp({
     path: "/manage/venue-operations/department/bar/view/zones/zone/z1",
