@@ -1,4 +1,4 @@
-// Weaker than its name: the source checks read the dashboard's and the till's source as text, so a
+// Weaker than its name: the source checks read only the named app/module roots as text, so a
 // guide path built from parts passes them.
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { GUIDE_LINKS } from "../apps/dashboard/src/help-guide.js";
 import { GUIDE_LINKS as TILL_GUIDE_LINKS } from "../apps/till/src/help-guide.js";
+import { GUIDE_LINKS as VENUE_GUIDE_LINKS } from "../packages/venue-service/src/dashboard/help-guide.js";
 import {
   GUIDE_LANGUAGES,
   GUIDE_PAGES,
@@ -35,6 +36,11 @@ function guideWriters(root: string): string[] {
 describe.each([
   { app: "dashboard", links: GUIDE_LINKS, src: DASHBOARD_SRC },
   { app: "till", links: TILL_GUIDE_LINKS, src: TILL_SRC },
+  {
+    app: "venue-service",
+    links: VENUE_GUIDE_LINKS,
+    src: join(import.meta.dirname, "..", "packages", "venue-service", "src", "dashboard"),
+  },
 ])("$app guide links", ({ app, links, src }) => {
   it.each(Object.entries(links))(
     "%s names a page and section the server serves in every language",

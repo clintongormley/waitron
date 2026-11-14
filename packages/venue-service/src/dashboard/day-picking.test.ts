@@ -23,11 +23,13 @@ class DayPickingHost extends LitElement {
   `;
   chosen: LocalDate[] = [];
   opened: [LocalDate, DayRun][] = [];
+  openedDates: (readonly LocalDate[])[] = [];
   ranged: DayRun[] = [];
   onPicked: ((run: DayRun | null) => void) | undefined;
   contextMenus: { prevented: boolean }[] = [];
   allowPicking = true;
   dragOnTouch = false;
+  multiple = false;
   picker!: DayPicker;
 
   start() {
@@ -36,13 +38,17 @@ class DayPickingHost extends LitElement {
         this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] > button`),
       canPick: () => this.allowPicking,
       dragOnTouch: this.dragOnTouch,
+      multiple: this.multiple,
       holdMs: 300,
       choose: (date) => this.chosen.push(date),
       picked: (run) => {
         this.onPicked?.(run);
         this.requestUpdate();
       },
-      open: (date, run) => this.opened.push([date, run]),
+      open: (date, run, _trigger, dates) => {
+        this.opened.push([date, run]);
+        this.openedDates.push(dates);
+      },
       ranged: (run) => this.ranged.push(run),
     };
     this.picker = new DayPicker(this, options);
@@ -96,7 +102,12 @@ let page: HTMLElement | undefined;
 /** With `inScrollBox`, the host sits in a scrolling box inside another element's shadow root, as
  * the dashboard's `.main` does, so its scroll events never reach `window`. */
 async function mount(
-  options: { canPick?: boolean; dragOnTouch?: boolean; inScrollBox?: boolean } = {},
+  options: {
+    canPick?: boolean;
+    dragOnTouch?: boolean;
+    inScrollBox?: boolean;
+    multiple?: boolean;
+  } = {},
 ) {
   page = document.createElement("div");
   page.style.blockSize = "4000px";
@@ -104,6 +115,7 @@ async function mount(
   const host = document.createElement("day-picking-host") as DayPickingHost;
   host.allowPicking = options.canPick ?? true;
   host.dragOnTouch = options.dragOnTouch ?? false;
+  host.multiple = options.multiple ?? false;
   host.start();
   if (options.inScrollBox) {
     const shell = document.createElement("div");
@@ -165,6 +177,59 @@ const focusedDate = (host: DayPickingHost) =>
   (host.renderRoot as ShadowRoot).activeElement?.closest("td")?.dataset.date;
 
 describe("DayPicker", () => {
+  it("touch taps toggle selected dates and a held picked date opens the remaining selection", async () => {
+    const host = await mount({ multiple: true });
+    await commands.mouseDrag([sel(20), sel(23)]);
+    await commands.touchGesture({ at: sel(21) });
+    await host.updateComplete;
+    expect(button(host, 21).getAttribute("aria-pressed")).toBe("false");
+    expect(button(host, 20).getAttribute("aria-pressed")).toBe("true");
+    expect(button(host, 23).getAttribute("aria-pressed")).toBe("true");
+    expect(host.chosen).toEqual([]);
+    await commands.touchGesture({ at: sel(22), holdMs: 400 });
+    expect(host.openedDates).toEqual([[day(20), day(22), day(23)]]);
+  });
+
+  it.each(["double-click", "Enter"])("%s opens every independently picked date", async (action) => {
+    const host = await mount({ multiple: true });
+    await userEvent.click(button(host, 20));
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.click(button(host, 23));
+    await userEvent.keyboard("{/Shift}");
+    const modifier = /Mac|iPad|iPhone/.test(navigator.platform) ? "Meta" : "Control";
+    await userEvent.keyboard(`{${modifier}>}`);
+    await userEvent.click(button(host, 27));
+    await userEvent.keyboard(`{/${modifier}}`);
+    if (action === "double-click") await userEvent.dblClick(button(host, 22));
+    else {
+      button(host, 22).focus();
+      await userEvent.keyboard("{Enter}");
+    }
+    expect(host.openedDates).toEqual([[day(20), day(21), day(22), day(23), day(27)]]);
+    await host.updateComplete;
+    expect(button(host, 20).getAttribute("aria-pressed")).toBe("true");
+    expect(button(host, 27).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("keeps separate dates when Shift extends the last added run", async () => {
+    const host = await mount({ multiple: true });
+    await userEvent.click(button(host, 20));
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.click(button(host, 23));
+    await userEvent.keyboard("{/Shift}");
+    const modifier = /Mac|iPad|iPhone/.test(navigator.platform) ? "Meta" : "Control";
+    await userEvent.keyboard(`{${modifier}>}`);
+    await userEvent.click(button(host, 27));
+    await userEvent.keyboard(`{/${modifier}}{Shift>}`);
+    await userEvent.click(button(host, 29));
+    await userEvent.keyboard("{/Shift}");
+    await host.updateComplete;
+    const pressed = [
+      ...host.renderRoot.querySelectorAll<HTMLElement>('td:has([aria-pressed="true"])'),
+    ].map((cell) => cell.dataset.date);
+    expect(pressed).toEqual([day(20), day(21), day(22), day(23), day(27), day(28), day(29)]);
+  });
+
   it("a click picks that one day and chooses it", async () => {
     const host = await mount();
     await userEvent.click(button(host, 20));

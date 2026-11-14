@@ -1,4 +1,8 @@
-# Festivos en Horario de apertura
+# Horario de apertura
+
+## Selecciona varios días {#select-days}
+
+En Año o Mes, selecciona un tramo con Mayús+clic y añade fechas sueltas con Cmd+clic (Ctrl+clic en Windows), o toca fechas en el teléfono mientras aparece la barra de selección; después, elige **Crear un día especial**.
 
 ## Nombres de los festivos {#holiday-names}
 

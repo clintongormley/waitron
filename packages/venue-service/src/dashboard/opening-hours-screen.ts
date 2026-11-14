@@ -67,12 +67,11 @@ type View = "year" | "month" | "week";
 const NO_STATIONS: readonly PrepStation[] = [];
 /** What a painter address names, as written; `painterTarget` resolves it against the model. */
 type PainterAddress = { seasonId: string; departmentId: string; zoneId: string };
-/** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`,
- *  through `to` when it opens on a run. */
 type SpecialAddress = {
   specialDayId: string | null;
   date: LocalDate | null;
   to?: LocalDate | null;
+  dates?: readonly LocalDate[];
 };
 const painterEntryKey = "openingHoursPainter";
 const focusLost = () => !document.activeElement || document.activeElement === document.body;
@@ -240,6 +239,7 @@ export class OpeningHoursScreen extends LitElement {
         "special-day": "special-day",
         date: "date",
         to: "to",
+        dates: "dates",
         year: "year",
         month: "month",
         week: "week",
@@ -301,11 +301,21 @@ export class OpeningHoursScreen extends LitElement {
     if (view === "special-day") {
       const specialDayId = this.url.read("special-day") || null;
       const to = this.url.read("to") ?? "";
+      const rawDates = specialDayId === null ? this.url.read("dates") : null;
+      const parsed = rawDates === null ? undefined : [...new Set(rawDates.split(","))].sort();
+      const dates =
+        parsed === undefined
+          ? undefined
+          : parsed.length <= HOURS_RANGE_MAX_DAYS && parsed.every(isLocalDate)
+            ? parsed
+            : [];
       this.painter = undefined;
       this.special = {
         specialDayId,
-        date: isLocalDate(date) ? date : null,
+        date: dates !== undefined ? (dates[0] ?? null) : isLocalDate(date) ? date : null,
+        dates,
         to:
+          dates === undefined &&
           specialDayId === null &&
           isLocalDate(date) &&
           isLocalDate(to) &&
@@ -326,6 +336,7 @@ export class OpeningHoursScreen extends LitElement {
             month: isLocalDate(date) ? date.slice(0, 7) : null,
             date: null,
             to: null,
+            dates: null,
           },
           true,
         ),
@@ -905,6 +916,7 @@ export class OpeningHoursScreen extends LitElement {
         week: null,
         date: null,
         to: null,
+        dates: null,
       }),
     ).then(() => this.followUrl());
   }
@@ -976,9 +988,9 @@ export class OpeningHoursScreen extends LitElement {
   private overlaid() {
     return this.painter !== undefined || this.special !== undefined;
   }
-  private specialUrl({ specialDayId, date, to }: SpecialAddress) {
+  private specialUrl({ specialDayId, date, to, dates }: SpecialAddress) {
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
-    url.pathname = specialDayPainterPath({ specialDayId, date, to });
+    url.pathname = specialDayPainterPath({ specialDayId, date, to, dates });
     url.searchParams.delete("station");
     return url;
   }
@@ -1122,6 +1134,7 @@ export class OpeningHoursScreen extends LitElement {
       .specialDayId=${specialDayId}
       .date=${specialDayId === null ? date : null}
       .lastDate=${specialDayId === null ? (address.to ?? null) : null}
+      .initialDates=${specialDayId === null ? (address.dates ?? null) : null}
       .addDate=${specialDayId === null ? null : date}
       .holidays=${holidays}
       .readOnly=${this.readOnly}
@@ -1156,18 +1169,29 @@ export class OpeningHoursScreen extends LitElement {
     if (!this.isConnected || this.painter) return;
     void this.openPainter(event.detail.seasonId);
   }
-  /** A date a special day holds opens that day; any other opens a new day on the run. */
   private openDays(event: CustomEvent<CalendarDaysOpen>) {
     event.stopPropagation();
-    const { date, from, to } = event.detail;
+    const { date, dates } = event.detail;
     const read = this.view === "year" ? this.yearModel : this.monthModel;
     const days = read?.days ?? [];
-    const specialDayId = days.find((day) => day.date === date)?.specialDay?.id ?? null;
+    const specialDayId =
+      dates.length === 1 ? (days.find((day) => day.date === date)?.specialDay?.id ?? null) : null;
     const holidays = days.flatMap((day) => day.holidays);
+    const from = dates[0]!;
+    const to = dates.at(-1)!;
+    const contiguous = daysBetween(from, to) === dates.length - 1;
     const open = () =>
       specialDayId
         ? this.openSpecialPainter({ specialDayId, date: null })
-        : this.openSpecialPainter({ specialDayId: null, date: from, to }, holidays);
+        : this.openSpecialPainter(
+            {
+              specialDayId: null,
+              date: from,
+              to: contiguous ? to : null,
+              dates: contiguous ? undefined : dates,
+            },
+            holidays,
+          );
     const box = this.shadowRoot?.querySelector("calendar-day-box");
     if (this.dayBox && this.dayBoxPlaced === this.dayBox && box?.shown) {
       this.afterDayBox = open;
@@ -1328,6 +1352,7 @@ export class OpeningHoursScreen extends LitElement {
         year: null,
         date: null,
         to: null,
+        dates: null,
       }),
     ).then(() => {
       this.followUrl();
@@ -1476,7 +1501,13 @@ export class OpeningHoursScreen extends LitElement {
         @month-year-open=${this.openYearFromMonth}
         @month-change=${(event: CustomEvent<{ month: string }>) => {
           event.stopPropagation();
-          this.writeChanges({ view: "month", month: event.detail.month, date: null, to: null });
+          this.writeChanges({
+            view: "month",
+            month: event.detail.month,
+            date: null,
+            to: null,
+            dates: null,
+          });
         }}
         @month-department-change=${this.departmentChanged}
         @month-station-change=${this.stationChanged}

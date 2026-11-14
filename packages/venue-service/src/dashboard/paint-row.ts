@@ -1,4 +1,4 @@
-import { css, html, nothing } from "lit";
+import { css, html, nothing, type TemplateResult } from "lit";
 import type { CalendarColour } from "../hours-types.js";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
@@ -14,6 +14,7 @@ export interface PaintPot {
 /** The row of paint chips above a painter's grid; the host also takes `periodColourStyles`. */
 export const paintRowStyles = css`
   .paint {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -21,6 +22,9 @@ export const paintRowStyles = css`
     border-block-start: 1px solid var(--wt-color-border);
     border-block-end: 1px solid var(--wt-color-border);
     padding-block: var(--wt-space-2);
+  }
+  .paint > wt-help-tooltip {
+    margin-inline-end: 0;
   }
   .paint .label {
     color: var(--wt-color-text-muted);
@@ -45,9 +49,6 @@ export const paintRowStyles = css`
     /* A scroller with nothing to focus in it cannot be scrolled by keyboard; nothing here acts. */
     .paint[data-disabled] .pots {
       overflow-x: clip;
-    }
-    .hint {
-      margin-inline-start: 0;
     }
   }
   .paint[data-disabled] .pot,
@@ -89,6 +90,8 @@ export const paintRowStyles = css`
     outline-offset: var(--wt-focus-offset);
   }
   .pot .edit {
+    min-inline-size: var(--wt-tap-min);
+    justify-content: center;
     padding-inline: var(--wt-space-2);
     gap: var(--wt-space-1);
     color: var(--wt-color-primary-text);
@@ -110,11 +113,6 @@ export const paintRowStyles = css`
       transparent 0 calc(var(--wt-space-1) * 2)
     );
   }
-  .hint {
-    margin-inline-start: auto;
-    color: var(--wt-color-text-muted);
-    font-size: var(--wt-font-size-sm);
-  }
 `;
 
 export function paintRow(options: {
@@ -126,6 +124,7 @@ export function paintRow(options: {
   /** Nothing can be painted yet: every button is disabled and the chips are drawn quiet. */
   disabled?: boolean;
   slot?: string;
+  help?: TemplateResult;
 }) {
   const { pots, chosen, choose, newPeriod, disabled = false, slot } = options;
   return html`<div
@@ -159,10 +158,11 @@ export function paintRow(options: {
                     class="edit"
                     data-test=${`edit-${pot.id}`}
                     aria-label=${format("painter.edit_period", { name: pot.name })}
+                    title=${format("painter.edit_period", { name: pot.name })}
                     ?disabled=${disabled}
                     @click=${pot.edit}
                   >
-                    <span aria-hidden="true">✎</span> ${t("painter.edit")}
+                    <span aria-hidden="true">✎</span>
                   </button>`
                 : nothing
             }
@@ -182,6 +182,6 @@ export function paintRow(options: {
           : nothing
       }
     </div>
-    <span class="hint" data-test="hint">${t("painter.hint")}</span>
+    ${options.help ?? nothing}
   </div>`;
 }

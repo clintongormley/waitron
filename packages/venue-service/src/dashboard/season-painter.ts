@@ -42,7 +42,9 @@ import {
 } from "./painter-labels.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
-import { PeriodEditing, periodsLink } from "./period-editing.js";
+import { PeriodEditing } from "./period-editing.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
+import { guideHref } from "./help-guide.js";
 
 type Model = OpeningHoursModel;
 type Department = Model["departments"][number];
@@ -659,6 +661,13 @@ export class SeasonPainter extends LitElement {
   private paintRow(department: Department, chosen: string | null, zoned: boolean) {
     return paintRow({
       slot: "row",
+      help: html`<wt-help-tooltip
+        mode="help-mode"
+        aria-label=${t("painter.help")}
+        guide-href=${guideHref("opening-hours")}
+        guide-label=${t("painter.guide")}
+        >${t(zoned ? "painter.zone_explain" : "painter.explain")}</wt-help-tooltip
+      >`,
       pots: [
         ...(zoned ? [] : this.periods.pots(department)),
         { id: null, name: t("hours.closed") },
@@ -713,7 +722,7 @@ export class SeasonPainter extends LitElement {
           this.forget();
         }}
       >
-        ${this.seasonChip()}${this.picker(department)} ${periodsLink()}
+        ${this.seasonChip()}${this.picker(department)}
         <p slot="row" class="covers" data-test="covers">
           ${format("painter.week_covers", {
             from: formatMonthDay(season.startsOn),

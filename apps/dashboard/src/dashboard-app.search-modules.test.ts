@@ -354,25 +354,23 @@ it("the real shell delegates window-only navigation without discarding the actua
   expect(grid.days.get("3")).toEqual(painted);
   expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
 });
-describe("the painters' Periods link inside the real shell", () => {
+describe("inline period editing inside the real shell", () => {
   const seasonBase = "/manage/opening-hours/view/season/season/spring/department/restaurant";
   const specialBase = "/manage/opening-hours/view/special-day/special-day/sd1";
-  const periodsWindow = (el: DashboardApp) =>
-    calendar(el).shadowRoot!.querySelector("[data-test=calendar-window][data-window=periods]");
-  async function clickLink(el: DashboardApp, painter: HTMLElement, base: string) {
+  async function openPeriodEditor(el: DashboardApp, painter: HTMLElement, base: string) {
     const pushed = vi.spyOn(history, "pushState");
-    const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
-    await userEvent.click(link);
-    await vi.waitFor(() => expect(periodsWindow(el)).not.toBeNull());
-    expect(location.pathname).toBe(`${base}/window/periods`);
-    expect(
-      pushed.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
-    ).toEqual([`${base}/window/periods`]);
+    expect(painter.shadowRoot!.querySelector("[data-test=periods-link]")).toBeNull();
+    await userEvent.click(painter.shadowRoot!.querySelector<HTMLElement>('[data-test^="edit-"]')!);
+    await vi.waitFor(() =>
+      expect(painter.shadowRoot!.querySelector("period-dialog")).not.toBeNull(),
+    );
+    expect(location.pathname).toBe(base);
+    expect(pushed.mock.calls).toEqual([]);
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   }
 
   it.each([true, false])(
-    "opens the window over the season painter, with paint %s, keeping the painter",
+    "opens the period editor over the season painter, with paint %s, keeping the painter",
     async (dirty) => {
       const { el } = await mount({ path: seasonBase });
       await vi.waitFor(() =>
@@ -396,14 +394,14 @@ describe("the painters' Periods link inside the real shell", () => {
         await painter.updateComplete;
       }
       expect(leaveCoordinatorFor(el)!.isDirty()).toBe(dirty);
-      await clickLink(el, painter, seasonBase);
+      await openPeriodEditor(el, painter, seasonBase);
       expect(calendar(el).shadowRoot!.querySelector("season-painter")).toBe(painter);
       if (dirty) expect(grid.days.get("3")).toEqual(painted);
       expect(leaveCoordinatorFor(el)!.isDirty()).toBe(dirty);
     },
   );
 
-  it("opens the window over the special-day painter, keeping its unsaved name", async () => {
+  it("opens the period editor over the special-day painter, keeping its unsaved name", async () => {
     const { el } = await mount({ path: specialBase });
     await vi.waitFor(() =>
       expect(
@@ -424,7 +422,7 @@ describe("the painters' Periods link inside the real shell", () => {
     );
     await painter.updateComplete;
     expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
-    await clickLink(el, painter, specialBase);
+    await openPeriodEditor(el, painter, specialBase);
     expect(calendar(el).shadowRoot!.querySelector("special-day-painter")).toBe(painter);
     expect(name()).toBe("Staff party");
     expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);

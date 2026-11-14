@@ -99,12 +99,14 @@ describe.each(["light", "dark"] as const)("Opening hours year accessibility (%s)
     el.model = yearModel();
     host.append(el);
     await el.updateComplete;
+
     const day = (date: string) => `opening-hours-year td[data-date="${date}"] button`;
     // The drag's points are read where the days are drawn, so December must be on screen.
     el.shadowRoot!.querySelector('[data-month="2027-12"]')!.scrollIntoView({ block: "center" });
     await commands.mouseDrag([day("2027-12-19"), day("2027-12-26")]);
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll('td button[aria-pressed="true"]')).toHaveLength(8);
+    expect(el.shadowRoot!.querySelector('[data-test="selection-bar"]')).not.toBeNull();
     await commands.parkPointer();
     await expectNoA11yViolations(host);
   });

@@ -136,6 +136,25 @@ const pressed = (el: OpeningHoursYearView) =>
 const daySel = (date: LocalDate) => `opening-hours-year td[data-date="${date}"] button`;
 
 describe("Opening hours year", () => {
+  it("keeps the Year selection bar visible and opens all its picked dates", async () => {
+    const el = await mount();
+    const runs = opensRun(el);
+    await userEvent.click(dayButton(el, "2027-01-20"));
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.click(dayButton(el, "2027-01-22"));
+    await userEvent.keyboard("{/Shift}");
+    await el.updateComplete;
+    const bar = root(el).querySelector<HTMLElement>('[data-test="selection-bar"]');
+    expect(bar).not.toBeNull();
+    const bounds = bar!.getBoundingClientRect();
+    expect(bounds.top).toBeGreaterThanOrEqual(0);
+    expect(bounds.bottom).toBeLessThanOrEqual(innerHeight);
+    await userEvent.click(bar!.querySelector<HTMLElement>('[data-test="open-selection"]')!);
+    expect(runs).toEqual([
+      { date: "2027-01-20", dates: ["2027-01-20", "2027-01-21", "2027-01-22"] },
+    ]);
+  });
+
   it("draws twelve Monday-first months holding only their own dates", async () => {
     const el = await mount();
     const months = [...root(el).querySelectorAll('[data-test="month-name"]')].map(text);
@@ -544,7 +563,9 @@ describe("Opening hours year", () => {
     expect(opened).toEqual([]);
     await userEvent.dblClick(dayButton(el, "2027-10-22"));
     await el.updateComplete;
-    expect(runs).toEqual([{ date: "2027-10-22", from: "2027-10-20", to: "2027-10-23" }]);
+    expect(runs).toEqual([
+      { date: "2027-10-22", dates: ["2027-10-20", "2027-10-21", "2027-10-22", "2027-10-23"] },
+    ]);
     expect(pressed(el)).toEqual(["2027-10-20", "2027-10-21", "2027-10-22", "2027-10-23"]);
   });
 
@@ -567,7 +588,9 @@ describe("Opening hours year", () => {
     await commands.mouseDrag(["2027-10-20", "2027-10-23"].map(daySel));
     dayButton(el, "2027-10-22").focus();
     await userEvent.keyboard("{Enter}");
-    expect(runs).toEqual([{ date: "2027-10-22", from: "2027-10-20", to: "2027-10-23" }]);
+    expect(runs).toEqual([
+      { date: "2027-10-22", dates: ["2027-10-20", "2027-10-21", "2027-10-22", "2027-10-23"] },
+    ]);
     expect(opened).toEqual([]);
     await userEvent.keyboard("{ }");
     expect(opened.map(({ date }) => date)).toEqual(["2027-10-22"]);

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, setHelpMode } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import { painterFloorPlans } from "../testing/season-painter-fixture.js";
 import type { LocalDate } from "../hours-types.js";
@@ -24,11 +24,28 @@ import "./special-day-painter.js";
 let painter: SpecialDayPainter | undefined;
 beforeEach(() => setLocale("en"));
 afterEach(() => {
+  setHelpMode(false);
   painter?.remove();
   painter = undefined;
 });
 
 const DEC_14 = "2026-12-14";
+
+it("moves the explanation and paint hint into one help-mode bubble", async () => {
+  const { painter } = await mount();
+  const help = painter.shadowRoot!.querySelector("wt-help-tooltip");
+  expect(help).not.toBeNull();
+  expect(painter.shadowRoot!.querySelectorAll("wt-help-tooltip")).toHaveLength(1);
+  expect(part(painter, "explain")).toBeNull();
+  expect(part(painter, "hint")).toBeNull();
+  expect(part(painter, "periods-link")).toBeNull();
+  await help!.updateComplete;
+  expect(help!.checkVisibility()).toBe(false);
+  setHelpMode(true);
+  await help!.updateComplete;
+  expect(help!.checkVisibility()).toBe(true);
+  expect(help!.guideHref).toBe("/help/en/opening-hours#select-days");
+});
 const DEC_15 = "2026-12-15";
 const DEC_25 = "2026-12-25";
 const dinner = (startsAt: string, endsAt: string) => ({ periodId: "p2", startsAt, endsAt });
@@ -498,61 +515,6 @@ describe("periods from the painter", () => {
     return editor;
   }
 
-  it("its bar links to the Periods window, as the season painter's does", async () => {
-    const { painter } = await mount();
-    const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
-    expect(link.slot).toBe("link");
-    expect(link.textContent!.trim()).toBe("Periods");
-    expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/year/window/periods");
-    expect(link.hasAttribute("data-own-click")).toBe(true);
-    await pick(painter, "zone:z2");
-    expect(
-      painter
-        .shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!
-        .getAttribute("href"),
-    ).toBe("/manage/opening-hours/view/year/window/periods");
-    expect(
-      painter
-        .shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!
-        .hasAttribute("data-own-click"),
-    ).toBe(true);
-  });
-
-  it("a plain click on its Periods link asks for the Periods window; a click already cancelled asks nothing", async () => {
-    const { painter } = await mount();
-    const link = part<HTMLAnchorElement>(painter, "periods-link")!;
-    const asked: unknown[] = [];
-    const seen: boolean[] = [];
-    const record = (event: Event) => asked.push((event as CustomEvent).detail);
-    const cancel = (event: Event) => event.preventDefault();
-    // Bubbling on window runs after the link's own listener; cancelling here keeps the test page.
-    const settled = (event: Event) => {
-      seen.push(event.defaultPrevented);
-      event.preventDefault();
-    };
-    const press = () =>
-      link.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
-      );
-    document.addEventListener("calendar-window-open", record);
-    window.addEventListener("click", settled);
-    try {
-      document.addEventListener("click", cancel, { capture: true });
-      try {
-        press();
-      } finally {
-        document.removeEventListener("click", cancel, { capture: true });
-      }
-      expect(asked).toEqual([]);
-      press();
-      expect(seen).toEqual([true, true]);
-      expect(asked).toEqual([{ window: "periods" }]);
-    } finally {
-      document.removeEventListener("calendar-window-open", record);
-      window.removeEventListener("click", settled);
-    }
-  });
-
   it("+ New period opens the period dialog, saves the period on its own, keeps the painting and chooses it", async () => {
     const { painter, writes } = await mount({
       answer: ({ url }) => (url.endsWith("/menu-periods") ? { id: "p-new" } : undefined),
@@ -626,7 +588,7 @@ describe("periods from the painter", () => {
     expect(painter.shadowRoot!.querySelector("[data-test^=edit-]")).toBeNull();
   });
 
-  it("read-only, there is no ✎ and no + New period, and the Periods link stays", async () => {
+  it("read-only, there is no ✎, + New period or Periods link", async () => {
     painter = document.createElement("special-day-painter");
     painter.api = specialDayApi([], { days: { sd1: storedDay() }, season: winterDinner });
     painter.model = painterModel();
@@ -637,7 +599,7 @@ describe("periods from the painter", () => {
     await loaded(painter);
     expect(part(painter, "new-period")).toBeNull();
     expect(part(painter, "edit-p1")).toBeNull();
-    expect(part(painter, "periods-link")).not.toBeNull();
+    expect(part(painter, "periods-link")).toBeNull();
   });
 });
 

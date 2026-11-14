@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
-import { registerIcons } from "@waitron/ui";
+import { registerIcons, setHelpMode } from "@waitron/ui";
+import { userEvent } from "vitest/browser";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { SeasonPainter } from "./season-painter.js";
@@ -10,6 +11,7 @@ import "./season-painter.js";
 registerIcons({ close: "M3 3l10 10M13 3L3 13" });
 
 afterEach(() => {
+  setHelpMode(false);
   cleanup();
   setLocale("en");
 });
@@ -17,6 +19,7 @@ afterEach(() => {
 describe.each(["light", "dark"] as const)("season painter (%s)", (theme) => {
   test.each([
     "department",
+    "painting help",
     "zone",
     "zone closed behind",
     "period dialog",
@@ -32,6 +35,15 @@ describe.each(["light", "dark"] as const)("season painter (%s)", (theme) => {
     painter.open = true;
     painter.readOnly = state.startsWith("read-only");
     await settle(painter);
+    if (state === "painting help") {
+      setHelpMode(true);
+      const help = painter.shadowRoot!.querySelector("wt-help-tooltip")!;
+      await help.updateComplete;
+      await userEvent.click(help.shadowRoot!.querySelector("button")!);
+      await expect
+        .poll(() => help.shadowRoot!.querySelector("[popover]")!.matches(":popover-open"))
+        .toBe(true);
+    }
     if (state === "zone" || state === "read-only zone") await pick(painter, "zone:z2");
     if (state === "zone closed behind") {
       await pick(painter, "zone:z2");

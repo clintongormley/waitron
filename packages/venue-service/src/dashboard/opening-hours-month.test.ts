@@ -90,6 +90,34 @@ const daySel = (date: LocalDate) => `opening-hours-month td[data-date="${date}"]
 const DRAG = ["2026-12-20", "2026-12-21", "2026-12-22", "2026-12-23"];
 
 describe("Opening hours month", () => {
+  it("offers the selected days as one action and clears their marks", async () => {
+    const el = await mount();
+    const opens = events<CalendarDaysOpen>(el, "calendar-days-open");
+    await commands.mouseDrag(DRAG.map(daySel));
+    await el.updateComplete;
+    applyTokens(el);
+    const bar = testId(el, "selection-bar");
+    expect(bar).not.toBeNull();
+    expect(text(bar)).toContain("4 days selected");
+    const action = bar!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="open-selection"]',
+    )!;
+    const clear = bar!.querySelector<HTMLElement>('[data-test="clear-selection"]')!;
+    await action.updateComplete;
+    expect(getComputedStyle(action.shadowRoot!.querySelector("button")!).backgroundColor).not.toBe(
+      getComputedStyle(clear.shadowRoot!.querySelector("button")!).backgroundColor,
+    );
+    await userEvent.click(bar!.querySelector<HTMLElement>('[data-test="open-selection"]')!);
+    expect(opens).toEqual([{ date: "2026-12-20", dates: DRAG }]);
+    await userEvent.click(bar!.querySelector<HTMLElement>('[data-test="clear-selection"]')!);
+    await el.updateComplete;
+    expect(testId(el, "selection-bar")).toBeNull();
+    expect(pressed(el)).toEqual([]);
+    expect(root(el).activeElement?.closest<HTMLElement>("[data-date]")?.dataset.date).toBe(
+      "2026-12-20",
+    );
+  });
+
   it("heads the month with its name and year, and the columns with weekdays from Monday", async () => {
     const el = await mount();
     expect(text(testId(el, "month"))).toBe("December 2026");
@@ -829,7 +857,9 @@ describe("Opening hours month", () => {
     expect(opened).toEqual([]);
     await userEvent.dblClick(dayButton(el, "2026-12-22"));
     await el.updateComplete;
-    expect(runs).toEqual([{ date: "2026-12-22", from: "2026-12-20", to: "2026-12-23" }]);
+    expect(runs).toEqual([
+      { date: "2026-12-22", dates: ["2026-12-20", "2026-12-21", "2026-12-22", "2026-12-23"] },
+    ]);
     expect(pressed(el)).toEqual(DRAG);
   });
 
@@ -852,7 +882,9 @@ describe("Opening hours month", () => {
     await commands.mouseDrag(["2026-12-20", "2026-12-23"].map(daySel));
     dayButton(el, "2026-12-22").focus();
     await userEvent.keyboard("{Enter}");
-    expect(runs).toEqual([{ date: "2026-12-22", from: "2026-12-20", to: "2026-12-23" }]);
+    expect(runs).toEqual([
+      { date: "2026-12-22", dates: ["2026-12-20", "2026-12-21", "2026-12-22", "2026-12-23"] },
+    ]);
     expect(opened).toEqual([]);
     await userEvent.keyboard("{ }");
     expect(opened.map(({ date }) => date)).toEqual(["2026-12-22"]);
@@ -877,7 +909,9 @@ describe("Opening hours month", () => {
     await el.updateComplete;
     expect(pressed(el)).toEqual(run);
     await userEvent.dblClick(dayButton(el, "2027-01-01"));
-    expect(runs).toEqual([{ date: "2027-01-01", from: "2026-12-30", to: "2027-01-02" }]);
+    expect(runs).toEqual([
+      { date: "2027-01-01", dates: ["2026-12-30", "2026-12-31", "2027-01-01", "2027-01-02"] },
+    ]);
   });
 
   it("forgets a picked run when the month changes", async () => {
@@ -1353,7 +1387,9 @@ describe("Opening hours month, a station shown", () => {
     expect(pressed(el)).toEqual(DRAG);
     await userEvent.dblClick(dayButton(el, "2026-12-22"));
     await el.updateComplete;
-    expect(runs).toEqual([{ date: "2026-12-22", from: "2026-12-20", to: "2026-12-23" }]);
+    expect(runs).toEqual([
+      { date: "2026-12-22", dates: ["2026-12-20", "2026-12-21", "2026-12-22", "2026-12-23"] },
+    ]);
   });
 
   it("names a lone sending department beside each period", async () => {

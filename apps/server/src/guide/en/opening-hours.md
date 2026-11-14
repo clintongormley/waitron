@@ -1,4 +1,8 @@
-# Public holidays in Opening hours
+# Opening hours
+
+## Select days together {#select-days}
+
+In Year or Month, select a run with Shift-click and add separate dates with Cmd-click (Ctrl-click on Windows), or tap dates on your phone while the selection bar shows, then choose **Make a special day**.
 
 ## Holiday names {#holiday-names}
 

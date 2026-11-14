@@ -161,6 +161,7 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
     await commands.mouseDrag([day("2026-12-24"), day("2027-01-02")]);
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll('button.day[aria-pressed="true"]')).toHaveLength(10);
+    expect(el.shadowRoot!.querySelector('[data-test="selection-bar"]')).not.toBeNull();
     await commands.parkPointer();
     await expectNoA11yViolations(host);
   });

@@ -360,7 +360,7 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 - **A1073. Saving one field in the department dialog can undo another manager's change to a
   different field.** [Detail](service-periods.md#a1073-saving-one-field-in-the-department-dialog-can-undo-another-managers-change-to-a-different-field)
 - **The special-day painter does not say a deleted period's replacement is still missing after a
-  failed re-read.** When a period is deleted in the Periods window over the painter and the
+  failed re-read.** When a period is deleted and the
   painter's re-read of the day fails, nothing tells the manager until Save shows "could not save"
   (finish-branch's account of its own fix on #1838; not re-run since). Left open by A719.
 - **A date another manager removed stays in the special-day draft**

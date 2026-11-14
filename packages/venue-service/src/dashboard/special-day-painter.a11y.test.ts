@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
-import { registerIcons } from "@waitron/ui";
+import { registerIcons, setHelpMode } from "@waitron/ui";
+import { userEvent } from "vitest/browser";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
@@ -19,6 +20,7 @@ import "./special-day-painter.js";
 registerIcons({ close: "M3 3l10 10M13 3L3 13" });
 
 afterEach(() => {
+  setHelpMode(false);
   cleanup();
   setLocale("en");
 });
@@ -27,6 +29,7 @@ describe.each(["light", "dark"] as const)("special-day painter (%s)", (theme) =>
   test.each([
     "new",
     "stored",
+    "painting help",
     "zone closed behind",
     "refused",
     "adding dates",
@@ -64,6 +67,15 @@ describe.each(["light", "dark"] as const)("special-day painter (%s)", (theme) =>
     await settle(painter);
     await expect.poll(() => part(painter, "loading")).toBeNull();
     await settle(painter);
+    if (state === "painting help") {
+      setHelpMode(true);
+      const help = painter.shadowRoot!.querySelector("wt-help-tooltip")!;
+      await help.updateComplete;
+      await userEvent.click(help.shadowRoot!.querySelector("button")!);
+      await expect
+        .poll(() => help.shadowRoot!.querySelector("[popover]")!.matches(":popover-open"))
+        .toBe(true);
+    }
     if (state === "zone closed behind") {
       await pick(painter, "zone:z2");
       const behind = grid(painter).shadowRoot!.querySelector(

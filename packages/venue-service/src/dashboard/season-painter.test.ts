@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, setHelpMode } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SeasonPainter } from "./season-painter.js";
@@ -23,6 +23,7 @@ import "./season-painter.js";
 let painter: SeasonPainter | undefined;
 beforeEach(() => setLocale("en"));
 afterEach(() => {
+  setHelpMode(false);
   painter?.remove();
   painter = undefined;
   setLocale("en");
@@ -55,6 +56,26 @@ const picker = (el: SeasonPainter) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=department]")!;
 const chip = (el: SeasonPainter, test: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`);
+
+it("keeps the painting instructions in help mode without a Periods link", async () => {
+  const { painter } = await mount();
+  const help = painter.shadowRoot!.querySelector("wt-help-tooltip");
+  expect(help).not.toBeNull();
+  await help!.updateComplete;
+  expect(help!.mode).toBe("help-mode");
+  expect(help!.checkVisibility()).toBe(false);
+  expect(chip(painter, "hint")).toBeNull();
+  expect(chip(painter, "periods-link")).toBeNull();
+  setHelpMode(true);
+  await help!.updateComplete;
+  expect(help!.checkVisibility()).toBe(true);
+  expect(help!.guideHref).toBe("/help/en/opening-hours#select-days");
+  setLocale("es");
+  painter.requestUpdate();
+  await painter.updateComplete;
+  await help!.updateComplete;
+  expect(help!.guideHref).toBe("/help/es/opening-hours#select-days");
+});
 it("titles the season's week and steps through the seasons with ‹ and ›", async () => {
   const { painter } = await mount();
   const navigations: unknown[] = [];
@@ -146,13 +167,6 @@ it("lists each active department with its zones beneath", async () => {
   ]);
   expect(picker(painter).value).toBe("d1");
   expect(chip(painter, "follows")).toBeNull();
-  const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
-  expect(link.textContent!.trim()).toBe("Periods");
-  expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/year/window/periods");
-  expect(link.hasAttribute("data-own-click")).toBe(true);
-  expect(chip(painter, "hint")!.textContent!.trim()).toBe(
-    "Drag down a day to paint · drag over a block to replace it",
-  );
 });
 
 it("a department paints its periods with Closed erasing; a zone paints Closed over the department's week drawn faded", async () => {
@@ -468,11 +482,12 @@ it("+ New period saves the period on its own, keeps the painting and chooses the
   expect(frame(painter).dirty).toBe(true);
 });
 
-it("each period chip offers a visible '✎ Edit', named 'Edit <period>'", async () => {
+it("each period chip offers a pencil named and titled for its period", async () => {
   const { painter } = await mount();
   const edit = chip(painter, "edit-p1")!;
-  expect(edit.textContent!.replace(/\s+/g, " ").trim()).toBe("✎ Edit");
+  expect(edit.textContent!.replace(/\s+/g, " ").trim()).toBe("✎");
   expect(edit.getAttribute("aria-label")).toBe("Edit Lunch");
+  expect(edit.getAttribute("title")).toBe("Edit Lunch");
   expect(edit.querySelector('[aria-hidden="true"]')?.textContent).toBe("✎");
   const probe = document.createElement("span");
   probe.style.color = "var(--wt-color-primary-text)";
@@ -482,14 +497,18 @@ it("each period chip offers a visible '✎ Edit', named 'Edit <period>'", async 
   expect(edit.getBoundingClientRect().height).toBeGreaterThanOrEqual(
     probe.getBoundingClientRect().height,
   );
+  expect(edit.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+    probe.getBoundingClientRect().height,
+  );
   expect(getComputedStyle(edit).color).toBe(getComputedStyle(probe).color);
   probe.remove();
   painter.remove();
   setLocale("es");
   const spanish = (await mount()).painter;
   const editar = chip(spanish, "edit-p1")!;
-  expect(editar.textContent!.replace(/\s+/g, " ").trim()).toBe("✎ Editar");
+  expect(editar.textContent!.replace(/\s+/g, " ").trim()).toBe("✎");
   expect(editar.getAttribute("aria-label")).toBe("Editar Lunch");
+  expect(editar.getAttribute("title")).toBe("Editar Lunch");
 });
 
 it("✎ opens the period dialog with that period, and a refusal shows in it", async () => {
@@ -983,12 +1002,9 @@ describe.each(["en", "es"] as const)("the bar (%s)", (locale) => {
           expect(box.left, test).toBeGreaterThanOrEqual(0);
           expect(box.right, test).toBeLessThanOrEqual(390);
         }
-        const shown = [
-          chip(painter, "season")!,
-          picker(painter),
-          chip(painter, "covers")!,
-          chip(painter, "periods-link")!,
-        ].map((el) => el.getBoundingClientRect());
+        const shown = [chip(painter, "season")!, picker(painter), chip(painter, "covers")!].map(
+          (el) => el.getBoundingClientRect(),
+        );
         for (const [i, box] of shown.entries()) {
           expect(box.left, `item ${i}`).toBeGreaterThanOrEqual(0);
           expect(box.right, `item ${i}`).toBeLessThanOrEqual(390);
@@ -1213,43 +1229,6 @@ it("a period the live model no longer lists leaves the draft, which is clean whe
   expect(grid(painter).days.get("3")).toEqual([]);
   expect(grid(painter).days.get("1")).toEqual([]);
   expect(painter.edited()).toEqual({ departments: [], zones: [] });
-});
-
-it("the Periods link asks for the Periods window on a plain left click, and leaves every other click to the browser", async () => {
-  const { painter } = await mount();
-  const link = chip(painter, "periods-link")!;
-  const asked: unknown[] = [];
-  const seen: boolean[] = [];
-  const record = (event: Event) => asked.push((event as CustomEvent).detail);
-  // Bubbling on window runs after the link's own listener; cancelling here keeps the test page.
-  const settled = (event: Event) => {
-    seen.push(event.defaultPrevented);
-    event.preventDefault();
-  };
-  document.addEventListener("calendar-window-open", record);
-  window.addEventListener("click", settled);
-  try {
-    const press = (init: MouseEventInit = {}) =>
-      link.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, ...init }),
-      );
-    for (const init of [
-      { ctrlKey: true },
-      { metaKey: true },
-      { shiftKey: true },
-      { altKey: true },
-      { button: 1 },
-    ])
-      press(init);
-    expect(seen).toEqual([false, false, false, false, false]);
-    expect(asked).toEqual([]);
-    press();
-    expect(seen.at(-1)).toBe(true);
-    expect(asked).toEqual([{ window: "periods" }]);
-  } finally {
-    document.removeEventListener("calendar-window-open", record);
-    window.removeEventListener("click", settled);
-  }
 });
 
 describe("the band in what the painter edits", () => {

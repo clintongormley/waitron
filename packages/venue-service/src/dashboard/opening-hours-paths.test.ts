@@ -15,6 +15,12 @@ const readBack = (path: string) =>
     .map((part) => decodePathSegment(part));
 
 describe("opening hours paths", () => {
+  it("round-trips the exact list of separately selected dates", () => {
+    const path = specialDayPainterPath({ specialDayId: null, dates: ["2026-10-20", "2026-10-23"] });
+    expect(path).toBe("/manage/opening-hours/view/special-day/dates/2026-10-20%2C2026-10-23");
+    expect(readBack(path)).toEqual(["view", "special-day", "dates", "2026-10-20,2026-10-23"]);
+  });
+
   it.each(["~", ".", "..", "a/b", "a b"])("writes the id %s so it reads back unchanged", (id) => {
     expect(readBack(seasonPainterPath({ seasonId: id, departmentId: "bar" }))).toEqual([
       "view",

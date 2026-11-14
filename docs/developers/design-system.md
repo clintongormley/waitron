@@ -2853,12 +2853,11 @@ season's week for every active department and zone, in a full-screen frame (`pai
 `wt-modal size="full"`). A band in the season's colour (its line; grey for a stored colour that
 names no calendar colour) runs along the top of the bar, `aria-hidden`; the words say what it means.
 The bar holds ✕, the heading "<season>: standard week", ‹ the season chip
-›, the department-or-zone picker, a Periods link that opens the Periods window over the painter,
-and Cancel and Save; the bar stays in view while the
+›, the department-or-zone picker, and Cancel and Save; the bar stays in view while the
 paint grid (`paint-grid.ts`) scrolls in the space under it. A heading too long for its room wraps
 onto more lines rather than being cut. A line under the bar says what is edited: "Every week from
 <first day> to <last day> opens these hours, except on special days." A paint row offers the
-department's periods (✎ Edit edits one),
+department's periods (a pencil edits one, named and titled "Edit <period>"),
 Closed and + New period, which saves the period on its own and chooses it. Dragging down a day
 paints the chosen period in the business day's quarter hours; a drag over a block replaces what it
 covers, touching blocks of one period join, and clicking a block offers another period or Delete.
@@ -2889,6 +2888,10 @@ repainted since it was sent. A refresh that removes the season, removes a depart
 edits, or makes a department with edits inactive, drops those edits and says so beside Save. The grid fits seven days in 1280 px; at phone width the grid scrolls
 sideways with its time column pinned. A venue viewer gets ✕ alone, no paint row, and a grid that
 does not change.
+
+The hours painters put their painting instructions in `wt-help-tooltip mode="help-mode"`, with
+English/Spanish text and an Opening hours guide link. Fixed paint hints and the special-day side
+paragraph are absent; the paint row's pencils keep a minimum `--wt-tap-min` width.
 
 The special-day painter (`special-day-painter.ts`) edits one special day in the same frame. A band
 in the special-day purple runs along the top of its bar from the moment it opens, a viewer's too.
@@ -5412,22 +5415,20 @@ Opening hours' Year.
   Month, to the same people; a station's day draws one row per department that sends it dishes, a
   day none of them sends on reads "No orders" once in place of its rows, and a week whose station
   times have not arrived draws no days.
-- **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month. A
-  click picks one day and opens its day box, dragging over days picks the run between them, and
-  Shift-click picks the run from the day picked first to the day clicked. A double-click opens the special-day editor: on the picked run when the
-  day double-clicked is inside it, otherwise on that day alone, and on a stored special day's date
-  it opens that special day instead. On a phone a tap picks a day and opens its day box, and a
-  finger that moves straight away scrolls the page. Holding a finger on a day (a long press) picks
-  it without selecting its number as text; moving the finger then stretches the run, and the page
-  does not scroll while it does; lifting it after a long press without moving opens the editor as a double-click does.
-  On the keyboard the arrow keys move to the next day and pick it alone, Shift with an arrow
-  stretches the run, Enter opens the editor as a double-click does, and Space, like a click, opens
-  the day box. In a screen reader's reading mode Enter arrives as a click, so it opens the day
-  box, whose special-day action opens the editor on that day, or the special day holding it; in its focus mode Shift with an
-  arrow and Enter pick a run and open the editor on it. A viewer picks one day at a time, with a
-  click, a tap, Space, Enter or an arrow key (Shift is ignored), and a click, a tap, Space or Enter
-  opens the day box; for a viewer a drag, a double-click and a long press pick no run, and nothing
-  opens the editor.
+- **Picking days.** `DayPicker` (`day-picking.ts`) picks exact dates in Year and Month.
+  A click picks one day and opens its day box; a drag replaces the selection with its run.
+  Shift extends the anchored run, keeping separate picks; Cmd-click on Mac or Ctrl-click elsewhere
+  toggles a separate day. With two or more selected dates a sticky bottom bar shows the count,
+  separate date groups, Clear and Make a special day. Clear removes the marks and returns date focus.
+  Double-click or Enter on a picked date opens a new special-day draft with the full selection;
+  a single stored date still opens its saved special day. A multi-date draft that includes an
+  occupied date keeps the existing refusal at Save rather than merging records.
+  On a phone, taps toggle dates while the bar shows; otherwise a tap opens the day box. Moving
+  without a hold scrolls; holding then dragging replaces the selection. A held picked date opens
+  the selection, while a held unpicked date opens alone. Arrow keys pick and focus the next date,
+  Shift+arrow extends the anchored run, and Space opens the day box. A screen reader's reading-mode
+  Enter arrives as a click and opens the day box; focus-mode Enter opens the selection.
+  Viewers keep single-date day boxes and cannot open a painter or show the selection bar.
 - **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host; it is exported as
   `@waitron/venue-service/dashboard/calendar-day-box` for other screens; Staffing's month opens it
   (above), and so does the Week, from a day's name. One box at a time floats below the date that
@@ -6746,15 +6747,9 @@ The Periods window is the Calendar's `window/periods` address pair, over any Cal
 painter, as `window/seasons` is (`calendarWindowPath`, `opening-hours-paths.ts`, under
 `packages/venue-service/src/dashboard/`). It opens from "Periods…" at the end of the Year's season
 row (a default slot in `season-chips`; the button sends `calendar-window-open` with
-`detail: { window }`, which the screen handles), from either painter's Periods link, from the
-Departments warning's "Set up periods" link and from page search (`venue-service:periods`). The
-painters' link points at `/manage/opening-hours/view/year/window/periods` and carries
-`data-own-click`, so the dashboard shell's link handler leaves it alone; a plain click on it is
-handled by the link itself (`periodsLink`, `period-editing.ts`), which sends `calendar-window-open`
-as the Year's button does, and the screen pushes the current address with `window/periods` added,
-so the window opens over the painter and its unsaved paint stays. A click with a modifier key or
-with a button other than the left is left to the browser, and a click something above the link has
-already cancelled opens nothing. The window is a wide `wt-modal` with `height="medium"`, so a longer list scrolls
+`detail: { window }`, which the screen handles), from the Departments warning's "Set up periods"
+link and from page search (`venue-service:periods`). Painters keep their inline period pencils and
++ New period instead of a Periods link. The window is a wide `wt-modal` with `height="medium"`, so a longer list scrolls
 inside it while Close stays visible. It has no heading, named "Periods" by its `aria-label` (`data-window="periods"`), and
 ends with a footer Close.
 

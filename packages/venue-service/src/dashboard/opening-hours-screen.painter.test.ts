@@ -8,7 +8,7 @@ import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SeasonPainter } from "./season-painter.js";
 import { drag, frame, grid, settle, withBar } from "../testing/season-painter-fixture.js";
-import { captureShellLinks } from "../testing/shell-link-capture.js";
+import { captureShellLinks, requestCalendarWindow } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
 
 type Screen = HTMLElementTagNameMap["dashboard-opening-hours-screen"];
@@ -321,7 +321,7 @@ describe("links into the painter", () => {
     expect(location.pathname).toBe("/manage/opening-hours/view/year");
   });
 
-  it("closing a painter loaded directly, after its Periods link and Back, closes onto the Year view", async () => {
+  it("closing a painter loaded directly, after its Periods window and Back, closes onto the Year view", async () => {
     history.replaceState(null, "", "/manage/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
@@ -333,9 +333,8 @@ describe("links into the painter", () => {
       await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
       ({ app } = await mountApp());
       const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
-      (await shownPainter(el))
-        .shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!
-        .click();
+      await shownPainter(el);
+      requestCalendarWindow(el, "periods");
       await expect
         .poll(() => location.pathname)
         .toBe("/manage/opening-hours/view/season/season/winter/department/d1/window/periods");
@@ -614,7 +613,7 @@ describe("Save closes the season painter", () => {
 });
 
 describe("leaving a painter with edits", () => {
-  it("the Periods link opens the window over a painter with paint, asking nothing, and closing it returns to the same paint", async () => {
+  it("the Periods window opens over a painter with paint, asking nothing, and closing it returns to the same paint", async () => {
     const base = "/manage/opening-hours/view/season/season/winter/department/d1";
     const { app, el } = await mountApp(base);
     const painter = await shownPainter(el);
@@ -626,9 +625,7 @@ describe("leaving a painter with edits", () => {
         "wt-unsaved-changes",
       )!;
     const pushes = pushedPaths();
-    await userEvent.click(
-      painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!,
-    );
+    requestCalendarWindow(el, "periods");
     const { modal } = await periodsWindow(el);
     expect(location.pathname).toBe(`${base}/window/periods`);
     expect(pushes()).toEqual([`${base}/window/periods`]);
@@ -1166,9 +1163,7 @@ describe("the Calendar window address", () => {
       );
       if (overPainter) {
         const painter = await shownPainter(el);
-        await userEvent.click(
-          painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!,
-        );
+        requestCalendarWindow(el, "periods");
       }
       const guard = screenGuard(() => app);
       try {
@@ -1629,10 +1624,8 @@ class ReplacingApp extends PainterApp {
 }
 customElements.define("opening-hours-replacing-test-app", ReplacingApp);
 
-describe("the painters' Periods link", () => {
+describe("Periods windows over painters", () => {
   const base = "/manage/opening-hours/view/season/season/winter/department/d1";
-  const link = (painter: SeasonPainter) =>
-    painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
 
   it("a period added in the Periods window reaches the painter underneath", async () => {
     history.replaceState(null, "", base);
@@ -1648,7 +1641,7 @@ describe("the painters' Periods link", () => {
     const before = painter.edited();
     expect(before).toEqual({ departments: ["d1"], zones: [] });
     expect(painter.shadowRoot!.querySelector('[data-test="paint-p-new"]')).toBeNull();
-    await userEvent.click(link(painter));
+    requestCalendarWindow(el, "periods");
     const { modal, list, table } = await periodsWindow(el);
     list.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!.click();
     await list.updateComplete;
@@ -1711,7 +1704,7 @@ describe("the painters' Periods link", () => {
       { periodId: "p1", startsAt: "08:00", endsAt: "10:00" },
     ]);
     expect(blocks("3")).toBe(1);
-    await userEvent.click(link(painter));
+    requestCalendarWindow(el, "periods");
     const { modal, list, table } = await periodsWindow(el);
     table
       .shadowRoot!.querySelector<HTMLElement>(
@@ -1776,7 +1769,7 @@ describe("the painters' Periods link", () => {
     painter.shadowRoot!.querySelector<HTMLElement>(`[data-test="paint-${pot}"]`)!.click();
     await settle(painter);
     await drag(painter, weekday, from, to);
-    await userEvent.click(link(painter));
+    requestCalendarWindow(el, "periods");
     const { modal, list, table } = await periodsWindow(el);
     table
       .shadowRoot!.querySelector<HTMLElement>(
@@ -1878,7 +1871,7 @@ describe("the painters' Periods link", () => {
       await drag(painter, "3", 120, 240);
       const before = painter.edited();
       expect(before).toEqual({ departments: ["d1"], zones: [] });
-      await userEvent.click(link(painter));
+      requestCalendarWindow(el, "periods");
       await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
       const { dialog } = await openPeriod(el);
       dialog.shadowRoot!.querySelector<HTMLElement>("[name=name]")!.dispatchEvent(
@@ -1909,94 +1902,6 @@ describe("the painters' Periods link", () => {
     } finally {
       guard.dispose();
     }
-  });
-
-  it("a modified click on the Periods link is left to the browser", async () => {
-    const el = await mount(base);
-    const painter = await shownPainter(el);
-    const seen: boolean[] = [];
-    // Bubbling on window runs after the link's own listener, so it sees what the link did.
-    const record = (event: Event) => {
-      seen.push(event.defaultPrevented);
-      event.preventDefault();
-    };
-    window.addEventListener("click", record);
-    try {
-      const press = (init: MouseEventInit) =>
-        link(painter).dispatchEvent(
-          new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, ...init }),
-        );
-      press({ ctrlKey: true });
-      await el.updateComplete;
-      expect(seen).toEqual([false]);
-      expect(location.pathname).toBe(base);
-      press({});
-      expect(seen).toEqual([false, true]);
-      await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
-    } finally {
-      window.removeEventListener("click", record);
-    }
-  });
-
-  it.each(["shiftKey", "metaKey"] as const)(
-    "a click on the Periods link with %s held is left to the browser",
-    async (modifier) => {
-      const el = await mount(base);
-      const painter = await shownPainter(el);
-      const seen: boolean[] = [];
-      // Bubbling on window runs after the link's own listener, so it sees what the link did.
-      const record = (event: Event) => {
-        seen.push(event.defaultPrevented);
-        event.preventDefault();
-      };
-      window.addEventListener("click", record);
-      try {
-        link(painter).dispatchEvent(
-          new MouseEvent("click", {
-            bubbles: true,
-            composed: true,
-            cancelable: true,
-            [modifier]: true,
-          }),
-        );
-        await el.updateComplete;
-        expect(seen).toEqual([false]);
-        expect(location.pathname).toBe(base);
-        expect(el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
-      } finally {
-        window.removeEventListener("click", record);
-      }
-    },
-  );
-
-  it("a Periods link click something above the painter has already cancelled opens nothing", async () => {
-    const el = await mount(base);
-    const painter = await shownPainter(el);
-    const pushes = pushedPaths();
-    const press = () =>
-      link(painter).dispatchEvent(
-        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
-      );
-    // Capturing on document runs before the link's own listener. With no guard and
-    // no leave coordinator, the screen pushes its address within the click itself.
-    const cancel = (event: Event) => event.preventDefault();
-    document.addEventListener("click", cancel, { capture: true });
-    try {
-      press();
-    } finally {
-      document.removeEventListener("click", cancel, { capture: true });
-    }
-    expect(pushes()).toEqual([]);
-    expect(location.pathname).toBe(base);
-    const record = (event: Event) => event.preventDefault();
-    window.addEventListener("click", record);
-    try {
-      press();
-    } finally {
-      window.removeEventListener("click", record);
-    }
-    expect(pushes()).toEqual([`${base}/window/periods`]);
-    await periodsWindow(el);
   });
 
   it("a calendar-window-open sent inside the screen does not reach the screen's parent", async () => {
