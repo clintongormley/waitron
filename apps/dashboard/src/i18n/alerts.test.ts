@@ -869,13 +869,13 @@ describe("the box waiting for its start's time", () => {
 
   it("says the tax agency refused a sale dated in the future in Spanish", () => {
     const REFUSED_ES =
-      "Hacienda rechazó una venta con fecha 2 nov 2026 porque esa fecha era futura cuando se envió, así que el equipo ha dejado de aceptar cobros hasta que se compruebe su hora. Confirma o corrige la fecha y la hora en Estado del equipo; el personal puede usar «Comprobar la hora» en un terminal.";
+      "Hacienda rechazó una venta con fecha 2 nov 2026 porque esa fecha era futura cuando se envió, así que el servidor ha dejado de aceptar cobros hasta que se compruebe su hora. Confirma o corrige la fecha y la hora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.";
     const params = { agreed: 2, cause: "future_date_refused", refusedOn: "2026-11-02" };
     expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: false }, "es")).toBe(
       REFUSED_ES,
     );
     expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: true }, "es")).toBe(
-      `${REFUSED_ES} No puede ver su hora de internet porque la parte del equipo que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.`,
+      `${REFUSED_ES} No puede ver su hora de internet porque la parte del servidor que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.`,
     );
   });
 });

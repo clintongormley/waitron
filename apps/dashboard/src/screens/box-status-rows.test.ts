@@ -734,17 +734,24 @@ describe("the Clock row while the start waits for its time", () => {
 
   it("says the tax agency refused a sale dated in the future, with no device count or every-start sentence", () => {
     const line = `The tax agency refused a sale as dated in the future: no payments are taken until the time is checked. The box's clock says ${formatIsoMinute(BOX_AT)}.`;
-    for (const hostAnswers of [true, false])
-      expect(
-        row(boxStatusRows(waitingHealth(hostAnswers, "future_date_refused"), []).rows, "clock"),
-      ).toMatchObject({ state: "stopped", line });
+    expect(
+      row(boxStatusRows(waitingHealth(true, "future_date_refused"), []).rows, "clock"),
+    ).toMatchObject({ state: "stopped", line });
+    expect(
+      row(boxStatusRows(waitingHealth(false, "future_date_refused"), []).rows, "clock"),
+    ).toMatchObject({
+      state: "stopped",
+      line: `${line} ${t("box_status.clock.waiting_host_silent_jumped")}`,
+    });
   });
 
   it("says the tax agency refused a sale dated in the future in Spanish", () => {
     setLocale("es");
     expect(
       row(boxStatusRows(waitingHealth(false, "future_date_refused"), []).rows, "clock").line,
-    ).toBe(es["box_status.clock.waiting_future_date"].replace("{boxAt}", formatIsoMinute(BOX_AT)));
+    ).toBe(
+      `${es["box_status.clock.waiting_future_date"].replace("{boxAt}", formatIsoMinute(BOX_AT))} ${es["box_status.clock.waiting_host_silent_jumped"]}`,
+    );
   });
 
   it("tells the Sales row that payments wait, pointing at the Clock row", () => {
